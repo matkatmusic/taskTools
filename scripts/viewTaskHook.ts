@@ -4,7 +4,7 @@
 // as JSON-escaped one-liners; the block reason prints them with real newlines.
 // Any other prompt: exit 0 with empty stdout (silent passthrough).
 import { readFileSync } from "node:fs";
-import { TaskRecord, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { type TaskRecord, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 function formatTask(task: TaskRecord, status: string): string {
   const lines = [`Task ${task.taskNumber} (${status}): ${task.title ?? ""}`];
