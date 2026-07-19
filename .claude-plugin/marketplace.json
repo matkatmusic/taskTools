@@ -1,0 +1,29 @@
+{
+  "name": "matkatmusic-task-tools",
+  "owner": {
+    "name": "Matkat Music LLC"
+  },
+  "metadata": {
+    "description": "taskTools — task-list management skills for tasks.json/completedTasks.json",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "taskTools",
+      "source": "./",
+      "description": "Task-list management skills backed by tasks.json/completedTasks.json: /create-task, /pick-a-task, /tackle-tasks, /update-tasks, /view-task.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Matkat Music LLC"
+      },
+      "category": "development",
+      "keywords": [
+        "tasks",
+        "todo",
+        "create-task",
+        "tackle-tasks",
+        "view-task"
+      ]
+    }
+  ]
+}
