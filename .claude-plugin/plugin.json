@@ -1,7 +1,7 @@
 {
   "name": "taskTools",
   "version": "0.1.0",
-  "description": "Task-list management skills backed by tasks.json/completedTasks.json: /create-task, /pick-a-task, /tackle-tasks, /update-tasks, /view-task (zero-token via UserPromptSubmit hook). Usable from any directory via --plugin-dir.",
+  "description": "Task-list management skills backed by tasks.json/completedTasks.json: /create-task, /pick-a-task, /tackle-tasks, /close-tasks, /update-tasks, /view-task (zero-token via UserPromptSubmit hook). Usable from any directory via --plugin-dir.",
   "author": {
     "name": "Matkat Music LLC"
   },
