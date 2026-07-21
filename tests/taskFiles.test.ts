@@ -51,6 +51,17 @@ test("test_resolveDefaultsToTaskToolsWhenNeitherExists", () => {
   assert.deepEqual(readdirSync(root), []);
 });
 
+test("test_resolveWalksUpToParentWithTaskFiles", () => {
+  // Scenario: the shell cwd was left in a subdirectory (mid-session `cd`), but the
+  // project's tasks.json lives at the root — resolution must walk up and find it.
+  const root = makeEmptyProjectRoot();
+  writeFileSync(join(root, "tasks.json"), "[]\n");
+  const sub = join(root, "jfred", "src");
+  mkdirSync(sub, { recursive: true });
+  const pair = resolveTaskFiles(sub);
+  assert.equal(pair.tasksPath, join(root, "tasks.json"));
+});
+
 test("test_seedCreatesBothFilesWithEmptyArrays", () => {
   // Scenario: first task creation in a fresh project generates both task files.
   // Steps:

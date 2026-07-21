@@ -1,19 +1,25 @@
 ---
 name: tackle-tasks
 description: tackle open tasks found in tasks.json (completed tasks are archived in completedTasks.json)
-argument-hint: <N...>
+argument-hint: <N...> [valid]
 ---
 
-First, invoke `/ponytail:ponytail ultra`. 
+- user confirmed valid: !`echo "$ARGUMENTS" | grep -qw valid && echo yes || echo no`
+- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" $ARGUMENTS`
+- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked $ARGUMENTS); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" $u || echo "none of the requested tasks are unblocked"`
 
-Then:
+First, invoke `/ponytail:ponytail ultra`.
 
-- task details: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" $ARGUMENTS`
+If "user confirmed valid" above is `yes`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
+
+## Verification
 
 Review the task details above (each object comes from `tasks.json` if the task is open, or `completedTasks.json` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
-Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the tasks named in $ARGUMENTS.
+Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks detailed above.
 
-If a task has a `blockedBy` field listing task numbers that are still open, do not work on it — report which blockers are open and move on to the next requested task that is unblocked.
+## Tackling
+
+Do not work on any task reported as BLOCKED in the "blocked status" above — report its open blockers and move on to the next requested task that is unblocked.
 
 If a task is still problematic/relevant in the codebase, use the `/make-a-plan` skill to tackle it.  If clarification is needed for the task, use AskUserQuestion to ask the user for more information before beginning working on the task.
 

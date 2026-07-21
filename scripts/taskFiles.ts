@@ -11,12 +11,16 @@ function pairIn(folder: string): TaskFilePair {
   return { tasksPath: join(folder, "tasks.json"), completedTasksPath: join(folder, "completedTasks.json") };
 }
 
+// Walks up from `root` so a shell cwd left in a subdirectory still finds the
+// project's task files (mid-session `cd`s were silently breaking every skill).
 export function resolveTaskFiles(root: string): TaskFilePair {
-  const housed = pairIn(join(root, ".taskTools"));
-  if (existsSync(housed.tasksPath)) return housed;
-  const atRoot = pairIn(root);
-  if (existsSync(atRoot.tasksPath)) return atRoot;
-  return housed;
+  for (let dir = root; ; dir = dirname(dir)) {
+    const housed = pairIn(join(dir, ".taskTools"));
+    if (existsSync(housed.tasksPath)) return housed;
+    const atRoot = pairIn(dir);
+    if (existsSync(atRoot.tasksPath)) return atRoot;
+    if (dirname(dir) === dir) return pairIn(join(root, ".taskTools"));
+  }
 }
 
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
