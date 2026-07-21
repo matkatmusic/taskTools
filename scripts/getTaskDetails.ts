@@ -16,7 +16,10 @@ const pair = resolveTaskFiles(process.cwd());
 const openTasks = readTaskFile(pair.tasksPath);
 const completedTasks = readTaskFile(pair.completedTasksPath);
 function listTaskTitles(tag: string, tasks: TaskRecord[]): string[] {
-  return tasks.map(t => `${tag} ${t.taskNumber}: ${t.title}`);
+  return tasks.map(t => {
+    const blockers = Array.isArray(t.blockedBy) && t.blockedBy.length > 0 ? ` [blockedBy: ${t.blockedBy.join(",")}]` : "";
+    return `${tag} ${t.taskNumber}: ${t.title}${blockers}`;
+  });
 }
 
 const taskNumbers = (process.argv.slice(2).join(" ").match(/\d+/g) ?? []).map(Number);

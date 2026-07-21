@@ -10,4 +10,8 @@ The decision that these tasks are done has already been made (by the user, or by
 
 Skip tasks already COMPLETED or not found, and say so.
 
+Then unblock dependents by running: `node "${CLAUDE_PLUGIN_ROOT}/scripts/unblockDependents.ts" <closed task numbers>` — it removes the closed numbers from every remaining task's `blockedBy` array and reports what it unblocked.
+
 Stage the changes but do not commit.   Provide a short commit message to the user, similar to "Closed tasks #<task numbers>" or "Closed task <#task number>".
+
+If a spec document references these task numbers, mark those items done in the spec.

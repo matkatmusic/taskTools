@@ -1,0 +1,6 @@
+{
+  "taskNumber": <the injected number above>,
+  "title": "<short summary of the task>",
+  "description": "<the task in the user's own wording, plus any refinements gathered; include file paths and repro URLs if given>",
+  "blockedBy": [<task numbers of any tasks that must be completed first; omit the field if none>]
+}

@@ -9,4 +9,6 @@ Open tasks: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" | grep ^OPE
 
 Compare each open task above against the current state of the project — pull full details with `node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" <N...>` where a title alone isn't enough, and check the relevant code/files to judge scope (already partly done? one-file change? decision-only?).
 
+Exclude any task whose `blockedBy` lists a task number that is still open — it is not eligible regardless of ease.
+
 Pick the N easiest/simplest open tasks, ordered easiest first. Report to the user: each task's number, title, and why it is that easy — under 70 words per task. Do not start implementing any of them.

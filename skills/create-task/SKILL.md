@@ -13,14 +13,12 @@ Decide whether that description is actionable later without this conversation's 
 Append ONE object to the `tasks.json` array, using this template:
 
 ```json
-{
-  "taskNumber": <the injected number above>,
-  "title": "<short summary of the task>",
-  "description": "<the task in the user's own wording, plus any refinements gathered; include file paths and repro URLs if given>"
-}
+!`cat "${CLAUDE_PLUGIN_ROOT}/skills/create-task/template/taskTemplate.json"`
 ```
 
 If the request names the source note/handoff file(s) the task came from (e.g. an `update-tasks` harvest), also include `"handoffFilePaths": [<those repo-relative paths>]` in the object; otherwise omit the field.
+
+If `specs/SPEC.md` exists and this task belongs to one of its spec items, append the task number to that item's `Tasks:` line.
 
 Omit completion-related fields (`completionDate`, `commitHashes`, `closureNote`) — those belong to `completedTasks.json`, which this skill never touches.
 
