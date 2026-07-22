@@ -35,6 +35,15 @@ test("listing marks blocked tasks and leaves unblocked ones plain", () => {
   assert.doesNotMatch(out, /unblocked task \[blockedBy/);
 });
 
+test("digits inside trailing prose are not treated as task numbers", () => {
+  const out = runScript(
+    makeProjectRoot(),
+    "1 closureNote: Verified NO (2026-07-21) — see task 2, stall 2252s (task 3, still open).",
+  );
+  assert.match(out, /task 1 \(OPEN\)/);
+  assert.doesNotMatch(out, /task (2|3|2026|2252)[ :(]/);
+});
+
 test("full details include the blockedBy field", () => {
   const out = runScript(makeProjectRoot(), "2");
   assert.match(out, /task 2 \(OPEN\)/);

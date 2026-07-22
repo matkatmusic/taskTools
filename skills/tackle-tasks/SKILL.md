@@ -5,8 +5,8 @@ argument-hint: <N...> [valid]
 ---
 
 - user confirmed valid: !`echo "$ARGUMENTS" | grep -qw valid && echo yes || echo no`
-- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" $ARGUMENTS`
-- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked $ARGUMENTS); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" $u || echo "none of the requested tasks are unblocked"`
+- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" "$ARGUMENTS"`
+- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked "$ARGUMENTS"); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" "$u" || echo "none of the requested tasks are unblocked"`
 
 First, invoke `/ponytail:ponytail ultra`.
 

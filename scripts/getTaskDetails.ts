@@ -2,7 +2,7 @@
 // looking in tasks.json (open) first, then completedTasks.json.
 // With NO arguments, prints one "OPEN|DONE <n>: <title>" line per task instead.
 // Output goes to stdout because skills inject it via a !`node ...` command.
-import { type TaskRecord, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { type TaskRecord, leadingTaskNumbers, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 function describeTask(taskNumber: number, openTasks: TaskRecord[], completedTasks: TaskRecord[]): string {
   const open = openTasks.find(t => t.taskNumber === taskNumber);
@@ -22,7 +22,7 @@ function listTaskTitles(tag: string, tasks: TaskRecord[]): string[] {
   });
 }
 
-const taskNumbers = (process.argv.slice(2).join(" ").match(/\d+/g) ?? []).map(Number);
+const taskNumbers = leadingTaskNumbers(process.argv.slice(2));
 const report =
   taskNumbers.length === 0
     ? [...listTaskTitles("OPEN", openTasks), ...listTaskTitles("DONE", completedTasks)]
