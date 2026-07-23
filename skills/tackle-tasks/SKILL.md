@@ -29,4 +29,13 @@ If the user requests adding tasks, append them to `tasks.json` following the tem
 
 Don't run any tests or suites.  The user will run tests after you have completed your work.
 
-Finally, If you make any changes to the codebase, stage the changes but do not commit. use a subagent running `Sonnet 5` to generate a short (40 words or less) single-sentence summary of the work done, and show that summary to the user, so the user can use it as a commit message.
+Finally, if you made any changes to the codebase — which may span multiple git repos or submodules — stage the changes in each affected repo, but do not commit in any of them.
+Generate one commit message per repo as defined in **Commit message** below.
+
+## Commit message
+
+Use a single subagent running `Sonnet 5`: give it the staged diff of every affected repo — collected after staging with `git -C <repo> diff --staged -- ':(exclude)tasks.json' ':(exclude)completedTasks.json' ':(exclude)plans/archived'` — and have it generate, per repo, a short (40 words or less) single-sentence summary of the work done in that repo, so the user can use each summary as that repo's commit message.
+A parent repo whose only change is a submodule pointer counts as an affected repo — its message should name the submodule being updated and why.
+
+Report the summaries to the user, one line per repo, in the following format:
+`Repo: <repo name> Message: <summary>`
