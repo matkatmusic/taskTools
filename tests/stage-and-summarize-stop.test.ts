@@ -30,7 +30,7 @@ test("flag set: emits Stop additionalContext once, consumes flag", () => {
   const home = homeWithFlag("s1");
   const out = JSON.parse(run(home, { session_id: "s1", stop_hook_active: false }));
   assert.equal(out.hookSpecificOutput.hookEventName, "Stop");
-  assert.match(out.hookSpecificOutput.additionalContext, /stage the changes/i);
+  assert.match(out.hookSpecificOutput.additionalContext, /COMMIT_MESSAGES\.md/);
   assert.equal(existsSync(join(home, ".claude", "turn-flags", "s1")), false);
   assert.equal(run(home, { session_id: "s1", stop_hook_active: false }), "");
 });
