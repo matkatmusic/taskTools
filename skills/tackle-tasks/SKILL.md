@@ -21,27 +21,24 @@ Use the git history and recent commits (over the last 3 days) to confirm/deny th
 
 Do not work on any task reported as BLOCKED in the "blocked status" above — report its open blockers and move on to the next requested task that is unblocked.
 
-If a task is still problematic/relevant in the codebase, use the `/make-a-plan` skill to produce a plan, then execute that plan with `/jot:implement <plan file>`.  If clarification is needed for the task, use AskUserQuestion to ask the user for more information before beginning working on the task.
+For every task that is still problematic/relevant in the codebase, ALWAYS use the `/make-a-plan` skill to produce a plan — never implement directly without one, even when the task looks trivial — then execute that plan with `/jot:implement <plan file>`.
+As soon as the plan exists, ALWAYS create a task list in this session (TaskCreate, one entry per plan step) and keep statuses current (TaskUpdate) as you work, so the user can watch progress.
+If clarification is needed for the task, use AskUserQuestion to ask the user for more information before beginning working on the task.
 
 ### Parallel tackling
 
 When more than one unblocked, still-relevant task remains, judge from the task details and the code whether they touch disjoint files. Tasks that overlap, or that still need user clarification, are worked serially in this session as described above.
 
-For the disjoint tasks, spawn one subagent per task, all in a single message so they run concurrently. Each subagent's prompt must tell it to: invoke `/tackle-tasks <its one task number> valid` (verification already happened above, so pass `valid`); NOT stage anything or generate commit messages; and report back a one-sentence summary of what it changed. After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
+For the disjoint tasks, spawn one subagent per task, all in a single message so they run concurrently. Before spawning, create a task list in this session with one entry per delegated task, and update each entry as its subagent finishes — subagents' own task lists are not visible to the user. Each subagent's prompt must tell it to: invoke `/tackle-tasks <its one task number> valid` (verification already happened above, so pass `valid`); NOT stage anything or generate commit messages; and report back a one-sentence summary of what it changed. After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
 
 If a task is not problematic and was completed successfully, rendering its `tasks.json` entry stale, close it by invoking the `close-tasks` skill with its task number, passing your reasoning that it was completed for the `closureNote`.
 
-If the user requests adding tasks, append them to `tasks.json` following the template at `${CLAUDE_PLUGIN_ROOT}/skills/create-task/template/taskTemplate.json`, with `taskNumber` = highest number across both `tasks.json` and `completedTasks.json` plus one. Omit completion-related fields.
+If the user requests adding tasks, invoke the `create-task` skill once per task — never edit `tasks.json` directly.
 
 Don't run any tests or suites.  The user will run tests after you have completed your work.
 
-Finally, if you made any changes to the codebase — which may span multiple git repos or submodules — stage the changes in each affected repo, but do not commit in any of them.
-Generate one commit message per repo as defined in **Commit message** below.
-
 ## Commit message
 
-Use a single subagent running `Sonnet 5`: give it the staged diff of every affected repo — collected after staging with `git -C <repo> diff --staged -- ':(exclude)tasks.json' ':(exclude)completedTasks.json' ':(exclude)plans/archived'` — and have it generate, per repo, a short (40 words or less) single-sentence summary of the work done in that repo, so the user can use each summary as that repo's commit message.
-A parent repo whose only change is a submodule pointer counts as an affected repo — its message should name the submodule being updated and why.
+Finally, follow these instructions:
 
-Report the summaries to the user, one line per repo, in the following format:
-`Repo: <repo name> Message: <summary>`
+!`cat "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/COMMIT_MESSAGES.md"`

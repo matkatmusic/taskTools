@@ -9,6 +9,28 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-modified-flag.ts\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\" 2>/dev/null",
+            "statusMessage": "Checking for unstaged work..."
+          }
+        ]
+      }
     ]
   }
 }
