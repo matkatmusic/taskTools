@@ -31,9 +31,17 @@ If clarification is needed for the task, use AskUserQuestion to ask the user for
 
 ### Parallel tackling
 
-When more than one unblocked, still-relevant task remains, judge from the task details and the code whether they touch disjoint files. Tasks that overlap, or that still need user clarification, are worked serially in this session as described above.
+When more than one unblocked, still-relevant task remains, judge from the task details and the code whether they touch disjoint files. Tasks that overlap, or that still need user clarification, are worked serially in this session as described above.  
 
-For the disjoint tasks, spawn one subagent per task, all in a single message so they run concurrently. Before spawning, create a task list in this session with one entry per delegated task, and update each entry as its subagent finishes — subagents' own task lists are not visible to the user. Each subagent's prompt must tell it to: invoke `/tackle-tasks <its one task number> valid` (verification already happened above, so pass `valid`); NOT stage anything or generate commit messages; and report back a one-sentence summary of what it changed. After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
+For the disjoint tasks, spawn one subagent per task, all in a single message so they run concurrently.  
+Parallelize by file ownership instead of by task to prevent multiple agents writing to the same file at the same time. 
+Before spawning, create a task list in this session with one entry per delegated task, and update each entry as its subagent finishes — subagents' own task lists are not visible to the user. 
+Each subagent's prompt must tell it to: 
+- invoke `/tackle-tasks <its one task number> valid` (verification already happened above, so pass `valid`); 
+- NOT stage anything or generate commit messages; 
+- and report back a one-sentence summary of what it changed. 
+
+After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
 
 If a task is not problematic and was completed successfully, rendering its `tasks.json` entry stale, close it by invoking the `close-tasks` skill with its task number, passing your reasoning that it was completed for the `closureNote`.
 
