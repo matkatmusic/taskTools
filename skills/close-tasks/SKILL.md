@@ -1,17 +1,22 @@
 ---
 name: close-tasks
 description: manually close the named task numbers — move them from tasks.json to completedTasks.json with commit hashes
-argument-hint: <N...>
+argument-hint: "[N,N,...] <why they are done>"
+allowed-tools: Bash(git add *)
 ---
 
-- task details: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" "$ARGUMENTS"`
+- tasks to close: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" '$ARGUMENTS[0]'`
 
-The decision that these tasks are done has already been made (by the user, or by the skill that invoked this one) — do not re-litigate it. For each OPEN task above: move its object from `tasks.json` to `completedTasks.json`, adding a `completionDate` (today), `commitHashes` (search git history for the resolving commits; use an empty array if none can be identified), and a short `closureNote` (one sentence stating why it was closed — the invoker's reasoning if given, otherwise "closed manually by user").
+Invocation format: the first argument is a JSON array of the task numbers with **no spaces** — `[268,270,281]` — and everything after it is free-text reasoning. Only that first argument reaches the shell, so quotes, backticks and apostrophes in the reasoning are harmless. If the details above don't cover every task number named in `$ARGUMENTS` — a full listing instead, or only the first few — the invoker skipped the array form or put spaces in it: re-run the script yourself with all the numbers before continuing.
+
+`$ARGUMENTS` holds the whole invocation, reasoning included, and may attribute reasons per task (`#268 fixed by X, #270 verified by user`).
+
+The decision that these tasks are done has already been made (by the user, or by the skill that invoked this one) — do not re-litigate it. Close every listed OPEN task in a single pass: move its object from `tasks.json` to `completedTasks.json`, adding a `completionDate` (today), `commitHashes` (search git history for the resolving commits; use an empty array if none can be identified), and a short `closureNote` — one sentence per task, using the invoker's reasoning for that specific task where they gave one, their general reasoning otherwise, and "closed manually by user" if they gave none.
 
 Skip tasks already COMPLETED or not found, and say so.
 
-Then unblock dependents by running: `node "${CLAUDE_PLUGIN_ROOT}/scripts/unblockDependents.ts" <closed task numbers>` — it removes the closed numbers from every remaining task's `blockedBy` array and reports what it unblocked.
+Then unblock dependents with one run of `node "${CLAUDE_PLUGIN_ROOT}/scripts/unblockDependents.ts" '$ARGUMENTS[0]'` — keep the quotes, or the shell treats the array as a glob. It removes the closed numbers from every remaining task's `blockedBy` array and reports what it unblocked.
 
-Stage the changes but do not commit.   Provide a short commit message to the user, similar to "Closed tasks #<task numbers>" or "Closed task <#task number>".
+Stage the changes but do not commit. Provide a short commit message to the user, similar to "Closed tasks $ARGUMENTS[0]" or "Closed task $ARGUMENTS[0]".
 
 If a spec document references these task numbers, mark those items done in the spec.

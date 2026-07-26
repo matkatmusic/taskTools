@@ -1,16 +1,18 @@
 ---
 name: tackle-tasks
 description: tackle open tasks found in tasks.json (completed tasks are archived in completedTasks.json)
-argument-hint: <N...> [valid]
+argument-hint: "[N,N,...] [valid]"
+allowed-tools: Bash(git add *)
 ---
 
-- user confirmed valid: !`echo "$ARGUMENTS" | grep -qw valid && echo yes || echo no`
-- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" "$ARGUMENTS"`
-- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked "$ARGUMENTS"); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" "$u" || echo "none of the requested tasks are unblocked"`
+- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" '$ARGUMENTS[0]'`
+- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked '$ARGUMENTS[0]'); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" "$u" || echo "none of the requested tasks are unblocked"`
+
+Invocation format: the first argument is a JSON array of the task numbers with **no spaces** — `[268,270,281]` — optionally followed by `valid` and any free text. Only that first argument reaches the shell, so quotes, backticks and apostrophes in the text are harmless. If the two blocks above cover fewer tasks than `$ARGUMENTS` names, the invoker skipped the array form: re-run both scripts yourself with all the numbers before continuing.
 
 First, invoke `/ponytail:ponytail ultra`.
 
-If "user confirmed valid" above is `yes`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
+When `$ARGUMENTS` contains the word `valid`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
 
 ## Verification
 
@@ -37,13 +39,13 @@ For the disjoint tasks, spawn one subagent per task, all in a single message so 
 Parallelize by file ownership instead of by task to prevent multiple agents writing to the same file at the same time. 
 Before spawning, create a task list in this session with one entry per delegated task, and update each entry as its subagent finishes — subagents' own task lists are not visible to the user. 
 Each subagent's prompt must tell it to: 
-- invoke `/tackle-tasks <its one task number> valid` (verification already happened above, so pass `valid`); 
+- invoke `/tackle-tasks [<its one task number>] valid` (verification already happened above, so pass `valid`); 
 - NOT stage anything or generate commit messages; 
 - and report back a one-sentence summary of what it changed. 
 
 After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
 
-If a task is not problematic and was completed successfully, rendering its `tasks.json` entry stale, close it by invoking the `close-tasks` skill with its task number, passing your reasoning that it was completed for the `closureNote`.
+Close every task that is not problematic and was completed successfully, rendering its `tasks.json` entry stale, with **one** invocation of the `close-tasks` skill for all of them. Its first argument must be a JSON array of the task numbers with no spaces — `[268,270,281]` — followed by your reasoning for the `closureNote`s, naming each task (`#268 …, #270 …`) when the reasons differ.
 
 If the user requests adding tasks, invoke the `create-task` skill once per task — never edit `tasks.json` directly.
 

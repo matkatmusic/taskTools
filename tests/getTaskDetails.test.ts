@@ -44,6 +44,17 @@ test("digits inside trailing prose are not treated as task numbers", () => {
   assert.doesNotMatch(out, /task (2|3|2026|2252)[ :(]/);
 });
 
+test("a JSON array first argument closes the batch the skill named", () => {
+  // Scenario: close-tasks pre-fills details via '$1', which is the no-space JSON
+  // array token — the only form that survives a closureNote full of quotes.
+  const root = makeProjectRoot();
+  for (const arg of ["[1,2]", '"[1,2]"', "1,2"]) {
+    const out = runScript(root, arg);
+    assert.match(out, /task 1 \(OPEN\)/, `${arg} should resolve task 1`);
+    assert.match(out, /task 2 \(OPEN\)/, `${arg} should resolve task 2`);
+  }
+});
+
 test("full details include the blockedBy field", () => {
   const out = runScript(makeProjectRoot(), "2");
   assert.match(out, /task 2 \(OPEN\)/);

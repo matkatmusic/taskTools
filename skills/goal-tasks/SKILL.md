@@ -2,6 +2,7 @@
 name: goal-tasks
 description: interview the user to define the project goal, produce a testable spec at specs/SPEC.md, and create ordered tasks that achieve it
 argument-hint: "<project goal>"
+allowed-tools: Bash(git add *)
 ---
 
 Standing rule for every step below: if the user is vague or unsure, use AskUserQuestion to fill specific gaps, or `/grill-me` for open-ended direction-setting.

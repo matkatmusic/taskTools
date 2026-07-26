@@ -17,5 +17,5 @@ Pick the N easiest/simplest open tasks, ordered easiest first. Report to the use
 
 End your report with exactly:
 `start a session with: 'claude --name "task <N...>"'`
-`prompt: "/tackle-tasks <N...> valid"`
-where `<N...>` is the chosen task numbers in both lines.
+`prompt: "/tackle-tasks [<N,...>] valid"`
+where `<N...>` is the chosen task numbers space-separated, and `[<N,...>]` is the same numbers as a JSON array with no spaces (`[268,270]`) — the argument form tackle-tasks and close-tasks require.

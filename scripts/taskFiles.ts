@@ -34,11 +34,13 @@ export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
 // Task numbers lead a skill invocation; free text (closureNote, flags) may follow.
 // Stop at the first non-numeric token so digits inside prose — dates, "task 162",
 // durations — aren't mistaken for task numbers.
+// Brackets and stray quotes are tolerated so a single no-space JSON array token —
+// [268,270,281], the shell-safe form skills pass as "$1" — parses like bare numbers.
 export function leadingTaskNumbers(args: string[]): number[] {
   const tokens = args.join(" ").trim().split(/\s+/);
   const numeric: number[] = [];
   for (const token of tokens) {
-    if (!/^[\d,]+$/.test(token)) break;
+    if (!/^["'[\]\d,]+$/.test(token)) break;
     numeric.push(...(token.match(/\d+/g) ?? []).map(Number));
   }
   return numeric;
