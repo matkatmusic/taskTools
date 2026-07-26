@@ -1,7 +1,8 @@
-// Behavioral checks for stage-and-summarize-stop.ts: with a flag set it blocks
-// the stop exactly once (consuming the flag); it stays silent when no flag
-// exists or when stop_hook_active guards against a loop.
-// Run with: node --test ~/.claude/hooks/tests/
+// Behavioral checks for stage-and-summarize-stop.ts: it speaks up exactly once
+// when a recorded file is still unstaged (consuming the flag), and stays silent
+// when no flag exists, when the recorded files are already staged, when the
+// files are outside a repo, or when stop_hook_active guards against a loop.
+// Run with: node --test "tests/*.test.ts"
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -19,19 +20,40 @@ function run(home: string, input: object): string {
   });
 }
 
-function homeWithFlag(sid: string): string {
+function homeWithFlag(sid: string, paths: string[]): string {
   const home = mkdtempSync(join(tmpdir(), "hook-stop-"));
   mkdirSync(join(home, ".claude", "turn-flags"), { recursive: true });
-  writeFileSync(join(home, ".claude", "turn-flags", sid), "");
+  writeFileSync(join(home, ".claude", "turn-flags", sid), paths.map((p) => `${p}\n`).join(""));
   return home;
 }
 
-test("flag set: emits Stop additionalContext once, consumes flag", () => {
-  const home = homeWithFlag("s1");
+// A throwaway repo with one edited file; stage it when `staged` is set.
+function repoWithEdit(staged: boolean): string {
+  const repo = mkdtempSync(join(tmpdir(), "hook-repo-"));
+  const file = join(repo, "edited.txt");
+  const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+  git("init", "-q");
+  writeFileSync(file, "hello\n");
+  if (staged) git("add", file);
+  return file;
+}
+
+test("unstaged edit: emits Stop additionalContext once, consumes flag", () => {
+  const home = homeWithFlag("s1", [repoWithEdit(false)]);
   const out = JSON.parse(run(home, { session_id: "s1", stop_hook_active: false }));
   assert.equal(out.hookSpecificOutput.hookEventName, "Stop");
   assert.match(out.hookSpecificOutput.additionalContext, /COMMIT_MESSAGES\.md/);
   assert.equal(existsSync(join(home, ".claude", "turn-flags", "s1")), false);
+  assert.equal(run(home, { session_id: "s1", stop_hook_active: false }), "");
+});
+
+test("already staged: silent", () => {
+  const home = homeWithFlag("s1", [repoWithEdit(true)]);
+  assert.equal(run(home, { session_id: "s1", stop_hook_active: false }), "");
+});
+
+test("file outside any git repo: silent", () => {
+  const home = homeWithFlag("s1", [join(mkdtempSync(join(tmpdir(), "hook-bare-")), "x.txt")]);
   assert.equal(run(home, { session_id: "s1", stop_hook_active: false }), "");
 });
 
@@ -41,6 +63,6 @@ test("no flag: silent", () => {
 });
 
 test("stop_hook_active: silent even with flag set", () => {
-  const home = homeWithFlag("s1");
+  const home = homeWithFlag("s1", [repoWithEdit(false)]);
   assert.equal(run(home, { session_id: "s1", stop_hook_active: true }), "");
 });
