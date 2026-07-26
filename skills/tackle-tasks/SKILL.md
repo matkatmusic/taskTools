@@ -21,7 +21,11 @@ Use the git history and recent commits (over the last 3 days) to confirm/deny th
 
 Do not work on any task reported as BLOCKED in the "blocked status" above — report its open blockers and move on to the next requested task that is unblocked.
 
-For every task that is still problematic/relevant in the codebase, ALWAYS use the `/make-a-plan` skill to produce a plan — never implement directly without one, even when the task looks trivial — then execute that plan with `/jot:implement <plan file>`.
+For every task that is still problematic/relevant in the codebase, ALWAYS produce a plan first — never implement directly without one, even when the task looks trivial.
+
+Invoke it as `/make-a-plan plan <task description>`. The `plan` mode argument is REQUIRED: it stops that skill after the plan file is written, because THIS skill owns implementation. Invoking it as `plan+implement` would hand the work to a subagent and skip the task list below.
+
+Then execute that plan yourself with `/jot:implement <plan file>`.
 As soon as the plan exists, ALWAYS create a task list in this session (TaskCreate, one entry per plan step) and keep statuses current (TaskUpdate) as you work, so the user can watch progress.
 If clarification is needed for the task, use AskUserQuestion to ask the user for more information before beginning working on the task.
 
