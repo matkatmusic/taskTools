@@ -45,6 +45,10 @@ Each subagent's prompt must tell it to:
 
 After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
 
+**ONLY AFTER** the user verifies that all tasks are completed successfully, invoke the `close-tasks` skill once for all of them, as described below.  DO NOT close any tasks until the user has approved them. 
+
+## Closing your tasks
+
 Close every task that is not problematic and was completed successfully, rendering its `tasks.json` entry stale, with **one** invocation of the `close-tasks` skill for all of them. Its first argument must be a JSON array of the task numbers with no spaces — `[268,270,281]` — followed by your reasoning for the `closureNote`s, naming each task (`#268 …, #270 …`) when the reasons differ.
 
 If the user requests adding tasks, invoke the `create-task` skill once per task — never edit `tasks.json` directly.
