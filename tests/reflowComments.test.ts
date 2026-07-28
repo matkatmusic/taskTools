@@ -59,16 +59,27 @@ test("single-line comments, blank lines, and directives are untouched", () => {
   assert.deepEqual(reflowSource(source), { text: source, runs: [] });
 });
 
-test("short comments say do nothing, long ones demand a rewrite", () => {
+test("all-short reflows omit the truncation sentence", () => {
   const short = reflowSource(["// a wrapped", "// short note"].join("\n"));
-  assert.deepEqual(describeReflows("f.ts", short.runs), [
-    "f.ts: the comment on lines [1-2] was rewritten as a single line.",
-    "do nothing with this stop hook feedback for line '1'",
-  ]);
+  assert.deepEqual(describeReflows([{ path: "f.ts", runs: short.runs }]), {
+    text: "f.ts\nThe comments on lines [1] were each rewritten as a single line.",
+    needsRewrite: false,
+  });
+});
 
-  const long = reflowSource(WRAPPED);
-  assert.deepEqual(describeReflows("f.ts", long.runs), [
-    "f.ts: the comment on lines [1-4] was rewritten as a single line.",
-    "The comment on line [1]  needs to be truncated to be less than 20 words long.  rewrite the comment.",
+test("each file lists every reflow, then only the lines over the word cap", () => {
+  const long = reflowSource(WRAPPED).runs;
+  const short = reflowSource(["// a wrapped", "// short note"].join("\n")).runs;
+  const { text, needsRewrite } = describeReflows([
+    { path: "a.ts", runs: [...long, ...short.map((r) => ({ ...r, line: 9 }))] },
+    { path: "b.ts", runs: short },
+  ]);
+  assert.equal(needsRewrite, true);
+  assert.deepEqual(text.split("\n"), [
+    "a.ts",
+    "The comments on lines [1, 9] were each rewritten as a single line.",
+    "the comments on lines [1] need to be truncated to be less than 20 words long. rewrite the comments.",
+    "b.ts",
+    "The comments on lines [1] were each rewritten as a single line.",
   ]);
 });

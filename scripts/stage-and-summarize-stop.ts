@@ -14,9 +14,10 @@ if (!existsSync(flag)) process.exit(0);
 const paths = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))];
 rmSync(flag); // consumed: the reminder fires once per file-modifying stretch
 
-const reflowed = paths.filter(existsSync).flatMap((p) => reflowFile(p).map((run) => ({ p, run })));
-const messages = reflowed.flatMap(({ p, run }) => describeReflows(p, [run]));
-const needsRewrite = reflowed.some(({ run }) => run.words >= 20);
+const reflowed = paths.filter(existsSync)
+  .map((path) => ({ path, runs: reflowFile(path) }))
+  .filter(({ runs }) => runs.length > 0);
+const { text: reason, needsRewrite } = describeReflows(reflowed);
 
 // Porcelain column two: space means staged, anything else means unstaged. Outside a repo, git throws — counts as clean.
 const unstaged = paths.some((p) => {
@@ -29,8 +30,7 @@ const unstaged = paths.some((p) => {
   }
 });
 
-if (messages.length > 0) {
-  const reason = messages.join("\n");
+if (reflowed.length > 0) {
   process.stdout.write(`${JSON.stringify(
     needsRewrite
       ? { decision: "block", reason }

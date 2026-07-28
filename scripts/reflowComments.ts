@@ -68,13 +68,21 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
   return { text: out.join("\n"), runs };
 }
 
-export function describeReflows(path: string, runs: Reflow[]): string[] {
-  return runs.flatMap((run) => [
-    `${path}: the comment on lines [${run.start}-${run.end}] was rewritten as a single line.`,
-    run.words < WORD_LIMIT
-      ? `do nothing with this stop hook feedback for line '${run.line}'`
-      : `The comment on line [${run.line}]  needs to be truncated to be less than ${WORD_LIMIT} words long.  rewrite the comment.`,
-  ]);
+export type FileReflow = { path: string; runs: Reflow[] };
+
+export function describeReflows(files: FileReflow[]): { text: string; needsRewrite: boolean } {
+  const lines = files.flatMap(({ path, runs }) => {
+    const long = runs.filter((run) => run.words >= WORD_LIMIT).map((run) => run.line);
+    return [
+      `${path}`,
+      `The comments on lines [${runs.map((run) => run.line).join(", ")}] were each rewritten as a single line.`,
+      ...(long.length > 0
+        ? [`the comments on lines [${long.join(", ")}] need to be truncated to be less than ${WORD_LIMIT} words long. rewrite the comments.`]
+        : []),
+    ];
+  });
+  const needsRewrite = files.some(({ runs }) => runs.some((run) => run.words >= WORD_LIMIT));
+  return { text: lines.join("\n"), needsRewrite };
 }
 
 export function reflowFile(path: string): Reflow[] {
