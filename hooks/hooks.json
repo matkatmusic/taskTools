@@ -17,6 +17,11 @@
           {
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-modified-flag.ts\" 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/reflow-comments-post.ts\"",
+            "statusMessage": "Reflowing wrapped comments..."
           }
         ]
       }

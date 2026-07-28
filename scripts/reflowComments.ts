@@ -26,7 +26,7 @@ function runIsProse(bodies: string[]): boolean {
   return (
     bodies.length > 1 &&
     !DIRECTIVE.test(bodies[0]) &&
-    bodies.every((body) => body.length > 0 && !looksLikeCode(body))
+    bodies.every((body) => !looksLikeCode(body))
   );
 }
 
@@ -37,7 +37,7 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
   let i = 0;
   while (i < lines.length) {
     const head = lines[i].match(COMMENT);
-    if (!head) {
+    if (!head || head[2].trim() === "") { // a bare `//` separates paragraphs, it never starts one
       out.push(lines[i]);
       i += 1;
       continue;
@@ -47,7 +47,7 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
     const bodies: string[] = [head[2].trim()];
     while (end + 1 < lines.length) {
       const next = lines[end + 1].match(COMMENT);
-      if (!next || next[1] !== indent) break;
+      if (!next || next[1] !== indent || next[2].trim() === "") break;
       bodies.push(next[2].trim());
       end += 1;
     }
@@ -70,19 +70,26 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
 
 export type FileReflow = { path: string; runs: Reflow[] };
 
-export function describeReflows(files: FileReflow[]): { text: string; needsRewrite: boolean } {
-  const lines = files.flatMap(({ path, runs }) => {
-    const long = runs.filter((run) => run.words >= WORD_LIMIT).map((run) => run.line);
-    return [
-      `${path}`,
-      `The comments on lines [${runs.map((run) => run.line).join(", ")}] were each rewritten as a single line.`,
-      ...(long.length > 0
-        ? [`the comments on lines [${long.join(", ")}] need to be truncated to be less than ${WORD_LIMIT} words long. rewrite the comments.`]
-        : []),
-    ];
+function showCommand(path: string, lines: number[]): string {
+  return `nl -ba '${path}' | sed -n '${lines.map((line) => `${line}p`).join(";")}'`;
+}
+
+const overCapLines = ({ path, runs }: FileReflow) =>
+  ({ path, lines: runs.filter((run) => run.words >= WORD_LIMIT).map((run) => run.line) });
+
+export const needsRewrite = (files: FileReflow[]) => files.some((f) => overCapLines(f).lines.length > 0);
+
+// A JSON string, so the receiving agent parses instead of reasoning about prose.
+export function describeReflows(files: FileReflow[]): string {
+  const overCap = files.map(overCapLines).filter(({ lines }) => lines.length > 0);
+  return JSON.stringify({
+    information: "the following lines were rewritten by a hook after your edit",
+    rewritten: files.map(({ path, runs }) => ({ file: path, lines: runs.map((run) => run.line) })),
+    ...(overCap.length > 0 && {
+      instruction: `Rewrite each comment below to under ${WORD_LIMIT} words, keeping it on one line.`,
+      files: overCap.map(({ path, lines }) => ({ path, lines, show: showCommand(path, lines) })),
+    }),
   });
-  const needsRewrite = files.some(({ runs }) => runs.some((run) => run.words >= WORD_LIMIT));
-  return { text: lines.join("\n"), needsRewrite };
 }
 
 export function reflowFile(path: string): Reflow[] {
@@ -90,4 +97,17 @@ export function reflowFile(path: string): Reflow[] {
   const { text, runs } = reflowSource(source);
   if (runs.length > 0 && text !== source) writeFileSync(path, text);
   return runs;
+}
+
+// Reports every reflow; blocks only when a joined comment is still over the cap.
+export function emitReflows(hookEventName: string, files: FileReflow[]): boolean {
+  const reflowed = files.filter(({ runs }) => runs.length > 0);
+  if (reflowed.length === 0) return false;
+  const reason = describeReflows(reflowed);
+  process.stdout.write(`${JSON.stringify(
+    needsRewrite(reflowed)
+      ? { decision: "block", reason }
+      : { hookSpecificOutput: { hookEventName, additionalContext: reason } },
+  )}\n`);
+  return true;
 }
