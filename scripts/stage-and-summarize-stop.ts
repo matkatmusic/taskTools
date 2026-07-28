@@ -1,9 +1,8 @@
-// Stop hook: if this session left any of the files it modified unstaged
-// (list recorded by turn-modified-flag.ts), point at COMMIT_MESSAGES.md once
-// instead of dumping its contents into the chat. Silent otherwise.
+// Stop hook: reflow wrapped comments in this session's edited files, then flag any still-unstaged ones.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { describeReflows, reflowFile } from "./reflowComments.ts";
 
 const input = JSON.parse(readFileSync(0, "utf8"));
 if (input.stop_hook_active) process.exit(0);
@@ -15,10 +14,11 @@ if (!existsSync(flag)) process.exit(0);
 const paths = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))];
 rmSync(flag); // consumed: the reminder fires once per file-modifying stretch
 
-// Nothing to say unless one of those files still has unstaged work. A porcelain
-// line's second column is the worktree status: space means staged-and-clean,
-// anything else (including "??") means the user still has staging to do.
-// Paths outside a git repo throw and count as clean — nothing to stage there.
+const reflowed = paths.filter(existsSync).flatMap((p) => reflowFile(p).map((run) => ({ p, run })));
+const messages = reflowed.flatMap(({ p, run }) => describeReflows(p, [run]));
+const needsRewrite = reflowed.some(({ run }) => run.words >= 20);
+
+// Porcelain column two: space means staged, anything else means unstaged. Outside a repo, git throws — counts as clean.
 const unstaged = paths.some((p) => {
   try {
     return execFileSync("git", ["-C", dirname(p), "status", "--porcelain", "--", p], {
@@ -28,6 +28,17 @@ const unstaged = paths.some((p) => {
     return false;
   }
 });
+
+if (messages.length > 0) {
+  const reason = messages.join("\n");
+  process.stdout.write(`${JSON.stringify(
+    needsRewrite
+      ? { decision: "block", reason }
+      : { hookSpecificOutput: { hookEventName: "Stop", additionalContext: reason } },
+  )}\n`);
+  process.exit(0); // one JSON payload per invocation; staging pointer waits for the next turn
+}
+
 if (!unstaged) process.exit(0);
 
 const instructionsPath = resolve(

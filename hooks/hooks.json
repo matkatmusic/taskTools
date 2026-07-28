@@ -26,8 +26,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\" 2>/dev/null",
-            "statusMessage": "Checking for unstaged work..."
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\"",
+            "statusMessage": "Checking comments and unstaged work..."
           }
         ]
       }
