@@ -47,6 +47,16 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end-cleanup.ts\" 2>/dev/null || true"
+          }
+        ]
+      }
     ]
   }
 }

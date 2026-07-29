@@ -28,7 +28,7 @@ const unstaged = paths.some((p) => {
 });
 
 // One JSON payload per invocation; the staging pointer waits for the next turn.
-if (emitReflows("Stop", reflowed)) process.exit(0);
+if (emitReflows("Stop", reflowed, sid)) process.exit(0);
 
 if (!unstaged) process.exit(0);
 

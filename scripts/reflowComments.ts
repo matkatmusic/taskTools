@@ -1,5 +1,6 @@
 // clang-format for `//` prose: rejoin wrapped comment runs onto one line, leaving commented-out code untouched.
 import { readFileSync, writeFileSync } from "node:fs";
+import { applyQuota } from "./reflowQuota.ts";
 
 const COMMENT = /^(\s*)\/\/ ?(.*)$/;
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
@@ -156,8 +157,10 @@ const overCapLines = ({ path, runs }: FileReflow) =>
 export const needsRewrite = (files: FileReflow[]) => files.some((f) => overCapLines(f).lines.length > 0);
 
 // A JSON string, so the receiving agent parses instead of reasoning about prose.
-export function describeReflows(files: FileReflow[]): string {
-  const overCap = files.map(overCapLines).filter(({ lines }) => lines.length > 0);
+export function describeReflows(
+  files: FileReflow[],
+  overCap = files.map(overCapLines).filter(({ lines }) => lines.length > 0),
+): string {
   const rewritten = files
     .map(({ path, runs }) => ({ file: path, lines: runs.filter((run) => run.joined).map((run) => run.line) }))
     .filter(({ lines }) => lines.length > 0);
@@ -167,7 +170,7 @@ export function describeReflows(files: FileReflow[]): string {
       rewritten,
     }),
     ...(overCap.length > 0 && {
-      instruction: `Rewrite each comment below to under ${WORD_LIMIT} words, keeping it on one line.`,
+      instruction: `Rewrite only 1-2 of the comments below to under ${WORD_LIMIT} words, keeping each on one line. Return to your primary task after finishing the comment rewrites.  The hook will track when any flagged comments pass the word-length restriction and stop blocking you.`,
       files: overCap.map(({ path, lines }) => ({ path, lines, show: showCommand(path, lines) })),
     }),
   });
@@ -180,13 +183,19 @@ export function reflowFile(path: string): Reflow[] {
   return runs;
 }
 
-// Reports every reflow; blocks only when a joined comment is still over the cap.
-export function emitReflows(hookEventName: string, files: FileReflow[]): boolean {
+// Blocks on over-cap comments; with a sessionId the quota silences already-seen debt after one fix.
+export function emitReflows(hookEventName: string, files: FileReflow[], sessionId?: string): boolean {
   const reflowed = files.filter(({ runs }) => runs.length > 0);
   if (reflowed.length === 0) return false;
-  const reason = describeReflows(reflowed);
+  let overCap = reflowed.map(overCapLines).filter(({ lines }) => lines.length > 0);
+  if (sessionId) overCap = applyQuota(sessionId, overCap);
+  const joined = reflowed.some(({ runs }) => runs.some((run) => run.joined));
+  if (overCap.length === 0) {
+    if (!joined) return false;
+  }
+  const reason = describeReflows(reflowed, overCap);
   process.stdout.write(`${JSON.stringify(
-    needsRewrite(reflowed)
+    overCap.length > 0
       ? { decision: "block", reason }
       : { hookSpecificOutput: { hookEventName, additionalContext: reason } },
   )}\n`);
