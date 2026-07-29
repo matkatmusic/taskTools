@@ -122,6 +122,23 @@ test("an already-flat comment over the cap is reported but not rewritten", () =>
   ]);
 });
 
+test("a ---- divider ---- is passed through and ends the run above it", () => {
+  const source = [
+    "  // trailing prose of the",
+    "  // previous section",
+    "  // ---- task #251: content-driven ruler spacing ----------",
+    "  // Any two CONSECUTIVE nodes of one widget are forced",
+    "  // at least ROW_PX apart.",
+  ].join("\n");
+  const { text, runs } = reflowSource(source);
+  assert.deepEqual(text.split("\n"), [
+    "  // trailing prose of the previous section",
+    "  // ---- task #251: content-driven ruler spacing ----------",
+    "  // Any two CONSECUTIVE nodes of one widget are forced at least ROW_PX apart.",
+  ]);
+  assert.deepEqual(runs.map((r) => [r.start, r.end, r.line]), [[1, 2, 1], [4, 5, 3]]);
+});
+
 test("a hyphenated word starting with a keyword is prose, not code", () => {
   const source = [
     "// Sole import: the counters module (itself",

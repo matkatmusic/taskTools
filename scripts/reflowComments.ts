@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const COMMENT = /^(\s*)\/\/ ?(.*)$/;
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
 const PARAGRAPH_MARK = /^ponytail:/; // joined like prose, but exempt from the word cap
+const DIVIDER = /^[-=*_#]{3,}/; // `---- section ----`: hand-formatted, passed through verbatim
 const WORD_LIMIT = 20;
 
 export type Reflow = {
@@ -23,7 +24,7 @@ function looksLikeCode(body: string): boolean {
 
 // A blank `//` or a directive begins a new comment instead of poisoning the run above it.
 const startsNewRun = (body: string) =>
-  body === "" || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body);
+  body === "" || DIVIDER.test(body) || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body);
 
 // Two spaces after a sentence-ending line, one space otherwise.
 function joinBodies(bodies: string[]): string {
@@ -45,7 +46,8 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
   let i = 0;
   while (i < lines.length) {
     const head = lines[i].match(COMMENT);
-    if (!head || head[2].trim() === "") { // a bare `//` separates paragraphs, it never starts one
+    // A bare `//` or a `---- section ----` rule separates comments, it never starts one.
+    if (!head || head[2].trim() === "" || DIVIDER.test(head[2].trim())) {
       out.push(lines[i]);
       i += 1;
       continue;
