@@ -36,10 +36,10 @@ const instructionsPath = resolve(
   import.meta.dirname, "..", "skills", "tackle-tasks", "COMMIT_MESSAGES.md",
 );
 
-// process.stdout.write(JSON.stringify({
-//   hookSpecificOutput: {
-//     hookEventName: "Stop",
-//     additionalContext:
-//       `Files were changed, read ${instructionsPath} and follow those directions.`,
-//   },
-// }));
+process.stdout.write(JSON.stringify({
+  hookSpecificOutput: {
+    hookEventName: "Stop",
+    additionalContext:
+      `Files were changed, read ${instructionsPath} and follow those directions.`,
+  },
+}));
