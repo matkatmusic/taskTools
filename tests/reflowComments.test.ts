@@ -28,7 +28,7 @@ const COMMENTED_CODE = [
 test("wrapped prose collapses to one line, two spaces after a sentence", () => {
   const { text, runs } = reflowSource(WRAPPED);
   assert.equal(text, JOINED);
-  assert.deepEqual(runs, [{ start: 1, end: 4, line: 1, words: 51 }]);
+  assert.deepEqual(runs, [{ start: 1, end: 4, line: 1, words: 51, joined: true, capped: true }]);
 });
 
 test("commented-out code is left exactly as written", () => {
@@ -78,6 +78,73 @@ test("a bare // between single-line comments joins nothing", () => {
   assert.deepEqual(reflowSource(source), { text: source, runs: [] });
 });
 
+test("a ponytail: note is joined like prose but never flagged for truncation", () => {
+  const source = [
+    "// Consent gate for the two impure stages (script re-execution and git",
+    "// shell-outs). Defaults ON so the CLI and tests behave exactly as before;",
+    "// ponytail: process-wide switch, not per-call threading — builds are",
+    "// synchronous, thread an options object through if that changes.",
+    "let allowed = true;",
+  ].join("\n");
+  const { text, runs } = reflowSource(source);
+  assert.deepEqual(text.split("\n"), [
+    "// Consent gate for the two impure stages (script re-execution and git shell-outs). Defaults ON so the CLI and tests behave exactly as before;",
+    "// ponytail: process-wide switch, not per-call threading — builds are synchronous, thread an options object through if that changes.",
+    "let allowed = true;",
+  ]);
+  assert.deepEqual(runs.map((r) => [r.line, r.joined, r.capped]), [[1, true, true], [2, true, false]]);
+
+  const payload = JSON.parse(describeReflows([{ path: "/tmp/a.ts", runs }]));
+  assert.deepEqual(payload.rewritten, [{ file: "/tmp/a.ts", lines: [1, 2] }]);
+  assert.deepEqual(payload.files, [
+    { path: "/tmp/a.ts", lines: [1], show: "nl -ba '/tmp/a.ts' | sed -n '1p'" },
+  ]);
+});
+
+test("a long single-line ponytail: note is not reported at all", () => {
+  const flat = `// ponytail: ${Array.from({ length: 25 }, (_, n) => `word${n}`).join(" ")}`;
+  const { text, runs } = reflowSource([flat, "const x = 1;"].join("\n"));
+  assert.equal(text, [flat, "const x = 1;"].join("\n"));
+  assert.deepEqual(runs, []);
+});
+
+test("an already-flat comment over the cap is reported but not rewritten", () => {
+  const flat = `// ${Array.from({ length: 25 }, (_, n) => `word${n}`).join(" ")}`;
+  const { text, runs } = reflowSource([flat, "const x = 1;"].join("\n"));
+  assert.equal(text, [flat, "const x = 1;"].join("\n"));
+  assert.deepEqual(runs, [{ start: 1, end: 1, line: 1, words: 25, joined: false, capped: true }]);
+
+  const payload = JSON.parse(describeReflows([{ path: "/tmp/a.ts", runs }]));
+  assert.equal(payload.rewritten, undefined);
+  assert.equal(payload.information, undefined);
+  assert.deepEqual(payload.files, [
+    { path: "/tmp/a.ts", lines: [1], show: "nl -ba '/tmp/a.ts' | sed -n '1p'" },
+  ]);
+});
+
+test("a hyphenated word starting with a keyword is prose, not code", () => {
+  const source = [
+    "// Sole import: the counters module (itself",
+    "// import-free), which tallies replay requests here",
+    "// class-based and type-safe callers are unaffected",
+  ].join("\n");
+  const { runs } = reflowSource(source);
+  assert.deepEqual(runs.map((r) => [r.start, r.end, r.joined]), [[1, 3, true]]);
+});
+
+test("real keyword lines are still detected as code", () => {
+  for (const body of ["const x = 1", "return;", "try {", "catch (e) {", "function(a)", "return"]) {
+    const { runs } = reflowSource([`// ${body}`, "// second line of the run"].join("\n"));
+    assert.deepEqual(runs, [], `expected code: ${body}`);
+  }
+});
+
+test("prose ending in a semicolon or paren is not mistaken for code", () => {
+  const source = ["// Defaults ON so the CLI and tests behave exactly as before;", "// the viewer boots it OFF."].join("\n");
+  const { runs } = reflowSource(source);
+  assert.deepEqual(runs.map((r) => r.joined), [true]);
+});
+
 test("single-line comments, blank lines, and directives are untouched", () => {
   const source = ["// eslint-disable-next-line no-console", "// because reasons", "", "// lone comment"].join("\n");
   assert.deepEqual(reflowSource(source), { text: source, runs: [] });
@@ -85,8 +152,8 @@ test("single-line comments, blank lines, and directives are untouched", () => {
 
 test("describeReflows reports every rewritten line plus the over-cap ones", () => {
   const runs = [
-    { start: 1, end: 2, line: 1, words: 40 },
-    { start: 9, end: 10, line: 8, words: 5 },
+    { start: 1, end: 2, line: 1, words: 40, joined: true, capped: true },
+    { start: 9, end: 10, line: 8, words: 5, joined: true, capped: true },
   ];
   const payload = JSON.parse(describeReflows([{ path: "/tmp/a.ts", runs }]));
   assert.equal(payload.information, "the following lines were rewritten by a hook after your edit");
@@ -107,7 +174,7 @@ test("all-short reflows report the rewrite but carry no instruction", () => {
 });
 
 test("the show command lists every over-cap line in order", () => {
-  const runs = [12, 40, 7].map((line) => ({ start: line, end: line + 1, line, words: 30 }));
+  const runs = [12, 40, 7].map((line) => ({ start: line, end: line + 1, line, words: 30, joined: true, capped: true }));
   const [file] = JSON.parse(describeReflows([{ path: "/a b/c.ts", runs }])).files;
   assert.equal(file.show, "nl -ba '/a b/c.ts' | sed -n '12p;40p;7p'");
 });
