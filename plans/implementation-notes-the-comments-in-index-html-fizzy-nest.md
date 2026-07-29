@@ -27,4 +27,4 @@ https://code.claude.com/docs/en/hooks#sessionend
 
 ### Open questions
 
-- Should SubagentStop sessions share the parent session's quota file? Today whatever `session_id` the SubagentStop payload carries is used as-is; if subagents get their own ids, each subagent gets its own quota.
+- ~~Should SubagentStop sessions share the parent session's quota file?~~ RESOLVED 2026-07-29: subagent JSONL transcripts (`<session>/subagents/agent-*.jsonl`) record the parent's `sessionId` — verified identical across five sessions in `~/.claude/projects`. Subagents therefore share the parent session's quota file: one quota governs a session and all of its agents, and a subagent's comment fix counts for the whole session.
