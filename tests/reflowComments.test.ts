@@ -143,14 +143,15 @@ test("a hyphenated word starting with a keyword is prose, not code", () => {
   const source = [
     "// Sole import: the counters module (itself",
     "// import-free), which tallies replay requests here",
+    "// for those, this file and the real page already agree",
     "// class-based and type-safe callers are unaffected",
   ].join("\n");
   const { runs } = reflowSource(source);
-  assert.deepEqual(runs.map((r) => [r.start, r.end, r.joined]), [[1, 3, true]]);
+  assert.deepEqual(runs.map((r) => [r.start, r.end, r.joined]), [[1, 4, true]]);
 });
 
 test("real keyword lines are still detected as code", () => {
-  for (const body of ["const x = 1", "return;", "try {", "catch (e) {", "function(a)", "return"]) {
+  for (const body of ["const x = 1;", "return;", "try {", "catch (e) {", "function(a)", "for (i = 0;"]) {
     const { runs } = reflowSource([`// ${body}`, "// second line of the run"].join("\n"));
     assert.deepEqual(runs, [], `expected code: ${body}`);
   }

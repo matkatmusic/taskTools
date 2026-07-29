@@ -5,6 +5,18 @@ const COMMENT = /^(\s*)\/\/ ?(.*)$/;
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
 const PARAGRAPH_MARK = /^ponytail:/; // joined like prose, but exempt from the word cap
 const DIVIDER = /^[-=*_#]{3,}/; // `---- section ----`: hand-formatted, passed through verbatim
+// `skipIf` guards JSDoc, whose `*`-prefixed continuation lines are a layout the tool must not touch.
+const BLOCK_KINDS = [
+  {
+    open: /^(\s*)\/\*/, openTag: "/*", closeTag: "*/",
+    stripOpen: /^\s*\/\*+/, stripClose: /\*\/\s*$/, skipIf: /^\*/,
+  },
+  {
+    open: /^(\s*)<!--/, openTag: "<!--", closeTag: "-->",
+    stripOpen: /^\s*<!--/, stripClose: /-->\s*$/, skipIf: undefined,
+  },
+];
+const KEYWORD = /^(const|let|var|function|if|else|for|while|do|return|import|export|class|await|try|catch|switch|case|throw|new|type|interface)(?=[\s;({]|$)/;
 const WORD_LIMIT = 20;
 
 export type Reflow = {
@@ -16,7 +28,9 @@ function looksLikeCode(body: string): boolean {
   return (
     /[{}]$|=>$/.test(body) ||
     /^[)}\]]/.test(body) ||
-    /^(const|let|var|function|if|else|for|while|do|return|import|export|class|await|try|catch|switch|case|throw|new|type|interface)(?=[\s;({]|$)/.test(body) ||
+    /^<[/!a-zA-Z]/.test(body) || // commented-out markup
+
+    (KEYWORD.test(body) && (/^\w+\s*\(/.test(body) || /[;{,:]$/.test(body))) ||
     /^[\w.$]+\s*[:=].*[,;:{]$/.test(body) ||
     /^[\w.$]+\(.*[;,){]$/.test(body)
   );
@@ -39,12 +53,63 @@ function runIsProse(bodies: string[]): boolean {
   );
 }
 
+// Block prose: continuation lines carry no marker, so the block is taken whole.
+function reflowBlock(lines: string[], start: number, outLen: number) {
+  const kind = BLOCK_KINDS.find((candidate) => candidate.open.test(lines[start]));
+  if (!kind) return null;
+  const indent = lines[start].match(kind.open)![1];
+  let end = start;
+  while (end < lines.length && !lines[end].includes(kind.closeTag)) end += 1;
+  if (end >= lines.length) return null;
+
+  const raw = lines.slice(start, end + 1);
+  const bodies = raw.map((line, n) => {
+    const stripped = (n === 0 ? line.replace(kind.stripOpen, "") : line);
+    return (n === raw.length - 1 ? stripped.replace(kind.stripClose, "") : stripped).trim();
+  });
+  if (bodies.some((body) => body !== "" && looksLikeCode(body))) return null;
+  if (kind.skipIf && bodies.some((body) => kind.skipIf!.test(body))) return null;
+
+  const paragraphs: { bodies: string[]; start: number; end: number }[] = [];
+  bodies.forEach((body, n) => {
+    if (body === "") return;
+    const last = paragraphs.at(-1);
+    if (last && bodies[n - 1] !== "") last.bodies.push(body), (last.end = start + n + 1);
+    else paragraphs.push({ bodies: [body], start: start + n + 1, end: start + n + 1 });
+  });
+  if (paragraphs.length === 0) return null;
+
+  // Delimiters get their own lines; body sits two spaces in from the opener.
+  const out: string[] = [`${indent}${kind.openTag}`];
+  const placed = paragraphs.map((paragraph) => {
+    if (out.length > 1) out.push("");
+    out.push(`${indent}  ${joinBodies(paragraph.bodies)}`);
+    return { paragraph, line: outLen + out.length };
+  });
+  out.push(`${indent}${kind.closeTag}`);
+
+  const changed = out.length !== raw.length || out.some((line, n) => line !== raw[n]);
+  const runs = placed.flatMap(({ paragraph, line }) => {
+    const words = joinBodies(paragraph.bodies).split(/\s+/).length;
+    if (!changed && words < WORD_LIMIT) return [];
+    return [{ start: paragraph.start, end: paragraph.end, line, words, joined: changed, capped: true }];
+  });
+  return { end, out, runs };
+}
+
 export function reflowSource(source: string): { text: string; runs: Reflow[] } {
   const lines = source.split("\n");
   const out: string[] = [];
   const runs: Reflow[] = [];
   let i = 0;
   while (i < lines.length) {
+    const block = reflowBlock(lines, i, out.length);
+    if (block) {
+      out.push(...block.out);
+      runs.push(...block.runs);
+      i = block.end + 1;
+      continue;
+    }
     const head = lines[i].match(COMMENT);
     // A bare `//` or a `---- section ----` rule separates comments, it never starts one.
     if (!head || head[2].trim() === "" || DIVIDER.test(head[2].trim())) {

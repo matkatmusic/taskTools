@@ -1,0 +1,312 @@
+[
+  {
+    "startLine": 8,
+    "endLine": 28,
+    "source": "  /* Tokens, header/button/ruler/filebox/node styling all lifted from plans/mvp-app-mockup.html\n     so this reads as the same app. Only the parts Layers 1 and 2 need are kept.\n\n     2026-07-27: covers Layers 1 AND 2 (tasks #299-#307). Layer 2 is the FILE-HISTORY SNAPSHOT\n     layer — one 📸 node per version, on the same bubbles and ruler. `[3]` is gone: layers 3+ are\n     unassigned.\n\n     2026-07-25: extended to show tasks #245-#257 — the user's visual-fix round.\n     2026-07-26: brought level with EVERY Layer 1 task now closed (#245-#256, #258-#266, #268-#281)\n     AND with every Layer 1 task still open in tasks.json (#257, #267, #282-#290), which are mocked\n     here as the EXPECTED state so the behaviour can be dialled in before it is signed off. Those\n     carry an \"OPEN #n\" tag; closed ones just carry their number.\n     Of the open set, #267, #283, #285, #287, #288 and #290 are already BUILT in the jfred working\n     tree (plans/task-287-285-283-267-288-290-layer1-batch) and are only waiting to be closed — so\n     for those, this file and the real page should already agree. Genuinely unbuilt: #257 (the\n     Detail View drawer), #282 (author vs committer time), #284 (a shared tick expanding to its file\n     list) and #286 (the branch and commit dropdowns).\n\n     NEW BEHAVIOUR, user-requested 2026-07-26 and not yet a task: the dashed leader lines are no\n     longer drawn at rest. One is drawn only while the user hovers a ruler timestamp, or hovers /\n     selects a bubble, or hovers / selects a node. Plain scrolling draws none. */"
+  },
+  {
+    "startLine": 38,
+    "endLine": 39,
+    "source": "    /* OPEN #287: the hover-revealed full path needs a colour NO resting bubble name uses, or a long\n       path reads as one continuous run of green monospace mixed with its neighbours' names. */"
+  },
+  {
+    "startLine": 91,
+    "endLine": 92,
+    "source": "  /* task #256 + OPEN #285: the two bucket jumps and the Find bubble box share ONE navigation row.\n     #285 moves the find box out of the .sources path row and onto this one. */"
+  },
+  {
+    "startLine": 96,
+    "endLine": 97,
+    "source": "  /* OPEN #289: the input and its ‹ › cycle buttons are ONE non-wrapping group, so no window width\n     can separate a button from the box it drives. */"
+  },
+  {
+    "startLine": 103,
+    "endLine": 104,
+    "source": "  /* task #272: the \"Enter cycles\" guidance is PAGE TEXT, not a `title`. A native tooltip is hidden\n     the moment the user starts typing — exactly when the instruction becomes relevant. */"
+  },
+  {
+    "startLine": 106,
+    "endLine": 106,
+    "source": "  /* task #273: emptied box -> this readout is emptied too, so a stale count never outlives its search. */"
+  },
+  {
+    "startLine": 109,
+    "endLine": 109,
+    "source": "  /* The whole Layer 1 input surface: two folder paths, a branch and a commit. */"
+  },
+  {
+    "startLine": 117,
+    "endLine": 121,
+    "source": "  /* OPEN #286: the ref textbox becomes a commit-history dropdown sized in ch — 75 characters of\n     subject plus its timestamp — and a branch dropdown appears only once the repo is confirmed.\n     The repo row is `nowrap` (user, 2026-07-26: git repo, branch and commit belong on ONE row), so\n     88ch is the WANTED width, not a floor: `min-width: 0` lets the select give way on a narrow\n     window instead of wrapping the control onto a line of its own. */"
+  },
+  {
+    "startLine": 129,
+    "endLine": 129,
+    "source": "  /* S12: legend above the timeline, outside the scroll container. */"
+  },
+  {
+    "startLine": 135,
+    "endLine": 135,
+    "source": "  /* Three columns: File Nav (#252) | timeline | Detail View drawer (OPEN #257). */"
+  },
+  {
+    "startLine": 138,
+    "endLine": 140,
+    "source": "  /* ---- task #252: File Nav, LEFT of the ruler. Class names are deliberately the ones the real\n     component already ships in webapp/views/sidebar.ts + views/timeline-file-tree.ts, because the\n     task is to REUSE that component, not to write a second tree. */"
+  },
+  {
+    "startLine": 141,
+    "endLine": 143,
+    "source": "  /* One column, two pickers, a horizontal grip between them (user, 2026-07-27). `--files-share` is\n     the split as a percentage of the column, so the two panes always add up to the column's height\n     and neither can be dragged out of existence. */"
+  },
+  {
+    "startLine": 155,
+    "endLine": 156,
+    "source": "  /* Only the FIRST button takes the free space: with task #326's toggle there are now two, and two\n     auto margins would SPLIT the gap and strand one of them mid-row. */"
+  },
+  {
+    "startLine": 160,
+    "endLine": 160,
+    "source": "  /* task #326: the toggle paints like every other active control on the page. */"
+  },
+  {
+    "startLine": 163,
+    "endLine": 165,
+    "source": "  /* The pane's title row and its search box stay put while the TREE scrolls under them: a header\n     that scrolls away takes the \"Show Only Selected\" toggle with it. Negative margins pull it out\n     to the pane's edges so nothing shows through beside it. */"
+  },
+  {
+    "startLine": 169,
+    "endLine": 170,
+    "source": "  /* task #281: the File Nav's OWN search box — it filters this tree only and shares no code with\n     the find-bubble box, which searches the timeline. */"
+  },
+  {
+    "startLine": 180,
+    "endLine": 181,
+    "source": "  /* A REAL element, not a ::before, so a click on the triangle can be told from a click on the name\n     — that distinction is what lets the arrow expand while the name filters. */"
+  },
+  {
+    "startLine": 194,
+    "endLine": 195,
+    "source": "  /* The clicked row says so. Without it a DELETED file — which has no bubble to land on — answered a\n     click with nothing but its existing strikethrough. Declared after `.deleted` so it wins. */"
+  },
+  {
+    "startLine": 197,
+    "endLine": 197,
+    "source": "  /* Deleted = in the repo tree, absent on disk. #252 says these MUST still be listed. */"
+  },
+  {
+    "startLine": 202,
+    "endLine": 204,
+    "source": "  /* task #292: the JSONL picker is a second SECTION of the File Nav pane, not a third column — it\n     filters the timeline the same way the folder tree does, so it belongs beside it and inherits the\n     pane's width, its scroll and its resize grip. */"
+  },
+  {
+    "startLine": 213,
+    "endLine": 214,
+    "source": "  /* task #306: the title reads as the row's heading, so it takes the ink the filename has and the\n     timestamp below it keeps its muted footnote size. */"
+  },
+  {
+    "startLine": 216,
+    "endLine": 218,
+    "source": "  /* task #303: the highlight-then-fade. --c-echo, deliberately NOT the --c-script a SELECTED session\n     wears — this mark does not filter anything, and two marks that look alike would say it does.\n     The duration comes from FLASH_MS via the inline --flash-ms, so there is one number to change. */"
+  },
+  {
+    "startLine": 225,
+    "endLine": 226,
+    "source": "  /* task #279: drag the File Nav's right edge to resize it. The grip is a sibling overlay rather\n     than a border on the pane, so the drag target is 7 px wide without changing the pane's box. */"
+  },
+  {
+    "startLine": 233,
+    "endLine": 242,
+    "source": "  /* `zoom`, never `transform: scale()` — zoom participates in layout, so the scroll area shrinks\n     with the content. `isolation` makes this an unconditional stacking context, which the leader\n     layer's negative z-index needs at 100% zoom.\n     --lane-y is the gap between a bubble's border-box top and its first NODE: `.filebox`'s 2 px\n     border plus its 52 px header padding. Declared HERE because it is the nearest common ancestor\n     of both consumers — `.ruler .tick` and `.leader` — and neither may state the literal twice.\n     It is what makes the timestamp and the dashed line land on the dots (task 290). The bubble is\n     NOT pulled up by it: a negative margin put every bubble's box 54 px ABOVE the canvas top, which\n     is above the sticky gutter's own top edge, so bubbles at the earliest instants were drawn OVER\n     the ruler as soon as the canvas was scrolled sideways (user, 2026-07-26). */"
+  },
+  {
+    "startLine": 246,
+    "endLine": 248,
+    "source": "  /* Sticky gutter: the ruler stays put while the canvas scrolls left. --rail-x is derived from the\n     widest label — task #276 put seconds and hundredths in (\"MM-DD HH:MM:SS.hh\") and task #275\n     appended \" (n)\", so 23 monospace characters at 10 px x 0.6 em = ~140 px, plus 10 px clearance. */"
+  },
+  {
+    "startLine": 252,
+    "endLine": 252,
+    "source": "  /* task #260/#266: a tick is a navigation control, not inert text. */"
+  },
+  {
+    "startLine": 253,
+    "endLine": 254,
+    "source": "  /* The zoom lives on `.stage`, so a tick has to scale the axis itself to keep pointing at its\n     nodes — the timestamp's own size is what the reader asked to hold still. */"
+  },
+  {
+    "startLine": 262,
+    "endLine": 264,
+    "source": "  /* Zoom is the BUBBLES' scale, not the page's: `zoom` (never `transform: scale()`) participates in\n     layout, so zooming out genuinely shrinks the scroll area and more bubbles fit on screen, while\n     the gutter outside it keeps its own font size at every zoom (user, 2026-07-26). */"
+  },
+  {
+    "startLine": 267,
+    "endLine": 273,
+    "source": "  /* --head is the in-box headroom the file name + sub line occupy. The box is pulled UP by exactly\n     that much so node axis 0 lands on its ruler tick.\n     OPEN #290 is the SAME defect stated the other way round: --axis-px alone is NOT where a node\n     sits, so the tick and the leader used to mark a point --head px above the dots. The fix is\n     `+ var(--lane-y)` on the TICK and the LEADER (see `.canvas`), not a negative margin here —\n     pulling the bubble up instead put its box above the canvas's own top edge, and the sticky ruler\n     stretches only to that edge, so early bubbles rode over the gutter under horizontal scroll. */"
+  },
+  {
+    "startLine": 277,
+    "endLine": 279,
+    "source": "    /* Half-transparent so the JSONL wash behind it reads THROUGH the bubble (user, 2026-07-27) —\n       otherwise the one place the range matters most, over the files it touched, is the one place\n       it cannot be seen. */"
+  },
+  {
+    "startLine": 282,
+    "endLine": 284,
+    "source": "  /* task #245/#270/#280: the label is the BASENAME with the full path on `data-path`, ellipsised to\n     the bubble at rest so it cannot overprint its neighbours. #270's wrapped two-line name was\n     REVERTED on user feedback; truncate-plus-reveal is the settled treatment. */"
+  },
+  {
+    "startLine": 288,
+    "endLine": 292,
+    "source": "  /* task #280: hovering reveals the WHOLE path in-page — not as a native tooltip, which the user\n     rejected. Lifting max-width/overflow is the entire reveal; the opaque background and z-index 7\n     (above .node's 6, below .ruler's 8) stop it being painted over by its neighbours.\n     OPEN #287: the revealed text also changes colour, so it cannot be read as a continuation of the\n     neighbouring bubbles' names sitting at the same y. */"
+  },
+  {
+    "startLine": 299,
+    "endLine": 307,
+    "source": "  /* ---- tasks #250/#262/#264/#265 + the 2026-07-26 on-demand rule --------------------------------\n     ONE dashed line per ruler ENTRY, in its own layer behind the bubbles (#264) — the per-bubble\n     `.filebox::before` drew 805 overlapping copies and made the page unusable (#263). `inset: 0`\n     against `.canvas`, not `.stage`, is what lets a line reach the sticky gutter with no length\n     guess (#262). `top` is the entry's own --axis-px, which is where its nodes sit (#265/#290).\n\n     ON DEMAND (user, 2026-07-26): opacity 0 at rest. Scrolling draws nothing. `.on` is set by JS\n     only while a ruler timestamp, a bubble or a node is hovered or selected. Kept as an opacity\n     toggle rather than display/none so the lines never re-layout — showing one costs a repaint. */"
+  },
+  {
+    "startLine": 314,
+    "endLine": 316,
+    "source": "  /* task #292: where a selected JSONL starts and ends. The filter keeps each touched file's WHOLE\n     history, so the band is the only thing saying which part of that history the session actually\n     wrote — it rides the same axis-times-zoom conversion the ticks and leaders use. */"
+  },
+  {
+    "startLine": 317,
+    "endLine": 322,
+    "source": "  /* Two marks per picked session, and they answer different questions. The WASH is the overlap: which\n     bubbles, and which of their nodes, the session's window actually covers (user, 2026-07-27) — a\n     14% tint keeps every dot and label under it readable. The BAR is the extent on its own, in the\n     empty column between the gutter and the first bubble, so the range still reads when the wash is\n     scrolled past its bubbles. Text is what a wash cannot carry: a printed name lands across whatever\n     file sits at that instant, so the name is the bar's tooltip. */"
+  },
+  {
+    "startLine": 324,
+    "endLine": 325,
+    "source": "  /* BEHIND the bubbles (user, 2026-07-27), like the leaders: the wash says which nodes the session\n     covers, and a bubble that has to be read through a tint is a bubble the wash has cost something. */"
+  },
+  {
+    "startLine": 337,
+    "endLine": 337,
+    "source": "  /* The two ends read as ends rather than as a bar that got clipped by a scroll. */"
+  },
+  {
+    "startLine": 342,
+    "endLine": 343,
+    "source": "  /* The gutter is opaque and always on screen, so it carries the range too — a band alone is hidden\n     wherever a bubble sits over it. */"
+  },
+  {
+    "startLine": 354,
+    "endLine": 355,
+    "source": "  /* task #301: a snapshot is a SOLID circle — the commit is a rounded square and the on-disk node is\n     a hollow double ring, so shape alone separates the three before colour is read. */"
+  },
+  {
+    "startLine": 359,
+    "endLine": 359,
+    "source": "  /* OPEN #257: only clickable nodes advertise themselves. */"
+  },
+  {
+    "startLine": 362,
+    "endLine": 364,
+    "source": "  /* `:not(.found)` — a SELECTED node already wears its [ ] brackets, and the hover ring is a second\n     mark in the same colour landing in the same few px (user, 2026-07-27). The selection is the\n     stronger statement, so it wins and the hover says nothing extra. */"
+  },
+  {
+    "startLine": 368,
+    "endLine": 370,
+    "source": "  /* task #259: two events of ONE file at ONE instant (a commit and the working tree touched in the\n     same second) get their own row slots — the rounded rectangle is what says they are simultaneous\n     rather than merely adjacent. Drawn before the nodes so it stays behind them. */"
+  },
+  {
+    "startLine": 375,
+    "endLine": 380,
+    "source": "  /* task #261's highlight convention, reused by every landing: an OUTLINE, never a border — a\n     border would move the bubble's own box, which is the geometry this page exists to inspect.\n     OPEN #267/#283: a NODE is marked with [ ] brackets instead. A dot is 15 px inside a lane of\n     stacked rows, so an outline on it reads as another ring — the brackets sit OUTSIDE the dot in\n     the empty gutter beside the rail, where nothing else on the page draws. The pseudo-elements\n     hang off `.node`, which is already absolutely positioned, so they move nothing. */"
+  },
+  {
+    "startLine": 382,
+    "endLine": 385,
+    "source": "  /* The brackets hug the dot: at the original 3 px gap and 5 px width they reached 15.5 px either\n     side of a 15 px dot, which put the left one over the range rails and the right one under the\n     node's own label (user, 2026-07-27). 11.5 px clears both, and the shorter 4 px overhang also\n     stops a bracket touching the node one ROW_PX below it. */"
+  },
+  {
+    "startLine": 391,
+    "endLine": 392,
+    "source": "  /* The gutter row for whatever is selected reads the same as an expanded row (user, 2026-07-26):\n     bold, in full ink, with its dashed leader up — one selection, one language. */"
+  },
+  {
+    "startLine": 395,
+    "endLine": 395,
+    "source": "  /* Orphan buckets: one per direction, a plain file list, placed at the earliest member instant. */"
+  },
+  {
+    "startLine": 398,
+    "endLine": 400,
+    "source": "  /* Each row is placed at its OWN instant (see addBucket), so the list is a positioning context\n     tall enough to hold the last one. `translateY(-50%)` centres a row on its instant the way a\n     `.node` is centred on its own — otherwise a row hangs half a line below its ruler timestamp. */"
+  },
+  {
+    "startLine": 406,
+    "endLine": 407,
+    "source": "  /* An orphan row is inspectable like a node (user, 2026-07-26): a repo-only file still has bytes in\n     the repository at its last commit, and a disk-only file has them in the working tree. */"
+  },
+  {
+    "startLine": 415,
+    "endLine": 425,
+    "source": "  /* ---- OPEN #284: a tick shared by nodes in MORE THAN ONE bubble expands the list of files\n     touched at that instant instead of silently jumping to whichever one the lookup found first.\n     IN THE RULER, not over the canvas (user, 2026-07-26): the list is part of the gutter row, so it\n     opens UNDER its timestamp and pushes the rows below it down — see EXPAND_ROW_PX in the script,\n     which feeds the row's extra height back into the axis layout so the bubbles crossing that\n     timestamp grow and shift with it. A popover floating over the timeline was the first attempt and\n     was wrong twice over: it hid the render it was describing, and its text took the timeline's ink\n     rather than the gutter's.\n     `width: max-content` past the 150 px rail is deliberate — a path is longer than the gutter is\n     wide, and `.ruler` is opaque and z-index 8, so the list paints cleanly over the canvas it\n     overhangs while the timestamps stay put. */"
+  },
+  {
+    "startLine": 426,
+    "endLine": 429,
+    "source": "  /* An OPEN row is not a SELECTED row. It used to be bold, which is exactly what `.selected` looks\n     like, so a row left open under a selection somewhere else read as a second selected row (user,\n     2026-07-26). Bold now means selected and nothing else; the open row is announced by the file\n     list hanging under it, which no other row has. */"
+  },
+  {
+    "startLine": 438,
+    "endLine": 440,
+    "source": "  /* ---- task #246: minimap, pinned to the LOWER-LEFT of the timeline pane. It lives in .stagewrap,\n     NOT in the scrolling .timelines, so it does not scroll away.\n     task #269: inset past the sticky ruler — at left: 12px it covered the gutter's timestamps. */"
+  },
+  {
+    "startLine": 453,
+    "endLine": 453,
+    "source": "  /* ---- OPEN #295/#296/#297: the source-path picker, and the settings button that watches it. */"
+  },
+  {
+    "startLine": 471,
+    "endLine": 471,
+    "source": "  /* The folder held no JSONLs. In front of the list, gone on its own a few seconds later. */"
+  },
+  {
+    "startLine": 477,
+    "endLine": 477,
+    "source": "  /* ---- OPEN #257: Detail View drawer, right half of the screen. */"
+  },
+  {
+    "startLine": 478,
+    "endLine": 479,
+    "source": "  /* A flex COLUMN since task #324 gave the header a second row: the body can no longer subtract a\n     fixed header height, because whether row 2 is there depends on what is selected. */"
+  },
+  {
+    "startLine": 482,
+    "endLine": 483,
+    "source": "                                 /* no width transition: #258 re-centres the clicked node against\n                                    the post-reflow pane, and an animating width is never that */"
+  },
+  {
+    "startLine": 492,
+    "endLine": 494,
+    "source": "  /* task #294: the drawer's code colours. The real page reuses webapp/highlight.ts, whose renderCodeInto\n     already serves the revision view — these class names are that renderer's output shape, so the port\n     is a swap of the tokeniser and not of the stylesheet. */"
+  },
+  {
+    "startLine": 503,
+    "endLine": 505,
+    "source": "  /* ---- tasks #323/#324: the drawer's control strips.\n     Row 1 carries identity and navigation, row 2 the diff tools — and row 2 exists ONLY for a pair,\n     so a single-node view spends none of the drawer's height on buttons it cannot use. */"
+  },
+  {
+    "startLine": 513,
+    "endLine": 515,
+    "source": "  /* task #305: the pair's marks on the lane. They REPLACE the [ ] brackets rather than joining them\n     — one selection language at a time — so they are rings, and the two ends differ in colour\n     because \"which of these two is the base\" is the question the header answers in words. */"
+  },
+  {
+    "startLine": 519,
+    "endLine": 520,
+    "source": "  /* ---- tasks #319/#320: the diff body. `.dbody` is a div, not a <pre>: it holds rows, and the\n     single-node view puts its own <pre> inside it. */"
+  },
+  {
+    "startLine": 530,
+    "endLine": 531,
+    "source": "  /* The side with no counterpart on a changed row: hatched-empty, so the eye reads \"nothing here\"\n     rather than \"a blank line here\". */"
+  },
+  {
+    "startLine": 535,
+    "endLine": 535,
+    "source": "  /* task #305: the cross-bubble refusal, said out loud rather than swallowed. */"
+  }
+]

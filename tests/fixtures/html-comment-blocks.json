@@ -1,0 +1,117 @@
+[
+  {
+    "startLine": 547,
+    "endLine": 549,
+    "source": "    <!-- OPEN #282: which stamp places a bubble. Two commits rewritten in one rebase share a\n         committer instant while their author instants are days apart, so the reading has to be\n         chosen per view rather than assumed. -->"
+  },
+  {
+    "startLine": 561,
+    "endLine": 561,
+    "source": "      <!-- task #299/#304: layers 3+ are unassigned, so there is no third button to dim. -->"
+  },
+  {
+    "startLine": 567,
+    "endLine": 567,
+    "source": "  <!-- task #256 + OPEN #285/#289: every navigation control on one row. -->"
+  },
+  {
+    "startLine": 581,
+    "endLine": 583,
+    "source": "  <!-- Two rows, not one (user, 2026-07-26): the project folder is what is on DISK, and everything\n       below it describes the REPOSITORY the disk state is being read against. Splitting them also\n       stops #286's 88ch commit dropdown pushing the folder box off the row. -->"
+  },
+  {
+    "startLine": 588,
+    "endLine": 588,
+    "source": "    <!-- OPEN #295/#296: two lists, one picker. #297's button reports whether either has moved. -->"
+  },
+  {
+    "startLine": 599,
+    "endLine": 599,
+    "source": "    <!-- OPEN #286 -->"
+  },
+  {
+    "startLine": 602,
+    "endLine": 602,
+    "source": "    <!-- <button id=\"load\">Load</button> -->"
+  },
+  {
+    "startLine": 608,
+    "endLine": 608,
+    "source": "    <!-- task #301 -->"
+  },
+  {
+    "startLine": 612,
+    "endLine": 612,
+    "source": "    <!-- task #292 -->"
+  },
+  {
+    "startLine": 618,
+    "endLine": 618,
+    "source": "    <!-- tasks #252/#281 -->"
+  },
+  {
+    "startLine": 621,
+    "endLine": 621,
+    "source": "        <!-- The title and the search box stay put while the tree scrolls under them. -->"
+  },
+  {
+    "startLine": 624,
+    "endLine": 624,
+    "source": "            <!-- task #326: the folder selection is only STORED until this is on; see app.js's inSelection. -->"
+  },
+  {
+    "startLine": 626,
+    "endLine": 626,
+    "source": "            <!-- task #254: the deselect. Shift-click folders (#255) to select more than one. -->"
+  },
+  {
+    "startLine": 637,
+    "endLine": 638,
+    "source": "      <!-- task #292: the project's JSONLs. Same picker behaviour as the folder tree — click filters,\n           clicking the only selected one clears, shift extends. -->"
+  },
+  {
+    "startLine": 644,
+    "endLine": 644,
+    "source": "          <!-- task #309: the Files pane's own search control, pointed at the customTitles. -->"
+  },
+  {
+    "startLine": 653,
+    "endLine": 653,
+    "source": "    <!-- task #279 -->"
+  },
+  {
+    "startLine": 660,
+    "endLine": 660,
+    "source": "        <!-- task #292: the wash rides behind the bubbles, the bars in front of the empty lane -->"
+  },
+  {
+    "startLine": 665,
+    "endLine": 665,
+    "source": "      <!-- tasks #246/#269/#274 -->"
+  },
+  {
+    "startLine": 671,
+    "endLine": 673,
+    "source": "    <!-- OPEN #257 + tasks #323/#324. Row 1 = what is shown and how to step through it; row 2 = the\n         diff tools, revealed only when TWO nodes are selected. The Close button stays in row 1: it\n         serves every drawer mode, and moving it per-mode would make it jump around. -->"
+  },
+  {
+    "startLine": 676,
+    "endLine": 676,
+    "source": "        <!-- task #323: step ONE node along this file's lane. -->"
+  },
+  {
+    "startLine": 678,
+    "endLine": 678,
+    "source": "        <!-- task #324: the FIRST pair moves the base, the SECOND moves the target. -->"
+  },
+  {
+    "startLine": 695,
+    "endLine": 696,
+    "source": "  <!-- OPEN #295/#296: ONE dialog serves both lists — same widget, same rules, different title and\n       different array. Fixed and centred over everything, so it is in front of the timeline. -->"
+  },
+  {
+    "startLine": 712,
+    "endLine": 713,
+    "source": "  <!-- task #305: the diff pair's refusal. Fixed to the viewport, not the drawer — the thing being\n       refused is a click out on the timeline, which is where the reader is looking. -->"
+  }
+]
