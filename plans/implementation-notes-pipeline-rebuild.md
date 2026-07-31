@@ -18,6 +18,25 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   (`Cannot find module 'tests'` — it treats the path as a module id, not a search root).
   `node --test tests/*.test.ts` (shell-glob expanded) and bare `node --test` (auto-discovery)
   both work and were used for every green-check in this implementation.
+- Step 3 `buildWorkflowArguments(repoRoot, typecheckCommand, groups: TaskGroup[])` only
+  receives `TaskGroup[]` (groupId/taskNumbers/filePaths/scope), not full `TaskRecord[]`, so a
+  `PreparedTask`'s `files` is set to the whole group's `filePaths` (identical for every task in
+  that group) rather than a per-task subset — the type given to the function has no per-task
+  file breakdown to draw from. `writeTaskBriefFile` (which does need per-task title/description/
+  files) is called separately by the CLI, once per real `TaskRecord`, before `buildWorkflowArguments`
+  runs; brief/plan file *paths* inside `buildWorkflowArguments` are pure string templates keyed
+  only on task number, so no `TaskRecord` access is needed to assign them.
+- Step 4/5 wiring: `tackleMetrics.ts` exports only `computeArgumentsHash`/`appendRunMetricsRecord`
+  (no CLI of its own, per the plan). Step 5 says these are "called by the CLI entry point of
+  mergeTaskWorktrees.ts, which runs last and knows every outcome" — but merge's own CLI input
+  (`WorkflowArguments`) has no done/partial/blocked/needsClarification/requeue counts, since
+  those come from the plan/implement pipeline stages that run inside `workflow.js`, not from
+  anything `mergeTaskWorktrees.ts` computes itself. Resolved by widening the merge CLI's parsed
+  input to `WorkflowArguments & { runId?, doneCount?, partialCount?, blockedCount?,
+  needsClarificationCount?, requeueCount? }` — `workflow.js` (Step 7) is expected to pass this
+  superset object (not a bare `WorkflowArguments`) as the merge-stage agent's CLI argument;
+  unset counts default to 0. `conflictCount` and `taskNumbers`/`groupCount` are always computed
+  locally from the actual merge outcome, never trusted from input.
 
 ### Deviations
 - **Step 0 numbers don't match the plan's "confirmed by inspection" figures.** The plan states

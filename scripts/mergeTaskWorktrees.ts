@@ -1,6 +1,16 @@
 // Merges each group's branch in ascending order; a conflict means a worker touched an undeclared file.
 import { execFileSync } from "node:child_process";
 import type { PreparedGroup, WorkflowArguments } from "./prepareTasks.ts";
+import { appendRunMetricsRecord, computeArgumentsHash } from "./tackleMetrics.ts";
+
+type CliInput = WorkflowArguments & {
+    runId?: string;
+    doneCount?: number;
+    partialCount?: number;
+    blockedCount?: number;
+    needsClarificationCount?: number;
+    requeueCount?: number;
+};
 
 export type MergeOutcome = {
     groupId: number;
@@ -32,7 +42,8 @@ export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, 
 }
 
 function runAsCli(): void {
-    const workflowArguments: WorkflowArguments = JSON.parse(process.argv[2]);
+    const input: CliInput = JSON.parse(process.argv[2]);
+    const workflowArguments: WorkflowArguments = { repo: input.repo, typecheckCommand: input.typecheckCommand, groups: input.groups };
     const sortedGroups = [...workflowArguments.groups].sort((a, b) => a.groupId - b.groupId);
     const merged: MergeOutcome[] = [];
     const conflicts: MergeOutcome[] = [];
@@ -45,6 +56,18 @@ function runAsCli(): void {
             conflicts.push(outcome);
         }
     }
+    appendRunMetricsRecord(workflowArguments.repo, {
+        runId: input.runId ?? new Date().toISOString(),
+        taskNumbers: sortedGroups.flatMap((g) => g.tasks.map((t) => t.number)),
+        groupCount: sortedGroups.length,
+        doneCount: input.doneCount ?? 0,
+        partialCount: input.partialCount ?? 0,
+        blockedCount: input.blockedCount ?? 0,
+        needsClarificationCount: input.needsClarificationCount ?? 0,
+        requeueCount: input.requeueCount ?? 0,
+        conflictCount: conflicts.length,
+        argumentsHash: computeArgumentsHash(workflowArguments),
+    });
     process.stdout.write(JSON.stringify({ merged, conflicts }));
 }
 
