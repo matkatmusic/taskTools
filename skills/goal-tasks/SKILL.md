@@ -13,7 +13,7 @@ Standing rule for every step below: if the user is vague or unsure, use AskUserQ
 
 3. Confirm the goal, spec items, and key decisions with the user. Do not create any tasks until the user agrees.
 
-4. Use `/create-task` to create granular tasks that, when all are completed, achieve the goal. Encode order with `blockedBy` so progress toward the goal is measurable. Each task should be completable in under 20 minutes and at most ~200 lines of code — split larger spec items into multiple tasks, merge trivial ones.
+4. Use `/create-task` to create granular tasks that, when all are completed, achieve the goal. Encode order with `blockedBy` so progress toward the goal is measurable. Each task should be completable in under 20 minutes and at most ~200 lines of code — split larger spec items into multiple tasks, merge trivial ones. Populate `files` with the repo-relative paths each task will touch; omit it if genuinely undeterminable.
 
 5. Backfill the created task numbers into each spec item's `Tasks:` line.
 

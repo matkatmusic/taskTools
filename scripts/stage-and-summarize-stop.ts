@@ -12,7 +12,7 @@ if (typeof sid !== "string" || sid.length === 0) process.exit(0);
 const flag = join(process.env.HOME ?? "", ".claude", "turn-flags", sid);
 if (!existsSync(flag)) process.exit(0);
 const paths = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))];
-rmSync(flag); // consumed: the reminder fires once per file-modifying stretch
+rmSync(flag, { force: true }); // consumed: the reminder fires once per file-modifying stretch
 
 const reflowed = paths.filter(existsSync).map((path) => ({ path, runs: reflowFile(path) }));
 
