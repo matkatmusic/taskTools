@@ -1,8 +1,4 @@
-// Behavioral checks for viewTaskHook.ts: /view-task prompts get a block-decision
-// JSON answer; anything else passes through silently. Regression guard for the
-// type-import crash that broke the hook on every prompt (Node type-stripping only
-// erases `import type` imports).
-// Run with: node --test tests/
+// viewTaskHook.ts: /view-task prompts get a block-decision JSON answer; other prompts pass through silently.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -22,7 +18,10 @@ function runHook(prompt: string, cwd: string): string {
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-hook-"));
-  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 1, title: "first task" }]));
+  writeFileSync(
+    join(root, "tasks.json"),
+    JSON.stringify([{ taskNumber: 1, title: "first task", description: "line one\nline two" }]),
+  );
   writeFileSync(join(root, "completedTasks.json"), "[]");
   return root;
 }
@@ -37,4 +36,22 @@ test("hook loads and answers /view-task with a block decision", () => {
 test("hook is silent passthrough for other prompts", () => {
   const out = runHook("unrelated prompt", makeProjectRoot());
   assert.equal(out, "");
+});
+
+test("/view-task <N> includes the task's description with real newlines", () => {
+  const decision = JSON.parse(runHook("/view-task 1", makeProjectRoot()));
+  assert.ok(decision.reason.includes("Task 1 (OPEN): first task"));
+  assert.ok(decision.reason.includes("line one\nline two"));
+});
+
+test("/view-task with no number blocks with usage and the open-task listing", () => {
+  const decision = JSON.parse(runHook("/view-task", makeProjectRoot()));
+  assert.equal(decision.decision, "block");
+  assert.ok(decision.reason.startsWith("Usage: /view-task <N...>"));
+  assert.match(decision.reason, /1: first task/);
+});
+
+test("unknown task number reports not-found instead of crashing", () => {
+  const decision = JSON.parse(runHook("/view-task 99999", makeProjectRoot()));
+  assert.ok(decision.reason.includes("Task 99999: not found"));
 });

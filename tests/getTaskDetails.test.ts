@@ -1,7 +1,4 @@
-// Behavioral checks for getTaskDetails.ts: the no-arg listing marks blocked
-// tasks with [blockedBy: ...] so pick-a-task/tackle-tasks can skip them
-// without pulling full details.
-// Run with: node --test tests/
+// getTaskDetails.ts: no-arg listing marks blocked tasks with [blockedBy: ...] for pick-a-task/tackle-tasks.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -33,6 +30,7 @@ test("listing marks blocked tasks and leaves unblocked ones plain", () => {
   assert.match(out, /OPEN 1: unblocked task\n/);
   assert.match(out, /OPEN 2: blocked task \[blockedBy: 1,3\]/);
   assert.doesNotMatch(out, /unblocked task \[blockedBy/);
+  assert.match(out, /DONE 3: done task\n/);
 });
 
 test("digits inside trailing prose are not treated as task numbers", () => {
@@ -45,8 +43,7 @@ test("digits inside trailing prose are not treated as task numbers", () => {
 });
 
 test("a JSON array first argument closes the batch the skill named", () => {
-  // Scenario: close-tasks pre-fills details via '$1', which is the no-space JSON
-  // array token — the only form that survives a closureNote full of quotes.
+  // close-tasks passes details via '$1', the no-space JSON array token that survives quoted closureNotes.
   const root = makeProjectRoot();
   for (const arg of ["[1,2]", '"[1,2]"', "1,2"]) {
     const out = runScript(root, arg);
