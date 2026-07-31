@@ -46,7 +46,19 @@ export function selectRequestedTasks(openTasks: TaskRecord[], requestedNumbers: 
         throw new Error(`not open in tasks.json: ${missingNumbers.join(", ")}`);
     }
     const requestedTasks = openTasks.filter((task) => requestedNumbers.includes(task.taskNumber));
-    return requestedTasks.filter((task) => getOpenBlockers(task, openNumbers).length === 0);
+    const runnableTasks = requestedTasks.filter((task) => getOpenBlockers(task, openNumbers).length === 0);
+    const undeclaredNumbers = runnableTasks.filter((task) => declaredFiles(task).length === 0).map((task) => task.taskNumber);
+    if (undeclaredNumbers.length > 0) {
+        const numbers = undeclaredNumbers.join(", ");
+        throw new Error(
+            `these tasks declare no "files" and cannot be planned or implemented: ${numbers}. `
+            + `A task's "files" array is both the worker's ownership fence and the key that decides `
+            + `what runs in parallel, so it cannot be inferred at run time. `
+            + `Run /taskTools:update-task-files [${undeclaredNumbers.join(",")}] to add them, `
+            + `or revise the tasks first.`,
+        );
+    }
+    return runnableTasks;
 }
 
 export function generateRunId(): string {

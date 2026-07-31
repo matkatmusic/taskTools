@@ -101,8 +101,7 @@ test("test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath", () => 
 test("test_selectRequestedTasksRefusesToRunWhenNoTaskNumbersWereGiven", () => {
     // Setup: two open tasks and an empty requested-numbers list.
     const openTasks = [{ taskNumber: 1 }, { taskNumber: 2 }];
-    // Test action and verification: selecting with no requested numbers throws instead of
-    // silently falling back to every open task, which would fan agents out over the whole backlog.
+    // Verification: throws instead of falling back to every open task.
     assert.throws(() => selectRequestedTasks(openTasks, []), /no task numbers/i);
 });
 
@@ -115,9 +114,43 @@ test("test_selectRequestedTasksRefusesWhenARequestedNumberIsNotOpen", () => {
 
 test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
     // Setup: task 2 is blocked by open task 1; both are requested.
-    const openTasks = [{ taskNumber: 1 }, { taskNumber: 2, blockedBy: [1] }];
+    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [1], files: ["b.ts"] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
     // Verification: only the unblocked task survives, so no worktree is built for blocked work.
     assert.deepEqual(selected.map((t) => t.taskNumber), [1]);
+});
+
+test("test_selectRequestedTasksRefusesTasksWithNoFilesArray", () => {
+    // Setup: task 1 declares files, task 2 has no files key at all; both are requested.
+    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2 }];
+    // Verification: the run stops and names only the undeclared task.
+    assert.throws(() => selectRequestedTasks(openTasks, [1, 2]), /\b2\b/);
+});
+
+test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
+    // Setup: task 1 carries an explicitly empty files array.
+    const openTasks = [{ taskNumber: 1, files: [] }];
+    // Test action and verification: an empty array is refused like a missing one, since it would hand the worker an empty ownership fence.
+    assert.throws(() => selectRequestedTasks(openTasks, [1]), /files/i);
+});
+
+test("test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask", () => {
+    // Setup: task 2 is blocked by open task 1 and declares no files; task 1 declares files.
+    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [1] }];
+    // Test action: select both requested tasks.
+    const selected = selectRequestedTasks(openTasks, [1, 2]);
+    // Verification: the blocked task is dropped before the files check, so it does not stop a run it was never going to take part in.
+    assert.deepEqual(selected.map((t) => t.taskNumber), [1]);
+});
+
+test("test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists", () => {
+    // Setup: one requested task with no files, and the skill directory on disk.
+    const openTasks = [{ taskNumber: 7 }];
+    // Test action: capture the refusal message.
+    let message = "";
+    try { selectRequestedTasks(openTasks, [7]); } catch (error) { message = (error as Error).message; }
+    // Verification: the message names the update-task-files command, and a SKILL.md for it exists, so the pointer cannot rot into a dead reference.
+    assert.match(message, /update-task-files/);
+    assert.ok(existsSync(join(import.meta.dirname, "..", "skills", "update-task-files", "SKILL.md")));
 });
