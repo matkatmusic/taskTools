@@ -5,7 +5,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildWorkflowArguments, createWorktreeForGroup, writeTaskBriefFile } from "../scripts/prepareTasks.ts";
+import {
+    buildWorkflowArguments,
+    createWorktreeForGroup,
+    generateRunId,
+    writeTaskBriefFile,
+} from "../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
@@ -75,4 +80,12 @@ test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () =
     const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
     const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
     assert.equal(JSON.stringify(first), JSON.stringify(second));
+});
+
+test("test_generateRunIdProducesDifferentValuesOnEachCall", () => {
+    const first = generateRunId();
+    const second = generateRunId();
+    assert.equal(typeof first, "string");
+    assert.ok(first.length > 0);
+    assert.notEqual(first, second);
 });

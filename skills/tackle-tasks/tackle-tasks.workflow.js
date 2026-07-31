@@ -153,7 +153,7 @@ const mergeCliInput = {
   repo: REPO,
   typecheckCommand: TYPECHECK_COMMAND,
   groups: GROUPS,
-  runId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+  runId: ARGS.runId,
   doneCount: implementResults.filter((r) => r.status === 'done').length,
   partialCount: partial.length,
   blockedCount: blocked.length,
