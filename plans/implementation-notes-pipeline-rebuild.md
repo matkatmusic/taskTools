@@ -33,10 +33,10 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   those come from the plan/implement pipeline stages that run inside `workflow.js`, not from
   anything `mergeTaskWorktrees.ts` computes itself. Resolved by widening the merge CLI's parsed
   input to `WorkflowArguments & { runId?, doneCount?, partialCount?, blockedCount?,
-  needsClarificationCount?, requeueCount? }` — `workflow.js` (Step 7) is expected to pass this
-  superset object (not a bare `WorkflowArguments`) as the merge-stage agent's CLI argument;
-  unset counts default to 0. `conflictCount` and `taskNumbers`/`groupCount` are always computed
-  locally from the actual merge outcome, never trusted from input.
+  needsClarificationCount?, requeueCount? }` — `workflow.js` (Step 7) passes this superset
+  object (not a bare `WorkflowArguments`) as the merge-stage agent's CLI argument; unset counts
+  default to 0. `conflictCount` and `taskNumbers`/`groupCount` are always computed locally from
+  the actual merge outcome, never trusted from input.
 
 ### Deviations
 - **Step 0 numbers don't match the plan's "confirmed by inspection" figures.** The plan states
@@ -47,15 +47,17 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   sessions and 7 close-tasks invocations in that directory. Across all six directories the
   extractor produced 116 runs total, 106 distinct sessions, 6 reached close-tasks. I did not
   alter the detection rule to chase the stated 331/22 — the plan's own detection spec (exact
-  marker, no recursion) is unambiguous and I followed it literally. The 331/22 figures were
-  likely produced by a looser or recursive count during the plan's own drafting. Proceeding
-  with the literally-specified rule; `plans/tackle-baseline.jsonl` (116 lines) reflects it.
-
-### Tradeoffs
-- Chose nearest-backward-timestamp fallback over dropping runs with an untimestamped boundary
-  record — keeps every run in the baseline for later comparison rather than silently losing
-  samples.
-
+  marker, no recursion) is unambiguous and I followed it literally. Proceeding with the
+  literally-specified rule; `plans/tackle-baseline.jsonl` (116 lines) reflects it.
+  **2026-07-31 addendum (post-review):** the coordinator's own independent count came out at
+  331/102/22, counting raw record matches across resumed and forked transcripts — which
+  duplicate history (the same turn appears in a resumed session's file *and* its parent, or in
+  a fork's file *and* the branch it forked from). My count only reads each session's own
+  top-level `*.jsonl` once and never follows resume/fork lineage, so it does not double-count
+  those duplicated turns. Confirmed: my 114/102/7 (main dir) and 116/106/6 (all six dirs) are
+  the de-duplicated counts; the plan's 331/22 figures were inflated by that duplication, not by
+  an error in my extractor. No change made to `plans/tackle-baseline.jsonl` — it already
+  reflects the correct de-duplicated counts.
 - Step 7 `tackle-tasks.workflow.js`: the runtime globals `agent`, `parallel`, `log`, `args` are
   already used unimported by the pre-existing file, confirming workflow scripts execute inside
   a harness-provided async function body, not as a normal ES module (`node --check` on both the
@@ -66,32 +68,59 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   into module-scope accumulator Maps/arrays as a side effect, and the final return object is
   built from those accumulators rather than from `pipeline`'s own return value — this makes the
   aggregation correct regardless of exactly what `pipeline()` itself resolves to.
-- Step 7 merge stage: the plan's spec says the merge-stage agent's "entire instruction" is to
-  run `node scripts/mergeTaskWorktrees.ts '<workflow arguments JSON>'`, but that script lives in
-  the taskTools *plugin's* scripts/ directory, not the target repo (`ARGS.repo`) the workflow
-  operates on — and workflow.js has no access to `${CLAUDE_PLUGIN_ROOT}` template substitution
-  (that's a SKILL.md-body-only feature). Used `$CLAUDE_PLUGIN_ROOT` as a literal shell env-var
-  reference in the agent's instructions instead, matching how the rest of this codebase already
-  relies on `CLAUDE_PLUGIN_ROOT` being a real exported shell variable (e.g. checkBlockers.ts's
-  invocation line in tackle-tasks/SKILL.md), not just markdown templating.
-- Step 7 merge CLI input: per the Step 5 deviation above, the merge-stage agent is told to pass
-  a JSON object that is `WorkflowArguments` (`repo`, `typecheckCommand`, `groups`) plus
-  `runId`/`doneCount`/`partialCount`/`blockedCount`/`needsClarificationCount`/`requeueCount`,
-  built from the pipeline's own accumulators. `runId` is a plain-JS random string
-  (`Date.now().toString(36)` + `Math.random()...`), not `crypto.randomUUID()`, since workflow
-  scripts have no Node API access.
+- Step 8 SKILL.md shim (original pass): the plan named exactly five things to keep (frontmatter,
+  Verification section, BLOCKED rule, Closing section, Commit message section) plus one literal
+  new body block. Two paragraphs from the old file weren't in either list — the "Invocation
+  format" explanation and the "`valid` skips Verification" bypass — and I dropped both. The
+  post-implementation review (below) correctly called the `valid`-bypass drop a live regression
+  (the `argument-hint` still advertised it) and had it restored.
 
-- Step 8 SKILL.md shim: the plan names exactly five things to keep (frontmatter, Verification
-  section, BLOCKED rule, Closing section, Commit message section) plus the one literal new body
-  block it gives verbatim. Two paragraphs from the old file aren't in either list: the
-  "Invocation format" explanation and the "`valid` skips Verification" bypass. I dropped both,
-  reading the plan's "There is no serial fallback path" as endorsing this simplification —
-  Verification now always runs (no bypass), matching create-task/checkBlockers.ts's existing
-  `$ARGUMENTS[0]` convention closely enough that the format doesn't need re-explaining here.
-  Placed the BLOCKED rule sentence directly after the two injected bullet lines (its original
-  relative position), before the ponytail/Workflow instructions.
+### Tradeoffs
+- Chose nearest-backward-timestamp fallback over dropping runs with an untimestamped boundary
+  record — keeps every run in the baseline for later comparison rather than silently losing
+  samples.
 
 ### Open questions
-- Should someone reconcile the plan's stated 331/22 figures against this run before treating
-  `tackle-baseline.jsonl` as the comparison target in Step 9? Flagging, not blocking — proceeding
-  with the rest of the plan's steps regardless since Step 0 is explicitly throwaway/no-tests.
+- Resolved: the 331/22 vs 114/7 baseline discrepancy is explained above (transcript
+  duplication in the coordinator's count, not an extractor bug). No further action needed.
+
+## 2026-07-31:01:00:00 — Post-review fixes: six defects from coordinator review
+Chat title: pipeline-rebuild worktree implementation
+Path to JSONL log: /Users/matkatmusicllc/.claude/projects/-Users-matkatmusicllc-Programming-taskTools/bf123ec9-1e47-4a01-9658-26970d3fa6d8.jsonl
+
+### References
+Coordinator review message identifying six defects (3 run-fatal in tackle-tasks.workflow.js,
+3 in SKILL.md).
+
+### Design decisions
+- **Defect 1 (runId):** `Date.now()`/`Math.random()` are blocked inside workflow scripts
+  (would break `resumeFromRunId` caching), so runId generation moved to `prepareTasks.ts`
+  (`generateRunId()`, a real Node CLI, not a workflow sandbox) and is emitted in the printed
+  args JSON; `tackle-tasks.workflow.js` now reads `ARGS.runId`. Kept `generateRunId` OUT of
+  `buildWorkflowArguments`'s return value (that function is covered by an existing determinism
+  test — `test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput` — which a random
+  field would break); it's spread onto the object only at CLI-print time in `runAsCli`.
+- **Defect 3 (merge script path):** the coordinator offered two options —
+  `${REPO}/scripts/mergeTaskWorktrees.ts` or an explicit `mergeScript` field emitted by
+  prepareTasks.ts. Picked the latter: `${REPO}` is the *target* repo (e.g. RevEng), but
+  `mergeTaskWorktrees.ts` lives in the taskTools *plugin's* own `scripts/` directory — a
+  REPO-relative path would resolve to the wrong repo entirely. `mergeScriptPath()` derives the
+  absolute path from `prepareTasks.ts`'s own module location (`import.meta.dirname`), which is
+  always a sibling of `mergeTaskWorktrees.ts` regardless of which repo is being worked on.
+- **Defect 2 (typecheckStage signature):** every pipeline stage callback receives
+  `(prevResult, originalItem, index)`. Fixed `typecheckStage(group)` → `typecheckStage(implementResults, group)`.
+  Re-verified `planStage(group)` (stage 1 receives the item itself — correct) and
+  `implementStage(plans, group)` (correct) against the same contract; no change needed there.
+
+### Deviations
+- None beyond what's described above — all six defects fixed as specified.
+
+### Tradeoffs
+- Split what was originally one combined edit (runId + mergeScript both touch
+  `prepareTasks.ts`'s `runAsCli` print line) into two separate commits, per the "commit each fix
+  separately" instruction — temporarily backed out the mergeScript half, committed runId alone,
+  then reapplied mergeScript as its own commit. Slightly more churn than one commit, but keeps
+  the commit history reviewable per-defect as asked.
+
+### Open questions
+- None.
