@@ -5,7 +5,7 @@ argument-hint: "[N,N,...]"
 ---
 
 - repo root: !`pwd`
-- task details: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" '$ARGUMENTS[0]'`
+- task details: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" '$ARGUMENTS'`
 
 First, invoke `/ponytail:ponytail ultra`.
 

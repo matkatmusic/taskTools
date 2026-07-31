@@ -1,20 +1,17 @@
-// Behavioral checks for taskFiles.ts resolution + first-run seeding.
-// Run with: node --test tests/
+// Behavioral checks for taskFiles.ts resolution + first-run seeding.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/taskFiles.ts";
+import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/taskFiles.ts";
 
 function makeEmptyProjectRoot(): string {
   return mkdtempSync(join(tmpdir(), "taskTools-"));
 }
 
 test("test_resolvePrefersTaskToolsFolder", () => {
-  // Scenario: a project has BOTH .taskTools/tasks.json and a root tasks.json.
-  // Steps:
-  // the project root contains a tasks.json.
+  // Scenario: a project has BOTH .taskTools/tasks.json and a root tasks.json.  Steps: the project root contains a tasks.json.
   const root = makeEmptyProjectRoot();
   writeFileSync(join(root, "tasks.json"), "[]\n");
   // the project also contains .taskTools/tasks.json.
@@ -27,9 +24,7 @@ test("test_resolvePrefersTaskToolsFolder", () => {
 });
 
 test("test_resolveFallsBackToRootTasksJson", () => {
-  // Scenario: a pre-plugin project (like RevEng) keeps tasks.json at the root.
-  // Steps:
-  // only a root tasks.json exists — no .taskTools/ folder.
+  // Scenario: a pre-plugin project (like RevEng) keeps tasks.json at the root.  Steps: only a root tasks.json exists — no .taskTools/ folder.
   const root = makeEmptyProjectRoot();
   writeFileSync(join(root, "tasks.json"), "[]\n");
   // resolving must return the root pair so existing repos keep working untouched.
@@ -39,9 +34,7 @@ test("test_resolveFallsBackToRootTasksJson", () => {
 });
 
 test("test_resolveDefaultsToTaskToolsWhenNeitherExists", () => {
-  // Scenario: a brand-new project with no task files anywhere.
-  // Steps:
-  // the project root is empty.
+  // Scenario: a brand-new project with no task files anywhere.  Steps: the project root is empty.
   const root = makeEmptyProjectRoot();
   // resolving must point at the .taskTools/ pair (where seeding will create them)...
   const pair = resolveTaskFiles(root);
@@ -52,8 +45,7 @@ test("test_resolveDefaultsToTaskToolsWhenNeitherExists", () => {
 });
 
 test("test_resolveWalksUpToParentWithTaskFiles", () => {
-  // Scenario: the shell cwd was left in a subdirectory (mid-session `cd`), but the
-  // project's tasks.json lives at the root — resolution must walk up and find it.
+  // Scenario: the shell cwd was left in a subdirectory (mid-session `cd`), but the project's tasks.json lives at the root — resolution must walk up and find it.
   const root = makeEmptyProjectRoot();
   writeFileSync(join(root, "tasks.json"), "[]\n");
   const sub = join(root, "jfred", "src");
@@ -63,9 +55,7 @@ test("test_resolveWalksUpToParentWithTaskFiles", () => {
 });
 
 test("test_seedCreatesBothFilesWithEmptyArrays", () => {
-  // Scenario: first task creation in a fresh project generates both task files.
-  // Steps:
-  // the project root is empty; the resolved pair is the .taskTools/ default.
+  // Scenario: first task creation in a fresh project generates both task files.  Steps: the project root is empty; the resolved pair is the .taskTools/ default.
   const root = makeEmptyProjectRoot();
   const pair = resolveTaskFiles(root);
   // seeding creates both files, each holding an empty JSON array.
@@ -76,4 +66,22 @@ test("test_seedCreatesBothFilesWithEmptyArrays", () => {
   writeFileSync(pair.tasksPath, JSON.stringify([{ taskNumber: 1, title: "t" }]) + "\n");
   seedTaskFilesIfAbsent(pair);
   assert.equal(JSON.parse(readFileSync(pair.tasksPath, "utf8")).length, 1);
+});
+
+test("test_leadingTaskNumbersReadsTheArrayFromAWholeInvocationString", () => {
+    // Setup: the whole argument string a skill passes through, array first, prose after.
+    const invocation = "[346,347,348,349,350,351,353,345] valid";
+    // Test action: parse the leading task numbers out of it.
+    const numbers = leadingTaskNumbers([invocation]);
+    // Verification: every number is recovered and the trailing word is ignored.
+    assert.deepEqual(numbers, [346, 347, 348, 349, 350, 351, 353, 345]);
+});
+
+test("test_leadingTaskNumbersStopsAtFreeTextReasoning", () => {
+    // Setup: a close-tasks style invocation with per-task reasoning after the array.
+    const invocation = "[268,270] #268 fixed by X, #270 verified by user";
+    // Test action: parse the leading task numbers out of it.
+    const numbers = leadingTaskNumbers([invocation]);
+    // Verification: only the array contributes, so numbers inside the prose are not picked up.
+    assert.deepEqual(numbers, [268, 270]);
 });

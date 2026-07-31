@@ -5,9 +5,9 @@ argument-hint: "[N,N,...] <why they are done>"
 allowed-tools: Bash(git add *)
 ---
 
-- tasks to close: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" '$ARGUMENTS[0]'`
+- tasks to close: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" '$ARGUMENTS'`
 
-Invocation format: the first argument is a JSON array of the task numbers with **no spaces** — `[268,270,281]` — and everything after it is free-text reasoning. Only that first argument reaches the shell, so quotes, backticks and apostrophes in the reasoning are harmless. If the details above don't cover every task number named in `$ARGUMENTS` — a full listing instead, or only the first few — the invoker skipped the array form or put spaces in it: re-run the script yourself with all the numbers before continuing.
+Invocation format: the task numbers come first as a JSON array with **no spaces** — `[268,270,281]` — and everything after them is free-text reasoning. The script reads the whole argument string and stops at the first token that is not part of the array, so the reasoning is ignored by it. Avoid apostrophes and backticks in that reasoning; it reaches the shell inside single quotes. If the details above don't cover every task number named in `$ARGUMENTS` — a full listing instead, or only the first few — the invoker skipped the array form or put spaces in it: re-run the script yourself with all the numbers before continuing.
 
 `$ARGUMENTS` holds the whole invocation, reasoning included, and may attribute reasons per task (`#268 fixed by X, #270 verified by user`).
 
@@ -17,8 +17,8 @@ The decision that these tasks are done has already been made (by the user, or by
 
 Skip tasks already COMPLETED or not found, and say so.
 
-Then unblock dependents with one run of `node "${CLAUDE_PLUGIN_ROOT}/scripts/unblockDependents.ts" '$ARGUMENTS[0]'` — keep the quotes, or the shell treats the array as a glob. It removes the closed numbers from every remaining task's `blockedBy` array and reports what it unblocked.
+Then unblock dependents with one run of `node "${CLAUDE_PLUGIN_ROOT}/scripts/unblockDependents.ts" '<the task numbers as a no-space JSON array>'` — keep the quotes, or the shell treats the array as a glob. It removes the closed numbers from every remaining task's `blockedBy` array and reports what it unblocked.
 
-Stage the changes but do not commit. Provide a short commit message to the user, similar to "Closed tasks $ARGUMENTS[0]" or "Closed task $ARGUMENTS[0]".
+Stage the changes but do not commit. Provide a short commit message to the user, similar to "Closed tasks [268,270,281]" or "Closed task [268]", naming the numbers you actually closed.
 
 If a spec document references these task numbers, mark those items done in the spec.
