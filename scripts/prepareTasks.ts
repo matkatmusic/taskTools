@@ -34,6 +34,10 @@ export function generateRunId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+export function mergeScriptPath(): string {
+    return join(import.meta.dirname, "mergeTaskWorktrees.ts");
+}
+
 function branchNameForGroup(groupId: number): string {
     return `task-group-${groupId}`;
 }
@@ -104,7 +108,7 @@ function runAsCli(): void {
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
     const groups = groupTasksByFileOverlap(tasks);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
-    process.stdout.write(JSON.stringify({ ...workflowArguments, runId: generateRunId() }));
+    process.stdout.write(JSON.stringify({ ...workflowArguments, runId: generateRunId(), mergeScript: mergeScriptPath() }));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();

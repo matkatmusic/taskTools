@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
     buildWorkflowArguments,
     createWorktreeForGroup,
     generateRunId,
+    mergeScriptPath,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
@@ -88,4 +89,10 @@ test("test_generateRunIdProducesDifferentValuesOnEachCall", () => {
     assert.equal(typeof first, "string");
     assert.ok(first.length > 0);
     assert.notEqual(first, second);
+});
+
+test("test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath", () => {
+    const path = mergeScriptPath();
+    assert.equal(isAbsolute(path), true);
+    assert.match(path, /mergeTaskWorktrees\.ts$/);
 });

@@ -162,11 +162,11 @@ const mergeCliInput = {
 }
 
 const mergeResult = await agent(
-  `Run exactly this command from the repo root and return its stdout as JSON,
-unmodified — do not parse, summarize, reformat, or edit it. Do not run any
-other command. Do not edit any file.
+  `Run exactly this command and return its stdout as JSON, unmodified — do
+not parse, summarize, reformat, or edit it. Do not run any other command.
+Do not edit any file.
 
-node "$CLAUDE_PLUGIN_ROOT/scripts/mergeTaskWorktrees.ts" '${JSON.stringify(mergeCliInput)}'`,
+node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`,
   { label: 'merge:repo', phase: 'Merge', effort: 'low', schema: MERGE_SCHEMA },
 )
 
