@@ -15,6 +15,11 @@ Invoke `/ponytail:ponytail ultra`.
 
 When `$ARGUMENTS` contains the word `valid`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
 
+## Verification
+
+Review the task details above (each object comes from `tasks.json` if the task is open, or `completedTasks.json` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
+Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks detailed above.
+
 Call Workflow with scriptPath "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/tackle-tasks.workflow.js"
 and args set to the pipeline args JSON printed above, verbatim.
 
@@ -23,11 +28,6 @@ needsClarification question with AskUserQuestion. ONLY after the user approves, 
 close-tasks once for all merged tasks.
 
 There is no serial fallback path. One task or ten, the same code path runs.
-
-## Verification
-
-Review the task details above (each object comes from `tasks.json` if the task is open, or `completedTasks.json` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
-Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks detailed above.
 
 ## Closing your tasks
 
