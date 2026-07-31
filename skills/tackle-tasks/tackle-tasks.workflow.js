@@ -129,7 +129,7 @@ async function implementStage(plans, group) {
   return results
 }
 
-async function typecheckStage(group) {
+async function typecheckStage(implementResults, group) {
   const result = await agent(
     `cd ${group.worktree} and run: ${TYPECHECK_COMMAND}
 Report only — do not edit any file. If it fails, set passed=false and put the first errors in notes.`,
