@@ -13,6 +13,8 @@ Do not work on any task reported as BLOCKED in the "blocked status" above — re
 
 Invoke `/ponytail:ponytail ultra`.
 
+When `$ARGUMENTS` contains the word `valid`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
+
 Call Workflow with scriptPath "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/tackle-tasks.workflow.js"
 and args set to the pipeline args JSON printed above, verbatim.
 
