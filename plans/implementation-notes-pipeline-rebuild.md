@@ -81,6 +81,16 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   (`Date.now().toString(36)` + `Math.random()...`), not `crypto.randomUUID()`, since workflow
   scripts have no Node API access.
 
+- Step 8 SKILL.md shim: the plan names exactly five things to keep (frontmatter, Verification
+  section, BLOCKED rule, Closing section, Commit message section) plus the one literal new body
+  block it gives verbatim. Two paragraphs from the old file aren't in either list: the
+  "Invocation format" explanation and the "`valid` skips Verification" bypass. I dropped both,
+  reading the plan's "There is no serial fallback path" as endorsing this simplification —
+  Verification now always runs (no bypass), matching create-task/checkBlockers.ts's existing
+  `$ARGUMENTS[0]` convention closely enough that the format doesn't need re-explaining here.
+  Placed the BLOCKED rule sentence directly after the two injected bullet lines (its original
+  relative position), before the ponytail/Workflow instructions.
+
 ### Open questions
 - Should someone reconcile the plan's stated 331/22 figures against this run before treating
   `tackle-baseline.jsonl` as the comparison target in Step 9? Flagging, not blocking — proceeding
