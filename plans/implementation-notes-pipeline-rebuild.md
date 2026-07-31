@@ -56,6 +56,31 @@ Worktree: /Users/matkatmusicllc/Programming/taskTools-worktrees/pipeline-rebuild
   record — keeps every run in the baseline for later comparison rather than silently losing
   samples.
 
+- Step 7 `tackle-tasks.workflow.js`: the runtime globals `agent`, `parallel`, `log`, `args` are
+  already used unimported by the pre-existing file, confirming workflow scripts execute inside
+  a harness-provided async function body, not as a normal ES module (`node --check` on both the
+  old and new file reports "Illegal return statement" identically — expected, not a defect;
+  verified by wrapping the body in `new AsyncFunction(...)`, which parses cleanly). `pipeline`
+  is a new such global named by the plan; I could not find its contract documented anywhere on
+  disk, so `planStage`/`implementStage`/`typecheckStage` write their per-task/per-group results
+  into module-scope accumulator Maps/arrays as a side effect, and the final return object is
+  built from those accumulators rather than from `pipeline`'s own return value — this makes the
+  aggregation correct regardless of exactly what `pipeline()` itself resolves to.
+- Step 7 merge stage: the plan's spec says the merge-stage agent's "entire instruction" is to
+  run `node scripts/mergeTaskWorktrees.ts '<workflow arguments JSON>'`, but that script lives in
+  the taskTools *plugin's* scripts/ directory, not the target repo (`ARGS.repo`) the workflow
+  operates on — and workflow.js has no access to `${CLAUDE_PLUGIN_ROOT}` template substitution
+  (that's a SKILL.md-body-only feature). Used `$CLAUDE_PLUGIN_ROOT` as a literal shell env-var
+  reference in the agent's instructions instead, matching how the rest of this codebase already
+  relies on `CLAUDE_PLUGIN_ROOT` being a real exported shell variable (e.g. checkBlockers.ts's
+  invocation line in tackle-tasks/SKILL.md), not just markdown templating.
+- Step 7 merge CLI input: per the Step 5 deviation above, the merge-stage agent is told to pass
+  a JSON object that is `WorkflowArguments` (`repo`, `typecheckCommand`, `groups`) plus
+  `runId`/`doneCount`/`partialCount`/`blockedCount`/`needsClarificationCount`/`requeueCount`,
+  built from the pipeline's own accumulators. `runId` is a plain-JS random string
+  (`Date.now().toString(36)` + `Math.random()...`), not `crypto.randomUUID()`, since workflow
+  scripts have no Node API access.
+
 ### Open questions
 - Should someone reconcile the plan's stated 331/22 figures against this run before treating
   `tackle-baseline.jsonl` as the comparison target in Step 9? Flagging, not blocking — proceeding
