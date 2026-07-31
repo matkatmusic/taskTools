@@ -23,27 +23,34 @@ Use the git history and recent commits (over the last 3 days) to confirm/deny th
 
 Do not work on any task reported as BLOCKED in the "blocked status" above — report its open blockers and move on to the next requested task that is unblocked.
 
-For every task that is still problematic/relevant in the codebase, ALWAYS produce a plan first — never implement directly without one, even when the task looks trivial.
+### Plan phase — all tasks, up front
 
-Invoke it as `/make-a-plan plan <task description>`. The `plan` mode argument is REQUIRED: it stops that skill after the plan file is written, because THIS skill owns implementation. Invoking it as `plan+implement` would hand the work to a subagent and skip the task list below.
+For every task that is still problematic/relevant in the codebase, ALWAYS produce a plan first — never implement directly without one, even when the task looks trivial. If a task needs clarification, use AskUserQuestion now, before any planning or fan-out.
 
-Then execute that plan yourself with `/jot:implement <plan file>`.
-As soon as the plan exists, ALWAYS create a task list in this session (TaskCreate, one entry per plan step) and keep statuses current (TaskUpdate) as you work, so the user can watch progress.
-If clarification is needed for the task, use AskUserQuestion to ask the user for more information before beginning working on the task.
+Invoke `/make-a-plan plan <task description>` once per task, serially in this session, before implementing anything. The `plan` mode argument is REQUIRED: it stops that skill after the plan file is written, because THIS skill owns implementation. Each plan file doubles as a prescriptive brief for the execute phase — a worker must be able to implement it without making design decisions.
 
-### Parallel tackling
+As soon as the plans exist, create a task list in this session (TaskCreate, one entry per task) and keep statuses current (TaskUpdate) as work completes, so the user can watch progress.
 
-When more than one unblocked, still-relevant task remains, judge from the task details and the code whether they touch disjoint files. Tasks that overlap, or that still need user clarification, are worked serially in this session as described above.  
+### Execute phase
 
-For the disjoint tasks, spawn one subagent per task, all in a single message so they run concurrently.  
-Parallelize by file ownership instead of by task to prevent multiple agents writing to the same file at the same time. 
-Before spawning, create a task list in this session with one entry per delegated task, and update each entry as its subagent finishes — subagents' own task lists are not visible to the user. 
-Each subagent's prompt must tell it to: 
-- invoke `/tackle-tasks [<its one task number>] valid` (verification already happened above, so pass `valid`); 
-- NOT stage anything or generate commit messages; 
-- and report back a one-sentence summary of what it changed. 
+Judge from the plans whether the tasks touch disjoint files.
 
-After every subagent finishes, staging and the **Commit message** section below run once, in this session — concurrent staging by subagents races git's index lock and would produce per-task instead of per-repo messages.
+When two or more tasks touch disjoint files, fan them out with the Workflow tool using the template shipped with this skill:
+
+    Workflow({
+      scriptPath: "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/tackle-tasks.workflow.js",
+      args: {
+        repo: "<absolute repo path>",
+        typecheckCmd: "<the project's typecheck command>",
+        tasks: [{ number: <task #>, planFile: "<absolute plan file path>", files: ["<owned file>", ...] }]
+      }
+    })
+
+Each worker implements its plan file exactly, runs typecheck only, never stages or commits, and returns a structured status; partial workers get one requeue pass and the run ends with a whole-repo typecheck. Update the session task list from the returned `{done, partial, blocked}` and finish any leftovers serially.
+
+Tasks that overlap, are design-heavy, or stand alone are executed serially in this session with `/jot:implement <plan file>`.
+
+After all execution finishes, staging and the **Commit message** section below run once, in this session — workers never touch the git index, so nothing races it.
 
 **ONLY AFTER** the user verifies that all tasks are completed successfully, invoke the `close-tasks` skill once for all of them, as described below.  DO NOT close any tasks until the user has approved them. 
 
@@ -53,7 +60,7 @@ Close every task that is not problematic and was completed successfully, renderi
 
 If the user requests adding tasks, invoke the `create-task` skill once per task — never edit `tasks.json` directly.
 
-Don't run any tests or suites.  The user will run tests after you have completed your work.
+During implementation, run typecheck only — no test suites or visual checks, by you or by workers. Full verification (typecheck + full suite + the repo's UI verification where relevant) runs once inside `close-tasks`, after the user approves closing.
 
 ## Commit message
 

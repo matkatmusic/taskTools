@@ -11,6 +11,8 @@ Invocation format: the first argument is a JSON array of the task numbers with *
 
 `$ARGUMENTS` holds the whole invocation, reasoning included, and may attribute reasons per task (`#268 fixed by X, #270 verified by user`).
 
+Before archiving anything, run the project's verification once for the whole batch: typecheck plus the full test suite, and the repo's stated UI/browser verification if any closing task touched UI. If failures trace to the work being closed, fix them, re-stage the fixes, and re-run until green — only then archive. This is a regression gate, not a re-litigation of doneness.
+
 The decision that these tasks are done has already been made (by the user, or by the skill that invoked this one) — do not re-litigate it. Close every listed OPEN task in a single pass: move its object from `tasks.json` to `completedTasks.json`, adding a `completionDate` (today), `commitHashes` (search git history for the resolving commits; use an empty array if none can be identified), and a short `closureNote` — one sentence per task, using the invoker's reasoning for that specific task where they gave one, their general reasoning otherwise, and "closed manually by user" if they gave none.
 
 Skip tasks already COMPLETED or not found, and say so.
