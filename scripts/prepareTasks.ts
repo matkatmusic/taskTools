@@ -143,7 +143,13 @@ function runAsCli(): void {
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
     const groups = groupTasksByFileOverlap(tasks);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
-    process.stdout.write(JSON.stringify({ ...workflowArguments, runId: generateRunId(), mergeScript: mergeScriptPath() }));
+    // startTimestamp is stamped here because workflow scripts cannot call Date.now().
+    process.stdout.write(JSON.stringify({
+        ...workflowArguments,
+        runId: generateRunId(),
+        startTimestamp: new Date().toISOString(),
+        mergeScript: mergeScriptPath(),
+    }));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();

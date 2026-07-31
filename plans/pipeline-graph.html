@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>taskTools — pipeline map</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg:#12141a; --panel:#1a1d26; --line:#2c3140; --fg:#e6e8ee; --dim:#9aa2b5;
+  --det:#3fb950; --int:#f0883e; --agent:#a371f7; --data:#58a6ff; --hook:#8b949e;
+}
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--fg);
+  font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",sans-serif }
+header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex;
+  align-items:baseline; gap:16px; flex-wrap:wrap }
+h1 { font-size:16px; margin:0; font-weight:600 }
+header .sub { color:var(--dim); font-size:12px }
+#crumb button { background:none; border:1px solid var(--line); color:var(--fg);
+  border-radius:6px; padding:3px 10px; cursor:pointer; font-size:12px }
+#crumb button:hover { border-color:var(--data) }
+main { display:flex; align-items:stretch; height:calc(100vh - 108px) }
+#stage { flex:1; overflow:auto; padding:20px; min-width:0 }
+#stage svg { max-width:100%; height:auto }
+#panel { width:400px; flex:none; border-left:1px solid var(--line);
+  overflow:auto; padding:18px 20px; background:var(--panel) }
+#panel h2 { font-size:15px; margin:0 0 4px }
+#panel .src { color:var(--dim); font-size:12px; font-family:ui-monospace,monospace;
+  margin-bottom:12px; word-break:break-all }
+#panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--dim); margin:16px 0 5px }
+#panel pre { background:#0d1017; border:1px solid var(--line); border-radius:6px;
+  padding:10px; overflow-x:auto; font-size:12px; white-space:pre-wrap;
+  font-family:ui-monospace,monospace; color:#c9d1d9; margin:0 }
+#panel p { margin:0 }
+.badges { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:2px }
+.b { font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid }
+.b.det { color:var(--det); border-color:var(--det) }
+.b.int { color:var(--int); border-color:var(--int) }
+.b.agent { color:var(--agent); border-color:var(--agent) }
+.b.cost { color:var(--dim); border-color:var(--line) }
+.b.hot { color:#ff7b72; border-color:#ff7b72 }
+footer { border-top:1px solid var(--line); padding:8px 20px; display:flex;
+  gap:18px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--dim) }
+footer i { width:11px; height:11px; border-radius:3px; display:inline-block;
+  margin-right:5px; vertical-align:-1px }
+.hint { color:var(--dim); font-size:13px }
+</style>
+</head>
+<body>
+<header>
+  <h1>taskTools — pipeline map</h1>
+  <span class="sub">8 skills · 18 scripts · 6 hooks · 1 four-phase workflow</span>
+  <span id="crumb"></span>
+</header>
+<main>
+  <div id="stage"></div>
+  <aside id="panel"><p class="hint">Click any node.</p></aside>
+</main>
+<footer>
+  <span><i style="background:var(--det)"></i>deterministic — a script runs</span>
+  <span><i style="background:var(--int)"></i>interpretive — the model decides</span>
+  <span><i style="background:var(--agent)"></i>agent spawn</span>
+  <span><i style="background:var(--data)"></i>shared state</span>
+  <span>dashed = slow · red text = hot spot · costs are structural estimates, not measurements</span>
+</footer>
+<script src="./pipeline-graph.overview.js"></script>
+<script src="./pipeline-graph.skills.js"></script>
+<script src="./pipeline-graph.tackle.js"></script>
+<script src="./pipeline-graph.render.js"></script>
+</body>
+</html>

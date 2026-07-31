@@ -89,8 +89,10 @@ When the edits are done, run: ${TYPECHECK_COMMAND}
 Fix type errors in the files you own; do not run test suites, visual checks,
 or any other verification.
 
-When typecheck passes, stage and commit your own work from ${group.worktree}:
-  git add -A && git commit -m "task ${t.number}: <one-line summary>"
+When typecheck passes, commit from ${group.worktree}. Other tasks may share
+this worktree, so stage ONLY your own paths — never \`git add -A\`, never \`git add .\`:
+  ${t.files.length ? `git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}` : 'git add -- <list every path you edited, explicitly>'}
+  git commit -m "task ${t.number}: <one-line summary>"
 
 Soft time budget: 10 minutes — if you cannot finish, stop and return status
 "partial" with the not-yet-done plan steps listed in "remaining".
@@ -114,7 +116,8 @@ async function implementStage(plans, group) {
   const plannedTasks = group.tasks.filter((t) => planByNumber.get(t.number).status === 'planned')
   const results = []
   for (const t of plannedTasks) {
-    results.push(await runWorker(t, group, planByNumber.get(t.number).planFile, ''))
+    const result = await runWorker(t, group, planByNumber.get(t.number).planFile, '')
+    results.push(result ?? { task: t.number, status: 'blocked', summary: 'worker agent returned no result (killed, errored, or blocked)', remaining: [] })
   }
 
   for (const r of results.filter((r) => r.status === 'partial')) {
@@ -154,6 +157,7 @@ const mergeCliInput = {
   typecheckCommand: TYPECHECK_COMMAND,
   groups: GROUPS,
   runId: ARGS.runId,
+  startTimestamp: ARGS.startTimestamp,
   doneCount: implementResults.filter((r) => r.status === 'done').length,
   partialCount: partial.length,
   blockedCount: blocked.length,

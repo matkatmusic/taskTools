@@ -10,7 +10,7 @@ export type TaskGroup = {
     scope: TaskGroupScope;
 };
 
-function declaredFiles(task: TaskRecord): string[] {
+export function declaredFiles(task: TaskRecord): string[] {
     return Array.isArray(task.files) ? (task.files as string[]) : [];
 }
 

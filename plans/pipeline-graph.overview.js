@@ -1,0 +1,66 @@
+// Overview layer: skills, external skills, shared state, hooks, and the edges between them. Step-level data lives in pipeline-graph.{skills,tackle}.js.
+const GRAPH = {
+  skills: {},
+
+  external: [
+    { id: 'ponytail', label: '/ponytail:ponytail ultra',
+      why: 'External plugin skill. Loaded by tackle-tasks, update-tasks, update-task-files, and by every planner/worker agent inside the workflow. Costs one skill load each time.' },
+    { id: 'grill-me', label: '/grill-me',
+      why: 'External skill. Optional escape hatch in create-task and goal-tasks when the description is too vague to act on. Human-bound — it interviews the user.' },
+  ],
+
+  data: [
+    { id: 'tasks-json', label: 'tasks.json',
+      why: 'Open tasks. Appended only by create-task, field-edited by update-task-files, drained by close-tasks, read by everything else through getTaskDetails.ts / checkBlockers.ts.' },
+    { id: 'completed-json', label: 'completedTasks.json',
+      why: 'Archive. Written only by close-tasks; read by getTaskDetails.ts and by the update-tasks de-duplication step.' },
+    { id: 'spec-md', label: 'specs/SPEC.md',
+      why: 'Living spec. Created by goal-tasks, Tasks: lines appended by create-task, items marked done by close-tasks.' },
+    { id: 'briefs', label: 'plans/brief-N.md',
+      why: 'Written by prepareTasks.ts — task title, description, and the full contents of every declared file. The only file a planner agent is allowed to read.' },
+    { id: 'plans-md', label: 'plans/task-N-plan.md',
+      why: 'Written by a planner agent, consumed by the worker agent that implements it. The plan/implement handoff is a file, not a message.' },
+    { id: 'notes-md', label: 'plans/*-notes.md',
+      why: 'Implementation notes and handoffs. Scanned by extractOpenSections.ts, then moved to plans/archived/ by archiveProcessed.ts.' },
+    { id: 'metrics', label: 'plans/tackle-metrics.jsonl',
+      why: 'One record per pipeline run, appended by mergeTaskWorktrees.ts via tackleMetrics.ts. The only timing-ish data the plugin collects today — and it is per-run, not per-phase.' },
+  ],
+
+  hooks: [
+    { id: 'h-prompt', label: 'UserPromptSubmit → viewTaskHook.ts', cost: 'fast',
+      why: 'Intercepts /view-task and returns {"decision":"block", reason:<formatted task>}. The model never runs. This is the only zero-token path in the plugin and the model for what every read-only skill could look like.' },
+    { id: 'h-post', label: 'PostToolUse (Edit|Write) → turn-modified-flag.ts + reflow-comments-post.ts', cost: 'fast',
+      why: 'Fires after every file write, including inside every worker agent. Logs the path, then reflows wrapped comments; can emit a block decision on a comment over the 20-word cap — which costs the worker an extra turn.' },
+    { id: 'h-stop', label: 'Stop / SubagentStop → stage-and-summarize-stop.ts', cost: 'fast',
+      why: 'Runs at the end of every turn AND every subagent. In a workflow run with N planners + N workers + G typechecks + 1 merge agent, this fires 2N+G+1 times.' },
+    { id: 'h-end', label: 'SessionEnd → session-end-cleanup.ts', cost: 'fast',
+      why: 'Deletes this session comment-quota and turn-flag state, sweeps orphans older than 7 days.' },
+  ],
+
+  // [from, to, label]
+  edges: [
+    ['goal-tasks', 'create-task', 'per task'],
+    ['goal-tasks', 'spec-md', 'writes'],
+    ['goal-tasks', 'grill-me', 'if vague'],
+    ['create-task', 'tasks-json', 'appends'],
+    ['create-task', 'spec-md', 'Tasks: line'],
+    ['create-task', 'grill-me', 'if vague'],
+    ['update-tasks', 'notes-md', 'harvests'],
+    ['update-tasks', 'create-task', 'per item'],
+    ['update-tasks', 'ponytail', ''],
+    ['update-task-files', 'tasks-json', 'backfills files[]'],
+    ['update-task-files', 'ponytail', ''],
+    ['pick-a-task', 'tasks-json', 'reads'],
+    ['pick-a-task', 'tackle-tasks', 'prints command'],
+    ['tackle-tasks', 'ponytail', ''],
+    ['tackle-tasks', 'briefs', 'prepareTasks.ts'],
+    ['tackle-tasks', 'workflow', 'Workflow tool'],
+    ['workflow', 'plans-md', 'plan ↔ worker'],
+    ['workflow', 'metrics', 'on merge'],
+    ['tackle-tasks', 'close-tasks', 'after approval'],
+    ['close-tasks', 'tasks-json', 'removes'],
+    ['close-tasks', 'completed-json', 'archives'],
+    ['close-tasks', 'spec-md', 'marks done'],
+    ['view-task', 'h-prompt', 'no-op skill'],
+  ],
+}

@@ -1,10 +1,11 @@
 // Merges each group's branch in ascending order; a conflict means a worker touched an undeclared file.
 import { execFileSync } from "node:child_process";
 import type { PreparedGroup, WorkflowArguments } from "./prepareTasks.ts";
-import { appendRunMetricsRecord, computeArgumentsHash } from "./tackleMetrics.ts";
+import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 
 type CliInput = WorkflowArguments & {
     runId?: string;
+    startTimestamp?: string;
     doneCount?: number;
     partialCount?: number;
     blockedCount?: number;
@@ -56,8 +57,12 @@ function runAsCli(): void {
             conflicts.push(outcome);
         }
     }
+    const endTimestamp = new Date().toISOString();
     appendRunMetricsRecord(workflowArguments.repo, {
-        runId: input.runId ?? new Date().toISOString(),
+        runId: input.runId ?? endTimestamp,
+        startTimestamp: input.startTimestamp ?? null,
+        endTimestamp,
+        durationMs: runDurationMs(input.startTimestamp ?? null, endTimestamp),
         taskNumbers: sortedGroups.flatMap((g) => g.tasks.map((t) => t.number)),
         groupCount: sortedGroups.length,
         doneCount: input.doneCount ?? 0,

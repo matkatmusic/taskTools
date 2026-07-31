@@ -4,12 +4,15 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendRunMetricsRecord, computeArgumentsHash } from "../scripts/tackleMetrics.ts";
+import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "../scripts/tackleMetrics.ts";
 import type { WorkflowArguments } from "../scripts/prepareTasks.ts";
 
 function makeRecord(runId: string) {
     return {
         runId,
+        startTimestamp: "2026-07-31T08:35:13.335Z",
+        endTimestamp: "2026-07-31T08:41:13.335Z",
+        durationMs: 360_000,
         taskNumbers: [1],
         groupCount: 1,
         doneCount: 1,
@@ -34,6 +37,18 @@ test("test_appendRunMetricsRecordAddsOneLinePerRunWithoutErasingEarlierLines", (
     assert.equal(lines.length, 2);
     assert.equal(JSON.parse(lines[0]).runId, "run-1");
     assert.equal(JSON.parse(lines[1]).runId, "run-2");
+});
+
+test("test_runDurationMsMeasuresTheGapBetweenPreparationAndMerge", () => {
+    assert.equal(runDurationMs("2026-07-31T08:35:13.335Z", "2026-07-31T08:41:13.335Z"), 360_000);
+});
+
+test("test_runDurationMsIsNullWhenNoStartTimestampWasCarriedThrough", () => {
+    assert.equal(runDurationMs(null, "2026-07-31T08:41:13.335Z"), null);
+});
+
+test("test_runDurationMsIsNullWhenEitherTimestampIsUnparseable", () => {
+    assert.equal(runDurationMs("not-a-date", "2026-07-31T08:41:13.335Z"), null);
 });
 
 test("test_computeArgumentsHashReturnsTheSameHashForIdenticalArguments", () => {
