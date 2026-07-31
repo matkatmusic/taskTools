@@ -10,6 +10,7 @@ import {
     createWorktreeForGroup,
     generateRunId,
     mergeScriptPath,
+    selectRequestedTasks,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
@@ -95,4 +96,28 @@ test("test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath", () => 
     const path = mergeScriptPath();
     assert.equal(isAbsolute(path), true);
     assert.match(path, /mergeTaskWorktrees\.ts$/);
+});
+
+test("test_selectRequestedTasksRefusesToRunWhenNoTaskNumbersWereGiven", () => {
+    // Setup: two open tasks and an empty requested-numbers list.
+    const openTasks = [{ taskNumber: 1 }, { taskNumber: 2 }];
+    // Test action and verification: selecting with no requested numbers throws instead of
+    // silently falling back to every open task, which would fan agents out over the whole backlog.
+    assert.throws(() => selectRequestedTasks(openTasks, []), /no task numbers/i);
+});
+
+test("test_selectRequestedTasksRefusesWhenARequestedNumberIsNotOpen", () => {
+    // Setup: open tasks 1 and 2, with 9 requested alongside them.
+    const openTasks = [{ taskNumber: 1 }, { taskNumber: 2 }];
+    // Test action and verification: the missing number is named in the error, rather than dropped.
+    assert.throws(() => selectRequestedTasks(openTasks, [1, 9]), /9/);
+});
+
+test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
+    // Setup: task 2 is blocked by open task 1; both are requested.
+    const openTasks = [{ taskNumber: 1 }, { taskNumber: 2, blockedBy: [1] }];
+    // Test action: select both requested tasks.
+    const selected = selectRequestedTasks(openTasks, [1, 2]);
+    // Verification: only the unblocked task survives, so no worktree is built for blocked work.
+    assert.deepEqual(selected.map((t) => t.taskNumber), [1]);
 });

@@ -30,6 +30,25 @@ export type WorkflowArguments = {
 
 const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
 
+function getOpenBlockers(task: TaskRecord, openNumbers: Set<number>): number[] {
+    const blockedBy = Array.isArray(task.blockedBy) ? task.blockedBy : [];
+    return blockedBy.filter((number): number is number => openNumbers.has(number as number));
+}
+
+// Never defaults to every open task: this creates worktrees and fans out agents.
+export function selectRequestedTasks(openTasks: TaskRecord[], requestedNumbers: number[]): TaskRecord[] {
+    if (requestedNumbers.length === 0) {
+        throw new Error("no task numbers given; pass a JSON array with no spaces, e.g. [268,270]");
+    }
+    const openNumbers = new Set(openTasks.map((task) => task.taskNumber));
+    const missingNumbers = requestedNumbers.filter((number) => !openNumbers.has(number));
+    if (missingNumbers.length > 0) {
+        throw new Error(`not open in tasks.json: ${missingNumbers.join(", ")}`);
+    }
+    const requestedTasks = openTasks.filter((task) => requestedNumbers.includes(task.taskNumber));
+    return requestedTasks.filter((task) => getOpenBlockers(task, openNumbers).length === 0);
+}
+
 export function generateRunId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
@@ -102,9 +121,13 @@ function runAsCli(): void {
     const pair = resolveTaskFiles(repoRoot);
     const openTasks = readTaskFile(pair.tasksPath);
     const requestedNumbers = leadingTaskNumbers(process.argv.slice(2));
-    const tasks = requestedNumbers.length > 0
-        ? openTasks.filter((t) => requestedNumbers.includes(t.taskNumber))
-        : openTasks;
+    let tasks: TaskRecord[];
+    try {
+        tasks = selectRequestedTasks(openTasks, requestedNumbers);
+    } catch (error) {
+        process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
+        process.exit(1);
+    }
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
     const groups = groupTasksByFileOverlap(tasks);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
