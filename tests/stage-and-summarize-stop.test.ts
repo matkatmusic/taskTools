@@ -1,12 +1,8 @@
-// Behavioral checks for stage-and-summarize-stop.ts: it speaks up exactly once
-// when a recorded file is still unstaged (consuming the flag), and stays silent
-// when no flag exists, when the recorded files are already staged, when the
-// files are outside a repo, or when stop_hook_active guards against a loop.
-// Run with: node --test "tests/*.test.ts"
+// Behavioral checks for stage-and-summarize-stop.ts's unstaged-file reminder and its guards.  Run with: node --test "tests/*.test.ts"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { closeSync, constants, existsSync, mkdirSync, mkdtempSync, openSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -65,4 +61,31 @@ test("no flag: silent", () => {
 test("stop_hook_active: silent even with flag set", () => {
   const home = homeWithFlag("s1", [repoWithEdit(false)]);
   assert.equal(run(home, { session_id: "s1", stop_hook_active: true }), "");
+});
+
+test("test_stopHookExitsCleanlyWhenTheTurnFlagIsRemovedByAConcurrentSubagent", async () => {
+  // FIFO pauses the hook mid-read so we can unlink the flag before its rmSync runs.
+  const home = mkdtempSync(join(tmpdir(), "hook-stop-race-"));
+  mkdirSync(join(home, ".claude", "turn-flags"), { recursive: true });
+  const flagPath = join(home, ".claude", "turn-flags", "s1");
+  execFileSync("mkfifo", [flagPath]);
+
+  const child = spawn("node", ["--no-inspect", SCRIPT], { env: { ...process.env, HOME: home } });
+  child.stdin.write(JSON.stringify({ session_id: "s1", stop_hook_active: false }));
+  child.stdin.end();
+
+  let writeFd = -1;
+  while (writeFd < 0) {
+    try {
+      writeFd = openSync(flagPath, constants.O_WRONLY | constants.O_NONBLOCK);
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  unlinkSync(flagPath);
+  writeSync(writeFd, "\n");
+  closeSync(writeFd);
+
+  const exitCode: number = await new Promise((resolve) => child.on("exit", (code) => resolve(code ?? -1)));
+  assert.equal(exitCode, 0);
 });
