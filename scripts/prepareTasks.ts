@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { groupTasksByFileOverlap } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { collectRepositorySources, createBranchInEveryRepository, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 
 export type PreparedTask = {
     number: number;
@@ -26,6 +27,7 @@ export type WorkflowArguments = {
     repo: string;
     typecheckCommand: string;
     groups: PreparedGroup[];
+    repositorySources: RepositorySource[];
 };
 
 const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
@@ -117,6 +119,7 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): stri
         );
     }
     initializeSubmodulesInWorktree(worktreePath);
+    createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchNameForGroup(group.groupId));
     return worktreePath;
 }
 
@@ -125,6 +128,7 @@ export function buildWorkflowArguments(
     typecheckCommand: string,
     groups: TaskGroup[],
 ): WorkflowArguments {
+    const repositorySources = collectRepositorySources(repoRoot);
     const preparedGroups: PreparedGroup[] = groups.map((group) => ({
         groupId: group.groupId,
         worktree: createWorktreeForGroup(repoRoot, group),
@@ -137,7 +141,7 @@ export function buildWorkflowArguments(
             files: group.filePaths,
         })),
     }));
-    return { repo: repoRoot, typecheckCommand, groups: preparedGroups };
+    return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
 }
 
 function runAsCli(): void {
