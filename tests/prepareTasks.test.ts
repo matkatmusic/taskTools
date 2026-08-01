@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import {
@@ -28,6 +28,19 @@ function makeTempRepoWithCommit(): string {
     git(repoRoot, "add", "seed.txt");
     git(repoRoot, "commit", "-q", "-m", "seed");
     return repoRoot;
+}
+
+function makeTempRepoWithLocalSubmodule(): { repoRoot: string; submoduleOrigin: string } {
+    const submoduleOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(submoduleOrigin, "inner.txt"), "SUBMODULE-MARKER\n");
+    git(submoduleOrigin, "add", "inner.txt");
+    git(submoduleOrigin, "commit", "-q", "-m", "inner");
+    const repoRoot = makeTempRepoWithCommit();
+    // git >=2.38 blocks file-transport submodules; repo config is ignored here, env is not.
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    git(repoRoot, "submodule", "add", "-q", submoduleOrigin, "vendor");
+    git(repoRoot, "commit", "-q", "-m", "add submodule");
+    return { repoRoot, submoduleOrigin };
 }
 
 test("test_writeTaskBriefFileEmbedsTheDeclaredFileContents", () => {
@@ -65,6 +78,25 @@ test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     const first = createWorktreeForGroup(repoRoot, group);
     const second = createWorktreeForGroup(repoRoot, group);
     assert.equal(second, first);
+});
+
+test("test_createWorktreeForGroupPopulatesSubmoduleWorkingTrees", () => {
+    // Setup: a repo whose `vendor/` submodule holds a file with a known marker.
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    // Test action: create the worktree a worker agent would be handed.
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    // Verification: the submodule directory holds its files instead of being empty.
+    assert.equal(existsSync(join(worktreePath, "vendor", "inner.txt")), true);
+});
+
+test("test_createWorktreeForGroupThrowsWhenSubmoduleInitFails", () => {
+    // Setup: a repo with a submodule whose origin no longer exists on disk.
+    const { repoRoot, submoduleOrigin } = makeTempRepoWithLocalSubmodule();
+    rmSync(submoduleOrigin, { recursive: true, force: true });
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    // Verification: the run stops rather than handing a worker a half-populated worktree.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group));
 });
 
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
@@ -131,7 +163,7 @@ test("test_selectRequestedTasksRefusesTasksWithNoFilesArray", () => {
 test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
     // Setup: task 1 carries an explicitly empty files array.
     const openTasks = [{ taskNumber: 1, files: [] }];
-    // Test action and verification: an empty array is refused like a missing one, since it would hand the worker an empty ownership fence.
+    // Verification: an empty array is refused like a missing one — no ownership fence.
     assert.throws(() => selectRequestedTasks(openTasks, [1]), /files/i);
 });
 
@@ -140,7 +172,7 @@ test("test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask", () => {
     const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [1] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
-    // Verification: the blocked task is dropped before the files check, so it does not stop a run it was never going to take part in.
+    // Verification: the blocked task is dropped before the files check, not stopping the run.
     assert.deepEqual(selected.map((t) => t.taskNumber), [1]);
 });
 

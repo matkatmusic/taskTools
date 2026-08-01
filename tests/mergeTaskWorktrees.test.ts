@@ -29,6 +29,26 @@ function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
     return { groupId, worktree, branch: `task-group-${groupId}`, scope: "unknown", tasks: [] };
 }
 
+function makeTempRepoWithLocalSubmodule(): string {
+    const submoduleOrigin = makeTempRepoWithCommit();
+    // git >=2.38 blocks file-transport submodules; repo config is ignored here, env is not.
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "submodule", "add", "-q", submoduleOrigin, "vendor");
+    git(repoRoot, "commit", "-q", "-m", "add submodule");
+    return repoRoot;
+}
+
+test("test_removeWorktreeAndBranchDeletesAWorktreeThatContainsSubmodules", () => {
+    // Setup: a worktree whose submodule was populated by createWorktreeForGroup.
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const group = makeGroup(repoRoot, 1);
+    assert.equal(existsSync(join(group.worktree, "vendor", "seed.txt")), true);
+    // Test action and verification: cleanup removes the worktree instead of refusing.
+    removeWorktreeAndBranch(repoRoot, group.worktree, group.branch);
+    assert.equal(existsSync(group.worktree), false);
+});
+
 test("test_mergeGroupBranchIntoRepoReportsSuccessForANonConflictingBranch", () => {
     const repoRoot = makeTempRepoWithCommit();
     const group = makeGroup(repoRoot, 1);

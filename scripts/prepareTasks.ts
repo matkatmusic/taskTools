@@ -96,15 +96,27 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     return briefFile;
 }
 
-export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `group-${group.groupId}`);
-    if (existsSync(worktreePath)) return worktreePath;
-    mkdirSync(dirname(worktreePath), { recursive: true });
+// `git worktree add` leaves submodule directories empty; a worker needs them populated.
+function initializeSubmodulesInWorktree(worktreePath: string): void {
+    if (!existsSync(join(worktreePath, ".gitmodules"))) return;
     execFileSync(
         "git",
-        ["-C", repoRoot, "worktree", "add", "-b", branchNameForGroup(group.groupId), worktreePath, "HEAD"],
-        { stdio: "ignore" },
+        ["-C", worktreePath, "submodule", "update", "--init", "--recursive"],
+        { stdio: ["ignore", "ignore", "inherit"] },
     );
+}
+
+export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
+    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `group-${group.groupId}`);
+    if (!existsSync(worktreePath)) {
+        mkdirSync(dirname(worktreePath), { recursive: true });
+        execFileSync(
+            "git",
+            ["-C", repoRoot, "worktree", "add", "-b", branchNameForGroup(group.groupId), worktreePath, "HEAD"],
+            { stdio: "ignore" },
+        );
+    }
+    initializeSubmodulesInWorktree(worktreePath);
     return worktreePath;
 }
 
