@@ -13,7 +13,7 @@ Compare each open task above against the current state of the project — pull f
 
 Exclude any task reported as BLOCKED in the "Blocked status" above — it is not eligible regardless of ease.
 
-Pick the N easiest/simplest open tasks, ordered easiest first. Report to the user: each task's number, title, and why it is that easy — under 70 words per task. Do not start implementing any of them.
+Pick the N easiest/simplest open tasks, ordered easiest first. Report to the user: each task's number, title, and why it is that easy — under 15 words per task. Do not start implementing any of them.
 
 End your report with exactly:
 `start a session with: 'claude --name "task <N...>"'`
