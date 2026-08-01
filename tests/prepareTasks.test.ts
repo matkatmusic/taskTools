@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import {
     buildWorkflowArguments,
     createWorktreeForGroup,
@@ -182,7 +182,32 @@ test("test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists
     // Test action: capture the refusal message.
     let message = "";
     try { selectRequestedTasks(openTasks, [7]); } catch (error) { message = (error as Error).message; }
-    // Verification: the message names the update-task-files command, and a SKILL.md for it exists, so the pointer cannot rot into a dead reference.
+    // Verification: message names update-task-files, and its SKILL.md exists, so the pointer can't rot.
     assert.match(message, /update-task-files/);
     assert.ok(existsSync(join(import.meta.dirname, "..", "skills", "update-task-files", "SKILL.md")));
+});
+
+test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    const branch = git(join(worktreePath, "vendor"), "branch", "--show-current").trim();
+    assert.equal(branch, "task-group-1");
+});
+
+test("test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory", () => {
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    git(join(repoRoot, "vendor"), "checkout", "--detach", "HEAD");
+    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" }];
+    assert.throws(() => buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups));
+    assert.equal(existsSync(join(tmpdir(), "taskTools-wt", basename(repoRoot), "group-1")), false);
+});
+
+test("test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch", () => {
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" }];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
+    const paths = workflowArguments.repositorySources.map((source) => source.path);
+    assert.ok(paths.includes(""));
+    assert.ok(paths.includes("vendor"));
 });
