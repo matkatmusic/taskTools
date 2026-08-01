@@ -55,6 +55,7 @@ test("test_computeArgumentsHashReturnsTheSameHashForIdenticalArguments", () => {
     const workflowArguments: WorkflowArguments = {
         repo: "/tmp/repo",
         typecheckCommand: "npx tsc --noEmit",
+        repositorySources: [{ path: "", sourceBranch: "develop" }],
         groups: [{ groupId: 1, worktree: "/tmp/wt", branch: "task-group-1", scope: "unknown", tasks: [] }],
     };
     const other: WorkflowArguments = JSON.parse(JSON.stringify(workflowArguments));
