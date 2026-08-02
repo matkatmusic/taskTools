@@ -156,6 +156,7 @@ const mergeCliInput = {
   repo: REPO,
   typecheckCommand: TYPECHECK_COMMAND,
   groups: GROUPS,
+  repositorySources: ARGS.repositorySources,
   runId: ARGS.runId,
   startTimestamp: ARGS.startTimestamp,
   doneCount: implementResults.filter((r) => r.status === 'done').length,
