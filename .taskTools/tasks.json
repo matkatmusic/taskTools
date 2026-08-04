@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 34,
-    "title": "Archive only successfully published tasks",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/taskArchival.ts: return task-level merge results after successful publication and archive only the explicit task numbers whose integration was successfully published. The whole-run approval already authorizes finalization and archival, so no second post-merge approval is introduced.\n\nA task in a conflicted, skipped, rolled-back, or partially published repository is never archived, and archival must be driven by an explicit list rather than by inferring success from the absence of errors.\n\nTests: a run where one logical repository rolled back archives none of that repository's tasks while archiving the successfully published ones; conflicted and skipped tasks stay open in tasks.json; archival requires the explicit published list; no second approval prompt is issued; archived entries land in completedTasks.json with their commit hashes.",
-    "files": [
-      "scripts/taskArchival.ts",
-      "tests/taskArchival.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ]
-  },
-  {
     "taskNumber": 35,
     "title": "Production cutover to the recursive repository workflow",
     "description": "Phase 4 of the recursive repository-discovery redesign — the cutover that finally routes production through everything built in Phases 1 to 3.\n\nReplace the flat-path helpers with their graph-based equivalents at their call sites: scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository), scripts/taskGroups.ts (grouping now via scripts/canonicalTaskGroups.ts), scripts/prepareTasks.ts (discovery, worktree and branch creation, workflow arguments), and scripts/mergeTaskWorktrees.ts (finalization and publication via scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts, scripts/taskArchival.ts). Rewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs, and readyForApproval instead of immediate merge results, and so the approval gate runs before finalization.\n\nActivate the new manifest/workflow version only after the complete end-to-end suite passes. Preserve legacy worktrees and route legacy manifests through scripts/legacyManifest.ts to their existing compatible tooling or a non-destructive refusal.\n\nTests: existing prepareTasks and mergeTaskWorktrees suites are updated to the new interfaces and pass; the workflow returns readyForApproval rather than merge results before approval; a legacy manifest is refused non-destructively with recovery instructions and its worktrees survive; the version flips only when the full suite is green.",
@@ -27,9 +15,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      34
     ]
   },
   {

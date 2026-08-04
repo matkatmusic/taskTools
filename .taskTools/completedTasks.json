@@ -620,5 +620,23 @@
       "046adf0"
     ],
     "closureNote": "Added scripts/basePublication.ts publishing local base refs only after the root integration OID exists, revalidating recorded base OIDs and approval inputs, updating one canonical base ref per logical repository with compare-and-swap, fast-forwarding other local occurrences without any remote push, rolling back every already-updated ref on failure, and preserving integration and recovery refs with an exact recovery command per affected repository when publication or rollback is incomplete."
+  },
+  {
+    "taskNumber": 34,
+    "title": "Archive only successfully published tasks",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/taskArchival.ts: return task-level merge results after successful publication and archive only the explicit task numbers whose integration was successfully published. The whole-run approval already authorizes finalization and archival, so no second post-merge approval is introduced.\n\nA task in a conflicted, skipped, rolled-back, or partially published repository is never archived, and archival must be driven by an explicit list rather than by inferring success from the absence of errors.\n\nTests: a run where one logical repository rolled back archives none of that repository's tasks while archiving the successfully published ones; conflicted and skipped tasks stay open in tasks.json; archival requires the explicit published list; no second approval prompt is issued; archived entries land in completedTasks.json with their commit hashes.",
+    "files": [
+      "scripts/taskArchival.ts",
+      "tests/taskArchival.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "4921646",
+      "ca63740"
+    ],
+    "closureNote": "Added scripts/taskArchival.ts returning task-level merge results and archiving only the explicit task numbers whose integration was successfully published, leaving conflicted, skipped, rolled-back and partially published tasks open in tasks.json, issuing no second approval prompt, and writing archived entries to completedTasks.json with their commit hashes."
   }
 ]
