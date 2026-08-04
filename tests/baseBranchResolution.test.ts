@@ -1,9 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+// Behavioral checks for baseBranchResolution.ts: exact tip-OID branch matching. Run: node --test tests/
+import { test } from "node:test";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolveBaseBranchCandidates } from "../scripts/baseBranchResolution";
+import { resolveBaseBranchCandidates } from "../scripts/baseBranchResolution.ts";
 
 function runGitCommand(repoPath: string, args: string[]): string {
     const result = spawnSync("git", args, { cwd: repoPath, encoding: "utf8" });
@@ -30,62 +32,47 @@ function createBranchAtCurrentHead(repoPath: string, branchName: string): void {
     runGitCommand(repoPath, ["branch", branchName]);
 }
 
-describe("resolveBaseBranchCandidates", () => {
-    let repoPath: string;
-
-    beforeEach(() => {
-        repoPath = createTempGitRepo();
-    });
-
-    afterEach(() => {
+function withTempGitRepo(body: (repoPath: string) => void): void {
+    const repoPath = createTempGitRepo();
+    try {
+        body(repoPath);
+    } finally {
         rmSync(repoPath, { recursive: true, force: true });
-    });
+    }
+}
 
-    test("test_singleBranchTipMatchingRecordedOidYieldsSoleMatch", () => {
-        // Scenario: exactly one branch tip equals the recorded OID.  Steps: a repo has one commit on "main".
+test("a lone branch tip equal to the recorded OID is the sole match", () => {
+    withTempGitRepo((repoPath) => {
         const recordedOid = commitNewFile(repoPath, "first.txt");
-        // no other branch is created.  resolving candidates against that commit's OID
         const result = resolveBaseBranchCandidates(repoPath, recordedOid);
-        // should report exactly one match: "main".
-        expect(result).toEqual({ kind: "single", baseBranch: "main" });
+        assert.deepEqual(result, { kind: "single", baseBranch: "main" });
     });
+});
 
-    test("test_twoBranchesAtSameCommitYieldBothInDeterministicOrder", () => {
-        // Scenario: two branches point at the same commit.  Steps: a repo has one commit on "main".
+test("two branches at the same commit are both returned, sorted by name", () => {
+    withTempGitRepo((repoPath) => {
         const recordedOid = commitNewFile(repoPath, "first.txt");
-        // a second branch "release" is created pointing at that same commit.
         createBranchAtCurrentHead(repoPath, "release");
-        // resolving candidates against that shared OID
         const result = resolveBaseBranchCandidates(repoPath, recordedOid);
-        // should report both branches, sorted by name.
-        expect(result).toEqual({ kind: "multiple", candidates: ["main", "release"] });
+        assert.deepEqual(result, { kind: "multiple", candidates: ["main", "release"] });
     });
+});
 
-    test("test_ancestorOidNotAnyBranchTipYieldsZeroMatches", () => {
-        // Ancestor OID, not any branch tip, must yield zero matches.  a repo has a first commit (the recorded OID).
+test("an OID that is an ancestor of every tip but the tip of none yields zero matches", () => {
+    withTempGitRepo((repoPath) => {
         const recordedOid = commitNewFile(repoPath, "first.txt");
-        // a second commit is made on "main", moving its tip past the recorded OID.
         commitNewFile(repoPath, "second.txt");
-        // resolving candidates against the ancestor OID
         const result = resolveBaseBranchCandidates(repoPath, recordedOid);
-        // should report zero matches, since no branch tip equals the recorded OID.
-        expect(result).toEqual({ kind: "none", candidates: [] });
+        assert.deepEqual(result, { kind: "none", candidates: [] });
     });
+});
 
-    test("test_branchContainingButNotAtRecordedOidIsExcludedFromMatches", () => {
-        // "base" tip equals recorded OID; "main" merely contains it, further ahead.
+test("a branch that merely contains the recorded OID is never reported as a match", () => {
+    withTempGitRepo((repoPath) => {
         const recordedOid = commitNewFile(repoPath, "first.txt");
-        // a "base" branch is created pointing at that exact commit.
         createBranchAtCurrentHead(repoPath, "base");
-        // "main" then advances past it with a second commit.
         commitNewFile(repoPath, "second.txt");
-        // resolving candidates against the recorded OID
         const result = resolveBaseBranchCandidates(repoPath, recordedOid);
-        // should report only "base" as the sole match.
-        expect(result).toEqual({ kind: "single", baseBranch: "base" });
-        // "main" must never appear, even though it contains the recorded commit in its history.
-        if (result.kind === "single") {
-            expect(result.baseBranch).not.toBe("main");
-        }
+        assert.deepEqual(result, { kind: "single", baseBranch: "base" });
     });
 });
