@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 12,
-    "title": "LogicalRepository records overlaid on the occurrence graph",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/logicalRepository.ts: a LogicalRepository record holding the normalized upstream identity from scripts/submoduleUrlIdentity.ts, all occurrence IDs sharing it, the selected base, the canonical occurrence, the last-writer occurrence, the convergence digest, and consolidation state. Persist the equivalence classes in the run manifest.\n\nThe occurrence tree stays intact. Logical equivalence must never collapse distinct parent chains: three checkouts of tmux_lib remain three occurrences with three different parents and three different paths, grouped under one logical repository. Support an arbitrary number of occurrences — no code path may assume one or two.\n\nNew module only; no production call sites yet.\n\nTests: a fixture with tmux_lib at tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib produces one logical repository with three occurrence IDs; each occurrence keeps its own parent edge and path; two occurrences each of claude_plugin_lib and scenarios form their own classes; a unique repository forms a one-member class; assert no occurrence is dropped, merged, or reparented by the overlay.",
-    "files": [
-      "scripts/logicalRepository.ts",
-      "tests/logicalRepository.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 13,
     "title": "Base and recorded-OID reconciliation gate for repeated repositories",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/baseReconciliation.ts: when the occurrences of one logical repository start at different recorded OIDs or different base branches, block all editing of that logical repository until a reconciliation choice is persisted through scripts/resolutionRequests.ts.\n\nThe gate is a hard precondition, not a warning: no synchronization, no worker edits, and no branch creation for that logical repository proceed while it is unresolved. A persisted choice records which base/OID won and applies on resume without re-asking.\n\nNew module only; no production call sites yet.\n\nTests: three occurrences at one OID and one base pass the gate; a divergent recorded OID blocks and emits a reconciliation request naming every member and its OID; a divergent base branch blocks likewise; after a persisted answer the gate passes and re-running emits no new request; assert the blocked state prevents editing rather than merely reporting.",
@@ -21,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      12
     ]
   },
   {
@@ -36,9 +21,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      12
     ]
   },
   {
@@ -51,9 +33,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      12
     ]
   },
   {
@@ -124,7 +103,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ],
     "blockedBy": [
-      12,
       16
     ]
   },
@@ -168,9 +146,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      12
     ]
   },
   {

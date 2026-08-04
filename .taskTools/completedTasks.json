@@ -205,5 +205,22 @@
       "0c8f0b4"
     ],
     "closureNote": "Implemented scripts/occurrenceTreeDelta.ts deriving one occurrence changes against its recorded base across added, modified, deleted, renamed, mode-changed, symlink, and untracked files, excluding nested occurrence paths and ignored output, with a content digest for tree equality comparison; passed the full suite unmodified."
+  },
+  {
+    "taskNumber": 12,
+    "title": "LogicalRepository records overlaid on the occurrence graph",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/logicalRepository.ts: a LogicalRepository record holding the normalized upstream identity from scripts/submoduleUrlIdentity.ts, all occurrence IDs sharing it, the selected base, the canonical occurrence, the last-writer occurrence, the convergence digest, and consolidation state. Persist the equivalence classes in the run manifest.\n\nThe occurrence tree stays intact. Logical equivalence must never collapse distinct parent chains: three checkouts of tmux_lib remain three occurrences with three different parents and three different paths, grouped under one logical repository. Support an arbitrary number of occurrences — no code path may assume one or two.\n\nNew module only; no production call sites yet.\n\nTests: a fixture with tmux_lib at tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib produces one logical repository with three occurrence IDs; each occurrence keeps its own parent edge and path; two occurrences each of claude_plugin_lib and scenarios form their own classes; a unique repository forms a one-member class; assert no occurrence is dropped, merged, or reparented by the overlay.",
+    "files": [
+      "scripts/logicalRepository.ts",
+      "tests/logicalRepository.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "821b8be"
+    ],
+    "closureNote": "Implemented scripts/logicalRepository.ts as a grouping overlay mapping normalized upstream identities to LogicalRepository records holding every occurrence ID sharing that identity plus selected base, canonical and last-writer occurrences, convergence digest, and consolidation state; the occurrence tree stays intact so three tmux_lib checkouts remain three occurrences with distinct parents under one logical repository, and no code path assumes a fixed member count."
   }
 ]
