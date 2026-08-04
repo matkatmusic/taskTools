@@ -37,7 +37,7 @@ Close every task that is not problematic and was completed successfully, renderi
 
 If the user requests adding tasks, invoke the `create-task` skill once per task — never edit `tasks.json` directly.
 
-During implementation, run typecheck only — no test suites or visual checks, by you or by workers. Full verification (typecheck + full suite + the repo's UI verification where relevant) runs once inside `close-tasks`, after the user approves closing.
+During implementation, you (the orchestrator) run typecheck only — no test suites or visual checks. Workers run the tests covering the files they own and fix their own failures before reporting status complete; a worker with failing tests reports blocked or partial, never complete. Full verification (typecheck + full suite + the repo's UI verification where relevant) still runs once inside `close-tasks`, after the user approves closing.
 
 ## Commit message
 

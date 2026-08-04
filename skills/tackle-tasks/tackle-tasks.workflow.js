@@ -86,8 +86,16 @@ plan; you are executing, not deciding. If the plan is impossible as written,
 stop and return status "blocked" with the reason in summary.
 
 When the edits are done, run: ${TYPECHECK_COMMAND}
-Fix type errors in the files you own; do not run test suites, visual checks,
-or any other verification.
+Fix type errors in the files you own.
+
+Then run the tests covering the files you own and fix any failures — check
+for a related-test discovery command in this repo (e.g. scripts/relatedTests.ts)
+before falling back to running each owned file's own test file directly. Do
+not run the full suite; that is the close-tasks gate, not yours.
+
+If your tests still fail after a reasonable effort, do not commit. Return
+status "blocked" (or "partial" if part of the plan is done) and name the
+failing tests in "remaining" — never return status "done" with a failing test.
 
 When typecheck passes, commit from ${group.worktree}. Other tasks may share
 this worktree, so stage ONLY your own paths — never \`git add -A\`, never \`git add .\`:
