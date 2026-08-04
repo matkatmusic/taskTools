@@ -17,5 +17,22 @@
       "c56cea4c9b82d0118ec943dff07a8dedaf12cacd"
     ],
     "closureNote": "Implemented in c57411f and merged as c56cea4: every repository in a worktree now gets a task-group-N branch at prepare time and merges back into its recorded source branch at teardown, the removeWorktreeAndBranch call was dropped from runAsCli so nothing is deleted, and mergeSubmoduleBranchIntoRepo fetches the worktree submodule branch into the main submodule before merging so commits survive a conflict."
+  },
+  {
+    "taskNumber": 2,
+    "title": "Versioned repository manifest with RepositoryOccurrence records",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryManifest.ts: a versioned run manifest that replaces the flat repository-path model with an occurrence graph. Define a RepositoryOccurrence record holding a stable occurrence ID, the root-relative checkout path, the explicit parent occurrence ID, the path within the immediate parent, the recorded gitlink OID, depth, origin URL, base branch and base OID, the operation branch name, child occurrence IDs, and test state. Add a manifest version constant, read/write helpers, and a validator.\n\nParentage is always an explicit edge. Nothing in this module may derive a parent with dirname(), path-segment removal, or slash counting.\n\nNew module only: do not wire it into scripts/prepareTasks.ts, scripts/mergeTaskWorktrees.ts, or skills/tackle-tasks/tackle-tasks.workflow.js. Production stays on the existing flat path until the Phase 4 cutover task.\n\nTests: round-trip serialization preserves every field; the validator rejects dangling parent IDs, duplicate occurrence IDs, and depth values inconsistent with the parent chain; a manifest describing jfred/jfredToolsPlugin/external/tmux_lib records its parent as the jfred/jfredToolsPlugin occurrence, never a synthetic jfred/jfredToolsPlugin/external entry.",
+    "files": [
+      "scripts/repositoryManifest.ts",
+      "tests/repositoryManifest.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "853a757"
+    ],
+    "closureNote": "Implemented scripts/repositoryManifest.ts with the versioned RepositoryOccurrence graph, manifest version constant, read/write helpers, and a validator rejecting duplicate occurrence IDs, dangling parent IDs, and depths inconsistent with the walked parent chain; parentage is an explicit edge only, covered by tests/repositoryManifest.test.ts including the jfred/jfredToolsPlugin/external/tmux_lib parent case, and left unwired pending the Phase 4 cutover."
   }
 ]
