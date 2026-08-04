@@ -14,22 +14,22 @@ test("test_relativeSubmoduleUrlResolvesAgainstParentOrigin", () => {
     assert.equal(resolved, "https://example.com/group/tmux_lib.git");
 });
 
-// "./x" resolves in place, next to the parent's own path.
+// "./x" appends after the parent's full path verbatim; git keeps the parent filename (verified via `git submodule sync`).
 test("test_relativeSubmoduleUrlWithDotSlashResolvesInPlace", () => {
     const resolved = resolveRelativeSubmoduleUrl("./sibling.git", "https://example.com/group/parent.git");
-    assert.equal(resolved, "https://example.com/group/sibling.git");
+    assert.equal(resolved, "https://example.com/group/parent.git/sibling.git");
 });
 
-// "../../x/y" walks up two directories before descending back into "other/".
+// Each "../" strips one trailing path segment from the literal parent url; two strips "parent.git" then "b".
 test("test_relativeSubmoduleUrlWalksMultipleLevelsUp", () => {
     const resolved = resolveRelativeSubmoduleUrl("../../other/repo.git", "https://example.com/a/b/parent.git");
-    assert.equal(resolved, "https://example.com/other/repo.git");
+    assert.equal(resolved, "https://example.com/a/other/repo.git");
 });
 
-// scp-style parent has no "/" left, so the walk crosses the ":" boundary instead.
+// One "/" remains in scp-style path, so one "../" strips only "parent.git", same as https.
 test("test_relativeSubmoduleUrlResolvesAgainstScpStyleParentOrigin", () => {
     const resolved = resolveRelativeSubmoduleUrl("../tmux_lib.git", "git@host:group/parent.git");
-    assert.equal(resolved, "git@host:tmux_lib.git");
+    assert.equal(resolved, "git@host:group/tmux_lib.git");
 });
 
 // scp-style, ssh://, and https:// forms of the same repo normalize to one identity.

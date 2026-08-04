@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 11,
-    "title": "Submodule URL identity resolution and normalization",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/submoduleUrlIdentity.ts: resolve each occurrence's upstream identity from its fully resolved .gitmodules URL. Relative URLs resolve against the immediate parent's origin. Equivalent SSH, HTTPS, and scp-style URLs normalize to one host/owner/repository identity (case, trailing .git, trailing slashes, and default ports included).\n\nWhen URLs differ between occurrences of what looks like the same repository, or a URL is unavailable, emit a resolution request rather than guessing equivalence. Guessing is the failure mode this module exists to prevent.\n\nNew module only; no production call sites yet.\n\nTests: relative URLs such as ../tmux_lib.git resolve against the parent origin; git@host:owner/repo.git, ssh://git@host/owner/repo, and https://host/owner/repo.git all normalize to the same identity; a differing host or owner does not; a missing .gitmodules entry or missing origin produces a resolution request rather than a guess.",
-    "files": [
-      "scripts/submoduleUrlIdentity.ts",
-      "tests/submoduleUrlIdentity.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 12,
     "title": "LogicalRepository records overlaid on the occurrence graph",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/logicalRepository.ts: a LogicalRepository record holding the normalized upstream identity from scripts/submoduleUrlIdentity.ts, all occurrence IDs sharing it, the selected base, the canonical occurrence, the last-writer occurrence, the convergence digest, and consolidation state. Persist the equivalence classes in the run manifest.\n\nThe occurrence tree stays intact. Logical equivalence must never collapse distinct parent chains: three checkouts of tmux_lib remain three occurrences with three different parents and three different paths, grouped under one logical repository. Support an arbitrary number of occurrences — no code path may assume one or two.\n\nNew module only; no production call sites yet.\n\nTests: a fixture with tmux_lib at tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib produces one logical repository with three occurrence IDs; each occurrence keeps its own parent edge and path; two occurrences each of claude_plugin_lib and scenarios form their own classes; a unique repository forms a one-member class; assert no occurrence is dropped, merged, or reparented by the overlay.",
@@ -21,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      11
     ]
   },
   {
@@ -57,18 +42,6 @@
     ]
   },
   {
-    "taskNumber": 15,
-    "title": "Recursive occurrence tree delta against the recorded base",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceTreeDelta.ts: derive one occurrence's changes relative to its recorded base, covering tracked and untracked additions, modifications, deletions, renames, mode changes (including the executable bit), and symlinks. Produce a content digest of the occurrence's own code tree suitable for equality comparison between occurrences.\n\nThe delta excludes .git, ignored and generated output, and the contents of nested submodules that are represented by their own occurrences — a nested occurrence's files are that occurrence's business, never ordinary files of the parent.\n\nNew module only; no production call sites yet.\n\nTests: each change kind (added, modified, deleted, renamed, mode-changed, symlink, untracked) appears in the delta with the right classification; files under a nested occurrence path are absent from the parent's delta; ignored and generated paths are absent; the digest is identical for two occurrences with identical trees and differs when a mode, symlink target, or byte differs.",
-    "files": [
-      "scripts/occurrenceTreeDelta.ts",
-      "tests/occurrenceTreeDelta.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 16,
     "title": "Deterministic N-way synchronization across occurrences",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceSync.ts: fan each accepted change from its latest writer occurrence to every other occurrence of the same logical repository, repeating until every occurrence reports the same code-tree digest from scripts/occurrenceTreeDelta.ts. Accept one source occurrence and an N-member set; return the changed paths and a convergence result.\n\nNo pairwise assumptions anywhere — the algorithm must handle two, three, and larger sets identically, and its result must not depend on iteration order. All change kinds from the delta module apply, including deletions, renames, modes, and symlinks. Nested submodule contents and generated output are never copied as ordinary files.\n\nNew module only; no production call sites yet.\n\nTests: a fix originating in any one of three tmux_lib copies fans out to the other two and all three digests converge; two-copy fixtures for claude_plugin_lib and scenarios converge; deletions, renames, mode changes, symlinks, and untracked additions all propagate; a nested submodule's files are never copied into a sibling occurrence; running the sync twice is a no-op.",
@@ -80,8 +53,7 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
     ],
     "blockedBy": [
-      12,
-      15
+      12
     ]
   },
   {
@@ -183,7 +155,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ],
     "blockedBy": [
-      15,
       21
     ]
   },

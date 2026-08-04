@@ -171,5 +171,39 @@
       "b0998d9"
     ],
     "closureNote": "Implemented scripts/repositoryDiscovery.ts as the root-outward recursive orchestrator composing gitlinkReader, baseBranchResolution, resolutionRequests, operationBranches, and repositoryGraph behind a two-phase gate that returns either a complete occurrence graph or resolution requests, never a partial guess; closing verification found the root occurrence empty occurrenceId produced an invalid trailing-slash git ref, fixed at the single choke point in operationBranchName."
+  },
+  {
+    "taskNumber": 11,
+    "title": "Submodule URL identity resolution and normalization",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/submoduleUrlIdentity.ts: resolve each occurrence's upstream identity from its fully resolved .gitmodules URL. Relative URLs resolve against the immediate parent's origin. Equivalent SSH, HTTPS, and scp-style URLs normalize to one host/owner/repository identity (case, trailing .git, trailing slashes, and default ports included).\n\nWhen URLs differ between occurrences of what looks like the same repository, or a URL is unavailable, emit a resolution request rather than guessing equivalence. Guessing is the failure mode this module exists to prevent.\n\nNew module only; no production call sites yet.\n\nTests: relative URLs such as ../tmux_lib.git resolve against the parent origin; git@host:owner/repo.git, ssh://git@host/owner/repo, and https://host/owner/repo.git all normalize to the same identity; a differing host or owner does not; a missing .gitmodules entry or missing origin produces a resolution request rather than a guess.",
+    "files": [
+      "scripts/submoduleUrlIdentity.ts",
+      "tests/submoduleUrlIdentity.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "6c0355e"
+    ],
+    "closureNote": "Implemented scripts/submoduleUrlIdentity.ts resolving relative gitmodules URLs against the immediate parent origin and normalizing ssh, https, and scp-style URLs to one host/owner/repository identity, emitting a resolution request when a URL or origin is missing rather than guessing equivalence; three test assertions encoding an invented dirname-style relative-URL model were corrected to match real git submodule sync behavior verified against a live fixture, with the module itself unchanged."
+  },
+  {
+    "taskNumber": 15,
+    "title": "Recursive occurrence tree delta against the recorded base",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceTreeDelta.ts: derive one occurrence's changes relative to its recorded base, covering tracked and untracked additions, modifications, deletions, renames, mode changes (including the executable bit), and symlinks. Produce a content digest of the occurrence's own code tree suitable for equality comparison between occurrences.\n\nThe delta excludes .git, ignored and generated output, and the contents of nested submodules that are represented by their own occurrences — a nested occurrence's files are that occurrence's business, never ordinary files of the parent.\n\nNew module only; no production call sites yet.\n\nTests: each change kind (added, modified, deleted, renamed, mode-changed, symlink, untracked) appears in the delta with the right classification; files under a nested occurrence path are absent from the parent's delta; ignored and generated paths are absent; the digest is identical for two occurrences with identical trees and differs when a mode, symlink target, or byte differs.",
+    "files": [
+      "scripts/occurrenceTreeDelta.ts",
+      "tests/occurrenceTreeDelta.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "0c8f0b4"
+    ],
+    "closureNote": "Implemented scripts/occurrenceTreeDelta.ts deriving one occurrence changes against its recorded base across added, modified, deleted, renamed, mode-changed, symlink, and untracked files, excluding nested occurrence paths and ignored output, with a content digest for tree equality comparison; passed the full suite unmodified."
   }
 ]
