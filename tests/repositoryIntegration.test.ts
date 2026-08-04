@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareNoFfMerge, substituteGitlink } from "../scripts/repositoryIntegration.ts";
+import { prepareNoFfMerge, substituteGitlink, substituteGitlinksRecursively } from "../scripts/repositoryIntegration.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -33,6 +33,31 @@ function makeParentWithTwoGitlinks(): { parentRoot: string; parentCommit: string
     git(parentRoot, "commit", "-q", "-m", "add submodules");
     const parentCommit = git(parentRoot, "rev-parse", "HEAD").trim();
     return { parentRoot, parentCommit, childARoot };
+}
+
+// Builds a nested submodule chain: chainRepos[0] is root, each has a gitlink at "vendor/next" to the next repo.
+function makeNestedGitlinkChain(depth: number): {
+    chainRepos: string[];
+    chainLinks: { repoRoot: string; parentCommitOid: string; pathInParent: string }[];
+    leafCommitOid: string;
+} {
+    const chainRepos: string[] = [];
+    for (let i = 0; i <= depth; i++) {
+        chainRepos.push(makeTempRepoWithCommit());
+    }
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const chainLinks: { repoRoot: string; parentCommitOid: string; pathInParent: string }[] = [];
+    for (let i = depth - 1; i >= 0; i--) {
+        git(chainRepos[i], "submodule", "add", "-q", chainRepos[i + 1], "vendor/next");
+        git(chainRepos[i], "commit", "-q", "-m", "add nested submodule");
+        chainLinks[i] = {
+            repoRoot: chainRepos[i],
+            parentCommitOid: git(chainRepos[i], "rev-parse", "HEAD").trim(),
+            pathInParent: "vendor/next",
+        };
+    }
+    const leafCommitOid = git(chainRepos[depth], "rev-parse", "HEAD").trim();
+    return { chainRepos, chainLinks, leafCommitOid };
 }
 
 test("test_substituteGitlinkChangesOnlyTheDeclaredGitlinkEntry", () => {
@@ -116,6 +141,93 @@ test("test_substituteGitlinkThrowsWhenPathInParentIsNotAGitlink", () => {
     // Test action + verification: "seed.txt" is a blob, not a gitlink.
     assert.throws(() => {
         substituteGitlink(repoRoot, { parentCommitOid: commit, pathInParent: "seed.txt", childOid: commit });
+    });
+});
+
+test("test_substituteGitlinksRecursivelyResolvesNewLeafThroughTwoGitlinksInATwoLevelChain", () => {
+    // Scenario: a two-level chain returns a root OID resolving to the new leaf through both gitlinks.
+    const { chainRepos, chainLinks } = makeNestedGitlinkChain(2);
+    const [rootRepo, midRepo, leafRepo] = chainRepos;
+    writeFileSync(join(leafRepo, "seed.txt"), "seed\nchange\n");
+    git(leafRepo, "commit", "-q", "-am", "change");
+    const newLeafOid = git(leafRepo, "rev-parse", "HEAD").trim();
+    // Test action.
+    const { rootCommitOid, commitOidsByLevel } = substituteGitlinksRecursively(chainLinks, newLeafOid);
+    // Verification: root -> mid gitlink, then mid -> leaf gitlink, lands on newLeafOid.
+    const midOidFromRoot = git(rootRepo, "rev-parse", `${rootCommitOid}:vendor/next`).trim();
+    assert.equal(midOidFromRoot, commitOidsByLevel[1]);
+    const leafOidFromMid = git(midRepo, "rev-parse", `${commitOidsByLevel[1]}:vendor/next`).trim();
+    assert.equal(leafOidFromMid, newLeafOid);
+});
+
+test("test_substituteGitlinksRecursivelyResolvesNewLeafThroughThreeGitlinksInAThreeLevelChain", () => {
+    // Scenario: a three-level chain resolves the new leaf OID to the root through every gitlink.
+    const { chainRepos, chainLinks } = makeNestedGitlinkChain(3);
+    const [rootRepo, midRepo, mid2Repo, leafRepo] = chainRepos;
+    writeFileSync(join(leafRepo, "seed.txt"), "seed\nchange\n");
+    git(leafRepo, "commit", "-q", "-am", "change");
+    const newLeafOid = git(leafRepo, "rev-parse", "HEAD").trim();
+    // Test action.
+    const { rootCommitOid, commitOidsByLevel } = substituteGitlinksRecursively(chainLinks, newLeafOid);
+    // Verification: walk all three gitlinks from the returned root OID.
+    const midOidFromRoot = git(rootRepo, "rev-parse", `${rootCommitOid}:vendor/next`).trim();
+    assert.equal(midOidFromRoot, commitOidsByLevel[1]);
+    const mid2OidFromMid = git(midRepo, "rev-parse", `${commitOidsByLevel[1]}:vendor/next`).trim();
+    assert.equal(mid2OidFromMid, commitOidsByLevel[2]);
+    const leafOidFromMid2 = git(mid2Repo, "rev-parse", `${commitOidsByLevel[2]}:vendor/next`).trim();
+    assert.equal(leafOidFromMid2, newLeafOid);
+});
+
+test("test_substituteGitlinksRecursivelyReturnsEveryIntermediateOid", () => {
+    // Scenario: commitOidsByLevel has one entry per chain link, each a distinct real commit OID.
+    const { chainLinks } = makeNestedGitlinkChain(3);
+    const leafRepo = makeTempRepoWithCommit();
+    const newLeafOid = git(leafRepo, "rev-parse", "HEAD").trim();
+    // Test action.
+    const { commitOidsByLevel } = substituteGitlinksRecursively(chainLinks, newLeafOid);
+    // Verification: one OID per link, all distinct from each other and the original OID.
+    assert.equal(commitOidsByLevel.length, chainLinks.length);
+    const uniqueOids = new Set(commitOidsByLevel);
+    assert.equal(uniqueOids.size, chainLinks.length);
+    chainLinks.forEach((link, level) => {
+        assert.notEqual(commitOidsByLevel[level], link.parentCommitOid);
+    });
+});
+
+test("test_substituteGitlinksRecursivelyThrowsWhenAChainLinkPathIsNotAGitlink", () => {
+    // Scenario: a chain link naming a non-gitlink path throws instead of corrupting a tree.
+    const { chainLinks } = makeNestedGitlinkChain(2);
+    chainLinks[1] = { ...chainLinks[1], pathInParent: "seed.txt" };
+    const leafRepo = makeTempRepoWithCommit();
+    const newLeafOid = git(leafRepo, "rev-parse", "HEAD").trim();
+    // Test action + verification.
+    assert.throws(() => {
+        substituteGitlinksRecursively(chainLinks, newLeafOid);
+    });
+});
+
+test("test_substituteGitlinksRecursivelyRejectsAnEmptyChain", () => {
+    // Scenario: an empty chain has nothing to fold over and must be rejected.
+    assert.throws(() => {
+        substituteGitlinksRecursively([], "0".repeat(40));
+    });
+});
+
+test("test_substituteGitlinksRecursivelyDoesNotMoveAnyBranchOrBaseRefAtAnyLevel", () => {
+    // Scenario: the no-ref-moved guarantee holds at every level of the chain, not just root.
+    const { chainRepos, chainLinks } = makeNestedGitlinkChain(3);
+    const branchesBefore = chainRepos.map((repoRoot) => git(repoRoot, "branch", "--show-current").trim());
+    const headsBefore = chainRepos.map((repoRoot) => git(repoRoot, "rev-parse", "HEAD").trim());
+    const leafRepo = chainRepos[chainRepos.length - 1];
+    writeFileSync(join(leafRepo, "seed.txt"), "seed\nchange\n");
+    git(leafRepo, "commit", "-q", "-am", "change");
+    const newLeafOid = git(leafRepo, "rev-parse", "HEAD").trim();
+    // Test action.
+    substituteGitlinksRecursively(chainLinks, newLeafOid);
+    // Verification: every repo the chain writes to (not the leaf, whose HEAD advanced by design) is unchanged.
+    chainRepos.slice(0, chainLinks.length).forEach((repoRoot, i) => {
+        assert.equal(git(repoRoot, "branch", "--show-current").trim(), branchesBefore[i]);
+        assert.equal(git(repoRoot, "rev-parse", "HEAD").trim(), headsBefore[i]);
     });
 });
 
