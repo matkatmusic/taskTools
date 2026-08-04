@@ -584,5 +584,23 @@
       "4984eef"
     ],
     "closureNote": "Added scripts/approvalGate.ts presenting exactly one whole-run approval gate, recording approval against a digest over the manifest, files, operation and base refs, occurrence digests, test receipts and review handoffs, issuing the runAuthorization token tied to that digest, and returning the run to review when any digest input drifts; tests/runAuthorization.test.ts allowlists approvalGate.ts as the approval recorder."
+  },
+  {
+    "taskNumber": 32,
+    "title": "Canonical-only operation branch push with ancestor check and no force",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/operationPush.ts: after approval, for each repeated logical repository, push only its canonical run-level operation branch, never with force. If a remote branch tip already exists, require it to be an ancestor of the pushed OID or abort before any base publication. Then fetch the canonical branch into every other occurrence and verify each is already at the same OID and the same tree.\n\nUnique repositories' operation branches are never pushed automatically, and no base branch is ever pushed automatically.\n\nTests: a unique repository's operation branch is not pushed; a repeated repository pushes only its canonical branch; a non-ancestor remote tip aborts before publication; no push uses force under any path; after push, every other occurrence verifies to the same OID and tree; a push attempted before approval fails.",
+    "files": [
+      "scripts/operationPush.ts",
+      "tests/operationPush.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "1c1aa8e",
+      "644afdc"
+    ],
+    "closureNote": "Added scripts/operationPush.ts pushing only the canonical run-level operation branch for repeated logical repositories, never with force, aborting before any base publication when an existing remote tip is not an ancestor of the pushed OID, then fetching the canonical branch into every other occurrence and verifying identical OID and tree; unique repositories and base branches are never pushed automatically."
   }
 ]
