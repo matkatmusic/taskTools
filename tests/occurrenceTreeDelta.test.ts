@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeOccurrenceTreeDelta } from "../scripts/occurrenceTreeDelta.ts";
+import { computeOccurrenceTreeDelta, computeTreeDelta, computeTreeDigest } from "../scripts/occurrenceTreeDelta.ts";
 import type { TreeChange } from "../scripts/occurrenceTreeDelta.ts";
 
 function git(repoPath: string, ...args: string[]): string {
@@ -189,4 +189,116 @@ test("digest inequality: one differing byte changes the digest", async () => {
         computeOccurrenceTreeDelta({ occurrencePath: b.repoPath, baseRef: b.baseRef }),
     ]);
     assert.notEqual(deltaA.digest, deltaB.digest);
+});
+
+test("digest changes on unstaged byte edit of a tracked file", async () => {
+    const { repoPath, baseRef } = makeRepoWithCommit();
+    const before = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    writeFileSync(join(repoPath, "seed.txt"), "changed\n");
+    const after = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    assert.notEqual(before.digest, after.digest);
+});
+
+test("digest changes on unstaged deletion of a tracked file", async () => {
+    const { repoPath, baseRef } = makeRepoWithCommit();
+    const before = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    rmSync(join(repoPath, "seed.txt"));
+    const after = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    assert.notEqual(before.digest, after.digest);
+});
+
+test("digest changes on unstaged exec-bit change of a tracked file", async () => {
+    const { repoPath, baseRef } = makeRepoWithCommit();
+    const before = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    chmodSync(join(repoPath, "seed.txt"), 0o755);
+    const after = await computeOccurrenceTreeDelta({ occurrencePath: repoPath, baseRef });
+    assert.notEqual(before.digest, after.digest);
+});
+
+test("computeTreeDigest changes when a symlink target changes", async () => {
+    const a = makeRepoWithCommit();
+    const b = makeRepoWithCommit();
+    symlinkSync("target-a", join(a.repoPath, "link.txt"));
+    git(a.repoPath, "add", "link.txt");
+    symlinkSync("target-b", join(b.repoPath, "link.txt"));
+    git(b.repoPath, "add", "link.txt");
+    const [digestA, digestB] = await Promise.all([
+        computeTreeDigest({ occurrencePath: a.repoPath }),
+        computeTreeDigest({ occurrencePath: b.repoPath }),
+    ]);
+    assert.notEqual(digestA, digestB);
+});
+
+test("computeTreeDelta reports a target-only edit", async () => {
+    const source = makeRepoWithCommit();
+    const target = makeRepoWithCommit();
+    writeFileSync(join(target.repoPath, "seed.txt"), "target changed\n");
+    const patches = await computeTreeDelta(
+        { occurrencePath: source.repoPath },
+        { occurrencePath: target.repoPath },
+    );
+    assert.deepEqual(patches, [{ path: "seed.txt", kind: "modify", mode: "100644" }]);
+});
+
+test("computeTreeDelta reports a source-only untracked file as an addition", async () => {
+    const source = makeRepoWithCommit();
+    const target = makeRepoWithCommit();
+    writeFileSync(join(source.repoPath, "extra.txt"), "extra\n");
+    const patches = await computeTreeDelta(
+        { occurrencePath: source.repoPath },
+        { occurrencePath: target.repoPath },
+    );
+    assert.equal(patches.length, 1);
+    assert.equal(patches[0].kind, "add");
+    assert.equal(patches[0].path, "extra.txt");
+});
+
+test("computeTreeDelta respects nested-occurrence exclusions on both sides", async () => {
+    const source = makeRepoWithCommit();
+    const target = makeRepoWithCommit();
+    mkdirSync(join(source.repoPath, "nested"));
+    writeFileSync(join(source.repoPath, "nested", "a.txt"), "source nested\n");
+    mkdirSync(join(target.repoPath, "nested"));
+    writeFileSync(join(target.repoPath, "nested", "a.txt"), "target nested\n");
+    const patches = await computeTreeDelta(
+        { occurrencePath: source.repoPath, nestedOccurrencePaths: ["nested"] },
+        { occurrencePath: target.repoPath, nestedOccurrencePaths: ["nested"] },
+    );
+    assert.deepEqual(patches, []);
+});
+
+test("computeTreeDelta respects generated-output exclusions on both sides", async () => {
+    const source = makeRepoWithCommit();
+    const target = makeRepoWithCommit();
+    mkdirSync(join(source.repoPath, "dist"));
+    writeFileSync(join(source.repoPath, "dist", "gen.txt"), "source gen\n");
+    mkdirSync(join(target.repoPath, "dist"));
+    writeFileSync(join(target.repoPath, "dist", "gen.txt"), "target gen\n");
+    const patches = await computeTreeDelta(
+        { occurrencePath: source.repoPath, excludePatterns: ["dist/**"] },
+        { occurrencePath: target.repoPath, excludePatterns: ["dist/**"] },
+    );
+    assert.deepEqual(patches, []);
+});
+
+test("computeTreeDelta yields a deterministic rename, or an accepted delete+add with no old path", async () => {
+    const source = makeRepoWithCommit();
+    const target = makeRepoWithCommit();
+    writeFileSync(join(target.repoPath, "old.txt"), "seed\n");
+    git(target.repoPath, "add", "old.txt");
+    git(target.repoPath, "commit", "-q", "-m", "add old");
+    writeFileSync(join(source.repoPath, "new.txt"), "seed\n");
+    git(source.repoPath, "add", "new.txt");
+    git(source.repoPath, "commit", "-q", "-m", "add new");
+    const patches = await computeTreeDelta(
+        { occurrencePath: source.repoPath },
+        { occurrencePath: target.repoPath },
+    );
+    const isSingleRename =
+        patches.length === 1 && patches[0].kind === "renamed" && patches[0].path === "new.txt" && patches[0].oldPath === "old.txt";
+    const isDeleteAddPair =
+        patches.length === 2 &&
+        patches.some((p) => p.kind === "delete" && p.path === "old.txt" && p.oldPath === undefined) &&
+        patches.some((p) => p.kind === "add" && p.path === "new.txt" && p.oldPath === undefined);
+    assert.ok(isSingleRename || isDeleteAddPair);
 });
