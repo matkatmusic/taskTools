@@ -1,41 +1,5 @@
 [
   {
-    "taskNumber": 20,
-    "title": "Receipt verification with per-occurrence and per-parent test execution",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/syncVerification.ts: for every synchronization receipt, verify the expected branches and byte, mode, symlink, and deletion equivalence across occurrences; run the related tests in every occurrence; and run the configured complete suite in every distinct affected parent while walking to the root. Fail on missing tests, mismatched trees, branch drift, or test failures. On success, persist a green receipt tied to the converged digest.\n\nRecord lastWriterOccurrence. Deduplicate identical repository/test/digest executions, but never skip a distinct parent merely because it contains the same logical child — distinct parent chains must each be validated.\n\nNew module only; no production call sites yet. Phase 2 acceptance: all repeated repositories in a RevEng-shaped graph converge to identical tested trees while retaining distinct occurrence branches and parentage.\n\nTests: mismatched trees, drifted branches, missing test policy, and failing tests each fail verification; identical repo/test/digest runs execute once; two distinct parents containing the same logical child both run their complete suites; a green receipt is persisted only when everything passes and is keyed to the converged digest.",
-    "files": [
-      "scripts/syncVerification.ts",
-      "tests/syncVerification.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
-    "taskNumber": 22,
-    "title": "Task grouping over canonical effects instead of raw paths",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/canonicalTaskGroups.ts: group tasks by union over canonical ownership and effect paths from scripts/ownershipKeys.ts rather than the literal declared file strings used by scripts/taskGroups.ts. Repository identity discovery must be complete before final grouping and worktree creation.\n\nTasks naming the same logical file through different occurrences must land in one serial group. Tasks touching genuinely disjoint files may remain in parallel groups even when those files belong to the same logical repository.\n\nNew module only — do not modify scripts/taskGroups.ts or scripts/prepareTasks.ts; the Phase 4 cutover task routes production through this module.\n\nTests: two tasks naming the same logical file through different occurrence paths union into one group; two tasks touching disjoint files in one logical repository stay in separate groups; overlap introduced only by ancestor-gitlink effects still unions; grouping is deterministic and group IDs are stable for a given task set.",
-    "files": [
-      "scripts/canonicalTaskGroups.ts",
-      "tests/canonicalTaskGroups.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ]
-  },
-  {
-    "taskNumber": 23,
-    "title": "Snapshot-based worker ownership checks replacing commit ranges",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/ownershipSnapshots.ts: replace commit-based worker ownership checks with before/after recursive snapshots covering tracked, untracked, deleted, renamed, mode, and symlink states across every occurrence. Attribute each worker's delta to its declared ownership from scripts/ownershipKeys.ts, and keep the group boundary as the final check.\n\nSnapshots must work when a worker made no commit, several commits, or amended one, since commit ranges are exactly what this replaces. Out-of-ownership changes are reported repository-qualified so a human can see which occurrence and path violated the fence.\n\nNew module only; no production call sites yet.\n\nTests: an edit outside declared ownership is reported even with no commits made; edits inside ownership pass; deletions, renames, mode changes, and symlink changes are all attributed correctly; a change inside a nested occurrence is attributed to that occurrence rather than its parent; the group boundary still rejects a change owned by no task in the group.",
-    "files": [
-      "scripts/ownershipSnapshots.ts",
-      "tests/ownershipSnapshots.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ]
-  },
-  {
     "taskNumber": 25,
     "title": "Per-repository finalizer: own-files commit, durable refs, gitlink bump commits",
     "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runFinalizer.ts, requiring an authorization from scripts/runAuthorization.ts: finalize logical children first using explicit occurrence edges, then for each repository, in each participating group/occurrence branch, create one nonempty commit containing approved own-file changes only, excluding child gitlinks. Preserve each resulting tip under a run-scoped durable ref. Create one temporary assembly branch at the logical repository's recorded base, set every direct child occurrence to its finalized integration OID, and create one distinct gitlink-bump commit per changed parent gitlink, ordered by path within the immediate parent.\n\nNo empty commits are ever created, and own-file commits never contain gitlink changes. This module must not update any base ref and must not push.\n\nNew module only; no production call sites yet.\n\nTests: the own-files commit contains no gitlink change; one separate bump commit exists per changed direct child occurrence and none for unchanged ones; a parent containing multiple occurrences of one logical child updates every one of those gitlinks to the same child integration OID; nested child OIDs propagate through each correct explicit parent edge to the root; durable refs exist for every group tip; base refs are provably unchanged.",
@@ -63,18 +27,6 @@
     ]
   },
   {
-    "taskNumber": 28,
-    "title": "Recorded per-run hook-disabled override requiring full suites before approval",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/hookOverride.ts: allow an explicit per-run override that lets a run proceed with the related-test hook disabled. Record the override in the run manifest, and require the complete suite from scripts/testPolicy.ts to run in every affected repository and every affected parent immediately before approval — not earlier, so the results describe the state being approved.\n\nThe override is explicit and recorded; there is no implicit fallback that silently skips tests.\n\nTests: the override is persisted in the manifest and survives a resume; with the override active, every affected repository and parent suite runs before approval and a failure blocks approval; without the override, a disabled hook still stops startup; suites run immediately before approval rather than at an earlier stage.",
-    "files": [
-      "scripts/hookOverride.ts",
-      "tests/hookOverride.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ]
-  },
-  {
     "taskNumber": 29,
     "title": "Run-scoped recovery refs after each worker and each synchronization",
     "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/recoveryRefs.ts: preserve work after each worker and after each N-way synchronization using internal run-scoped recovery refs. Build recovery snapshots with temporary indexes and recursive gitlink substitution via scripts/repositoryIntegration.ts, without moving any operation or base branch.\n\nRecovery must capture the full recursive state, including nested occurrence contents, so a killed run loses nothing. Snapshotting must be safe to repeat and must never disturb the working tree a worker is using.\n\nTests: a recovery ref exists after each worker and each sync and resolves to a tree containing that state; operation and base branches are provably unmoved; nested occurrence contents are reachable through substituted gitlinks; repeated snapshots are idempotent; a snapshot taken with uncommitted worker changes still captures them.",
@@ -84,9 +36,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      42
     ]
   },
   {
@@ -101,8 +50,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      20,
-      23,
       26
     ]
   },
@@ -186,7 +133,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      22,
       26,
       31,
       33,
@@ -238,19 +184,6 @@
     "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.",
     "files": [],
     "handoffFilePaths": [],
-    "blockedBy": []
-  },
-  {
-    "taskNumber": 42,
-    "title": "Recursive gitlink substitution across a full ancestor chain",
-    "description": "Add recursive gitlink substitution to scripts/repositoryIntegration.ts. Today it exports only substituteGitlink(repoRoot, {parentCommitOid, pathInParent, childOid}), which rewrites exactly one gitlink entry in one parent commit via scratch-index tree surgery and returns the new parent commit OID without moving any ref.\n\nTask 29 (recoveryRefs) and later Phase 4 finalization work need to rewrite a whole ancestor chain at once: given a leaf occurrence commit and its full parent chain, substitute the child OID at each level from the bottom up, feeding each new parent commit OID into the next level, and return the new root commit OID plus the new OID at every level.\n\nAdd substituteGitlinksRecursively (or the naming convention already in use in that module) taking the ordered chain from root to leaf plus the new leaf OID, folding substituteGitlink over it bottom-up. Reject a chain whose entry is not a gitlink at the named path, reject an empty chain, and keep the no-ref-moved guarantee.\n\nThis was split out of task 29: its planner stopped because the recursive primitive its plan assumed does not exist.\n\nTests: a two-level chain returns a root OID whose tree resolves to the new leaf through both gitlinks; a three-level chain does the same to the root; every intermediate OID is returned; a non-gitlink path in the chain throws; an empty chain is rejected; no branch or base ref moves.",
-    "files": [
-      "scripts/repositoryIntegration.ts",
-      "tests/repositoryIntegration.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
     "blockedBy": []
   }
 ]
