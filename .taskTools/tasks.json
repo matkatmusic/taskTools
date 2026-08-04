@@ -470,5 +470,27 @@
     "blockedBy": [
       35
     ]
+  },
+  {
+    "taskNumber": 37,
+    "title": "unblocked option, or tackle-unblocked skill",
+    "description": "an 'unblocked' option for tackle-tasks that finds all unblocked tasks and spins them up, lowest number to highest number.",
+    "files": [
+    ],
+    "handoffFilePaths": [
+    ],
+    "blockedBy": [
+    ]
+  },
+  {
+    "taskNumber": 38,
+    "title": "tackle-tasks-loop skill",
+    "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. ",
+    "files": [
+    ],
+    "handoffFilePaths": [
+    ],
+    "blockedBy": [
+    ]
   }
 ]
