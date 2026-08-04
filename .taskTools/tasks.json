@@ -457,5 +457,13 @@
     "files": [],
     "handoffFilePaths": [],
     "blockedBy": []
+  },
+  {
+    "taskNumber": 41,
+    "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
+    "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.",
+    "files": [],
+    "handoffFilePaths": [],
+    "blockedBy": []
   }
 ]
