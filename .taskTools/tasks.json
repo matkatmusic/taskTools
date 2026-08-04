@@ -1,35 +1,5 @@
 [
   {
-    "taskNumber": 13,
-    "title": "Base and recorded-OID reconciliation gate for repeated repositories",
-    "description": "Phase 2 of the recursive repository-discovery redesign. AMENDED — follow plans/amended task 13.md; it supersedes plans/task-13-plan.md.\n\nThis is no longer a new-module-only task. scripts/resolutionRequests.ts must be extended first: its Phase 1 contract keys requests by (occurrenceId, reason) and types answers as Record<string, string>, which cannot express a logical-repository question or a structured {recordedOid, baseBranch} answer. Do not JSON-encode a choice into a string, substitute a logical repository ID into occurrenceId, or serialize members into candidateBaseBranches.\n\nAdd a discriminated base-reconciliation request family (REASON_BASE_RECONCILIATION, BaseReconciliationRequest keyed by logicalRepositoryId, BaseReconciliationChoice) alongside the existing branch-selection request, widen the manifest to persist both, and generalize createResolutionRequestId's parameter from occurrenceId to subjectId with byte-identical output. Existing string-answer creation, validation, and IDs stay green; a reconciliation request passed to the legacy string-answer path is rejected explicitly. applyBaseReconciliationAnswers accepts an answer only when its complete {recordedOid, baseBranch} pair appears in one member record, persists it atomically, does not duplicate an unanswered request, and refreshes a changed member list under the stable ID.\n\nThen scripts/baseReconciliation.ts: checkBaseReconciliation(logicalRepositoryId, occurrences, manifest) takes the manifest explicitly and returns a resolved {recordedOid, baseBranch} or blocked {logicalRepositoryId, requestId}; assertBaseReconciled narrows and throws naming both. Order: persisted typed answer wins, then unanimous occurrences, else create/refresh one request. Require at least one occurrence; normalize member order before persisting. Blocking is a hard precondition — no synchronization, worker edits, or branch creation while unresolved.\n\nNo production call sites in this task.\n\nTests: the seven original behavioral tests amended to pass a ResolutionManifest, plus request-ID stability keyed to the logical repository, full member payload persistence, structured answer surviving a JSON round trip, rejection of a cross-member OID/base pair never recorded together, non-duplicating deterministic re-record, existing string-answer suite still green, and explicit rejection of a reconciliation request by the legacy function.",
-    "files": [
-      "scripts/resolutionRequests.ts",
-      "tests/resolutionRequests.test.ts",
-      "scripts/baseReconciliation.ts",
-      "tests/baseReconciliation.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/amended task 13.md",
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
-    "taskNumber": 16,
-    "title": "Deterministic N-way synchronization across occurrences",
-    "description": "Phase 2 of the recursive repository-discovery redesign. AMENDED — follow plans/amended task 16.md; it supersedes plans/task-16-plan.md.\n\nThis is no longer a new-module-only task. scripts/occurrenceTreeDelta.ts ships only computeOccurrenceTreeDelta({occurrencePath, baseRef, nestedOccurrencePaths?, excludePatterns?}) — a base-relative delta whose digest reads `git ls-files -s` index OIDs and modes, so unstaged modifications, deletions, and exec-bit changes can be invisible. A base-relative delta also cannot express a target-only edit at a path the source never touched, so replaying it never converges. Do not write a second private tree walker inside occurrenceSync.ts.\n\nExtend the delta module with a shared OccurrenceTreeSpec {occurrencePath, nestedOccurrencePaths?, excludePatterns?} and current-tree primitives computeTreeDigest(spec) and computeTreeDelta(source, target), both built on one internal snapshot builder: Git-derived included path set honoring nested-occurrence, exclude, and ignore rules; deleted-from-worktree tracked paths omitted; lstat without following symlinks; hashes of actual file bytes and symlink target text; current exec mode; entries sorted by relative path; digest input covers path, type, mode, and content hash. computeOccurrenceTreeDelta keeps working on the corrected digest. Pairwise patches cover add, delete, modify, mode-only change, type/symlink-target change, and deterministic renames paired by exact content/type/mode match in sorted path order (ambiguous cases may degrade to delete+add leaving no old path).\n\nThen scripts/occurrenceSync.ts: syncOccurrences(sourceOccurrencePath, occurrences: OccurrenceTreeSpec[], opts?: {maxIterations?}) returns {converged, iterations, changedPaths: Record<string, string[]>}. Validate non-empty list, unique normalized paths, exactly one member matching the source, positive-integer maxIterations. Star topology with the source as sole authority: digest all, return early when equal, else apply computeTreeDelta(source, target) to each sorted target, record both old and new paths for renames, recompute digests, repeat until converged or maxIterations. Sorted changed-path arrays so results are order-independent. Filesystem failures fail fast with source/target/path context — the loop bounds non-convergence, it does not retry I/O.\n\nIf Phase 1 ownership of the delta module must stay closed, split those two files into a prerequisite task and mark this one blocked by it.\n\nNo production call sites in this task.\n\nDelta tests: unstaged byte change, unstaged tracked deletion, and unstaged exec-bit change each move the digest; changed symlink target moves it without following the link; source/target comparison reports a target-only edit; source-only untracked file becomes an addition; nested-occurrence and generated-output exclusions respected on both sides; a plain rename yields one deterministic rename or an accepted delete/add leaving no old path.\n\nSync tests: the original two-, three-, and N-way scenarios amended to OccurrenceTreeSpec, plus target-only modification removed/overwritten, target-only untracked file inside the included tree deleted, unstaged source modifications/deletions/mode changes propagated, nested occurrence contents untouched and excluded from digest/delta, excluded generated output untouched, reordering the array producing identical sorted changed paths and digests, duplicate paths and missing source rejected, filesystem failure throwing with context instead of a misleading non-converged result, and a second sync returning zero iterations with empty changed paths.",
-    "files": [
-      "scripts/occurrenceTreeDelta.ts",
-      "tests/occurrenceTreeDelta.test.ts",
-      "scripts/occurrenceSync.ts",
-      "tests/occurrenceSync.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/amended task 16.md",
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 19,
     "title": "Machine-readable synchronization receipts",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/syncReceipts.ts: a sync-receipt mode emitting a machine-readable record for each synchronization, containing the logical repository ID, the source and destination occurrences, the changed paths, the expected branches, the content digests, and each occurrence's full parent chain.\n\nThe parent chain is part of the receipt because verification must later run the complete suite in every distinct affected parent, and two occurrences of the same logical child can sit under entirely different chains.\n\nNew module only; no production call sites yet.\n\nTests: a receipt from a three-occurrence sync lists all destinations, their branches, digests, and distinct parent chains; receipts serialize and parse losslessly; a receipt for a nested occurrence records the full chain to the root, not just the immediate parent; two occurrences of one logical child under different parents produce receipts with different chains.",
@@ -39,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      16
     ]
   },
   {
@@ -69,9 +36,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      16
     ]
   },
   {
@@ -184,9 +148,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      16
     ]
   },
   {
@@ -330,17 +291,6 @@
     "title": "merge-worktree-tasks skill",
     "description": "a way to check if worktrees weren't merged and if there are open tasks that haven't been completed and are assigned to those worktrees, and then to run the merge-worktrees script to merge them *if the task is approved*.  Cause: sometimes I forget to commit when tasks are completed, which blocks the worktrees from being commited. ",
     "files": [],
-    "handoffFilePaths": [],
-    "blockedBy": []
-  },
-  {
-    "taskNumber": 40,
-    "title": "workers should run their own tests as part of their task requirement",
-    "description": "workers should run their own tests as part of their task requirement, and be responsible for fixing their failing tests before they signal to the orchestrating agent that their task is complete and ready to be merged.\n\nTwo places currently forbid this and must both change: skills/tackle-tasks/SKILL.md line 40 (\"run typecheck only — no test suites or visual checks, by you or by workers\") and the workerBrief template in skills/tackle-tasks/tackle-tasks.workflow.js (\"Fix type errors in the files you own; do not run test suites\"). Replace both with the requirement that a worker runs the tests covering the files it owns and fixes its own failures before reporting status complete; a worker with failing tests reports blocked or partial, never complete. Keep the full-suite run in close-tasks as the final gate.",
-    "files": [
-      "skills/tackle-tasks/SKILL.md",
-      "skills/tackle-tasks/tackle-tasks.workflow.js"
-    ],
     "handoffFilePaths": [],
     "blockedBy": []
   },
