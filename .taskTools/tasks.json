@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 31,
-    "title": "Whole-run approval gate with state digest and drift invalidation",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalGate.ts: present exactly one approval gate for the entire run and record the approval against a digest covering the manifest, the files, the operation and base refs, the occurrence digests, the test receipts, and the review handoffs. Issue the authorization from scripts/runAuthorization.ts tied to that digest. Any later drift in any digest input invalidates the approval and returns the run to review.\n\nThere is exactly one approval in the run: the whole-run approval authorizes finalization and archival, and no second post-merge approval is added.\n\nTests: approval cannot be recorded unless readyForApproval; the issued authorization carries the recorded digest; changing any single digest input afterwards — a file, a ref, an occurrence digest, a receipt, or a review handoff — invalidates the authorization and returns the run to review; a stale authorization is rejected by the finalizer; only one gate exists across the run.",
-    "files": [
-      "scripts/approvalGate.ts",
-      "tests/approvalGate.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ]
-  },
-  {
     "taskNumber": 32,
     "title": "Canonical-only operation branch push with ancestor check and no force",
     "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/operationPush.ts: after approval, for each repeated logical repository, push only its canonical run-level operation branch, never with force. If a remote branch tip already exists, require it to be an ancestor of the pushed OID or abort before any base publication. Then fetch the canonical branch into every other occurrence and verify each is already at the same OID and the same tree.\n\nUnique repositories' operation branches are never pushed automatically, and no base branch is ever pushed automatically.\n\nTests: a unique repository's operation branch is not pushed; a repeated repository pushes only its canonical branch; a non-ancestor remote tip aborts before publication; no push uses force under any path; after push, every other occurrence verifies to the same OID and tree; a push attempted before approval fails.",
@@ -21,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      31
     ]
   },
   {
@@ -74,7 +59,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      31,
       33,
       34
     ]

@@ -566,5 +566,23 @@
       "3484188"
     ],
     "closureNote": "Added scripts/approvalReadiness.ts setting readyForApproval only when every selected task is done, ownership checks and typechecks pass, occurrences have converged, sync verification receipts are green, and every group supplies an actionable exercise method (live URL or exact command plus working directory), with a report-only reviewer that performs no writes."
+  },
+  {
+    "taskNumber": 31,
+    "title": "Whole-run approval gate with state digest and drift invalidation",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalGate.ts: present exactly one approval gate for the entire run and record the approval against a digest covering the manifest, the files, the operation and base refs, the occurrence digests, the test receipts, and the review handoffs. Issue the authorization from scripts/runAuthorization.ts tied to that digest. Any later drift in any digest input invalidates the approval and returns the run to review.\n\nThere is exactly one approval in the run: the whole-run approval authorizes finalization and archival, and no second post-merge approval is added.\n\nTests: approval cannot be recorded unless readyForApproval; the issued authorization carries the recorded digest; changing any single digest input afterwards — a file, a ref, an occurrence digest, a receipt, or a review handoff — invalidates the authorization and returns the run to review; a stale authorization is rejected by the finalizer; only one gate exists across the run.",
+    "files": [
+      "scripts/approvalGate.ts",
+      "tests/approvalGate.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "059d952",
+      "4984eef"
+    ],
+    "closureNote": "Added scripts/approvalGate.ts presenting exactly one whole-run approval gate, recording approval against a digest over the manifest, files, operation and base refs, occurrence digests, test receipts and review handoffs, issuing the runAuthorization token tied to that digest, and returning the run to review when any digest input drifts; tests/runAuthorization.test.ts allowlists approvalGate.ts as the approval recorder."
   }
 ]

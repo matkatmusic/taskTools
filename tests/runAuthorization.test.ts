@@ -31,8 +31,8 @@ test("test_acceptsATokenWhoseDigestMatchesCurrentState", () => {
 });
 
 test("test_noProductionModuleOtherThanThePhase4ApprovalRecorderImportsIssueRunAuthorization", () => {
-    // Scan scripts/ for issueRunAuthorization imports; only allowlisted files (future approval recorder) may use it.
-    const allowedImporters = new Set<string>([]);
+    // Scan scripts/ for issueRunAuthorization imports; only allowlisted files (the approval recorder) may use it.
+    const allowedImporters = new Set<string>(["approvalGate.ts"]);
     const scriptsDir = join(import.meta.dirname, "..", "scripts");
     const scriptFiles = readdirSync(scriptsDir).filter((file) => file.endsWith(".ts") && file !== "runAuthorization.ts");
     for (const file of scriptFiles) {
