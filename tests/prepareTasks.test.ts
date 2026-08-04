@@ -80,6 +80,27 @@ test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     assert.equal(second, first);
 });
 
+test("test_createWorktreeForGroupRebasesAStaleWorktreeOntoTheSourceBranchTip", () => {
+    // Setup: a worktree left behind by an earlier run, holding that run's commit.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    writeFileSync(join(worktreePath, "stale.txt"), "from the previous run\n");
+    git(worktreePath, "add", "stale.txt");
+    git(worktreePath, "commit", "-q", "-m", "previous run");
+    // Setup: the source branch has since moved on.
+    writeFileSync(join(repoRoot, "fresh.txt"), "landed since\n");
+    git(repoRoot, "add", "fresh.txt");
+    git(repoRoot, "commit", "-q", "-m", "fresh work");
+    const sourceTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    // Test action: a second run hands a worker the same path.
+    createWorktreeForGroup(repoRoot, group);
+    // Verification: the worker gets the source branch tip, not the earlier run's codebase.
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), sourceTip);
+    assert.equal(existsSync(join(worktreePath, "fresh.txt")), true);
+    assert.equal(existsSync(join(worktreePath, "stale.txt")), false);
+});
+
 test("test_createWorktreeForGroupPopulatesSubmoduleWorkingTrees", () => {
     // Setup: a repo whose `vendor/` submodule holds a file with a known marker.
     const { repoRoot } = makeTempRepoWithLocalSubmodule();

@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { groupTasksByFileOverlap } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
-import { collectRepositorySources, createBranchInEveryRepository, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
+import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 
 export type PreparedTask = {
     number: number;
@@ -110,16 +110,24 @@ function initializeSubmodulesInWorktree(worktreePath: string): void {
 
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
     const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `group-${group.groupId}`);
-    if (!existsSync(worktreePath)) {
+    const branchName = branchNameForGroup(group.groupId);
+    if (existsSync(worktreePath)) {
+        // A worktree left by an earlier run holds that run's commits; re-base it on the source branch tip.
+        execFileSync(
+            "git",
+            ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
+            { stdio: "ignore" },
+        );
+    } else {
         mkdirSync(dirname(worktreePath), { recursive: true });
         execFileSync(
             "git",
-            ["-C", repoRoot, "worktree", "add", "-b", branchNameForGroup(group.groupId), worktreePath, "HEAD"],
+            ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "HEAD"],
             { stdio: "ignore" },
         );
     }
     initializeSubmodulesInWorktree(worktreePath);
-    createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchNameForGroup(group.groupId));
+    createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchName);
     return worktreePath;
 }
 

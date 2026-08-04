@@ -45,23 +45,9 @@ export function collectRepositorySources(repoRoot: string): RepositorySource[] {
     return sources;
 }
 
-function branchExists(repoRoot: string, branchName: string): boolean {
-    try {
-        execFileSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`], { stdio: "ignore" });
-        return true;
-    } catch {
-        return false;
-    }
-}
-
+// -B, not -b: a branch left behind by an earlier run must be reset onto HEAD, never reused as-is.
 export function createBranchInEveryRepository(repoRoot: string, paths: string[], branchName: string): void {
     for (const path of paths) {
-        const fullPath = path === "" ? repoRoot : join(repoRoot, path);
-        if (currentBranchName(fullPath) === branchName) continue;
-        if (branchExists(fullPath, branchName)) {
-            git(fullPath, "checkout", branchName);
-        } else {
-            git(fullPath, "checkout", "-b", branchName);
-        }
+        git(path === "" ? repoRoot : join(repoRoot, path), "checkout", "-B", branchName);
     }
 }

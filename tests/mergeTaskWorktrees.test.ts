@@ -215,6 +215,23 @@ test("test_runAsCliLeavesTheWorktreeAndBranchInPlaceAfterASuccessfulMerge", () =
     assert.ok(branches.includes(group.branch));
 });
 
+test("test_mergeGroupBranchIntoRepoReportsWhyAMergeThatNeverStartedFailed", () => {
+    // Setup: an uncommitted local edit that git refuses to overwrite, so the merge never starts.
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(repoRoot, "new.txt"), "untracked squatter\n");
+
+    // Test action and verification: it reports instead of crashing on an empty commit.
+    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []);
+    assert.equal(outcome.merged, false);
+    assert.deepEqual(outcome.conflictedFilePaths, []);
+    assert.ok(outcome.failureReason && outcome.failureReason.length > 0);
+});
+
 test("test_resolveGitlinkConflictsAutoResolvesASubmodulePointerConflict", () => {
     const repoRoot = makeTempRepoWithLocalSubmodule();
     const mainSubmodulePath = join(repoRoot, "vendor");
