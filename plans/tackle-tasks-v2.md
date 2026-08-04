@@ -16,18 +16,36 @@ Three problems, ranked by the strength of the evidence behind them.
 
 ### 1.1 Unbounded retries (measured)
 
-From `plans/tackle-metrics.jsonl` — 21 runs, 45 tasks, 10.57 hours:
+From `plans/tackle-metrics.jsonl`. The file has **22 records but only 20 distinct
+runIds** — see §1.1.1 — so both readings are given:
+
+| Reading | Runs | Tasks | Total | Mean |
+|---|---|---|---|---|
+| every record | 22 | 46 | 10.73 h | 14.0 min/task |
+| first record per runId | 20 | 42 | 7.16 h | 10.2 min/task |
 
 | Run | What happened | Duration |
 |---|---|---|
-| average | — | 14.1 min/task |
-| task 16 | retried, ended in conflict | **201.7 min (3.4 h)** |
+| task 16 | retried, ended in conflict | **~202 min (3.4 h)** |
 | task 17 | retried, still blocked | 26.4 min |
 | task 9 | blocked at 316s, retried, ended in conflict | 21.0 min |
+| task 11+15 | next largest, for scale | 20.8 min |
 
-One task consumed 14× the average and produced nothing. Nothing in v1 bounds a
+One task consumed 14–20× the mean and produced nothing. Nothing in v1 bounds a
 retry: `requeueCount` permits one more pass with no time limit and no attempt
 ceiling. This is the single largest cost in the system and it is unaddressed.
+
+#### 1.1.1 The metrics file is itself unreliable
+
+`mse7zdrm-afo8cz07h0j` appears twice with different durations (693,105 ms vs
+705,998 ms). `mse7zdrm-afo8cz07h0j-r2` appears twice **and the records
+disagree**: 12,100,239 ms with `conflictCount: 1`, against 12,160,767 ms with
+`conflictCount: 0` — the same run recorded as both conflicted and clean.
+
+`appendRunMetricsRecord` appends without checking whether the runId is already
+present. v2 fixes this (§5.7); until then, no figure derived from this file is
+better than ±5%. The conclusion survives anyway: task 16's retry is an order of
+magnitude beyond every other run under either reading.
 
 ### 1.2 Merge and worktree fragility (three recorded incidents)
 
@@ -40,7 +58,7 @@ ceiling. This is the single largest cost in the system and it is unaddressed.
   non-destructive and accepted, in its own words, that "worktrees now accumulate
   indefinitely since no cleanup path remains."
 
-Conflicts occurred in 2 of 21 runs; 7 blocked outcomes across 5 of 21 runs.
+Conflicts occurred in 2 of 22 records; 7 blocked outcomes across 5 of them.
 
 ### 1.3 Code that cannot be composed (no incident evidence)
 
@@ -288,9 +306,16 @@ Requeue is capped on **both** axes:
   reported `blocked` with the elapsed time, whatever partial work exists is
   committed, and the run continues.
 
-Default ceiling: **20 minutes per task attempt**, ~1.4× the measured 14.1 min
-average. Configurable per run. Task 16 would have been cut at 20 minutes instead
-of 201.7, returning 3 hours to the run.
+Default ceiling: **30 minutes per task attempt**. Configurable per run.
+
+Chosen against the data, not rounded to a nice number. The mean is 10.2–14.0
+min/task (§1.1), but the largest *legitimate* run — tasks 11 and 15 together —
+took 20.8 min, so a 20-minute ceiling would have killed real work. 30 minutes
+clears that datapoint by ~1.5× while still cutting task 16 at 30 instead of 202,
+returning ~2.9 hours to that run.
+
+This threshold is provisional. §5.7's per-task durations are what make it
+tunable; right now it rests on one observed legitimate maximum.
 
 The ceiling is enforced by the scheduler, not the worker — a stuck worker cannot
 be trusted to time itself.
@@ -476,8 +501,9 @@ the corrected figures.
 
 Corrections from the first draft: hook payload was 6 not 5 (`viewTaskHook:34`
 missed); open blockers is 4 not 5 (the claimed fifth site does not exist);
-declared files is 2 not 3 (`canonicalTaskGroups` *imports* it from
-`taskGroups.ts:4`, it does not reimplement it).
+declared files is 2 not 3 — `declaredFiles` is exported once at
+`taskGroups.ts:13`, and `canonicalTaskGroups.ts:4` *imports* it rather than
+reimplementing it.
 
 **Deferred:** build a path snapshot exists twice with different hash algorithms —
 sha256 at `occurrenceTreeDelta:91-131`, sha1 at `ownershipSnapshots:17-45`.
@@ -575,9 +601,15 @@ In scope: `archiveProcessed`, `checkBlockers`, `extractOpenSections`,
 `taskStats`, `testPolicy`, `turn-modified-flag`, `unblockDependents`,
 `viewTaskHook`, plus `mergeTaskWorktrees` and `tackleMetrics`.
 
-The last two appear in no static import graph — the workflow spawns them by path
-(`prepareTasks.ts:70`, `mergeScriptPath()`). Any future runtime-spawned script
-must be added to this list by hand; the closure will not find it.
+`mergeTaskWorktrees` appears in no static import graph: the workflow spawns it by
+path (`prepareTasks.ts:70`, `mergeScriptPath()`). It must be added as a root by
+hand. `tackleMetrics` then follows automatically — `mergeTaskWorktrees.ts:6`
+imports it normally — so only the path-spawned entry point needs manual
+addition, not its dependencies.
+
+The general rule: **the closure finds imports, not spawns.** Any script invoked
+by path rather than imported must be added as a root by hand, and only that
+script, not what it imports.
 
 ### 11.1 Correcting the first draft
 
@@ -666,8 +698,12 @@ distinguished from a regression.
 
 ## 14. Repository state
 
-At `117073b` on `new-usage-graph`, 2026-08-04. These drift — another agent is
-landing work concurrently. Recompute rather than trust.
+Measured at `e55302d` on `new-usage-graph`, 2026-08-04. These drift fast —
+another agent is landing work concurrently. Recompute rather than trust.
+
+(The first draft cited `117073b`, which was already stale when written: that
+commit has 48 scripts, 4041 lines, and 48 test files, and `approvalGate.ts` /
+`approvalReadiness.ts` did not yet exist there.)
 
 - 51 scripts, 4253 lines, 50 test files.
 - `plans/rename-map.csv`: 255 function rows.
@@ -690,3 +726,15 @@ landing work concurrently. Recompute rather than trust.
 | `repositoryGraph`/`repositoryManifest`/`resolutionRequests` | out of scope | **in scope** |
 | §3.3 missing file | throws (contradicting its own table) | returns `[]` |
 | `validateRunAuthorization` | "same-signature wrapper" | wrapper, different signature |
+
+### 14.2 Second-draft claims corrected here
+
+The second draft was audited too. It got these wrong:
+
+| Claim | Was | Is |
+|---|---|---|
+| metrics totals | 21 runs, 45 tasks, 10.57 h | 22 records / 20 runIds; see §1.1 |
+| metrics reliability | treated as sound | duplicate runIds, one pair disagreeing (§1.1.1) |
+| `declaredFiles` import site | `taskGroups.ts:4` | exported `taskGroups.ts:13`, imported `canonicalTaskGroups.ts:4` |
+| `tackleMetrics` | "spawned by path" | ordinary import from `mergeTaskWorktrees.ts:6` |
+| repo-state commit | `117073b` | `e55302d` — the numbers were never `117073b`'s |
