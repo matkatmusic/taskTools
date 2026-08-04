@@ -22,6 +22,12 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/reflow-comments-post.ts\"",
             "statusMessage": "Reflowing wrapped comments..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts\"",
+            "statusMessage": "Running related tests...",
+            "enabled": true
           }
         ]
       }
