@@ -103,5 +103,56 @@
       "d5ec003"
     ],
     "closureNote": "Implemented scripts/baseBranchResolution.ts matching branches by exact tip OID with distinct single, none, and multiple results; its test file was rewritten from bun:test to the repo node:test convention after the worker worktree lacked node_modules and could not typecheck it."
+  },
+  {
+    "taskNumber": 7,
+    "title": "Resumable discovery resolution requests with persisted answers",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/resolutionRequests.ts: when discovery cannot decide something on its own, emit a resolution request carrying the occurrence ID, the recorded OID, the candidate base branches, and the reason (zero exact tip matches, multiple exact tip matches, or a later phase's ambiguity). Accept a resolution input mapping each request ID to the selected answer, and persist both requests and answers in the run manifest.\n\nResuming a run must not re-ask a resolved question and must not recreate a worktree that already exists. Request IDs must be stable across runs for the same occurrence and reason so a persisted answer still matches after a restart.\n\nNew module only; no production call sites yet.\n\nTests: a zero-match and a multi-match request are emitted with the right reason and candidates; applying answers stores them in the manifest; a second discovery pass over the same manifest emits no request that already has an answer; request IDs are stable across serialization round trips; an answer naming a branch that is not among the candidates is rejected.",
+    "files": [
+      "scripts/resolutionRequests.ts",
+      "tests/resolutionRequests.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "08dbac6"
+    ],
+    "closureNote": "Implemented scripts/resolutionRequests.ts emitting zero-match and multi-match resolution requests with stable IDs, persisting answers in the run manifest, re-asking nothing already answered, and rejecting answers naming a branch outside the candidate set."
+  },
+  {
+    "taskNumber": 8,
+    "title": "Run-scoped operation branch creation at the recorded OID",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/operationBranches.ts: for each occurrence, create and check out the run-scoped operation branch at that occurrence's recorded OID (not at whatever HEAD happens to be), and record the branch name on the occurrence.\n\nSetup must stop before any worker worktree is created if a repository is on a detached HEAD or its base branch is still unresolved. Failure is loud and names the offending occurrence paths. Creating a branch that already exists at the same OID is idempotent so a resumed run is safe; an existing branch at a different OID is an error, not a silent reset.\n\nNew module only; no production call sites yet.\n\nTests: branches are created at the recorded OID even when the checkout is elsewhere; re-running is a no-op; an existing branch at a different OID errors; a detached-HEAD occurrence aborts setup and the error names it; an occurrence with no resolved baseBranch aborts setup; assert no worker worktree directory is created on any of those failure paths.",
+    "files": [
+      "scripts/operationBranches.ts",
+      "tests/operationBranches.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "72a4adf"
+    ],
+    "closureNote": "Implemented scripts/operationBranches.ts creating run-scoped branches at each occurrence recorded OID, idempotent on re-run, erroring on an existing branch at a different OID, and aborting loudly on detached HEAD or unresolved base branch before any worktree is created."
+  },
+  {
+    "taskNumber": 10,
+    "title": "Integration primitives: gitlink substitution and prepared no-ff merge",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryIntegration.ts with two primitives used by later phases:\n\n1. Substitute a finalized child OID into the correct direct gitlink of its immediate parent, located by the explicit occurrence edge and the recorded path within that parent. Only the declared gitlink changes; every other entry in the parent tree is byte-identical.\n\n2. Prepare a real --no-ff merge commit from a recorded base to a given tip, returning the prepared commit OID, without moving any branch ref.\n\nNeither primitive may update a branch, and neither may touch a base ref. On conflict, return repository-qualified conflict information instead of leaving a half-finished state. Phase 3 composes these across task groups; this task delivers the primitives and their tests only.\n\nTests: substituting a child OID changes exactly one gitlink entry and leaves every sibling entry unchanged; a parent containing two gitlinks pointing at the same child path prefix updates only the declared one; a prepared --no-ff merge produces a real merge commit with two parents while refs/heads is provably unchanged before and after; a conflicting merge returns a repository-qualified conflict and moves nothing.",
+    "files": [
+      "scripts/repositoryIntegration.ts",
+      "tests/repositoryIntegration.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "f1a3d26"
+    ],
+    "closureNote": "Implemented scripts/repositoryIntegration.ts gitlink substitution and prepared no-ff merge primitives that move no refs; its test filter for ls-tree output was corrected during closing verification because workers typecheck only and never ran it."
   }
 ]

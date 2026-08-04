@@ -1,51 +1,11 @@
 [
   {
-    "taskNumber": 7,
-    "title": "Resumable discovery resolution requests with persisted answers",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/resolutionRequests.ts: when discovery cannot decide something on its own, emit a resolution request carrying the occurrence ID, the recorded OID, the candidate base branches, and the reason (zero exact tip matches, multiple exact tip matches, or a later phase's ambiguity). Accept a resolution input mapping each request ID to the selected answer, and persist both requests and answers in the run manifest.\n\nResuming a run must not re-ask a resolved question and must not recreate a worktree that already exists. Request IDs must be stable across runs for the same occurrence and reason so a persisted answer still matches after a restart.\n\nNew module only; no production call sites yet.\n\nTests: a zero-match and a multi-match request are emitted with the right reason and candidates; applying answers stores them in the manifest; a second discovery pass over the same manifest emits no request that already has an answer; request IDs are stable across serialization round trips; an answer naming a branch that is not among the candidates is rejected.",
-    "files": [
-      "scripts/resolutionRequests.ts",
-      "tests/resolutionRequests.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
-    "taskNumber": 8,
-    "title": "Run-scoped operation branch creation at the recorded OID",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/operationBranches.ts: for each occurrence, create and check out the run-scoped operation branch at that occurrence's recorded OID (not at whatever HEAD happens to be), and record the branch name on the occurrence.\n\nSetup must stop before any worker worktree is created if a repository is on a detached HEAD or its base branch is still unresolved. Failure is loud and names the offending occurrence paths. Creating a branch that already exists at the same OID is idempotent so a resumed run is safe; an existing branch at a different OID is an error, not a silent reset.\n\nNew module only; no production call sites yet.\n\nTests: branches are created at the recorded OID even when the checkout is elsewhere; re-running is a no-op; an existing branch at a different OID errors; a detached-HEAD occurrence aborts setup and the error names it; an occurrence with no resolved baseBranch aborts setup; assert no worker worktree directory is created on any of those failure paths.",
-    "files": [
-      "scripts/operationBranches.ts",
-      "tests/operationBranches.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
     "taskNumber": 9,
     "title": "Root-outward recursive repository discovery orchestrator",
     "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryDiscovery.ts, composing scripts/gitlinkReader.ts, scripts/baseBranchResolution.ts, scripts/resolutionRequests.ts, scripts/operationBranches.ts, and scripts/repositoryGraph.ts into the root-outward setup sequence: record the root's checked-out branch and OID as its base; read each direct gitlink from the parent commit and initialize that child at the recorded OID; fetch branch refs and find branches whose tip exactly equals that OID; record a sole match as baseBranch or emit a resolution request for zero or multiple matches; create and check out the run-scoped operation branch at that OID; then recurse through that child's own direct submodules.\n\nDiscovery returns either a complete occurrence graph or a list of resolutionRequests — never a partially-guessed graph. Discovery must be resumable from a persisted manifest without repeating resolved choices or recreating completed worktrees.\n\nNew module only; production stays on the flat path until the Phase 4 cutover task.\n\nTests: a three-level fixture (root, child, grandchild) discovers every occurrence with correct parent edges and depths; a submodule at jfred/external/tmux_lib is recorded with parent jfred; a submodule below jfred/jfredToolsPlugin is recorded with that repository as parent; no synthetic path such as jfred/external appears as a repository; unresolved or detached repositories stop discovery before worker worktrees exist; a resumed run re-uses persisted answers. Phase 1 acceptance: a unique, deeply nested tree can be discovered, branched at recorded commits, and dry-run integrated using explicit parent edges.",
     "files": [
       "scripts/repositoryDiscovery.ts",
       "tests/repositoryDiscovery.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ],
-    "blockedBy": [
-      7,
-      8
-    ]
-  },
-  {
-    "taskNumber": 10,
-    "title": "Integration primitives: gitlink substitution and prepared no-ff merge",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryIntegration.ts with two primitives used by later phases:\n\n1. Substitute a finalized child OID into the correct direct gitlink of its immediate parent, located by the explicit occurrence edge and the recorded path within that parent. Only the declared gitlink changes; every other entry in the parent tree is byte-identical.\n\n2. Prepare a real --no-ff merge commit from a recorded base to a given tip, returning the prepared commit OID, without moving any branch ref.\n\nNeither primitive may update a branch, and neither may touch a base ref. On conflict, return repository-qualified conflict information instead of leaving a half-finished state. Phase 3 composes these across task groups; this task delivers the primitives and their tests only.\n\nTests: substituting a child OID changes exactly one gitlink entry and leaves every sibling entry unchanged; a parent containing two gitlinks pointing at the same child path prefix updates only the declared one; a prepared --no-ff merge produces a real merge commit with two parents while refs/heads is provably unchanged before and after; a conflicting merge returns a repository-qualified conflict and moves nothing.",
-    "files": [
-      "scripts/repositoryIntegration.ts",
-      "tests/repositoryIntegration.test.ts"
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
@@ -94,7 +54,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
     ],
     "blockedBy": [
-      7,
       12
     ]
   },
@@ -171,7 +130,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
     ],
     "blockedBy": [
-      7,
       9
     ]
   },
@@ -281,7 +239,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ],
     "blockedBy": [
-      10,
       14,
       24
     ]
@@ -298,7 +255,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ],
     "blockedBy": [
-      10,
       25
     ]
   },
@@ -347,7 +303,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      10,
       16
     ]
   },
@@ -475,22 +430,32 @@
     "taskNumber": 37,
     "title": "unblocked option, or tackle-unblocked skill",
     "description": "an 'unblocked' option for tackle-tasks that finds all unblocked tasks and spins them up, lowest number to highest number.",
-    "files": [
-    ],
-    "handoffFilePaths": [
-    ],
-    "blockedBy": [
-    ]
+    "files": [],
+    "handoffFilePaths": [],
+    "blockedBy": []
   },
   {
     "taskNumber": 38,
     "title": "tackle-tasks-loop skill",
     "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. ",
-    "files": [
-    ],
-    "handoffFilePaths": [
-    ],
-    "blockedBy": [
-    ]
+    "files": [],
+    "handoffFilePaths": [],
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 39,
+    "title": "merge-worktree-tasks skill",
+    "description": "a way to check if worktrees weren't merged and if there are open tasks that haven't been completed and are assigned to those worktrees, and then to run the merge-worktrees script to merge them *if the task is approved*.  Cause: sometimes I forget to commit when tasks are completed, which blocks the worktrees from being commited. ",
+    "files": [],
+    "handoffFilePaths": [],
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 40,
+    "title": "workers should run their own tests as part of their task requirement",
+    "description": "workers should run their own tests as part of their task requirement, and be responsible for fixing their failing tests before they signal to the orchestrating agent that their task is complete and ready to be merged.",
+    "files": [],
+    "handoffFilePaths": [],
+    "blockedBy": []
   }
 ]
