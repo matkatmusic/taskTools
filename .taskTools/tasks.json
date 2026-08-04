@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 26,
-    "title": "Run consolidation into one operation and integration OID per logical repository",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runConsolidation.ts: fetch and merge every participating group/occurrence branch into the assembly branch with --no-ff, ordered by group ID and then occurrence path. Verify the resulting projected tree equals the approved converged tree plus the finalized child gitlinks. Name the result as the run-level operation branch in the canonical occurrence and fast-forward every participating occurrence branch to its OID. Then prepare one real --no-ff integration merge from the recorded base to the operation tip, using scripts/repositoryIntegration.ts, without moving baseBranch.\n\nFor a repeated logical repository, the canonical occurrence is lastWriterOccurrence, retaining its path-suffixed branch name; all occurrence and group tips must remain ancestors of the canonical operation OID. Produce exactly one prepared integration OID per logical repository for the whole run — never competing per-group base updates. If any merge conflicts or produces an unapproved tree, preserve every ref, return repository-qualified conflicts, and require testing and approval to be renewed later.\n\nNew module only; remote pushes, base-ref updates, and task archival stay disabled. Phase 3 acceptance: arbitrary parallel group histories consolidate deterministically into one verified operation and integration OID per logical repository without publishing anything.\n\nTests: two disjoint groups in one logical repository both become ancestors of one run-level operation branch; merge order is deterministic; a tree mismatch aborts with every ref preserved; a conflict returns repository-qualified results and leaves base refs untouched; exactly one prepared integration OID exists per logical repository.",
-    "files": [
-      "scripts/runConsolidation.ts",
-      "tests/runConsolidation.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ]
-  },
-  {
     "taskNumber": 30,
     "title": "readyForApproval gating and reviewer exercise-method handoff",
     "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalReadiness.ts: set readyForApproval only when every selected task is done, ownership checks and typechecks pass, repeated occurrences have converged, final test receipts from scripts/syncVerification.ts are green, and each group provides an exercise method. A report-only reviewer must return at least one actionable method per group — a live server URL, or an exact command plus its working directory.\n\nPartial, blocked, clarification, ownership, typecheck, sync, test, or missing-review results keep the run recoverable but never approvable. The reviewer is report-only and must not modify the run.\n\nTests: each failing input (partial task, ownership violation, typecheck failure, unconverged occurrence, red or missing receipt, missing review, non-actionable review) independently prevents readyForApproval; a fully green run with an actionable method per group becomes ready; a reviewer returning only prose without a URL or command plus working directory is rejected; the reviewer performs no writes.",
@@ -21,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      26
     ]
   },
   {
@@ -53,7 +38,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      26,
       31
     ]
   },
@@ -105,7 +89,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      26,
       31,
       33,
       34

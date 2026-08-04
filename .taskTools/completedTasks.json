@@ -530,5 +530,23 @@
       "21c1868"
     ],
     "closureNote": "Added scripts/recoveryRefs.ts preserving work after each worker and each synchronization via run-scoped recovery refs built with temporary indexes and recursive gitlink substitution, capturing nested occurrence contents without disturbing a worker working tree."
+  },
+  {
+    "taskNumber": 26,
+    "title": "Run consolidation into one operation and integration OID per logical repository",
+    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runConsolidation.ts: fetch and merge every participating group/occurrence branch into the assembly branch with --no-ff, ordered by group ID and then occurrence path. Verify the resulting projected tree equals the approved converged tree plus the finalized child gitlinks. Name the result as the run-level operation branch in the canonical occurrence and fast-forward every participating occurrence branch to its OID. Then prepare one real --no-ff integration merge from the recorded base to the operation tip, using scripts/repositoryIntegration.ts, without moving baseBranch.\n\nFor a repeated logical repository, the canonical occurrence is lastWriterOccurrence, retaining its path-suffixed branch name; all occurrence and group tips must remain ancestors of the canonical operation OID. Produce exactly one prepared integration OID per logical repository for the whole run — never competing per-group base updates. If any merge conflicts or produces an unapproved tree, preserve every ref, return repository-qualified conflicts, and require testing and approval to be renewed later.\n\nNew module only; remote pushes, base-ref updates, and task archival stay disabled. Phase 3 acceptance: arbitrary parallel group histories consolidate deterministically into one verified operation and integration OID per logical repository without publishing anything.\n\nTests: two disjoint groups in one logical repository both become ancestors of one run-level operation branch; merge order is deterministic; a tree mismatch aborts with every ref preserved; a conflict returns repository-qualified results and leaves base refs untouched; exactly one prepared integration OID exists per logical repository.",
+    "files": [
+      "scripts/runConsolidation.ts",
+      "tests/runConsolidation.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "520305d",
+      "6ebea58"
+    ],
+    "closureNote": "Added scripts/runConsolidation.ts merging every participating group and occurrence branch into the assembly branch with no-ff in deterministic group-then-occurrence-path order, verifying the projected tree against the approved converged tree plus finalized child gitlinks, naming the run-level operation branch in the canonical occurrence, and preparing exactly one integration OID per logical repository without moving any base ref."
   }
 ]
