@@ -548,5 +548,23 @@
       "6ebea58"
     ],
     "closureNote": "Added scripts/runConsolidation.ts merging every participating group and occurrence branch into the assembly branch with no-ff in deterministic group-then-occurrence-path order, verifying the projected tree against the approved converged tree plus finalized child gitlinks, naming the run-level operation branch in the canonical occurrence, and preparing exactly one integration OID per logical repository without moving any base ref."
+  },
+  {
+    "taskNumber": 30,
+    "title": "readyForApproval gating and reviewer exercise-method handoff",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalReadiness.ts: set readyForApproval only when every selected task is done, ownership checks and typechecks pass, repeated occurrences have converged, final test receipts from scripts/syncVerification.ts are green, and each group provides an exercise method. A report-only reviewer must return at least one actionable method per group — a live server URL, or an exact command plus its working directory.\n\nPartial, blocked, clarification, ownership, typecheck, sync, test, or missing-review results keep the run recoverable but never approvable. The reviewer is report-only and must not modify the run.\n\nTests: each failing input (partial task, ownership violation, typecheck failure, unconverged occurrence, red or missing receipt, missing review, non-actionable review) independently prevents readyForApproval; a fully green run with an actionable method per group becomes ready; a reviewer returning only prose without a URL or command plus working directory is rejected; the reviewer performs no writes.",
+    "files": [
+      "scripts/approvalReadiness.ts",
+      "tests/approvalReadiness.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "2269678",
+      "3484188"
+    ],
+    "closureNote": "Added scripts/approvalReadiness.ts setting readyForApproval only when every selected task is done, ownership checks and typechecks pass, occurrences have converged, sync verification receipts are green, and every group supplies an actionable exercise method (live URL or exact command plus working directory), with a report-only reviewer that performs no writes."
   }
 ]

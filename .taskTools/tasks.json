@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 30,
-    "title": "readyForApproval gating and reviewer exercise-method handoff",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalReadiness.ts: set readyForApproval only when every selected task is done, ownership checks and typechecks pass, repeated occurrences have converged, final test receipts from scripts/syncVerification.ts are green, and each group provides an exercise method. A report-only reviewer must return at least one actionable method per group — a live server URL, or an exact command plus its working directory.\n\nPartial, blocked, clarification, ownership, typecheck, sync, test, or missing-review results keep the run recoverable but never approvable. The reviewer is report-only and must not modify the run.\n\nTests: each failing input (partial task, ownership violation, typecheck failure, unconverged occurrence, red or missing receipt, missing review, non-actionable review) independently prevents readyForApproval; a fully green run with an actionable method per group becomes ready; a reviewer returning only prose without a URL or command plus working directory is rejected; the reviewer performs no writes.",
-    "files": [
-      "scripts/approvalReadiness.ts",
-      "tests/approvalReadiness.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ]
-  },
-  {
     "taskNumber": 31,
     "title": "Whole-run approval gate with state digest and drift invalidation",
     "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/approvalGate.ts: present exactly one approval gate for the entire run and record the approval against a digest covering the manifest, the files, the operation and base refs, the occurrence digests, the test receipts, and the review handoffs. Issue the authorization from scripts/runAuthorization.ts tied to that digest. Any later drift in any digest input invalidates the approval and returns the run to review.\n\nThere is exactly one approval in the run: the whole-run approval authorizes finalization and archival, and no second post-merge approval is added.\n\nTests: approval cannot be recorded unless readyForApproval; the issued authorization carries the recorded digest; changing any single digest input afterwards — a file, a ref, an occurrence digest, a receipt, or a review handoff — invalidates the authorization and returns the run to review; a stale authorization is rejected by the finalizer; only one gate exists across the run.",
@@ -21,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      30
     ]
   },
   {
@@ -111,8 +96,8 @@
   },
   {
     "taskNumber": 37,
-    "title": "unblocked option, or tackle-unblocked skill",
-    "description": "an 'unblocked' option for tackle-tasks that finds all unblocked tasks and spins them up, lowest number to highest number.\n\nAdd an exported `unblockedTaskNumbers(openTasks)` helper to scripts/taskFiles.ts returning ascending-sorted task numbers with no open blockers. Use it in scripts/checkBlockers.ts for the `--unblocked` no-arguments case so its output is numerically ascending instead of tasks.json file order. In scripts/prepareTasks.ts, add an exported `resolveRequestedTaskNumbers(openTasks, argv)` that returns `unblockedTaskNumbers(openTasks)` when no explicit numbers were parsed and the raw argument is literally `unblocked`, instead of throwing \"no task numbers given\"; wire it into runAsCli() in place of the direct leadingTaskNumbers call. No new script and no new skill directory — reuse the existing `--unblocked` flag.",
+    "title": "new skill: /tackle-unblocked-tasks",
+    "description": "Works by finding all tasks with empty blockedBy[] arrays, returning an array of task numbers as `unblockedTaskNumbers` sorted lowest to highest, then executes the same code path that invoking 'tackle-tasks unblockedTaskNumbers valid' uses.  \n\nAdd an exported `unblockedTaskNumbers(openTasks)` helper to scripts/taskFiles.ts returning ascending-sorted task numbers with empty blockedBy[] arrays. ",
     "files": [
       "scripts/taskFiles.ts",
       "scripts/checkBlockers.ts",
