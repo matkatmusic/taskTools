@@ -1,53 +1,5 @@
 [
   {
-    "taskNumber": 3,
-    "title": "Non-destructive refusal of legacy flat repository manifests",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/legacyManifest.ts: detect run manifests written by the old flat repository-path model (no manifest version, or a version below the one defined in scripts/repositoryManifest.ts) and mark them incompatible with the new finalizer.\n\nA legacy manifest must never be converted implicitly and must never cause a worktree, branch, or ref to be deleted. Return a refusal result carrying the detected version, the reason, and the exact recovery commands a human can run to finish or unwind that run with the existing tooling.\n\nNew module only; no call sites in production code yet.\n\nTests: a versionless manifest and an older-version manifest are both rejected; the rejection result names the recovery commands; a fixture asserts that after refusal every worktree directory and every ref recorded in that manifest still exists; a current-version manifest passes through untouched.",
-    "files": [
-      "scripts/legacyManifest.ts",
-      "tests/legacyManifest.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
-    "taskNumber": 4,
-    "title": "Occurrence-graph traversal helpers driven by explicit edges",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryGraph.ts with helpers that operate purely on the manifest edges from scripts/repositoryManifest.ts: direct children of an occurrence, the ancestor chain to the root, deepest-first ordering, the occurrence that owns a given root-relative path, and the path of a file within its owning repository.\n\nEvery helper must traverse recorded parent/child edges and recorded depth. None may use dirname(), path-segment removal, slash counting, or longest-prefix matching over raw path strings to infer structure. Ordering must be deterministic — deepest-first, then by path within the immediate parent.\n\nNew module only. The equivalent flat-path helpers in scripts/repositoryBranches.ts and scripts/mergeTaskWorktrees.ts stay in place; the Phase 4 cutover task swaps the call sites.\n\nTests: direct-child lookup, ancestor traversal, ownership, path-within-repository, and deepest-first ordering all verified against a fixture graph containing jfred, jfred/external/tmux_lib, jfred/jfredToolsPlugin, and jfred/jfredToolsPlugin/external/tmux_lib; assert the parent of jfred/external/tmux_lib is jfred and that no synthetic path such as jfred/external is ever returned as a repository.",
-    "files": [
-      "scripts/repositoryGraph.ts",
-      "tests/repositoryGraph.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
-    "taskNumber": 5,
-    "title": "Direct gitlink reader for a parent commit",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/gitlinkReader.ts: read every direct gitlink entry from a given repository's commit — the path within that repository and the recorded child OID — using git plumbing (ls-tree of mode 160000 entries) rather than `git submodule foreach`.\n\nOnly direct gitlinks of that one repository are returned. A gitlink whose path spans several segments, such as external/tmux_lib, is one direct child of that repository; the intermediate directory is an ordinary tree and must never appear as a repository. The reader must not recurse on its own — recursion is the discovery orchestrator's job.\n\nNew module only; no production call sites yet.\n\nTests: a fixture repo with a gitlink at a single-segment path and one at a multi-segment path returns exactly two direct children with correct OIDs; a repo with no gitlinks returns an empty list; assert intermediate directories are absent from the result; assert a grandchild gitlink inside a child repository is not returned when reading the parent.",
-    "files": [
-      "scripts/gitlinkReader.ts",
-      "tests/gitlinkReader.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
-    "taskNumber": 6,
-    "title": "Base-branch candidate matching by exact tip OID",
-    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/baseBranchResolution.ts: for a repository checked out at a recorded OID, fetch branch refs and return every branch whose tip OID exactly equals that recorded OID. No fuzzy matching, no ancestry checks, no preference for a branch merely because it contains the commit.\n\nThe result distinguishes three cases explicitly: exactly one match (usable as baseBranch), zero matches, and multiple matches. Zero and multiple are not errors here — they are returned as candidate sets for the resolution-request module to turn into a question.\n\nNew module only; no production call sites yet.\n\nTests: a repo where exactly one branch tip equals the recorded OID yields that branch as the sole match; a repo where two branches point at the same commit yields both, in deterministic order; a repo where the recorded OID is an ancestor of every branch tip but the tip of none yields zero matches; assert a branch that merely contains the commit is never reported as a match.",
-    "files": [
-      "scripts/baseBranchResolution.ts",
-      "tests/baseBranchResolution.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ]
-  },
-  {
     "taskNumber": 7,
     "title": "Resumable discovery resolution requests with persisted answers",
     "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/resolutionRequests.ts: when discovery cannot decide something on its own, emit a resolution request carrying the occurrence ID, the recorded OID, the candidate base branches, and the reason (zero exact tip matches, multiple exact tip matches, or a later phase's ambiguity). Accept a resolution input mapping each request ID to the selected answer, and persist both requests and answers in the run manifest.\n\nResuming a run must not re-ask a resolved question and must not recreate a worktree that already exists. Request IDs must be stable across runs for the same occurrence and reason so a persisted answer still matches after a restart.\n\nNew module only; no production call sites yet.\n\nTests: a zero-match and a multi-match request are emitted with the right reason and candidates; applying answers stores them in the manifest; a second discovery pass over the same manifest emits no request that already has an answer; request IDs are stable across serialization round trips; an answer naming a branch that is not among the candidates is rejected.",
@@ -57,9 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ],
-    "blockedBy": [
-      6
     ]
   },
   {
@@ -72,9 +21,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ],
-    "blockedBy": [
-      6
     ]
   },
   {
@@ -89,9 +35,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
     ],
     "blockedBy": [
-      4,
-      5,
-      6,
       7,
       8
     ]
@@ -106,10 +49,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
-    ],
-    "blockedBy": [
-      4,
-      5
     ]
   },
   {
@@ -510,7 +449,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      3,
       22,
       26,
       31,

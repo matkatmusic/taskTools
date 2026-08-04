@@ -34,5 +34,74 @@
       "853a757"
     ],
     "closureNote": "Implemented scripts/repositoryManifest.ts with the versioned RepositoryOccurrence graph, manifest version constant, read/write helpers, and a validator rejecting duplicate occurrence IDs, dangling parent IDs, and depths inconsistent with the walked parent chain; parentage is an explicit edge only, covered by tests/repositoryManifest.test.ts including the jfred/jfredToolsPlugin/external/tmux_lib parent case, and left unwired pending the Phase 4 cutover."
+  },
+  {
+    "taskNumber": 3,
+    "title": "Non-destructive refusal of legacy flat repository manifests",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/legacyManifest.ts: detect run manifests written by the old flat repository-path model (no manifest version, or a version below the one defined in scripts/repositoryManifest.ts) and mark them incompatible with the new finalizer.\n\nA legacy manifest must never be converted implicitly and must never cause a worktree, branch, or ref to be deleted. Return a refusal result carrying the detected version, the reason, and the exact recovery commands a human can run to finish or unwind that run with the existing tooling.\n\nNew module only; no call sites in production code yet.\n\nTests: a versionless manifest and an older-version manifest are both rejected; the rejection result names the recovery commands; a fixture asserts that after refusal every worktree directory and every ref recorded in that manifest still exists; a current-version manifest passes through untouched.",
+    "files": [
+      "scripts/legacyManifest.ts",
+      "tests/legacyManifest.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "0798a8c"
+    ],
+    "closureNote": "Implemented scripts/legacyManifest.ts refusing versionless and older-version manifests non-destructively, returning the detected version, reason, and recovery commands, with tests asserting worktrees and refs survive refusal and a current-version manifest passes through untouched."
+  },
+  {
+    "taskNumber": 4,
+    "title": "Occurrence-graph traversal helpers driven by explicit edges",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/repositoryGraph.ts with helpers that operate purely on the manifest edges from scripts/repositoryManifest.ts: direct children of an occurrence, the ancestor chain to the root, deepest-first ordering, the occurrence that owns a given root-relative path, and the path of a file within its owning repository.\n\nEvery helper must traverse recorded parent/child edges and recorded depth. None may use dirname(), path-segment removal, slash counting, or longest-prefix matching over raw path strings to infer structure. Ordering must be deterministic — deepest-first, then by path within the immediate parent.\n\nNew module only. The equivalent flat-path helpers in scripts/repositoryBranches.ts and scripts/mergeTaskWorktrees.ts stay in place; the Phase 4 cutover task swaps the call sites.\n\nTests: direct-child lookup, ancestor traversal, ownership, path-within-repository, and deepest-first ordering all verified against a fixture graph containing jfred, jfred/external/tmux_lib, jfred/jfredToolsPlugin, and jfred/jfredToolsPlugin/external/tmux_lib; assert the parent of jfred/external/tmux_lib is jfred and that no synthetic path such as jfred/external is ever returned as a repository.",
+    "files": [
+      "scripts/repositoryGraph.ts",
+      "tests/repositoryGraph.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "ec043cc"
+    ],
+    "closureNote": "Implemented scripts/repositoryGraph.ts traversal helpers driven purely by recorded parent/child edges and depth, with deterministic deepest-first ordering, verified against a fixture graph asserting no synthetic intermediate path is ever returned as a repository."
+  },
+  {
+    "taskNumber": 5,
+    "title": "Direct gitlink reader for a parent commit",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/gitlinkReader.ts: read every direct gitlink entry from a given repository's commit — the path within that repository and the recorded child OID — using git plumbing (ls-tree of mode 160000 entries) rather than `git submodule foreach`.\n\nOnly direct gitlinks of that one repository are returned. A gitlink whose path spans several segments, such as external/tmux_lib, is one direct child of that repository; the intermediate directory is an ordinary tree and must never appear as a repository. The reader must not recurse on its own — recursion is the discovery orchestrator's job.\n\nNew module only; no production call sites yet.\n\nTests: a fixture repo with a gitlink at a single-segment path and one at a multi-segment path returns exactly two direct children with correct OIDs; a repo with no gitlinks returns an empty list; assert intermediate directories are absent from the result; assert a grandchild gitlink inside a child repository is not returned when reading the parent.",
+    "files": [
+      "scripts/gitlinkReader.ts",
+      "tests/gitlinkReader.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "7717ef9"
+    ],
+    "closureNote": "Implemented scripts/gitlinkReader.ts reading only direct mode-160000 entries via git plumbing, with tests covering single-segment and multi-segment gitlink paths, empty repos, absent intermediate directories, and grandchild gitlinks correctly excluded."
+  },
+  {
+    "taskNumber": 6,
+    "title": "Base-branch candidate matching by exact tip OID",
+    "description": "Phase 1 of the recursive repository-discovery redesign.\n\nCreate scripts/baseBranchResolution.ts: for a repository checked out at a recorded OID, fetch branch refs and return every branch whose tip OID exactly equals that recorded OID. No fuzzy matching, no ancestry checks, no preference for a branch merely because it contains the commit.\n\nThe result distinguishes three cases explicitly: exactly one match (usable as baseBranch), zero matches, and multiple matches. Zero and multiple are not errors here — they are returned as candidate sets for the resolution-request module to turn into a question.\n\nNew module only; no production call sites yet.\n\nTests: a repo where exactly one branch tip equals the recorded OID yields that branch as the sole match; a repo where two branches point at the same commit yields both, in deterministic order; a repo where the recorded OID is an ancestor of every branch tip but the tip of none yields zero matches; assert a branch that merely contains the commit is never reported as a match.",
+    "files": [
+      "scripts/baseBranchResolution.ts",
+      "tests/baseBranchResolution.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-1.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "25f3fec",
+      "d5ec003"
+    ],
+    "closureNote": "Implemented scripts/baseBranchResolution.ts matching branches by exact tip OID with distinct single, none, and multiple results; its test file was rewritten from bun:test to the repo node:test convention after the worker worktree lacked node_modules and could not typecheck it."
   }
 ]
