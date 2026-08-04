@@ -330,5 +330,78 @@
       "ef590a3"
     ],
     "closureNote": "Replaced the no-test-suites instruction in skills/tackle-tasks/SKILL.md and the workerBrief in tackle-tasks.workflow.js so workers run the tests covering their owned files and report blocked or partial instead of done on failure."
+  },
+  {
+    "taskNumber": 19,
+    "title": "Machine-readable synchronization receipts",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/syncReceipts.ts: a sync-receipt mode emitting a machine-readable record for each synchronization, containing the logical repository ID, the source and destination occurrences, the changed paths, the expected branches, the content digests, and each occurrence's full parent chain.\n\nThe parent chain is part of the receipt because verification must later run the complete suite in every distinct affected parent, and two occurrences of the same logical child can sit under entirely different chains.\n\nNew module only; no production call sites yet.\n\nTests: a receipt from a three-occurrence sync lists all destinations, their branches, digests, and distinct parent chains; receipts serialize and parse losslessly; a receipt for a nested occurrence records the full chain to the root, not just the immediate parent; two occurrences of one logical child under different parents produce receipts with different chains.",
+    "files": [
+      "scripts/syncReceipts.ts",
+      "tests/syncReceipts.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "de7dfa5",
+      "66b5c75"
+    ],
+    "closureNote": "Added scripts/syncReceipts.ts assembling machine-readable sync receipts carrying the logical repository ID, source and destination occurrences, changed paths, branches, digests and full parent chains, with lossless serialize and parse."
+  },
+  {
+    "taskNumber": 21,
+    "title": "Canonical ownership keys with occurrence and ancestor-gitlink effect expansion",
+    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/ownershipKeys.ts: convert every declared task path into a canonical ownership key of logical repository ID plus path within that repository, then expand its effects to the synchronized occurrence paths and the affected ancestor gitlinks up to the root.\n\nA task naming a file through one occurrence implicitly affects every other occurrence of that logical repository (through synchronization) and every gitlink on each of their parent chains. Those effects are what later grouping and ownership checks operate on, so they must be computed from the occurrence graph and logical-repository map, never from raw path strings.\n\nNew module only; no production call sites yet.\n\nTests: two alias paths naming the same logical file produce the same canonical key; a path inside one tmux_lib occurrence expands to all three occurrence paths; the expansion includes each distinct ancestor gitlink to the root; a path in a unique repository expands to itself plus its ancestor gitlinks; paths in different logical repositories never share a key.",
+    "files": [
+      "scripts/ownershipKeys.ts",
+      "tests/ownershipKeys.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "ecdbacb",
+      "5a78bcd"
+    ],
+    "closureNote": "Added scripts/ownershipKeys.ts deriving canonical logical-repository-plus-path ownership keys and expanding each declared path to its sibling occurrences and ancestor gitlinks."
+  },
+  {
+    "taskNumber": 24,
+    "title": "Opaque finalization authorization token",
+    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runAuthorization.ts: an opaque authorization value that the finalization subsystem requires before doing anything mutating. Tests may construct one directly; in production only the Phase 4 approval recorder may issue one, and it must carry the state digest it was issued against so the finalizer can reject a token that no longer matches current state.\n\nThe type must make an unauthorized call impossible to express rather than merely discouraged, and the token must not be forgeable from ordinary manifest data.\n\nNew module only; no production call sites yet.\n\nTests: a finalizer entry point cannot be invoked without a token; a token constructed for one digest is rejected when the digest has changed; a test-constructed token is accepted by the finalizer; assert no production module other than the Phase 4 approval recorder imports the constructor.",
+    "files": [
+      "scripts/runAuthorization.ts",
+      "tests/runAuthorization.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "3c74f2a",
+      "a12acbf"
+    ],
+    "closureNote": "Added scripts/runAuthorization.ts, an opaque digest-bound finalization token that makes an unauthorized finalizer call unexpressible rather than merely discouraged."
+  },
+  {
+    "taskNumber": 27,
+    "title": "Read-only startup discovery and test-hook confirmation before any mutation",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/runStartup.ts and restructure startup so command interpolation performs only read-only task and blocker discovery — no worktrees, no branches, no commits. Before any mutating preparation step, require confirmation that the copied taskTools test hook from scripts/relatedTests.ts is enabled, and register that hook's entry point in hooks/hooks.json (taskTools registers hooks in hooks/hooks.json, not in any settings.json).\n\nNo semantic commit, remote push, integration merge, base update, or task archival may occur at startup under any code path.\n\nTests: startup with the hook disabled stops before creating a worktree or branch; hook confirmation is verified to precede every mutating preparation step; the read-only discovery path performs no writes to the repository; hooks/hooks.json registration is asserted to load the copied entry point.",
+    "files": [
+      "scripts/runStartup.ts",
+      "hooks/hooks.json",
+      "tests/runStartup.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "0bec4e1",
+      "67ab534"
+    ],
+    "closureNote": "Added scripts/runStartup.ts with read-only task and blocker discovery plus a test-hook confirmation gate preceding every mutating step, and registered the hook entry point in hooks/hooks.json."
   }
 ]

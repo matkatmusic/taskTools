@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 19,
-    "title": "Machine-readable synchronization receipts",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/syncReceipts.ts: a sync-receipt mode emitting a machine-readable record for each synchronization, containing the logical repository ID, the source and destination occurrences, the changed paths, the expected branches, the content digests, and each occurrence's full parent chain.\n\nThe parent chain is part of the receipt because verification must later run the complete suite in every distinct affected parent, and two occurrences of the same logical child can sit under entirely different chains.\n\nNew module only; no production call sites yet.\n\nTests: a receipt from a three-occurrence sync lists all destinations, their branches, digests, and distinct parent chains; receipts serialize and parse losslessly; a receipt for a nested occurrence records the full chain to the root, not just the immediate parent; two occurrences of one logical child under different parents produce receipts with different chains.",
-    "files": [
-      "scripts/syncReceipts.ts",
-      "tests/syncReceipts.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 20,
     "title": "Receipt verification with per-occurrence and per-parent test execution",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/syncVerification.ts: for every synchronization receipt, verify the expected branches and byte, mode, symlink, and deletion equivalence across occurrences; run the related tests in every occurrence; and run the configured complete suite in every distinct affected parent while walking to the root. Fail on missing tests, mismatched trees, branch drift, or test failures. On success, persist a green receipt tied to the converged digest.\n\nRecord lastWriterOccurrence. Deduplicate identical repository/test/digest executions, but never skip a distinct parent merely because it contains the same logical child — distinct parent chains must each be validated.\n\nNew module only; no production call sites yet. Phase 2 acceptance: all repeated repositories in a RevEng-shaped graph converge to identical tested trees while retaining distinct occurrence branches and parentage.\n\nTests: mismatched trees, drifted branches, missing test policy, and failing tests each fail verification; identical repo/test/digest runs execute once; two distinct parents containing the same logical child both run their complete suites; a green receipt is persisted only when everything passes and is keyed to the converged digest.",
@@ -21,21 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ],
-    "blockedBy": [
-      19
-    ]
-  },
-  {
-    "taskNumber": 21,
-    "title": "Canonical ownership keys with occurrence and ancestor-gitlink effect expansion",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/ownershipKeys.ts: convert every declared task path into a canonical ownership key of logical repository ID plus path within that repository, then expand its effects to the synchronized occurrence paths and the affected ancestor gitlinks up to the root.\n\nA task naming a file through one occurrence implicitly affects every other occurrence of that logical repository (through synchronization) and every gitlink on each of their parent chains. Those effects are what later grouping and ownership checks operate on, so they must be computed from the occurrence graph and logical-repository map, never from raw path strings.\n\nNew module only; no production call sites yet.\n\nTests: two alias paths naming the same logical file produce the same canonical key; a path inside one tmux_lib occurrence expands to all three occurrence paths; the expansion includes each distinct ancestor gitlink to the root; a path in a unique repository expands to itself plus its ancestor gitlinks; paths in different logical repositories never share a key.",
-    "files": [
-      "scripts/ownershipKeys.ts",
-      "tests/ownershipKeys.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ]
   },
   {
@@ -48,9 +21,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      21
     ]
   },
   {
@@ -60,21 +30,6 @@
     "files": [
       "scripts/ownershipSnapshots.ts",
       "tests/ownershipSnapshots.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      21
-    ]
-  },
-  {
-    "taskNumber": 24,
-    "title": "Opaque finalization authorization token",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runAuthorization.ts: an opaque authorization value that the finalization subsystem requires before doing anything mutating. Tests may construct one directly; in production only the Phase 4 approval recorder may issue one, and it must carry the state digest it was issued against so the finalizer can reject a token that no longer matches current state.\n\nThe type must make an unauthorized call impossible to express rather than merely discouraged, and the token must not be forgeable from ordinary manifest data.\n\nNew module only; no production call sites yet.\n\nTests: a finalizer entry point cannot be invoked without a token; a token constructed for one digest is rejected when the digest has changed; a test-constructed token is accepted by the finalizer; assert no production module other than the Phase 4 approval recorder imports the constructor.",
-    "files": [
-      "scripts/runAuthorization.ts",
-      "tests/runAuthorization.test.ts"
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
@@ -90,9 +45,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      24
     ]
   },
   {
@@ -111,19 +63,6 @@
     ]
   },
   {
-    "taskNumber": 27,
-    "title": "Read-only startup discovery and test-hook confirmation before any mutation",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/runStartup.ts and restructure startup so command interpolation performs only read-only task and blocker discovery — no worktrees, no branches, no commits. Before any mutating preparation step, require confirmation that the copied taskTools test hook from scripts/relatedTests.ts is enabled, and register that hook's entry point in hooks/hooks.json (taskTools registers hooks in hooks/hooks.json, not in any settings.json).\n\nNo semantic commit, remote push, integration merge, base update, or task archival may occur at startup under any code path.\n\nTests: startup with the hook disabled stops before creating a worktree or branch; hook confirmation is verified to precede every mutating preparation step; the read-only discovery path performs no writes to the repository; hooks/hooks.json registration is asserted to load the copied entry point.",
-    "files": [
-      "scripts/runStartup.ts",
-      "hooks/hooks.json",
-      "tests/runStartup.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ]
-  },
-  {
     "taskNumber": 28,
     "title": "Recorded per-run hook-disabled override requiring full suites before approval",
     "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/hookOverride.ts: allow an explicit per-run override that lets a run proceed with the related-test hook disabled. Record the override in the run manifest, and require the complete suite from scripts/testPolicy.ts to run in every affected repository and every affected parent immediately before approval — not earlier, so the results describe the state being approved.\n\nThe override is explicit and recorded; there is no implicit fallback that silently skips tests.\n\nTests: the override is persisted in the manifest and survives a resume; with the override active, every affected repository and parent suite runs before approval and a failure blocks approval; without the override, a disabled hook still stops startup; suites run immediately before approval rather than at an earlier stage.",
@@ -133,9 +72,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      27
     ]
   },
   {
@@ -148,6 +84,9 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "blockedBy": [
+      42
     ]
   },
   {
@@ -179,7 +118,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      24,
       30
     ]
   },
@@ -300,6 +238,19 @@
     "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.",
     "files": [],
     "handoffFilePaths": [],
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 42,
+    "title": "Recursive gitlink substitution across a full ancestor chain",
+    "description": "Add recursive gitlink substitution to scripts/repositoryIntegration.ts. Today it exports only substituteGitlink(repoRoot, {parentCommitOid, pathInParent, childOid}), which rewrites exactly one gitlink entry in one parent commit via scratch-index tree surgery and returns the new parent commit OID without moving any ref.\n\nTask 29 (recoveryRefs) and later Phase 4 finalization work need to rewrite a whole ancestor chain at once: given a leaf occurrence commit and its full parent chain, substitute the child OID at each level from the bottom up, feeding each new parent commit OID into the next level, and return the new root commit OID plus the new OID at every level.\n\nAdd substituteGitlinksRecursively (or the naming convention already in use in that module) taking the ordered chain from root to leaf plus the new leaf OID, folding substituteGitlink over it bottom-up. Reject a chain whose entry is not a gitlink at the named path, reject an empty chain, and keep the no-ref-moved guarantee.\n\nThis was split out of task 29: its planner stopped because the recursive primitive its plan assumed does not exist.\n\nTests: a two-level chain returns a root OID whose tree resolves to the new leaf through both gitlinks; a three-level chain does the same to the root; every intermediate OID is returned; a non-gitlink path in the chain throws; an empty chain is rejected; no branch or base ref moves.",
+    "files": [
+      "scripts/repositoryIntegration.ts",
+      "tests/repositoryIntegration.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
     "blockedBy": []
   }
 ]
