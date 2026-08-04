@@ -157,32 +157,46 @@
   {
     "taskNumber": 37,
     "title": "unblocked option, or tackle-unblocked skill",
-    "description": "an 'unblocked' option for tackle-tasks that finds all unblocked tasks and spins them up, lowest number to highest number.",
-    "files": [],
+    "description": "an 'unblocked' option for tackle-tasks that finds all unblocked tasks and spins them up, lowest number to highest number.\n\nAdd an exported `unblockedTaskNumbers(openTasks)` helper to scripts/taskFiles.ts returning ascending-sorted task numbers with no open blockers. Use it in scripts/checkBlockers.ts for the `--unblocked` no-arguments case so its output is numerically ascending instead of tasks.json file order. In scripts/prepareTasks.ts, add an exported `resolveRequestedTaskNumbers(openTasks, argv)` that returns `unblockedTaskNumbers(openTasks)` when no explicit numbers were parsed and the raw argument is literally `unblocked`, instead of throwing \"no task numbers given\"; wire it into runAsCli() in place of the direct leadingTaskNumbers call. No new script and no new skill directory — reuse the existing `--unblocked` flag.",
+    "files": [
+      "scripts/taskFiles.ts",
+      "scripts/checkBlockers.ts",
+      "scripts/prepareTasks.ts"
+    ],
     "handoffFilePaths": [],
     "blockedBy": []
   },
   {
     "taskNumber": 38,
     "title": "tackle-tasks-loop skill",
-    "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. ",
-    "files": [],
+    "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. \n\nCreate skills/tackle-tasks-loop/SKILL.md only — skills are auto-discovered by directory, so no plugin.json or marketplace.json registration is needed. The skill wraps the existing global `/loop` skill to invoke `taskTools:tackle-tasks unblocked` (task 37's mode) on an interval. Use scripts/taskStats.ts for the stop condition: end when the open count reaches 0, and bail out when a full pass finds nothing unblocked so it does not spin on a fully blocked backlog. No new TypeScript and no new test file — checkBlockers.ts --unblocked and taskStats.ts already supply every count this needs.",
+    "files": [
+      "skills/tackle-tasks-loop/SKILL.md"
+    ],
     "handoffFilePaths": [],
-    "blockedBy": []
+    "blockedBy": [
+      37
+    ]
   },
   {
     "taskNumber": 39,
     "title": "merge-worktree-tasks skill",
-    "description": "a way to check if worktrees weren't merged and if there are open tasks that haven't been completed and are assigned to those worktrees, and then to run the merge-worktrees script to merge them *if the task is approved*.  Cause: sometimes I forget to commit when tasks are completed, which blocks the worktrees from being commited. ",
-    "files": [],
+    "description": "a way to check if worktrees weren't merged and if there are open tasks that haven't been completed and are assigned to those worktrees, and then to run the merge-worktrees script to merge them *if the task is approved*.  Cause: sometimes I forget to commit when tasks are completed, which blocks the worktrees from being commited. \n\nWorktrees live at `tmpdir()/taskTools-wt/<basename(repoRoot)>/group-<groupId>` on branch `task-group-<groupId>`, but groupId is recomputed every prepareTasks run and never persisted, so a leftover worktree cannot be matched to task numbers by groupId. Match by file overlap instead: read the worktree branch's changed files plus its uncommitted status and compare them against `declaredFiles(task)` from scripts/taskGroups.ts for open tasks.\n\nExtend scripts/mergeTaskWorktrees.ts rather than adding a new script: add `listTaskWorktrees(repoRoot)` (parse `git worktree list --porcelain`, keep only paths matching the taskTools-wt convention), `findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks)` (unmerged-commit count plus uncommitted status, changed files matched to declared files), and CLI modes `--discover` and `--merge <worktree>` reusing the existing collectRepositorySources, currentBranchName, mergeGroupBranchIntoRepo and removeWorktreeAndBranch. Create skills/merge-worktree-tasks/SKILL.md: run --discover, report each unmerged worktree with its matched open task numbers, gate the merge behind explicit user approval via AskUserQuestion, then run --merge only for approved worktrees.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "skills/merge-worktree-tasks/SKILL.md"
+    ],
     "handoffFilePaths": [],
     "blockedBy": []
   },
   {
     "taskNumber": 41,
     "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
-    "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.",
-    "files": [],
+    "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.\n\nIn skills/tackle-tasks/tackle-tasks.workflow.js add a Verify phase (one agent per task after Plan, gating which planned tasks reach Implement) and a Test phase (one agent per group after Implement, feeding failures back into runWorker the way the existing partial-requeue loop does). Both need meta.phases entries, result arrays threaded into the final return, and an extra pipeline() stage.\n\nThe file is 194 of the 250-line cap and the two phases add roughly 60-100 lines, so split first: move VERIFY_SCHEMA, TEST_SCHEMA and the verifierBrief/testerBrief prompt builders (plus the existing plannerBrief/workerBrief for consistency) into a new skills/tackle-tasks/tackle-tasks.briefs.js imported by the workflow, leaving the workflow as thin orchestration wiring. The Test agent brief should point at the existing scripts/relatedTests.ts discovery pattern rather than duplicating test discovery; relatedTests.ts and testPolicy.ts themselves need no changes.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "skills/tackle-tasks/tackle-tasks.briefs.js"
+    ],
     "handoffFilePaths": [],
     "blockedBy": []
   }
