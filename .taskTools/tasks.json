@@ -1,17 +1,5 @@
 [
   {
-    "taskNumber": 25,
-    "title": "Per-repository finalizer: own-files commit, durable refs, gitlink bump commits",
-    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runFinalizer.ts, requiring an authorization from scripts/runAuthorization.ts: finalize logical children first using explicit occurrence edges, then for each repository, in each participating group/occurrence branch, create one nonempty commit containing approved own-file changes only, excluding child gitlinks. Preserve each resulting tip under a run-scoped durable ref. Create one temporary assembly branch at the logical repository's recorded base, set every direct child occurrence to its finalized integration OID, and create one distinct gitlink-bump commit per changed parent gitlink, ordered by path within the immediate parent.\n\nNo empty commits are ever created, and own-file commits never contain gitlink changes. This module must not update any base ref and must not push.\n\nNew module only; no production call sites yet.\n\nTests: the own-files commit contains no gitlink change; one separate bump commit exists per changed direct child occurrence and none for unchanged ones; a parent containing multiple occurrences of one logical child updates every one of those gitlinks to the same child integration OID; nested child OIDs propagate through each correct explicit parent edge to the root; durable refs exist for every group tip; base refs are provably unchanged.",
-    "files": [
-      "scripts/runFinalizer.ts",
-      "tests/runFinalizer.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ]
-  },
-  {
     "taskNumber": 26,
     "title": "Run consolidation into one operation and integration OID per logical repository",
     "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runConsolidation.ts: fetch and merge every participating group/occurrence branch into the assembly branch with --no-ff, ordered by group ID and then occurrence path. Verify the resulting projected tree equals the approved converged tree plus the finalized child gitlinks. Name the result as the run-level operation branch in the canonical occurrence and fast-forward every participating occurrence branch to its OID. Then prepare one real --no-ff integration merge from the recorded base to the operation tip, using scripts/repositoryIntegration.ts, without moving baseBranch.\n\nFor a repeated logical repository, the canonical occurrence is lastWriterOccurrence, retaining its path-suffixed branch name; all occurrence and group tips must remain ancestors of the canonical operation OID. Produce exactly one prepared integration OID per logical repository for the whole run — never competing per-group base updates. If any merge conflicts or produces an unapproved tree, preserve every ref, return repository-qualified conflicts, and require testing and approval to be renewed later.\n\nNew module only; remote pushes, base-ref updates, and task archival stay disabled. Phase 3 acceptance: arbitrary parallel group histories consolidate deterministically into one verified operation and integration OID per logical repository without publishing anything.\n\nTests: two disjoint groups in one logical repository both become ancestors of one run-level operation branch; merge order is deterministic; a tree mismatch aborts with every ref preserved; a conflict returns repository-qualified results and leaves base refs untouched; exactly one prepared integration OID exists per logical repository.",
@@ -21,21 +9,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
-    ],
-    "blockedBy": [
-      25
-    ]
-  },
-  {
-    "taskNumber": 29,
-    "title": "Run-scoped recovery refs after each worker and each synchronization",
-    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/recoveryRefs.ts: preserve work after each worker and after each N-way synchronization using internal run-scoped recovery refs. Build recovery snapshots with temporary indexes and recursive gitlink substitution via scripts/repositoryIntegration.ts, without moving any operation or base branch.\n\nRecovery must capture the full recursive state, including nested occurrence contents, so a killed run loses nothing. Snapshotting must be safe to repeat and must never disturb the working tree a worker is using.\n\nTests: a recovery ref exists after each worker and each sync and resolves to a tree containing that state; operation and base branches are provably unmoved; nested occurrence contents are reachable through substituted gitlinks; repeated snapshots are idempotent; a snapshot taken with uncommitted worker changes still captures them.",
-    "files": [
-      "scripts/recoveryRefs.ts",
-      "tests/recoveryRefs.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ]
   },
   {
@@ -96,7 +69,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      29,
       32
     ]
   },

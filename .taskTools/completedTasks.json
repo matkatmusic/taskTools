@@ -494,5 +494,41 @@
       "e28fa8b"
     ],
     "closureNote": "Added substituteGitlinksRecursively to scripts/repositoryIntegration.ts, folding single-gitlink substitution bottom-up over a full ancestor chain and returning every intermediate OID without moving any ref."
+  },
+  {
+    "taskNumber": 25,
+    "title": "Per-repository finalizer: own-files commit, durable refs, gitlink bump commits",
+    "description": "Phase 3 of the recursive repository-discovery redesign.\n\nCreate scripts/runFinalizer.ts, requiring an authorization from scripts/runAuthorization.ts: finalize logical children first using explicit occurrence edges, then for each repository, in each participating group/occurrence branch, create one nonempty commit containing approved own-file changes only, excluding child gitlinks. Preserve each resulting tip under a run-scoped durable ref. Create one temporary assembly branch at the logical repository's recorded base, set every direct child occurrence to its finalized integration OID, and create one distinct gitlink-bump commit per changed parent gitlink, ordered by path within the immediate parent.\n\nNo empty commits are ever created, and own-file commits never contain gitlink changes. This module must not update any base ref and must not push.\n\nNew module only; no production call sites yet.\n\nTests: the own-files commit contains no gitlink change; one separate bump commit exists per changed direct child occurrence and none for unchanged ones; a parent containing multiple occurrences of one logical child updates every one of those gitlinks to the same child integration OID; nested child OIDs propagate through each correct explicit parent edge to the root; durable refs exist for every group tip; base refs are provably unchanged.",
+    "files": [
+      "scripts/runFinalizer.ts",
+      "tests/runFinalizer.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "8e4d2d5",
+      "b8aa899"
+    ],
+    "closureNote": "Added scripts/runFinalizer.ts requiring a runAuthorization token, finalizing logical children first through explicit occurrence edges, creating one nonempty own-files commit per participating branch excluding child gitlinks, preserving each tip under a run-scoped durable ref, and creating one gitlink-bump commit per changed parent gitlink without moving any base ref."
+  },
+  {
+    "taskNumber": 29,
+    "title": "Run-scoped recovery refs after each worker and each synchronization",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/recoveryRefs.ts: preserve work after each worker and after each N-way synchronization using internal run-scoped recovery refs. Build recovery snapshots with temporary indexes and recursive gitlink substitution via scripts/repositoryIntegration.ts, without moving any operation or base branch.\n\nRecovery must capture the full recursive state, including nested occurrence contents, so a killed run loses nothing. Snapshotting must be safe to repeat and must never disturb the working tree a worker is using.\n\nTests: a recovery ref exists after each worker and each sync and resolves to a tree containing that state; operation and base branches are provably unmoved; nested occurrence contents are reachable through substituted gitlinks; repeated snapshots are idempotent; a snapshot taken with uncommitted worker changes still captures them.",
+    "files": [
+      "scripts/recoveryRefs.ts",
+      "tests/recoveryRefs.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "f2c153b",
+      "21c1868"
+    ],
+    "closureNote": "Added scripts/recoveryRefs.ts preserving work after each worker and each synchronization via run-scoped recovery refs built with temporary indexes and recursive gitlink substitution, capturing nested occurrence contents without disturbing a worker working tree."
   }
 ]

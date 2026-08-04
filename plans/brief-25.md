@@ -17,3 +17,17 @@ Tests: the own-files commit contains no gitlink change; one separate bump commit
 ### tests/runFinalizer.test.ts
 
 (missing: file not found on disk)
+
+---
+
+# Available primitives (read this before planning)
+
+You may only read this brief, so here is what already exists on the current branch. Plan against these; do not stop to look for anything else.
+
+- `scripts/ownershipSnapshots.ts` — `takeSnapshot(occurrenceRoot): Snapshot`, `diffSnapshots(occurrenceRoot, before, after): Change[]`, `attributeOccurrence(change, occurrenceRoots)`, `checkOwnership(workerId, changes, ownershipKeys): Violation[]`, `checkGroupBoundary(changes, allWorkersOwnershipKeys): Violation[]`. `Change = {type: "added"|"deleted"|"modified"|"mode-changed"|"symlink-changed"|"renamed", ...}`. A branch's approved own-file change set is `Change[]` filtered to non-gitlink paths — there is no other type for it, so take it as a parameter rather than searching for one.
+- `scripts/repositoryIntegration.ts` — `substituteGitlink(repoRoot, {parentCommitOid, pathInParent, childOid}): string` rewrites one gitlink and returns the new parent commit OID; `substituteGitlinksRecursively(...)` folds that bottom-up over a full ancestor chain and returns every intermediate OID; `prepareNoFfMerge(...)`. None of them move a ref.
+- `scripts/runAuthorization.ts` — the opaque digest-bound token the finalizer must require.
+- `scripts/ownershipKeys.ts` — canonical ownership keys and `OwnershipEffects`.
+- `scripts/logicalRepository.ts`, `scripts/repositoryGraph.ts` — `LogicalRepository`, `RepositoryOccurrence`, occurrence edges and recorded bases.
+
+If a type you want does not exist in that list, define it locally in `scripts/runFinalizer.ts` as an input parameter. Do not stop and report the task blocked for a missing type.

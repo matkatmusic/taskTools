@@ -1,184 +1,269 @@
-# Task 25 Plan: Per-repository finalizer (own-files commit, durable refs, gitlink bumps)
+# Task 25 Plan: scripts/runFinalizer.ts
 
-## Why (one paragraph, for reference during implementation)
-This is Phase 3 of the recursive repository-discovery redesign. Phases 1/2
-(discovery, authorization, occurrence/branch naming — see tasks 13/14/16/17/18)
-already produce: an authorization gate (`scripts/runAuthorization.ts`), the
-recursive graph of "occurrences" (a repo can appear more than once under a
-parent, and a repo can itself have child occurrences), and deterministic
-per-occurrence branch names. Phase 3 turns the *approved, staged* own-file
-changes on each occurrence branch into real commits, without ever touching a
-mutable base ref, then stitches child results into each parent via one
-gitlink-bump commit per changed path. This module produces finalized OIDs and
-refs only — it does not update any long-lived branch and does not push.
-Nothing calls it yet.
+## Goal
+New module, `scripts/runFinalizer.ts` (+ a git-plumbing helper file if the
+250-line cap forces a split), that finalizes a repository-occurrence graph
+bottom-up: one own-files commit per occurrence, a durable ref per occurrence
+tip, and — for occurrences with children — one temporary assembly branch
+carrying one gitlink-bump commit per changed child path. No production call
+site yet. No file besides the two new module files and their test file.
 
-## Before writing any code: discovery step (mandatory)
-This plan was written from the brief only — the exact shapes of
-"authorization", "occurrence", "explicit occurrence edge", "recorded base",
-and "group/occurrence branch" come from already-merged modules in this repo.
-Before writing `scripts/runFinalizer.ts`, read:
-- `scripts/runAuthorization.ts` — its exported function/type is the *only*
-  legal way to check authorization; do not reimplement or bypass it. Finalizer
-  must call it and throw/refuse if it does not grant authorization.
-- `scripts/occurrenceBranchNames.ts` (task 14) — reuse its naming/lookup
-  helpers for occurrence branch names rather than recomputing them.
-- The task-13/16/17/18 plans and whatever discovery module they produced —
-  find the type that represents a logical repository's recorded base, its
-  list of participating group/occurrence branches, its explicit occurrence
-  edges to children, and per-branch "approved own-file changes". Reuse those
-  types as-is; do not invent parallel ones.
-- Whatever git-invocation wrapper the existing scripts already use (grep
-  `scripts/*.ts` for how they shell out to git / which library). Reuse it —
-  do not add a new git library dependency (ponytail rung 5: an
-  already-installed dependency, or the existing in-house wrapper, beats a new
-  one).
+## Required reads before writing any code
+This plan was authored from `plans/brief-25.md` only, per this task's
+constraint. Before implementing, read these — their exact exported
+names/shapes drive the plumbing below and are deliberately not guessed here:
+- `scripts/runAuthorization.ts` — exact exported token type and the
+  verify/assert entry point the finalizer must call first.
+- `scripts/ownershipSnapshots.ts` — exact `Change` field names. The plan
+  below only relies on `type`, `path`, and (for renames) `oldPath` existing
+  on `Change` — confirm those names before writing `commitOwnFileChanges`.
+- `scripts/repositoryIntegration.ts` — exact signature/return shape of
+  `substituteGitlink` (the plan assumes `(repoRoot, {parentCommitOid,
+  pathInParent, childOid}) => string`, returning a new commit oid without
+  moving any ref).
+- `scripts/logicalRepository.ts` / `scripts/repositoryGraph.ts` — check
+  whether `LogicalRepository`/`RepositoryOccurrence` already cover the local
+  input type below; import instead of duplicating wherever they do. Per the
+  brief, anything not already exported there is defined locally in
+  `runFinalizer.ts` as an input parameter — that is not a blocking gap, do
+  not stop and report it as one.
+- An existing `.test.ts` file in `tests/` (e.g. `tests/relatedTests.test.ts`)
+  — match its test runner/import style and naming so
+  `tests/runFinalizer.test.ts` fits the codebase.
 
-If any of the above types/helpers turn out not to exist yet, stop and treat
-this as a blocking gap rather than guessing their shape — the finalizer's
-correctness depends on matching them exactly.
+## Local types to define in scripts/runFinalizer.ts
+No repository/occurrence graph traversal helper is listed among the
+available primitives, and the brief says to take what's missing as an input
+parameter rather than search for it — so the run's shape is a flat list of
+per-occurrence inputs, with the tree/graph shape expressed only as edges on
+each entry:
 
-## Scope guardrails
-- New file(s) only: `scripts/runFinalizer.ts` + `tests/runFinalizer.test.ts`.
-  No edits to any other production file, no new call sites.
-- Never call `git push` or touch any remote.
-- Never write to a logical repository's recorded base ref — only read it (to
-  seed the temporary assembly branch's start point).
-- Never create an empty commit.
-- Own-file commits must never touch a gitlink path.
-- Keep `scripts/runFinalizer.ts` under the 250-line cap. If the full
-  algorithm won't fit, split pure/stateless pieces (topological ordering,
-  changed-gitlink-path diffing, durable-ref name building) into a sibling
-  module up front — do not write past the cap and split afterward.
+```ts
+type ChildOccurrenceEdge = {
+    pathInParent: string;
+    childOccurrenceId: string;
+};
 
-## Algorithm, in order
+type OccurrenceFinalizationInput = {
+    occurrenceId: string;
+    repoRoot: string;
+    currentTipOid: string;
+    recordedBaseOid: string;
+    approvedOwnFileChanges: Change[]; // from ownershipSnapshots.ts, already filtered to non-gitlink
+    directChildEdges: ChildOccurrenceEdge[];
+};
 
-### Step 1 — Authorize
-Call the existing `scripts/runAuthorization.ts` authorization entry point
-first, with whatever inputs it requires. If it does not authorize, throw and
-do nothing else (no commits, no refs, no branches). This must be the first
-thing the finalizer does.
+type FinalizationRunInput = {
+    runId: string;
+    occurrences: OccurrenceFinalizationInput[];
+};
 
-### Step 2 — Topological order (children before parents)
-Build a child-before-parent processing order over the repositories using
-their explicit occurrence edges. A repo may occur under more than one parent
-and a repo may have multiple distinct children, so this is a DAG, not a tree:
-use a plain Kahn's-algorithm-style queue (in-degree counting) or a recursive
-post-order visit with a "visited" set — either is a few lines with arrays and
-a Set/Map, no graph library needed (ponytail rung 3/6: stdlib collections are
-enough for this size of graph).
+type BumpCommit = {
+    pathInParent: string;
+    childOccurrenceId: string;
+    commitOid: string;
+};
 
-### Step 3 — Own-files commit + durable ref, per repo, per participating branch
-Process repos in the Step 2 order. For each repo, for each of its
-participating group/occurrence branches:
-1. Take that branch's approved own-file change set (already excludes
-   gitlinks per the upstream discovery/authorization data — do not
-   re-derive it; if the upstream type does *not* already guarantee "no
-   gitlink paths", filter out any path that is a submodule/gitlink entry
-   before committing).
-2. If the change set is empty, do **not** create a commit — the durable ref
-   for this branch simply points at the branch's current tip. (The brief
-   requires "no empty commits" and, separately, "durable refs exist for
-   every group tip" — an unchanged branch satisfies both by pointing the
-   durable ref at the existing tip.)
-3. Otherwise create exactly one commit on top of the branch tip containing
-   only that change set.
-4. Write a run-scoped durable ref for this tip, e.g.
-   `refs/finalizer/<runId>/<repoPath>/<branchName>`. Build this name with one
-   small pure helper (e.g. `runFinalizer_durableRefName(runId, repoPath,
-   branchName): string`) so its format is independently testable.
-5. Record the resulting OID as that branch's "finalized integration OID" —
-   this is what parents will bump their gitlink to in Step 4.
+type OccurrenceFinalizationResult = {
+    occurrenceId: string;
+    ownFilesCommitOid: string;       // === currentTipOid when no own-file changes were approved
+    durableTipRef: string;
+    finalizedIntegrationOid: string; // what a parent's gitlink bump must point a path at
+    assemblyBranchRef: string | null; // null when the occurrence has no direct children
+    bumpCommits: BumpCommit[];
+};
 
-### Step 4 — Assembly branch + gitlink bumps, per logical repository
-Still in Step 2's order (a repo's children are already finalized by the time
-the repo itself is processed):
-1. Create one temporary assembly branch at the repo's recorded base (read
-   from the discovery data, not from the branch's live HEAD — this is what
-   keeps the base ref itself untouched).
-2. Collect this repo's direct child occurrences (explicit occurrence edges),
-   each with its gitlink path in this repo and its child's finalized
-   integration OID from Step 3.
-3. Sort those paths lexicographically (deterministic "ordered by path"
-   requirement).
-4. For each path, in that order: if the gitlink already equals the child's
-   finalized OID, skip it — no commit. Otherwise set the gitlink to the
-   child's finalized OID and create exactly one commit for that single path
-   change. A logical child that occurs at multiple paths under the same
-   parent produces one bump commit per changed path, all pointing at the
-   same child OID.
-5. The assembly branch's final tip after all bump commits is this repo's own
-   finalized integration OID, available to *its* parent in the next Step 4
-   iteration (this is how nested OIDs propagate to the root).
+type FinalizationRunResult = {
+    runId: string;
+    occurrences: OccurrenceFinalizationResult[];
+};
+```
 
-### Step 5 — Return value
-Return, per repository: the durable ref name(s) and OID(s) from Step 3, the
-temporary assembly branch name and final OID from Step 4, and the ordered
-list of gitlink-bump commit OIDs. No caller consumes this yet, but the shape
-should let a future orchestrator find every durable ref and every assembly
-tip without re-deriving them.
+`occurrenceId` is the key used both to index results and as the
+`childOccurrenceId` any parent's `directChildEdges` references — every
+`childOccurrenceId` in the input must resolve to an entry in `occurrences`,
+or the run throws (see Step 1).
 
-## Testing plan (write RED before GREEN, one behavior per test)
+## Why finalizedIntegrationOid is defined this way
+For a leaf occurrence (no children), `finalizedIntegrationOid` is the
+own-files commit tip. For an occurrence with children, it is the tip of its
+own assembly branch (recordedBaseOid + bump commits) — **not** a merge of
+that with the own-files commit. This is the only definition that makes a
+nested child's OID visible in the root's bump commit (required test:
+nested propagation), since the own-files line and the gitlink-integration
+line are two separate, unmerged constructs in this phase — merging them
+(via `prepareNoFfMerge`, already available but intentionally unused here)
+is a later phase's job, not this one's.
 
-Plain-English behavior, then the test to prove it. Use whatever test-repo
-fixture helper the sibling test suite (`tests/relatedTests.test.ts` or
-neighboring task-14/18 tests) already uses to build a throwaway git repo —
-reuse it rather than writing a new one.
+## Ref naming (own namespace, so base refs are trivially untouched)
+- Durable tip ref: `refs/finalize/<runId>/tip/<occurrenceId>`
+- Assembly branch ref: `refs/finalize/<runId>/assembly/<occurrenceId>`
 
-1. `test_ownFilesCommitContainsNoGitlinkChanges` — given a branch with
-   approved own-file changes and an untouched gitlink, run the finalizer and
-   assert the resulting own-files commit's diff touches none of the
-   repo's gitlink paths.
-2. `test_noCommitCreatedWhenBranchHasNoApprovedChanges` — given a branch with
-   an empty approved change set, assert its durable ref resolves to the
-   branch's pre-existing tip OID (no new commit object created).
-3. `test_oneBumpCommitPerChangedDirectChildOccurrence` — a parent with two
-   distinct child occurrences whose finalized OIDs differ from the parent's
-   current gitlinks: assert exactly two bump commits exist, one per path.
-4. `test_noBumpCommitForUnchangedChildOccurrence` — a parent with one child
-   occurrence whose gitlink already equals the child's finalized OID: assert
-   zero bump commits are created for that path.
-5. `test_repeatedChildOccurrenceUpdatesAllPathsToSameOid` — a parent
-   containing the same logical child at two different paths: assert both
-   paths end up set to that child's one finalized integration OID, via two
-   separate bump commits.
-6. `test_bumpCommitsOrderedByPathWithinParent` — a parent with changed
-   gitlinks at paths `["b/child", "a/child"]` (declaration order):
-   assert the bump commits were created in `["a/child", "b/child"]` order.
-7. `test_nestedChildOidsPropagateThroughExplicitParentEdgesToRoot` — a
-   three-level chain (grandchild -> child -> root) each with their own
-   approved own-file change: assert the root's final assembly OID reflects
-   the grandchild's finalized OID having flowed through the child's bump
-   commit into the root's bump commit.
-8. `test_durableRefExistsForEveryGroupTip` — for a repo with multiple
-   participating group/occurrence branches, assert every branch has a
-   resolvable durable ref after the run.
-9. `test_baseRefUnchangedAfterFinalizerRuns` — record each repo's recorded
-   base ref OID before the run, run the finalizer, assert every one of those
-   OIDs is identical after (this is the base-ref-immutability guarantee;
-   implement it as a real equality assertion, not a mock/spy).
-10. `test_finalizerRefusesWithoutAuthorization` — call the finalizer with an
-    authorization input that `runAuthorization.ts` rejects: assert it throws
-    before creating any commit, branch, or ref.
-11. `test_finalizerNeverInvokesPush` — spy on/wrap the shared git-invocation
-    wrapper (whatever Step-0 discovery finds) for the duration of one run and
-    assert no invocation's arguments include `push`.
+Never write to `refs/heads/...` or any ref the caller passed in as
+`recordedBaseOid`/`currentTipOid` — those are oids read once at the start,
+never refs the finalizer resolves live or writes back to.
 
-Write each test's body as PLAIN ENGLISH step comments first (per
-`~/.claude/guides/tdd.md`), confirm it fails for the right reason, then add
-the minimum code in `scripts/runFinalizer.ts` (and any split-out sibling
-helper module from the guardrails section) to make it pass, one test at a
-time, in the numeric order above (own-files commit correctness before bump
-logic, unchanged-vs-changed before repeated-path, single-parent bump before
-multi-level propagation, then the two whole-run invariants last since they
-depend on everything else already working).
+## Algorithm (in scripts/runFinalizer.ts)
+
+**Step 0 — authorize.** First line of `runFinalizer`: verify the
+`RunAuthorization` token via whatever `runAuthorization.ts` exports. Throw
+before touching git if invalid. Nothing below runs on an unauthorized call.
+
+**Step 1 — topological sort, children first.** Post-order DFS over
+`occurrences` using `directChildEdges`. Use gray/black marking to detect
+cycles (throw with the cycle's occurrenceIds). Throw if any
+`childOccurrenceId` has no matching entry in `occurrences`. Result: a
+processing order where every occurrence appears after all of its direct and
+transitive children.
+
+**Step 2 — per occurrence, in that order:**
+
+a. `commitOwnFileChanges(occurrenceRoot=repoRoot, currentTipOid, changes=approvedOwnFileChanges)`:
+   - If `changes.length === 0`: return `currentTipOid` unchanged. No commit
+     object is created. (No empty commits, ever.)
+   - Else: assert none of the changes touch a gitlink path (defensive check
+     — guaranteed by the caller already filtering, but it's the one
+     invariant this whole task exists to uphold, so check it here too).
+     Stage **exactly** the changed paths — never `git add -A` / `git add .`,
+     which could sweep in unrelated dirty gitlink state in the working
+     tree:
+     - added/modified/mode-changed/symlink-changed: `git -C repoRoot add -- <path>`
+     - deleted: `git -C repoRoot add -- <path>` (works for a path already
+       removed from disk — stages the deletion)
+     - renamed: `git -C repoRoot add -- <oldPath> <newPath>`
+   - `git -C repoRoot write-tree` → `newTreeOid` (reflects `currentTipOid`'s
+     tree plus only the staged paths — this assumes the working tree's
+     index otherwise matches `currentTipOid`; confirm this precondition
+     against how `occurrenceRoot` is normally kept in sync, from the
+     required reads above).
+   - `git -C repoRoot commit-tree <newTreeOid> -p <currentTipOid> -m "finalize: own-file changes for <occurrenceId> (<runId>)"` →
+     `ownFilesCommitOid`. `commit-tree` never moves HEAD or any branch ref —
+     this is what keeps the real base/group branch untouched.
+
+b. `git -C repoRoot update-ref refs/finalize/<runId>/tip/<occurrenceId> <ownFilesCommitOid>`
+   — durable ref, written unconditionally (changed or not).
+
+c. If `directChildEdges.length === 0`: `finalizedIntegrationOid =
+   ownFilesCommitOid`, `assemblyBranchRef = null`, `bumpCommits = []`. Move
+   on to the next occurrence — no assembly branch is created when there is
+   nothing to bump.
+
+d. Else, build the assembly branch:
+   - Sort `directChildEdges` by `pathInParent` ascending (required
+     ordering for bump commits).
+   - `let assemblyTip = recordedBaseOid`.
+   - For each edge, in that sorted order:
+     - `childOid = results.get(edge.childOccurrenceId).finalizedIntegrationOid`
+       (already computed — children were processed first in Step 1).
+     - `existingGitlinkOid = readGitlinkOid(repoRoot, assemblyTip, edge.pathInParent)`
+       via `git -C repoRoot ls-tree <assemblyTip> -- <pathInParent>`,
+       parsing the oid column of a `160000 commit <oid>\t<path>` line.
+     - If `existingGitlinkOid === childOid`: skip — no commit for an
+       unchanged gitlink.
+     - Else: `assemblyTip = substituteGitlink(repoRoot, {parentCommitOid: assemblyTip, pathInParent: edge.pathInParent, childOid})`;
+       push `{pathInParent, childOccurrenceId: edge.childOccurrenceId, commitOid: assemblyTip}`
+       onto `bumpCommits`.
+   - `git -C repoRoot update-ref refs/finalize/<runId>/assembly/<occurrenceId> <assemblyTip>`.
+   - `finalizedIntegrationOid = assemblyTip`, `assemblyBranchRef =` that ref
+     name.
+
+**Step 3 — return** `{ runId, occurrences: [...results in input order] }`
+(input order, not topological order, so callers can zip results back to
+their original request list by index).
+
+## File layout
+Put the plumbing helpers (`commitOwnFileChanges`, `readGitlinkOid`, the
+topological sort) in `scripts/runFinalizer.ts` first; only split into a
+second file (e.g. `scripts/runFinalizerGitOps.ts`) if the 250-line cap
+forces it. Keep `runFinalizer()` itself — the orchestration in Step 1–3 —
+as the last, top-level exported function so it reads as the entry point.
+
+## Tests (tests/runFinalizer.test.ts)
+Use real temp git repos (one dir per occurrence, `git init` +
+`hash-object`/`commit-tree` to seed a starting commit with a couple of
+tracked files and, where needed, a `160000` gitlink tree entry pointing at
+another occurrence's starting oid) — no mocking of git itself, since the
+whole point under test is real tree/commit shape. Match the existing test
+file's runner/style (see Required reads). Write each test's body as
+plain-English step comments first (per `~/.claude/guides/tdd.md`), confirm
+it fails for the right reason, then add the minimum code to pass — one test
+at a time, roughly in the order below (own-files commit correctness before
+bump logic, single-parent bump before multi-level propagation, whole-run
+invariants last since they depend on everything else already working).
+
+1. `test_ownFilesCommitContainsNoGitlinkChange` — occurrence has a gitlink
+   entry plus a regular file at its tip; `approvedOwnFileChanges` touches
+   only the regular file. Assert the resulting `ownFilesCommitOid`'s tree
+   has the identical gitlink oid at the same path as the parent tip (diff
+   the two trees; only the non-gitlink path differs).
+
+2. `test_noEmptyOwnFilesCommitWhenNoApprovedChanges` — `approvedOwnFileChanges = []`.
+   Assert `ownFilesCommitOid === currentTipOid` (no new commit object was
+   created at all).
+
+3. `test_oneBumpCommitPerChangedDirectChildOccurrence_noneForUnchanged` —
+   parent occurrence with two direct child edges: one whose child's
+   `finalizedIntegrationOid` differs from the tip's current gitlink, one
+   whose child's `finalizedIntegrationOid` already matches it. Assert
+   `bumpCommits.length === 1` and it names the changed child's path; assert
+   `git rev-list recordedBaseOid..assemblyTip` has exactly one commit.
+
+4. `test_multipleGitlinksToSameChildAllUpdatedToSameOid` — parent has two
+   `directChildEdges` at different `pathInParent`s pointing at the same
+   `childOccurrenceId`. Assert both paths' final gitlink oid (read via
+   `ls-tree` on the final assembly tip) equal that child's
+   `finalizedIntegrationOid`, and `bumpCommits.length === 2` (one per
+   changed path, not one per logical child).
+
+5. `test_bumpCommitsOrderedByPathWithinParent` — parent with two changed
+   gitlinks declared in order `["b/child", "a/child"]`. Assert the
+   `bumpCommits` array is ordered `["a/child", "b/child"]`.
+
+6. `test_nestedChildOidsPropagateThroughEachExplicitParentEdgeToRoot` —
+   three occurrences, root → mid → leaf, each linked by an explicit
+   `directChildEdges` entry. Leaf has an own-file change (so leaf's
+   `finalizedIntegrationOid` is a new commit). Assert mid's
+   `finalizedIntegrationOid` is a new commit (its assembly tip, distinct
+   from `mid.recordedBaseOid`) whose gitlink at the leaf's path equals
+   leaf's `finalizedIntegrationOid`. Assert root's `finalizedIntegrationOid`'s
+   gitlink at mid's path equals mid's `finalizedIntegrationOid` — then walk
+   one level further and assert that oid's own gitlink at the leaf's path
+   still equals leaf's `finalizedIntegrationOid`, proving the propagation
+   is real (not two independently-equal values).
+
+7. `test_durableRefsExistForEveryOccurrenceTip` — run over several
+   occurrences (mix of empty and nonempty own-file changes). For each,
+   assert `refs/finalize/<runId>/tip/<occurrenceId>` resolves and equals
+   the returned `ownFilesCommitOid`.
+
+8. `test_baseRefsAreProvablyUnchanged` — before the run, record each
+   occurrence's real branch ref oid (whatever ref `currentTipOid` was read
+   from) and `recordedBaseOid`'s ref if one exists. Run the finalizer.
+   Assert every one of those refs still resolves to the identical oid
+   afterward, and enumerate refs before/after to assert nothing outside
+   `refs/finalize/<runId>/...` was created or moved.
+
+9. `test_unauthorizedRunIsRejected` — call `runFinalizer` with an
+   invalid/absent authorization token. Assert it throws and that no ref
+   under `refs/finalize/...` was created (nothing ran).
 
 ## Naming (per coding-standards.md)
-- Prefix pure helper functions with `runFinalizer_` (e.g.
-  `runFinalizer_durableRefName`, `runFinalizer_topologicalOrder`,
-  `runFinalizer_changedGitlinkPaths`) so their origin module is obvious at
-  call sites, matching the existing `git_*`/`tmux_*` style already used in
-  this codebase's guides.
-- Name the main export for what it does, e.g. `finalizeRepositories(...)` or
-  `runFinalizer(...)` — confirm no export-name collision with
-  `runAuthorization.ts`'s own entry point before settling on the name.
+Name the main export for what it does — `runFinalizer(...)` — and name
+helpers with a verb describing their body (`commitOwnFileChanges`,
+`readGitlinkOid`, `topologicallySortChildFirst`). No `_`-prefixed namespacing
+convention is established by the listed primitives (`substituteGitlink`,
+`takeSnapshot`, etc. are plain verbs), so match that plain style rather than
+inventing a `runFinalizer_*` prefix.
+
+## Constraints checklist (verify against the diff before calling this done)
+- No empty commits: `commitOwnFileChanges` returns the unchanged tip when
+  `changes.length === 0`; the assembly bump loop skips unchanged gitlinks.
+- Own-file commits never touch gitlinks: enforced by only staging the
+  specific non-gitlink paths named in `approvedOwnFileChanges`, plus the
+  defensive assert in Step 2a.
+- No base ref is ever written: only `refs/finalize/<runId>/...` refs are
+  created; `currentTipOid`/`recordedBaseOid` are read once as oids, never
+  as refs the module writes back to.
+- No push: the module never shells out to `git push`.
+- New module only: no edits to any existing file, no new call site wiring
+  this into another script.
