@@ -602,5 +602,23 @@
       "644afdc"
     ],
     "closureNote": "Added scripts/operationPush.ts pushing only the canonical run-level operation branch for repeated logical repositories, never with force, aborting before any base publication when an existing remote tip is not an ancestor of the pushed OID, then fetching the canonical branch into every other occurrence and verifying identical OID and tree; unique repositories and base branches are never pushed automatically."
+  },
+  {
+    "taskNumber": 33,
+    "title": "Local base publication with compare-and-swap, rollback, and recovery commands",
+    "description": "Phase 4 of the recursive repository-discovery redesign.\n\nCreate scripts/basePublication.ts: publish only after the root integration OID exists. Revalidate all recorded base OIDs and every approval input first, then update one canonical local base ref per logical repository using compare-and-swap semantics, and align other local occurrences' base branches through local fetch and fast-forward. If any update fails, roll back the already-updated refs to their recorded OIDs. If publication or rollback is incomplete, preserve the integration and recovery refs and report exact recovery commands.\n\nRollback must not stop at the first failure in a way that leaves advanced repositories without recovery instructions — every repository's state and its recovery command must be reported.\n\nTests: a base ref that moved since approval blocks publication entirely; compare-and-swap prevents clobbering a concurrent update; a mid-sequence failure rolls back every already-updated ref to its recorded OID; a failing rollback preserves integration and recovery refs and reports an exact command per affected repository; other occurrences fast-forward locally without a remote push; nothing publishes before the root integration OID exists.",
+    "files": [
+      "scripts/basePublication.ts",
+      "tests/basePublication.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "0940f8d",
+      "046adf0"
+    ],
+    "closureNote": "Added scripts/basePublication.ts publishing local base refs only after the root integration OID exists, revalidating recorded base OIDs and approval inputs, updating one canonical base ref per logical repository with compare-and-swap, fast-forwarding other local occurrences without any remote push, rolling back every already-updated ref on failure, and preserving integration and recovery refs with an exact recovery command per affected repository when publication or rollback is incomplete."
   }
 ]
