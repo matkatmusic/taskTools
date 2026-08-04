@@ -1,6 +1,7 @@
 // resolutionRequests.ts: resumable discovery resolution requests with persisted answers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
 import {
     createResolutionRequest,
     createResolutionRequestId,
@@ -8,8 +9,12 @@ import {
     recordResolutionRequest,
     applyResolutionAnswers,
     needsResolutionRequest,
+    createBaseReconciliationRequest,
+    recordBaseReconciliationRequest,
+    applyBaseReconciliationAnswers,
     REASON_ZERO_EXACT_TIP_MATCHES,
     REASON_MULTIPLE_EXACT_TIP_MATCHES,
+    REASON_BASE_RECONCILIATION,
 } from "../scripts/resolutionRequests.ts";
 
 // Zero exact tip matches: request carries that reason and an empty candidate list.
@@ -86,3 +91,78 @@ test("resolution request id is stable across a JSON round trip", () => {
 interface ResolutionManifestForTest {
     resolutionRequests: { id: string; occurrenceId: string; reason: string }[];
 }
+
+// Same generalized id function as occurrence-scoped requests — proves the id is stable, not a second id scheme.
+test("createResolutionRequestId is stable when keyed by a logical repository id", () => {
+    const idBefore = createResolutionRequestId("repo-e", REASON_BASE_RECONCILIATION);
+    const idAfter = createResolutionRequestId("repo-e", REASON_BASE_RECONCILIATION);
+    assert.equal(idBefore, idAfter);
+    const request = createBaseReconciliationRequest("repo-e", []);
+    assert.equal(request.id, idBefore);
+});
+
+// Every member's full {occurrenceId, recordedOid, baseBranch} record must survive retrieval unchanged.
+test("recordBaseReconciliationRequest persists the full member payload", () => {
+    const manifest = createEmptyResolutionManifest();
+    const members = [
+        { occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" },
+        { occurrenceId: "occ-2", recordedOid: "def456", baseBranch: "develop" },
+    ];
+    const request = createBaseReconciliationRequest("repo-f", members);
+    recordBaseReconciliationRequest(manifest, request);
+    assert.deepEqual(manifest.baseReconciliationRequests[0].members, members);
+});
+
+// A changed occurrence set for the same repository overwrites the one entry, not a second one.
+test("recordBaseReconciliationRequest refreshes a changed member list under the stable id", () => {
+    const manifest = createEmptyResolutionManifest();
+    const firstMembers = [{ occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" }];
+    recordBaseReconciliationRequest(manifest, createBaseReconciliationRequest("repo-c", firstMembers));
+    const secondMembers = [
+        { occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" },
+        { occurrenceId: "occ-2", recordedOid: "abc123", baseBranch: "feature-x" },
+    ];
+    recordBaseReconciliationRequest(manifest, createBaseReconciliationRequest("repo-c", secondMembers));
+    assert.equal(manifest.baseReconciliationRequests.length, 1);
+    assert.deepEqual(manifest.baseReconciliationRequests[0].members, secondMembers);
+});
+
+// A structured answer round-trips through JSON as a single {recordedOid, baseBranch}
+// value, not two separately-keyed fields that could desync.
+test("applyBaseReconciliationAnswers answer survives a JSON round trip", () => {
+    const manifest = createEmptyResolutionManifest();
+    const request = createBaseReconciliationRequest("repo-a", [
+        { occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" },
+        { occurrenceId: "occ-2", recordedOid: "def456", baseBranch: "develop" },
+    ]);
+    recordBaseReconciliationRequest(manifest, request);
+    applyBaseReconciliationAnswers(manifest, { [request.id]: { recordedOid: "abc123", baseBranch: "main" } });
+    const roundTripped: ResolutionManifest = JSON.parse(JSON.stringify(manifest));
+    assert.deepEqual(roundTripped.baseReconciliationAnswers[request.id], { recordedOid: "abc123", baseBranch: "main" });
+});
+
+// Mixing one member's OID with another's baseBranch was never recorded together; reject as one unit.
+test("applyBaseReconciliationAnswers rejects a cross-member OID/base pair", () => {
+    const manifest = createEmptyResolutionManifest();
+    const request = createBaseReconciliationRequest("repo-b", [
+        { occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" },
+        { occurrenceId: "occ-2", recordedOid: "def456", baseBranch: "develop" },
+    ]);
+    recordBaseReconciliationRequest(manifest, request);
+    const crossedPair = { recordedOid: "abc123", baseBranch: "develop" };
+    assert.throws(() => applyBaseReconciliationAnswers(manifest, { [request.id]: crossedPair }));
+    assert.equal(manifest.baseReconciliationAnswers[request.id], undefined);
+});
+
+// Legacy string-answer function must reject a reconciliation id by name, not the generic not-found error.
+test("applyResolutionAnswers explicitly rejects a base-reconciliation request id", () => {
+    const manifest = createEmptyResolutionManifest();
+    const request = createBaseReconciliationRequest("repo-d", [
+        { occurrenceId: "occ-1", recordedOid: "abc123", baseBranch: "main" },
+    ]);
+    recordBaseReconciliationRequest(manifest, request);
+    assert.throws(
+        () => applyResolutionAnswers(manifest, { [request.id]: "main" }),
+        /base-reconciliation/
+    );
+});
