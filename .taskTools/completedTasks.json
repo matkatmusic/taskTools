@@ -222,5 +222,54 @@
       "821b8be"
     ],
     "closureNote": "Implemented scripts/logicalRepository.ts as a grouping overlay mapping normalized upstream identities to LogicalRepository records holding every occurrence ID sharing that identity plus selected base, canonical and last-writer occurrences, convergence digest, and consolidation state; the occurrence tree stays intact so three tmux_lib checkouts remain three occurrences with distinct parents under one logical repository, and no code path assumes a fixed member count."
+  },
+  {
+    "taskNumber": 14,
+    "title": "Occurrence branch naming for unique and repeated repositories",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceBranchNames.ts: a unique repository gets the plain group operation branch name. Each occurrence of a repeated logical repository gets a distinct name derived from its sanitized full root-relative path plus a collision hash, so two occurrences can never end up sharing a branch name.\n\nNames must be valid git ref names, deterministic across runs, and stable for a given occurrence path. Sanitization must not be able to map two different paths to the same name without the hash disambiguating them.\n\nNew module only; no production call sites yet.\n\nTests: all three RevEng tmux_lib forms — tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib — produce three distinct valid branch names; a unique repository gets the plain group branch name; names are byte-identical across repeated invocations; two paths that sanitize to the same string still differ by hash; every generated name passes git check-ref-format.",
+    "files": [
+      "scripts/occurrenceBranchNames.ts",
+      "tests/occurrenceBranchNames.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "7665d32"
+    ],
+    "closureNote": "Implemented scripts/occurrenceBranchNames.ts giving a unique repository the plain group branch name and each occurrence of a repeated logical repository a distinct name from its sanitized root-relative path plus a collision hash, deterministic across runs and valid as git refs."
+  },
+  {
+    "taskNumber": 17,
+    "title": "Copy the Jot related-test hook into taskTools and batch by owning repository",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCopy the Jot related-test hook into taskTools as scripts/relatedTests.ts, including its entry point, without modifying Jot itself. Extend the copy so it resolves each edited file's nearest Git root and batches the related tests by owning occurrence, so a file edited inside a nested submodule runs that submodule's tests rather than the parent's.\n\nOwnership resolution uses the occurrence graph, not path prefixes. Deliver the module and its entry point here; registration in hooks/hooks.json is deliberately deferred to the Phase 4 startup task so nothing changes production behaviour yet.\n\nTests: edited files map to the correct owning occurrence in a three-level fixture; files from several occurrences in one edit set are batched per occurrence rather than merged into one run; a file directly in the root repository maps to the root; assert the Jot source tree is untouched by this task.",
+    "files": [
+      "scripts/relatedTests.ts",
+      "tests/relatedTests.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [],
+    "closureNote": "Ported the Jot post-tool-batch related-test hook from Python into scripts/relatedTests.ts including its stdin entry point, replacing Jot extension-keyed batching with occurrence-keyed batching resolved through getOwningOccurrence and invoking discoverTestPolicy per occurrence; the plan called for a verbatim copy which was impossible since the source is Python, and hooks/hooks.json was left untouched per the Phase 4 deferral. Staged but not yet committed at closing time, so no commit hash is recorded."
+  },
+  {
+    "taskNumber": 18,
+    "title": "Per-occurrence test policy with related-test map and complete-suite command",
+    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/testPolicy.ts: attach an explicit test policy to each occurrence — a related-test mapping used for ordinary edits, and a complete suite command used for parent validation. Discover commands from repository configuration (package.json scripts and equivalents) only when the choice is unambiguous; when it is ambiguous or absent, emit a setup resolution request through scripts/resolutionRequests.ts instead of guessing a command.\n\nA missing or unresolved test policy is a blocking condition for that occurrence, not a warning to skip past.\n\nNew module only; no production call sites yet.\n\nTests: an unambiguous test script is discovered and recorded; two equally plausible candidates produce a resolution request rather than a pick; a repository with no test configuration produces a request; a persisted answer is reused on the next run; occurrences of one logical repository may carry the same policy while remaining separately recorded.",
+    "files": [
+      "scripts/testPolicy.ts",
+      "tests/testPolicy.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
+    ],
+    "completionDate": "2026-08-03",
+    "commitHashes": [
+      "b07157f"
+    ],
+    "closureNote": "Implemented scripts/testPolicy.ts attaching a related-test map and complete-suite command to each occurrence, discovering commands from repository configuration only when unambiguous and emitting a setup resolution request otherwise rather than guessing."
   }
 ]

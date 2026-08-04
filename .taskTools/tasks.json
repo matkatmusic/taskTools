@@ -12,48 +12,12 @@
     ]
   },
   {
-    "taskNumber": 14,
-    "title": "Occurrence branch naming for unique and repeated repositories",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceBranchNames.ts: a unique repository gets the plain group operation branch name. Each occurrence of a repeated logical repository gets a distinct name derived from its sanitized full root-relative path plus a collision hash, so two occurrences can never end up sharing a branch name.\n\nNames must be valid git ref names, deterministic across runs, and stable for a given occurrence path. Sanitization must not be able to map two different paths to the same name without the hash disambiguating them.\n\nNew module only; no production call sites yet.\n\nTests: all three RevEng tmux_lib forms — tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib — produce three distinct valid branch names; a unique repository gets the plain group branch name; names are byte-identical across repeated invocations; two paths that sanitize to the same string still differ by hash; every generated name passes git check-ref-format.",
-    "files": [
-      "scripts/occurrenceBranchNames.ts",
-      "tests/occurrenceBranchNames.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
     "taskNumber": 16,
     "title": "Deterministic N-way synchronization across occurrences",
     "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/occurrenceSync.ts: fan each accepted change from its latest writer occurrence to every other occurrence of the same logical repository, repeating until every occurrence reports the same code-tree digest from scripts/occurrenceTreeDelta.ts. Accept one source occurrence and an N-member set; return the changed paths and a convergence result.\n\nNo pairwise assumptions anywhere — the algorithm must handle two, three, and larger sets identically, and its result must not depend on iteration order. All change kinds from the delta module apply, including deletions, renames, modes, and symlinks. Nested submodule contents and generated output are never copied as ordinary files.\n\nNew module only; no production call sites yet.\n\nTests: a fix originating in any one of three tmux_lib copies fans out to the other two and all three digests converge; two-copy fixtures for claude_plugin_lib and scenarios converge; deletions, renames, mode changes, symlinks, and untracked additions all propagate; a nested submodule's files are never copied into a sibling occurrence; running the sync twice is a no-op.",
     "files": [
       "scripts/occurrenceSync.ts",
       "tests/occurrenceSync.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
-    "taskNumber": 17,
-    "title": "Copy the Jot related-test hook into taskTools and batch by owning repository",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCopy the Jot related-test hook into taskTools as scripts/relatedTests.ts, including its entry point, without modifying Jot itself. Extend the copy so it resolves each edited file's nearest Git root and batches the related tests by owning occurrence, so a file edited inside a nested submodule runs that submodule's tests rather than the parent's.\n\nOwnership resolution uses the occurrence graph, not path prefixes. Deliver the module and its entry point here; registration in hooks/hooks.json is deliberately deferred to the Phase 4 startup task so nothing changes production behaviour yet.\n\nTests: edited files map to the correct owning occurrence in a three-level fixture; files from several occurrences in one edit set are batched per occurrence rather than merged into one run; a file directly in the root repository maps to the root; assert the Jot source tree is untouched by this task.",
-    "files": [
-      "scripts/relatedTests.ts",
-      "tests/relatedTests.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
-    ]
-  },
-  {
-    "taskNumber": 18,
-    "title": "Per-occurrence test policy with related-test map and complete-suite command",
-    "description": "Phase 2 of the recursive repository-discovery redesign.\n\nCreate scripts/testPolicy.ts: attach an explicit test policy to each occurrence — a related-test mapping used for ordinary edits, and a complete suite command used for parent validation. Discover commands from repository configuration (package.json scripts and equivalents) only when the choice is unambiguous; when it is ambiguous or absent, emit a setup resolution request through scripts/resolutionRequests.ts instead of guessing a command.\n\nA missing or unresolved test policy is a blocking condition for that occurrence, not a warning to skip past.\n\nNew module only; no production call sites yet.\n\nTests: an unambiguous test script is discovered and recorded; two equally plausible candidates produce a resolution request rather than a pick; a repository with no test configuration produces a request; a persisted answer is reused on the next run; occurrences of one logical repository may carry the same policy while remaining separately recorded.",
-    "files": [
-      "scripts/testPolicy.ts",
-      "tests/testPolicy.test.ts"
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
@@ -86,8 +50,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-2.md"
     ],
     "blockedBy": [
-      17,
-      18,
       19
     ]
   },
@@ -160,7 +122,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-3.md"
     ],
     "blockedBy": [
-      14,
       24
     ]
   },
@@ -190,9 +151,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      17
     ]
   },
   {
@@ -207,7 +165,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      18,
       27
     ]
   },
