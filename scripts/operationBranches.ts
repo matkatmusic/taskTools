@@ -35,7 +35,8 @@ function validateOccurrencesReadyForBranching(occurrences: RepositoryOccurrence[
 }
 
 export function operationBranchName(runId: string, occurrence: RepositoryOccurrence): string {
-    return `tackle-op/${runId}/${occurrence.occurrenceId}`;
+    const occurrenceSegment = occurrence.occurrenceId === "" ? "root" : occurrence.occurrenceId;
+    return `tackle-op/${runId}/${occurrenceSegment}`;
 }
 
 function branchOid(repoPath: string, branchName: string): string | null {
