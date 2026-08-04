@@ -60,6 +60,30 @@ export function substituteGitlink(repoRoot: string, substitution: GitlinkSubstit
     }
 }
 
+export type GitlinkChainLink = {
+    repoRoot: string;
+    parentCommitOid: string;
+    pathInParent: string;
+};
+
+// Folds substituteGitlink bottom-up: leaf OID feeds the deepest link, each new OID feeds the level above. No ref moves.
+export function substituteGitlinksRecursively(
+    chain: GitlinkChainLink[],
+    leafChildOid: string,
+): { rootCommitOid: string; commitOidsByLevel: string[] } {
+    if (chain.length === 0) {
+        throw new Error("substituteGitlinksRecursively requires a non-empty chain");
+    }
+    const commitOidsByLevel: string[] = new Array(chain.length);
+    let childOid = leafChildOid;
+    for (let level = chain.length - 1; level >= 0; level--) {
+        const { repoRoot, parentCommitOid, pathInParent } = chain[level];
+        childOid = substituteGitlink(repoRoot, { parentCommitOid, pathInParent, childOid });
+        commitOidsByLevel[level] = childOid;
+    }
+    return { rootCommitOid: commitOidsByLevel[0], commitOidsByLevel };
+}
+
 // Parses merge-tree conflict output: skip the tree-OID line, take the path from each remaining line.
 function parseConflictedPaths(mergeTreeOutput: string): string[] {
     const [fileInfoBlock = ""] = mergeTreeOutput.split("\n\n");
