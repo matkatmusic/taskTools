@@ -154,5 +154,15 @@
     ],
     "handoffFilePaths": [],
     "blockedBy": []
+  },
+  {
+    "taskNumber": 43,
+    "title": "Rewrite pick-a-task's selection criteria to use the difficulty field",
+    "description": "Revisit how pick-a-task chooses tasks once the `difficulty` field is supported on tasks.json entries.\n\nToday skills/pick-a-task/SKILL.md picks the N easiest open tasks by having the agent read every task and reason in prose about which are simplest, comparing each against the current state of the project. Once each task carries a difficulty rating (1-5), most of that reasoning becomes a sort: filter to unblocked, order by difficulty ascending, take N.\n\nRewrite the picking criteria to use the field, and decide what judgment is still worth spending prose on. The remaining candidate is the relevance check — is this task still needed given the current codebase? — which is separate from difficulty and cannot be sorted.\n\nBlocked by the task that adds the difficulty field to tasks.json entries and to skills/create-task/template/taskTemplate.json; that task does not exist yet, so add its number to blockedBy once it is created.",
+    "files": [
+      "skills/pick-a-task/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": []
   }
 ]
