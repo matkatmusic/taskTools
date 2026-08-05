@@ -53,7 +53,10 @@ const mergeCliInput = {
 
 const command = `node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`
 
-const runBrief = `Follow this exactly.
+const runBrief = `Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
 
 result = run(${command})
 
@@ -62,10 +65,15 @@ if result.exitCode == 0 and result.stdout is JSON containing "merged" and "confl
 else:
     return {ok: false, merged: [], conflicts: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
 
-forbidden: editing any file, running any other command, changing the merged or
-conflicts values on the success branch.`
+You are forbidden to edit any file, to run any other command, or to change the
+merged or conflicts values on the success branch.`
 
-const diagnoseBrief = (run) => `The merge failed. Follow this exactly.
+const diagnoseBrief = (run) => `The merge failed.
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
 
 repo = ${ARGS.repo}
 failedCommand = ${command}
@@ -106,10 +114,10 @@ if decisions is empty and blockers is empty:
 else:
     return {fixed: false, summary: how far you got, blockers: blockers, decisions: decisions}
 
-forbidden: weakening, deleting, or stubbing out code to make a conflict
-disappear; force-pushing or hard-resetting anything you did not create;
-running failedCommand yourself; deciding anything in decisions on the user's
-behalf. Each entry in 'decisions' must be answerable without opening the repo.
+You are forbidden to weaken, delete, or stub out code to make a conflict
+disappear; to force-push or hard-reset anything you did not create; to run
+failedCommand yourself; or to decide anything in decisions on the user's
+behalf. Each entry in decisions must be answerable without opening the repo.
 Returning a decision is a correct outcome, not a failure.`
 
 const runMergeScript = (attempt) =>
@@ -144,7 +152,10 @@ const diagnosisSummary = diagnosisMissing
   ? 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed'
   : diagnosis.summary
 
-if (diagnosisFixed === false) {
+// A pending decision blocks the retry even when the agent reported fixed.
+const decisionsPending = diagnosisMissing ? false : (diagnosis.decisions?.length ?? 0) > 0
+
+if (diagnosisFixed === false || decisionsPending === true) {
   return {
     merged: firstMergeAttempt?.merged ?? [],
     conflicts: firstMergeAttempt?.conflicts ?? [],

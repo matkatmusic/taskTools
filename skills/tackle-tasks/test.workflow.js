@@ -39,53 +39,78 @@ const FIX_SCHEMA = {
   required: ['task', 'fixed', 'summary'],
 }
 
-const testerBrief = (group, tasks) => `cd ${group.worktree}.
-These tasks just committed changes to these files:
-${tasks.map((t) => `- task ${t.number}: ${t.files.join(', ')}`).join('\n')}
+const testerBrief = (group, tasks) => `Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
 
-Report only — do not edit any file. First run: ${TYPECHECK_COMMAND}
-Then find and run the tests covering these files: check for a related-test
-discovery command in this repo (e.g. scripts/relatedTests.ts) before falling
-back to running each file's own test file directly. Do not run the full suite.
+cd ${group.worktree}
+ownedFiles = {
+${tasks.map((t) => `    task ${t.number}: ${t.files.join(', ')}`).join('\n')}
+}
+failures = []
 
-Return passed=true only if typecheck is clean AND every discovered test
-passes. Otherwise passed=false and, for each task whose files have a failing
-test or type error, add an entry to failures: {task: <task number>, detail:
-<failing test names and a short error summary>}.
-Return {passed, failures}.`
+typecheck = run(${TYPECHECK_COMMAND})
+
+if scripts/relatedTests.ts exists:
+    tests = run it to discover the tests covering ownedFiles
+else:
+    tests = the test file belonging to each file in ownedFiles
+// never run the full suite
+
+results = run(tests)
+
+for each task in ownedFiles:
+    if typecheck reported an error in that task's files, or any of its tests failed:
+        failures += {task: that task number, detail: the failing test names plus a short error summary}
+
+if typecheck is clean and every test in results passed:
+    return {passed: true, failures: []}
+else:
+    return {passed: false, failures: failures}
+
+You are forbidden to edit any file, to run the full suite, or to report passed
+true while any test failed or typecheck reported an error.`
 
 const planFileFor = (task) => (ARGS.approved ?? []).find((a) => a.task === task)?.planFile ?? ''
 
-const fixerBrief = (t, group, detail) => `You already implemented task #${t.number} and wrote its tests. A
-follow-up test run found a failure in that work, so you are picking your own
-task back up to correct it.
-Repo root (cd here first): ${group.worktree}
-Files you own (touch nothing outside them): ${t.files.join(', ')}
-The plan you implemented: ${planFileFor(t.number) || '(no plan file recorded)'}
+const fixerBrief = (t, group, detail) => `You implemented task #${t.number} and wrote its tests. One of them
+is now failing.
 
-The failure:
-${detail}
+Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
 
-Re-read your plan first, so the fix matches what the task set out to do
-rather than only silencing the failure. Then decide which side is wrong:
-- The code is wrong — fix the code so the test passes as written.
-- The test is wrong — the plan's intent is right but the test asserts the
-  wrong thing. Correct the test to assert what the plan actually called for,
-  and say in summary that you changed the test and why.
+cd ${group.worktree}
+ownedFiles = ${t.files.join(', ')}
+plan = ${planFileFor(t.number) || '(no plan file recorded)'}
+failure = ${detail}
 
-Never weaken, skip, or delete a test just to make it pass, and never assert
-the current buggy output as expected. If the plan itself is what is wrong,
-stop, set fixed=false, and say so — that is not yours to redecide.
+read(plan)   // the fix must match what the task set out to do
 
-Re-run the affected tests and ${TYPECHECK_COMMAND} to confirm.
+if the plan is wrong:
+    return {task: ${t.number}, fixed: false, summary: why the plan itself is wrong}
+else if the code is wrong:
+    fix the code so the test passes as written
+else if the test asserts something the plan did not call for:
+    correct the test to assert what the plan called for
+    note in summary that you changed the test, and why
 
-When it is green, commit from ${group.worktree}, staging ONLY your own paths —
-never \`git add -A\`, never \`git add .\`:
-  git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}
-  git commit -m "task ${t.number}: fix failing test"
+typecheck = run(${TYPECHECK_COMMAND})
+results = run(the tests covering ownedFiles)
 
-If you cannot fix it, set fixed=false and say why in summary.
-Return {task: ${t.number}, fixed, summary}.`
+if typecheck is clean and every test passed:
+    run: git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}
+    run: git commit -m "task ${t.number}: fix failing test"
+    return {task: ${t.number}, fixed: true, summary: what you changed}
+else:
+    return {task: ${t.number}, fixed: false, summary: what is still failing}
+
+You are forbidden to touch anything outside ownedFiles; to weaken, skip, or
+delete a test to make it pass; to assert the current wrong output as the
+expected value; to run \`git add -A\` or \`git add .\`; to commit while anything
+fails; or to redecide the plan yourself.`
 
 async function testGroup(group) {
   const tasks = group.tasks.filter((t) => DONE.some((d) => d.task === t.number))

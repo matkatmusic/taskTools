@@ -21,37 +21,56 @@ const WORKER_SCHEMA = {
   required: ['task', 'status', 'summary', 'remaining'],
 }
 
-const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task from ./.taskTools/tasks.json: #${t.number}.
-Repo root (cd here first): ${group.worktree}
-Files you own (touch nothing outside them): ${t.files.join(', ')}
-${note}
+const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task from
+./.taskTools/tasks.json: #${t.number}.
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+cd ${group.worktree}
+ownedFiles = ${t.files.join(', ')}
+plan = ${planFile}
+timeBudget = 10 minutes
+${note ? `note = ${note}\n` : ''}
 use jot:implement ${planFile}
 
-Implement the plan exactly — no scope additions, no refactors the plan
-doesn't call for. All design decisions were made in the plan; you are
-executing, not deciding. If the plan is impossible as written, stop and
-return status "blocked" with the reason in summary.
+if the plan is impossible as written:
+    return {task: ${t.number}, status: "blocked", summary: why it cannot be done, remaining: []}
 
-When the edits are done, run: ${TYPECHECK_COMMAND}
-Fix type errors in the files you own.
+implement every step of the plan, editing only ownedFiles
 
-Then run the tests covering the files you own and fix any failures — check
-for a related-test discovery command in this repo (e.g. scripts/relatedTests.ts)
-before falling back to running each owned file's own test file directly. Do
-not run the full suite; that is the close-tasks gate, not yours.
+typecheck = run(${TYPECHECK_COMMAND})
+if typecheck reported errors in ownedFiles:
+    fix them
 
-If your tests still fail after a reasonable effort, do not commit. Return
-status "blocked" (or "partial" if part of the plan is done) and name the
-failing tests in "remaining" — never return status "done" with a failing test.
+if scripts/relatedTests.ts exists:
+    tests = run it to discover the tests covering ownedFiles
+else:
+    tests = the test file belonging to each file in ownedFiles
+// never run the full suite; that is the close-tasks gate, not yours
 
-When typecheck passes, commit from ${group.worktree}. Other tasks may share
-this worktree, so stage ONLY your own paths — never \`git add -A\`, never \`git add .\`:
-  ${t.files.length ? `git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}` : 'git add -- <list every path you edited, explicitly>'}
-  git commit -m "task ${t.number}: <one-line summary>"
+results = run(tests)
+if any test failed:
+    fix the cause, then run typecheck and results again
 
-Soft time budget: 10 minutes — if you cannot finish, stop and return status
-"partial" with the not-yet-done plan steps listed in "remaining".
-Return {task: ${t.number}, status, summary (one sentence), remaining}.`
+if typecheck is clean and every test passed:
+    run: ${t.files.length ? `git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}` : 'git add -- (every path you edited, listed explicitly)'}
+    run: git commit -m "task ${t.number}: one-line summary"
+    return {task: ${t.number}, status: "done", summary: one sentence, remaining: []}
+else if part of the plan is implemented:
+    return {task: ${t.number}, status: "partial", summary: one sentence, remaining: the plan steps not yet done, plus any failing test names}
+else:
+    return {task: ${t.number}, status: "blocked", summary: one sentence, remaining: the failing test names}
+
+if you reach timeBudget before finishing:
+    return status "partial" with the not-yet-done plan steps in remaining
+
+You are forbidden to touch anything outside ownedFiles; to add scope or
+refactors the plan does not call for; to redecide anything the plan already
+decided; to run the full suite, \`git add -A\`, or \`git add .\`; to commit while
+anything fails; or to return status "done" with a failing test.`
 
 const planFileFor = (task) => APPROVED.find((a) => a.task === task)?.planFile ?? ''
 
