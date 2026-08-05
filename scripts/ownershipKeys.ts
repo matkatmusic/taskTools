@@ -25,7 +25,7 @@ function findLogicalRepository(occurrenceId: string, manifest: RepositoryManifes
 export function computeCanonicalOwnershipKey(taskPath: string, manifest: RepositoryManifest): OwnershipKey {
     const owner = getOwningOccurrence(taskPath, manifest);
     if (!owner) throw new Error(`no occurrence owns path "${taskPath}"`);
-    const pathWithinRepo = getPathWithinRepository(taskPath, owner);
+    const pathWithinRepo = getPathWithinRepository(taskPath, owner, manifest);
     const logicalRepository = findLogicalRepository(owner.occurrenceId, manifest);
     return { canonicalOccurrenceId: logicalRepository.canonicalOccurrenceId, pathWithinRepo };
 }
