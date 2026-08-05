@@ -908,5 +908,24 @@
       "553c7a8"
     ],
     "closureNote": "Implemented manually rather than through the tackle-tasks pipeline, whose codex verifier rejected two successive plans over whether the fallback could reuse codexPrompt verbatim while calling agent() with a structured schema. The user resolved that by dropping agent() entirely: verifierBrief in skills/tackle-tasks/verify.workflow.js now tells the verifier that a non-zero codex exit with no verdict and no PROBLEMS or FIXES block means unavailability rather than rejection, and to rerun the identical prompt as claude -p PROMPT --tools Read --model opus --effort high, so the prompt text and the first-line APPROVED or REJECTED format stay identical and no schema is involved. Verdicts gained a reviewer field of codex or claude, carried into reviewHandoffs so a fallback review is never presented as codex-approved, and the two-review ceiling now counts codex and the fallback together. Flags were verified against the installed Claude Code CLI v2.1.222. The SKILL.md step 2 mention was written by the user directly in commit 553c7a8."
+  },
+  {
+    "taskNumber": 53,
+    "title": "Mint the run authorization in mergeTaskWorktrees and widen its CLI input to carry the evidence",
+    "description": "Re-scoped on 2026-08-05 after codex rejected the wider version twice. The two jobs it could not do inside its fence were split into task 56 (produce real TestReceipts and reviewHandoffs) and task 57 (rename the colliding LogicalRepository type). This task is now only the merge-side plumbing, and both of those must land first.\n\nRead plans/task-53-plan.md first; it holds the rejected plan plus codex verdicts. The chosen direction, already decided by the user, is to widen the CLI contract rather than add a prerequisite phase — mergeTaskWorktrees.ts keeps its front door as a flat JSON argv 2, and the extra evidence rides on that JSON.\n\nWiden CliInput to carry the repository manifest, occurrence data, testReceipts and reviewHandoffs that task 56 now produces, have skills/tackle-tasks/merge.workflow.js pass them through from its ARGS without fabricating any of them, and mint the authorization through the recordApproval then issueApprovalAuthorization flow in scripts/approvalGate.ts.\n\nCodex named five concrete requirements the implementation must satisfy, all of which the previous plan failed:\n1. Load and retain the repository manifest BEFORE any merge runs, so recordedBaseOid captures the pre-merge base OID; loading it afterwards makes recordedBaseOid equal targetOid and defeats base-movement detection.\n2. Build publication targets after successful merges, using pre-merge baseOid as recordedBaseOid and current canonical HEAD OIDs as targetOid.\n3. Return the complete approved RunState, not just a token — basePublication.publishBases needs the whole state, and task 49 needs it exposed.\n4. Mint approval only when conflicts is empty, every expected group merged, all receipts are green, and both receipts and review handoffs are non-empty.\n5. Define operationRef as the post-merge root HEAD OID and baseRef as the pre-merge root occurrence baseOid. Joining group branch names with commas is not a repository ref.\n\nTests must be at CLI level and prove: evidence actually reaches the pipeline, a conflicted run produces no approval state, and publication targets keep pre-merge base OIDs while using post-merge target OIDs.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/approvalGate.ts",
+      "scripts/prepareTasks.ts",
+      "tests/mergeTaskWorktrees.test.ts",
+      "skills/tackle-tasks/merge.workflow.js"
+    ],
+    "difficulty": 5,
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "ebbc081",
+      "88a00fe"
+    ],
+    "closureNote": "Merged into new-usage-graph as 88a00fe (work commit ebbc081): mergeTaskWorktrees CLI input now carries the repository manifest, testReceipts and reviewHandoffs, mints the run approval and authorization only when conflicts are empty and every group merged with non-empty all-green receipts, and builds publication targets per manifest occurrence using pre-merge baseOid and post-merge HEAD; verified with a clean typecheck and 1038 passing tests."
   }
 ]

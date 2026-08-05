@@ -1,12 +1,19 @@
-# Task 53: Re-scope task 49: supply the authorization, occurrence and receipt data mergeTaskWorktrees needs
+# Task 53: Mint the run authorization in mergeTaskWorktrees and widen its CLI input to carry the evidence
 
-Task 49 as written is unimplementable, proven twice by codex during a tackle-tasks run on 2026-08-05. Read plans/task-49-plan.md first; it records the full evidence.
+Re-scoped on 2026-08-05 after codex rejected the wider version twice. The two jobs it could not do inside its fence were split into task 56 (produce real TestReceipts and reviewHandoffs) and task 57 (rename the colliding LogicalRepository type). This task is now only the merge-side plumbing, and both of those must land first.
 
-The blocker: runFinalizer.ts, runConsolidation.ts, operationPush.ts, basePublication.ts and taskArchival.ts all require a RunAuthorizationToken or RunState that can only be minted through the recordApproval then issueApprovalAuthorization flow in approvalGate.ts, which itself needs a RepositoryManifest plus testReceipts, reviewHandoffs and occurrenceDigests. They also require a full RepositoryOccurrence graph and per-repository publish-outcome data. None of that exists on WorkflowArguments or on the flat CliInput that mergeTaskWorktrees.ts accepts as argv 2, and task 49 forbids changing the CLI contract, so its two owned files cannot supply it.
+Read plans/task-53-plan.md first; it holds the rejected plan plus codex verdicts. The chosen direction, already decided by the user, is to widen the CLI contract rather than add a prerequisite phase — mergeTaskWorktrees.ts keeps its front door as a flat JSON argv 2, and the extra evidence rides on that JSON.
 
-This task decides and implements the plumbing. Two options: widen the CLI contract so the flat input carries manifest, occurrence and receipt data, or add a prerequisite step that mints the authorization and builds the occurrence graph before mergeTaskWorktrees runs. Pick one and implement it, then unblock task 49.
+Widen CliInput to carry the repository manifest, occurrence data, testReceipts and reviewHandoffs that task 56 now produces, have skills/tackle-tasks/merge.workflow.js pass them through from its ARGS without fabricating any of them, and mint the authorization through the recordApproval then issueApprovalAuthorization flow in scripts/approvalGate.ts.
 
-Also fix a defect found on the way: scripts/basePublication.ts and scripts/logicalRepository.ts both export a type named LogicalRepository and the two are incompatible.
+Codex named five concrete requirements the implementation must satisfy, all of which the previous plan failed:
+1. Load and retain the repository manifest BEFORE any merge runs, so recordedBaseOid captures the pre-merge base OID; loading it afterwards makes recordedBaseOid equal targetOid and defeats base-movement detection.
+2. Build publication targets after successful merges, using pre-merge baseOid as recordedBaseOid and current canonical HEAD OIDs as targetOid.
+3. Return the complete approved RunState, not just a token — basePublication.publishBases needs the whole state, and task 49 needs it exposed.
+4. Mint approval only when conflicts is empty, every expected group merged, all receipts are green, and both receipts and review handoffs are non-empty.
+5. Define operationRef as the post-merge root HEAD OID and baseRef as the pre-merge root occurrence baseOid. Joining group branch names with commas is not a repository ref.
+
+Tests must be at CLI level and prove: evidence actually reaches the pipeline, a conflicted run produces no approval state, and publication targets keep pre-merge base OIDs while using post-merge target OIDs.
 
 ### scripts/mergeTaskWorktrees.ts
 
@@ -22,6 +29,9 @@ import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./t
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { computeOccurrenceDigests } from "./approvalGate.ts";
+import type { OccurrenceSnapshot } from "./approvalGate.ts";
+import type { TestReceipt } from "./approvalReadiness.ts";
 
 type CliInput = WorkflowArguments & {
     runId?: string;
@@ -31,6 +41,8 @@ type CliInput = WorkflowArguments & {
     blockedCount?: number;
     needsClarificationCount?: number;
     requeueCount?: number;
+    testReceipts?: TestReceipt[];
+    reviewHandoffs?: string[];
 };
 
 export type SubmoduleConflict = { path: string; conflictedFilePaths: string[]; failureReason: string | null };
@@ -258,6 +270,17 @@ function runPipelineCli(): void {
         const outcome = mergeGroupBranchIntoRepo(workflowArguments.repo, group, findSourceBranch(""), submodulePathsDeepestFirst);
         if (outcome.merged) merged.push(outcome); else conflicts.push(outcome);
     }
+    const occurrenceSnapshots: OccurrenceSnapshot[] = merged.flatMap((outcome) => {
+        const group = sortedGroups.find((g) => g.groupId === outcome.groupId)!;
+        return ["", ...submodulePathsDeepestFirst].map((repositoryPath) => ({
+            groupId: group.groupId,
+            repositoryPath,
+            treeListing: repositoryPath === ""
+                ? git(workflowArguments.repo, "ls-tree", "-r", "-z", group.branch)
+                : git(join(group.worktree, repositoryPath), "ls-tree", "-r", "-z", "HEAD"),
+        }));
+    });
+    const occurrenceDigests = computeOccurrenceDigests(occurrenceSnapshots);
     const endTimestamp = new Date().toISOString();
     appendRunMetricsRecord(workflowArguments.repo, {
         runId: input.runId ?? endTimestamp,
@@ -274,7 +297,13 @@ function runPipelineCli(): void {
         conflictCount: conflicts.length,
         argumentsHash: computeArgumentsHash(workflowArguments),
     });
-    process.stdout.write(JSON.stringify({ merged, conflicts }));
+    process.stdout.write(JSON.stringify({
+        merged,
+        conflicts,
+        testReceipts: input.testReceipts ?? [],
+        reviewHandoffs: input.reviewHandoffs ?? [],
+        occurrenceDigests,
+    }));
 }
 
 function runAsCli(): void {
@@ -347,6 +376,15 @@ export function computeApprovalDigest(input: ApprovalDigestInput): string {
     return createHash("sha256").update(stableStringify(input)).digest("hex");
 }
 
+export type OccurrenceSnapshot = { groupId: number; repositoryPath: string; treeListing: string };
+
+// Hashes the whole sorted record, not a git oid, so deletions and gitlinks are just more bytes.
+export function computeOccurrenceDigests(snapshots: OccurrenceSnapshot[]): string[] {
+    return [...snapshots]
+        .sort((a, b) => a.groupId - b.groupId || a.repositoryPath.localeCompare(b.repositoryPath))
+        .map((snapshot) => createHash("sha256").update(stableStringify(snapshot)).digest("hex"));
+}
+
 export function recordApproval(runState: RunState): Approval {
     if (!runState.readyForApproval) {
         throw new Error("cannot record approval: run is not readyForApproval");
@@ -390,239 +428,6 @@ export function finalizeApprovedRun(
         throw new Error("cannot finalize: run has no issued authorization");
     }
     return runFinalizer(finalizationInput, runState.authorization, computeApprovalDigest(runState.digestInput));
-}
-
-```
-
-### scripts/basePublication.ts
-
-```
-// basePublication.ts: local base publication with CAS, whole-run rollback, and recovery reporting.  Phase 4 of the recursive repository-discovery redesign.
-import { spawnSync } from "node:child_process";
-import { checkAuthorizationDrift } from "./approvalGate.ts";
-import type { RunState } from "./approvalGate.ts";
-
-export type LogicalRepository = {
-    name: string;
-    canonicalOccurrencePath: string;
-    canonicalRefName: string;
-    otherOccurrences: { path: string; refName: string }[];
-    recordedBaseOid: string;
-    targetOid: string;
-};
-
-export type UpdatedRef = {
-    repoName: string;
-    occurrencePath: string;
-    refName: string;
-    recordedOid: string;
-    newOid: string;
-};
-
-export type RollbackOutcome = {
-    ref: UpdatedRef;
-    rolledBack: boolean;
-    recoveryCommand: string;
-};
-
-export type PublicationResult = {
-    published: boolean;
-    rollback: RollbackOutcome[];
-};
-
-function runGit(repoPath: string, args: string[]): { ok: boolean; stdout: string } {
-    const result = spawnSync("git", ["-C", repoPath, ...args], { encoding: "utf8" });
-    return { ok: result.status === 0, stdout: result.stdout ?? "" };
-}
-
-export function readCurrentRefOid(repoPath: string, refName: string): string | null {
-    const result = runGit(repoPath, ["rev-parse", "--verify", "--quiet", refName]);
-    return result.ok ? result.stdout.trim() : null;
-}
-
-export function checkRootIntegrationOidExists(repoPath: string, rootIntegrationRef: string): boolean {
-    return readCurrentRefOid(repoPath, rootIntegrationRef) !== null;
-}
-
-export function revalidateRecordedBaseOids(repos: LogicalRepository[]): { ok: boolean; moved: LogicalRepository[] } {
-    const moved = repos.filter(
-        (repo) => readCurrentRefOid(repo.canonicalOccurrencePath, repo.canonicalRefName) !== repo.recordedBaseOid,
-    );
-    return { ok: moved.length === 0, moved };
-}
-
-export function revalidateApprovalInputs(approvalState: RunState): boolean {
-    return checkAuthorizationDrift(approvalState);
-}
-
-export function publishCanonicalRef(repo: LogicalRepository): { ok: boolean; updated?: UpdatedRef } {
-    const result = runGit(repo.canonicalOccurrencePath, [
-        "update-ref",
-        repo.canonicalRefName,
-        repo.targetOid,
-        repo.recordedBaseOid,
-    ]);
-    if (!result.ok) return { ok: false };
-    return {
-        ok: true,
-        updated: {
-            repoName: repo.name,
-            occurrencePath: repo.canonicalOccurrencePath,
-            refName: repo.canonicalRefName,
-            recordedOid: repo.recordedBaseOid,
-            newOid: repo.targetOid,
-        },
-    };
-}
-
-export function fastForwardOtherOccurrences(
-    repo: LogicalRepository,
-): { ok: boolean; updated: UpdatedRef[]; failedAt?: string } {
-    const updated: UpdatedRef[] = [];
-    for (const occurrence of repo.otherOccurrences) {
-        // No --force: a plain "src:dst" fetch refspec already refuses a non-fast-forward move.
-        const result = runGit(occurrence.path, [
-            "fetch",
-            repo.canonicalOccurrencePath,
-            `${repo.canonicalRefName}:${occurrence.refName}`,
-        ]);
-        if (!result.ok) {
-            return { ok: false, updated, failedAt: occurrence.path };
-        }
-        updated.push({
-            repoName: repo.name,
-            occurrencePath: occurrence.path,
-            refName: occurrence.refName,
-            recordedOid: repo.recordedBaseOid,
-            newOid: repo.targetOid,
-        });
-    }
-    return { ok: true, updated };
-}
-
-export function formatRecoveryCommand(ref: UpdatedRef): string {
-    return `git -C ${ref.occurrencePath} update-ref ${ref.refName} ${ref.recordedOid}`;
-}
-
-export function rollbackUpdatedRefs(updated: UpdatedRef[]): RollbackOutcome[] {
-    return updated.map((ref) => {
-        const result = runGit(ref.occurrencePath, ["update-ref", ref.refName, ref.recordedOid, ref.newOid]);
-        return { ref, rolledBack: result.ok, recoveryCommand: formatRecoveryCommand(ref) };
-    });
-}
-
-export function publishBases(
-    repos: LogicalRepository[],
-    approvalState: RunState,
-    rootIntegration: { repoPath: string; refName: string },
-): PublicationResult {
-    if (!checkRootIntegrationOidExists(rootIntegration.repoPath, rootIntegration.refName)) {
-        return { published: false, rollback: [] };
-    }
-    if (!revalidateApprovalInputs(approvalState)) {
-        return { published: false, rollback: [] };
-    }
-    if (!revalidateRecordedBaseOids(repos).ok) {
-        return { published: false, rollback: [] };
-    }
-
-    const updatedSoFar: UpdatedRef[] = [];
-    let pass2Failed = false;
-    for (const repo of repos) {
-        const canonicalResult = publishCanonicalRef(repo);
-        if (!canonicalResult.ok) {
-            pass2Failed = true;
-            break;
-        }
-        updatedSoFar.push(canonicalResult.updated!);
-
-        const fastForwardResult = fastForwardOtherOccurrences(repo);
-        updatedSoFar.push(...fastForwardResult.updated);
-        if (!fastForwardResult.ok) {
-            pass2Failed = true;
-            break;
-        }
-    }
-
-    if (!pass2Failed) {
-        return { published: true, rollback: [] };
-    }
-    return { published: false, rollback: rollbackUpdatedRefs(updatedSoFar) };
-}
-
-```
-
-### scripts/logicalRepository.ts
-
-```
-// Groups occurrence-tree entries sharing an upstream identity into LogicalRepository records.  Read-only overlay; plain strings/arrays -- already the run-manifest-ready shape.
-import { createHash } from "node:crypto";
-import { normalizeRepositoryIdentity } from "./submoduleUrlIdentity.ts";
-import type { RepositoryIdentity } from "./submoduleUrlIdentity.ts";
-import type { RepositoryOccurrence } from "./repositoryManifest.ts";
-
-export type ConsolidationState = "single" | "grouped";
-
-export interface LogicalRepository {
-    normalizedIdentity: RepositoryIdentity;
-    occurrenceIds: string[];
-    selectedBaseOccurrenceId: string;
-    canonicalOccurrenceId: string;
-    lastWriterOccurrenceId: string;
-    convergenceDigest: string;
-    consolidationState: ConsolidationState;
-}
-
-function identityToMapKey(identity: RepositoryIdentity): string {
-    return `${identity.host}/${identity.owner}/${identity.repository}`;
-}
-
-function digestOccurrenceIds(occurrenceIds: string[]): string {
-    const sorted = [...occurrenceIds].sort();
-    return createHash("sha256").update(sorted.join("\n")).digest("hex");
-}
-
-function buildLogicalRepositoryFromGroup(
-    identity: RepositoryIdentity,
-    group: RepositoryOccurrence[],
-): LogicalRepository {
-    const occurrenceIds = group.map((occurrence) => occurrence.occurrenceId);
-    const canonicalOccurrenceId = occurrenceIds[0];
-    // ponytail: no write-timestamp field on RepositoryOccurrence yet; last writer == last discovered until real mtime/write tracking exists upstream.
-    const lastWriterOccurrenceId = occurrenceIds[occurrenceIds.length - 1];
-    // ponytail: no base-selection policy specified by the brief; base defaults to canonical until a future task defines real selection.
-    const selectedBaseOccurrenceId = canonicalOccurrenceId;
-    return {
-        normalizedIdentity: identity,
-        occurrenceIds,
-        selectedBaseOccurrenceId,
-        canonicalOccurrenceId,
-        lastWriterOccurrenceId,
-        convergenceDigest: digestOccurrenceIds(occurrenceIds),
-        consolidationState: occurrenceIds.length === 1 ? "single" : "grouped",
-    };
-}
-
-export function buildLogicalRepositories(occurrences: RepositoryOccurrence[]): LogicalRepository[] {
-    const groupsByIdentityKey = new Map<string, { identity: RepositoryIdentity; occurrences: RepositoryOccurrence[] }>();
-    for (const occurrence of occurrences) {
-        const identity = normalizeRepositoryIdentity(occurrence.originUrl);
-        if (identity === null) {
-            throw new Error(
-                `occurrence "${occurrence.occurrenceId}" has an unparseable origin URL: "${occurrence.originUrl}"`,
-            );
-        }
-        const key = identityToMapKey(identity);
-        const existingGroup = groupsByIdentityKey.get(key);
-        if (existingGroup) {
-            existingGroup.occurrences.push(occurrence);
-        } else {
-            groupsByIdentityKey.set(key, { identity, occurrences: [occurrence] });
-        }
-    }
-    return Array.from(groupsByIdentityKey.values()).map(({ identity, occurrences: group }) =>
-        buildLogicalRepositoryFromGroup(identity, group),
-    );
 }
 
 ```
@@ -1135,3 +940,232 @@ test("test_resolveGitlinkConflictsAbortsOnANonSubmoduleConflict", () => {
 });
 
 ```
+
+### skills/tackle-tasks/merge.workflow.js
+
+```
+export const meta = {
+  name: 'tackle-tasks-merge',
+  description: 'Run the merge script, and on failure have a subagent diagnose and fix the blockers before running it again',
+  phases: [
+    { title: 'Merge', detail: 'run mergeTaskWorktrees.ts' },
+    { title: 'Unblock', detail: 'diagnose and fix merge blockers, then merge again' },
+  ],
+}
+
+const ARGS = typeof args === 'string' ? JSON.parse(args) : args
+
+const RUN_SCHEMA = {
+  type: 'object',
+  properties: {
+    ok: { type: 'boolean' },
+    merged: { type: 'array' },
+    conflicts: { type: 'array' },
+    testReceipts: { type: 'array' },
+    reviewHandoffs: { type: 'array', items: { type: 'string' } },
+    occurrenceDigests: { type: 'array', items: { type: 'string' } },
+    error: { type: 'string' },
+  },
+  required: ['ok', 'merged', 'conflicts', 'testReceipts', 'reviewHandoffs', 'occurrenceDigests', 'error'],
+}
+
+const DIAGNOSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    fixed: { type: 'boolean' },
+    summary: { type: 'string' },
+    blockers: { type: 'array', items: { type: 'string' } },
+    decisions: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['fixed', 'summary', 'blockers', 'decisions'],
+}
+
+// The orchestrator gets the user's approval before this workflow is ever launched.
+if (!ARGS.approvedByUser) {
+  return { merged: [], conflicts: [], refused: 'merge workflow launched without approvedByUser' }
+}
+
+const mergeCliInput = {
+  repo: ARGS.repo,
+  typecheckCommand: ARGS.typecheckCommand ?? 'npx tsc --noEmit',
+  groups: ARGS.groups ?? [],
+  repositorySources: ARGS.repositorySources,
+  runId: ARGS.runId,
+  startTimestamp: ARGS.startTimestamp,
+  doneCount: ARGS.doneCount ?? 0,
+  partialCount: ARGS.partialCount ?? 0,
+  blockedCount: ARGS.blockedCount ?? 0,
+  needsClarificationCount: ARGS.needsClarificationCount ?? 0,
+  rejectedCount: ARGS.rejectedCount ?? 0,
+  requeueCount: ARGS.requeueCount ?? 0,
+  testReceipts: ARGS.testReceipts ?? [],
+  reviewHandoffs: ARGS.reviewHandoffs ?? [],
+}
+
+const command = `node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`
+
+const runBrief = `Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+result = run(${command})
+
+if result.exitCode == 0 and result.stdout is JSON containing "merged" and "conflicts":
+    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, testReceipts: result.stdout.testReceipts, reviewHandoffs: result.stdout.reviewHandoffs, occurrenceDigests: result.stdout.occurrenceDigests, error: ""}
+else:
+    return {ok: false, merged: [], conflicts: [], testReceipts: [], reviewHandoffs: [], occurrenceDigests: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
+
+You are forbidden to edit any file, to run any other command, or to change the
+merged, conflicts, testReceipts, reviewHandoffs, or occurrenceDigests values on
+the success branch.`
+
+const diagnoseBrief = (run) => `The merge failed.
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+repo = ${ARGS.repo}
+failedCommand = ${command}
+report = ${JSON.stringify({ ok: run.ok, conflicts: run.conflicts ?? [], error: run.error ?? '' })}
+
+decisions = []
+blockers = []
+
+for each conflict in report.conflicts:
+    if conflict.submoduleConflicts is not empty:
+        run scripts/resolveGitlinkConflicts against conflict.worktree
+    else if conflict.conflictedFilePaths is not empty:
+        for each path in conflict.conflictedFilePaths:
+            resolve path in conflict.worktree, keeping BOTH sides' intent
+        stage only those paths, then commit
+
+if report.error names a gitlink or submodule path:
+    run scripts/resolveGitlinkConflicts against the named worktree
+else if report.error names unmerged paths, an unfinished merge, or an unclean tree:
+    complete the in-progress merge, or abort it, so the tree is clean
+else if report.error is unrecognized:
+    identify the real cause
+    fix it only if the fix is as concrete and reversible as the branches above
+
+if a blocker needs a user decision (both sides changed the same logic, a
+recorded source branch is missing, or the only way forward destroys work):
+    leave the repo exactly as you found it
+    decisions += the choice itself, with the options you saw
+    // example: "group-1 rewrote validateInput() while main deleted it:
+    //           keep group-1's version, keep the deletion, or merge both?"
+
+if something else stopped you (a tool failed, no permission, a state you could
+not reach):
+    blockers += one sentence naming it
+
+if decisions is empty and blockers is empty:
+    return {fixed: true, summary: what you changed, blockers: [], decisions: []}
+else:
+    return {fixed: false, summary: how far you got, blockers: blockers, decisions: decisions}
+
+You are forbidden to weaken, delete, or stub out code to make a conflict
+disappear; to force-push or hard-reset anything you did not create; to run
+failedCommand yourself; or to decide anything in decisions on the user's
+behalf. Each entry in decisions must be answerable without opening the repo.
+Returning a decision is a correct outcome, not a failure.`
+
+const runMergeScript = (attempt) =>
+  agent(runBrief, { label: `merge:run${attempt}`, phase: 'Merge', effort: 'low', schema: RUN_SCHEMA })
+
+const MERGE_OK = 'OK'
+const MERGE_FAILED = 'FAILED'
+
+function mergeResultCode(run) {
+  if (run === null || run === undefined) return MERGE_FAILED
+  if (run.ok !== true) return MERGE_FAILED
+  if ((run.conflicts?.length ?? 0) > 0) return MERGE_FAILED
+  return MERGE_OK
+}
+
+log(`merging ${mergeCliInput.groups.length} group(s)`)
+const firstMergeAttempt = await runMergeScript(1)
+
+if (mergeResultCode(firstMergeAttempt) === MERGE_OK) {
+  return {
+    merged: firstMergeAttempt.merged,
+    conflicts: [],
+    testReceipts: firstMergeAttempt.testReceipts,
+    reviewHandoffs: firstMergeAttempt.reviewHandoffs,
+    occurrenceDigests: firstMergeAttempt.occurrenceDigests,
+    fixedBlockers: null,
+    blockers: [],
+    decisions: [],
+  }
+}
+
+log('merge failed — diagnosing')
+const diagnosis = await agent(
+  diagnoseBrief(firstMergeAttempt ?? { ok: false, conflicts: [], error: 'merge agent returned no result' }),
+  { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA },
+)
+
+const diagnosisMissing = diagnosis === null || diagnosis === undefined
+const diagnosisFixed = diagnosisMissing ? false : diagnosis.fixed
+const diagnosisSummary = diagnosisMissing
+  ? 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed'
+  : diagnosis.summary
+
+// A pending decision blocks the retry even when the agent reported fixed.
+const decisionsPending = diagnosisMissing ? false : (diagnosis.decisions?.length ?? 0) > 0
+
+if (diagnosisFixed === false || decisionsPending === true) {
+  return {
+    merged: firstMergeAttempt?.merged ?? [],
+    conflicts: firstMergeAttempt?.conflicts ?? [],
+    testReceipts: firstMergeAttempt?.testReceipts ?? [],
+    reviewHandoffs: firstMergeAttempt?.reviewHandoffs ?? [],
+    occurrenceDigests: [],
+    fixedBlockers: false,
+    blockers: diagnosisMissing ? ['the diagnosing agent returned no result'] : diagnosis.blockers,
+    decisions: diagnosisMissing ? [] : diagnosis.decisions,
+    summary: diagnosisSummary,
+  }
+}
+
+log('blockers cleared — merging again')
+const retry = await runMergeScript(2)
+const retryFailed = mergeResultCode(retry) === MERGE_FAILED
+
+return {
+  merged: retry?.merged ?? [],
+  conflicts: retry?.conflicts ?? [],
+  testReceipts: retry?.testReceipts ?? [],
+  reviewHandoffs: retry?.reviewHandoffs ?? [],
+  occurrenceDigests: retryFailed ? [] : (retry?.occurrenceDigests ?? []),
+  fixedBlockers: true,
+  blockers: retryFailed ? ['merge still failed after the fix; see conflicts and error'] : [],
+  decisions: [],
+  summary: diagnosisSummary,
+  error: retry?.error ?? '',
+}
+
+```
+
+## Answered clarifications (from the orchestrator, 2026-08-05)
+
+These two type shapes were asked about and are settled — do not ask again.
+
+1. `RepositoryManifest` (scripts/repositoryManifest.ts) is
+   `{ version: number; occurrences: RepositoryOccurrence[] }`.
+   `RepositoryOccurrence` is
+   `{ occurrenceId: string; checkoutPath: string; parentOccurrenceId: string | null;
+      pathInParent: string | null; gitlinkOid: string | null; depth: number;
+      originUrl: string; baseBranch: string; baseOid: string; operationBranch: string;
+      childOccurrenceIds: string[]; testState: "untested" | "passed" | "failed" }`.
+   The root occurrence is the one with `parentOccurrenceId === null`
+   (equivalently `depth === 0`). So `baseRef` is:
+   `manifest.occurrences.find(o => o.parentOccurrenceId === null)?.baseOid`,
+   read BEFORE any merge runs. Throw a clear error if there is no root occurrence.
+
+2. `TestReceipt` (scripts/approvalReadiness.ts) is
+   `{ groupId: string; status: "green" | "red" }`.
+   "All receipts green" means
+   `testReceipts.length > 0 && testReceipts.every(r => r.status === "green")`.
