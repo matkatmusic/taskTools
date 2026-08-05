@@ -34,7 +34,8 @@ const verifierBrief = (t, planFile) => {
   const prompt = JSON.stringify(codexPrompt(t, planFile))
   const command = `codex exec -s read-only ${prompt}`
   // ponytail: opus/high, not fable/medium — the fallback replaces the strictest gate in the pipeline
-  const fallbackCommand = `claude -p ${prompt} --tools "Read" --model opus --effort high`
+  const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model opus --effort medium`
+  const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`
   return `Review the plan for task #${t.number} by running exactly this command:
 
 ${command}
@@ -46,7 +47,10 @@ exceeded, not logged in, rate limited, or no codex binary on PATH. In that
 case run this command instead, and treat its output exactly as you would
 codex's:
 
-${fallbackCommand}
+${fableFallbackCommand}
+if that command also exits with an error code, run this command instead, and treat its output exactly as you would codex's:
+
+${opusFallbackCommand}
 
 Whichever reviewer answers prints its verdict on the first line. The only
 file you may ever edit is the plan file ${planFile} — never touch a source
