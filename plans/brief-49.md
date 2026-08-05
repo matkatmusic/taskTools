@@ -15,15 +15,19 @@ Tests: the existing suite passes unedited; the finalization path is exercised en
 ```
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import type { PreparedGroup, WorkflowArguments } from "./prepareTasks.ts";
+import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath, type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization } from "./approvalGate.ts";
+import type { OccurrenceSnapshot, RunState, ApprovalDigestInput } from "./approvalGate.ts";
+import type { TestReceipt } from "./approvalReadiness.ts";
+import type { RepositoryManifest } from "./repositoryManifest.ts";
 
 type CliInput = WorkflowArguments & {
     runId?: string;
@@ -33,6 +37,9 @@ type CliInput = WorkflowArguments & {
     blockedCount?: number;
     needsClarificationCount?: number;
     requeueCount?: number;
+    testReceipts?: TestReceipt[];
+    reviewHandoffs?: string[];
+    repositoryManifest: RepositoryManifest;
 };
 
 export type SubmoduleConflict = { path: string; conflictedFilePaths: string[]; failureReason: string | null };
@@ -45,6 +52,8 @@ export type MergeOutcome = {
     worktree: string;
     failureReason: string | null;
 };
+
+export type PublicationTarget = { repositoryPath: string; recordedBaseOid: string; targetOid: string };
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -222,8 +231,13 @@ function runMergeCli(worktreePath: string): void {
     process.stdout.write(JSON.stringify(outcome));
 }
 
-function runPipelineCli(): void {
-    const input: CliInput = JSON.parse(process.argv[2]);
+function runPipelineCli(input: CliInput): void {
+    if (!input.repositoryManifest) throw new Error("no repository manifest given in CLI input; approval cannot be minted without pre-merge base OIDs");
+    const rootOccurrence = input.repositoryManifest.occurrences.find((occurrence) => occurrence.parentOccurrenceId === null);
+    if (!rootOccurrence) throw new Error("repository manifest has no root occurrence");
+    const baseRef = rootOccurrence.baseOid;
+    const testReceipts = input.testReceipts ?? [];
+    const reviewHandoffs = input.reviewHandoffs ?? [];
     const workflowArguments: WorkflowArguments = {
         repo: input.repo,
         typecheckCommand: input.typecheckCommand,
@@ -260,6 +274,45 @@ function runPipelineCli(): void {
         const outcome = mergeGroupBranchIntoRepo(workflowArguments.repo, group, findSourceBranch(""), submodulePathsDeepestFirst);
         if (outcome.merged) merged.push(outcome); else conflicts.push(outcome);
     }
+    const allGroupsMerged = conflicts.length === 0 && merged.length === sortedGroups.length;
+    const operationRef = git(workflowArguments.repo, "rev-parse", "HEAD").trim();
+    const occurrenceSnapshots: OccurrenceSnapshot[] = merged.flatMap((outcome) => {
+        const group = sortedGroups.find((g) => g.groupId === outcome.groupId)!;
+        return ["", ...submodulePathsDeepestFirst].map((repositoryPath) => ({
+            groupId: group.groupId,
+            repositoryPath,
+            treeListing: repositoryPath === ""
+                ? git(workflowArguments.repo, "ls-tree", "-r", "-z", group.branch)
+                : git(join(group.worktree, repositoryPath), "ls-tree", "-r", "-z", "HEAD"),
+        }));
+    });
+    const occurrenceDigests = computeOccurrenceDigests(occurrenceSnapshots);
+    const files = [...new Set(sortedGroups.flatMap((group) => group.tasks.flatMap((task) => task.files)))];
+    const readyForApproval = allGroupsMerged
+        && testReceipts.length > 0
+        && testReceipts.every((receipt) => receipt.status === "green")
+        && reviewHandoffs.length > 0;
+    const digestInput: ApprovalDigestInput = {
+        manifest: input.repositoryManifest,
+        files,
+        operationRef,
+        baseRef,
+        occurrenceDigests,
+        testReceipts,
+        reviewHandoffs,
+    };
+    const runState: RunState = { readyForApproval, status: readyForApproval ? "approved" : "blocked", digestInput };
+    if (readyForApproval) {
+        recordApproval(runState);
+        issueApprovalAuthorization(runState);
+    }
+    const publicationTargets: PublicationTarget[] = allGroupsMerged
+        ? input.repositoryManifest.occurrences.map((occurrence) => ({
+            repositoryPath: occurrence.checkoutPath,
+            recordedBaseOid: occurrence.baseOid,
+            targetOid: git(join(workflowArguments.repo, occurrence.checkoutPath), "rev-parse", "HEAD").trim(),
+        }))
+        : [];
     const endTimestamp = new Date().toISOString();
     appendRunMetricsRecord(workflowArguments.repo, {
         runId: input.runId ?? endTimestamp,
@@ -276,7 +329,21 @@ function runPipelineCli(): void {
         conflictCount: conflicts.length,
         argumentsHash: computeArgumentsHash(workflowArguments),
     });
-    process.stdout.write(JSON.stringify({ merged, conflicts }));
+    // A failed merge keeps them so the retry still has its inputs.
+    if (allGroupsMerged) {
+        rmSync(resolveRunArgumentsPath(workflowArguments.repo), { force: true });
+        rmSync(resolveRunOutcomesPath(workflowArguments.repo), { force: true });
+        rmSync(resolveStepOutputsPath(workflowArguments.repo), { force: true });
+    }
+    process.stdout.write(JSON.stringify({
+        merged,
+        conflicts,
+        testReceipts,
+        reviewHandoffs,
+        occurrenceDigests,
+        runState,
+        publicationTargets,
+    }));
 }
 
 function runAsCli(): void {
@@ -289,7 +356,14 @@ function runAsCli(): void {
         runMergeCli(process.argv[3]);
         return;
     }
-    runPipelineCli();
+    if (mode === "--run") {
+        const prepared = JSON.parse(readFileSync(process.argv[3], "utf8"));
+        const outcomesFile = process.argv[4];
+        const outcomes = outcomesFile && existsSync(outcomesFile) ? JSON.parse(readFileSync(outcomesFile, "utf8")) : {};
+        runPipelineCli({ ...prepared, ...outcomes });
+        return;
+    }
+    runPipelineCli(JSON.parse(process.argv[2]));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
@@ -303,12 +377,13 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { dirname, join } from "node:path";
+import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -336,6 +411,45 @@ function makeTempRepoWithCommit(): string {
 function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
     const worktree = createWorktreeForGroup(repoRoot, { groupId, taskNumbers: [groupId], filePaths: [], scope: "unknown" });
     return { groupId, worktree, branch: `task-group-${groupId}`, scope: "unknown", tasks: [] };
+}
+
+type SubmoduleManifestSpec = { checkoutPath: string; baseBranch: string; baseOid: string; operationBranch: string };
+
+function makeManifest(
+    baseBranch: string,
+    baseOid: string,
+    operationBranch: string,
+    submodules: SubmoduleManifestSpec[] = [],
+): RepositoryManifest {
+    const root = {
+        occurrenceId: "root",
+        checkoutPath: "",
+        parentOccurrenceId: null,
+        pathInParent: null,
+        gitlinkOid: null,
+        depth: 0,
+        originUrl: "",
+        baseBranch,
+        baseOid,
+        operationBranch,
+        childOccurrenceIds: submodules.map((_, index) => `sub-${index}`),
+        testState: "untested" as const,
+    };
+    const subOccurrences = submodules.map((sub, index) => ({
+        occurrenceId: `sub-${index}`,
+        checkoutPath: sub.checkoutPath,
+        parentOccurrenceId: "root",
+        pathInParent: sub.checkoutPath,
+        gitlinkOid: null,
+        depth: 1,
+        originUrl: "",
+        baseBranch: sub.baseBranch,
+        baseOid: sub.baseOid,
+        operationBranch: sub.operationBranch,
+        childOccurrenceIds: [],
+        testState: "untested" as const,
+    }));
+    return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [root, ...subOccurrences] };
 }
 
 function makeTempRepoWithLocalSubmodule(): string {
@@ -509,7 +623,9 @@ test("test_runAsCliLeavesTheWorktreeAndBranchInPlaceAfterASuccessfulMerge", () =
         groups: [preparedGroup],
         repositorySources: [{ path: "", sourceBranch }],
     };
-    execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(workflowArguments)], { encoding: "utf8" });
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = { ...workflowArguments, repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch) };
+    execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
 
     assert.equal(existsSync(group.worktree), true);
     const branches = git(repoRoot, "branch", "--list", group.branch);
@@ -607,4 +723,191 @@ test("test_resolveGitlinkConflictsAbortsOnANonSubmoduleConflict", () => {
     assert.equal(existsSync(join(repoRoot, ".git", "MERGE_HEAD")), false);
 });
 
+test("test_runPipelineCliMintsApprovalAndPublicationTargetsWhenEvidenceIsCompleteAndGreen", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const sourceBranch = currentBranchName(repoRoot);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const submoduleGroupBranch = currentBranchName(worktreeSubmodulePath);
+
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+
+    const preMergeRootOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const preMergeSubmoduleOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const testReceipts = [{ groupId: "1", status: "green" }];
+    const reviewHandoffs = ["reviewed by codex"];
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: makeManifest(sourceBranch, preMergeRootOid, group.branch, [
+            { checkoutPath: "vendor", baseBranch: submoduleSourceBranch, baseOid: preMergeSubmoduleOid, operationBranch: submoduleGroupBranch },
+        ]),
+        testReceipts,
+        reviewHandoffs,
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+    const postMergeRootOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const postMergeSubmoduleOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    assert.equal(output.runState.readyForApproval, true);
+    assert.ok(output.runState.approval && output.runState.approval.digest.length > 0);
+    assert.ok(output.runState.authorization);
+    assert.deepEqual(output.runState.digestInput.testReceipts, testReceipts);
+    assert.deepEqual(output.runState.digestInput.reviewHandoffs, reviewHandoffs);
+    assert.deepEqual(output.publicationTargets, [
+        { repositoryPath: "", recordedBaseOid: preMergeRootOid, targetOid: postMergeRootOid },
+        { repositoryPath: "vendor", recordedBaseOid: preMergeSubmoduleOid, targetOid: postMergeSubmoduleOid },
+    ]);
+    assert.notEqual(preMergeRootOid, postMergeRootOid);
+    assert.notEqual(preMergeSubmoduleOid, postMergeSubmoduleOid);
+});
+
+test("test_runFlagReadsPreparedArgumentsAndOutcomesFromDiskThenDeletesThem", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const argumentsFile = resolveRunArgumentsPath(repoRoot);
+    const outcomesFile = resolveRunOutcomesPath(repoRoot);
+    mkdirSync(dirname(argumentsFile), { recursive: true });
+    writeFileSync(argumentsFile, JSON.stringify({
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+    }));
+    writeFileSync(outcomesFile, JSON.stringify({
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    }));
+
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, "--run", argumentsFile, outcomesFile], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.merged.length, 1);
+    assert.equal(output.runState.readyForApproval, true);
+    assert.deepEqual(output.reviewHandoffs, ["reviewed by codex"]);
+    assert.equal(existsSync(argumentsFile), false);
+    assert.equal(existsSync(outcomesFile), false);
+});
+
+test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    writeFileSync(join(repoRoot, "shared.txt"), "line1\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "add shared.txt");
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "shared.txt"), "line1-from-worktree\n");
+    git(group.worktree, "add", "shared.txt");
+    git(group.worktree, "commit", "-q", "-m", "worktree edit");
+
+    writeFileSync(join(repoRoot, "shared.txt"), "line1-from-main\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "main edit");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.conflicts.length, 1);
+    assert.equal(output.runState.readyForApproval, false);
+    assert.equal(output.runState.approval, undefined);
+    assert.equal(output.runState.authorization, undefined);
+    assert.deepEqual(output.publicationTargets, []);
+});
+
 ```
+
+## Read-only reference files (added by the orchestrator, 2026-08-05)
+
+scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts,
+scripts/basePublication.ts and scripts/taskArchival.ts are now in your allowed
+file list SO THAT YOU CAN READ THEM. They are READ-ONLY references.
+
+DO NOT EDIT any of those five files. The only files this task may modify are
+scripts/mergeTaskWorktrees.ts and tests/mergeTaskWorktrees.test.ts. If a change
+to one of the five looks necessary, stop and report it as a needs-clarification
+question instead of making it.
+
+## Read access widened again (orchestrator, 2026-08-05) — final answer
+
+Every file under scripts/ is now in your allowed list. Read whatever you need:
+runAuthorization.ts, ownershipSnapshots.ts, logicalRepository.ts,
+repositoryIntegration.ts, gitlinkReader.ts, approvalGate.ts, and the rest.
+
+The EDIT list has not changed and will not change. You may modify ONLY
+scripts/mergeTaskWorktrees.ts and tests/mergeTaskWorktrees.test.ts. Every other
+scripts/ file is a read-only reference. Do not ask for more read access; you
+now have all of it. Write the plan.
+
+## User decision, 2026-08-05 — the publish contradiction is resolved
+
+The planner correctly found that publishBases can never publish while
+mergeGroupBranchIntoRepo does `checkout <baseBranch>; merge --no-ff`, because
+revalidateRecordedBaseOids (basePublication.ts:48-53) refuses once the base ref
+has moved. The user chose: the base branch must NOT be moved by the merge. Only
+publishBases may move it, under its compare-and-swap check.
+
+Key discovery that makes this cheap — consolidateLogicalRepository
+(runConsolidation.ts:117-170) ALREADY implements exactly that shape. It
+fold-merges the participating group branches into an assembly commit, calls
+prepareNoFfMerge(canonicalRepoRoot, recordedBaseOid, assemblyOid, ...) to build
+the integration commit WITHOUT moving the base branch, and moves an operation
+branch ref instead. publishBases then fast-forwards the real base branch under
+CAS.
+
+So the implementation is: runAsCli stops driving the legacy
+mergeGroupBranchIntoRepo/mergeSubmoduleBranchIntoRepo loop and instead drives
+runFinalizer, consolidateRun, pushOperationBranches, publishBases and
+archivePublishedTasks. Do not rewrite the merge logic; reuse what already
+exists.
+
+Binding rules for this task:
+
+1. mergeGroupBranchIntoRepo, mergeSubmoduleBranchIntoRepo, resolveGitlinkConflicts
+   and removeWorktreeAndBranch stay EXPORTED and behaviorally UNCHANGED. They are
+   simply no longer what runAsCli calls. Their direct unit tests must keep passing
+   untouched.
+2. The stdout JSON shape stays as it is today, and the CLI front door stays a
+   flat WorkflowArguments JSON in argv[2]. Translate to graph/occurrence shapes
+   inside the script.
+3. CLI-level tests in tests/mergeTaskWorktrees.test.ts that assert the OLD
+   behavior of the base branch moving during the merge MAY be updated, because
+   the user has now decided that behavior is wrong. Say clearly in the plan which
+   tests change and why. Every other existing test must pass unedited.
+4. mergeTaskWorktrees.ts is already 354 lines, over the 250-line cap. Put the new
+   translation/wiring code in a NEW file, scripts/mergePipeline.ts, which is now
+   in your editable list. Keep both files under 250 lines.
+
+Editable files for this task: scripts/mergeTaskWorktrees.ts,
+scripts/mergePipeline.ts (new), tests/mergeTaskWorktrees.test.ts. Everything else
+under scripts/ remains read-only reference.

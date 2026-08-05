@@ -39,7 +39,19 @@
     "description": "Step 4 of the task 35 cutover split, and its largest behavior change.\n\nRewire scripts/mergeTaskWorktrees.ts runAsCli to drive scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts and scripts/taskArchival.ts. Read all five in full before editing.\n\nCLI contract decision already made by the user — implement it, do not re-litigate: the script keeps its current front door. It accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged, with no rewritten CLI assertions. A graph-shaped front door is a later follow-up.\n\nKeep mergeGroupBranchIntoRepo, mergeSubmoduleBranchIntoRepo, resolveGitlinkConflicts and removeWorktreeAndBranch exported and behaviorally unchanged.\n\nTests: the existing suite passes unedited; the finalization path is exercised end to end against a temporary repository.",
     "files": [
       "scripts/mergeTaskWorktrees.ts",
-      "tests/mergeTaskWorktrees.test.ts"
+      "scripts/mergePipeline.ts",
+      "tests/mergeTaskWorktrees.test.ts",
+      "scripts/runFinalizer.ts",
+      "scripts/runConsolidation.ts",
+      "scripts/operationPush.ts",
+      "scripts/basePublication.ts",
+      "scripts/taskArchival.ts",
+      "scripts/runAuthorization.ts",
+      "scripts/ownershipSnapshots.ts",
+      "scripts/logicalRepository.ts",
+      "scripts/repositoryIntegration.ts",
+      "scripts/gitlinkReader.ts",
+      "scripts/approvalGate.ts"
     ],
     "difficulty": 4
   },
