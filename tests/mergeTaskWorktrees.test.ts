@@ -2,10 +2,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { dirname, join } from "node:path";
+import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
@@ -398,6 +398,40 @@ test("test_runPipelineCliMintsApprovalAndPublicationTargetsWhenEvidenceIsComplet
     ]);
     assert.notEqual(preMergeRootOid, postMergeRootOid);
     assert.notEqual(preMergeSubmoduleOid, postMergeSubmoduleOid);
+});
+
+test("test_runFlagReadsPreparedArgumentsAndOutcomesFromDiskThenDeletesThem", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const argumentsFile = resolveRunArgumentsPath(repoRoot);
+    const outcomesFile = resolveRunOutcomesPath(repoRoot);
+    mkdirSync(dirname(argumentsFile), { recursive: true });
+    writeFileSync(argumentsFile, JSON.stringify({
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+    }));
+    writeFileSync(outcomesFile, JSON.stringify({
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    }));
+
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, "--run", argumentsFile, outcomesFile], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.merged.length, 1);
+    assert.equal(output.runState.readyForApproval, true);
+    assert.deepEqual(output.reviewHandoffs, ["reviewed by codex"]);
+    assert.equal(existsSync(argumentsFile), false);
+    assert.equal(existsSync(outcomesFile), false);
 });
 
 test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {

@@ -1,29 +1,12 @@
 export const meta = {
-  name: 'tackle-tasks-merge',
-  description: 'Run the merge script, and on failure have a subagent diagnose and fix the blockers before running it again',
+  name: 'tackle-tasks-merge-unblock',
+  description: 'Diagnose and fix the blockers from a failed merge run so the caller can run the merge script again',
   phases: [
-    { title: 'Merge', detail: 'run mergeTaskWorktrees.ts' },
-    { title: 'Unblock', detail: 'diagnose and fix merge blockers, then merge again' },
+    { title: 'Unblock', detail: 'diagnose and fix merge blockers' },
   ],
 }
 
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
-
-const RUN_SCHEMA = {
-  type: 'object',
-  properties: {
-    ok: { type: 'boolean' },
-    merged: { type: 'array' },
-    conflicts: { type: 'array' },
-    testReceipts: { type: 'array' },
-    reviewHandoffs: { type: 'array', items: { type: 'string' } },
-    occurrenceDigests: { type: 'array', items: { type: 'string' } },
-    runState: { type: ['object', 'null'] },
-    publicationTargets: { type: 'array' },
-    error: { type: 'string' },
-  },
-  required: ['ok', 'merged', 'conflicts', 'testReceipts', 'reviewHandoffs', 'occurrenceDigests', 'runState', 'publicationTargets', 'error'],
-}
 
 const DIAGNOSE_SCHEMA = {
   type: 'object',
@@ -38,46 +21,15 @@ const DIAGNOSE_SCHEMA = {
 
 // The orchestrator gets the user's approval before this workflow is ever launched.
 if (!ARGS.approvedByUser) {
-  return { merged: [], conflicts: [], refused: 'merge workflow launched without approvedByUser' }
+  return { fixed: false, summary: '', blockers: ['merge unblock workflow launched without approvedByUser'], decisions: [] }
 }
 
-const mergeCliInput = {
-  repo: ARGS.repo,
-  typecheckCommand: ARGS.typecheckCommand ?? 'npx tsc --noEmit',
-  groups: ARGS.groups ?? [],
-  repositorySources: ARGS.repositorySources,
-  repositoryManifest: ARGS.repositoryManifest,
-  runId: ARGS.runId,
-  startTimestamp: ARGS.startTimestamp,
-  doneCount: ARGS.doneCount ?? 0,
-  partialCount: ARGS.partialCount ?? 0,
-  blockedCount: ARGS.blockedCount ?? 0,
-  needsClarificationCount: ARGS.needsClarificationCount ?? 0,
-  rejectedCount: ARGS.rejectedCount ?? 0,
-  requeueCount: ARGS.requeueCount ?? 0,
-  testReceipts: ARGS.testReceipts ?? [],
-  reviewHandoffs: ARGS.reviewHandoffs ?? [],
-}
+const answeredDecisions = ARGS.decisions ?? []
+const answeredBlock = answeredDecisions.length === 0
+  ? ''
+  : `\nThe user already answered these choices — apply them instead of returning them again:\n${answeredDecisions.map((answer) => `  - ${answer}`).join('\n')}\n`
 
-const command = `node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`
-
-const runBrief = `Carry out every step below, in order, from top to bottom.
-A line reading \`name = value\` means record that value and use it later.
-A line reading \`run(...)\` means actually execute that command now.
-A line reading \`return {...}\` means stop and report exactly those fields.
-
-result = run(${command})
-
-if result.exitCode == 0 and result.stdout is JSON containing "merged" and "conflicts":
-    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, testReceipts: result.stdout.testReceipts, reviewHandoffs: result.stdout.reviewHandoffs, occurrenceDigests: result.stdout.occurrenceDigests, runState: result.stdout.runState, publicationTargets: result.stdout.publicationTargets, error: ""}
-else:
-    return {ok: false, merged: [], conflicts: [], testReceipts: [], reviewHandoffs: [], occurrenceDigests: [], runState: null, publicationTargets: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
-
-You are forbidden to edit any file, to run any other command, or to change the
-merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, or
-publicationTargets values on the success branch.`
-
-const diagnoseBrief = (run) => `The merge failed.
+const diagnoseBrief = `The merge failed.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`name = value\` means record that value and use it later.
@@ -85,9 +37,9 @@ A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
 repo = ${ARGS.repo}
-failedCommand = ${command}
-report = ${JSON.stringify({ ok: run.ok, conflicts: run.conflicts ?? [], error: run.error ?? '' })}
-
+failedCommand = ${ARGS.failedCommand}
+report = ${JSON.stringify({ conflicts: ARGS.conflicts ?? [], error: ARGS.error ?? '' })}
+${answeredBlock}
 decisions = []
 blockers = []
 
@@ -129,83 +81,24 @@ failedCommand yourself; or to decide anything in decisions on the user's
 behalf. Each entry in decisions must be answerable without opening the repo.
 Returning a decision is a correct outcome, not a failure.`
 
-const runMergeScript = (attempt) =>
-  agent(runBrief, { label: `merge:run${attempt}`, phase: 'Merge', effort: 'low', schema: RUN_SCHEMA })
+log('diagnosing the failed merge')
+const diagnosis = await agent(diagnoseBrief, { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA })
 
-const MERGE_OK = 'OK'
-const MERGE_FAILED = 'FAILED'
-
-function mergeResultCode(run) {
-  if (run === null || run === undefined) return MERGE_FAILED
-  if (run.ok !== true) return MERGE_FAILED
-  if ((run.conflicts?.length ?? 0) > 0) return MERGE_FAILED
-  return MERGE_OK
-}
-
-log(`merging ${mergeCliInput.groups.length} group(s)`)
-const firstMergeAttempt = await runMergeScript(1)
-
-if (mergeResultCode(firstMergeAttempt) === MERGE_OK) {
+if (diagnosis === null || diagnosis === undefined) {
   return {
-    merged: firstMergeAttempt.merged,
-    conflicts: [],
-    testReceipts: firstMergeAttempt.testReceipts,
-    reviewHandoffs: firstMergeAttempt.reviewHandoffs,
-    occurrenceDigests: firstMergeAttempt.occurrenceDigests,
-    runState: firstMergeAttempt.runState,
-    publicationTargets: firstMergeAttempt.publicationTargets,
-    fixedBlockers: null,
-    blockers: [],
+    fixed: false,
+    summary: 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed',
+    blockers: ['the diagnosing agent returned no result'],
     decisions: [],
   }
 }
 
-log('merge failed — diagnosing')
-const diagnosis = await agent(
-  diagnoseBrief(firstMergeAttempt ?? { ok: false, conflicts: [], error: 'merge agent returned no result' }),
-  { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA },
-)
-
-const diagnosisMissing = diagnosis === null || diagnosis === undefined
-const diagnosisFixed = diagnosisMissing ? false : diagnosis.fixed
-const diagnosisSummary = diagnosisMissing
-  ? 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed'
-  : diagnosis.summary
-
 // A pending decision blocks the retry even when the agent reported fixed.
-const decisionsPending = diagnosisMissing ? false : (diagnosis.decisions?.length ?? 0) > 0
-
-if (diagnosisFixed === false || decisionsPending === true) {
-  return {
-    merged: firstMergeAttempt?.merged ?? [],
-    conflicts: firstMergeAttempt?.conflicts ?? [],
-    testReceipts: firstMergeAttempt?.testReceipts ?? [],
-    reviewHandoffs: firstMergeAttempt?.reviewHandoffs ?? [],
-    occurrenceDigests: [],
-    runState: null,
-    publicationTargets: [],
-    fixedBlockers: false,
-    blockers: diagnosisMissing ? ['the diagnosing agent returned no result'] : diagnosis.blockers,
-    decisions: diagnosisMissing ? [] : diagnosis.decisions,
-    summary: diagnosisSummary,
-  }
-}
-
-log('blockers cleared — merging again')
-const retry = await runMergeScript(2)
-const retryFailed = mergeResultCode(retry) === MERGE_FAILED
+const decisionsPending = (diagnosis.decisions?.length ?? 0) > 0
 
 return {
-  merged: retry?.merged ?? [],
-  conflicts: retry?.conflicts ?? [],
-  testReceipts: retry?.testReceipts ?? [],
-  reviewHandoffs: retry?.reviewHandoffs ?? [],
-  occurrenceDigests: retryFailed ? [] : (retry?.occurrenceDigests ?? []),
-  runState: retryFailed ? null : (retry?.runState ?? null),
-  publicationTargets: retryFailed ? [] : (retry?.publicationTargets ?? []),
-  fixedBlockers: true,
-  blockers: retryFailed ? ['merge still failed after the fix; see conflicts and error'] : [],
-  decisions: [],
-  summary: diagnosisSummary,
-  error: retry?.error ?? '',
+  fixed: diagnosis.fixed === true && decisionsPending === false,
+  summary: diagnosis.summary,
+  blockers: diagnosis.blockers,
+  decisions: diagnosis.decisions,
 }

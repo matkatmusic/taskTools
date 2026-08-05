@@ -9,7 +9,7 @@ import {
     buildWorkflowArguments,
     createWorktreeForGroup,
     generateRunId,
-    mergeScriptPath,
+    resolveMergeScriptPath,
     selectRequestedTasks,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
@@ -146,7 +146,7 @@ test("test_generateRunIdProducesDifferentValuesOnEachCall", () => {
 });
 
 test("test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath", () => {
-    const path = mergeScriptPath();
+    const path = resolveMergeScriptPath();
     assert.equal(isAbsolute(path), true);
     assert.match(path, /mergeTaskWorktrees\.ts$/);
 });

@@ -2,7 +2,7 @@
 name: tackle-tasks
 description: tackle open tasks found in tasks.json (completed tasks are archived in completedTasks.json)
 argument-hint: "[N,N,...] [valid]"
-allowed-tools: Bash(git add *)
+allowed-tools: Bash(git add *), Bash(node *)
 ---
 
 - blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" '$ARGUMENTS'`
@@ -29,9 +29,14 @@ scriptPath and args given below, and wait for each to finish before starting
 the next.
 
 The "pipeline args" JSON printed above has these keys: `repo`,
-`typecheckCommand`, `groups`, `repositorySources`, `runId`, `startTimestamp`,
-`mergeScript`. Every step below passes all seven of those keys through
-unchanged, plus the extra keys named in that step.
+`typecheckCommand`, `groups`, `repositorySources`, `repositoryManifest`,
+`runId`, `startTimestamp`, `mergeScript`, `stepOutputsFile`, `mergeCommand`.
+Every step below passes all of those keys through unchanged, plus the extra
+keys named in that step.
+
+`prepareTasks.ts` has already written that whole JSON to disk, so step 6 never
+retypes it. `mergeCommand` is the finished command line; `stepOutputsFile` is
+the one file step 6 writes.
 
 **Step 1 — plan.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/plan.workflow.js`,
 args = the pipeline args JSON exactly as printed, no additions.
@@ -71,46 +76,46 @@ checks, carried into step 6.
 with AskUserQuestion. **Do not launch the merge workflow until the user
 approves the work.**
 
-**Step 6 — merge.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/merge.workflow.js`,
-args = the pipeline args JSON plus:
-- `approvedByUser`: `true` — only after the user approved in step 5. The
-  workflow refuses to merge without it.
-- `doneCount`: length of `done` from step 3.
-- `partialCount`: length of `partial` from step 3.
-- `blockedCount`: length of `blocked` from step 3.
-- `needsClarificationCount`: length of `needsClarification` from step 1.
-- `rejectedCount`: length of `rejected` from step 2.
-- `requeueCount`: `requeueCount` from step 3.
-- `testReceipts`: `testReceipts` from step 4, verbatim — real green/red
-  evidence per group.
-- `reviewHandoffs`: `reviewHandoffs` from step 2, verbatim — real codex
-  review evidence per task.
+**Step 6 — merge.** This step is a script you run yourself, not a workflow.
+Only after the user approved in step 5.
 
-`mergeTaskWorktrees.ts` receives `testReceipts` and `reviewHandoffs` in its
-own CLI args, computes an `occurrenceDigests` array from a git-tree snapshot
-of each merged group's branch (main repo and every submodule), and includes
-all three in its stdout JSON alongside `merged`/`conflicts` — this is the
-real evidence an approval gate needs instead of an empty or fabricated array.
+First, Write the earlier steps' return values verbatim to the `stepOutputsFile`
+path from the pipeline args — copy them, compute nothing:
 
-The workflow runs `mergeTaskWorktrees.ts` in a subagent. If that fails —
-non-zero exit or a non-empty `conflicts` array — a second subagent diagnoses
-the cause and fixes what it can, and the merge script then runs again. Do none
-of that yourself; it stays in the workflow.
+```json
+{
+  "done": [], "partial": [], "blocked": [],
+  "needsClarification": [], "requeueCount": 0,
+  "testReceipts": [], "reviewHandoffs": []
+}
+```
 
-Returns `{merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests,
-fixedBlockers, blockers, decisions, summary}`. `testReceipts` and
-`reviewHandoffs` are the evidence carried in from steps 4 and 2;
-`occurrenceDigests` is the git-tree-snapshot evidence `mergeTaskWorktrees.ts`
-itself computes for whatever merged in this run, and is empty whenever the
-merge did not fully complete.
+`done`/`partial`/`blocked`/`requeueCount` come from step 3,
+`needsClarification` from step 1, `testReceipts` from step 4, `reviewHandoffs`
+from step 2. `runMergePhase.ts` derives every count and every merge argument
+from that file — see `buildMergeOutcomes` in `scripts/runMergePhase.ts`.
 
-- `fixedBlockers` is `null` when the first run was clean, `true` when a
-  subagent cleared the blockers and the retry ran, `false` when it could not.
-- **`decisions` is the one you must act on.** Each entry is a choice the
-  subagent deliberately refused to make for the user — conflicting logic, a
-  missing source branch, something destructive. Ask every entry with
-  AskUserQuestion, then launch this step again with the user's answers added
-  to the args as `decisions`, so the retry has them.
+Then run the `mergeCommand` string from the pipeline args, exactly as printed.
+It takes no arguments; do not append any.
+
+It prints `{status, result, failure}`. `status` is `"merged"` or `"blocked"`
+(the pass/fail rule lives in `judgeMergeRun` in `scripts/runMergePhase.ts`, not
+here). On `"merged"` you are done — `result` is the merge result.
+
+On `"blocked"`, launch the unblock workflow — scriptPath
+`${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/merge.workflow.js`, args = the
+printed `failure` object plus `approvedByUser: true`, plus `decisions` if the
+user answered a previous round's questions.
+
+It returns `{fixed, summary, blockers, decisions}`. Do not diagnose or fix
+conflicts yourself; that stays in the workflow.
+
+- If `fixed` is `true`, run `mergeCommand` again, unchanged.
+- **If `decisions` is non-empty, that is the one you must act on.** Each entry
+  is a choice the subagent deliberately refused to make for the user —
+  conflicting logic, a missing source branch, something destructive. Ask every
+  entry with AskUserQuestion, then launch the unblock workflow again with the
+  user's answers as `decisions`.
 - `blockers` are non-decision failures. Report them; the merge is incomplete.
 
 A merge that returns a non-empty `decisions` or `blockers` did not finish — do

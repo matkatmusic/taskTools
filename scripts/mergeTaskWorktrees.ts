@@ -1,9 +1,9 @@
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import type { PreparedGroup, WorkflowArguments } from "./prepareTasks.ts";
+import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath, type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 import { declaredFiles } from "./taskGroups.ts";
@@ -216,8 +216,7 @@ function runMergeCli(worktreePath: string): void {
     process.stdout.write(JSON.stringify(outcome));
 }
 
-function runPipelineCli(): void {
-    const input: CliInput = JSON.parse(process.argv[2]);
+function runPipelineCli(input: CliInput): void {
     if (!input.repositoryManifest) throw new Error("no repository manifest given in CLI input; approval cannot be minted without pre-merge base OIDs");
     const rootOccurrence = input.repositoryManifest.occurrences.find((occurrence) => occurrence.parentOccurrenceId === null);
     if (!rootOccurrence) throw new Error("repository manifest has no root occurrence");
@@ -315,6 +314,12 @@ function runPipelineCli(): void {
         conflictCount: conflicts.length,
         argumentsHash: computeArgumentsHash(workflowArguments),
     });
+    // A failed merge keeps them so the retry still has its inputs.
+    if (allGroupsMerged) {
+        rmSync(resolveRunArgumentsPath(workflowArguments.repo), { force: true });
+        rmSync(resolveRunOutcomesPath(workflowArguments.repo), { force: true });
+        rmSync(resolveStepOutputsPath(workflowArguments.repo), { force: true });
+    }
     process.stdout.write(JSON.stringify({
         merged,
         conflicts,
@@ -336,7 +341,14 @@ function runAsCli(): void {
         runMergeCli(process.argv[3]);
         return;
     }
-    runPipelineCli();
+    if (mode === "--run") {
+        const prepared = JSON.parse(readFileSync(process.argv[3], "utf8"));
+        const outcomesFile = process.argv[4];
+        const outcomes = outcomesFile && existsSync(outcomesFile) ? JSON.parse(readFileSync(outcomesFile, "utf8")) : {};
+        runPipelineCli({ ...prepared, ...outcomes });
+        return;
+    }
+    runPipelineCli(JSON.parse(process.argv[2]));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();

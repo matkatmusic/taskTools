@@ -69,8 +69,27 @@ export function generateRunId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function mergeScriptPath(): string {
+export function resolveMergeScriptPath(): string {
     return join(import.meta.dirname, "mergeTaskWorktrees.ts");
+}
+
+// The merge script reads its bulky arguments from here so no agent has to retype them.
+export function resolveRunArgumentsPath(repoRoot: string): string {
+    return join(repoRoot, ".taskTools", "run-arguments.json");
+}
+
+// Step 6 writes the run's outcome counts and receipts here rather than shell-quoting them.
+export function resolveRunOutcomesPath(repoRoot: string): string {
+    return join(repoRoot, ".taskTools", "run-outcomes.json");
+}
+
+// Step 6 drops the earlier steps' return values here verbatim; runMergePhase.ts derives the counts.
+export function resolveStepOutputsPath(repoRoot: string): string {
+    return join(repoRoot, ".taskTools", "run-steps.json");
+}
+
+export function resolveMergePhaseScriptPath(): string {
+    return join(import.meta.dirname, "runMergePhase.ts");
 }
 
 function branchNameForGroup(groupId: number): string {
@@ -179,12 +198,20 @@ function runAsCli(): void {
     const groups = groupTasksByFileOverlap(tasks, manifest);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
-    process.stdout.write(JSON.stringify({
+    const pipelineArguments = {
         ...workflowArguments,
         runId: generateRunId(),
         startTimestamp: new Date().toISOString(),
-        mergeScript: mergeScriptPath(),
+        mergeScript: resolveMergeScriptPath(),
         repositoryManifest: manifest,
+    };
+    const argumentsFile = resolveRunArgumentsPath(repoRoot);
+    mkdirSync(dirname(argumentsFile), { recursive: true });
+    writeFileSync(argumentsFile, JSON.stringify(pipelineArguments));
+    process.stdout.write(JSON.stringify({
+        ...pipelineArguments,
+        stepOutputsFile: resolveStepOutputsPath(repoRoot),
+        mergeCommand: `node "${resolveMergePhaseScriptPath()}"`,
     }));
 }
 
