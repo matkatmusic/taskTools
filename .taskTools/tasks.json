@@ -86,19 +86,20 @@
   },
   {
     "taskNumber": 53,
-    "title": "Re-scope task 49: supply the authorization, occurrence and receipt data mergeTaskWorktrees needs",
-    "description": "Task 49 as written is unimplementable, proven twice by codex during a tackle-tasks run on 2026-08-05. Read plans/task-49-plan.md first; it records the full evidence.\n\nThe blocker: runFinalizer.ts, runConsolidation.ts, operationPush.ts, basePublication.ts and taskArchival.ts all require a RunAuthorizationToken or RunState that can only be minted through the recordApproval then issueApprovalAuthorization flow in approvalGate.ts, which itself needs a RepositoryManifest plus testReceipts, reviewHandoffs and occurrenceDigests. They also require a full RepositoryOccurrence graph and per-repository publish-outcome data. None of that exists on WorkflowArguments or on the flat CliInput that mergeTaskWorktrees.ts accepts as argv 2, and task 49 forbids changing the CLI contract, so its two owned files cannot supply it.\n\nThis task decides and implements the plumbing. Two options: widen the CLI contract so the flat input carries manifest, occurrence and receipt data, or add a prerequisite step that mints the authorization and builds the occurrence graph before mergeTaskWorktrees runs. Pick one and implement it, then unblock task 49.\n\nAlso fix a defect found on the way: scripts/basePublication.ts and scripts/logicalRepository.ts both export a type named LogicalRepository and the two are incompatible.",
+    "title": "Mint the run authorization in mergeTaskWorktrees and widen its CLI input to carry the evidence",
+    "description": "Re-scoped on 2026-08-05 after codex rejected the wider version twice. The two jobs it could not do inside its fence were split into task 56 (produce real TestReceipts and reviewHandoffs) and task 57 (rename the colliding LogicalRepository type). This task is now only the merge-side plumbing, and both of those must land first.\n\nRead plans/task-53-plan.md first; it holds the rejected plan plus codex verdicts. The chosen direction, already decided by the user, is to widen the CLI contract rather than add a prerequisite phase — mergeTaskWorktrees.ts keeps its front door as a flat JSON argv 2, and the extra evidence rides on that JSON.\n\nWiden CliInput to carry the repository manifest, occurrence data, testReceipts and reviewHandoffs that task 56 now produces, have skills/tackle-tasks/merge.workflow.js pass them through from its ARGS without fabricating any of them, and mint the authorization through the recordApproval then issueApprovalAuthorization flow in scripts/approvalGate.ts.\n\nCodex named five concrete requirements the implementation must satisfy, all of which the previous plan failed:\n1. Load and retain the repository manifest BEFORE any merge runs, so recordedBaseOid captures the pre-merge base OID; loading it afterwards makes recordedBaseOid equal targetOid and defeats base-movement detection.\n2. Build publication targets after successful merges, using pre-merge baseOid as recordedBaseOid and current canonical HEAD OIDs as targetOid.\n3. Return the complete approved RunState, not just a token — basePublication.publishBases needs the whole state, and task 49 needs it exposed.\n4. Mint approval only when conflicts is empty, every expected group merged, all receipts are green, and both receipts and review handoffs are non-empty.\n5. Define operationRef as the post-merge root HEAD OID and baseRef as the pre-merge root occurrence baseOid. Joining group branch names with commas is not a repository ref.\n\nTests must be at CLI level and prove: evidence actually reaches the pipeline, a conflicted run produces no approval state, and publication targets keep pre-merge base OIDs while using post-merge target OIDs.",
     "files": [
       "scripts/mergeTaskWorktrees.ts",
       "scripts/approvalGate.ts",
-      "scripts/basePublication.ts",
-      "scripts/logicalRepository.ts",
       "scripts/prepareTasks.ts",
       "tests/mergeTaskWorktrees.test.ts",
       "skills/tackle-tasks/merge.workflow.js"
     ],
     "difficulty": 5,
-    "blockedBy": []
+    "blockedBy": [
+      56,
+      57
+    ]
   },
   {
     "taskNumber": 54,
@@ -122,6 +123,39 @@
       "skills/tackle-tasks/SKILL.md"
     ],
     "difficulty": 3,
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 56,
+    "title": "Produce real TestReceipts and reviewHandoffs from the test phase so the approval gate can ever open",
+    "description": "Split out of task 53 on 2026-08-05 after codex rejected its plan twice. Root cause found while investigating: nothing in this repository ever CREATES a TestReceipt. scripts/approvalGate.ts line 16 and scripts/approvalReadiness.ts line 43 consume TestReceipt arrays, and scripts/approvalReadiness.ts line 97 refuses approval when the array is empty or any receipt is red, but the only places a receipt is ever constructed are tests/approvalGate.test.ts, tests/approvalReadiness.test.ts and tests/basePublication.test.ts. Production code has no producer. The same is true of reviewHandoffs (scripts/approvalGate.ts line 17) and occurrenceDigests (line 15). The approval gate therefore cannot open no matter what any caller passes it.\n\nBuild the producer. skills/tackle-tasks/test.workflow.js already runs the tests covering each group and returns {tests, allPassed} with a per-group passed flag and failure list; convert that into a real TestReceipt array. Decide and state where reviewHandoffs come from — the verify phase codex verdicts in skills/tackle-tasks/verify.workflow.js are the obvious source — and define a deterministic ordered occurrenceDigests algorithm rather than reusing raw baseOid values, which codex rejected explicitly.\n\nThread the result through the orchestrator documented in skills/tackle-tasks/SKILL.md so the merge step receives real evidence in its args. Read plans/task-53-plan.md and the task 53 codex rejection notes before starting.",
+    "files": [
+      "skills/tackle-tasks/test.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/SKILL.md",
+      "scripts/approvalReadiness.ts",
+      "tests/approvalReadiness.test.ts"
+    ],
+    "difficulty": 4,
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 57,
+    "title": "Rename basePublication LogicalRepository to PublicationTarget to end the name collision",
+    "description": "Split out of task 53 on 2026-08-05. scripts/basePublication.ts and scripts/logicalRepository.ts both export a type named LogicalRepository and the two are incompatible, so any file importing both has to alias one of them. Codex rejected hiding this behind a local import alias in a single consumer, calling for the real rename.\n\nRename the basePublication.ts export to PublicationTarget and update every use. The name appears in ten files: scripts/basePublication.ts, scripts/logicalRepository.ts, scripts/operationPush.ts, scripts/ownershipKeys.ts, scripts/runConsolidation.ts, tests/basePublication.test.ts, tests/logicalRepository.test.ts, tests/operationPush.test.ts, tests/runConsolidation.test.ts, tests/testPolicy.test.ts. Check each one to see which of the two types it actually means before editing — scripts/logicalRepository.ts keeps its own LogicalRepository name unchanged.\n\nThis is a mechanical rename with no behavior change: typecheck clean and the full suite green with no test assertions rewritten other than the type name itself.",
+    "files": [
+      "scripts/basePublication.ts",
+      "scripts/logicalRepository.ts",
+      "scripts/operationPush.ts",
+      "scripts/ownershipKeys.ts",
+      "scripts/runConsolidation.ts",
+      "tests/basePublication.test.ts",
+      "tests/logicalRepository.test.ts",
+      "tests/operationPush.test.ts",
+      "tests/runConsolidation.test.ts",
+      "tests/testPolicy.test.ts"
+    ],
+    "difficulty": 2,
     "blockedBy": []
   }
 ]
