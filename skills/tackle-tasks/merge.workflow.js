@@ -109,7 +109,7 @@ else:
 forbidden: weakening, deleting, or stubbing out code to make a conflict
 disappear; force-pushing or hard-resetting anything you did not create;
 running failedCommand yourself; deciding anything in decisions on the user's
-behalf. Each entry in decisions must be answerable without opening the repo.
+behalf. Each entry in 'decisions' must be answerable without opening the repo.
 Returning a decision is a correct outcome, not a failure.`
 
 const runMergeScript = (attempt) =>
