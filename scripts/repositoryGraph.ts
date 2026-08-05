@@ -2,8 +2,20 @@
 import { relative } from "node:path";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
 
-function findRootOccurrence(manifest: RepositoryManifest): RepositoryOccurrence | null {
-    return manifest.occurrences.find((occurrence) => occurrence.parentOccurrenceId === null) ?? null;
+function rootCandidates(manifest: RepositoryManifest): RepositoryOccurrence[] {
+    return manifest.occurrences.filter((occurrence) => occurrence.parentOccurrenceId === null);
+}
+
+// Raw-matching root -> already-relative checkout convention. No match with one root -> absolute production root, relativize.
+function selectRoot(
+    rootRelativePath: string,
+    manifest: RepositoryManifest,
+): { root: RepositoryOccurrence; relativize: boolean } | null {
+    const candidates = rootCandidates(manifest);
+    const rawMatch = candidates.find((root) => isWithinCheckout(rootRelativePath, root.checkoutPath));
+    if (rawMatch) return { root: rawMatch, relativize: false };
+    if (candidates.length === 1) return { root: candidates[0], relativize: true };
+    return null;
 }
 
 // Discovery records checkoutPath absolutely; task paths are root-relative. relative() collapses both.
@@ -61,19 +73,17 @@ export function getOwningOccurrence(
     rootRelativePath: string,
     manifest: RepositoryManifest,
 ): RepositoryOccurrence | null {
-    let owner =
-        manifest.occurrences.find(
-            (occurrence) =>
-                occurrence.parentOccurrenceId === null &&
-                isWithinCheckout(rootRelativePath, occurrence.checkoutPath),
-        ) ?? null;
-    if (!owner) return null;
+    const selected = selectRoot(rootRelativePath, manifest);
+    if (!selected) return null;
+    const { root, relativize } = selected;
 
+    let owner = root;
     let descended = true;
     while (descended) {
         descended = false;
         for (const child of getChildren(owner, manifest)) {
-            if (isWithinCheckout(rootRelativePath, child.checkoutPath)) {
+            const childCheckoutPath = relativize ? checkoutPathFromRoot(child, root) : child.checkoutPath;
+            if (isWithinCheckout(rootRelativePath, childCheckoutPath)) {
                 owner = child;
                 descended = true;
                 break;
@@ -86,8 +96,12 @@ export function getOwningOccurrence(
 export function getPathWithinRepository(
     rootRelativePath: string,
     owningOccurrence: RepositoryOccurrence,
+    manifest: RepositoryManifest,
 ): string {
-    const { checkoutPath } = owningOccurrence;
+    const ancestors = getAncestorChain(owningOccurrence, manifest);
+    const root = ancestors.length > 0 ? ancestors[ancestors.length - 1] : owningOccurrence;
+    const relativize = !isWithinCheckout(rootRelativePath, root.checkoutPath);
+    const checkoutPath = relativize ? checkoutPathFromRoot(owningOccurrence, root) : owningOccurrence.checkoutPath;
     if (checkoutPath === "") return rootRelativePath;
     if (rootRelativePath === checkoutPath) return "";
     return rootRelativePath.slice(checkoutPath.length + 1);

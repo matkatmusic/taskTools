@@ -23,6 +23,16 @@ export type DiscoveryResult =
     | { status: "resolved"; graph: RepositoryOccurrence[] }
     | { status: "needsResolution"; resolutionRequests: ResolutionRequest[] };
 
+function readOriginUrl(checkoutPath: string): string {
+    try {
+        return execFileSync("git", ["-C", checkoutPath, "remote", "get-url", "origin"], {
+            encoding: "utf8",
+        }).trim();
+    } catch {
+        throw new Error(`repository at "${checkoutPath}" has no "origin" remote configured`);
+    }
+}
+
 function readRootBranchAndOid(rootPath: string): { branch: string; oid: string } {
     let branch: string;
     try {
@@ -68,7 +78,7 @@ function discoverOccurrenceAndDescendants(
     manifest: DiscoveryManifest,
     pendingResolutionRequests: ResolutionRequest[],
 ): void {
-    const occurrenceId = relativePath;
+    const occurrenceId = relativePath === "" ? "root" : relativePath;
     const checkoutPath = join(rootPath, relativePath);
     const occurrences = manifest.repositoryManifest.occurrences;
     const existing = occurrences.find((candidate) => candidate.occurrenceId === occurrenceId);
@@ -100,7 +110,7 @@ function discoverOccurrenceAndDescendants(
         pathInParent,
         gitlinkOid: parentOccurrenceId === null ? null : baseOid,
         depth,
-        originUrl: existing?.originUrl ?? "",
+        originUrl: readOriginUrl(checkoutPath),
         baseBranch,
         baseOid,
         operationBranch: existing?.operationBranch ?? "",

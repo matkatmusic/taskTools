@@ -94,14 +94,14 @@ test("test_noTraversalEverYieldsTheSyntheticPathSegmentAsAnOccurrence", () => {
 });
 
 test("test_getOwningOccurrenceResolvesToTheDeepestMatchingRepositoryNotItsAncestor", () => {
-    const owner = getOwningOccurrence("jfred/external/tmux_lib/src/foo.ts", manifest);
+    const owner = getOwningOccurrence("external/tmux_lib/src/foo.ts", manifest);
     assert.equal(owner?.checkoutPath, "jfred/external/tmux_lib");
 });
 
 test("test_getPathWithinRepositoryIsRelativeToTheOwningOccurrenceRoot", () => {
-    const owner = getOwningOccurrence("jfred/external/tmux_lib/src/foo.ts", manifest);
+    const owner = getOwningOccurrence("external/tmux_lib/src/foo.ts", manifest);
     assert.ok(owner);
-    assert.equal(getPathWithinRepository("jfred/external/tmux_lib/src/foo.ts", owner!), "src/foo.ts");
+    assert.equal(getPathWithinRepository("external/tmux_lib/src/foo.ts", owner!, manifest), "src/foo.ts");
 });
 
 test("test_getDeepestFirstOrderSortsByDepthThenByPathWithinParentRegardlessOfInsertionOrder", () => {

@@ -27,8 +27,8 @@ function loadOccurrenceGraph(repoRoot: string): RepositoryOccurrence[] {
 
 export function submodulePaths(repoRoot: string): string[] {
     return loadOccurrenceGraph(repoRoot)
-        .map((occurrence) => occurrence.occurrenceId)
-        .filter((occurrenceId) => occurrenceId !== "");
+        .filter((occurrence) => occurrence.parentOccurrenceId !== null)
+        .map((occurrence) => occurrence.occurrenceId);
 }
 
 export function collectRepositorySources(repoRoot: string): RepositorySource[] {
@@ -43,7 +43,10 @@ export function collectRepositorySources(repoRoot: string): RepositorySource[] {
         throw error;
     }
     const occurrenceById = new Map(occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence]));
-    const paths = ["", ...occurrences.map((occurrence) => occurrence.occurrenceId).filter((id) => id !== "")];
+    const paths = [
+        "",
+        ...occurrences.filter((occurrence) => occurrence.parentOccurrenceId !== null).map((occurrence) => occurrence.occurrenceId),
+    ];
 
     const detachedPaths: string[] = [];
     const branchByPath = new Map<string, string>();
