@@ -1,23 +1,6 @@
 // Aggregates tasks.json and completedTasks.json: closure velocity, files coverage, blocking, and the parallelism a tackle-tasks run would get.
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { declaredFiles, groupTasksByFileOverlap } from "./taskGroups.ts";
-import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
-
-const FLAT_OCCURRENCE: RepositoryOccurrence = {
-    occurrenceId: "flat",
-    checkoutPath: "",
-    parentOccurrenceId: null,
-    pathInParent: null,
-    gitlinkOid: null,
-    depth: 0,
-    originUrl: "https://local/flat/flat.git",
-    baseBranch: "main",
-    baseOid: "0".repeat(40),
-    operationBranch: "main",
-    childOccurrenceIds: [],
-    testState: "untested",
-};
 
 export type TaskStats = {
     openCount: number;
@@ -73,17 +56,12 @@ function rankContendedFiles(tasks: TaskRecord[]): { path: string; taskCount: num
         .map(([path, taskCount]) => ({ path, taskCount }));
 }
 
-export function computeTaskStats(
-    open: TaskRecord[],
-    completed: TaskRecord[],
-    today: string,
-    manifest: RepositoryManifest,
-): TaskStats {
+export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], today: string): TaskStats {
     const openNumbers = new Set(open.map(t => t.taskNumber));
     const unblocked = open.filter(t => openBlockersOf(t, openNumbers).length === 0);
     // tackle-tasks refuses blocked tasks and tasks declaring no files, so the forecast uses the same gate.
     const forecastable = unblocked.filter(t => declaredFiles(t).length > 0);
-    const groups = forecastable.length > 0 ? groupTasksByFileOverlap(forecastable, manifest) : [];
+    const groups = forecastable.length > 0 ? groupTasksByFileOverlap(forecastable) : [];
 
     return {
         openCount: open.length,
@@ -123,21 +101,9 @@ export function formatTaskStats(stats: TaskStats): string {
     return lines.join("\n") + "\n";
 }
 
-// Stats must work outside a discoverable repo, so an undiscoverable root forecasts as one flat repository.
-function manifestForForecast(repoRoot: string): RepositoryManifest {
-    try {
-        const bootstrap = bootstrapRepositoryManifest(repoRoot);
-        if (!bootstrap.refused) return { version: REPOSITORY_MANIFEST_VERSION, occurrences: bootstrap.occurrenceGraph };
-    } catch {
-        // not a git checkout, or not on a branch — fall through to the flat forecast
-    }
-    return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [FLAT_OCCURRENCE] };
-}
-
 if (import.meta.url === `file://${process.argv[1]}`) {
-    const repoRoot = process.cwd();
-    const pair = resolveTaskFiles(repoRoot);
+    const pair = resolveTaskFiles(process.cwd());
     const today = new Date().toISOString().slice(0, 10);
-    const stats = computeTaskStats(readTaskFile(pair.tasksPath), readTaskFile(pair.completedTasksPath), today, manifestForForecast(repoRoot));
+    const stats = computeTaskStats(readTaskFile(pair.tasksPath), readTaskFile(pair.completedTasksPath), today);
     process.stdout.write(formatTaskStats(stats));
 }
