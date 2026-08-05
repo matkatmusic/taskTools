@@ -832,5 +832,22 @@
       "145434f"
     ],
     "closureNote": "Renamed basePublication's LogicalRepository type to PublicationTarget, ending the incompatible name collision with logicalRepository.ts; codex approved the plan after one repair round, implemented in f7eb2ad touching only scripts/basePublication.ts and tests/basePublication.test.ts, merged to new-usage-graph in 145434f with typecheck clean and the full suite green."
+  },
+  {
+    "taskNumber": 43,
+    "title": "Rewrite pick-a-task's selection criteria to use the difficulty field",
+    "description": "Revisit how pick-a-task chooses tasks once the `difficulty` field is supported on tasks.json entries.\n\nToday skills/pick-a-task/SKILL.md picks the N easiest open tasks by having the agent read every task and reason in prose about which are simplest, comparing each against the current state of the project. Once each task carries a difficulty rating (1-5), most of that reasoning becomes a sort: filter to unblocked, order by difficulty ascending, take N.\n\nRewrite the picking criteria to use the field, and decide what judgment is still worth spending prose on. The remaining candidate is the relevance check — is this task still needed given the current codebase? — which is separate from difficulty and cannot be sorted.\n\nNo longer blocked: the difficulty field now exists on every open tasks.json entry, and skills/create-task/template/taskTemplate.json documents the 1-5 scale (1 = one-line mechanical change, 5 = wide blast radius or a previously reverted attempt). Read that scale before rewriting the criteria so the SKILL.md wording matches what the ratings actually mean.",
+    "files": [
+      "skills/pick-a-task/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "difficulty": 2,
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "f462cfc",
+      "1e32117"
+    ],
+    "closureNote": "Rewrote skills/pick-a-task/SKILL.md to exclude blocked tasks, sort the rest by the difficulty field ascending with task number as tie-break, and keep only the per-candidate relevance check as prose judgment, replacing the old read-every-task scope guessing; also added explicit exhaustion behavior for fewer than N or zero qualifying tasks. Codex approved the plan after the byte-for-byte output-contract requirement and the missing exhaustion case were fixed; implemented in f462cfc and merged to new-usage-graph in 1e32117 with typecheck clean and tests green."
   }
 ]
