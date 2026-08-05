@@ -21,7 +21,7 @@ const WORKER_SCHEMA = {
   required: ['task', 'status', 'summary', 'remaining'],
 }
 
-const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task: #${t.number}.
+const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task from ./.taskTools/tasks.json: #${t.number}.
 Repo root (cd here first): ${group.worktree}
 Files you own (touch nothing outside them): ${t.files.join(', ')}
 ${note}

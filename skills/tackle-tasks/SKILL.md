@@ -76,7 +76,24 @@ args = the pipeline args JSON plus:
 - `rejectedCount`: length of `rejected` from step 2.
 - `requeueCount`: `requeueCount` from step 3.
 
-Returns `{merged, conflicts}`.
+The workflow runs `mergeTaskWorktrees.ts` in a subagent. If that fails —
+non-zero exit or a non-empty `conflicts` array — a second subagent diagnoses
+the cause and fixes what it can, and the merge script then runs again. Do none
+of that yourself; it stays in the workflow.
+
+Returns `{merged, conflicts, fixedBlockers, blockers, decisions, summary}`.
+
+- `fixedBlockers` is `null` when the first run was clean, `true` when a
+  subagent cleared the blockers and the retry ran, `false` when it could not.
+- **`decisions` is the one you must act on.** Each entry is a choice the
+  subagent deliberately refused to make for the user — conflicting logic, a
+  missing source branch, something destructive. Ask every entry with
+  AskUserQuestion, then launch this step again with the user's answers added
+  to the args as `decisions`, so the retry has them.
+- `blockers` are non-decision failures. Report them; the merge is incomplete.
+
+A merge that returns a non-empty `decisions` or `blockers` did not finish — do
+not report it as merged, and do not invoke close-tasks for its tasks.
 
 Present merged and conflicts to the user. ONLY after the user approves, invoke
 close-tasks once for all merged tasks.
