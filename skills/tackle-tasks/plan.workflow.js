@@ -19,6 +19,10 @@ const PLAN_SCHEMA = {
   required: ['task', 'status', 'planFile', 'question'],
 }
 
+const testsInstruction = (t) => t.tests && t.tests !== 'skip'
+  ? `The task's tests field holds an example test the user wrote — put it into the plan's verification section as the concrete check to run, expanded with a few extra cases covering the individual functions/subparts it touches: ${t.tests}`
+  : 'This task has no tests field, or it is the literal string "skip" — do not require TDD; write ordinary verification commands in the plan instead.'
+
 const plannerBrief = (t) => `Invoke /ponytail:ponytail ultra.
 Read this brief file: ${t.briefFile}
 You may also READ these owned files, and nothing else: ${t.files.join(', ')}
@@ -35,6 +39,7 @@ The plan must be exact enough that the implementer makes no discovery of its own
   needs-clarification, not a fallback sentence in the plan.
 - Quote only text you actually read. Never describe an excerpt the brief does not contain.
 - State the verification that proves the change worked, as commands with expected results.
+- ${testsInstruction(t)}
 
 If the plan would need to edit a file outside the owned list above, set status
 "needs-clarification" and name that file in "question" — do not plan the edit anyway.

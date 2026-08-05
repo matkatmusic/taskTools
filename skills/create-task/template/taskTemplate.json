@@ -3,6 +3,7 @@
   "title": "<short summary of the task>",
   "description": "<the task in the user's own wording, plus any refinements gathered; include file paths and repro URLs if given>",
   "files": ["<repo-relative path this task will touch>"],
+  "tests": "<the user's example test as prose or pseudocode, or the literal string skip>",
   "difficulty": <implementation effort and risk, NOT importance: 1 = one-line or single-file mechanical change; 2 = contained change to one file plus its test; 3 = several files in one subsystem, design already settled; 4 = crosses subsystems or needs design decisions during implementation; 5 = wide blast radius, unclear scope, or a previously reverted attempt>,
   "blockedBy": [<task numbers of any tasks that must be completed first; omit the field if none>]
 }
