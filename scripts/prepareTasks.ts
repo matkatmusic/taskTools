@@ -7,8 +7,6 @@ import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { groupTasksByFileOverlap } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
-import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "./repositoryManifest.ts";
 
 export type PreparedTask = {
     number: number;
@@ -154,14 +152,6 @@ export function buildWorkflowArguments(
     return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
 }
 
-function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
-    const result = bootstrapRepositoryManifest(repoRoot);
-    if (result.refused) {
-        throw new Error(`repository at "${repoRoot}" needs branch resolution before it can be discovered`);
-    }
-    return { version: REPOSITORY_MANIFEST_VERSION, occurrences: result.occurrenceGraph };
-}
-
 function runAsCli(): void {
     const repoRoot = process.cwd();
     const pair = resolveTaskFiles(repoRoot);
@@ -175,8 +165,7 @@ function runAsCli(): void {
         process.exit(1);
     }
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
-    const manifest = loadRepositoryManifest(repoRoot);
-    const groups = groupTasksByFileOverlap(tasks, manifest);
+    const groups = groupTasksByFileOverlap(tasks);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
     process.stdout.write(JSON.stringify({
