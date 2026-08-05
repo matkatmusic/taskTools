@@ -1,9 +1,13 @@
+import { plannerBrief, verifierBrief, workerBrief, testerBrief, VERIFY_SCHEMA, TEST_SCHEMA } from './tackle-tasks.briefs.js'
+
 export const meta = {
   name: 'tackle-tasks-pipeline',
-  description: 'Plan, implement, and typecheck file-disjoint task groups as an overlapping pipeline, then merge each group back into the repo',
+  description: 'Plan, verify, implement, test, and typecheck file-disjoint task groups as an overlapping pipeline, then merge each group back into the repo',
   phases: [
     { title: 'Plan', detail: 'one planner agent per task' },
+    { title: 'Verify', detail: 'one verifier agent per planned task, gates which plans reach Implement' },
     { title: 'Implement', detail: 'serial workers per group, one-pass requeue for partial' },
+    { title: 'Test', detail: 'one test agent per group after Implement, one-pass requeue on failure' },
     { title: 'Typecheck', detail: 'report-only agent per worktree' },
     { title: 'Merge', detail: 'merge each group branch back into the repo' },
   ],
@@ -51,19 +55,11 @@ const MERGE_SCHEMA = {
 }
 
 const planResultsByTask = new Map()
+const verifyResultsByTask = new Map()
 const implementResultsByTask = new Map()
+const testResultsByGroup = new Map()
 const typecheckResults = []
 let requeueCount = 0
-
-const plannerBrief = (t) => `Invoke /ponytail:ponytail ultra.
-Read ONLY this brief file (do not read any other file): ${t.briefFile}
-Follow ~/.claude/guides/planning.md and write the plan to exactly this path: ${t.planFile}
-Do not change any source file — this is planning only, not implementation.
-If the task is unclear, set status "needs-clarification" and put your
-question in "question". If the task no longer applies to the codebase, set
-status "not-relevant" and explain why in "question". Otherwise write the
-plan file and set status "planned".
-Return {task: ${t.number}, status, planFile: "${t.planFile}", question}.`
 
 const runPlanner = (t) => {
   const options = { label: `plan:${t.number}`, phase: 'Plan', schema: PLAN_SCHEMA }
@@ -75,44 +71,10 @@ async function planStage(group) {
   return parallel(group.tasks.map((t) => () => runPlanner(t)))
 }
 
-const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task: #${t.number}.
-Repo root (cd here first): ${group.worktree}
-Plan file: ${planFile}
-Files you own (touch nothing outside them): ${t.files.join(', ')}
-${note}
-Read the plan file, then implement it exactly — no scope additions, no
-refactors the plan doesn't call for. All design decisions were made in the
-plan; you are executing, not deciding. If the plan is impossible as written,
-stop and return status "blocked" with the reason in summary.
+const runVerifier = (t, planFile) =>
+  agent(verifierBrief(t, planFile), { label: `verify:${t.number}`, phase: 'Verify', effort: 'low', schema: VERIFY_SCHEMA })
 
-When the edits are done, run: ${TYPECHECK_COMMAND}
-Fix type errors in the files you own.
-
-Then run the tests covering the files you own and fix any failures — check
-for a related-test discovery command in this repo (e.g. scripts/relatedTests.ts)
-before falling back to running each owned file's own test file directly. Do
-not run the full suite; that is the close-tasks gate, not yours.
-
-If your tests still fail after a reasonable effort, do not commit. Return
-status "blocked" (or "partial" if part of the plan is done) and name the
-failing tests in "remaining" — never return status "done" with a failing test.
-
-When typecheck passes, commit from ${group.worktree}. Other tasks may share
-this worktree, so stage ONLY your own paths — never \`git add -A\`, never \`git add .\`:
-  ${t.files.length ? `git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}` : 'git add -- <list every path you edited, explicitly>'}
-  git commit -m "task ${t.number}: <one-line summary>"
-
-Soft time budget: 10 minutes — if you cannot finish, stop and return status
-"partial" with the not-yet-done plan steps listed in "remaining".
-Return {task: ${t.number}, status, summary (one sentence), remaining}.`
-
-const runWorker = (t, group, planFile, note) => {
-  const options = { label: `task:${t.number}`, phase: 'Implement', schema: WORKER_SCHEMA }
-  if (WORKER_MODEL) options.model = WORKER_MODEL
-  return agent(workerBrief(t, group, planFile, note), options)
-}
-
-async function implementStage(plans, group) {
+async function verifyStage(plans, group) {
   const planByNumber = new Map((plans ?? []).filter(Boolean).map((p) => [p.task, p]))
   for (const t of group.tasks) {
     if (!planByNumber.has(t.number)) {
@@ -122,21 +84,73 @@ async function implementStage(plans, group) {
   for (const plan of planByNumber.values()) planResultsByTask.set(plan.task, plan)
 
   const plannedTasks = group.tasks.filter((t) => planByNumber.get(t.number).status === 'planned')
+  const verifyResults = await parallel(plannedTasks.map((t) => () => runVerifier(t, planByNumber.get(t.number).planFile)))
+  plannedTasks.forEach((t, i) => {
+    const v = verifyResults[i] ?? { task: t.number, verdict: 'rejected', notes: 'verifier agent returned no result (killed, errored, or blocked)' }
+    verifyResultsByTask.set(t.number, v)
+  })
+
+  return group.tasks.map((t) => ({ plan: planByNumber.get(t.number), verify: verifyResultsByTask.get(t.number) ?? null }))
+}
+
+const runWorker = (t, group, planFile, note) => {
+  const options = { label: `task:${t.number}`, phase: 'Implement', schema: WORKER_SCHEMA }
+  if (WORKER_MODEL) options.model = WORKER_MODEL
+  return agent(workerBrief(t, group, planFile, note, TYPECHECK_COMMAND), options)
+}
+
+async function implementStage(verified, group) {
+  const verifiedByNumber = new Map((verified ?? []).map((v) => [v.plan.task, v]))
+  const approvedTasks = group.tasks.filter((t) => {
+    const v = verifiedByNumber.get(t.number)
+    return v?.plan.status === 'planned' && v?.verify?.verdict === 'approved'
+  })
+
   const results = []
-  for (const t of plannedTasks) {
-    const result = await runWorker(t, group, planByNumber.get(t.number).planFile, '')
+  for (const t of approvedTasks) {
+    const planFile = verifiedByNumber.get(t.number).plan.planFile
+    const result = await runWorker(t, group, planFile, '')
     results.push(result ?? { task: t.number, status: 'blocked', summary: 'worker agent returned no result (killed, errored, or blocked)', remaining: [] })
   }
 
   for (const r of results.filter((r) => r.status === 'partial')) {
     requeueCount++
-    const t = plannedTasks.find((task) => task.number === r.task)
+    const t = approvedTasks.find((task) => task.number === r.task)
+    const planFile = verifiedByNumber.get(t.number).plan.planFile
     const note = `A previous worker finished part of this plan; still remaining: ${r.remaining.join('; ')}. Check the file state before redoing anything.`
-    const redone = await runWorker(t, group, planByNumber.get(t.number).planFile, note)
+    const redone = await runWorker(t, group, planFile, note)
     results[results.findIndex((x) => x.task === r.task)] = redone
   }
 
   for (const r of results) implementResultsByTask.set(r.task, r)
+  return results
+}
+
+const runTester = (group, doneTasks) =>
+  agent(testerBrief(group, doneTasks), { label: `test:${group.groupId}`, phase: 'Test', effort: 'low', schema: TEST_SCHEMA })
+
+async function testStage(implementResults, group) {
+  const doneTasks = group.tasks.filter((t) => (implementResults ?? []).some((r) => r.task === t.number && r.status === 'done'))
+  if (!doneTasks.length) return implementResults
+
+  const testResult = await runTester(group, doneTasks)
+  const outcome = testResult ?? { passed: false, failures: doneTasks.map((t) => ({ task: t.number, detail: 'test agent returned no result (killed, errored, or blocked)' })) }
+  testResultsByGroup.set(group.groupId, { groupId: group.groupId, ...outcome })
+  if (outcome.passed) return implementResults
+
+  const results = [...implementResults]
+  for (const f of outcome.failures) {
+    const t = doneTasks.find((task) => task.number === f.task)
+    if (!t) continue
+    requeueCount++
+    const planFile = planResultsByTask.get(t.number).planFile
+    const note = `A follow-up test run found a failure in files you own: ${f.detail}. Fix it.`
+    const redone = await runWorker(t, group, planFile, note)
+    const idx = results.findIndex((r) => r.task === t.number)
+    const outcomeResult = redone ?? { task: t.number, status: 'blocked', summary: 'worker agent returned no result on test-fix retry', remaining: [] }
+    results[idx] = outcomeResult
+    implementResultsByTask.set(t.number, outcomeResult)
+  }
   return results
 }
 
@@ -152,10 +166,11 @@ Report only — do not edit any file. If it fails, set passed=false and put the 
 }
 
 log(`${GROUPS.length} group(s), ${GROUPS.reduce((n, g) => n + g.tasks.length, 0)} task(s)`)
-await pipeline(GROUPS, planStage, implementStage, typecheckStage)
+await pipeline(GROUPS, planStage, verifyStage, implementStage, testStage, typecheckStage)
 
 const needsClarification = [...planResultsByTask.values()].filter((r) => r.status === 'needs-clarification')
 const notRelevant = [...planResultsByTask.values()].filter((r) => r.status === 'not-relevant')
+const rejected = [...verifyResultsByTask.values()].filter((r) => r.verdict === 'rejected')
 const implementResults = [...implementResultsByTask.values()]
 const partial = implementResults.filter((r) => r.status === 'partial')
 const blocked = implementResults.filter((r) => r.status === 'blocked')
@@ -171,6 +186,7 @@ const mergeCliInput = {
   partialCount: partial.length,
   blockedCount: blocked.length,
   needsClarificationCount: needsClarification.length,
+  rejectedCount: rejected.length,
   requeueCount,
 }
 
@@ -188,7 +204,9 @@ return {
   conflicts: mergeResult?.conflicts ?? [],
   needsClarification,
   notRelevant,
+  rejected,
   partial,
   blocked,
   typecheck: typecheckResults,
+  tests: [...testResultsByGroup.values()],
 }
