@@ -1,6 +1,5 @@
 // Root-outward discovery of a repository's nested submodule tree, gated on full branch resolution.
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
 import { readDirectGitlinks } from "./gitlinkReader.ts";
@@ -14,7 +13,6 @@ import {
     REASON_ZERO_EXACT_TIP_MATCHES,
 } from "./resolutionRequests.ts";
 import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
-import { setUpOperationBranches } from "./operationBranches.ts";
 
 export type DiscoveryManifest = {
     repositoryManifest: RepositoryManifest;
@@ -142,13 +140,6 @@ export function discoverRepositoryTree(rootPath: string, manifest: DiscoveryMani
 
     if (pendingResolutionRequests.length > 0) {
         return { status: "needsResolution", resolutionRequests: pendingResolutionRequests };
-    }
-
-    const runId = randomUUID();
-    for (const occurrence of manifest.repositoryManifest.occurrences) {
-        if (occurrence.operationBranch !== "") continue;
-        const [updated] = setUpOperationBranches([occurrence], runId);
-        occurrence.operationBranch = updated.operationBranch;
     }
 
     return { status: "resolved", graph: manifest.repositoryManifest.occurrences };
