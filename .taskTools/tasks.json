@@ -2,7 +2,7 @@
   {
     "taskNumber": 35,
     "title": "Production cutover to the recursive repository workflow",
-    "description": "Phase 4 of the recursive repository-discovery redesign — the cutover that finally routes production through everything built in Phases 1 to 3.\n\nReplace the flat-path helpers with their graph-based equivalents at their call sites: scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository), scripts/taskGroups.ts (grouping now via scripts/canonicalTaskGroups.ts), scripts/prepareTasks.ts (discovery, worktree and branch creation, workflow arguments), and scripts/mergeTaskWorktrees.ts (finalization and publication via scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts, scripts/taskArchival.ts). Rewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs, and readyForApproval instead of immediate merge results, and so the approval gate runs before finalization.\n\nActivate the new manifest/workflow version only after the complete end-to-end suite passes. Preserve legacy worktrees and route legacy manifests through scripts/legacyManifest.ts to their existing compatible tooling or a non-destructive refusal.\n\nTests: existing prepareTasks and mergeTaskWorktrees suites are updated to the new interfaces and pass; the workflow returns readyForApproval rather than merge results before approval; a legacy manifest is refused non-destructively with recovery instructions and its worktrees survive; the version flips only when the full suite is green.",
+    "description": "Phase 4 of the recursive repository-discovery redesign — the cutover that finally routes production through everything built in Phases 1 to 3.\n\nReplace the flat-path helpers with their graph-based equivalents at their call sites: scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository), scripts/taskGroups.ts (grouping now via scripts/canonicalTaskGroups.ts), scripts/prepareTasks.ts (discovery, worktree and branch creation, workflow arguments), and scripts/mergeTaskWorktrees.ts (finalization and publication via scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts, scripts/taskArchival.ts). Rewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs, and readyForApproval instead of immediate merge results, and so the approval gate runs before finalization.\n\nActivate the new manifest/workflow version only after the complete end-to-end suite passes. Preserve legacy worktrees and route legacy manifests through scripts/legacyManifest.ts to their existing compatible tooling or a non-destructive refusal.\n\nTests: existing prepareTasks and mergeTaskWorktrees suites are updated to the new interfaces and pass; the workflow returns readyForApproval rather than merge results before approval; a legacy manifest is refused non-destructively with recovery instructions and its worktrees survive; the version flips only when the full suite is green.\n\nDesign decisions already made by the user — implement these, do not re-litigate or re-derive them:\n\n1. Detached HEAD. Keep the existing explicit refusal in collectRepositorySources and run it BEFORE graph discovery, not instead of it. Graph discovery resolves a base branch by matching any local branch whose tip equals the recorded gitlink OID, which would wrongly accept a detached submodule because detaching does not move the branch. So the empty-current-branch check stays as the outer guard, and its error names each offending repository path and tells the user to check out a branch there before continuing. tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unchanged.\n\n2. mergeTaskWorktrees CLI contract. The script keeps its current front door: it accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script before driving runFinalizer, runConsolidation, operationPush, basePublication and taskArchival. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged — no rewritten CLI assertions. A graph-shaped front door is a later follow-up, not part of this task.",
     "files": [
       "scripts/prepareTasks.ts",
       "scripts/mergeTaskWorktrees.ts",
@@ -30,30 +30,6 @@
     ],
     "blockedBy": [
       35
-    ]
-  },
-  {
-    "taskNumber": 37,
-    "title": "new skill: /tackle-unblocked-tasks",
-    "description": "Works by finding all tasks with empty blockedBy[] arrays, returning an array of task numbers as `unblockedTaskNumbers` sorted lowest to highest, then executes the same code path that invoking 'tackle-tasks unblockedTaskNumbers valid' uses.  \n\nAdd an exported `unblockedTaskNumbers(openTasks)` helper to scripts/taskFiles.ts returning ascending-sorted task numbers with empty blockedBy[] arrays. ",
-    "files": [
-      "scripts/taskFiles.ts",
-      "scripts/checkBlockers.ts",
-      "scripts/prepareTasks.ts"
-    ],
-    "handoffFilePaths": [],
-    "blockedBy": []
-  },
-  {
-    "taskNumber": 38,
-    "title": "tackle-tasks-loop skill",
-    "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. \n\nCreate skills/tackle-tasks-loop/SKILL.md only — skills are auto-discovered by directory, so no plugin.json or marketplace.json registration is needed. The skill wraps the existing global `/loop` skill to invoke `taskTools:tackle-tasks unblocked` (task 37's mode) on an interval. Use scripts/taskStats.ts for the stop condition: end when the open count reaches 0, and bail out when a full pass finds nothing unblocked so it does not spin on a fully blocked backlog. No new TypeScript and no new test file — checkBlockers.ts --unblocked and taskStats.ts already supply every count this needs.",
-    "files": [
-      "skills/tackle-tasks-loop/SKILL.md"
-    ],
-    "handoffFilePaths": [],
-    "blockedBy": [
-      37
     ]
   },
   {

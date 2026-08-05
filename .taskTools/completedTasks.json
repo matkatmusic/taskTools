@@ -638,5 +638,53 @@
       "ca63740"
     ],
     "closureNote": "Added scripts/taskArchival.ts returning task-level merge results and archiving only the explicit task numbers whose integration was successfully published, leaving conflicted, skipped, rolled-back and partially published tasks open in tasks.json, issuing no second approval prompt, and writing archived entries to completedTasks.json with their commit hashes."
+  },
+  {
+    "taskNumber": 37,
+    "title": "new skill: /tackle-unblocked-tasks",
+    "description": "Works by finding all tasks with empty blockedBy[] arrays, returning an array of task numbers as `unblockedTaskNumbers` sorted lowest to highest, then executes the same code path that invoking 'tackle-tasks unblockedTaskNumbers valid' uses.  \n\nAdd an exported `unblockedTaskNumbers(openTasks)` helper to scripts/taskFiles.ts returning ascending-sorted task numbers with empty blockedBy[] arrays. ",
+    "files": [
+      "scripts/taskFiles.ts",
+      "scripts/checkBlockers.ts",
+      "scripts/prepareTasks.ts",
+      "skills/tackle-unblocked-tasks/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "completionDate": "2026-08-04",
+    "commitHashes": [],
+    "closureNote": "Closed as replaced by the v2 spec: the exported unblockedTaskNumbers helper in scripts/taskFiles.ts was never built (commit 370cd68 claimed it but its diff added only skills/tackle-unblocked-tasks/SKILL.md), and the v2 design supersedes this approach rather than completing it."
+  },
+  {
+    "taskNumber": 38,
+    "title": "tackle-tasks-loop skill",
+    "description": "another mode that keeps checking the tasks.json for blockers on a timer,tackles them, then does unblocked until the whole list is completed.  End result of this script-loop running is that the user just has to run it once, then just use 'create-task' or 'goal-tasks' to define what to build, and the background agents build everything that has a task created. \n\nCreate skills/tackle-tasks-loop/SKILL.md only — skills are auto-discovered by directory, so no plugin.json or marketplace.json registration is needed. The skill wraps the existing global `/loop` skill to invoke `taskTools:tackle-tasks unblocked` (task 37's mode) on an interval. Use scripts/taskStats.ts for the stop condition: end when the open count reaches 0, and bail out when a full pass finds nothing unblocked so it does not spin on a fully blocked backlog. No new TypeScript and no new test file — checkBlockers.ts --unblocked and taskStats.ts already supply every count this needs.",
+    "files": [
+      "skills/tackle-tasks-loop/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [
+      37
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [],
+    "closureNote": "Closed as replaced by the v2 spec: the tackle-tasks-loop skill wrapping /loop around task 37 unblocked mode is superseded by the v2 design and was never built."
+  },
+  {
+    "taskNumber": 44,
+    "title": "Separate repositoryDiscovery read-only query from its branch-creating side effect",
+    "description": "Today scripts/repositoryDiscovery.ts discoverRepositoryTree unconditionally calls setUpOperationBranches on its resolved path (lines 148-152), and scripts/operationBranches.ts line 71 runs a real git checkout against occurrence.checkoutPath. Discovery also mints its own runId with randomUUID at line 147. That makes discoverRepositoryTree a run-initiating mutation rather than a query, so any read-only caller silently gets its working directory checked out onto a tackle-op branch.\n\nMake discoverRepositoryTree read-only: it returns the graph and resolution status without creating or checking out any branch. Callers that want operation branches call setUpOperationBranches explicitly, passing the runId in rather than having discovery generate one.\n\nThis blocks task 35, whose step 1 swaps collectRepositorySources onto graph discovery and is called against the production repo root before any worktree exists — a naive swap would check the user real working directory out onto a throwaway branch.\n\nTests: discoverRepositoryTree creates no branch and performs no checkout on the resolved path; the working directory branch is unchanged after discovery; setUpOperationBranches still creates and checks out branches when called directly; the runId used for operation branch names is the one the caller passed in; existing repositoryDiscovery and operationBranches suites keep passing.",
+    "files": [
+      "scripts/repositoryDiscovery.ts",
+      "scripts/operationBranches.ts",
+      "tests/repositoryDiscovery.test.ts",
+      "tests/operationBranches.test.ts"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "e4984d9",
+      "53e455b"
+    ],
+    "closureNote": "discoverRepositoryTree is now a read-only query: the unconditional setUpOperationBranches call and the randomUUID runId were removed from its resolved path so discovery no longer creates or checks out any branch, callers opt into operation branches by calling setUpOperationBranches with their own runId, and tests/repositoryDiscovery.test.ts pins that discovery leaves the working directory branch unchanged."
   }
 ]
