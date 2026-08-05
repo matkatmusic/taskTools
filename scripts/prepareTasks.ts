@@ -184,6 +184,7 @@ function runAsCli(): void {
         runId: generateRunId(),
         startTimestamp: new Date().toISOString(),
         mergeScript: mergeScriptPath(),
+        repositoryManifest: manifest,
     }));
 }
 
