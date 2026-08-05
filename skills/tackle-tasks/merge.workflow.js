@@ -53,16 +53,21 @@ const mergeCliInput = {
 
 const command = `node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`
 
-const runBrief = `Run exactly this command and do not edit any file:
+const runBrief = `Run exactly this command. Do not edit any file. Do not run any other command.
 
 ${command}
 
-On success it prints JSON {merged, conflicts} on stdout — return ok=true with
-those two arrays copied verbatim and error="". Copy them; do not parse,
-summarize, or reformat.
+Then return one of exactly two results. There is no third case.
 
-If the command exits non-zero or prints no usable JSON, return ok=false,
-merged=[], conflicts=[], and put the stderr and exit code in error.`
+CASE 1 — the command exited 0 AND its stdout is JSON containing both a
+"merged" array and a "conflicts" array. Return:
+{"ok": true, "merged": <the merged array, copied verbatim>, "conflicts": <the conflicts array, copied verbatim>, "error": ""}
+Copy both arrays exactly as printed. Do not parse, summarize, reformat,
+reorder, drop, or add fields.
+
+CASE 2 — the command exited non-zero, OR printed nothing, OR printed output
+that is not JSON containing both of those arrays. Return:
+{"ok": false, "merged": [], "conflicts": [], "error": "exit <exit code>: <the full stderr, or the unusable stdout when stderr is empty>"}`
 
 const diagnoseBrief = (run) => `The tackle-tasks merge failed. This is the command that was run:
 
@@ -73,14 +78,27 @@ ${JSON.stringify({ ok: run.ok, conflicts: run.conflicts ?? [], error: run.error 
 
 Repo: ${ARGS.repo}
 
-Diagnose why the merge could not complete, then fix it if the fix is within
-your reach. Typical causes and their fixes:
-- Submodule gitlink pointer conflicts — this repo has resolveGitlinkConflicts
-  in scripts/, which auto-resolves them. Look there before hand-editing.
-- Ordinary file-level merge conflicts in a group worktree — resolve them in
-  the worktree, keeping BOTH sides' intent, and commit the resolution.
-- A dirty or half-merged worktree — finish or abort the in-progress merge so
-  the tree is clean.
+Check each known cause below against what the command reported. When one
+matches, apply its solution.
+
+diagnosis: submodule gitlink pointer conflict — a conflicts entry has a
+non-empty submoduleConflicts, or the error names a gitlink or submodule path.
+solution: run the existing resolveGitlinkConflicts routine in scripts/ against
+the affected worktree. Do not hand-edit gitlink entries.
+
+diagnosis: ordinary file-level merge conflict in a group worktree — a
+conflicts entry has a non-empty conflictedFilePaths.
+solution: resolve each path listed in conflictedFilePaths inside that
+worktree, keeping BOTH sides' intent, then stage only those paths and commit
+the resolution.
+
+diagnosis: dirty or half-merged worktree — the error mentions unmerged paths,
+an unfinished merge, or a tree that is not clean.
+solution: complete the in-progress merge if it can be completed, otherwise
+abort it, so the tree is clean and this workflow can retry.
+
+If none of them matches, identify the actual cause and fix it only when your
+fix is as concrete and reversible as the three above.
 
 Do not weaken, delete, or stub out code to make a conflict disappear, and do
 not force-push or hard-reset anything you did not create. Do not run the merge
@@ -90,62 +108,82 @@ Some blockers are not yours to decide: two sides changed the same logic in
 ways that genuinely conflict, a recorded source branch is missing, or the only
 way forward destroys work. You are not expected to resolve those, and
 returning one is a correct outcome, not a failure. When you hit one:
-  1. Stop working on it and leave the repo as you found it.
-  2. Return fixed=false.
-  3. Add one entry to "decisions" phrased as the choice itself, with the
+  1. Stop working on it and leave the repo exactly as you found it.
+  2. Add one entry to "decisions", phrased as the choice itself with the
      options you actually saw — for example "group-1 rewrote validateInput()
      while main deleted it: keep group-1's version, keep the deletion, or
      merge both?".
-The caller puts each entry in "decisions" to the user, the user chooses, and
-the merge is retried with that answer. So write each one so a human can answer
-it without opening the repo. Never pick for them, and never guess.
+  3. Return the CASE B result below.
+The caller shows each entry in "decisions" to the user as AskUserQuestion
+choices, the user chooses, and the merge is retried with that answer. So write
+each one so a human can answer it without opening the repo. Never pick for
+them, and never guess.
 
 Use "blockers" for the other kind: something that stopped you but that nobody
 needs to decide — a tool that failed, a command you lacked permission to run,
 a state you could not reach. One concrete sentence each.
 
-If you cleared every blocker so the merge can be retried, return fixed=true,
-say what you did in summary, and leave both arrays empty.
-Return {fixed, summary, blockers, decisions}.`
+Return one of exactly two results.
+
+CASE A — you cleared every blocker and the merge can be retried. Return:
+{"fixed": true, "summary": "<one sentence naming exactly what you changed>", "blockers": [], "decisions": []}
+
+CASE B — you could not clear them. Return:
+{"fixed": false, "summary": "<one sentence saying how far you got>", "blockers": [<one concrete sentence per non-decision failure>], "decisions": [<one question per choice that belongs to the user>]}`
 
 const runMergeScript = (attempt) =>
   agent(runBrief, { label: `merge:run${attempt}`, phase: 'Merge', effort: 'low', schema: RUN_SCHEMA })
 
-const failed = (run) => !run || !run.ok || (run.conflicts?.length ?? 0) > 0
+const MERGE_OK = 'OK'
+const MERGE_FAILED = 'FAILED'
+
+function mergeResultCode(run) {
+  if (run === null || run === undefined) return MERGE_FAILED
+  if (run.ok !== true) return MERGE_FAILED
+  if ((run.conflicts?.length ?? 0) > 0) return MERGE_FAILED
+  return MERGE_OK
+}
 
 log(`merging ${mergeCliInput.groups.length} group(s)`)
-const first = await runMergeScript(1)
+const firstMergeAttempt = await runMergeScript(1)
 
-if (!failed(first)) {
-  return { merged: first.merged, conflicts: [], fixedBlockers: null, blockers: [], decisions: [] }
+if (mergeResultCode(firstMergeAttempt) === MERGE_OK) {
+  return { merged: firstMergeAttempt.merged, conflicts: [], fixedBlockers: null, blockers: [], decisions: [] }
 }
 
 log('merge failed — diagnosing')
 const diagnosis = await agent(
-  diagnoseBrief(first ?? { ok: false, conflicts: [], error: 'merge agent returned no result' }),
+  diagnoseBrief(firstMergeAttempt ?? { ok: false, conflicts: [], error: 'merge agent returned no result' }),
   { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA },
 )
 
-if (!diagnosis?.fixed) {
+const diagnosisMissing = diagnosis === null || diagnosis === undefined
+const diagnosisFixed = diagnosisMissing ? false : diagnosis.fixed
+const diagnosisSummary = diagnosisMissing
+  ? 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed'
+  : diagnosis.summary
+
+if (diagnosisFixed === false) {
   return {
-    merged: first?.merged ?? [],
-    conflicts: first?.conflicts ?? [],
+    merged: firstMergeAttempt?.merged ?? [],
+    conflicts: firstMergeAttempt?.conflicts ?? [],
     fixedBlockers: false,
-    blockers: diagnosis?.blockers ?? ['the diagnosing agent returned no result'],
-    decisions: diagnosis?.decisions ?? [],
-    summary: diagnosis?.summary ?? '',
+    blockers: diagnosisMissing ? ['the diagnosing agent returned no result'] : diagnosis.blockers,
+    decisions: diagnosisMissing ? [] : diagnosis.decisions,
+    summary: diagnosisSummary,
   }
 }
 
 log('blockers cleared — merging again')
 const retry = await runMergeScript(2)
+const retryFailed = mergeResultCode(retry) === MERGE_FAILED
 
 return {
   merged: retry?.merged ?? [],
   conflicts: retry?.conflicts ?? [],
   fixedBlockers: true,
-  blockers: failed(retry) ? ['merge still failed after the fix; see conflicts and error'] : [],
+  blockers: retryFailed ? ['merge still failed after the fix; see conflicts and error'] : [],
   decisions: [],
-  summary: diagnosis.summary,
+  summary: diagnosisSummary,
   error: retry?.error ?? '',
 }
