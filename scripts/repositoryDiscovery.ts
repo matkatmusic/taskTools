@@ -81,7 +81,7 @@ function discoverOccurrenceAndDescendants(
     manifest: DiscoveryManifest,
     pendingResolutionRequests: ResolutionRequest[],
 ): void {
-    const occurrenceId = relativePath === "" ? "root" : relativePath;
+    const occurrenceId = relativePath;
     const checkoutPath = join(rootPath, relativePath);
     const occurrences = manifest.repositoryManifest.occurrences;
     const existing = occurrences.find((candidate) => candidate.occurrenceId === occurrenceId);

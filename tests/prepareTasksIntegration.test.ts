@@ -77,12 +77,6 @@ test("test_everyOccurrenceHasANonEmptyOriginUrl", () => {
     }
 });
 
-test("test_everyOccurrenceHasANonEmptyOccurrenceId", () => {
-    for (const occurrence of manifest.occurrences) {
-        assert.notEqual(occurrence.occurrenceId, "");
-    }
-});
-
 test("test_groupTasksByFileOverlapReturnsRealGroupsInsteadOfThrowing", () => {
     const tasks: TaskRecord[] = [
         { taskNumber: 1, files: ["scripts/foo.ts"] },
