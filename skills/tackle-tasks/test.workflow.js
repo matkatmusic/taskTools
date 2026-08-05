@@ -155,4 +155,6 @@ async function testGroup(group) {
 log(`testing ${GROUPS.length} group(s), up to ${MAX_ROUNDS} round(s) each`)
 const tests = (await parallel(GROUPS.map((g) => () => testGroup(g)))).filter(Boolean)
 
-return { tests, allPassed: tests.every((t) => t.passed) }
+const testReceipts = tests.map((t) => ({ groupId: String(t.groupId), status: t.passed ? 'green' : 'red' }))
+
+return { tests, allPassed: tests.every((t) => t.passed), testReceipts }

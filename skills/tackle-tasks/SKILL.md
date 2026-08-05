@@ -43,9 +43,11 @@ args = the pipeline args JSON plus one added key:
 
 Reviews each plan with codex. On a rejection the verifier applies codex's
 suggested fixes to the plan file and re-runs codex once; a second rejection is
-final. Returns `{verified, approved, rejected, revisedCount}`. If `approved` is
-empty, stop and report — there is nothing to implement. Report `revisedCount`
-so the user knows how many plan files codex rewrote.
+final. Returns `{verified, approved, rejected, revisedCount, reviewHandoffs}`.
+If `approved` is empty, stop and report — there is nothing to implement.
+Report `revisedCount` so the user knows how many plan files codex rewrote.
+`reviewHandoffs` is one string per verified task recording codex's verdict —
+real evidence the approval gate later checks, carried into step 6.
 
 **Step 3 — implement.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/implement.workflow.js`,
 args = the pipeline args JSON plus one added key:
@@ -60,7 +62,9 @@ args = the pipeline args JSON plus:
   the implementer with the plan it implemented rather than to a cold agent.
 - `maxRounds` (optional): test-then-fix rounds before giving up, default 3.
 
-Returns `{tests, allPassed}`.
+Returns `{tests, allPassed, testReceipts}`. `testReceipts` is one
+`{groupId, status}` record per group — real evidence the approval gate later
+checks, carried into step 6.
 
 **Step 5 — approval.** Present `needsClarification`, `rejected`, `partial`,
 `blocked` and `tests` to the user, and ask every needsClarification question
@@ -77,13 +81,28 @@ args = the pipeline args JSON plus:
 - `needsClarificationCount`: length of `needsClarification` from step 1.
 - `rejectedCount`: length of `rejected` from step 2.
 - `requeueCount`: `requeueCount` from step 3.
+- `testReceipts`: `testReceipts` from step 4, verbatim — real green/red
+  evidence per group.
+- `reviewHandoffs`: `reviewHandoffs` from step 2, verbatim — real codex
+  review evidence per task.
+
+`mergeTaskWorktrees.ts` receives `testReceipts` and `reviewHandoffs` in its
+own CLI args, computes an `occurrenceDigests` array from a git-tree snapshot
+of each merged group's branch (main repo and every submodule), and includes
+all three in its stdout JSON alongside `merged`/`conflicts` — this is the
+real evidence an approval gate needs instead of an empty or fabricated array.
 
 The workflow runs `mergeTaskWorktrees.ts` in a subagent. If that fails —
 non-zero exit or a non-empty `conflicts` array — a second subagent diagnoses
 the cause and fixes what it can, and the merge script then runs again. Do none
 of that yourself; it stays in the workflow.
 
-Returns `{merged, conflicts, fixedBlockers, blockers, decisions, summary}`.
+Returns `{merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests,
+fixedBlockers, blockers, decisions, summary}`. `testReceipts` and
+`reviewHandoffs` are the evidence carried in from steps 4 and 2;
+`occurrenceDigests` is the git-tree-snapshot evidence `mergeTaskWorktrees.ts`
+itself computes for whatever merged in this run, and is empty whenever the
+merge did not fully complete.
 
 - `fixedBlockers` is `null` when the first run was clean, `true` when a
   subagent cleared the blockers and the retry ran, `false` when it could not.
