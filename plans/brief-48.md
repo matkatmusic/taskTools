@@ -10,6 +10,8 @@ Tests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSub
 
 Required: replace the synthesized manifest stub left behind by task 47. scripts/taskGroups.ts currently calls buildCanonicalTaskGroups with a locally fabricated buildFlatSingleRepositoryManifest — one occurrence with occurrenceId flat, originUrl https://local/flat/flat.git, a baseOid of forty zeros and baseBranch main — because the task 47 worker owned only taskGroups.ts and could not reach a repoRoot. That stub keeps grouping effectively flat, so submodules are still not grouped by real logical repository. This task owns prepareTasks.ts, has the repoRoot, and must thread the real manifest from bootstrapRepositoryManifest through to grouping and delete buildFlatSingleRepositoryManifest along with the stale comment claiming no disk-free manifest constructor exists. The cutover is not complete while a fabricated manifest sits in the hot path.
 
+REOPENED. The first attempt (commit 1039a4e) merged with a failing typecheck and broke tackle-tasks entirely — prepareTasks could not group any task — and was reverted in commit fbe32a7, along with the computeTaskStats manifest parameter it forced. Do not re-attempt until task 52 lands an end-to-end integration test against a real repository and fixes the discovery defects it documents: absolute checkoutPath versus root-relative task paths, and an originUrl that is never read from the git remote.
+
 ### scripts/prepareTasks.ts
 
 ```

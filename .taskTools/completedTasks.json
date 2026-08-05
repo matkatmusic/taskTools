@@ -785,5 +785,23 @@
       "e713ded"
     ],
     "closureNote": "Added tests/prepareTasksIntegration.test.ts against a real temporary git repository with an origin remote and a submodule, and fixed the three defects it exposed: repositoryDiscovery.ts now reads a real originUrl and assigns a non-empty root occurrenceId, and repositoryGraph.ts relativizes absolute checkoutPath values via a new selectRoot helper. The originUrl read falls back to the root commit SHA when a repository has no origin remote, so local-only repositories keep working; without that fallback it threw and regressed 15 tests across prepareTasks, mergeTaskWorktrees and repositoryDiscovery. The submodule clone is unblocked by spawning buildWorkflowArguments in a subprocess with GIT_CONFIG_GLOBAL set, because Bun does not propagate process.env to child processes; production prepareTasks.ts was left unchanged so the git CVE-2022-39253 default stays intact."
+  },
+  {
+    "taskNumber": 48,
+    "title": "Rewire prepareTasks call sites onto graph discovery and canonical grouping",
+    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.\n\nRequired: replace the synthesized manifest stub left behind by task 47. scripts/taskGroups.ts currently calls buildCanonicalTaskGroups with a locally fabricated buildFlatSingleRepositoryManifest — one occurrence with occurrenceId flat, originUrl https://local/flat/flat.git, a baseOid of forty zeros and baseBranch main — because the task 47 worker owned only taskGroups.ts and could not reach a repoRoot. That stub keeps grouping effectively flat, so submodules are still not grouped by real logical repository. This task owns prepareTasks.ts, has the repoRoot, and must thread the real manifest from bootstrapRepositoryManifest through to grouping and delete buildFlatSingleRepositoryManifest along with the stale comment claiming no disk-free manifest constructor exists. The cutover is not complete while a fabricated manifest sits in the hot path.\n\nREOPENED. The first attempt (commit 1039a4e) merged with a failing typecheck and broke tackle-tasks entirely — prepareTasks could not group any task — and was reverted in commit fbe32a7, along with the computeTaskStats manifest parameter it forced. Do not re-attempt until task 52 lands an end-to-end integration test against a real repository and fixes the discovery defects it documents: absolute checkoutPath versus root-relative task paths, and an originUrl that is never read from the git remote.",
+    "files": [
+      "scripts/prepareTasks.ts",
+      "tests/prepareTasks.test.ts",
+      "scripts/taskGroups.ts",
+      "tests/taskGroups.test.ts"
+    ],
+    "difficulty": 5,
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "06f616e",
+      "5a4856a"
+    ],
+    "closureNote": "Re-attempted after task 52 landed the real-repository integration test and fixed the discovery defects: scripts/prepareTasks.ts now loads the real repository manifest via bootstrapRepositoryManifest and threads it into groupTasksByFileOverlap, and scripts/taskGroups.ts drops the fabricated buildFlatSingleRepositoryManifest stub in favour of an optional manifest parameter with a union-find fallback so manifest-free callers keep working; implemented in 06f616e, merged in 5a4856a with typecheck clean and all 1032 tests passing."
   }
 ]

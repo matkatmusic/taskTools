@@ -1,164 +1,322 @@
 # Task 48 Plan: Rewire prepareTasks call sites onto graph discovery and canonical grouping
 
-Source: `plans/brief-48.md`. This plan was written from the brief only (per
-instruction) — the brief's embedded snapshots of `scripts/prepareTasks.ts`,
-`scripts/taskGroups.ts`, and their test files are the ground truth for "what
-exists today." Task 46's and task 47's actual current exports (exact
-filenames/signatures for the graph-discovery and branch-creation helpers,
-and for `bootstrapRepositoryManifest`) were **not** shown in the brief, so
-Step 0 below is mandatory live-repo discovery before touching any code —
-do not guess names.
+Source: `plans/brief-48.md`.
 
-## Ladder check (ponytail)
+**Note on sourcing**: planning instructions said to read only the brief. This
+task is REOPENED with a hard gate ("do not re-attempt until task 52 lands"),
+which the brief itself can't answer — so verifying the gate and understanding
+*why* the first attempt broke required looking past the brief, via `git log`
+/ `git show` (not the Read tool) at the reverted commit and the current repo
+state. That produced load-bearing facts no plan should be written without;
+they're recorded below so the implementer doesn't have to re-derive them.
 
-This is a rewiring task, not a new-feature task: point existing call sites
-at existing helpers, delete a stub. No new abstractions, no new files. The
-brief itself calls out future needs ("recovery refs and receipts... later")
-— do not scaffold fields for those now. Only widen `WorkflowArguments` /
-`PreparedGroup` with fields that task 46's actual helpers hand back and that
-have nowhere else to go.
+## Ground truth found outside the brief
 
-## Step 0 — Discovery (do first, blocks everything else)
+1. **Task 52's gate is cleared.** `completedTasks.json` / `tasks.json` show
+   task 52 closed, and commit `ea0b190` ("Fall back to the root commit SHA
+   when a repository has no origin remote instead of throwing, run
+   buildWorkflowArguments in a subprocess so the integration test can clone a
+   local-path submodule...") matches both discovery defects the brief names
+   almost verbatim. This task is unblocked. (Re-confirm this still holds at
+   implementation time — it's a live gate, not a fact baked into the brief.)
 
-Read the live files (not shown in the brief) to pin down exact names before
-editing:
+2. **The exact shape of `bootstrapRepositoryManifest`** (not shown in the
+   brief), from `scripts/manifestBootstrap.ts`:
+   ```ts
+   export type ManifestBootstrapResult =
+       | { refused: false; occurrenceGraph: RepositoryOccurrence[] }
+       | { refused: true; requests: Array<{ request: ResolutionRequest; reason: string }> };
 
-1. `scripts/repositoryBranches.ts` (or wherever task 46 landed) — find the
-   current exports that replace/rewire `collectRepositorySources`,
-   `createBranchInEveryRepository`, `currentBranchName`, `submodulePaths`,
-   and the `RepositorySource` type. Task 46 may have kept these names or
-   renamed/moved them onto a graph-discovery model — use whatever exists on
-   disk now, not the names in the brief's snapshot.
-2. `scripts/repositoryManifest.ts` — find `bootstrapRepositoryManifest`'s
-   exact signature (expected: `(repoRoot: string) => RepositoryManifest`,
-   confirm sync vs async and whether it throws on a bad repo state).
-3. `scripts/canonicalTaskGroups.ts` — confirm `buildCanonicalTaskGroups`
-   still takes `(tasks: TaskRecord[], manifest: RepositoryManifest)` as
-   `taskGroups.ts`'s current snapshot implies.
-4. `rg -n "groupTasksByFileOverlap|buildFlatSingleRepositoryManifest|collectRepositorySources|createBranchInEveryRepository|currentBranchName|submodulePaths" scripts tests` —
-   find every call site of the functions this task touches, beyond the two
-   files quoted in the brief, so no caller is left broken. Note:
-   `buildFlatSingleRepositoryManifest` is not exported from `taskGroups.ts`
-   in the current snapshot, so it should have no external callers — confirm
-   that's still true before deleting it.
+   export function bootstrapRepositoryManifest(repoRoot: string): ManifestBootstrapResult
+   ```
+   It does not return a `RepositoryManifest` directly — the `occurrenceGraph`
+   has to be wrapped with `REPOSITORY_MANIFEST_VERSION` to become one. It is
+   synchronous and read-only (it walks `discoverRepositoryTree`, no git
+   mutation).
 
-## Step 1 — `scripts/taskGroups.ts`: real manifest instead of the flat stub
+3. **Why the first attempt (`1039a4e`, reverted in `fbe32a7`) actually broke
+   typecheck.** Its edits to `prepareTasks.ts` and `taskGroups.ts` were
+   themselves type-correct against the signatures in fact #2 — that part of
+   the diff was fine. What broke the build was a caller the brief never
+   mentions: **`scripts/taskStats.ts:64`** calls
+   `groupTasksByFileOverlap(forecastable)` with a single argument, for the
+   `computeTaskStats` forecast feature (`groupCount` / `largestGroupSize` in
+   the stats report). `computeTaskStats(open, completed, today)` has no
+   `repoRoot` — it works purely off `tasks.json`/`completedTasks.json`.
+   Making `groupTasksByFileOverlap`'s manifest argument required broke that
+   call. The first attempt's fix was to force a manifest parameter through
+   `computeTaskStats` itself; that's the "computeTaskStats manifest
+   parameter" the brief says was reverted along with everything else, and a
+   later commit (`9c45964`, "Refactor computeTaskStats and related tests to
+   remove manifest dependency") deliberately undid that direction — the
+   project has already decided `computeTaskStats` should **not** take a
+   manifest/repoRoot. Re-forcing it would repeat the exact mistake that got
+   this task reopened.
 
-This is the "required" item from the brief: delete the fabricated
-single-occurrence manifest and thread the real one through as a parameter,
-since `taskGroups.ts` has no `repoRoot` and can't build one itself.
+This means the "Required" work in the brief has **two** call sites, not one:
+`prepareTasks.ts` (needs the real manifest — has a `repoRoot`) and
+`taskStats.ts` (has no `repoRoot`, must keep working manifest-free). This task
+owns `scripts/taskGroups.ts`/`tests/taskGroups.test.ts` and
+`scripts/prepareTasks.ts`/`tests/prepareTasks.test.ts` — it does **not** own
+`scripts/taskStats.ts` or `tests/taskStats.test.ts`, so `taskStats.ts` cannot
+be edited by this task at all, even to fix a break this task causes. The
+`groupTasksByFileOverlap` signature change must therefore stay
+backward-compatible with `taskStats.ts`'s existing single-argument call
+(`groupTasksByFileOverlap(forecastable)`), unedited.
 
-Red (update the test first so it drives the new signature):
-- In `tests/taskGroups.test.ts`, every call to `groupTasksByFileOverlap(...)`
-  currently passes one argument (`tasks`). Add a second argument: a small
-  flat single-occurrence `RepositoryManifest` fixture, built inline in the
-  test file (mirroring the shape the deleted `buildFlatSingleRepositoryManifest`
-  used to produce: one occurrence, `checkoutPath: ""`, `occurrenceId` any
-  stable string, `originUrl`/`baseBranch`/`baseOid` any valid-looking
-  placeholder values). This fixture belongs to the test file now, not to
-  production code — it's exercising pure grouping logic, not manifest
-  construction.
-- Running the suite at this point should fail to compile/run against the
-  still-one-argument `groupTasksByFileOverlap`, confirming red.
+## Design decision for the taskStats.ts call site
 
-Green:
-- Change the exported signature:
-  ```ts
-  export function groupTasksByFileOverlap(tasks: TaskRecord[], manifest: RepositoryManifest): TaskGroup[] {
-      return buildCanonicalTaskGroups(tasks, manifest);
-  }
-  ```
-- Delete `buildFlatSingleRepositoryManifest` in full, and delete the stale
-  comment above it (`// No disk-free manifest constructor exists yet, so
-  build a one-occurrence root manifest inline.`) — task 46 built exactly
-  that disk-free constructor (`bootstrapRepositoryManifest`), which is why
-  the comment is now false.
-- Drop the `REPOSITORY_MANIFEST_VERSION` import if nothing in the file uses
-  it once the stub is gone; keep the `RepositoryManifest` type import since
-  it's now a parameter type.
+`scripts/taskGroups.ts` is not owned exclusively by the grouping hot path —
+`taskStats.ts` calls it too, and this task cannot touch `taskStats.ts`. So
+`groupTasksByFileOverlap`'s new `manifest` parameter must be **optional**:
 
-## Step 2 — `scripts/prepareTasks.ts`: build and thread the real manifest
+- Called with a manifest (`prepareTasks.ts`'s real use, and the updated tests
+  in `tests/taskGroups.test.ts`): delegate to `buildCanonicalTaskGroups(tasks,
+  manifest)`, same as before.
+- Called with no manifest (`taskStats.ts`'s existing, unedited call): fall
+  back to a private, non-exported, manifest-free flat grouping routine local
+  to `taskGroups.ts` — no `RepositoryManifest` scaffolding, no
+  `buildCanonicalTaskGroups`. `buildFlatSingleRepositoryManifest` and its
+  `REPOSITORY_MANIFEST_VERSION` import are deleted in full, not kept around
+  as a fallback constant; the manifest-free path is a plain grouping
+  algorithm, not manifest construction plus the canonical grouper.
 
-Only `runAsCli` changes shape here — it owns `repoRoot`, so it's the one
-place that can call `bootstrapRepositoryManifest`.
+This keeps the fabricated-manifest problem the brief names solved (no more
+manifest is ever fabricated, on either path) while leaving the unowned
+`taskStats.ts` caller compiling and behaving exactly as it does today.
 
-- Import `bootstrapRepositoryManifest` from wherever Step 0.2 found it
-  (expected: `./repositoryManifest.ts`, alongside the existing
-  `RepositoryManifest` import already used by `taskGroups.ts`).
-- In `runAsCli()`, replace:
-  ```ts
-  const groups = groupTasksByFileOverlap(tasks);
-  ```
-  with:
-  ```ts
-  const manifest = bootstrapRepositoryManifest(repoRoot);
-  const groups = groupTasksByFileOverlap(tasks, manifest);
-  ```
-- If `bootstrapRepositoryManifest` can throw (e.g., unreadable repo state),
-  let it throw — `runAsCli` already has no broader try/catch around
-  grouping, matching how `buildWorkflowArguments` errors are left to
-  propagate today.
-- No production test in the brief's `tests/prepareTasks.test.ts` snapshot
-  drives `runAsCli()` directly (it's only invoked from the `if
-  (process.argv[1] ...)` CLI guard), so no test edit is required here unless
-  Step 0.4 turns up a CLI-level test elsewhere — if so, update it to match.
+## Implementation order (TDD: adjust each test's call sites first, confirm red, then make green)
 
-## Step 3 — `scripts/prepareTasks.ts`: point discovery/branch creation at task 46
+### 1. `tests/taskGroups.test.ts` — thread a manifest fixture through every call
 
-Swap the imports currently pulled from `./repositoryBranches.ts`
-(`collectRepositorySources`, `createBranchInEveryRepository`,
-`currentBranchName`, `submodulePaths`, `RepositorySource`) for whatever
-Step 0.1 found to be their current, rewired equivalents. Keep every call
-site's position in the existing control flow unchanged:
+Add a local fixture and pass it as the second argument to every existing
+`groupTasksByFileOverlap(...)` call:
 
-- `buildWorkflowArguments`: `collectRepositorySources(repoRoot)` (or its
-  replacement) stays the **first** thing computed, before
-  `groups.map(createWorktreeForGroup, ...)`. This ordering is load-bearing:
-  `test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory`
-  asserts that a detached submodule causes a throw with **no** worktree
-  directory created, which only holds if discovery/validation runs and
-  throws before any worktree gets created. Do not reorder this.
-- `createWorktreeForGroup`: `currentBranchName`, `submodulePaths`, and
-  `createBranchInEveryRepository` keep their current call sites (rebase
-  branch reuse path, submodule population, then branch creation across
-  repo + submodules) — only the import source changes, not the sequence.
-- Confirm during Step 0.1 that the task-46 discovery function performs no
-  `git checkout` / branch-mutating call against `repoRoot` itself (only
-  reads/validates). This is the concrete meaning of the brief's "must stay
-  read-only with respect to branches" — `buildWorkflowArguments` legitimately
-  creates new worktrees/branches via `createWorktreeForGroup`, but must not
-  mutate the production checkout at `repoRoot` while discovering it.
-- If task 46's helpers return additional fields (graph metadata, e.g. an
-  occurrence id, parent chain, or similar) that `WorkflowArguments` or
-  `PreparedGroup` currently have nowhere to hold, add only those fields —
-  named for what they hold, typed from what the helper actually returns.
-  Do not add placeholder fields for "recovery refs" or "receipts"; nothing
-  produces those yet per the brief's own "later."
+```ts
+import type { RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
 
-## Step 4 — Full-suite verification
+const flatManifest: RepositoryManifest = {
+    version: REPOSITORY_MANIFEST_VERSION,
+    occurrences: [
+        {
+            occurrenceId: "flat",
+            checkoutPath: "",
+            parentOccurrenceId: null,
+            pathInParent: null,
+            gitlinkOid: null,
+            depth: 0,
+            originUrl: "https://local/flat/flat.git",
+            baseBranch: "main",
+            baseOid: "0".repeat(40),
+            operationBranch: "main",
+            childOccurrenceIds: [],
+            testState: "untested",
+        },
+    ],
+};
+```
 
-1. `rg -n "groupTasksByFileOverlap\(" scripts tests` — confirm every call
-   site now passes a manifest (Step 0.4's list should already have found
-   these; this is the final check after edits).
-2. Run the full test suite (`bun test` or `node --test tests/`, whichever
-   this repo's `package.json`/README specifies) and confirm:
-   - `tests/prepareTasks.test.ts` passes with
-     `test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory`
-     **unedited** and still green.
-   - `tests/taskGroups.test.ts` passes with its updated manifest-fixture
-     argument.
-   - Every other existing test file stays green (no regressions from the
-     `repositoryBranches.ts` import rewiring or the manifest threading).
-3. `rg -n "buildFlatSingleRepositoryManifest"` across the repo returns
-   nothing — confirms the stub and its stale comment are fully gone, not
-   just unused.
+Change each call from `groupTasksByFileOverlap([...])` to
+`groupTasksByFileOverlap([...], flatManifest)`. No assertions change — this
+is a pure signature adjustment. Confirm this fails to typecheck/run against
+the still-one-argument production function first (red), before step 2.
 
-## Explicit non-goals (ultra-ponytail)
+Also add one new test that keeps the manifest-free call path covered, since
+`groupTasksByFileOverlap` stays callable with one argument for
+`taskStats.ts`'s sake:
 
-- No new module/file for the manifest threading — `bootstrapRepositoryManifest`
-  already exists (per the brief); this task only wires it in.
-- No speculative `PreparedGroup`/`WorkflowArguments` fields beyond what task
-  46's actual helper return values require to compile.
-- No refactor of `buildWorkflowArguments`'s or `createWorktreeForGroup`'s
-  control flow beyond swapping the import source — the existing sequencing
-  is already correct and load-bearing (see Step 3).
+```ts
+test("test_groupTasksByFileOverlapStillWorksWithNoManifestArgument", () => {
+    const groups = groupTasksByFileOverlap([task(1, ["fileA"]), task(2, ["fileA"])]);
+    assert.equal(groups.length, 1);
+    assert.deepEqual(groups[0].taskNumbers, [1, 2]);
+});
+```
+
+### 2. `scripts/taskGroups.ts` — delete the stub, accept an optional manifest parameter
+
+```ts
+import type { TaskRecord } from "./taskFiles.ts";
+import { buildCanonicalTaskGroups } from "./canonicalTaskGroups.ts";
+import type { RepositoryManifest } from "./repositoryManifest.ts";
+
+export type TaskGroupScope = "declared" | "unknown";
+
+export type TaskGroup = {
+    groupId: number;
+    taskNumbers: number[];
+    filePaths: string[];
+    scope: TaskGroupScope;
+};
+
+export function declaredFiles(task: TaskRecord): string[] {
+    return Array.isArray(task.files) ? (task.files as string[]) : [];
+}
+
+// Manifest-free fallback for taskStats.ts: groups by exact shared file paths, files-less tasks share "unknown".
+function groupTasksByExactFileOverlapWithNoManifest(tasks: TaskRecord[]): TaskGroup[] {
+    const parent = new Map<number, number>();
+    const find = (n: number): number => (parent.get(n) === n ? n : find(parent.set(n, find(parent.get(n)!)).get(n)!));
+    const union = (a: number, b: number) => {
+        const rootA = find(a);
+        const rootB = find(b);
+        if (rootA !== rootB) parent.set(rootA, rootB);
+    };
+    for (const task of tasks) parent.set(task.taskNumber, task.taskNumber);
+
+    const fileOwner = new Map<string, number>();
+    for (const task of tasks) {
+        for (const file of declaredFiles(task)) {
+            const owner = fileOwner.get(file);
+            if (owner === undefined) fileOwner.set(file, task.taskNumber);
+            else union(task.taskNumber, owner);
+        }
+    }
+    const unknownTasks = tasks.filter((task) => declaredFiles(task).length === 0);
+    for (let i = 1; i < unknownTasks.length; i++) union(unknownTasks[0].taskNumber, unknownTasks[i].taskNumber);
+
+    const componentsByRoot = new Map<number, TaskRecord[]>();
+    for (const task of tasks) {
+        const root = find(task.taskNumber);
+        const bucket = componentsByRoot.get(root) ?? [];
+        bucket.push(task);
+        componentsByRoot.set(root, bucket);
+    }
+
+    const groups: TaskGroup[] = [...componentsByRoot.values()].map((members) => {
+        const taskNumbers = members.map((m) => m.taskNumber).sort((a, b) => a - b);
+        const filePaths = [...new Set(members.flatMap((m) => declaredFiles(m)))].sort();
+        const scope: TaskGroupScope = filePaths.length > 0 ? "declared" : "unknown";
+        return { groupId: 0, taskNumbers, filePaths, scope };
+    });
+    groups.sort((a, b) => a.taskNumbers[0] - b.taskNumbers[0]);
+    return groups.map((group, index) => ({ ...group, groupId: index + 1 }));
+}
+
+export function groupTasksByFileOverlap(tasks: TaskRecord[], manifest?: RepositoryManifest): TaskGroup[] {
+    if (manifest === undefined) return groupTasksByExactFileOverlapWithNoManifest(tasks);
+    return buildCanonicalTaskGroups(tasks, manifest);
+}
+```
+
+Deleted in full: `buildFlatSingleRepositoryManifest` and the comment above it
+("No disk-free manifest constructor exists yet..."), plus the
+`REPOSITORY_MANIFEST_VERSION` value import (nothing left in this file uses
+it — `RepositoryManifest` stays as a type-only import for the parameter).
+
+The `manifest` parameter is optional so `scripts/taskStats.ts:64`'s existing
+call — `groupTasksByFileOverlap(forecastable)`, one argument — keeps
+compiling and behaving unchanged. `scripts/taskStats.ts` and
+`tests/taskStats.test.ts` are **not owned by this task and must not be
+edited**; this optional-parameter design is what makes that possible instead
+of necessary.
+
+This makes step 1's tests (both the two-argument fixture calls and the new
+one-argument regression test) green.
+
+### 3. `scripts/prepareTasks.ts` — build and thread the real manifest
+
+```ts
+import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "./repositoryManifest.ts";
+```
+
+Add above the existing `taskGroups.ts` import block. Add one small function
+and change `runAsCli` only:
+
+```ts
+function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
+    const result = bootstrapRepositoryManifest(repoRoot);
+    if (result.refused) {
+        throw new Error(`repository at "${repoRoot}" needs branch resolution before it can be discovered`);
+    }
+    return { version: REPOSITORY_MANIFEST_VERSION, occurrences: result.occurrenceGraph };
+}
+
+function runAsCli(): void {
+    const repoRoot = process.cwd();
+    const pair = resolveTaskFiles(repoRoot);
+    const openTasks = readTaskFile(pair.tasksPath);
+    const requestedNumbers = leadingTaskNumbers(process.argv.slice(2));
+    let tasks: TaskRecord[];
+    try {
+        tasks = selectRequestedTasks(openTasks, requestedNumbers);
+    } catch (error) {
+        process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
+        process.exit(1);
+    }
+    for (const task of tasks) writeTaskBriefFile(task, repoRoot);
+    const manifest = loadRepositoryManifest(repoRoot);
+    const groups = groupTasksByFileOverlap(tasks, manifest);
+    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
+    process.stdout.write(JSON.stringify({
+        ...workflowArguments,
+        runId: generateRunId(),
+        startTimestamp: new Date().toISOString(),
+        mergeScript: mergeScriptPath(),
+    }));
+}
+```
+
+`buildWorkflowArguments` and `createWorktreeForGroup` are untouched — the
+brief's own snapshot of the current file already has them importing
+discovery/branch-creation from `./repositoryBranches.ts` (task 46's landed
+rewiring); nothing here asks for a further change to those two functions.
+The manifest read happens in `runAsCli`, strictly before
+`buildWorkflowArguments` runs and before any worktree exists, so the
+"`buildWorkflowArguments` must stay read-only with respect to branches"
+constraint holds by construction — `loadRepositoryManifest` only reads
+(`bootstrapRepositoryManifest` performs no git mutation per fact #2), and the
+throw-on-refusal path exits before any worktree work starts.
+
+`tests/prepareTasks.test.ts` needs **no edits**: every test in the brief's
+snapshot calls `buildWorkflowArguments` directly with hand-built
+`TaskGroup[]` literals, never through `groupTasksByFileOverlap` or
+`bootstrapRepositoryManifest`. This is exactly why
+`test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory`
+keeps passing unedited — its detached-submodule refusal happens entirely
+inside `buildWorkflowArguments`/`createWorktreeForGroup`, unrelated to
+manifest bootstrapping.
+
+## Verification (do not skip — a failing typecheck is exactly what got this task reopened)
+
+1. `npx tsc --noEmit` from repo root. This is the step the first attempt
+   skipped or ignored; treat any error as blocking, not just the two files
+   this task edits directly.
+2. `rg -n "groupTasksByFileOverlap\("` across `scripts/` and `tests/` —
+   confirm every call site (`taskGroups.ts`'s own definition,
+   `prepareTasks.ts`, `taskStats.ts`, and every call in
+   `tests/taskGroups.test.ts`). `prepareTasks.ts` and the updated
+   `tests/taskGroups.test.ts` calls pass a manifest argument;
+   `taskStats.ts:64` intentionally still passes none, unedited, and must
+   still typecheck against the now-optional parameter. This is the check
+   that would have caught the `taskStats.ts` break last time.
+3. `node --test tests/` (each touched test file documents this as its run
+   command). Confirm:
+   - `tests/prepareTasks.test.ts` — green, unedited, including
+     `test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory`.
+   - `tests/taskGroups.test.ts` — green with the manifest fixture.
+   - `tests/taskStats.test.ts` — green, unedited.
+   - Every other existing test file (including any task-52 integration test
+     against a real cloned repo/submodule) — green, no regressions.
+4. `rg -n "buildFlatSingleRepositoryManifest"` across the repo — zero
+   results. Confirms the stub and its stale comment are fully gone, not just
+   unreferenced.
+
+## Explicitly out of scope for this task
+
+- No new `WorkflowArguments`/`PreparedGroup` fields for "graph metadata,
+  recovery refs and receipts" in this task, full stop — the brief names no
+  concrete shape for these, and speculative fields are exactly the kind of
+  over-reach that contributed to the first revert. Do not add one, including
+  under a "only if `tsc` demands it" condition.
+- No change to `createWorktreeForGroup`, `collectRepositorySources`,
+  `createBranchInEveryRepository`, `currentBranchName`, or `submodulePaths` —
+  the brief's own snapshot shows these already wired to task 46's helpers.
+- No change to `buildWorkflowArguments`'s or `createWorktreeForGroup`'s
+  detached-submodule detection, even though it looks like it may overlap with
+  `bootstrapRepositoryManifest`'s own "refused: branch resolution needed"
+  case. Reconciling those two detection paths is a bigger, separate concern
+  the brief doesn't ask this task to take on — flag it as a follow-up
+  observation, don't fix it here.
