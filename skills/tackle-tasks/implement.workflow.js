@@ -22,6 +22,10 @@ const WORKER_SCHEMA = {
   required: ['task', 'status', 'summary', 'remaining'],
 }
 
+const tddInstruction = (t) => t.tests && t.tests !== 'skip'
+  ? `This task's tests field holds an example test the user wrote: ${t.tests}\nWrite that test first, then expand it to also cover the individual functions/subparts you build, before writing the implementation.`
+  : 'This task has no tests field, or it is the literal string "skip" — skip TDD entirely and just write the code.'
+
 const workerBrief = (t, group, planFile, note) => `You are implementing EXACTLY ONE pre-planned task from
 ./.taskTools/tasks.json: #${t.number}.
 
@@ -35,6 +39,8 @@ ownedFiles = ${t.files.join(', ')}
 plan = ${planFile}
 timeBudget = 10 minutes
 ${note ? `note = ${note}\n` : ''}
+${tddInstruction(t)}
+
 use jot:implement ${planFile}
 
 if the plan is impossible as written:
