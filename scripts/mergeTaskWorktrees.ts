@@ -184,17 +184,11 @@ export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, 
 
 function runDiscoverCli(): void {
     const repoRoot = process.cwd();
-    process.stderr.write("DEBUG repoRoot=" + repoRoot + "\n");
     const sourceBranch = currentBranchName(repoRoot);
-    process.stderr.write("DEBUG sourceBranch=" + sourceBranch + "\n");
     const pair = resolveTaskFiles(repoRoot);
-    process.stderr.write("DEBUG pair=" + JSON.stringify(pair) + "\n");
     const openTasks = readTaskFile(pair.tasksPath);
-    process.stderr.write("DEBUG openTasks=" + JSON.stringify(openTasks) + "\n");
     const results = findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks);
-    process.stderr.write("DEBUG results=" + JSON.stringify(results) + "\n");
     process.stdout.write(JSON.stringify(results));
-    process.stderr.write("DEBUG wrote stdout\n");
 }
 
 function runMergeCli(worktreePath: string): void {
@@ -283,5 +277,4 @@ function runAsCli(): void {
     runPipelineCli();
 }
 
-process.stderr.write("DEBUG argv1=" + process.argv[1] + " metaurl=" + import.meta.url + "\n");
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
