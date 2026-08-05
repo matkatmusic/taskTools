@@ -751,24 +751,6 @@
     "closureNote": "Added listTaskWorktrees and findUnmergedTaskWorktrees plus --discover and --merge CLI modes to scripts/mergeTaskWorktrees.ts, matching leftover worktrees to open tasks by file overlap because groupId is never persisted, and created skills/merge-worktree-tasks/SKILL.md gating every merge behind explicit user approval."
   },
   {
-    "taskNumber": 41,
-    "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
-    "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.\n\nIn skills/tackle-tasks/tackle-tasks.workflow.js add a Verify phase (one agent per task after Plan, gating which planned tasks reach Implement) and a Test phase (one agent per group after Implement, feeding failures back into runWorker the way the existing partial-requeue loop does). Both need meta.phases entries, result arrays threaded into the final return, and an extra pipeline() stage.\n\nThe file is 194 of the 250-line cap and the two phases add roughly 60-100 lines, so split first: move VERIFY_SCHEMA, TEST_SCHEMA and the verifierBrief/testerBrief prompt builders (plus the existing plannerBrief/workerBrief for consistency) into a new skills/tackle-tasks/tackle-tasks.briefs.js imported by the workflow, leaving the workflow as thin orchestration wiring. The Test agent brief should point at the existing scripts/relatedTests.ts discovery pattern rather than duplicating test discovery; relatedTests.ts and testPolicy.ts themselves need no changes.",
-    "files": [
-      "skills/tackle-tasks/tackle-tasks.workflow.js",
-      "skills/tackle-tasks/tackle-tasks.briefs.js"
-    ],
-    "handoffFilePaths": [],
-    "blockedBy": [],
-    "difficulty": 3,
-    "completionDate": "2026-08-04",
-    "commitHashes": [
-      "d33b9c8",
-      "70cb1b8"
-    ],
-    "closureNote": "Added Verify and Test phases to skills/tackle-tasks/tackle-tasks.workflow.js and extracted the schemas and prompt builders into skills/tackle-tasks/tackle-tasks.briefs.js to stay under the 250-line cap."
-  },
-  {
     "taskNumber": 52,
     "title": "End-to-end integration test: prepareTasks against a real repository",
     "description": "Phase 1 to 3 was unit-tested entirely against hand-written manifest fixtures and never executed against a real repository, so wiring it into production (task 48) broke tackle-tasks completely and was reverted in commit fbe32a7. Three integration defects were found and none were caught by the 1027-test suite.\n\n1. scripts/repositoryDiscovery.ts line 72 records checkoutPath as an absolute path via join(rootPath, relativePath), while scripts/repositoryGraph.ts isWithinCheckout matches it against root-relative task paths like scripts/foo.ts — so nothing owns any path and prepareTasks throws: no occurrence owns path scripts/mergeTaskWorktrees.ts. Decision already made by the user: absolute wins, and the graph matchers relativize against the root occurrence checkoutPath. Do not re-litigate that.\n\n2. scripts/repositoryDiscovery.ts line 103 sets originUrl to existing?.originUrl ?? empty string and never reads the git remote, but logical repository identity is keyed on originUrl, so ownership fails with: occurrence has an unparseable origin URL.\n\n3. The root occurrence is given an empty occurrenceId.\n\nAlso reconcile the coordinate systems: tests/repositoryGraph.test.ts uses a fixture whose task paths are relative to the root occurrence PARENT directory (root checkoutPath jfred, paths like jfred/external/tmux_lib/src/foo.ts), while production task paths are relative to the repo root itself. Those two conventions conflict and one of them has to give.\n\nAdd tests/prepareTasksIntegration.test.ts that builds a real temporary git repository with an origin remote and at least one submodule, then runs bootstrapRepositoryManifest, groupTasksByFileOverlap and buildWorkflowArguments against it and asserts: ownership resolves for a root file path and for a submodule file path; every occurrence carries a non-empty originUrl and occurrenceId; grouping returns real groups instead of throwing.\n\nFix scripts/repositoryDiscovery.ts and scripts/repositoryGraph.ts as needed to make it pass. This must land before task 48 is re-attempted.",

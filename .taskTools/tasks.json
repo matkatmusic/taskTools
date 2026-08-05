@@ -34,6 +34,20 @@
     "difficulty": 4
   },
   {
+    "taskNumber": 41,
+    "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
+    "description": "REOPENED. The Verify and Test phases this task asked for now exist and both run green end to end (exercised on task 48), but not in the shape the original description specified.\n\nThey are separate self-contained workflow files - skills/tackle-tasks/verify.workflow.js and skills/tackle-tasks/test.workflow.js - not extra pipeline() stages inside a single tackle-tasks.workflow.js. There is no tackle-tasks.briefs.js and there cannot be one: Claude Code workflow scripts run in a sandbox whose only globals are log, phase, console, budget, setTimeout, clearTimeout, Date, agent, parallel, pipeline, workflow and args. Both static import and dynamic import() are rejected at load. The original module-split instruction is impossible - do not re-attempt it. Each workflow file stays self-contained and under the 250-line cap, which is what the split was trying to achieve anyway.\n\nWhat is actually left:\n\n1. Failure routing. test.workflow.js sends a failing test to a separate fixer agent (fixerBrief). The original ask was that failures feed back into the implementing worker the way the partial-requeue loop in implement.workflow.js does, so the agent that wrote the code is the one that fixes it, carrying the plan context instead of starting cold from a diff. Either route failures back through implement.workflow.js workerBrief, or keep the fixer agent and record in SKILL.md why a cold fixer is preferable.\n\n2. Keep SKILL.md step 4 in sync with whatever routing lands. It currently documents test.workflow.js returning {tests, allPassed} and bounded by maxRounds (default 3) so a genuinely broken test stops the loop rather than spinning.\n\nThe stale files array from the first attempt named tackle-tasks.workflow.js and tackle-tasks.briefs.js; both were deleted when the pipeline was split per phase.",
+    "files": [
+      "skills/tackle-tasks/test.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "difficulty": 3
+  },
+  {
     "taskNumber": 43,
     "title": "Rewrite pick-a-task's selection criteria to use the difficulty field",
     "description": "Revisit how pick-a-task chooses tasks once the `difficulty` field is supported on tasks.json entries.\n\nToday skills/pick-a-task/SKILL.md picks the N easiest open tasks by having the agent read every task and reason in prose about which are simplest, comparing each against the current state of the project. Once each task carries a difficulty rating (1-5), most of that reasoning becomes a sort: filter to unblocked, order by difficulty ascending, take N.\n\nRewrite the picking criteria to use the field, and decide what judgment is still worth spending prose on. The remaining candidate is the relevance check — is this task still needed given the current codebase? — which is separate from difficulty and cannot be sorted.\n\nNo longer blocked: the difficulty field now exists on every open tasks.json entry, and skills/create-task/template/taskTemplate.json documents the 1-5 scale (1 = one-line mechanical change, 5 = wide blast radius or a previously reverted attempt). Read that scale before rewriting the criteria so the SKILL.md wording matches what the ratings actually mean.",
