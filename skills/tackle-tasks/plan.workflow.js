@@ -20,14 +20,33 @@ const PLAN_SCHEMA = {
 }
 
 const plannerBrief = (t) => `Invoke /ponytail:ponytail ultra.
-Read ONLY this brief file (do not read any other file): ${t.briefFile}
+Read this brief file: ${t.briefFile}
+You may also READ these owned files, and nothing else: ${t.files.join(', ')}
+Read them — a plan that guesses at their contents will be rejected by the reviewer.
 Follow ~/.claude/guides/planning.md and write the plan to exactly this path: ${t.planFile}
 Do not change any source file — this is planning only, not implementation.
+
+The plan must be exact enough that the implementer makes no discovery of its own:
+- Name every edit by file path and line number, with the current text and what it becomes.
+- Account for every owned file: either its exact edit list, or the reason it needs no edit.
+- Resolve every question while planning. Write no conditional instruction — no
+  "re-check", no "verify before editing", no "if the live file disagrees", no
+  "trust the live file". If you could not settle something, that is
+  needs-clarification, not a fallback sentence in the plan.
+- Quote only text you actually read. Never describe an excerpt the brief does not contain.
+- State the verification that proves the change worked, as commands with expected results.
+
+If the plan would need to edit a file outside the owned list above, set status
+"needs-clarification" and name that file in "question" — do not plan the edit anyway.
 If the task is unclear, set status "needs-clarification" and put your
 question in "question". If the task no longer applies to the codebase, set
 status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
-Return {task: ${t.number}, status, planFile: "${t.planFile}", question}.`
+Return {task: ${t.number}, status, planFile: "${t.planFile}", question}.
+
+You are forbidden to edit any file other than ${t.planFile}; to read a file outside
+the owned list; to leave a decision for the implementer; or to write a plan step
+whose exact target you did not read.`
 
 const TASKS = GROUPS.flatMap((g) => g.tasks)
 log(`planning ${TASKS.length} task(s)`)
