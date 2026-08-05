@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -35,6 +36,45 @@ function makeTempRepoWithCommit(): string {
 function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
     const worktree = createWorktreeForGroup(repoRoot, { groupId, taskNumbers: [groupId], filePaths: [], scope: "unknown" });
     return { groupId, worktree, branch: `task-group-${groupId}`, scope: "unknown", tasks: [] };
+}
+
+type SubmoduleManifestSpec = { checkoutPath: string; baseBranch: string; baseOid: string; operationBranch: string };
+
+function makeManifest(
+    baseBranch: string,
+    baseOid: string,
+    operationBranch: string,
+    submodules: SubmoduleManifestSpec[] = [],
+): RepositoryManifest {
+    const root = {
+        occurrenceId: "root",
+        checkoutPath: "",
+        parentOccurrenceId: null,
+        pathInParent: null,
+        gitlinkOid: null,
+        depth: 0,
+        originUrl: "",
+        baseBranch,
+        baseOid,
+        operationBranch,
+        childOccurrenceIds: submodules.map((_, index) => `sub-${index}`),
+        testState: "untested" as const,
+    };
+    const subOccurrences = submodules.map((sub, index) => ({
+        occurrenceId: `sub-${index}`,
+        checkoutPath: sub.checkoutPath,
+        parentOccurrenceId: "root",
+        pathInParent: sub.checkoutPath,
+        gitlinkOid: null,
+        depth: 1,
+        originUrl: "",
+        baseBranch: sub.baseBranch,
+        baseOid: sub.baseOid,
+        operationBranch: sub.operationBranch,
+        childOccurrenceIds: [],
+        testState: "untested" as const,
+    }));
+    return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [root, ...subOccurrences] };
 }
 
 function makeTempRepoWithLocalSubmodule(): string {
@@ -208,7 +248,9 @@ test("test_runAsCliLeavesTheWorktreeAndBranchInPlaceAfterASuccessfulMerge", () =
         groups: [preparedGroup],
         repositorySources: [{ path: "", sourceBranch }],
     };
-    execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(workflowArguments)], { encoding: "utf8" });
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = { ...workflowArguments, repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch) };
+    execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
 
     assert.equal(existsSync(group.worktree), true);
     const branches = git(repoRoot, "branch", "--list", group.branch);
@@ -304,4 +346,92 @@ test("test_resolveGitlinkConflictsAbortsOnANonSubmoduleConflict", () => {
     assert.equal(resolution.resolved, false);
     assert.ok(resolution.unexpectedConflicts.includes("shared.txt"));
     assert.equal(existsSync(join(repoRoot, ".git", "MERGE_HEAD")), false);
+});
+
+test("test_runPipelineCliMintsApprovalAndPublicationTargetsWhenEvidenceIsCompleteAndGreen", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const sourceBranch = currentBranchName(repoRoot);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const submoduleGroupBranch = currentBranchName(worktreeSubmodulePath);
+
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+
+    const preMergeRootOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const preMergeSubmoduleOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const testReceipts = [{ groupId: "1", status: "green" }];
+    const reviewHandoffs = ["reviewed by codex"];
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: makeManifest(sourceBranch, preMergeRootOid, group.branch, [
+            { checkoutPath: "vendor", baseBranch: submoduleSourceBranch, baseOid: preMergeSubmoduleOid, operationBranch: submoduleGroupBranch },
+        ]),
+        testReceipts,
+        reviewHandoffs,
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+    const postMergeRootOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const postMergeSubmoduleOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    assert.equal(output.runState.readyForApproval, true);
+    assert.ok(output.runState.approval && output.runState.approval.digest.length > 0);
+    assert.ok(output.runState.authorization);
+    assert.deepEqual(output.runState.digestInput.testReceipts, testReceipts);
+    assert.deepEqual(output.runState.digestInput.reviewHandoffs, reviewHandoffs);
+    assert.deepEqual(output.publicationTargets, [
+        { repositoryPath: "", recordedBaseOid: preMergeRootOid, targetOid: postMergeRootOid },
+        { repositoryPath: "vendor", recordedBaseOid: preMergeSubmoduleOid, targetOid: postMergeSubmoduleOid },
+    ]);
+    assert.notEqual(preMergeRootOid, postMergeRootOid);
+    assert.notEqual(preMergeSubmoduleOid, postMergeSubmoduleOid);
+});
+
+test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    writeFileSync(join(repoRoot, "shared.txt"), "line1\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "add shared.txt");
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "shared.txt"), "line1-from-worktree\n");
+    git(group.worktree, "add", "shared.txt");
+    git(group.worktree, "commit", "-q", "-m", "worktree edit");
+
+    writeFileSync(join(repoRoot, "shared.txt"), "line1-from-main\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "main edit");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.conflicts.length, 1);
+    assert.equal(output.runState.readyForApproval, false);
+    assert.equal(output.runState.approval, undefined);
+    assert.equal(output.runState.authorization, undefined);
+    assert.deepEqual(output.publicationTargets, []);
 });

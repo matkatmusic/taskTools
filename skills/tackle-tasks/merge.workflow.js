@@ -18,9 +18,11 @@ const RUN_SCHEMA = {
     testReceipts: { type: 'array' },
     reviewHandoffs: { type: 'array', items: { type: 'string' } },
     occurrenceDigests: { type: 'array', items: { type: 'string' } },
+    runState: { type: ['object', 'null'] },
+    publicationTargets: { type: 'array' },
     error: { type: 'string' },
   },
-  required: ['ok', 'merged', 'conflicts', 'testReceipts', 'reviewHandoffs', 'occurrenceDigests', 'error'],
+  required: ['ok', 'merged', 'conflicts', 'testReceipts', 'reviewHandoffs', 'occurrenceDigests', 'runState', 'publicationTargets', 'error'],
 }
 
 const DIAGNOSE_SCHEMA = {
@@ -44,6 +46,7 @@ const mergeCliInput = {
   typecheckCommand: ARGS.typecheckCommand ?? 'npx tsc --noEmit',
   groups: ARGS.groups ?? [],
   repositorySources: ARGS.repositorySources,
+  repositoryManifest: ARGS.repositoryManifest,
   runId: ARGS.runId,
   startTimestamp: ARGS.startTimestamp,
   doneCount: ARGS.doneCount ?? 0,
@@ -66,13 +69,13 @@ A line reading \`return {...}\` means stop and report exactly those fields.
 result = run(${command})
 
 if result.exitCode == 0 and result.stdout is JSON containing "merged" and "conflicts":
-    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, testReceipts: result.stdout.testReceipts, reviewHandoffs: result.stdout.reviewHandoffs, occurrenceDigests: result.stdout.occurrenceDigests, error: ""}
+    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, testReceipts: result.stdout.testReceipts, reviewHandoffs: result.stdout.reviewHandoffs, occurrenceDigests: result.stdout.occurrenceDigests, runState: result.stdout.runState, publicationTargets: result.stdout.publicationTargets, error: ""}
 else:
-    return {ok: false, merged: [], conflicts: [], testReceipts: [], reviewHandoffs: [], occurrenceDigests: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
+    return {ok: false, merged: [], conflicts: [], testReceipts: [], reviewHandoffs: [], occurrenceDigests: [], runState: null, publicationTargets: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
 
 You are forbidden to edit any file, to run any other command, or to change the
-merged, conflicts, testReceipts, reviewHandoffs, or occurrenceDigests values on
-the success branch.`
+merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, or
+publicationTargets values on the success branch.`
 
 const diagnoseBrief = (run) => `The merge failed.
 
@@ -149,6 +152,8 @@ if (mergeResultCode(firstMergeAttempt) === MERGE_OK) {
     testReceipts: firstMergeAttempt.testReceipts,
     reviewHandoffs: firstMergeAttempt.reviewHandoffs,
     occurrenceDigests: firstMergeAttempt.occurrenceDigests,
+    runState: firstMergeAttempt.runState,
+    publicationTargets: firstMergeAttempt.publicationTargets,
     fixedBlockers: null,
     blockers: [],
     decisions: [],
@@ -177,6 +182,8 @@ if (diagnosisFixed === false || decisionsPending === true) {
     testReceipts: firstMergeAttempt?.testReceipts ?? [],
     reviewHandoffs: firstMergeAttempt?.reviewHandoffs ?? [],
     occurrenceDigests: [],
+    runState: null,
+    publicationTargets: [],
     fixedBlockers: false,
     blockers: diagnosisMissing ? ['the diagnosing agent returned no result'] : diagnosis.blockers,
     decisions: diagnosisMissing ? [] : diagnosis.decisions,
@@ -194,6 +201,8 @@ return {
   testReceipts: retry?.testReceipts ?? [],
   reviewHandoffs: retry?.reviewHandoffs ?? [],
   occurrenceDigests: retryFailed ? [] : (retry?.occurrenceDigests ?? []),
+  runState: retryFailed ? null : (retry?.runState ?? null),
+  publicationTargets: retryFailed ? [] : (retry?.publicationTargets ?? []),
   fixedBlockers: true,
   blockers: retryFailed ? ['merge still failed after the fix; see conflicts and error'] : [],
   decisions: [],
