@@ -85,3 +85,37 @@ test("test_createBranchInEveryRepositoryIsIdempotentWhenTheBranchAlreadyExists",
     createBranchInEveryRepository(repoRoot, ["", "vendor"], "task-group-1");
     assert.doesNotThrow(() => createBranchInEveryRepository(repoRoot, ["", "vendor"], "task-group-1"));
 });
+
+test("test_collectRepositorySourcesCreatesNoBranchAndLeavesEveryWorkingDirectoryBranchUnchanged", () => {
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    const vendorPath = join(repoRoot, "vendor");
+    const parentBranchBefore = currentBranchName(repoRoot);
+    const vendorBranchBefore = currentBranchName(vendorPath);
+    const parentBranchListBefore = git(repoRoot, "branch", "--list");
+    const vendorBranchListBefore = git(vendorPath, "branch", "--list");
+
+    collectRepositorySources(repoRoot);
+
+    assert.equal(currentBranchName(repoRoot), parentBranchBefore);
+    assert.equal(currentBranchName(vendorPath), vendorBranchBefore);
+    assert.equal(git(repoRoot, "branch", "--list"), parentBranchListBefore);
+    assert.equal(git(vendorPath, "branch", "--list"), vendorBranchListBefore);
+});
+
+test("test_collectRepositorySourcesSurfacesABootstrapRefusalAsACleanError", () => {
+    const submoduleOrigin = makeTempRepoWithCommit();
+    const repoRoot = makeTempRepoWithCommit();
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    git(repoRoot, "submodule", "add", "-q", submoduleOrigin, "vendor");
+    git(repoRoot, "commit", "-q", "-m", "add submodule");
+    const vendorPath = join(repoRoot, "vendor");
+    writeFileSync(join(vendorPath, "extra.txt"), "extra\n");
+    git(vendorPath, "add", "extra.txt");
+    git(vendorPath, "commit", "-q", "-m", "extra");
+
+    assert.throws(() => collectRepositorySources(repoRoot), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.notEqual((error as Error).message, "");
+        return true;
+    });
+});
