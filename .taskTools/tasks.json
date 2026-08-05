@@ -98,5 +98,18 @@
     ],
     "difficulty": 5,
     "blockedBy": []
+  },
+  {
+    "taskNumber": 54,
+    "title": "Have create-task ask the user for an example test and store it as a tests field on the task",
+    "description": "When using create-task, ask the user for an example of a test (most likely an e2e test) that will correctly test the thing they are adding. Offer an optional skip choice when asking. If the user picks skip, the implementing agent skips TDD and just writes code. Otherwise the implementing agent writes the test based on what the user wrote, and expands on it a bit to test subparts of what was built (i.e. test individual functions).\n\nPurpose: skip the agent undirected TDD approach and give it an actual test to write the implementation around, one that reflects how the user wants the code to actually work.\n\nDesign notes: the answer has to survive past the create-task conversation, so store it on the task entry as a new field named tests, holding the user answer as prose or pseudocode, or the literal string skip. Add the field to skills/create-task/template/taskTemplate.json and document it in skills/create-task/SKILL.md alongside the AskUserQuestion prompt that collects it. Then consume it downstream: skills/tackle-tasks/plan.workflow.js must put the example test into the plan so codex verifies against it, and skills/tackle-tasks/implement.workflow.js workerBrief must instruct the worker to write that test first and expand it to cover individual functions, or to skip TDD entirely when tests is the string skip. Tasks created before this field exists must keep working, so treat a missing field the same as skip.",
+    "files": [
+      "skills/create-task/SKILL.md",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js"
+    ],
+    "difficulty": 3,
+    "blockedBy": []
   }
 ]
