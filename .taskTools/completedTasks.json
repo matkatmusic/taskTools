@@ -730,22 +730,5 @@
       "9488346"
     ],
     "closureNote": "groupTasksByFileOverlap now delegates to buildCanonicalTaskGroups and the hand-rolled union-find grouping was deleted (net 19 lines removed); it keeps its original signature as a thin adapter that passes a synthesized flat single-repository manifest, because the worker owned only taskGroups.ts and could not reach a repoRoot, so threading the real bootstrapRepositoryManifest output and deleting that stub is an explicit requirement recorded on task 48."
-  },
-  {
-    "taskNumber": 48,
-    "title": "Rewire prepareTasks call sites onto graph discovery and canonical grouping",
-    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.\n\nRequired: replace the synthesized manifest stub left behind by task 47. scripts/taskGroups.ts currently calls buildCanonicalTaskGroups with a locally fabricated buildFlatSingleRepositoryManifest — one occurrence with occurrenceId flat, originUrl https://local/flat/flat.git, a baseOid of forty zeros and baseBranch main — because the task 47 worker owned only taskGroups.ts and could not reach a repoRoot. That stub keeps grouping effectively flat, so submodules are still not grouped by real logical repository. This task owns prepareTasks.ts, has the repoRoot, and must thread the real manifest from bootstrapRepositoryManifest through to grouping and delete buildFlatSingleRepositoryManifest along with the stale comment claiming no disk-free manifest constructor exists. The cutover is not complete while a fabricated manifest sits in the hot path.",
-    "files": [
-      "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts",
-      "scripts/taskGroups.ts",
-      "tests/taskGroups.test.ts"
-    ],
-    "completionDate": "2026-08-04",
-    "commitHashes": [
-      "1039a4e",
-      "9500989"
-    ],
-    "closureNote": "scripts/prepareTasks.ts now threads the real bootstrapRepositoryManifest output through discovery and grouping and the fabricated buildFlatSingleRepositoryManifest stub was deleted from scripts/taskGroups.ts; the resulting signature change broke scripts/taskStats.ts, which sat outside the worker ownership fence and was merged with a failing typecheck because the pipeline typecheck stage is report-only, so computeTaskStats was given the manifest as an explicit fourth parameter with its CLI falling back to a single flat occurrence when the working directory is not a discoverable checkout, keeping stats usable outside a git repository."
   }
 ]
