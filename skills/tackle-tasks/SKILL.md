@@ -22,11 +22,60 @@ When `$ARGUMENTS` contains the word `valid`, the user has confirmed the tasks ar
 Review the task details above (each object comes from `tasks.json` if the task is open, or `completedTasks.json` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
 Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks detailed above.
 
-Call Workflow with scriptPath "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/tackle-tasks.workflow.js"
-and args set to the pipeline args JSON printed above, verbatim.
+## Running the pipeline
 
-Present merged, conflicts, needsClarification and blocked to the user. Ask every
-needsClarification question with AskUserQuestion. ONLY after the user approves, invoke
+Each phase is its own workflow, launched in order. Call Workflow with the
+scriptPath and args given below, and wait for each to finish before starting
+the next.
+
+The "pipeline args" JSON printed above has these keys: `repo`,
+`typecheckCommand`, `groups`, `repositorySources`, `runId`, `startTimestamp`,
+`mergeScript`. Every step below passes all seven of those keys through
+unchanged, plus the extra keys named in that step.
+
+**Step 1 — plan.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/plan.workflow.js`,
+args = the pipeline args JSON exactly as printed, no additions.
+Returns `{plans, planned, needsClarification, notRelevant}`.
+
+**Step 2 — verify.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/verify.workflow.js`,
+args = the pipeline args JSON plus one added key:
+- `planned`: the `planned` array from step 1, verbatim.
+
+Reviews each plan with codex. Returns `{verified, approved, rejected}`. If
+`approved` is empty, stop and report — there is nothing to implement.
+
+**Step 3 — implement.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/implement.workflow.js`,
+args = the pipeline args JSON plus one added key:
+- `approved`: the `approved` array from step 2, verbatim.
+
+Returns `{results, done, partial, blocked, requeueCount}`.
+
+**Step 4 — test.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/test.workflow.js`,
+args = the pipeline args JSON plus:
+- `done`: the `done` array from step 3, verbatim.
+- `maxRounds` (optional): test-then-fix rounds before giving up, default 3.
+
+Returns `{tests, allPassed}`.
+
+**Step 5 — approval.** Present `needsClarification`, `rejected`, `partial`,
+`blocked` and `tests` to the user, and ask every needsClarification question
+with AskUserQuestion. **Do not launch the merge workflow until the user
+approves the work.**
+
+**Step 6 — merge.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/merge.workflow.js`,
+args = the pipeline args JSON plus:
+- `approvedByUser`: `true` — only after the user approved in step 5. The
+  workflow refuses to merge without it.
+- `doneCount`: length of `done` from step 3.
+- `partialCount`: length of `partial` from step 3.
+- `blockedCount`: length of `blocked` from step 3.
+- `needsClarificationCount`: length of `needsClarification` from step 1.
+- `rejectedCount`: length of `rejected` from step 2.
+- `requeueCount`: `requeueCount` from step 3.
+
+Returns `{merged, conflicts}`.
+
+Present merged and conflicts to the user. ONLY after the user approves, invoke
 close-tasks once for all merged tasks.
 
 There is no serial fallback path. One task or ten, the same code path runs.
