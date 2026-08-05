@@ -785,5 +785,27 @@
       "5a4856a"
     ],
     "closureNote": "Re-attempted after task 52 landed the real-repository integration test and fixed the discovery defects: scripts/prepareTasks.ts now loads the real repository manifest via bootstrapRepositoryManifest and threads it into groupTasksByFileOverlap, and scripts/taskGroups.ts drops the fabricated buildFlatSingleRepositoryManifest stub in favour of an optional manifest parameter with a union-find fallback so manifest-free callers keep working; implemented in 06f616e, merged in 5a4856a with typecheck clean and all 1032 tests passing."
+  },
+  {
+    "taskNumber": 41,
+    "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
+    "description": "REOPENED. The Verify and Test phases this task asked for now exist and both run green end to end (exercised on task 48), but not in the shape the original description specified.\n\nThey are separate self-contained workflow files - skills/tackle-tasks/verify.workflow.js and skills/tackle-tasks/test.workflow.js - not extra pipeline() stages inside a single tackle-tasks.workflow.js. There is no tackle-tasks.briefs.js and there cannot be one: Claude Code workflow scripts run in a sandbox whose only globals are log, phase, console, budget, setTimeout, clearTimeout, Date, agent, parallel, pipeline, workflow and args. Both static import and dynamic import() are rejected at load. The original module-split instruction is impossible - do not re-attempt it. Each workflow file stays self-contained and under the 250-line cap, which is what the split was trying to achieve anyway.\n\nWhat is actually left:\n\n1. Failure routing. test.workflow.js sends a failing test to a separate fixer agent (fixerBrief). The original ask was that failures feed back into the implementing worker the way the partial-requeue loop in implement.workflow.js does, so the agent that wrote the code is the one that fixes it, carrying the plan context instead of starting cold from a diff. Either route failures back through implement.workflow.js workerBrief, or keep the fixer agent and record in SKILL.md why a cold fixer is preferable.\n\n2. Keep SKILL.md step 4 in sync with whatever routing lands. It currently documents test.workflow.js returning {tests, allPassed} and bounded by maxRounds (default 3) so a genuinely broken test stops the loop rather than spinning.\n\nThe stale files array from the first attempt named tackle-tasks.workflow.js and tackle-tasks.briefs.js; both were deleted when the pipeline was split per phase.",
+    "files": [
+      "skills/tackle-tasks/test.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "difficulty": 3,
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "ee0bd6b",
+      "b450675",
+      "6943749",
+      "a5fb3d7"
+    ],
+    "closureNote": "Verify and Test phases exist and run green end to end (exercised on task 48), delivered as separate self-contained workflow files (verify.workflow.js using codex, test.workflow.js with a bounded test-then-fix loop) because the workflow sandbox rejects both static and dynamic import, making the prescribed tackle-tasks.briefs.js module split impossible; the last remaining piece, routing a failing test back to the implementing agent with its plan file instead of a cold fixer, landed in test.workflow.js."
   }
 ]

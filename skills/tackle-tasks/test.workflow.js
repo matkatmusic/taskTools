@@ -44,7 +44,7 @@ A line reading \`name = value\` means record that value and use it later.
 A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
-cd ${group.worktree}
+run(cd ${group.worktree})
 ownedFiles = {
 ${tasks.map((t) => `    task ${t.number}: ${t.files.join(', ')}`).join('\n')}
 }
@@ -82,7 +82,7 @@ A line reading \`name = value\` means record that value and use it later.
 A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
-cd ${group.worktree}
+run(cd ${group.worktree})
 ownedFiles = ${t.files.join(', ')}
 plan = ${planFileFor(t.number) || '(no plan file recorded)'}
 failure = ${detail}

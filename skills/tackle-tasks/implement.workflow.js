@@ -29,7 +29,7 @@ A line reading \`name = value\` means record that value and use it later.
 A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
-cd ${group.worktree}
+run(cd ${group.worktree})
 ownedFiles = ${t.files.join(', ')}
 plan = ${planFile}
 timeBudget = 10 minutes
