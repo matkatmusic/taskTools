@@ -807,5 +807,30 @@
       "a5fb3d7"
     ],
     "closureNote": "Verify and Test phases exist and run green end to end (exercised on task 48), delivered as separate self-contained workflow files (verify.workflow.js using codex, test.workflow.js with a bounded test-then-fix loop) because the workflow sandbox rejects both static and dynamic import, making the prescribed tackle-tasks.briefs.js module split impossible; the last remaining piece, routing a failing test back to the implementing agent with its plan file instead of a cold fixer, landed in test.workflow.js."
+  },
+  {
+    "taskNumber": 57,
+    "title": "Rename basePublication LogicalRepository to PublicationTarget to end the name collision",
+    "description": "Split out of task 53 on 2026-08-05. scripts/basePublication.ts and scripts/logicalRepository.ts both export a type named LogicalRepository and the two are incompatible, so any file importing both has to alias one of them. Codex rejected hiding this behind a local import alias in a single consumer, calling for the real rename.\n\nRename the basePublication.ts export to PublicationTarget and update every use. The name appears in ten files: scripts/basePublication.ts, scripts/logicalRepository.ts, scripts/operationPush.ts, scripts/ownershipKeys.ts, scripts/runConsolidation.ts, tests/basePublication.test.ts, tests/logicalRepository.test.ts, tests/operationPush.test.ts, tests/runConsolidation.test.ts, tests/testPolicy.test.ts. Check each one to see which of the two types it actually means before editing — scripts/logicalRepository.ts keeps its own LogicalRepository name unchanged.\n\nThis is a mechanical rename with no behavior change: typecheck clean and the full suite green with no test assertions rewritten other than the type name itself.",
+    "files": [
+      "scripts/basePublication.ts",
+      "scripts/logicalRepository.ts",
+      "scripts/operationPush.ts",
+      "scripts/ownershipKeys.ts",
+      "scripts/runConsolidation.ts",
+      "tests/basePublication.test.ts",
+      "tests/logicalRepository.test.ts",
+      "tests/operationPush.test.ts",
+      "tests/runConsolidation.test.ts",
+      "tests/testPolicy.test.ts"
+    ],
+    "difficulty": 2,
+    "blockedBy": [],
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "f7eb2ad",
+      "145434f"
+    ],
+    "closureNote": "Renamed basePublication's LogicalRepository type to PublicationTarget, ending the incompatible name collision with logicalRepository.ts; codex approved the plan after one repair round, implemented in f7eb2ad touching only scripts/basePublication.ts and tests/basePublication.test.ts, merged to new-usage-graph in 145434f with typecheck clean and the full suite green."
   }
 ]
