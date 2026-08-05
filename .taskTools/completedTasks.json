@@ -730,5 +730,60 @@
       "9488346"
     ],
     "closureNote": "groupTasksByFileOverlap now delegates to buildCanonicalTaskGroups and the hand-rolled union-find grouping was deleted (net 19 lines removed); it keeps its original signature as a thin adapter that passes a synthesized flat single-repository manifest, because the worker owned only taskGroups.ts and could not reach a repoRoot, so threading the real bootstrapRepositoryManifest output and deleting that stub is an explicit requirement recorded on task 48."
+  },
+  {
+    "taskNumber": 39,
+    "title": "merge-worktree-tasks skill",
+    "description": "a way to check if worktrees weren't merged and if there are open tasks that haven't been completed and are assigned to those worktrees, and then to run the merge-worktrees script to merge them *if the task is approved*.  Cause: sometimes I forget to commit when tasks are completed, which blocks the worktrees from being commited. \n\nWorktrees live at `tmpdir()/taskTools-wt/<basename(repoRoot)>/group-<groupId>` on branch `task-group-<groupId>`, but groupId is recomputed every prepareTasks run and never persisted, so a leftover worktree cannot be matched to task numbers by groupId. Match by file overlap instead: read the worktree branch's changed files plus its uncommitted status and compare them against `declaredFiles(task)` from scripts/taskGroups.ts for open tasks.\n\nExtend scripts/mergeTaskWorktrees.ts rather than adding a new script: add `listTaskWorktrees(repoRoot)` (parse `git worktree list --porcelain`, keep only paths matching the taskTools-wt convention), `findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks)` (unmerged-commit count plus uncommitted status, changed files matched to declared files), and CLI modes `--discover` and `--merge <worktree>` reusing the existing collectRepositorySources, currentBranchName, mergeGroupBranchIntoRepo and removeWorktreeAndBranch. Create skills/merge-worktree-tasks/SKILL.md: run --discover, report each unmerged worktree with its matched open task numbers, gate the merge behind explicit user approval via AskUserQuestion, then run --merge only for approved worktrees.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "skills/merge-worktree-tasks/SKILL.md"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "difficulty": 3,
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "219c256",
+      "69d555e",
+      "36e9523"
+    ],
+    "closureNote": "Added listTaskWorktrees and findUnmergedTaskWorktrees plus --discover and --merge CLI modes to scripts/mergeTaskWorktrees.ts, matching leftover worktrees to open tasks by file overlap because groupId is never persisted, and created skills/merge-worktree-tasks/SKILL.md gating every merge behind explicit user approval."
+  },
+  {
+    "taskNumber": 41,
+    "title": "add 'verify plan' and 'test' to tackle-tasks workflow",
+    "description": "the workflow does plan -> implement -> typecheck -> merge. it needs to add 'verify' after plan, and then 'test' after 'implement'.  'verify' is a separate agent that checks if the plan is good or not.  'test' is running the tests for the files touched by the implementation, and then reporting the test results to the implementing agent to fix or not.\n\nIn skills/tackle-tasks/tackle-tasks.workflow.js add a Verify phase (one agent per task after Plan, gating which planned tasks reach Implement) and a Test phase (one agent per group after Implement, feeding failures back into runWorker the way the existing partial-requeue loop does). Both need meta.phases entries, result arrays threaded into the final return, and an extra pipeline() stage.\n\nThe file is 194 of the 250-line cap and the two phases add roughly 60-100 lines, so split first: move VERIFY_SCHEMA, TEST_SCHEMA and the verifierBrief/testerBrief prompt builders (plus the existing plannerBrief/workerBrief for consistency) into a new skills/tackle-tasks/tackle-tasks.briefs.js imported by the workflow, leaving the workflow as thin orchestration wiring. The Test agent brief should point at the existing scripts/relatedTests.ts discovery pattern rather than duplicating test discovery; relatedTests.ts and testPolicy.ts themselves need no changes.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "skills/tackle-tasks/tackle-tasks.briefs.js"
+    ],
+    "handoffFilePaths": [],
+    "blockedBy": [],
+    "difficulty": 3,
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "d33b9c8",
+      "70cb1b8"
+    ],
+    "closureNote": "Added Verify and Test phases to skills/tackle-tasks/tackle-tasks.workflow.js and extracted the schemas and prompt builders into skills/tackle-tasks/tackle-tasks.briefs.js to stay under the 250-line cap."
+  },
+  {
+    "taskNumber": 52,
+    "title": "End-to-end integration test: prepareTasks against a real repository",
+    "description": "Phase 1 to 3 was unit-tested entirely against hand-written manifest fixtures and never executed against a real repository, so wiring it into production (task 48) broke tackle-tasks completely and was reverted in commit fbe32a7. Three integration defects were found and none were caught by the 1027-test suite.\n\n1. scripts/repositoryDiscovery.ts line 72 records checkoutPath as an absolute path via join(rootPath, relativePath), while scripts/repositoryGraph.ts isWithinCheckout matches it against root-relative task paths like scripts/foo.ts — so nothing owns any path and prepareTasks throws: no occurrence owns path scripts/mergeTaskWorktrees.ts. Decision already made by the user: absolute wins, and the graph matchers relativize against the root occurrence checkoutPath. Do not re-litigate that.\n\n2. scripts/repositoryDiscovery.ts line 103 sets originUrl to existing?.originUrl ?? empty string and never reads the git remote, but logical repository identity is keyed on originUrl, so ownership fails with: occurrence has an unparseable origin URL.\n\n3. The root occurrence is given an empty occurrenceId.\n\nAlso reconcile the coordinate systems: tests/repositoryGraph.test.ts uses a fixture whose task paths are relative to the root occurrence PARENT directory (root checkoutPath jfred, paths like jfred/external/tmux_lib/src/foo.ts), while production task paths are relative to the repo root itself. Those two conventions conflict and one of them has to give.\n\nAdd tests/prepareTasksIntegration.test.ts that builds a real temporary git repository with an origin remote and at least one submodule, then runs bootstrapRepositoryManifest, groupTasksByFileOverlap and buildWorkflowArguments against it and asserts: ownership resolves for a root file path and for a submodule file path; every occurrence carries a non-empty originUrl and occurrenceId; grouping returns real groups instead of throwing.\n\nFix scripts/repositoryDiscovery.ts and scripts/repositoryGraph.ts as needed to make it pass. This must land before task 48 is re-attempted.",
+    "files": [
+      "tests/prepareTasksIntegration.test.ts",
+      "scripts/repositoryDiscovery.ts",
+      "scripts/repositoryGraph.ts",
+      "tests/repositoryGraph.test.ts"
+    ],
+    "difficulty": 4,
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "64f8bbd",
+      "e713ded"
+    ],
+    "closureNote": "Added tests/prepareTasksIntegration.test.ts against a real temporary git repository with an origin remote and a submodule, and fixed the three defects it exposed: repositoryDiscovery.ts now reads a real originUrl and assigns a non-empty root occurrenceId, and repositoryGraph.ts relativizes absolute checkoutPath values via a new selectRoot helper. The originUrl read falls back to the root commit SHA when a repository has no origin remote, so local-only repositories keep working; without that fallback it threw and regressed 15 tests across prepareTasks, mergeTaskWorktrees and repositoryDiscovery. The submodule clone is unblocked by spawning buildWorkflowArguments in a subprocess with GIT_CONFIG_GLOBAL set, because Bun does not propagate process.env to child processes; production prepareTasks.ts was left unchanged so the git CVE-2022-39253 default stays intact."
   }
 ]

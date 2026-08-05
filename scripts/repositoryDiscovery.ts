@@ -29,7 +29,10 @@ function readOriginUrl(checkoutPath: string): string {
             encoding: "utf8",
         }).trim();
     } catch {
-        throw new Error(`repository at "${checkoutPath}" has no "origin" remote configured`);
+        // No remote: the root commit identifies the repo across every checkout of it.
+        return `rootcommit:${execFileSync("git", ["-C", checkoutPath, "rev-list", "--max-parents=0", "HEAD"], {
+            encoding: "utf8",
+        }).trim()}`;
     }
 }
 

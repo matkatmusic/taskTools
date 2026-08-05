@@ -2,15 +2,15 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import { getOwningOccurrence } from "../scripts/repositoryGraph.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
 import { groupTasksByFileOverlap } from "../scripts/taskGroups.ts";
-import { buildWorkflowArguments } from "../scripts/prepareTasks.ts";
+const prepareTasksModulePath = new URL("../scripts/prepareTasks.ts", import.meta.url).href;
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 function git(cwd: string, args: string[]): void {
@@ -19,6 +19,11 @@ function git(cwd: string, args: string[]): void {
 
 const rootPath = mkdtempSync(join(tmpdir(), "prepareTasksIntegration-"));
 const submoduleSourcePath = mkdtempSync(join(tmpdir(), "prepareTasksIntegrationSubmoduleSource-"));
+
+// Git blocks local-path submodules; only global config survives into the nested clone.
+const gitConfigPath = join(rootPath, "allow-file-transport.gitconfig");
+writeFileSync(gitConfigPath, '[protocol "file"]\n\tallow = always\n');
+process.env.GIT_CONFIG_GLOBAL = gitConfigPath;
 
 git(rootPath, ["init", "-q", "-b", "main"]);
 git(rootPath, ["config", "user.email", "test@example.com"]);
@@ -47,6 +52,7 @@ const occurrenceGraph: RepositoryOccurrence[] = bootstrapResult.refused ? [] : b
 const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
 
 after(() => {
+    rmSync(join(tmpdir(), "taskTools-wt", basename(rootPath)), { recursive: true, force: true });
     rmSync(rootPath, { recursive: true, force: true });
     rmSync(submoduleSourcePath, { recursive: true, force: true });
 });
@@ -85,8 +91,15 @@ test("test_groupTasksByFileOverlapReturnsRealGroupsInsteadOfThrowing", () => {
     const groups = groupTasksByFileOverlap(tasks);
     assert.ok(groups.length > 0);
 
-    // buildWorkflowArguments runs `git submodule update` in a fresh worktree; the submodule's origin is a local file path in this test, which git blocks by default unless allow-listed.
-    process.env.GIT_ALLOW_PROTOCOL = "file:https:ssh:git:http";
-    const workflowArguments = buildWorkflowArguments(rootPath, "npx tsc --noEmit", groups);
-    assert.ok(workflowArguments.groups.length > 0);
+    // Bun drops process.env edits for children, so only a spawned process can carry the git override.
+    const script = `
+        const { buildWorkflowArguments } = await import(${JSON.stringify(prepareTasksModulePath)});
+        const built = buildWorkflowArguments(${JSON.stringify(rootPath)}, "npx tsc --noEmit", ${JSON.stringify(groups)});
+        process.stdout.write(String(built.groups.length));
+    `;
+    const groupCount = execFileSync("bun", ["-e", script], {
+        encoding: "utf8",
+        env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigPath },
+    });
+    assert.ok(Number(groupCount) > 0);
 });
