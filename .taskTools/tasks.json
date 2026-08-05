@@ -122,7 +122,10 @@
       "skills/tackle-tasks/verify.workflow.js",
       "skills/tackle-tasks/SKILL.md",
       "scripts/approvalReadiness.ts",
-      "tests/approvalReadiness.test.ts"
+      "tests/approvalReadiness.test.ts",
+      "scripts/approvalGate.ts",
+      "skills/tackle-tasks/merge.workflow.js",
+      "scripts/mergeTaskWorktrees.ts"
     ],
     "difficulty": 4,
     "blockedBy": []
