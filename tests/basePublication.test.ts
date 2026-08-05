@@ -10,7 +10,7 @@ import {
     publishCanonicalRef,
     rollbackUpdatedRefs,
 } from "../scripts/basePublication.ts";
-import type { LogicalRepository, UpdatedRef } from "../scripts/basePublication.ts";
+import type { PublicationTarget, UpdatedRef } from "../scripts/basePublication.ts";
 import type { RunState } from "../scripts/approvalGate.ts";
 
 function git(repoPath: string, ...args: string[]): string {
@@ -59,7 +59,7 @@ function makeRootIntegration(exists: boolean): { repoPath: string; refName: stri
 }
 
 // Canonical repo: recordedBaseOid on canonicalRefName, later commit as targetOid on "main".
-function makeLogicalRepoFixture(name: string): { repo: LogicalRepository; otherPath: string } {
+function makeLogicalRepoFixture(name: string): { repo: PublicationTarget; otherPath: string } {
     const canonicalPath = makeRepo();
     const recordedBaseOid = commitFile(canonicalPath, "seed.txt", "seed");
     git(canonicalPath, "update-ref", "refs/heads/base", recordedBaseOid);
@@ -129,7 +129,7 @@ test("test_midSequenceFailureRollsBackEveryAlreadyUpdatedRefToRecordedOid", () =
     const rootIntegration = makeRootIntegration(true);
 
     // Force repo C's canonical CAS to fail without tripping pass-1: recordedBaseOid still matches, but targetOid is nonexistent.
-    const failingRepoC: LogicalRepository = { ...fixtureC.repo, targetOid: "a".repeat(40) };
+    const failingRepoC: PublicationTarget = { ...fixtureC.repo, targetOid: "a".repeat(40) };
 
     const result = publishBases([fixtureA.repo, fixtureB.repo, failingRepoC], approvedRunState(), rootIntegration);
 

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { checkAuthorizationDrift } from "./approvalGate.ts";
 import type { RunState } from "./approvalGate.ts";
 
-export type LogicalRepository = {
+export type PublicationTarget = {
     name: string;
     canonicalOccurrencePath: string;
     canonicalRefName: string;
@@ -45,7 +45,7 @@ export function checkRootIntegrationOidExists(repoPath: string, rootIntegrationR
     return readCurrentRefOid(repoPath, rootIntegrationRef) !== null;
 }
 
-export function revalidateRecordedBaseOids(repos: LogicalRepository[]): { ok: boolean; moved: LogicalRepository[] } {
+export function revalidateRecordedBaseOids(repos: PublicationTarget[]): { ok: boolean; moved: PublicationTarget[] } {
     const moved = repos.filter(
         (repo) => readCurrentRefOid(repo.canonicalOccurrencePath, repo.canonicalRefName) !== repo.recordedBaseOid,
     );
@@ -56,7 +56,7 @@ export function revalidateApprovalInputs(approvalState: RunState): boolean {
     return checkAuthorizationDrift(approvalState);
 }
 
-export function publishCanonicalRef(repo: LogicalRepository): { ok: boolean; updated?: UpdatedRef } {
+export function publishCanonicalRef(repo: PublicationTarget): { ok: boolean; updated?: UpdatedRef } {
     const result = runGit(repo.canonicalOccurrencePath, [
         "update-ref",
         repo.canonicalRefName,
@@ -77,7 +77,7 @@ export function publishCanonicalRef(repo: LogicalRepository): { ok: boolean; upd
 }
 
 export function fastForwardOtherOccurrences(
-    repo: LogicalRepository,
+    repo: PublicationTarget,
 ): { ok: boolean; updated: UpdatedRef[]; failedAt?: string } {
     const updated: UpdatedRef[] = [];
     for (const occurrence of repo.otherOccurrences) {
@@ -113,7 +113,7 @@ export function rollbackUpdatedRefs(updated: UpdatedRef[]): RollbackOutcome[] {
 }
 
 export function publishBases(
-    repos: LogicalRepository[],
+    repos: PublicationTarget[],
     approvalState: RunState,
     rootIntegration: { repoPath: string; refName: string },
 ): PublicationResult {
