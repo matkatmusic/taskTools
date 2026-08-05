@@ -54,14 +54,30 @@ test or type error, add an entry to failures: {task: <task number>, detail:
 <failing test names and a short error summary>}.
 Return {passed, failures}.`
 
-const fixerBrief = (t, group, detail) => `cd ${group.worktree}.
-A test run found this failure in files you own (${t.files.join(', ')}):
+const planFileFor = (task) => (ARGS.approved ?? []).find((a) => a.task === task)?.planFile ?? ''
 
+const fixerBrief = (t, group, detail) => `You already implemented task #${t.number} and wrote its tests. A
+follow-up test run found a failure in that work, so you are picking your own
+task back up to correct it.
+Repo root (cd here first): ${group.worktree}
+Files you own (touch nothing outside them): ${t.files.join(', ')}
+The plan you implemented: ${planFileFor(t.number) || '(no plan file recorded)'}
+
+The failure:
 ${detail}
 
-Fix it. Touch nothing outside the files you own, and do not weaken or delete
-a test to make it pass — fix the cause. Re-run the affected tests and
-${TYPECHECK_COMMAND} to confirm.
+Re-read your plan first, so the fix matches what the task set out to do
+rather than only silencing the failure. Then decide which side is wrong:
+- The code is wrong — fix the code so the test passes as written.
+- The test is wrong — the plan's intent is right but the test asserts the
+  wrong thing. Correct the test to assert what the plan actually called for,
+  and say in summary that you changed the test and why.
+
+Never weaken, skip, or delete a test just to make it pass, and never assert
+the current buggy output as expected. If the plan itself is what is wrong,
+stop, set fixed=false, and say so — that is not yours to redecide.
+
+Re-run the affected tests and ${TYPECHECK_COMMAND} to confirm.
 
 When it is green, commit from ${group.worktree}, staging ONLY your own paths —
 never \`git add -A\`, never \`git add .\`:

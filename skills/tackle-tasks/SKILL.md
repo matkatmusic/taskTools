@@ -56,6 +56,8 @@ Returns `{results, done, partial, blocked, requeueCount}`.
 **Step 4 — test.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/test.workflow.js`,
 args = the pipeline args JSON plus:
 - `done`: the `done` array from step 3, verbatim.
+- `approved`: the `approved` array from step 2, so a failing test goes back to
+  the implementer with the plan it implemented rather than to a cold agent.
 - `maxRounds` (optional): test-then-fix rounds before giving up, default 3.
 
 Returns `{tests, allPassed}`.
