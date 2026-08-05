@@ -41,8 +41,11 @@ Returns `{plans, planned, needsClarification, notRelevant}`.
 args = the pipeline args JSON plus one added key:
 - `planned`: the `planned` array from step 1, verbatim.
 
-Reviews each plan with codex. Returns `{verified, approved, rejected}`. If
-`approved` is empty, stop and report — there is nothing to implement.
+Reviews each plan with codex. On a rejection the verifier applies codex's
+suggested fixes to the plan file and re-runs codex once; a second rejection is
+final. Returns `{verified, approved, rejected, revisedCount}`. If `approved` is
+empty, stop and report — there is nothing to implement. Report `revisedCount`
+so the user knows how many plan files codex rewrote.
 
 **Step 3 — implement.** scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/implement.workflow.js`,
 args = the pipeline args JSON plus one added key:
