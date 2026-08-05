@@ -11,7 +11,6 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      48,
       49,
       50,
       51
@@ -65,26 +64,12 @@
     "blockedBy": []
   },
   {
-    "taskNumber": 48,
-    "title": "Rewire prepareTasks call sites onto graph discovery and canonical grouping",
-    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.\n\nRequired: replace the synthesized manifest stub left behind by task 47. scripts/taskGroups.ts currently calls buildCanonicalTaskGroups with a locally fabricated buildFlatSingleRepositoryManifest — one occurrence with occurrenceId flat, originUrl https://local/flat/flat.git, a baseOid of forty zeros and baseBranch main — because the task 47 worker owned only taskGroups.ts and could not reach a repoRoot. That stub keeps grouping effectively flat, so submodules are still not grouped by real logical repository. This task owns prepareTasks.ts, has the repoRoot, and must thread the real manifest from bootstrapRepositoryManifest through to grouping and delete buildFlatSingleRepositoryManifest along with the stale comment claiming no disk-free manifest constructor exists. The cutover is not complete while a fabricated manifest sits in the hot path.",
-    "files": [
-      "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts",
-      "scripts/taskGroups.ts",
-      "tests/taskGroups.test.ts"
-    ]
-  },
-  {
     "taskNumber": 49,
     "title": "Drive mergeTaskWorktrees through the finalization and publication pipeline",
     "description": "Step 4 of the task 35 cutover split, and its largest behavior change.\n\nRewire scripts/mergeTaskWorktrees.ts runAsCli to drive scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts and scripts/taskArchival.ts. Read all five in full before editing.\n\nCLI contract decision already made by the user — implement it, do not re-litigate: the script keeps its current front door. It accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged, with no rewritten CLI assertions. A graph-shaped front door is a later follow-up.\n\nKeep mergeGroupBranchIntoRepo, mergeSubmoduleBranchIntoRepo, resolveGitlinkConflicts and removeWorktreeAndBranch exported and behaviorally unchanged.\n\nTests: the existing suite passes unedited; the finalization path is exercised end to end against a temporary repository.",
     "files": [
       "scripts/mergeTaskWorktrees.ts",
       "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "blockedBy": [
-      48
     ]
   },
   {

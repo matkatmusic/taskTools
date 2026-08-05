@@ -1,5 +1,15 @@
 // Pure traversal helpers over the occurrence graph recorded by repositoryManifest.ts.
+import { relative } from "node:path";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
+
+function findRootOccurrence(manifest: RepositoryManifest): RepositoryOccurrence | null {
+    return manifest.occurrences.find((occurrence) => occurrence.parentOccurrenceId === null) ?? null;
+}
+
+// Discovery records checkoutPath absolutely; task paths are root-relative. relative() collapses both.
+function checkoutPathFromRoot(occurrence: RepositoryOccurrence, root: RepositoryOccurrence): string {
+    return relative(root.checkoutPath, occurrence.checkoutPath);
+}
 
 function buildOccurrenceIndex(manifest: RepositoryManifest): Map<string, RepositoryOccurrence> {
     return new Map(manifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence]));
