@@ -41,7 +41,7 @@ Returns `{plans, planned, needsClarification, notRelevant}`.
 args = the pipeline args JSON plus one added key:
 - `planned`: the `planned` array from step 1, verbatim.
 
-Reviews each plan with codex (falls back to fable-medium, then opus-medium). On a rejection the verifier applies codex's
+Reviews each plan with codex (falls back to fable-medium, then opus 4.8-medium). On a rejection the verifier applies codex's
 suggested fixes to the plan file and re-runs codex once; a second rejection is
 final. Returns `{verified, approved, rejected, revisedCount, reviewHandoffs}`.
 If `approved` is empty, stop and report — there is nothing to implement.

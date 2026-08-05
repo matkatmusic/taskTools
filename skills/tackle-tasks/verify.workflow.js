@@ -34,7 +34,7 @@ const verifierBrief = (t, planFile) => {
   const prompt = JSON.stringify(codexPrompt(t, planFile))
   const command = `codex exec -s read-only ${prompt}`
   // ponytail: opus/high, not fable/medium — the fallback replaces the strictest gate in the pipeline
-  const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model opus --effort medium`
+  const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model claude-opus-4-8 --effort high`
   const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`
   return `Review the plan for task #${t.number} by running exactly this command:
 
