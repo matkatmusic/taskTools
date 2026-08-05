@@ -1,9 +1,14 @@
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 import type { PreparedGroup, WorkflowArguments } from "./prepareTasks.ts";
-import { currentBranchName } from "./repositoryBranches.ts";
+import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
+import { declaredFiles } from "./taskGroups.ts";
+import type { TaskRecord } from "./taskFiles.ts";
+import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 type CliInput = WorkflowArguments & {
     runId?: string;
@@ -33,6 +38,87 @@ function git(repoRoot: string, ...args: string[]): string {
 function gitErrorText(error: unknown): string {
     const failure = error as { stderr?: string; message?: string };
     return (failure.stderr || failure.message || "git merge failed").trim();
+}
+
+export type TaskWorktree = { path: string; branch: string };
+
+function parseWorktreeListPorcelain(output: string): TaskWorktree[] {
+    const blocks = output.split("\n\n").map((block) => block.trim()).filter(Boolean);
+    const worktrees: TaskWorktree[] = [];
+    for (const block of blocks) {
+        const lines = block.split("\n");
+        const pathLine = lines.find((line) => line.startsWith("worktree "));
+        const branchLine = lines.find((line) => line.startsWith("branch refs/heads/"));
+        if (!pathLine) continue;
+        if (!branchLine) continue;
+        worktrees.push({
+            path: pathLine.slice("worktree ".length),
+            branch: branchLine.slice("branch refs/heads/".length),
+        });
+    }
+    return worktrees;
+}
+
+export function listTaskWorktrees(repoRoot: string): TaskWorktree[] {
+    const conventionDir = join(tmpdir(), "taskTools-wt", basename(repoRoot));
+    // git resolves symlinks in the paths it reports (e.g. macOS /var -> /private/var); match on the resolved form.
+    if (!existsSync(conventionDir)) return [];
+    const conventionRoot = realpathSync(conventionDir);
+    const output = git(repoRoot, "worktree", "list", "--porcelain");
+    return parseWorktreeListPorcelain(output).filter((worktree) => {
+        if (!worktree.path.startsWith(`${conventionRoot}/`)) return false;
+        return /^group-\d+$/.test(basename(worktree.path));
+    });
+}
+
+function unmergedCommitCount(repoRoot: string, sourceBranch: string, branch: string): number {
+    return Number(git(repoRoot, "rev-list", "--count", `${sourceBranch}..${branch}`).trim());
+}
+
+function commitChangedFiles(repoRoot: string, sourceBranch: string, branch: string): string[] {
+    return git(repoRoot, "diff", "--name-only", `${sourceBranch}...${branch}`).split("\n").filter(Boolean);
+}
+
+// Porcelain v1 rename lines read "R  old -> new"; every other status line is "XY path".
+function uncommittedChangedFiles(worktreePath: string): string[] {
+    return git(worktreePath, "status", "--porcelain").split("\n").filter(Boolean).map((line) => {
+        const path = line.slice(3);
+        if (!path.includes(" -> ")) return path;
+        return path.split(" -> ")[1];
+    });
+}
+
+export type UnmergedTaskWorktree = {
+    worktree: string;
+    branch: string;
+    unmergedCommitCount: number;
+    hasUncommittedChanges: boolean;
+    changedFilePaths: string[];
+    matchedTaskNumbers: number[];
+};
+
+export function findUnmergedTaskWorktrees(
+    repoRoot: string,
+    sourceBranch: string,
+    openTasks: TaskRecord[],
+): UnmergedTaskWorktree[] {
+    const results = listTaskWorktrees(repoRoot).map((worktree) => {
+        const commitChanged = commitChangedFiles(repoRoot, sourceBranch, worktree.branch);
+        const uncommittedChanged = uncommittedChangedFiles(worktree.path);
+        const changedFilePaths = [...new Set([...commitChanged, ...uncommittedChanged])];
+        const matchedTaskNumbers = openTasks
+            .filter((task) => declaredFiles(task).some((file) => changedFilePaths.includes(file)))
+            .map((task) => task.taskNumber);
+        return {
+            worktree: worktree.path,
+            branch: worktree.branch,
+            unmergedCommitCount: unmergedCommitCount(repoRoot, sourceBranch, worktree.branch),
+            hasUncommittedChanges: uncommittedChanged.length > 0,
+            changedFilePaths,
+            matchedTaskNumbers,
+        };
+    });
+    return results.filter((r) => r.unmergedCommitCount > 0 || r.hasUncommittedChanges);
 }
 
 export function mergeGroupBranchIntoRepo(
@@ -96,7 +182,32 @@ export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, 
     git(repoRoot, "branch", "-D", branchName);
 }
 
-function runAsCli(): void {
+function runDiscoverCli(): void {
+    const repoRoot = process.cwd();
+    const sourceBranch = currentBranchName(repoRoot);
+    const pair = resolveTaskFiles(repoRoot);
+    const openTasks = readTaskFile(pair.tasksPath);
+    const results = findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks);
+    process.stdout.write(JSON.stringify(results));
+}
+
+function runMergeCli(worktreePath: string): void {
+    const repoRoot = process.cwd();
+    const repositorySources = collectRepositorySources(repoRoot);
+    const parentSource = repositorySources.find((source) => source.path === "");
+    if (!parentSource) throw new Error(`no recorded source branch for repository path "${repoRoot}"`);
+    const submodulePathsDeepestFirst = repositorySources
+        .map((source) => source.path)
+        .filter((path) => path !== "")
+        .sort((a, b) => b.split("/").length - a.split("/").length);
+    const branch = currentBranchName(worktreePath);
+    const group: PreparedGroup = { groupId: 0, worktree: worktreePath, branch, scope: "unknown", tasks: [] };
+    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, parentSource.sourceBranch, submodulePathsDeepestFirst);
+    if (outcome.merged) removeWorktreeAndBranch(repoRoot, worktreePath, branch);
+    process.stdout.write(JSON.stringify(outcome));
+}
+
+function runPipelineCli(): void {
     const input: CliInput = JSON.parse(process.argv[2]);
     const workflowArguments: WorkflowArguments = {
         repo: input.repo,
@@ -151,6 +262,19 @@ function runAsCli(): void {
         argumentsHash: computeArgumentsHash(workflowArguments),
     });
     process.stdout.write(JSON.stringify({ merged, conflicts }));
+}
+
+function runAsCli(): void {
+    const mode = process.argv[2];
+    if (mode === "--discover") {
+        runDiscoverCli();
+        return;
+    }
+    if (mode === "--merge") {
+        runMergeCli(process.argv[3]);
+        return;
+    }
+    runPipelineCli();
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
