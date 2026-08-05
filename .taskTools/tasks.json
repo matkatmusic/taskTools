@@ -65,24 +65,14 @@
     "blockedBy": []
   },
   {
-    "taskNumber": 47,
-    "title": "Swap taskGroups grouping onto canonicalTaskGroups",
-    "description": "Step 2 of the task 35 cutover split.\n\nReplace groupTasksByFileOverlap in scripts/taskGroups.ts with scripts/canonicalTaskGroups.ts buildCanonicalTaskGroups. buildCanonicalTaskGroups requires a RepositoryManifest argument that groupTasksByFileOverlap does not take, so it depends on the manifest bootstrap from task 45 and the wiring from task 46.\n\nFind every importer of groupTasksByFileOverlap before changing its signature and update them together, or keep the old export as a thin adapter if a caller cannot be migrated in this task — say which in the plan.\n\nTests: existing tests/taskGroups.test.ts and tests/canonicalTaskGroups.test.ts both keep passing; file-disjoint grouping produces the same groups as before for the flat single-repository case.",
-    "files": [
-      "scripts/taskGroups.ts",
-      "tests/taskGroups.test.ts"
-    ]
-  },
-  {
     "taskNumber": 48,
     "title": "Rewire prepareTasks call sites onto graph discovery and canonical grouping",
-    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.",
+    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.\n\nRequired: replace the synthesized manifest stub left behind by task 47. scripts/taskGroups.ts currently calls buildCanonicalTaskGroups with a locally fabricated buildFlatSingleRepositoryManifest — one occurrence with occurrenceId flat, originUrl https://local/flat/flat.git, a baseOid of forty zeros and baseBranch main — because the task 47 worker owned only taskGroups.ts and could not reach a repoRoot. That stub keeps grouping effectively flat, so submodules are still not grouped by real logical repository. This task owns prepareTasks.ts, has the repoRoot, and must thread the real manifest from bootstrapRepositoryManifest through to grouping and delete buildFlatSingleRepositoryManifest along with the stale comment claiming no disk-free manifest constructor exists. The cutover is not complete while a fabricated manifest sits in the hot path.",
     "files": [
       "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts"
-    ],
-    "blockedBy": [
-      47
+      "tests/prepareTasks.test.ts",
+      "scripts/taskGroups.ts",
+      "tests/taskGroups.test.ts"
     ]
   },
   {

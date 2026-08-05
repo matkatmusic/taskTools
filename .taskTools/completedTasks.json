@@ -716,5 +716,19 @@
       "8a63b6e"
     ],
     "closureNote": "scripts/repositoryBranches.ts now resolves repository sources through bootstrapRepositoryManifest and the occurrence graph instead of walking submodule paths by hand, with the empty-current-branch detached-HEAD refusal kept as the outer guard ahead of discovery and still naming every offending repository path, a detached root surfaced through the same message rather than a raw bootstrap throw, and no branch created or checked out while reading source branches."
+  },
+  {
+    "taskNumber": 47,
+    "title": "Swap taskGroups grouping onto canonicalTaskGroups",
+    "description": "Step 2 of the task 35 cutover split.\n\nReplace groupTasksByFileOverlap in scripts/taskGroups.ts with scripts/canonicalTaskGroups.ts buildCanonicalTaskGroups. buildCanonicalTaskGroups requires a RepositoryManifest argument that groupTasksByFileOverlap does not take, so it depends on the manifest bootstrap from task 45 and the wiring from task 46.\n\nFind every importer of groupTasksByFileOverlap before changing its signature and update them together, or keep the old export as a thin adapter if a caller cannot be migrated in this task — say which in the plan.\n\nTests: existing tests/taskGroups.test.ts and tests/canonicalTaskGroups.test.ts both keep passing; file-disjoint grouping produces the same groups as before for the flat single-repository case.",
+    "files": [
+      "scripts/taskGroups.ts",
+      "tests/taskGroups.test.ts"
+    ],
+    "completionDate": "2026-08-04",
+    "commitHashes": [
+      "9488346"
+    ],
+    "closureNote": "groupTasksByFileOverlap now delegates to buildCanonicalTaskGroups and the hand-rolled union-find grouping was deleted (net 19 lines removed); it keeps its original signature as a thin adapter that passes a synthesized flat single-repository manifest, because the worker owned only taskGroups.ts and could not reach a repoRoot, so threading the real bootstrapRepositoryManifest output and deleting that stub is an explicit requirement recorded on task 48."
   }
 ]
