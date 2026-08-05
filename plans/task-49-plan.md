@@ -6,6 +6,15 @@ blockers are resolved by those updates: the base branch is no longer moved by th
 `publishBases` moves it, under CAS — and `scripts/mergePipeline.ts` is now an editable new file, so the
 250-line cap on `scripts/mergeTaskWorktrees.ts` is no longer a blocker.)
 
+(Revised again after a plan review: `scripts/mergePipeline.ts` was over the 250-line cap and is now
+trimmed to 235; `consolidationInputs[i].canonicalOccurrenceBranchName` now uses `occurrence.operationBranch`
+instead of `occurrence.baseBranch` (fact 3b); publication targets are now `finalizer`'s own
+`finalizedIntegrationOid` used directly, with no extra merge, so a parent's published gitlink and its
+child's published commit can never diverge (fact 3); `logicalRepositories` now use real
+`normalizeRepositoryIdentity` grouping instead of one hardcoded singleton per occurrence (fact 4); the new
+test uses a submodule and asserts that nested consistency, and fixes a trailing-newline comparison bug; and
+the test inventory below was corrected from 12 to the file's real 15 existing tests.)
+
 ## Architecture decision (binding, resolved during planning)
 
 `runFinalizer.ts`, `runConsolidation.ts`, `operationPush.ts`, `basePublication.ts`, `taskArchival.ts` are
@@ -124,6 +133,18 @@ delegate to it.
    `publishedTaskNumbers` will always be `[]` for every existing test, so `archived.length` stays `0` and
    `archivePublishedTasks` never reaches its `writeFileSync` branch — no risk of it touching a real or
    missing `tasks.json` during tests.
+9. **`runId` must be usable inside a git ref name.** It is interpolated into
+   `refs/finalize/${runId}/...` and `refs/heads/operations/${runId}/...`, and git forbids colons in ref
+   names, so an ISO timestamp is not a legal default. The default is `merge-${Date.now()}-${process.pid}`,
+   and `assertRunIdIsRefSafe` validates the resulting identifier with `git check-ref-format` against a
+   representative full operation ref before any pipeline mutation, so a bad caller-supplied `runId` fails
+   loudly and early instead of part-way through the merge. The existing green-path tests that omit `runId`
+   stay as they are, and therefore prove the generated default survives finalization and consolidation.
+10. **`finalizeApprovedRun` is imported from `scripts/approvalGate.ts`, and that is correct.** It is
+    exported at `scripts/approvalGate.ts:95`. `runFinalizer.ts` exports `runFinalizer` plus the
+    `OccurrenceFinalizationInput`/`FinalizationRunInput`/`FinalizationRunResult` types, which is where the
+    types come from. A reviewer flagged this import as wrong; it was verified against the source and the
+    plan is right. Do not "fix" it.
 
 ## File 1: scripts/mergeTaskWorktrees.ts (edits)
 
@@ -287,19 +308,9 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import {
-    resolveRunArgumentsPath,
-    resolveRunOutcomesPath,
-    resolveStepOutputsPath,
-    type WorkflowArguments,
-} from "./prepareTasks.ts";
+import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath, type WorkflowArguments } from "./prepareTasks.ts";
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
-import {
-    computeOccurrenceDigests,
-    recordApproval,
-    issueApprovalAuthorization,
-    finalizeApprovedRun,
-} from "./approvalGate.ts";
+import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization, finalizeApprovedRun } from "./approvalGate.ts";
 import type { OccurrenceSnapshot, RunState, ApprovalDigestInput } from "./approvalGate.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
@@ -318,16 +329,9 @@ import { archivePublishedTasks, summarizeTaskMergeResults } from "./taskArchival
 import type { RawTaskRepoOutcome, TaskMergeResult } from "./taskArchival.ts";
 
 export type CliInput = WorkflowArguments & {
-    runId?: string;
-    startTimestamp?: string;
-    doneCount?: number;
-    partialCount?: number;
-    blockedCount?: number;
-    needsClarificationCount?: number;
-    requeueCount?: number;
-    testReceipts?: TestReceipt[];
-    reviewHandoffs?: string[];
-    repositoryManifest: RepositoryManifest;
+    runId?: string; startTimestamp?: string; doneCount?: number; partialCount?: number; blockedCount?: number;
+    needsClarificationCount?: number; requeueCount?: number; testReceipts?: TestReceipt[];
+    reviewHandoffs?: string[]; repositoryManifest: RepositoryManifest;
 };
 
 export type PublicationTargetSummary = { repositoryPath: string; recordedBaseOid: string; targetOid: string };
@@ -336,9 +340,7 @@ function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" }).trim();
 }
 
-type FoldResult =
-    | { folded: true; foldOid: string; integratedOid: string }
-    | { folded: false; conflict: RepositoryQualifiedConflict };
+type FoldResult = { folded: true; foldOid: string; integratedOid: string } | { folded: false; conflict: RepositoryQualifiedConflict };
 
 // Folds group branches into foldOid, then test-merges onto the real base as integratedOid.
 function resolveOccurrenceFold(
@@ -419,9 +421,20 @@ function groupOccurrencesIntoLogicalRepositories(occurrences: RepositoryOccurren
     });
 }
 
+function assertRunIdIsRefSafe(runId: string): void {
+    const probe = `refs/heads/operations/${runId}/probe`;
+    try {
+        execFileSync("git", ["check-ref-format", probe], { encoding: "utf8" });
+    } catch {
+        throw new Error(`runId ${runId} is not usable in a git ref name (${probe})`);
+    }
+}
+
 export async function runMergePipeline(input: CliInput): Promise<void> {
     if (!input.repositoryManifest) throw new Error("no repository manifest given in CLI input; approval cannot be minted without pre-merge base OIDs");
-    const runId = input.runId ?? new Date().toISOString();
+    // Colons are illegal in git ref names, so an ISO timestamp cannot be used here.
+    const runId = input.runId ?? `merge-${Date.now()}-${process.pid}`;
+    assertRunIdIsRefSafe(runId);
     const sortedGroups = [...input.groups].sort((a, b) => a.groupId - b.groupId);
     const manifest = input.repositoryManifest;
     const rootOccurrence = manifest.occurrences.find((o) => o.parentOccurrenceId === null);
@@ -465,15 +478,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         && testReceipts.length > 0
         && testReceipts.every((receipt) => receipt.status === "green")
         && reviewHandoffs.length > 0;
-    const digestInput: ApprovalDigestInput = {
-        manifest,
-        files,
-        operationRef,
-        baseRef: rootOccurrence.baseOid,
-        occurrenceDigests,
-        testReceipts,
-        reviewHandoffs,
-    };
+    const digestInput: ApprovalDigestInput = { manifest, files, operationRef, baseRef: rootOccurrence.baseOid, occurrenceDigests, testReceipts, reviewHandoffs };
     const runState: RunState = { readyForApproval, status: readyForApproval ? "approved" : "blocked", digestInput };
 
     let publicationTargets: PublicationTargetSummary[] = [];
@@ -485,17 +490,8 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
 
         const occurrenceInputs: OccurrenceFinalizationInput[] = manifest.occurrences.map((occurrence) => {
             const integratedOid = (foldByPath.get(occurrence.checkoutPath) as { folded: true; integratedOid: string }).integratedOid;
-            return {
-                occurrenceId: occurrence.occurrenceId,
-                repoRoot: join(input.repo, occurrence.checkoutPath),
-                currentTipOid: integratedOid,
-                recordedBaseOid: integratedOid,
-                approvedOwnFileChanges: [],
-                directChildEdges: occurrence.childOccurrenceIds.map((childId) => ({
-                    pathInParent: occurrenceById.get(childId)!.pathInParent!,
-                    childOccurrenceId: childId,
-                })),
-            };
+            const directChildEdges = occurrence.childOccurrenceIds.map((childId) => ({ pathInParent: occurrenceById.get(childId)!.pathInParent!, childOccurrenceId: childId }));
+            return { occurrenceId: occurrence.occurrenceId, repoRoot: join(input.repo, occurrence.checkoutPath), currentTipOid: integratedOid, recordedBaseOid: integratedOid, approvedOwnFileChanges: [], directChildEdges };
         });
         const finalizationResult = finalizeApprovedRun(runState, { runId, occurrences: occurrenceInputs });
         const finalizedByOccurrenceId = new Map(finalizationResult.occurrences.map((o) => [o.occurrenceId, o]));
@@ -503,16 +499,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         const consolidationInputs: LogicalRepositoryConsolidationInput[] = manifest.occurrences.map((occurrence) => {
             const repoRoot = join(input.repo, occurrence.checkoutPath);
             const foldOid = (foldByPath.get(occurrence.checkoutPath) as { folded: true; foldOid: string }).foldOid;
-            return {
-                logicalRepositoryId: occurrence.occurrenceId,
-                canonicalRepoRoot: repoRoot,
-                canonicalOccurrenceBranchName: occurrence.operationBranch,
-                participatingBranches: branchesByPath.get(occurrence.checkoutPath)!,
-                approvedConvergedTreeOid: git(repoRoot, "rev-parse", `${foldOid}^{tree}`),
-                finalizedChildGitlinks: [],
-                recordedBaseOid: occurrence.baseOid,
-                baseBranchRef: `refs/heads/${occurrence.baseBranch}`,
-            };
+            return { logicalRepositoryId: occurrence.occurrenceId, canonicalRepoRoot: repoRoot, canonicalOccurrenceBranchName: occurrence.operationBranch, participatingBranches: branchesByPath.get(occurrence.checkoutPath)!, approvedConvergedTreeOid: git(repoRoot, "rev-parse", `${foldOid}^{tree}`), finalizedChildGitlinks: [], recordedBaseOid: occurrence.baseOid, baseBranchRef: `refs/heads/${occurrence.baseBranch}` };
         });
         const consolidationResults = consolidateRun(runId, consolidationInputs, token, digest);
         for (const result of consolidationResults) {
@@ -526,27 +513,12 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         // Publishes finalizedIntegrationOid as-is; parent and child gitlinks then always match.
         const publicationInputTargets: PublicationTarget[] = manifest.occurrences.map((occurrence) => {
             const finalized = finalizedByOccurrenceId.get(occurrence.occurrenceId)!;
-            return {
-                name: occurrence.occurrenceId,
-                canonicalOccurrencePath: join(input.repo, occurrence.checkoutPath),
-                canonicalRefName: `refs/heads/${occurrence.baseBranch}`,
-                otherOccurrences: [],
-                recordedBaseOid: occurrence.baseOid,
-                targetOid: finalized.finalizedIntegrationOid,
-            };
+            return { name: occurrence.occurrenceId, canonicalOccurrencePath: join(input.repo, occurrence.checkoutPath), canonicalRefName: `refs/heads/${occurrence.baseBranch}`, otherOccurrences: [], recordedBaseOid: occurrence.baseOid, targetOid: finalized.finalizedIntegrationOid };
         });
-        publicationTargets = publicationInputTargets.map((target, index) => ({
-            repositoryPath: manifest.occurrences[index].checkoutPath,
-            recordedBaseOid: target.recordedBaseOid,
-            targetOid: target.targetOid,
-        }));
+        publicationTargets = publicationInputTargets.map((target, index) => ({ repositoryPath: manifest.occurrences[index].checkoutPath, recordedBaseOid: target.recordedBaseOid, targetOid: target.targetOid }));
 
         const rootFinalized = finalizedByOccurrenceId.get(rootOccurrence.occurrenceId)!;
-        const publication = publishBases(
-            publicationInputTargets,
-            runState,
-            { repoPath: join(input.repo, rootOccurrence.checkoutPath), refName: rootFinalized.durableTipRef },
-        );
+        const publication = publishBases(publicationInputTargets, runState, { repoPath: join(input.repo, rootOccurrence.checkoutPath), refName: rootFinalized.durableTipRef });
 
         const rolledBackNames = new Set(publication.rollback.filter((r) => r.rolledBack).map((r) => r.ref.repoName));
         const rawOutcomes: RawTaskRepoOutcome[] = [];
@@ -567,21 +539,8 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
     }
 
     const endTimestamp = new Date().toISOString();
-    appendRunMetricsRecord(input.repo, {
-        runId,
-        startTimestamp: input.startTimestamp ?? null,
-        endTimestamp,
-        durationMs: runDurationMs(input.startTimestamp ?? null, endTimestamp),
-        taskNumbers: sortedGroups.flatMap((g) => g.tasks.map((t) => t.number)),
-        groupCount: sortedGroups.length,
-        doneCount: input.doneCount ?? 0,
-        partialCount: input.partialCount ?? 0,
-        blockedCount: input.blockedCount ?? 0,
-        needsClarificationCount: input.needsClarificationCount ?? 0,
-        requeueCount: input.requeueCount ?? 0,
-        conflictCount: conflicts.length,
-        argumentsHash: computeArgumentsHash({ repo: input.repo, typecheckCommand: input.typecheckCommand, groups: input.groups, repositorySources: input.repositorySources }),
-    });
+    const argumentsHash = computeArgumentsHash({ repo: input.repo, typecheckCommand: input.typecheckCommand, groups: input.groups, repositorySources: input.repositorySources });
+    appendRunMetricsRecord(input.repo, { runId, startTimestamp: input.startTimestamp ?? null, endTimestamp, durationMs: runDurationMs(input.startTimestamp ?? null, endTimestamp), taskNumbers: sortedGroups.flatMap((g) => g.tasks.map((t) => t.number)), groupCount: sortedGroups.length, doneCount: input.doneCount ?? 0, partialCount: input.partialCount ?? 0, blockedCount: input.blockedCount ?? 0, needsClarificationCount: input.needsClarificationCount ?? 0, requeueCount: input.requeueCount ?? 0, conflictCount: conflicts.length, argumentsHash });
     if (allOccurrencesFolded) {
         rmSync(resolveRunArgumentsPath(input.repo), { force: true });
         rmSync(resolveRunOutcomesPath(input.repo), { force: true });
@@ -592,9 +551,10 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
 }
 ```
 
-This file is ~215 lines, under the 250-line cap. If a final line count check (Verification, below) puts
-it over 250, trim only by removing blank lines between statements inside `runMergePipeline` — every line
-above is load-bearing, so nothing should be deleted for length; compress vertical whitespace only.
+This file is 235 lines, under the 250-line cap (`wc -l` after writing it, per Verification below). Every
+line above is load-bearing; if a final count still comes in over 250, the only safe trim is collapsing more
+object-literal fields onto fewer lines the way `appendRunMetricsRecord`'s call above already is — never
+drop a field or a check.
 
 ### Why each field/call is what it is (cross-reference to the five read-only files)
 
@@ -604,19 +564,22 @@ above is load-bearing, so nothing should be deleted for length; compress vertica
 - `occurrenceInputs` matches `runFinalizer.ts`'s `OccurrenceFinalizationInput` exactly:
   `directChildEdges` is built straight from `RepositoryOccurrence.childOccurrenceIds` +
   `RepositoryOccurrence.pathInParent`, both already on the manifest — no discovery needed.
-  `approvedOwnFileChanges: []` is correct because `currentTipOid`/`recordedBaseOid` are both the group
-  fold's oid, which already has every change as real git commits; `commitOwnFileChanges` (in
-  `runFinalizer.ts`) returns `currentTipOid` unchanged when `changes.length === 0`
-  (`test_noEmptyOwnFilesCommitWhenNoApprovedChanges`), so for leaf occurrences `finalizedIntegrationOid`
-  equals the fold oid directly, and for occurrences with children `buildAssemblyBranch` starts its
-  gitlink-substitution chain from `recordedBaseOid`, which is that same fold oid carrying any of the
-  occurrence's own root-level file changes already.
-- `consolidationInputs.approvedConvergedTreeOid` is deliberately the tree of the *raw* fold oid (not
-  `finalizedIntegrationOid`) for every occurrence, leaf or container — this is what makes
-  `consolidateLogicalRepository`'s own internal tree-match check always pass (see architecture fact 3).
-- `logicalRepositories`/`absoluteOccurrences` intentionally bypass `buildLogicalRepositories` (fact 4).
-- `publicationInputTargets[].targetOid` is computed directly via `prepareNoFfMerge` against
-  `finalized.finalizedIntegrationOid`, not read from `consolidationResults` (fact 3).
+  `currentTipOid`/`recordedBaseOid` are both `integratedOid` (fact 3a), not the raw fold oid, so
+  `finalizedIntegrationOid` is genuinely descended from the occurrence's real base.
+  `approvedOwnFileChanges: []` is correct because `integratedOid` already has every change as real git
+  commits; `commitOwnFileChanges` (in `runFinalizer.ts`) returns `currentTipOid` unchanged when
+  `changes.length === 0` (`test_noEmptyOwnFilesCommitWhenNoApprovedChanges`), so for leaf occurrences
+  `finalizedIntegrationOid` equals `integratedOid` directly, and for occurrences with children
+  `buildAssemblyBranch` starts its gitlink-substitution chain from `recordedBaseOid` (that same
+  `integratedOid`).
+- `consolidationInputs.approvedConvergedTreeOid` is deliberately the tree of the *raw* fold oid, not
+  `integratedOid` and not `finalizedIntegrationOid`, for every occurrence, leaf or container — this is what
+  makes `consolidateLogicalRepository`'s own internal tree-match check (folding the same raw
+  `participatingBranches`) always pass (fact 3).
+- `logicalRepositories`/`absoluteOccurrences` use `groupOccurrencesIntoLogicalRepositories`, not
+  `buildLogicalRepositories` directly (fact 4).
+- `publicationInputTargets[].targetOid` is `finalized.finalizedIntegrationOid` directly — no merge call,
+  no read from `consolidationResults` (fact 3).
 - `publishBases`'s `rootIntegration.refName` is `rootFinalized.durableTipRef` — the ref `runFinalizer`
   itself creates and updates unconditionally for every occurrence
   (`refs/finalize/${runId}/tip/${occurrenceId}`, verified against `test_durableRefsExistForEveryOccurrenceTip`
@@ -624,9 +587,9 @@ above is load-bearing, so nothing should be deleted for length; compress vertica
 
 ## File 3: tests/mergeTaskWorktrees.test.ts
 
-### Tests that need NO edit (11 of 12 existing tests)
+### Tests that need NO edit (15 of 15 existing tests)
 
-All tests except the one discussed below are untouched, verified individually:
+All 15 existing tests are untouched, verified individually:
 
 - `test_removeWorktreeAndBranchDeletesAWorktreeThatContainsSubmodules`,
   `test_mergeGroupBranchIntoRepoReportsSuccessForANonConflictingBranch`,
@@ -636,6 +599,7 @@ All tests except the one discussed below are untouched, verified individually:
   `test_mergeGroupBranchIntoRepoContinuesToLaterGroupsAfterAnEarlierConflict`,
   `test_mergeGroupBranchIntoRepoChecksOutTheSourceBranchBeforeMerging`,
   `test_mergeSubmoduleBranchSurvivesEvenWhenTheGroupConflicts`,
+  `test_mergeGroupBranchIntoRepoReportsWhyAMergeThatNeverStartedFailed`,
   `test_resolveGitlinkConflictsAutoResolvesASubmodulePointerConflict`,
   `test_resolveGitlinkConflictsAbortsOnANonSubmoduleConflict` — all call
   `mergeGroupBranchIntoRepo`/`mergeSubmoduleBranchIntoRepo`/`resolveGitlinkConflicts`/`removeWorktreeAndBranch`
@@ -694,26 +658,42 @@ Tracing it against the new implementation:
 
 Add this test to `tests/mergeTaskWorktrees.test.ts` (append after the last existing test, before the
 closing of the file; it needs no new imports beyond what the file already imports — `execFileSync`,
-`existsSync`, `writeFileSync`, `join`, `currentBranchName`, `makeTempRepoWithCommit`, `makeGroup`,
-`makeManifest`, `SCRIPT`, `git` are all already in scope):
+`writeFileSync`, `join`, `currentBranchName`, `makeTempRepoWithLocalSubmodule`, `makeGroup`,
+`makeManifest`, `SCRIPT`, `git` are all already in scope). It uses a submodule so it can also prove the
+nested-publication consistency fixed by architecture fact 3 (a parent's published gitlink must equal its
+child's published commit):
 
 ```ts
 test("test_runPipelineCliPublishesThroughTheFinalizeConsolidatePublishChain", () => {
-    const repoRoot = makeTempRepoWithCommit();
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
     const sourceBranch = currentBranchName(repoRoot);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
     const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const submoduleGroupBranch = currentBranchName(worktreeSubmodulePath);
+
     writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");
     const groupBranchOid = git(group.worktree, "rev-parse", "HEAD").trim();
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
 
     const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const preMergeSubmoduleOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
     const cliInput = {
         repo: repoRoot,
         typecheckCommand: "npx tsc --noEmit",
         groups: [group],
-        repositorySources: [{ path: "", sourceBranch }],
-        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch, [
+            { checkoutPath: "vendor", baseBranch: submoduleSourceBranch, baseOid: preMergeSubmoduleOid, operationBranch: submoduleGroupBranch },
+        ]),
         testReceipts: [{ groupId: "1", status: "green" }],
         reviewHandoffs: ["reviewed by codex"],
     };
@@ -722,10 +702,16 @@ test("test_runPipelineCliPublishesThroughTheFinalizeConsolidatePublishChain", ()
 
     // Proof the chain ran: both the pre-run base and the group's branch tip are ancestors of the published commit.
     const targetOid = output.publicationTargets[0].targetOid;
+    const submoduleTargetOid = output.publicationTargets[1].targetOid;
     assert.doesNotThrow(() => git(repoRoot, "merge-base", "--is-ancestor", preMergeBaseOid, targetOid));
     assert.doesNotThrow(() => git(repoRoot, "merge-base", "--is-ancestor", groupBranchOid, targetOid));
     assert.equal(git(repoRoot, "show", `${targetOid}:new.txt`), "brand new\n");
-    assert.equal(git(repoRoot, "rev-parse", sourceBranch), targetOid);
+    assert.equal(git(repoRoot, "rev-parse", sourceBranch).trim(), targetOid);
+
+    // Nested consistency: the published root's gitlink for vendor is exactly the published vendor commit.
+    const lsTreeLine = git(repoRoot, "ls-tree", targetOid, "--", "vendor").trim();
+    const publishedGitlinkOid = lsTreeLine.split("\t")[0].split(" ")[2];
+    assert.equal(publishedGitlinkOid, submoduleTargetOid);
 
     // The finalize phase's durable per-occurrence ref exists and resolves to a real commit.
     const durableRefs = git(repoRoot, "for-each-ref", `refs/finalize/`).trim();
@@ -739,7 +725,10 @@ test("test_runPipelineCliPublishesThroughTheFinalizeConsolidatePublishChain", ()
 
 Note: `git show <oid>:<path>` prints the file content followed by a trailing newline captured by
 `execFileSync`'s default `encoding: "utf8"` return — matches `"brand new\n"` written by `writeFileSync`
-exactly (git does not add or strip trailing newlines from blob content).
+exactly (git does not add or strip trailing newlines from blob content). `git(repoRoot, "rev-parse",
+sourceBranch)` is `.trim()`-ed before comparing to `targetOid` because this test file's own local `git()`
+helper (unlike `mergePipeline.ts`'s) does not trim its output, and `rev-parse` output carries a trailing
+newline that a bare JSON-sourced `targetOid` never has.
 
 ## Verification
 
@@ -748,7 +737,7 @@ Run from the repository root:
 ```
 node --test tests/mergeTaskWorktrees.test.ts
 ```
-Expected: all 13 tests pass (12 existing + 1 new), 0 failures.
+Expected: all 16 tests pass (15 existing + 1 new), 0 failures.
 
 ```
 node --test tests/runFinalizer.test.ts tests/runConsolidation.test.ts tests/operationPush.test.ts tests/basePublication.test.ts tests/taskArchival.test.ts
