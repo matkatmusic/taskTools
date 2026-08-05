@@ -52,7 +52,10 @@
       "scripts/mergeTaskWorktrees.ts",
       "tests/mergeTaskWorktrees.test.ts"
     ],
-    "difficulty": 4
+    "difficulty": 4,
+    "blockedBy": [
+      53
+    ]
   },
   {
     "taskNumber": 50,
@@ -80,5 +83,20 @@
       49
     ],
     "difficulty": 3
+  },
+  {
+    "taskNumber": 53,
+    "title": "Re-scope task 49: supply the authorization, occurrence and receipt data mergeTaskWorktrees needs",
+    "description": "Task 49 as written is unimplementable, proven twice by codex during a tackle-tasks run on 2026-08-05. Read plans/task-49-plan.md first; it records the full evidence.\n\nThe blocker: runFinalizer.ts, runConsolidation.ts, operationPush.ts, basePublication.ts and taskArchival.ts all require a RunAuthorizationToken or RunState that can only be minted through the recordApproval then issueApprovalAuthorization flow in approvalGate.ts, which itself needs a RepositoryManifest plus testReceipts, reviewHandoffs and occurrenceDigests. They also require a full RepositoryOccurrence graph and per-repository publish-outcome data. None of that exists on WorkflowArguments or on the flat CliInput that mergeTaskWorktrees.ts accepts as argv 2, and task 49 forbids changing the CLI contract, so its two owned files cannot supply it.\n\nThis task decides and implements the plumbing. Two options: widen the CLI contract so the flat input carries manifest, occurrence and receipt data, or add a prerequisite step that mints the authorization and builds the occurrence graph before mergeTaskWorktrees runs. Pick one and implement it, then unblock task 49.\n\nAlso fix a defect found on the way: scripts/basePublication.ts and scripts/logicalRepository.ts both export a type named LogicalRepository and the two are incompatible.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/approvalGate.ts",
+      "scripts/basePublication.ts",
+      "scripts/logicalRepository.ts",
+      "scripts/prepareTasks.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "difficulty": 5,
+    "blockedBy": []
   }
 ]

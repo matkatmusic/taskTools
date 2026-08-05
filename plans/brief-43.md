@@ -6,7 +6,7 @@ Today skills/pick-a-task/SKILL.md picks the N easiest open tasks by having the a
 
 Rewrite the picking criteria to use the field, and decide what judgment is still worth spending prose on. The remaining candidate is the relevance check — is this task still needed given the current codebase? — which is separate from difficulty and cannot be sorted.
 
-Blocked by the task that adds the difficulty field to tasks.json entries and to skills/create-task/template/taskTemplate.json; that task does not exist yet, so add its number to blockedBy once it is created.
+No longer blocked: the difficulty field now exists on every open tasks.json entry, and skills/create-task/template/taskTemplate.json documents the 1-5 scale (1 = one-line mechanical change, 5 = wide blast radius or a previously reverted attempt). Read that scale before rewriting the criteria so the SKILL.md wording matches what the ratings actually mean.
 
 ### skills/pick-a-task/SKILL.md
 
