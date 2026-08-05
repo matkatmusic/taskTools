@@ -84,50 +84,17 @@
       "tests/mergeTaskWorktrees.test.ts",
       "skills/tackle-tasks/merge.workflow.js"
     ],
-    "difficulty": 5,
-    "blockedBy": [
-      56
-    ]
-  },
-  {
-    "taskNumber": 54,
-    "title": "Have create-task ask the user for an example test and store it as a tests field on the task",
-    "description": "When using create-task, ask the user for an example of a test (most likely an e2e test) that will correctly test the thing they are adding. Offer an optional skip choice when asking. If the user picks skip, the implementing agent skips TDD and just writes code. Otherwise the implementing agent writes the test based on what the user wrote, and expands on it a bit to test subparts of what was built (i.e. test individual functions).\n\nPurpose: skip the agent undirected TDD approach and give it an actual test to write the implementation around, one that reflects how the user wants the code to actually work.\n\nDesign notes: the answer has to survive past the create-task conversation, so store it on the task entry as a new field named tests, holding the user answer as prose or pseudocode, or the literal string skip. Add the field to skills/create-task/template/taskTemplate.json and document it in skills/create-task/SKILL.md alongside the AskUserQuestion prompt that collects it. Then consume it downstream: skills/tackle-tasks/plan.workflow.js must put the example test into the plan so codex verifies against it, and skills/tackle-tasks/implement.workflow.js workerBrief must instruct the worker to write that test first and expand it to cover individual functions, or to skip TDD entirely when tests is the string skip. Tasks created before this field exists must keep working, so treat a missing field the same as skip.",
-    "files": [
-      "skills/create-task/SKILL.md",
-      "skills/create-task/template/taskTemplate.json",
-      "skills/tackle-tasks/plan.workflow.js",
-      "skills/tackle-tasks/implement.workflow.js"
-    ],
-    "difficulty": 3,
-    "blockedBy": []
+    "difficulty": 5
   },
   {
     "taskNumber": 55,
     "title": "Fall back to a Claude reviewer in the verify phase when codex is unavailable",
-    "description": "Add support to the review phase for when codex is not available: use opus5-high or fable-medium to review instead, to keep token cost down. Codex can be unavailable for several reasons — api overloaded, usage exceeded, not logged in, binary missing from PATH, rate limited — and the verify phase currently has no path for any of them.\n\nWhere it lives: skills/tackle-tasks/verify.workflow.js line 33 builds the single command `codex exec -s read-only <prompt>` and the verifier subagent brief forbids running any other command. When that command fails, the verifier has nowhere to go.\n\nWhat to build: detect codex unavailability by its exit status and stderr, distinguishing it from a genuine plan rejection — a non-zero exit with no PROBLEMS or FIXES block is unavailability, not a verdict. On unavailability, review the plan with a Claude agent instead, using the same prompt text already built by codexPrompt, called through agent() with model opus and effort high, or model fable and effort medium as the cheaper option. Decide which of those two is the default and say so in the plan. The fallback must return the identical verdict shape the codex path returns — approved or rejected, revised, notes — so the repair round and the rest of the pipeline are unchanged, and it must respect the same never-review-more-than-twice ceiling.\n\nAlso surface which reviewer actually ran, so a run reviewed by the fallback is not silently reported as codex-approved: add a reviewer field to the per-task result and mention it in skills/tackle-tasks/SKILL.md step 2.",
+    "description": "Add support to the review phase for when codex is not available: use opus5-high or fable-medium to review instead, to keep token cost down. Codex can be unavailable for several reasons — api overloaded, usage exceeded, not logged in, binary missing from PATH, rate limited — and the verify phase currently has no path for any of them.\n\nWhere it lives: skills/tackle-tasks/verify.workflow.js line 33 builds the single command `codex exec -s read-only <prompt>` and the verifier subagent brief forbids running any other command. When that command fails, the verifier has nowhere to go.\n\nWhat to build: detect codex unavailability by its exit status and stderr, distinguishing it from a genuine plan rejection — a non-zero exit with no PROBLEMS or FIXES block is unavailability, not a verdict. On unavailability, review the plan with a Claude agent instead, using the same prompt text already built by codexPrompt, called through agent() with model opus and effort high, or model fable and effort medium as the cheaper option. Decide which of those two is the default and say so in the plan. The fallback must return the identical verdict shape the codex path returns — approved or rejected, revised, notes — so the repair round and the rest of the pipeline are unchanged, and it must respect the same never-review-more-than-twice ceiling.\n\nAlso surface which reviewer actually ran, so a run reviewed by the fallback is not silently reported as codex-approved: add a reviewer field to the per-task result and mention it in skills/tackle-tasks/SKILL.md step 2.\n\nAPPROACH DECIDED BY THE USER on 2026-08-05, do not re-litigate it. A first attempt at this task was planned and then rejected by codex twice, because the plan built a separate fallbackPrompt for an agent() call with a structured schema, while the brief requires reusing codexPrompt verbatim. The planner argued codexPrompt's print-APPROVED-or-REJECTED text instructions contradict a schema-validated agent() call. The user resolved it: do not use agent() at all. Keep the fallback a shell command run by the same verifier subagent, so the prompt text and the first-line APPROVED or REJECTED output format both stay identical and no schema is involved.\n\nConcretely, in the verifierBrief template literal in skills/tackle-tasks/verify.workflow.js, immediately after the line that interpolates the codex command (currently the ${command} line, around line 36), add text of the form: if running the command returns an error code, use this command instead: claude --model <model> -p <codexPrompt> <otherArgs>. Pick the model and remaining arguments, state the choice in the plan, and keep the existing never-review-more-than-twice ceiling and the reviewer field requirement above.",
     "files": [
       "skills/tackle-tasks/verify.workflow.js",
       "skills/tackle-tasks/SKILL.md"
     ],
     "difficulty": 3,
-    "blockedBy": []
-  },
-  {
-    "taskNumber": 56,
-    "title": "Produce real TestReceipts and reviewHandoffs from the test phase so the approval gate can ever open",
-    "description": "Split out of task 53 on 2026-08-05 after codex rejected its plan twice. Root cause found while investigating: nothing in this repository ever CREATES a TestReceipt. scripts/approvalGate.ts line 16 and scripts/approvalReadiness.ts line 43 consume TestReceipt arrays, and scripts/approvalReadiness.ts line 97 refuses approval when the array is empty or any receipt is red, but the only places a receipt is ever constructed are tests/approvalGate.test.ts, tests/approvalReadiness.test.ts and tests/basePublication.test.ts. Production code has no producer. The same is true of reviewHandoffs (scripts/approvalGate.ts line 17) and occurrenceDigests (line 15). The approval gate therefore cannot open no matter what any caller passes it.\n\nBuild the producer. skills/tackle-tasks/test.workflow.js already runs the tests covering each group and returns {tests, allPassed} with a per-group passed flag and failure list; convert that into a real TestReceipt array. Decide and state where reviewHandoffs come from — the verify phase codex verdicts in skills/tackle-tasks/verify.workflow.js are the obvious source — and define a deterministic ordered occurrenceDigests algorithm rather than reusing raw baseOid values, which codex rejected explicitly.\n\nThread the result through the orchestrator documented in skills/tackle-tasks/SKILL.md so the merge step receives real evidence in its args. Read plans/task-53-plan.md and the task 53 codex rejection notes before starting.",
-    "files": [
-      "skills/tackle-tasks/test.workflow.js",
-      "skills/tackle-tasks/verify.workflow.js",
-      "skills/tackle-tasks/SKILL.md",
-      "scripts/approvalReadiness.ts",
-      "tests/approvalReadiness.test.ts",
-      "scripts/approvalGate.ts",
-      "skills/tackle-tasks/merge.workflow.js",
-      "scripts/mergeTaskWorktrees.ts"
-    ],
-    "difficulty": 4,
     "blockedBy": []
   }
 ]

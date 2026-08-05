@@ -849,5 +849,47 @@
       "1e32117"
     ],
     "closureNote": "Rewrote skills/pick-a-task/SKILL.md to exclude blocked tasks, sort the rest by the difficulty field ascending with task number as tie-break, and keep only the per-candidate relevance check as prose judgment, replacing the old read-every-task scope guessing; also added explicit exhaustion behavior for fewer than N or zero qualifying tasks. Codex approved the plan after the byte-for-byte output-contract requirement and the missing exhaustion case were fixed; implemented in f462cfc and merged to new-usage-graph in 1e32117 with typecheck clean and tests green."
+  },
+  {
+    "taskNumber": 54,
+    "title": "Have create-task ask the user for an example test and store it as a tests field on the task",
+    "description": "When using create-task, ask the user for an example of a test (most likely an e2e test) that will correctly test the thing they are adding. Offer an optional skip choice when asking. If the user picks skip, the implementing agent skips TDD and just writes code. Otherwise the implementing agent writes the test based on what the user wrote, and expands on it a bit to test subparts of what was built (i.e. test individual functions).\n\nPurpose: skip the agent undirected TDD approach and give it an actual test to write the implementation around, one that reflects how the user wants the code to actually work.\n\nDesign notes: the answer has to survive past the create-task conversation, so store it on the task entry as a new field named tests, holding the user answer as prose or pseudocode, or the literal string skip. Add the field to skills/create-task/template/taskTemplate.json and document it in skills/create-task/SKILL.md alongside the AskUserQuestion prompt that collects it. Then consume it downstream: skills/tackle-tasks/plan.workflow.js must put the example test into the plan so codex verifies against it, and skills/tackle-tasks/implement.workflow.js workerBrief must instruct the worker to write that test first and expand it to cover individual functions, or to skip TDD entirely when tests is the string skip. Tasks created before this field exists must keep working, so treat a missing field the same as skip.",
+    "files": [
+      "skills/create-task/SKILL.md",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js"
+    ],
+    "difficulty": 3,
+    "blockedBy": [],
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "8d2669e",
+      "b11fdf7"
+    ],
+    "closureNote": "create-task now asks for an example test and stores it as a tests field on the task; plan.workflow.js folds it into the plan for codex to verify against and implement.workflow.js instructs the worker to write it first and expand it, treating skip or a missing field as no TDD. Landed via the tackle-tasks pipeline on new-usage-graph with a codex-approved plan, group tests green and a clean merge."
+  },
+  {
+    "taskNumber": 56,
+    "title": "Produce real TestReceipts and reviewHandoffs from the test phase so the approval gate can ever open",
+    "description": "Split out of task 53 on 2026-08-05 after codex rejected its plan twice. Root cause found while investigating: nothing in this repository ever CREATES a TestReceipt. scripts/approvalGate.ts line 16 and scripts/approvalReadiness.ts line 43 consume TestReceipt arrays, and scripts/approvalReadiness.ts line 97 refuses approval when the array is empty or any receipt is red, but the only places a receipt is ever constructed are tests/approvalGate.test.ts, tests/approvalReadiness.test.ts and tests/basePublication.test.ts. Production code has no producer. The same is true of reviewHandoffs (scripts/approvalGate.ts line 17) and occurrenceDigests (line 15). The approval gate therefore cannot open no matter what any caller passes it.\n\nBuild the producer. skills/tackle-tasks/test.workflow.js already runs the tests covering each group and returns {tests, allPassed} with a per-group passed flag and failure list; convert that into a real TestReceipt array. Decide and state where reviewHandoffs come from — the verify phase codex verdicts in skills/tackle-tasks/verify.workflow.js are the obvious source — and define a deterministic ordered occurrenceDigests algorithm rather than reusing raw baseOid values, which codex rejected explicitly.\n\nThread the result through the orchestrator documented in skills/tackle-tasks/SKILL.md so the merge step receives real evidence in its args. Read plans/task-53-plan.md and the task 53 codex rejection notes before starting.",
+    "files": [
+      "skills/tackle-tasks/test.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/SKILL.md",
+      "scripts/approvalReadiness.ts",
+      "tests/approvalReadiness.test.ts",
+      "scripts/approvalGate.ts",
+      "skills/tackle-tasks/merge.workflow.js",
+      "scripts/mergeTaskWorktrees.ts"
+    ],
+    "difficulty": 4,
+    "blockedBy": [],
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "6b66b48",
+      "8e9f0e5"
+    ],
+    "closureNote": "Built the missing approval-gate evidence producers: test.workflow.js now emits real TestReceipts and verify.workflow.js emits reviewHandoffs, approvalGate.ts gained computeOccurrenceDigests over a new OccurrenceSnapshot type hashing deterministic sorted git tree listings, mergeTaskWorktrees.ts computes occurrenceDigests after the merge loop from each group branch ref so retries reproduce identical evidence, and merge.workflow.js plus SKILL.md thread all three fields through every return path. Unblocks task 53."
   }
 ]

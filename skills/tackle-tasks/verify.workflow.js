@@ -1,7 +1,7 @@
 export const meta = {
   name: 'tackle-tasks-verify',
-  description: 'Review each plan with codex, apply its suggested fixes once, and re-review before rejecting',
-  phases: [{ title: 'Verify', detail: 'one codex verifier per planned task, one repair round each' }],
+  description: 'Review each plan with codex (or Claude when codex is down), apply its fixes once, and re-review before rejecting',
+  phases: [{ title: 'Verify', detail: 'one verifier per planned task, one repair round each' }],
 }
 
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
@@ -15,8 +15,9 @@ const VERIFY_SCHEMA = {
     verdict: { type: 'string', enum: ['approved', 'rejected'] },
     revised: { type: 'boolean' },
     notes: { type: 'string' },
+    reviewer: { type: 'string', enum: ['codex', 'claude'] },
   },
-  required: ['task', 'verdict', 'revised', 'notes'],
+  required: ['task', 'verdict', 'revised', 'notes', 'reviewer'],
 }
 
 const codexPrompt = (t, planFile) => `Review an implementation plan. Read only these two files: the brief ${t.briefFile} and the plan ${planFile}. Do not edit anything.
@@ -30,36 +31,52 @@ If APPROVED, follow it with one short paragraph saying why.
 If REJECTED, follow it with two sections. First "PROBLEMS:" — what is wrong and why. Then "FIXES:" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, say so explicitly in FIXES instead of inventing a fix.`
 
 const verifierBrief = (t, planFile) => {
-  const command = `codex exec -s read-only ${JSON.stringify(codexPrompt(t, planFile))}`
+  const prompt = JSON.stringify(codexPrompt(t, planFile))
+  const command = `codex exec -s read-only ${prompt}`
+  // ponytail: opus/high, not fable/medium — the fallback replaces the strictest gate in the pipeline
+  const fallbackCommand = `claude -p ${prompt} --tools "Read" --model opus --effort high`
   return `Review the plan for task #${t.number} by running exactly this command:
 
 ${command}
 
-Codex prints its verdict on the first line. The only file you may ever edit
-is the plan file ${planFile} — never touch a source file, and never run any
-command other than the codex command above.
+If that command exits with an error code, codex is unavailable — not a
+verdict. Unavailability looks like a non-zero exit with no APPROVED or
+REJECTED first line and no PROBLEMS or FIXES block: overloaded api, usage
+exceeded, not logged in, rate limited, or no codex binary on PATH. In that
+case run this command instead, and treat its output exactly as you would
+codex's:
+
+${fallbackCommand}
+
+Whichever reviewer answers prints its verdict on the first line. The only
+file you may ever edit is the plan file ${planFile} — never touch a source
+file, and never run any command other than the two above.
+
+Report which reviewer actually produced the verdict you return: reviewer
+"codex" if the codex command answered, reviewer "claude" if you had to fall
+back. Never report a fallback review as codex.
 
 If the first run prints APPROVED:
-  return verdict "approved", revised false, and codex's reasoning in notes.
+  return verdict "approved", revised false, and the reviewer's reasoning in notes.
 
 If the first run prints REJECTED:
   it also prints a FIXES section. Apply those fixes to ${planFile} so the plan
-  says what codex asked for — edit only that file. Then run the exact same
-  codex command a second time against the now-updated plan.
+  says what the reviewer asked for — edit only that file. Then run that same
+  reviewer's command a second time against the now-updated plan.
 
   If the second run prints APPROVED: return verdict "approved", revised true,
   and describe in notes what you changed in the plan.
 
   If the second run prints REJECTED: return verdict "rejected", revised true,
-  and put codex's second-round PROBLEMS and FIXES text in notes verbatim —
+  and put the reviewer's second-round PROBLEMS and FIXES text in notes verbatim —
   that reason is the only thing anyone sees before the task is skipped.
 
-  If codex said the plan cannot be fixed within the task's owned files, do not
-  invent a fix: return verdict "rejected", revised false, and copy that
+  If the reviewer said the plan cannot be fixed within the task's owned files, do
+  not invent a fix: return verdict "rejected", revised false, and copy that
   explanation into notes.
 
-Never run codex more than twice.
-Return {task: ${t.number}, verdict, revised, notes}.`
+Never review more than twice in total, counting codex and the fallback together.
+Return {task: ${t.number}, verdict, revised, notes, reviewer}.`
 }
 
 log(`verifying ${PLANNED.length} plan(s) with codex, up to one repair round each`)
@@ -76,11 +93,12 @@ const verified = PLANNED.map((p, i) => results[i] ?? {
   verdict: 'rejected',
   revised: false,
   notes: 'verifier agent returned no result (killed, errored, or blocked)',
+  reviewer: 'none',
 })
 
 const planFileFor = (task) => PLANNED.find((p) => p.task === task).planFile
 
-const reviewHandoffs = verified.map((v) => `task ${v.task}: ${v.verdict}${v.revised ? ' (revised)' : ''} - ${v.notes}`)
+const reviewHandoffs = verified.map((v) => `task ${v.task}: ${v.verdict} by ${v.reviewer}${v.revised ? ' (revised)' : ''} - ${v.notes}`)
 
 return {
   verified,
