@@ -9,6 +9,7 @@ const GROUPS = ARGS.groups ?? []
 const APPROVED = ARGS.approved ?? []
 const TYPECHECK_COMMAND = ARGS.typecheckCommand ?? 'npx tsc --noEmit'
 const WORKER_MODEL = ARGS.workerModel
+const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
 
 const WORKER_SCHEMA = {
   type: 'object',
@@ -52,8 +53,15 @@ else:
 // never run the full suite; that is the close-tasks gate, not yours
 
 results = run(tests)
-if any test failed:
-    fix the cause, then run typecheck and results again
+fixRound = 0
+while any test failed and fixRound is less than ${MAX_FIX_ROUNDS}:
+    fixRound = fixRound + 1
+    fix the cause
+    typecheck = run(${TYPECHECK_COMMAND})
+    results = run(tests)
+
+if any test still failed after ${MAX_FIX_ROUNDS} fix rounds:
+    return {task: ${t.number}, status: "blocked", summary: what is still failing after ${MAX_FIX_ROUNDS} fix rounds, remaining: the failing test names}
 
 if typecheck is clean and every test passed:
     run: ${t.files.length ? `git add -- ${t.files.map((f) => JSON.stringify(f)).join(' ')}` : 'git add -- (every path you edited, listed explicitly)'}
@@ -70,7 +78,8 @@ if you reach timeBudget before finishing:
 You are forbidden to touch anything outside ownedFiles; to add scope or
 refactors the plan does not call for; to redecide anything the plan already
 decided; to run the full suite, \`git add -A\`, or \`git add .\`; to commit while
-anything fails; or to return status "done" with a failing test.`
+anything fails; to attempt more than ${MAX_FIX_ROUNDS} fix rounds; or to return
+status "done" with a failing test.`
 
 const planFileFor = (task) => APPROVED.find((a) => a.task === task)?.planFile ?? ''
 
