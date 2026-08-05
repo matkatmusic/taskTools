@@ -3,42 +3,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
-import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath, type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
+import { type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
-import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
-import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization } from "./approvalGate.ts";
-import type { OccurrenceSnapshot, RunState, ApprovalDigestInput } from "./approvalGate.ts";
-import type { TestReceipt } from "./approvalReadiness.ts";
-import type { RepositoryManifest } from "./repositoryManifest.ts";
-
-type CliInput = WorkflowArguments & {
-    runId?: string;
-    startTimestamp?: string;
-    doneCount?: number;
-    partialCount?: number;
-    blockedCount?: number;
-    needsClarificationCount?: number;
-    requeueCount?: number;
-    testReceipts?: TestReceipt[];
-    reviewHandoffs?: string[];
-    repositoryManifest: RepositoryManifest;
-};
-
-export type SubmoduleConflict = { path: string; conflictedFilePaths: string[]; failureReason: string | null };
-
-export type MergeOutcome = {
-    groupId: number;
-    merged: boolean;
-    conflictedFilePaths: string[];
-    submoduleConflicts: SubmoduleConflict[];
-    worktree: string;
-    failureReason: string | null;
-};
-
-export type PublicationTarget = { repositoryPath: string; recordedBaseOid: string; targetOid: string };
+import { runMergePipeline } from "./mergePipeline.ts";
+import type { MergeOutcome, SubmoduleConflict } from "./mergePipeline.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -216,122 +187,7 @@ function runMergeCli(worktreePath: string): void {
     process.stdout.write(JSON.stringify(outcome));
 }
 
-function runPipelineCli(input: CliInput): void {
-    if (!input.repositoryManifest) throw new Error("no repository manifest given in CLI input; approval cannot be minted without pre-merge base OIDs");
-    const rootOccurrence = input.repositoryManifest.occurrences.find((occurrence) => occurrence.parentOccurrenceId === null);
-    if (!rootOccurrence) throw new Error("repository manifest has no root occurrence");
-    const baseRef = rootOccurrence.baseOid;
-    const testReceipts = input.testReceipts ?? [];
-    const reviewHandoffs = input.reviewHandoffs ?? [];
-    const workflowArguments: WorkflowArguments = {
-        repo: input.repo,
-        typecheckCommand: input.typecheckCommand,
-        groups: input.groups,
-        repositorySources: input.repositorySources,
-    };
-    const sortedGroups = [...workflowArguments.groups].sort((a, b) => a.groupId - b.groupId);
-    const submodulePathsDeepestFirst = workflowArguments.repositorySources
-        .map((source) => source.path)
-        .filter((path) => path !== "")
-        .sort((a, b) => b.split("/").length - a.split("/").length);
-    const findSourceBranch = (path: string): string => {
-        const found = workflowArguments.repositorySources.find((source) => source.path === path);
-        if (!found) throw new Error(`no recorded source branch for repository path "${path}"`);
-        return found.sourceBranch;
-    };
-
-    const merged: MergeOutcome[] = [];
-    const conflicts: MergeOutcome[] = [];
-    for (const group of sortedGroups) {
-        const submoduleConflicts: SubmoduleConflict[] = [];
-        for (const submodulePath of submodulePathsDeepestFirst) {
-            const outcome = mergeSubmoduleBranchIntoRepo(
-                join(workflowArguments.repo, submodulePath),
-                join(group.worktree, submodulePath),
-                findSourceBranch(submodulePath),
-            );
-            if (!outcome.merged) submoduleConflicts.push({ path: submodulePath, conflictedFilePaths: outcome.conflictedFilePaths, failureReason: outcome.failureReason });
-        }
-        if (submoduleConflicts.length > 0) {
-            conflicts.push({ groupId: group.groupId, merged: false, conflictedFilePaths: [], submoduleConflicts, worktree: group.worktree, failureReason: null });
-            continue;
-        }
-        const outcome = mergeGroupBranchIntoRepo(workflowArguments.repo, group, findSourceBranch(""), submodulePathsDeepestFirst);
-        if (outcome.merged) merged.push(outcome); else conflicts.push(outcome);
-    }
-    const allGroupsMerged = conflicts.length === 0 && merged.length === sortedGroups.length;
-    const operationRef = git(workflowArguments.repo, "rev-parse", "HEAD").trim();
-    const occurrenceSnapshots: OccurrenceSnapshot[] = merged.flatMap((outcome) => {
-        const group = sortedGroups.find((g) => g.groupId === outcome.groupId)!;
-        return ["", ...submodulePathsDeepestFirst].map((repositoryPath) => ({
-            groupId: group.groupId,
-            repositoryPath,
-            treeListing: repositoryPath === ""
-                ? git(workflowArguments.repo, "ls-tree", "-r", "-z", group.branch)
-                : git(join(group.worktree, repositoryPath), "ls-tree", "-r", "-z", "HEAD"),
-        }));
-    });
-    const occurrenceDigests = computeOccurrenceDigests(occurrenceSnapshots);
-    const files = [...new Set(sortedGroups.flatMap((group) => group.tasks.flatMap((task) => task.files)))];
-    const readyForApproval = allGroupsMerged
-        && testReceipts.length > 0
-        && testReceipts.every((receipt) => receipt.status === "green")
-        && reviewHandoffs.length > 0;
-    const digestInput: ApprovalDigestInput = {
-        manifest: input.repositoryManifest,
-        files,
-        operationRef,
-        baseRef,
-        occurrenceDigests,
-        testReceipts,
-        reviewHandoffs,
-    };
-    const runState: RunState = { readyForApproval, status: readyForApproval ? "approved" : "blocked", digestInput };
-    if (readyForApproval) {
-        recordApproval(runState);
-        issueApprovalAuthorization(runState);
-    }
-    const publicationTargets: PublicationTarget[] = allGroupsMerged
-        ? input.repositoryManifest.occurrences.map((occurrence) => ({
-            repositoryPath: occurrence.checkoutPath,
-            recordedBaseOid: occurrence.baseOid,
-            targetOid: git(join(workflowArguments.repo, occurrence.checkoutPath), "rev-parse", "HEAD").trim(),
-        }))
-        : [];
-    const endTimestamp = new Date().toISOString();
-    appendRunMetricsRecord(workflowArguments.repo, {
-        runId: input.runId ?? endTimestamp,
-        startTimestamp: input.startTimestamp ?? null,
-        endTimestamp,
-        durationMs: runDurationMs(input.startTimestamp ?? null, endTimestamp),
-        taskNumbers: sortedGroups.flatMap((g) => g.tasks.map((t) => t.number)),
-        groupCount: sortedGroups.length,
-        doneCount: input.doneCount ?? 0,
-        partialCount: input.partialCount ?? 0,
-        blockedCount: input.blockedCount ?? 0,
-        needsClarificationCount: input.needsClarificationCount ?? 0,
-        requeueCount: input.requeueCount ?? 0,
-        conflictCount: conflicts.length,
-        argumentsHash: computeArgumentsHash(workflowArguments),
-    });
-    // A failed merge keeps them so the retry still has its inputs.
-    if (allGroupsMerged) {
-        rmSync(resolveRunArgumentsPath(workflowArguments.repo), { force: true });
-        rmSync(resolveRunOutcomesPath(workflowArguments.repo), { force: true });
-        rmSync(resolveStepOutputsPath(workflowArguments.repo), { force: true });
-    }
-    process.stdout.write(JSON.stringify({
-        merged,
-        conflicts,
-        testReceipts,
-        reviewHandoffs,
-        occurrenceDigests,
-        runState,
-        publicationTargets,
-    }));
-}
-
-function runAsCli(): void {
+async function runAsCli(): Promise<void> {
     const mode = process.argv[2];
     if (mode === "--discover") {
         runDiscoverCli();
@@ -345,10 +201,15 @@ function runAsCli(): void {
         const prepared = JSON.parse(readFileSync(process.argv[3], "utf8"));
         const outcomesFile = process.argv[4];
         const outcomes = outcomesFile && existsSync(outcomesFile) ? JSON.parse(readFileSync(outcomesFile, "utf8")) : {};
-        runPipelineCli({ ...prepared, ...outcomes });
+        await runMergePipeline({ ...prepared, ...outcomes });
         return;
     }
-    runPipelineCli(JSON.parse(process.argv[2]));
+    await runMergePipeline(JSON.parse(process.argv[2]));
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
+if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+    runAsCli().catch((error) => {
+        process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+        process.exitCode = 1;
+    });
+}

@@ -9,6 +9,7 @@ import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -468,4 +469,106 @@ test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {
     assert.equal(output.runState.approval, undefined);
     assert.equal(output.runState.authorization, undefined);
     assert.deepEqual(output.publicationTargets, []);
+});
+
+test("test_noEvidenceCausesNoFinalizationMutation", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.runState.readyForApproval, false);
+    assert.equal(output.runState.approval, undefined);
+    assert.equal(output.runState.authorization, undefined);
+    assert.deepEqual(output.publicationTargets, []);
+    assert.equal(git(repoRoot, "rev-parse", sourceBranch).trim(), preMergeBaseOid);
+    const refs = git(repoRoot, "for-each-ref", "--format=%(refname)").split("\n");
+    assert.equal(refs.some((ref) => ref.startsWith("refs/finalize/")), false);
+    assert.equal(refs.some((ref) => ref.startsWith("refs/heads/operations/")), false);
+    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}`), []);
+});
+
+test("test_productionShapedNestedFinalizationSucceeds", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const rootPath = makeTempRepoWithCommit();
+    const submoduleSourcePath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add submodule");
+
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    assert.equal(bootstrapResult.refused, false);
+    const occurrenceGraph = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
+    const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
+    const rootOccurrence = occurrenceGraph.find((o) => o.parentOccurrenceId === null)!;
+    assert.equal(rootOccurrence.operationBranch, "");
+    assert.ok(rootOccurrence.checkoutPath.startsWith("/"));
+
+    const sourceBranch = currentBranchName(rootPath);
+    const submodulePath = join(rootPath, "vendor");
+    const submoduleSourceBranch = currentBranchName(submodulePath);
+    const group = makeGroup(rootPath, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+
+    const preMergeRootOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const preMergeSubmoduleOid = git(submodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    const cliInput = {
+        repo: rootPath,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: manifest,
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.deepEqual(
+        Object.keys(output).sort(),
+        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets"].sort(),
+    );
+    assert.equal(output.runState.readyForApproval, true);
+
+    const postMergeRootOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const postMergeSubmoduleOid = git(submodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const rootTarget = output.publicationTargets.find((t: { repositoryPath: string }) => t.repositoryPath === "");
+    const subTarget = output.publicationTargets.find((t: { repositoryPath: string }) => t.repositoryPath === "vendor");
+    assert.equal(rootTarget.targetOid, postMergeRootOid);
+    assert.equal(subTarget.targetOid, postMergeSubmoduleOid);
+
+    assert.doesNotThrow(() => git(rootPath, "merge-base", "--is-ancestor", preMergeRootOid, postMergeRootOid));
+    assert.doesNotThrow(() => git(submodulePath, "merge-base", "--is-ancestor", preMergeSubmoduleOid, postMergeSubmoduleOid));
+
+    const rootGitlinkOid = git(rootPath, "ls-tree", sourceBranch, "vendor").trim().split(/\s+/)[2];
+    assert.equal(rootGitlinkOid, postMergeSubmoduleOid);
+
+    const refs = git(rootPath, "for-each-ref", "--format=%(refname)").split("\n");
+    assert.ok(refs.some((ref) => ref.startsWith("refs/finalize/")));
+
+    assert.equal(existsSync(group.worktree), true);
+    const branches = git(rootPath, "branch", "--list", group.branch);
+    assert.ok(branches.includes(group.branch));
 });
