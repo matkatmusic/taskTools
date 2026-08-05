@@ -284,16 +284,22 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli
 
 ```
 
+### skills/tackle-unblocked-tasks/SKILL.md
+
+```
 ---
+name: tackle-unblocked-tasks
+description: tackle every open task in tasks.json whose blockedBy array is empty, in ascending task-number order
+---
+- `$tasks`: !``
+- `$unblockedTaskNumbers`: !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked '$tasks'); [ -n "$u" ] && echo "[$(echo $u | tr ' ' '\n' | sort -n | paste -sd, -)]" || echo "none"`
 
-# Current state (read this before planning)
+If the line above says `none`, report that every open task is blocked and stop.
 
-You may only read this brief. Here is what exists on the current branch:
+otherwise:
+Invoke the `tackle-tasks $unblockedTaskNumbers valid` skill.
+example: `[30,32,35] valid`. 
+Pass it verbatim; do not re-derive or filter it.
 
-- `scripts/checkBlockers.ts` already parses the flag: `const unblockedOnly = process.argv.includes("--unblocked")` and strips it before `leadingTaskNumbers(...)`.
-- `scripts/prepareTasks.ts` does NOT: `runAsCli()` calls `leadingTaskNumbers(process.argv.slice(2))` and throws "no task numbers given; pass a JSON array with no spaces" when the array is missing. Invoking the skill with `--unblocked valid` fails there today — that is the concrete bug to fix.
-- `scripts/taskFiles.ts` holds the shared task-reading helpers and is where the exported `unblockedTaskNumbers(openTasks)` helper belongs: ascending-sorted task numbers whose `blockedBy` array is empty or absent.
 
-Scope: export `unblockedTaskNumbers(openTasks)` from `scripts/taskFiles.ts`, use it in `scripts/checkBlockers.ts` in place of any local equivalent, and make `scripts/prepareTasks.ts` accept `--unblocked` by expanding it to those numbers instead of throwing. After this, `--unblocked valid` must drive the same code path as passing the explicit array.
-
-You own only `scripts/taskFiles.ts`, `scripts/checkBlockers.ts`, and `scripts/prepareTasks.ts`. Do not create a skill directory; that is tracked separately.
+```

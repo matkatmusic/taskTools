@@ -1,20 +1,20 @@
 [
   {
     "taskNumber": 35,
-    "title": "Production cutover to the recursive repository workflow",
-    "description": "Phase 4 of the recursive repository-discovery redesign — the cutover that finally routes production through everything built in Phases 1 to 3.\n\nReplace the flat-path helpers with their graph-based equivalents at their call sites: scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository), scripts/taskGroups.ts (grouping now via scripts/canonicalTaskGroups.ts), scripts/prepareTasks.ts (discovery, worktree and branch creation, workflow arguments), and scripts/mergeTaskWorktrees.ts (finalization and publication via scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts, scripts/taskArchival.ts). Rewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs, and readyForApproval instead of immediate merge results, and so the approval gate runs before finalization.\n\nActivate the new manifest/workflow version only after the complete end-to-end suite passes. Preserve legacy worktrees and route legacy manifests through scripts/legacyManifest.ts to their existing compatible tooling or a non-destructive refusal.\n\nTests: existing prepareTasks and mergeTaskWorktrees suites are updated to the new interfaces and pass; the workflow returns readyForApproval rather than merge results before approval; a legacy manifest is refused non-destructively with recovery instructions and its worktrees survive; the version flips only when the full suite is green.\n\nDesign decisions already made by the user — implement these, do not re-litigate or re-derive them:\n\n1. Detached HEAD. Keep the existing explicit refusal in collectRepositorySources and run it BEFORE graph discovery, not instead of it. Graph discovery resolves a base branch by matching any local branch whose tip equals the recorded gitlink OID, which would wrongly accept a detached submodule because detaching does not move the branch. So the empty-current-branch check stays as the outer guard, and its error names each offending repository path and tells the user to check out a branch there before continuing. tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unchanged.\n\n2. mergeTaskWorktrees CLI contract. The script keeps its current front door: it accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script before driving runFinalizer, runConsolidation, operationPush, basePublication and taskArchival. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged — no rewritten CLI assertions. A graph-shaped front door is a later follow-up, not part of this task.",
+    "title": "Activate the new manifest and workflow version after the cutover suite is green",
+    "description": "Final step of the recursive repository-discovery cutover, after the split into tasks 45 to 51.\n\nEvery call-site migration now lives in its own task: 45 manifest bootstrap, 46 repositoryBranches, 47 taskGroups, 48 prepareTasks, 49 mergeTaskWorktrees finalization, 50 workflow and SKILL approval split, 51 legacy manifest routing. This task is only the version flip that activates the new manifest and workflow version once all of them have landed.\n\nFlip the version only after the complete end-to-end suite passes: a full node --test tests/ run plus npx tsc --noEmit, both green, in the same commit. Isolate the flip as its own commit so it can be reverted without unwinding the migration.\n\nThis task was attempted three times as a single whole-cutover unit and refused each time for a different verified reason: detached-HEAD resolution semantics, discoverRepositoryTree checking out working directories (fixed by task 44), and the absence of any manifest bootstrap (now task 45). Do not re-merge the split steps back into this task.\n\nTests: the version constant advances only with the full suite green, and a guard refuses the flip on any nonzero exit.",
     "files": [
-      "scripts/prepareTasks.ts",
-      "scripts/mergeTaskWorktrees.ts",
-      "scripts/repositoryBranches.ts",
-      "scripts/taskGroups.ts",
-      "skills/tackle-tasks/tackle-tasks.workflow.js",
-      "skills/tackle-tasks/SKILL.md",
-      "tests/prepareTasks.test.ts",
-      "tests/mergeTaskWorktrees.test.ts"
+      "scripts/repositoryManifest.ts",
+      "tests/repositoryManifest.test.ts"
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "blockedBy": [
+      48,
+      49,
+      50,
+      51
     ]
   },
   {
@@ -63,5 +63,89 @@
     ],
     "handoffFilePaths": [],
     "blockedBy": []
+  },
+  {
+    "taskNumber": 45,
+    "title": "Manifest bootstrap: produce a RepositoryManifest from a bare repoRoot",
+    "description": "Nothing in production can currently obtain a manifest. discoverRepositoryTree(rootPath, manifest) takes a DiscoveryManifest as input and fills it in rather than building one, and readRepositoryManifest and writeRepositoryManifest are called by nothing in scripts/ outside their own file — only tests construct manifests, by hand. prepareTasks.ts starts from a bare repoRoot, so every graph consumer (discoverRepositoryTree, buildCanonicalTaskGroups, setUpOperationBranches) has no way to be called in production.\n\nAdd scripts/manifestBootstrap.ts exporting a function that takes a repoRoot, builds an empty DiscoveryManifest at REPOSITORY_MANIFEST_VERSION with an empty ResolutionManifest, runs discoverRepositoryTree, and returns either the resolved occurrence graph or a non-interactive refusal that names every ResolutionRequest with its reason so a CLI caller can refuse cleanly.\n\nDo not prompt interactively and do not persist the manifest to disk — keep it in memory until a caller needs persistence.\n\nTests: a repository with no submodules bootstraps to a resolved graph holding one occurrence for the root; a repository whose submodule sits at its recorded gitlink OID resolves both occurrences; an unresolvable gitlink returns the refusal naming each request and its reason; bootstrap performs no git checkout and creates no branch on any path.",
+    "files": [
+      "scripts/manifestBootstrap.ts",
+      "tests/manifestBootstrap.test.ts"
+    ]
+  },
+  {
+    "taskNumber": 46,
+    "title": "Route repositoryBranches through graph discovery, keeping the detached-HEAD guard in front",
+    "description": "Step 1 of the task 35 cutover split.\n\nRewire scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository) onto the occurrence graph produced by scripts/manifestBootstrap.ts instead of walking submodule paths by hand.\n\nThe detached-HEAD refusal stays as the OUTER guard and runs BEFORE discovery, not instead of it: graph discovery resolves a base branch by matching any local branch whose tip equals the recorded gitlink OID, which would wrongly accept a detached submodule because detaching does not move the branch. The existing empty-current-branch check keeps its position and its error keeps naming each offending repository path and telling the user to check out a branch there before continuing.\n\nDiscovery is read-only as of task 44, so this must create and check out no branches as a side effect of reading source branches. A bootstrap refusal (needsResolution) must surface as a clean error, not a crash.\n\nTests: existing tests/repositoryBranches.test.ts keeps passing unchanged; a detached submodule is still refused with its path named; collecting sources creates no branch and leaves every working directory branch unchanged.",
+    "files": [
+      "scripts/repositoryBranches.ts",
+      "tests/repositoryBranches.test.ts"
+    ],
+    "blockedBy": [
+      45
+    ]
+  },
+  {
+    "taskNumber": 47,
+    "title": "Swap taskGroups grouping onto canonicalTaskGroups",
+    "description": "Step 2 of the task 35 cutover split.\n\nReplace groupTasksByFileOverlap in scripts/taskGroups.ts with scripts/canonicalTaskGroups.ts buildCanonicalTaskGroups. buildCanonicalTaskGroups requires a RepositoryManifest argument that groupTasksByFileOverlap does not take, so it depends on the manifest bootstrap from task 45 and the wiring from task 46.\n\nFind every importer of groupTasksByFileOverlap before changing its signature and update them together, or keep the old export as a thin adapter if a caller cannot be migrated in this task — say which in the plan.\n\nTests: existing tests/taskGroups.test.ts and tests/canonicalTaskGroups.test.ts both keep passing; file-disjoint grouping produces the same groups as before for the flat single-repository case.",
+    "files": [
+      "scripts/taskGroups.ts",
+      "tests/taskGroups.test.ts"
+    ],
+    "blockedBy": [
+      45,
+      46
+    ]
+  },
+  {
+    "taskNumber": 48,
+    "title": "Rewire prepareTasks call sites onto graph discovery and canonical grouping",
+    "description": "Step 3 of the task 35 cutover split.\n\nPoint scripts/prepareTasks.ts at the rewired helpers: buildWorkflowArguments and createWorktreeForGroup take their discovery and branch creation from task 46, and runAsCli takes its grouping from task 47. Thread through whatever new WorkflowArguments and PreparedGroup fields the approval split needs, so the workflow can carry graph metadata, recovery refs and receipts later.\n\nbuildWorkflowArguments is called against the production repo root before any worktree exists, so it must stay read-only with respect to branches — no checkout as a side effect of preparing.\n\nTests: tests/prepareTasks.test.ts test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory must keep passing unedited, and the whole existing suite stays green.",
+    "files": [
+      "scripts/prepareTasks.ts",
+      "tests/prepareTasks.test.ts"
+    ],
+    "blockedBy": [
+      46,
+      47
+    ]
+  },
+  {
+    "taskNumber": 49,
+    "title": "Drive mergeTaskWorktrees through the finalization and publication pipeline",
+    "description": "Step 4 of the task 35 cutover split, and its largest behavior change.\n\nRewire scripts/mergeTaskWorktrees.ts runAsCli to drive scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts and scripts/taskArchival.ts. Read all five in full before editing.\n\nCLI contract decision already made by the user — implement it, do not re-litigate: the script keeps its current front door. It accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged, with no rewritten CLI assertions. A graph-shaped front door is a later follow-up.\n\nKeep mergeGroupBranchIntoRepo, mergeSubmoduleBranchIntoRepo, resolveGitlinkConflicts and removeWorktreeAndBranch exported and behaviorally unchanged.\n\nTests: the existing suite passes unedited; the finalization path is exercised end to end against a temporary repository.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "blockedBy": [
+      48
+    ]
+  },
+  {
+    "taskNumber": 50,
+    "title": "Split the tackle-tasks workflow into prepare-for-approval and finalize stages",
+    "description": "Step 5 of the task 35 cutover split.\n\nRewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs and readyForApproval instead of immediate merge results, and so the whole-run approval gate runs before finalization.\n\nUse the task 31 modules: scripts/approvalGate.ts, scripts/approvalReadiness.ts and scripts/runAuthorization.ts. There is exactly one approval in a run — do not introduce a second post-merge gate. Replace MERGE_SCHEMA with a shape carrying readyForApproval, and update the SKILL.md flow so the orchestrator presents the gate before anything is finalized or archived.\n\nTests: the workflow returns readyForApproval rather than merge results before approval; finalization runs only with a valid authorization.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "skills/tackle-tasks/SKILL.md"
+    ],
+    "blockedBy": [
+      49
+    ]
+  },
+  {
+    "taskNumber": 51,
+    "title": "Route legacy manifests to a non-destructive refusal with recovery instructions",
+    "description": "Step 6 of the task 35 cutover split.\n\nDispatch legacy versus new manifests through scripts/legacyManifest.ts at the mergeTaskWorktrees.ts runAsCli entry point, routing a legacy manifest to its existing compatible tooling or to a non-destructive refusal that reports exact recovery instructions.\n\nLegacy worktrees must survive the refusal untouched — nothing is removed, reset or force-checked-out on this path.\n\nTests: a legacy manifest is refused non-destructively, its recovery instructions name the affected worktree, and the worktree still exists on disk afterwards.",
+    "files": [
+      "scripts/legacyManifest.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/legacyManifest.test.ts"
+    ],
+    "blockedBy": [
+      49
+    ]
   }
 ]
