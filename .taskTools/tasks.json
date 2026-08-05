@@ -94,7 +94,8 @@
       "scripts/basePublication.ts",
       "scripts/logicalRepository.ts",
       "scripts/prepareTasks.ts",
-      "tests/mergeTaskWorktrees.test.ts"
+      "tests/mergeTaskWorktrees.test.ts",
+      "skills/tackle-tasks/merge.workflow.js"
     ],
     "difficulty": 5,
     "blockedBy": []
@@ -108,6 +109,17 @@
       "skills/create-task/template/taskTemplate.json",
       "skills/tackle-tasks/plan.workflow.js",
       "skills/tackle-tasks/implement.workflow.js"
+    ],
+    "difficulty": 3,
+    "blockedBy": []
+  },
+  {
+    "taskNumber": 55,
+    "title": "Fall back to a Claude reviewer in the verify phase when codex is unavailable",
+    "description": "Add support to the review phase for when codex is not available: use opus5-high or fable-medium to review instead, to keep token cost down. Codex can be unavailable for several reasons — api overloaded, usage exceeded, not logged in, binary missing from PATH, rate limited — and the verify phase currently has no path for any of them.\n\nWhere it lives: skills/tackle-tasks/verify.workflow.js line 33 builds the single command `codex exec -s read-only <prompt>` and the verifier subagent brief forbids running any other command. When that command fails, the verifier has nowhere to go.\n\nWhat to build: detect codex unavailability by its exit status and stderr, distinguishing it from a genuine plan rejection — a non-zero exit with no PROBLEMS or FIXES block is unavailability, not a verdict. On unavailability, review the plan with a Claude agent instead, using the same prompt text already built by codexPrompt, called through agent() with model opus and effort high, or model fable and effort medium as the cheaper option. Decide which of those two is the default and say so in the plan. The fallback must return the identical verdict shape the codex path returns — approved or rejected, revised, notes — so the repair round and the rest of the pipeline are unchanged, and it must respect the same never-review-more-than-twice ceiling.\n\nAlso surface which reviewer actually ran, so a run reviewed by the fallback is not silently reported as codex-approved: add a reviewer field to the per-task result and mention it in skills/tackle-tasks/SKILL.md step 2.",
+    "files": [
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/SKILL.md"
     ],
     "difficulty": 3,
     "blockedBy": []
