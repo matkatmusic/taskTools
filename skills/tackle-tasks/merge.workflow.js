@@ -15,9 +15,12 @@ const RUN_SCHEMA = {
     ok: { type: 'boolean' },
     merged: { type: 'array' },
     conflicts: { type: 'array' },
+    testReceipts: { type: 'array' },
+    reviewHandoffs: { type: 'array', items: { type: 'string' } },
+    occurrenceDigests: { type: 'array', items: { type: 'string' } },
     error: { type: 'string' },
   },
-  required: ['ok', 'merged', 'conflicts', 'error'],
+  required: ['ok', 'merged', 'conflicts', 'testReceipts', 'reviewHandoffs', 'occurrenceDigests', 'error'],
 }
 
 const DIAGNOSE_SCHEMA = {
@@ -49,6 +52,8 @@ const mergeCliInput = {
   needsClarificationCount: ARGS.needsClarificationCount ?? 0,
   rejectedCount: ARGS.rejectedCount ?? 0,
   requeueCount: ARGS.requeueCount ?? 0,
+  testReceipts: ARGS.testReceipts ?? [],
+  reviewHandoffs: ARGS.reviewHandoffs ?? [],
 }
 
 const command = `node "${ARGS.mergeScript}" '${JSON.stringify(mergeCliInput)}'`
@@ -61,12 +66,13 @@ A line reading \`return {...}\` means stop and report exactly those fields.
 result = run(${command})
 
 if result.exitCode == 0 and result.stdout is JSON containing "merged" and "conflicts":
-    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, error: ""}
+    return {ok: true, merged: result.stdout.merged, conflicts: result.stdout.conflicts, testReceipts: result.stdout.testReceipts, reviewHandoffs: result.stdout.reviewHandoffs, occurrenceDigests: result.stdout.occurrenceDigests, error: ""}
 else:
-    return {ok: false, merged: [], conflicts: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
+    return {ok: false, merged: [], conflicts: [], testReceipts: [], reviewHandoffs: [], occurrenceDigests: [], error: result.exitCode + ": " + (result.stderr or result.stdout)}
 
 You are forbidden to edit any file, to run any other command, or to change the
-merged or conflicts values on the success branch.`
+merged, conflicts, testReceipts, reviewHandoffs, or occurrenceDigests values on
+the success branch.`
 
 const diagnoseBrief = (run) => `The merge failed.
 
@@ -137,7 +143,16 @@ log(`merging ${mergeCliInput.groups.length} group(s)`)
 const firstMergeAttempt = await runMergeScript(1)
 
 if (mergeResultCode(firstMergeAttempt) === MERGE_OK) {
-  return { merged: firstMergeAttempt.merged, conflicts: [], fixedBlockers: null, blockers: [], decisions: [] }
+  return {
+    merged: firstMergeAttempt.merged,
+    conflicts: [],
+    testReceipts: firstMergeAttempt.testReceipts,
+    reviewHandoffs: firstMergeAttempt.reviewHandoffs,
+    occurrenceDigests: firstMergeAttempt.occurrenceDigests,
+    fixedBlockers: null,
+    blockers: [],
+    decisions: [],
+  }
 }
 
 log('merge failed — diagnosing')
@@ -159,6 +174,9 @@ if (diagnosisFixed === false || decisionsPending === true) {
   return {
     merged: firstMergeAttempt?.merged ?? [],
     conflicts: firstMergeAttempt?.conflicts ?? [],
+    testReceipts: firstMergeAttempt?.testReceipts ?? [],
+    reviewHandoffs: firstMergeAttempt?.reviewHandoffs ?? [],
+    occurrenceDigests: [],
     fixedBlockers: false,
     blockers: diagnosisMissing ? ['the diagnosing agent returned no result'] : diagnosis.blockers,
     decisions: diagnosisMissing ? [] : diagnosis.decisions,
@@ -173,6 +191,9 @@ const retryFailed = mergeResultCode(retry) === MERGE_FAILED
 return {
   merged: retry?.merged ?? [],
   conflicts: retry?.conflicts ?? [],
+  testReceipts: retry?.testReceipts ?? [],
+  reviewHandoffs: retry?.reviewHandoffs ?? [],
+  occurrenceDigests: retryFailed ? [] : (retry?.occurrenceDigests ?? []),
   fixedBlockers: true,
   blockers: retryFailed ? ['merge still failed after the fix; see conflicts and error'] : [],
   decisions: [],

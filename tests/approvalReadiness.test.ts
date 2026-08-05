@@ -7,6 +7,8 @@ import {
     reviewGroupExerciseMethod,
 } from "../scripts/approvalReadiness.ts";
 import type { ApprovalReadinessInput } from "../scripts/approvalReadiness.ts";
+import { computeOccurrenceDigests } from "../scripts/approvalGate.ts";
+import type { OccurrenceSnapshot } from "../scripts/approvalGate.ts";
 
 function baseGreenInput(): ApprovalReadinessInput {
     return {
@@ -173,4 +175,35 @@ test("test_reviewerPerformsNoWrites", async () => {
     } finally {
         for (const [name, original] of originals) (fs as Record<string, unknown>)[name] = original;
     }
+});
+
+test("test_occurrenceDigestOrderIsSortedByGroupIdThenRepositoryPath", () => {
+    const reversed: OccurrenceSnapshot[] = [
+        { groupId: 2, repositoryPath: "sub", treeListing: "b" },
+        { groupId: 1, repositoryPath: "sub", treeListing: "a" },
+        { groupId: 1, repositoryPath: "", treeListing: "c" },
+    ];
+    const forward: OccurrenceSnapshot[] = [
+        { groupId: 1, repositoryPath: "", treeListing: "c" },
+        { groupId: 1, repositoryPath: "sub", treeListing: "a" },
+        { groupId: 2, repositoryPath: "sub", treeListing: "b" },
+    ];
+    assert.deepEqual(computeOccurrenceDigests(reversed), computeOccurrenceDigests(forward));
+});
+
+test("test_occurrenceDigestChangesWithTreeListingContent", () => {
+    const base: OccurrenceSnapshot[] = [{ groupId: 1, repositoryPath: "", treeListing: "100644 blob abc\tfile.ts\0" }];
+    const changed: OccurrenceSnapshot[] = [{ groupId: 1, repositoryPath: "", treeListing: "100644 blob def\tfile.ts\0" }];
+    assert.notEqual(computeOccurrenceDigests(base)[0], computeOccurrenceDigests(changed)[0]);
+});
+
+test("test_occurrenceDigestHandlesDeletionAsAbsentTreeEntry", () => {
+    const withFile: OccurrenceSnapshot[] = [{ groupId: 1, repositoryPath: "", treeListing: "100644 blob abc\tfile.ts\0" }];
+    const withoutFile: OccurrenceSnapshot[] = [{ groupId: 1, repositoryPath: "", treeListing: "" }];
+    assert.notEqual(computeOccurrenceDigests(withFile)[0], computeOccurrenceDigests(withoutFile)[0]);
+});
+
+test("test_occurrenceDigestHandlesGitlinkEntryDeterministically", () => {
+    const snapshot: OccurrenceSnapshot = { groupId: 1, repositoryPath: "", treeListing: "160000 commit abc123\tsub\0" };
+    assert.equal(computeOccurrenceDigests([snapshot])[0], computeOccurrenceDigests([snapshot])[0]);
 });

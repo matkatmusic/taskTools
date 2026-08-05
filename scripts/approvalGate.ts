@@ -48,6 +48,15 @@ export function computeApprovalDigest(input: ApprovalDigestInput): string {
     return createHash("sha256").update(stableStringify(input)).digest("hex");
 }
 
+export type OccurrenceSnapshot = { groupId: number; repositoryPath: string; treeListing: string };
+
+// Hashes the whole sorted record, not a git oid, so deletions and gitlinks are just more bytes.
+export function computeOccurrenceDigests(snapshots: OccurrenceSnapshot[]): string[] {
+    return [...snapshots]
+        .sort((a, b) => a.groupId - b.groupId || a.repositoryPath.localeCompare(b.repositoryPath))
+        .map((snapshot) => createHash("sha256").update(stableStringify(snapshot)).digest("hex"));
+}
+
 export function recordApproval(runState: RunState): Approval {
     if (!runState.readyForApproval) {
         throw new Error("cannot record approval: run is not readyForApproval");

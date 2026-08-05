@@ -80,9 +80,12 @@ const verified = PLANNED.map((p, i) => results[i] ?? {
 
 const planFileFor = (task) => PLANNED.find((p) => p.task === task).planFile
 
+const reviewHandoffs = verified.map((v) => `task ${v.task}: ${v.verdict}${v.revised ? ' (revised)' : ''} - ${v.notes}`)
+
 return {
   verified,
   approved: verified.filter((v) => v.verdict === 'approved').map((v) => ({ ...v, planFile: planFileFor(v.task) })),
   rejected: verified.filter((v) => v.verdict === 'rejected'),
   revisedCount: verified.filter((v) => v.revised).length,
+  reviewHandoffs,
 }

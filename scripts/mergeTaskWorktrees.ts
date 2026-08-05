@@ -9,6 +9,9 @@ import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./t
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { computeOccurrenceDigests } from "./approvalGate.ts";
+import type { OccurrenceSnapshot } from "./approvalGate.ts";
+import type { TestReceipt } from "./approvalReadiness.ts";
 
 type CliInput = WorkflowArguments & {
     runId?: string;
@@ -18,6 +21,8 @@ type CliInput = WorkflowArguments & {
     blockedCount?: number;
     needsClarificationCount?: number;
     requeueCount?: number;
+    testReceipts?: TestReceipt[];
+    reviewHandoffs?: string[];
 };
 
 export type SubmoduleConflict = { path: string; conflictedFilePaths: string[]; failureReason: string | null };
@@ -245,6 +250,17 @@ function runPipelineCli(): void {
         const outcome = mergeGroupBranchIntoRepo(workflowArguments.repo, group, findSourceBranch(""), submodulePathsDeepestFirst);
         if (outcome.merged) merged.push(outcome); else conflicts.push(outcome);
     }
+    const occurrenceSnapshots: OccurrenceSnapshot[] = merged.flatMap((outcome) => {
+        const group = sortedGroups.find((g) => g.groupId === outcome.groupId)!;
+        return ["", ...submodulePathsDeepestFirst].map((repositoryPath) => ({
+            groupId: group.groupId,
+            repositoryPath,
+            treeListing: repositoryPath === ""
+                ? git(workflowArguments.repo, "ls-tree", "-r", "-z", group.branch)
+                : git(join(group.worktree, repositoryPath), "ls-tree", "-r", "-z", "HEAD"),
+        }));
+    });
+    const occurrenceDigests = computeOccurrenceDigests(occurrenceSnapshots);
     const endTimestamp = new Date().toISOString();
     appendRunMetricsRecord(workflowArguments.repo, {
         runId: input.runId ?? endTimestamp,
@@ -261,7 +277,13 @@ function runPipelineCli(): void {
         conflictCount: conflicts.length,
         argumentsHash: computeArgumentsHash(workflowArguments),
     });
-    process.stdout.write(JSON.stringify({ merged, conflicts }));
+    process.stdout.write(JSON.stringify({
+        merged,
+        conflicts,
+        testReceipts: input.testReceipts ?? [],
+        reviewHandoffs: input.reviewHandoffs ?? [],
+        occurrenceDigests,
+    }));
 }
 
 function runAsCli(): void {
