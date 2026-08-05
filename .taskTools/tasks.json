@@ -65,24 +65,12 @@
     "blockedBy": []
   },
   {
-    "taskNumber": 46,
-    "title": "Route repositoryBranches through graph discovery, keeping the detached-HEAD guard in front",
-    "description": "Step 1 of the task 35 cutover split.\n\nRewire scripts/repositoryBranches.ts (collectRepositorySources, submodulePaths, createBranchInEveryRepository) onto the occurrence graph produced by scripts/manifestBootstrap.ts instead of walking submodule paths by hand.\n\nThe detached-HEAD refusal stays as the OUTER guard and runs BEFORE discovery, not instead of it: graph discovery resolves a base branch by matching any local branch whose tip equals the recorded gitlink OID, which would wrongly accept a detached submodule because detaching does not move the branch. The existing empty-current-branch check keeps its position and its error keeps naming each offending repository path and telling the user to check out a branch there before continuing.\n\nDiscovery is read-only as of task 44, so this must create and check out no branches as a side effect of reading source branches. A bootstrap refusal (needsResolution) must surface as a clean error, not a crash.\n\nTests: existing tests/repositoryBranches.test.ts keeps passing unchanged; a detached submodule is still refused with its path named; collecting sources creates no branch and leaves every working directory branch unchanged.",
-    "files": [
-      "scripts/repositoryBranches.ts",
-      "tests/repositoryBranches.test.ts"
-    ]
-  },
-  {
     "taskNumber": 47,
     "title": "Swap taskGroups grouping onto canonicalTaskGroups",
     "description": "Step 2 of the task 35 cutover split.\n\nReplace groupTasksByFileOverlap in scripts/taskGroups.ts with scripts/canonicalTaskGroups.ts buildCanonicalTaskGroups. buildCanonicalTaskGroups requires a RepositoryManifest argument that groupTasksByFileOverlap does not take, so it depends on the manifest bootstrap from task 45 and the wiring from task 46.\n\nFind every importer of groupTasksByFileOverlap before changing its signature and update them together, or keep the old export as a thin adapter if a caller cannot be migrated in this task — say which in the plan.\n\nTests: existing tests/taskGroups.test.ts and tests/canonicalTaskGroups.test.ts both keep passing; file-disjoint grouping produces the same groups as before for the flat single-repository case.",
     "files": [
       "scripts/taskGroups.ts",
       "tests/taskGroups.test.ts"
-    ],
-    "blockedBy": [
-      46
     ]
   },
   {
@@ -94,7 +82,6 @@
       "tests/prepareTasks.test.ts"
     ],
     "blockedBy": [
-      46,
       47
     ]
   },
