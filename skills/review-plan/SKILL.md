@@ -4,13 +4,13 @@ description: reviews a plan against a target and produces a report that contains
 argument-hint: <plan file path> <target>
 ---
 
-plan = $ARGUMENTS[0]
-target = $ARGUMENTS[1]
+- plan file: $ARGUMENTS[0]
+- target: !`echo '$ARGUMENTS' | cut -d' ' -f2-`
 
-If the plan doesn't exist in the plans/ folder for this project, copy the plan there using the command: 
-`cp <plan> plans/` and then set `plan = plans/<plan>`.
+If that plan file is not already inside this project's `plans/` folder, copy it there
+(`cp $ARGUMENTS[0] plans/`) and review the copy — every path below then refers to the copy.
 
-review @plan against <target>.
+review $ARGUMENTS[0] against !`echo '$ARGUMENTS' | cut -d' ' -f2-`.
 
 check the plan for gotchas/failures/bugs/incorrect assumptions,errors/false statements/illusions/lies.
 create a report next to the plan file called `<plan>-amendment.md`.
