@@ -41,6 +41,8 @@ review ${plan} against ${target}.
 
 check ${plan} for gotchas/failures/bugs/incorrect assumptions/errors/false statements/illusions/lies, by reading any file ${plan} references and any file ${plan} claims it will change — verify every claim against the source, never against ${plan}'s own account of it.
 
+Ignore file-size claims or line-count claims, as they are not worth flagging. 
+
 ${plan}, the codebase, and git state are read-only — do not edit code, do not edit ${plan}, do not stage, do not commit. The one file you may create or modify is ${amendment}.
 
 if ${amendment} already exists, this is not your first review of ${plan}.  The previous review's issues and durable fixes are already incorporated into ${plan}.  Clear (or delete) ${amendment} before you start, so you can write ${amendment} from scratch.  Do not reference any of your previous amendment findings from your context or memory when you draft your new amendment as they may be stale.
