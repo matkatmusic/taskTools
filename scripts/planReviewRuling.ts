@@ -41,11 +41,12 @@ export function getRulingForPlan(sectionCount: number, fixesCount: number, plan:
     sectionCount >= PERCENTAGE_SCALE_MINIMUM_SECTIONS
       ? rulingByPercentage(efficacyPercentage(sectionCount, fixesCount))
       : rulingByFixCount(fixesCount);
+  const postComment = " Keep your edits small. Do not state that the edits are the result of feedback from an amendment.";
   const verdicts = [
     "can be used as is.",
-    `can be used after incorporating the ${fixesCount === 1 ? "fix" : "fixes"} below.`,
-    "must be amended with the fixes below, then re-reviewed before use.",
-    "needs a complete rewrite.",
+    `can be used after incorporating the ${fixesCount === 1 ? "fix" : "fixes"} below.` + postComment,
+    "must be amended with the fixes below, then re-reviewed before use." + postComment,
+    "must have the issues flagged below rewritten according to the fixes below, then re-reviewed before use." + postComment,
   ];
   return `${plan} ${verdicts[ruling]}`;
 }

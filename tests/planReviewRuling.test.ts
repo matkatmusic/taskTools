@@ -45,7 +45,7 @@ test("efficacy floors at zero and survives a plan with no sections", () => {
 test("under 12 sections the fix count decides, ignoring the harsh percentage", () => {
   assert.match(getRulingForPlan(4, 1, "p.md"), /can be used after incorporating the fix below\./);
   assert.match(getRulingForPlan(4, 3, "p.md"), /must be amended with the fixes below/);
-  assert.match(getRulingForPlan(4, 5, "p.md"), /needs a complete rewrite\./);
+  assert.match(getRulingForPlan(4, 5, "p.md"), /must have the issues flagged below rewritten according to the fixes below/);
   assert.match(getRulingForPlan(4, 0, "p.md"), /can be used as is\./);
 });
 
@@ -53,16 +53,17 @@ test("at 12 sections the efficacy percentage decides instead", () => {
   assert.match(getRulingForPlan(12, 0, "p.md"), /can be used as is\./);
   assert.match(getRulingForPlan(12, 1, "p.md"), /can be used after incorporating the fix below\./);
   assert.match(getRulingForPlan(12, 2, "p.md"), /must be amended with the fixes below/);
-  assert.match(getRulingForPlan(20, 6, "p.md"), /needs a complete rewrite\./);
+  assert.match(getRulingForPlan(20, 6, "p.md"), /must have the issues flagged below rewritten according to the fixes below/);
 });
 
 test("the two scales disagree, and the section count picks the winner", () => {
-  assert.match(getRulingForPlan(11, 5, "p.md"), /needs a complete rewrite\./);
+  assert.match(getRulingForPlan(11, 5, "p.md"), /must have the issues flagged below rewritten according to the fixes below/);
   assert.match(getRulingForPlan(40, 5, "p.md"), /must be amended with the fixes below/);
 });
 
 test("names the plan and pluralises by the fix count", () => {
-  assert.equal(getRulingForPlan(4, 1, "/abs/p.md"), "/abs/p.md can be used after incorporating the fix below.");
+  assert.match(getRulingForPlan(4, 1, "/abs/p.md"), /^\/abs\/p\.md can be used after incorporating the fix below\. Keep/);
+  assert.match(getRulingForPlan(40, 2, "/abs/p.md"), /incorporating the fixes below\./);
   assert.match(getRulingForPlan(12, 2, "/abs/p.md"), /^\/abs\/p\.md must be amended/);
 });
 
@@ -87,5 +88,6 @@ test("prints the three template lines for a real plan file", () => {
   const plan = join(mkdtempSync(join(tmpdir(), "ruling-")), "p.md");
   writeFileSync(plan, planWithSections(4));
   const printed = execFileSync("node", [scriptPath, plan, "2"], { encoding: "utf8" });
-  assert.equal(printed, `Sections: 4 | Fixes: 2\nEfficacy: 50%\nRuling: ${plan} must be amended with the fixes below, then re-reviewed before use.\n`);
+  const postComment = " Keep your edits small. Do not state that the edits are the result of feedback from an amendment.";
+  assert.equal(printed, `Sections: 4 | Fixes: 2\nEfficacy: 50%\nRuling: ${plan} must be amended with the fixes below, then re-reviewed before use.${postComment}\n`);
 });
