@@ -43,6 +43,8 @@ check ${plan} for gotchas/failures/bugs/incorrect assumptions/errors/false state
 
 ${plan}, the codebase, and git state are read-only — do not edit code, do not edit ${plan}, do not stage, do not commit. The one file you may create or modify is ${amendment}.
 
+if ${amendment} already exists, this is not your first review of ${plan}.  The previous review's issues and durable fixes are already incorporated into ${plan}.  Clear (or delete) ${amendment} before you start, so you can write ${amendment} from scratch.  Do not reference any of your previous amendment findings from your context or memory when you draft your new amendment as they may be stale.
+
 Every flagged issue must carry evidence: a citation listing each repo-relative file path followed by \`:\` and the line numbers you read, either a single line or an inclusive \`start-end\` range — as in \`[path/to/file.ts:12-40, other/file.ts:8]\`, meaning lines 12 through 40 of the first file and line 8 of the second. A command you ran and its output counts as evidence too. An issue you cannot evidence does not go in the report.
 
 If a section of ${plan} holds up, say so and move on. Do not manufacture issues to fill the report — "no issues found" is a valid and useful result.
