@@ -181,6 +181,15 @@ function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: result.occurrenceGraph };
 }
 
+function hasOriginRemote(repoRoot: string): boolean {
+    try {
+        execFileSync("git", ["-C", repoRoot, "remote", "get-url", "origin"], { stdio: "ignore" });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function runAsCli(): void {
     const repoRoot = process.cwd();
     const pair = resolveTaskFiles(repoRoot);
@@ -188,6 +197,9 @@ function runAsCli(): void {
     const requestedNumbers = leadingTaskNumbers(process.argv.slice(2));
     let tasks: TaskRecord[];
     try {
+        if (!hasOriginRemote(repoRoot)) {
+            throw new Error("this repository does not have an origin remote. set one to continue to use 'tackle-tasks'");
+        }
         tasks = selectRequestedTasks(openTasks, requestedNumbers);
     } catch (error) {
         process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
