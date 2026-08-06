@@ -4,6 +4,7 @@ import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
+import { checkLegacyManifest, type LegacyManifestRefusal } from "./legacyManifest.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
@@ -187,6 +188,12 @@ function runMergeCli(worktreePath: string): void {
     process.stdout.write(JSON.stringify(outcome));
 }
 
+function reportLegacyManifestRefusal(refusal: LegacyManifestRefusal): void {
+    process.stderr.write(`${refusal.reason}\n`);
+    for (const command of refusal.recoveryCommands) process.stderr.write(`  - ${command}\n`);
+    process.exitCode = 1;
+}
+
 async function runAsCli(): Promise<void> {
     const mode = process.argv[2];
     if (mode === "--discover") {
@@ -199,12 +206,23 @@ async function runAsCli(): Promise<void> {
     }
     if (mode === "--run") {
         const prepared = JSON.parse(readFileSync(process.argv[3], "utf8"));
+        const legacyCheck = checkLegacyManifest(prepared);
+        if (!legacyCheck.ok) {
+            reportLegacyManifestRefusal(legacyCheck);
+            return;
+        }
         const outcomesFile = process.argv[4];
         const outcomes = outcomesFile && existsSync(outcomesFile) ? JSON.parse(readFileSync(outcomesFile, "utf8")) : {};
         await runMergePipeline({ ...prepared, ...outcomes });
         return;
     }
-    await runMergePipeline(JSON.parse(process.argv[2]));
+    const manifest = JSON.parse(process.argv[2]);
+    const legacyCheck = checkLegacyManifest(manifest);
+    if (!legacyCheck.ok) {
+        reportLegacyManifestRefusal(legacyCheck);
+        return;
+    }
+    await runMergePipeline(manifest);
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
