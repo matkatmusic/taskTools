@@ -1,5 +1,5 @@
 // Turns a plan's section count and fix count into the /review-plan ruling, so no prose judgement is needed.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 // Below this, absolute fix counts decide the ruling; at or above it, the efficacy percentage does.
 const PERCENTAGE_SCALE_MINIMUM_SECTIONS = 12;
@@ -50,9 +50,18 @@ export function getRulingForPlan(sectionCount: number, fixesCount: number, plan:
   return `${plan} ${verdicts[ruling]}`;
 }
 
+// A bad fix count would otherwise print "Efficacy: NaN%" straight into the amendment report.
+function fail(problem: string): never {
+  process.stderr.write(`planReviewRuling: ${problem}\nusage: node planReviewRuling.ts <plan file path> <fix count>\n`);
+  process.exit(1);
+}
+
 if (process.argv[1]?.endsWith("planReviewRuling.ts")) {
   const [plan, fixes] = process.argv.slice(2);
   const fixesCount = Number(fixes);
+  if (!plan) fail("no plan file path given");
+  if (!existsSync(plan)) fail(`plan file does not exist: ${plan}`);
+  if (!Number.isInteger(fixesCount) || fixesCount < 0) fail(`fix count must be a whole number, got: ${fixes}`);
   const sectionCount = countSections(readFileSync(plan, "utf8"));
   process.stdout.write(
     `Sections: ${sectionCount} | Fixes: ${fixesCount}\n` +

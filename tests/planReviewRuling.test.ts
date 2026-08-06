@@ -66,6 +66,23 @@ test("names the plan and pluralises by the fix count", () => {
   assert.match(getRulingForPlan(12, 2, "/abs/p.md"), /^\/abs\/p\.md must be amended/);
 });
 
+test("fails loudly rather than printing NaN into the report", () => {
+  const plan = join(mkdtempSync(join(tmpdir(), "ruling-")), "p.md");
+  writeFileSync(plan, planWithSections(4));
+  const stderrFor = (args: string[]) => {
+    try {
+      execFileSync("node", [scriptPath, ...args], { encoding: "utf8", stdio: "pipe" });
+    } catch (error) {
+      return String((error as { stderr: string }).stderr);
+    }
+    return "";
+  };
+  assert.match(stderrFor([]), /no plan file path given/);
+  assert.match(stderrFor(["/tmp/nope/missing.md", "2"]), /plan file does not exist/);
+  assert.match(stderrFor([plan]), /fix count must be a whole number/);
+  assert.match(stderrFor([plan, "two"]), /fix count must be a whole number/);
+});
+
 test("prints the three template lines for a real plan file", () => {
   const plan = join(mkdtempSync(join(tmpdir(), "ruling-")), "p.md");
   writeFileSync(plan, planWithSections(4));

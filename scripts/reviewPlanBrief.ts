@@ -95,8 +95,20 @@ function readStdin(): string {
   }
 }
 
+// Arguments arrive on stdin, so an empty read must stop here rather than emit a brief pointing nowhere.
+function fail(problem: string): never {
+  process.stderr.write(
+    `reviewPlanBrief: ${problem}\n` +
+      `usage: node reviewPlanBrief.ts <<'REVIEWPLANEOF'\n<plan file path> <target...>\nREVIEWPLANEOF\n`,
+  );
+  process.exit(1);
+}
+
 if (process.argv[1]?.endsWith("reviewPlanBrief.ts")) {
   const { planPath, target } = splitPlanPath(readStdin());
+  if (planPath === "") fail("no plan file path on stdin");
+  if (target === "") fail(`no target given after the plan file path ${planPath}`);
   const plan = copyPlanToPlansFolder(repoRelativePlanPath(planPath), planPath);
+  if (!existsSync(plan)) fail(`plan file does not exist: ${planPath}`);
   process.stdout.write(reviewerBrief(resolve(plan), target, resolve(amendmentPath(planPath))));
 }

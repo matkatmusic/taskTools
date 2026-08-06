@@ -75,8 +75,26 @@ test("does not copy when the plan already lives in plans/", () => {
   assert.equal(readFileSync(plan, "utf8"), "in place\n");
 });
 
+function runExpectingFailure(input: string): string {
+  try {
+    execFileSync("node", [scriptPath], { input, encoding: "utf8", stdio: "pipe" });
+  } catch (error) {
+    return String((error as { stderr: string }).stderr);
+  }
+  return "";
+}
+
+test("fails loudly rather than emitting a brief that points nowhere", () => {
+  assert.match(runExpectingFailure(""), /no plan file path on stdin/);
+  assert.match(runExpectingFailure("plans/p.md"), /no target given after the plan file path/);
+  assert.match(runExpectingFailure("/tmp/nope/missing.md the codebase"), /plan file does not exist/);
+});
+
 test("emits the amendment template with its fenced block intact", () => {
-  const brief = runScript("plans/p.md the codebase");
+  const plan = join(mkdtempSync(join(tmpdir(), "review-plan-")), "plans", "p.md");
+  mkdirSync(dirname(plan), { recursive: true });
+  writeFileSync(plan, "# Plan\n");
+  const brief = runScript(`${plan} the codebase`);
   assert.match(brief, /```markdown\n# Amendment: <plan title>/);
   assert.match(brief, /- Reviewed against: the codebase\n/);
 });
