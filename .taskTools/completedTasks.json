@@ -956,5 +956,35 @@
       "84e1cfc"
     ],
     "closureNote": "Merged as 84e1cfc: runAsCli now drives runFinalizer, consolidateRun, pushOperationBranches, publishBases and archivePublishedTasks through the new scripts/mergePipeline.ts, with the finalizer run child-first so its finalizedIntegrationOid is the single commit consolidated, pushed and published; the four legacy merge functions stay exported and unchanged. Fixed two live bugs found on the way: the merge script joined the repo root onto already-absolute manifest checkoutPaths so it could never merge a real manifest, and root occurrences carry an empty occurrenceId that produced invalid runFinalizer ref names. Verified on the merged tree with a clean typecheck and 1048 passing tests."
+  },
+  {
+    "taskNumber": 50,
+    "title": "Split the tackle-tasks workflow into prepare-for-approval and finalize stages",
+    "description": "Step 5 of the task 35 cutover split.\n\nRewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs and readyForApproval instead of immediate merge results, and so the whole-run approval gate runs before finalization.\n\nUse the task 31 modules: scripts/approvalGate.ts, scripts/approvalReadiness.ts and scripts/runAuthorization.ts. There is exactly one approval in a run — do not introduce a second post-merge gate. Replace MERGE_SCHEMA with a shape carrying readyForApproval, and update the SKILL.md flow so the orchestrator presents the gate before anything is finalized or archived.\n\nTests: the workflow returns readyForApproval rather than merge results before approval; finalization runs only with a valid authorization.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "skills/tackle-tasks/SKILL.md"
+    ],
+    "difficulty": 4,
+    "completionDate": "2026-08-06",
+    "commitHashes": [],
+    "closureNote": "Closed with no code change: the target file skills/tackle-tasks/tackle-tasks.workflow.js no longer exists, having been split into plan/verify/implement/test/merge workflow scripts by commit ee0bd6b, and skills/tackle-tasks/SKILL.md already runs the single whole-run approval gate at step 5 before any finalize, merge or archive at step 6, so the brief's goal was already met by a different route; user confirmed closing it as already done."
+  },
+  {
+    "taskNumber": 51,
+    "title": "Route legacy manifests to a non-destructive refusal with recovery instructions",
+    "description": "Step 6 of the task 35 cutover split.\n\nDispatch legacy versus new manifests through scripts/legacyManifest.ts at the mergeTaskWorktrees.ts runAsCli entry point, routing a legacy manifest to its existing compatible tooling or to a non-destructive refusal that reports exact recovery instructions.\n\nLegacy worktrees must survive the refusal untouched — nothing is removed, reset or force-checked-out on this path.\n\nTests: a legacy manifest is refused non-destructively, its recovery instructions name the affected worktree, and the worktree still exists on disk afterwards.",
+    "files": [
+      "scripts/legacyManifest.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/legacyManifest.test.ts"
+    ],
+    "difficulty": 3,
+    "completionDate": "2026-08-06",
+    "commitHashes": [
+      "efcc0e7",
+      "58b4b8dbf3075633b17610d3f63917232617f5d8"
+    ],
+    "closureNote": "Merged as efcc0e7: mergeTaskWorktrees.ts runAsCli now dispatches through checkLegacyManifest on both the --run and default branches, refusing a legacy manifest non-destructively with recovery commands that name each affected worktree checkoutPath, covered by an end-to-end CLI test asserting a nonzero exit, the worktree path in stderr, and the worktree surviving on disk. Also fixed version detection to fall back to repositoryManifest.version, since production manifests nest the version there and every current-format manifest would otherwise have been falsely refused. Verified with a clean typecheck and 1048 passing tests."
   }
 ]

@@ -1,3 +1,67 @@
+# Task 51: Route legacy manifests to a non-destructive refusal with recovery instructions
+
+Step 6 of the task 35 cutover split.
+
+Dispatch legacy versus new manifests through scripts/legacyManifest.ts at the mergeTaskWorktrees.ts runAsCli entry point, routing a legacy manifest to its existing compatible tooling or to a non-destructive refusal that reports exact recovery instructions.
+
+Legacy worktrees must survive the refusal untouched — nothing is removed, reset or force-checked-out on this path.
+
+Tests: a legacy manifest is refused non-destructively, its recovery instructions name the affected worktree, and the worktree still exists on disk afterwards.
+
+### scripts/legacyManifest.ts
+
+```
+// Detects flat-model (pre-version) run manifests and refuses to proceed, non-destructively.
+import { REPOSITORY_MANIFEST_VERSION } from "./repositoryManifest.ts";
+
+export interface LegacyManifestRefusal {
+    ok: false;
+    detectedVersion: number | undefined; // undefined = versionless manifest
+    reason: string;
+    recoveryCommands: string[];
+}
+
+export interface LegacyManifestPass {
+    ok: true;
+}
+
+export type LegacyManifestCheck = LegacyManifestRefusal | LegacyManifestPass;
+
+const RECOVERY_COMMANDS = [
+    "inspect the worktrees listed in this manifest manually before rerunning",
+    "run `git worktree list` in the repository to see what checkouts still exist",
+    "run `git branch --list` to see what operation branches still exist",
+];
+
+export function checkLegacyManifest(manifest: unknown): LegacyManifestCheck {
+    const version = (manifest as { version?: number } | null | undefined)?.version;
+
+    if (version === undefined || version === null) {
+        return {
+            ok: false,
+            detectedVersion: undefined,
+            reason: "manifest predates version tracking (flat repository-path model)",
+            recoveryCommands: RECOVERY_COMMANDS,
+        };
+    }
+
+    if (version < REPOSITORY_MANIFEST_VERSION) {
+        return {
+            ok: false,
+            detectedVersion: version,
+            reason: `manifest version ${version} is older than current version ${REPOSITORY_MANIFEST_VERSION}`,
+            recoveryCommands: RECOVERY_COMMANDS,
+        };
+    }
+
+    return { ok: true };
+}
+
+```
+
+### scripts/mergeTaskWorktrees.ts
+
+```
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
@@ -213,3 +277,78 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
         process.exitCode = 1;
     });
 }
+
+```
+
+### tests/legacyManifest.test.ts
+
+```
+// Behavioral checks for legacyManifest.ts: refusal of pre-version manifests, non-destructive.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { checkLegacyManifest } from "../scripts/legacyManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+
+function git(repoRoot: string, ...args: string[]): string {
+    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
+}
+
+test("test_versionlessManifestIsRejected", () => {
+    const result = checkLegacyManifest({ occurrences: [] });
+    assert.equal(result.ok, false);
+    assert.equal((result as { detectedVersion: number | undefined }).detectedVersion, undefined);
+});
+
+test("test_olderVersionManifestIsRejected", () => {
+    const olderVersion = REPOSITORY_MANIFEST_VERSION - 1;
+    const result = checkLegacyManifest({ version: olderVersion, occurrences: [] });
+    assert.equal(result.ok, false);
+    assert.equal((result as { detectedVersion: number | undefined }).detectedVersion, olderVersion);
+});
+
+test("test_rejectionResultNamesRecoveryCommands", () => {
+    const result = checkLegacyManifest({ occurrences: [] });
+    assert.equal(result.ok, false);
+    const recoveryCommands = (result as { recoveryCommands: string[] }).recoveryCommands;
+    assert.ok(recoveryCommands.length > 0);
+    for (const command of recoveryCommands) {
+        assert.equal(typeof command, "string");
+        assert.ok(command.trim().length > 0);
+    }
+});
+
+test("test_refusalDoesNotDeleteWorktreeOrBranch", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "legacy-manifest-"));
+    git(repoRoot, "init", "-q");
+    git(repoRoot, "config", "user.email", "test@example.com");
+    git(repoRoot, "config", "user.name", "Test");
+    git(repoRoot, "commit", "-q", "--allow-empty", "-m", "seed");
+    const worktreePath = join(repoRoot, "worktree-1");
+    git(repoRoot, "worktree", "add", "-q", "-b", "task-group-1", worktreePath);
+
+    const legacyManifest = {
+        repositories: [{ checkoutPath: worktreePath, operationBranch: "task-group-1" }],
+    };
+    const result = checkLegacyManifest(legacyManifest);
+
+    assert.equal(result.ok, false);
+    assert.equal(existsSync(worktreePath), true);
+    const branches = git(repoRoot, "branch", "--list", "task-group-1");
+    assert.ok(branches.includes("task-group-1"));
+});
+
+test("test_currentVersionManifestPassesThroughUnchanged", () => {
+    const manifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: [] };
+    const clone = structuredClone(manifest);
+
+    const result = checkLegacyManifest(manifest);
+
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(manifest, clone);
+});
+
+```

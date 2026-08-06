@@ -10,10 +10,6 @@
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
-    "blockedBy": [
-      50,
-      51
-    ],
     "difficulty": 3
   },
   {
@@ -33,24 +29,27 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 50,
-    "title": "Split the tackle-tasks workflow into prepare-for-approval and finalize stages",
-    "description": "Step 5 of the task 35 cutover split.\n\nRewire skills/tackle-tasks/tackle-tasks.workflow.js and skills/tackle-tasks/SKILL.md so preparation returns recursive graph metadata, hook mode, recovery refs, test receipts, review handoffs and readyForApproval instead of immediate merge results, and so the whole-run approval gate runs before finalization.\n\nUse the task 31 modules: scripts/approvalGate.ts, scripts/approvalReadiness.ts and scripts/runAuthorization.ts. There is exactly one approval in a run — do not introduce a second post-merge gate. Replace MERGE_SCHEMA with a shape carrying readyForApproval, and update the SKILL.md flow so the orchestrator presents the gate before anything is finalized or archived.\n\nTests: the workflow returns readyForApproval rather than merge results before approval; finalization runs only with a valid authorization.",
+    "taskNumber": 58,
+    "title": "Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them",
+    "description": "When preparing the brief for a task, use file pointers instead of copying file contents into the brief. Add 'readOnlyFiles' to the keys of each task to provide the list of files to be read by the agent, with 'readOnlyFiles: [*]' meaning every file in the project is readable by the subagents. Change 'files' to 'modifiableFiles', meaning 'only these files are editable by the subagents'. When a task only has 'files' but not 'modifiableFiles', accept 'files'. When 'readOnlyFiles' is missing, default to '[*]' meaning all project files are readable. When close-tasks is invoked, replace 'files' with 'modifiableFiles' in the project's tasks.json.\n\nConcretely:\n\n1. scripts/prepareTasks.ts writeTaskBriefFile (around lines 103-120) currently inlines every declared file's full contents into plans/brief-N.md inside a fenced block. Replace those sections with a pointer list: the modifiable paths under one heading and the readable paths under another, no file bodies. Note '(missing: file not found on disk)' still applies to a declared path that does not exist.\n\n2. Add one shared accessor pair used everywhere a task's file fence is read: modifiableFiles falls back to files when absent, and readOnlyFiles defaults to ['*']. The existing readers are scripts/prepareTasks.ts declaredFiles (line 100) and scripts/taskGroups.ts declaredFiles (line 16); both must route through it so grouping and preparation cannot diverge. Grouping and worktree-scope decisions key off modifiableFiles only — readOnlyFiles must never widen a group or make two tasks collide.\n\n3. Thread readOnlyFiles through the prepared-task shape so the workflows can see it: the PreparedTask interface in scripts/prepareTasks.ts (line 17 files: string[]) and its construction site (line 170 files: group.filePaths), the ApprovalGate task shape in scripts/approvalGate.ts (line 12), and the flatten in scripts/mergePipeline.ts (line 141, task.files).\n\n4. Update the four workflow prompts so the edit fence and the read fence are stated separately. Today they conflate the two: skills/tackle-tasks/plan.workflow.js line 28 says 'You may also READ these owned files, and nothing else'; implement.workflow.js lines 38 and 73; test.workflow.js lines 49, 86 and 104; verify.workflow.js line 25. Only modifiableFiles may be edited or git-added; readOnlyFiles (or the whole project when it is ['*']) may be read.\n\n5. Update the task-authoring surfaces to emit and maintain the new keys: skills/create-task/template/taskTemplate.json, skills/create-task/SKILL.md, and skills/update-task-files/SKILL.md.\n\n6. Add a migration step to skills/close-tasks/SKILL.md: on each invocation, rename any remaining 'files' key to 'modifiableFiles' across the project's tasks.json, so the legacy key drains out over time even though readers still accept it.\n\nThe motivation for the read fence is real: task 50's planner produced a plan against a file that no longer existed because its read fence was scoped to its own owned files. Widening reads while keeping writes narrow fixes that without loosening ownership.",
     "files": [
-      "skills/tackle-tasks/tackle-tasks.workflow.js",
-      "skills/tackle-tasks/SKILL.md"
+      "scripts/prepareTasks.ts",
+      "scripts/taskGroups.ts",
+      "scripts/approvalGate.ts",
+      "scripts/mergePipeline.ts",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js",
+      "skills/tackle-tasks/test.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/create-task/SKILL.md",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/update-task-files/SKILL.md",
+      "skills/close-tasks/SKILL.md",
+      "tests/prepareTasks.test.ts",
+      "tests/prepareTasksIntegration.test.ts",
+      "tests/taskGroups.test.ts"
     ],
+    "tests": "Prepare a task declaring modifiableFiles plus readOnlyFiles, and a second legacy task declaring only files. Assert both group and prepare identically, that each brief lists its file paths and contains no file contents, and that the task omitting readOnlyFiles is treated as [*].",
     "difficulty": 4
-  },
-  {
-    "taskNumber": 51,
-    "title": "Route legacy manifests to a non-destructive refusal with recovery instructions",
-    "description": "Step 6 of the task 35 cutover split.\n\nDispatch legacy versus new manifests through scripts/legacyManifest.ts at the mergeTaskWorktrees.ts runAsCli entry point, routing a legacy manifest to its existing compatible tooling or to a non-destructive refusal that reports exact recovery instructions.\n\nLegacy worktrees must survive the refusal untouched — nothing is removed, reset or force-checked-out on this path.\n\nTests: a legacy manifest is refused non-destructively, its recovery instructions name the affected worktree, and the worktree still exists on disk afterwards.",
-    "files": [
-      "scripts/legacyManifest.ts",
-      "scripts/mergeTaskWorktrees.ts",
-      "tests/legacyManifest.test.ts"
-    ],
-    "difficulty": 3
   }
 ]
