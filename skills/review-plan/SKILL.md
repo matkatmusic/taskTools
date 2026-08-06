@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: reviews a plan against a target and produces a report that contains flagged issues, efficacy rating, and a list of durable fixes.
+description: reviews a plan against a target (e.g., a file/bug/idea/etc.) and produces a report that contains flagged issues, efficacy rating, and a list of durable fixes.
 argument-hint: <plan file path> <target>
 ---
 
