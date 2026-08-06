@@ -79,5 +79,18 @@
     ],
     "tests": "Create a task from a short raw prompt, then assert userDescription is that prompt verbatim, description is the agent's expanded version and does not merely repeat the prompt, and that both the generated brief and the viewTaskHook output show each field under its own heading.",
     "difficulty": 2
+  },
+  {
+    "taskNumber": 61,
+    "title": "Have the commit-message subagent collect the staged diff itself instead of receiving it from the main agent",
+    "userDescription": "make the commit-message subagent always get the latest git changes programmatically, instead of from the main agent, because the main agent's repo view goes stale after 1 conversation turn.",
+    "description": "The commit-message subagent must run the git commands itself, at the moment it starts, rather than being handed a diff the main agent captured earlier. The main agent's view of the repository goes stale as soon as anything else is staged, so a diff passed in as prompt text describes a snapshot that may no longer match HEAD's index.\n\nObserved in a real run of this pipeline: the commit-message subagent was launched, and tasks 58, 59 and 60 were staged afterwards. The returned message described neither of them and mischaracterised the code change it did see. Nothing errored — the message was simply wrong, which is the dangerous failure mode, because a wrong-but-plausible commit message gets used.\n\nThe wording that causes this is in skills/tackle-tasks/COMMIT_MESSAGES.md: \"give it the staged diff of every affected repo — collected after staging with git -C <repo> diff --staged ...\". \"Give it\" puts the collection in the caller's hands and makes the diff prompt text. Rewrite so the subagent is instructed to run `git -C <repo> diff --staged -- ':(exclude)*tasks.json' ':(exclude)*completedTasks.json' ':(exclude)plans/archived'` itself, along with whatever it needs to enumerate the affected repos and detect a moved submodule pointer. The caller should pass repository paths, not diff contents.\n\nskills/update-tasks/SKILL.md line 27 has the same defect and is vaguer still — it says to use a Sonnet 5 subagent to summarise \"the work done\" without saying where the diff comes from at all. Point it at COMMIT_MESSAGES.md rather than restating the procedure, so there is one source of truth.\n\nNote that scripts/stage-and-summarize-stop.ts (line 36) inlines COMMIT_MESSAGES.md into a Stop hook, and skills/tackle-tasks/SKILL.md (line 141) does the same, so both pick up the corrected wording automatically with no edit of their own. skills/close-tasks/SKILL.md line 22 is unaffected: it uses a fixed \"Closed tasks [...]\" message and no subagent.",
+    "files": [
+      "skills/tackle-tasks/COMMIT_MESSAGES.md",
+      "skills/update-tasks/SKILL.md",
+      "tests/commitMessageSubagent.test.ts"
+    ],
+    "tests": "in a throwaway repo, stage a change, spawn commit-message subagent, then make the commit with the subagent's message, then make another change, stage that 2nd change, spawn commit-message subagent again, and make sure the subagent's message is different (because the diff contents are different)",
+    "difficulty": 2
   }
 ]
