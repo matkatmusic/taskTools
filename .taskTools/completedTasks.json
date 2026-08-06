@@ -927,5 +927,34 @@
       "88a00fe"
     ],
     "closureNote": "Merged into new-usage-graph as 88a00fe (work commit ebbc081): mergeTaskWorktrees CLI input now carries the repository manifest, testReceipts and reviewHandoffs, mints the run approval and authorization only when conflicts are empty and every group merged with non-empty all-green receipts, and builds publication targets per manifest occurrence using pre-merge baseOid and post-merge HEAD; verified with a clean typecheck and 1038 passing tests."
+  },
+  {
+    "taskNumber": 49,
+    "title": "Drive mergeTaskWorktrees through the finalization and publication pipeline",
+    "description": "Step 4 of the task 35 cutover split, and its largest behavior change.\n\nRewire scripts/mergeTaskWorktrees.ts runAsCli to drive scripts/runFinalizer.ts, scripts/runConsolidation.ts, scripts/operationPush.ts, scripts/basePublication.ts and scripts/taskArchival.ts. Read all five in full before editing.\n\nCLI contract decision already made by the user — implement it, do not re-litigate: the script keeps its current front door. It accepts the flat WorkflowArguments JSON as argv[2] and writes the same stdout shape it writes today. Translate the flat arguments into the graph and occurrence shapes INSIDE the script. Every existing test in tests/mergeTaskWorktrees.test.ts must keep passing unchanged, with no rewritten CLI assertions. A graph-shaped front door is a later follow-up.\n\nKeep mergeGroupBranchIntoRepo, mergeSubmoduleBranchIntoRepo, resolveGitlinkConflicts and removeWorktreeAndBranch exported and behaviorally unchanged.\n\nTests: the existing suite passes unedited; the finalization path is exercised end to end against a temporary repository.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/mergePipeline.ts",
+      "tests/mergeTaskWorktrees.test.ts",
+      "scripts/runFinalizer.ts",
+      "scripts/runConsolidation.ts",
+      "scripts/operationPush.ts",
+      "scripts/basePublication.ts",
+      "scripts/taskArchival.ts",
+      "scripts/runAuthorization.ts",
+      "scripts/ownershipSnapshots.ts",
+      "scripts/logicalRepository.ts",
+      "scripts/repositoryIntegration.ts",
+      "scripts/gitlinkReader.ts",
+      "scripts/approvalGate.ts"
+    ],
+    "difficulty": 4,
+    "completionDate": "2026-08-05",
+    "commitHashes": [
+      "d5580e1",
+      "2d6eaa8",
+      "84e1cfc"
+    ],
+    "closureNote": "Merged as 84e1cfc: runAsCli now drives runFinalizer, consolidateRun, pushOperationBranches, publishBases and archivePublishedTasks through the new scripts/mergePipeline.ts, with the finalizer run child-first so its finalizedIntegrationOid is the single commit consolidated, pushed and published; the four legacy merge functions stay exported and unchanged. Fixed two live bugs found on the way: the merge script joined the repo root onto already-absolute manifest checkoutPaths so it could never merge a real manifest, and root occurrences carry an empty occurrenceId that produced invalid runFinalizer ref names. Verified on the merged tree with a clean typecheck and 1048 passing tests."
   }
 ]
