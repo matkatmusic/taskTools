@@ -2,13 +2,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath } from "../scripts/prepareTasks.ts";
+import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -468,4 +469,185 @@ test("test_runPipelineCliProducesNoApprovalStateWhenAGroupConflicts", () => {
     assert.equal(output.runState.approval, undefined);
     assert.equal(output.runState.authorization, undefined);
     assert.deepEqual(output.publicationTargets, []);
+});
+
+test("test_noEvidenceCausesNoFinalizationMutation", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const preMergeBaseOid = git(repoRoot, "rev-parse", sourceBranch).trim();
+    const cliInput = {
+        repo: repoRoot,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch }],
+        repositoryManifest: makeManifest(sourceBranch, preMergeBaseOid, group.branch),
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.equal(output.runState.readyForApproval, false);
+    assert.equal(output.runState.approval, undefined);
+    assert.equal(output.runState.authorization, undefined);
+    assert.deepEqual(output.publicationTargets, []);
+    assert.equal(git(repoRoot, "rev-parse", sourceBranch).trim(), preMergeBaseOid);
+    const refs = git(repoRoot, "for-each-ref", "--format=%(refname)").split("\n");
+    assert.equal(refs.some((ref) => ref.startsWith("refs/finalize/")), false);
+    assert.equal(refs.some((ref) => ref.startsWith("refs/heads/operations/")), false);
+    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}`), []);
+});
+
+test("test_productionShapedNestedFinalizationSucceeds", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const rootPath = makeTempRepoWithCommit();
+    const submoduleSourcePath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add submodule");
+
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    assert.equal(bootstrapResult.refused, false);
+    const occurrenceGraph = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
+    const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
+    const rootOccurrence = occurrenceGraph.find((o) => o.parentOccurrenceId === null)!;
+    assert.equal(rootOccurrence.operationBranch, "");
+    assert.ok(rootOccurrence.checkoutPath.startsWith("/"));
+
+    const sourceBranch = currentBranchName(rootPath);
+    const submodulePath = join(rootPath, "vendor");
+    const submoduleSourceBranch = currentBranchName(submodulePath);
+    const group = makeGroup(rootPath, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+
+    const preMergeRootOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const preMergeSubmoduleOid = git(submodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    const cliInput = {
+        repo: rootPath,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: manifest,
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    };
+    const stdout = execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" });
+    const output = JSON.parse(stdout);
+
+    assert.deepEqual(
+        Object.keys(output).sort(),
+        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets"].sort(),
+    );
+    assert.equal(output.runState.readyForApproval, true);
+
+    const postMergeRootOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const postMergeSubmoduleOid = git(submodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const rootTarget = output.publicationTargets.find((t: { repositoryPath: string }) => t.repositoryPath === "");
+    const subTarget = output.publicationTargets.find((t: { repositoryPath: string }) => t.repositoryPath === "vendor");
+    assert.equal(rootTarget.targetOid, postMergeRootOid);
+    assert.equal(subTarget.targetOid, postMergeSubmoduleOid);
+
+    assert.doesNotThrow(() => git(rootPath, "merge-base", "--is-ancestor", preMergeRootOid, postMergeRootOid));
+    assert.doesNotThrow(() => git(submodulePath, "merge-base", "--is-ancestor", preMergeSubmoduleOid, postMergeSubmoduleOid));
+
+    const rootGitlinkOid = git(rootPath, "ls-tree", sourceBranch, "vendor").trim().split(/\s+/)[2];
+    assert.equal(rootGitlinkOid, postMergeSubmoduleOid);
+
+    const refs = git(rootPath, "for-each-ref", "--format=%(refname)").split("\n");
+    assert.ok(refs.some((ref) => ref.startsWith("refs/finalize/")));
+
+    assert.equal(existsSync(group.worktree), true);
+    const branches = git(rootPath, "branch", "--list", group.branch);
+    assert.ok(branches.includes(group.branch));
+});
+
+// Root + submodule fixture carrying a real task number, a seeded task file, and the three run-input files.
+function buildNestedFixtureWithTask(taskNumber: number) {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const rootPath = makeTempRepoWithCommit();
+    const submoduleSourcePath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add submodule");
+
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    assert.equal(bootstrapResult.refused, false);
+    const manifest: RepositoryManifest = {
+        version: REPOSITORY_MANIFEST_VERSION,
+        occurrences: bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph,
+    };
+
+    const sourceBranch = currentBranchName(rootPath);
+    const submoduleSourceBranch = currentBranchName(join(rootPath, "vendor"));
+    const group = makeGroup(rootPath, 1);
+    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: [] }];
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+    writeFileSync(join(group.worktree, "vendor", "vendor-new.txt"), "vendor new\n");
+    git(join(group.worktree, "vendor"), "add", "vendor-new.txt");
+    git(join(group.worktree, "vendor"), "commit", "-q", "-m", "add vendor-new.txt");
+
+    const taskToolsDir = join(rootPath, ".taskTools");
+    mkdirSync(taskToolsDir, { recursive: true });
+    writeFileSync(
+        join(taskToolsDir, "tasks.json"),
+        JSON.stringify([{ taskNumber, title: "t", description: "d", files: [], difficulty: 1, blockedBy: [] }]) + "\n",
+    );
+    writeFileSync(join(taskToolsDir, "completedTasks.json"), "[]\n");
+    const runFiles = [resolveRunArgumentsPath(rootPath), resolveRunOutcomesPath(rootPath), resolveStepOutputsPath(rootPath)];
+    for (const path of runFiles) writeFileSync(path, "{}\n");
+
+    const cliInput = {
+        repo: rootPath,
+        typecheckCommand: "npx tsc --noEmit",
+        groups: [group],
+        repositorySources: [
+            { path: "", sourceBranch },
+            { path: "vendor", sourceBranch: submoduleSourceBranch },
+        ],
+        repositoryManifest: manifest,
+        testReceipts: [{ groupId: "1", status: "green" }],
+        reviewHandoffs: ["reviewed by codex"],
+    };
+    return { rootPath, cliInput, runFiles, taskToolsDir };
+}
+
+function runPipelineCli(cliInput: unknown): { publicationTargets: unknown[] } {
+    return JSON.parse(execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" }));
+}
+
+function readTaskNumbers(taskToolsDir: string, fileName: string): number[] {
+    return JSON.parse(readFileSync(join(taskToolsDir, fileName), "utf8")).map((task: { taskNumber: number }) => task.taskNumber);
+}
+
+test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessArchives", () => {
+    // Another writer moves the base ref after the manifest is captured, so publication must refuse.
+    const raced = buildNestedFixtureWithTask(9101);
+    writeFileSync(join(raced.rootPath, "raced.txt"), "another writer\n");
+    git(raced.rootPath, "add", "raced.txt");
+    git(raced.rootPath, "commit", "-q", "-m", "someone else moved the base");
+
+    assert.deepEqual(runPipelineCli(raced.cliInput).publicationTargets, []);
+    assert.deepEqual(readTaskNumbers(raced.taskToolsDir, "tasks.json"), [9101]);
+    assert.deepEqual(readTaskNumbers(raced.taskToolsDir, "completedTasks.json"), []);
+    for (const path of raced.runFiles) assert.equal(existsSync(path), true);
+
+    // Nothing races the base ref, so the task is archived and the run inputs are cleaned up.
+    const clean = buildNestedFixtureWithTask(9102);
+    assert.notDeepEqual(runPipelineCli(clean.cliInput).publicationTargets, []);
+    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "tasks.json"), []);
+    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "completedTasks.json"), [9102]);
+    for (const path of clean.runFiles) assert.equal(existsSync(path), false);
 });
