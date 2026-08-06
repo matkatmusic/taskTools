@@ -89,10 +89,19 @@ status "done" with a failing test.`
 
 const planFileFor = (task) => APPROVED.find((a) => a.task === task)?.planFile ?? ''
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const runWorker = (t, group, note) => {
   const options = { label: `task:${t.number}`, phase: 'Implement', schema: WORKER_SCHEMA }
   if (WORKER_MODEL) options.model = WORKER_MODEL
-  return agent(workerBrief(t, group, planFileFor(t.number), note), options)
+  return retryAgent(() => agent(workerBrief(t, group, planFileFor(t.number), note), options))
 }
 
 let requeueCount = 0
@@ -105,7 +114,7 @@ async function implementGroup(group) {
     results.push(result ?? {
       task: t.number,
       status: 'blocked',
-      summary: 'worker agent returned no result (killed, errored, or blocked)',
+      summary: 'worker agent returned no result after 3 attempts (killed, errored, or blocked)',
       remaining: [],
     })
   }

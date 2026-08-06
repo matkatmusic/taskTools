@@ -81,14 +81,23 @@ failedCommand yourself; or to decide anything in decisions on the user's
 behalf. Each entry in decisions must be answerable without opening the repo.
 Returning a decision is a correct outcome, not a failure.`
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 log('diagnosing the failed merge')
-const diagnosis = await agent(diagnoseBrief, { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA })
+const diagnosis = await retryAgent(() => agent(diagnoseBrief, { label: 'merge:unblock', phase: 'Unblock', schema: DIAGNOSE_SCHEMA }))
 
 if (diagnosis === null || diagnosis === undefined) {
   return {
     fixed: false,
-    summary: 'the diagnosing agent returned no result, so nothing was diagnosed and nothing was fixed',
-    blockers: ['the diagnosing agent returned no result'],
+    summary: 'no structured diagnosis was returned after 3 attempts; inspect the repository, because an earlier attempt may have changed it',
+    blockers: ['the diagnosing agent returned no result after 3 attempts'],
     decisions: [],
   }
 }

@@ -56,10 +56,19 @@ whose exact target you did not read.`
 const TASKS = GROUPS.flatMap((g) => g.tasks)
 log(`planning ${TASKS.length} task(s)`)
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const runPlanner = (t) => {
   const options = { label: `plan:${t.number}`, phase: 'Plan', schema: PLAN_SCHEMA }
   if (PLAN_MODEL) options.model = PLAN_MODEL
-  return agent(plannerBrief(t), options)
+  return retryAgent(() => agent(plannerBrief(t), options))
 }
 
 const results = await parallel(TASKS.map((t) => () => runPlanner(t)))
@@ -67,7 +76,7 @@ const plans = TASKS.map((t, i) => results[i] ?? {
   task: t.number,
   status: 'needs-clarification',
   planFile: '',
-  question: 'planner returned no result',
+  question: 'planner returned no result after 3 attempts',
 })
 
 return {

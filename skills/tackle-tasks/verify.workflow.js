@@ -85,18 +85,27 @@ Return {task: ${t.number}, verdict, revised, notes, reviewer}.`
 
 log(`verifying ${PLANNED.length} plan(s) with codex, up to one repair round each`)
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const results = await parallel(PLANNED.map((p) => () =>
-  agent(verifierBrief(TASK_BY_NUMBER.get(p.task), p.planFile), {
+  retryAgent(() => agent(verifierBrief(TASK_BY_NUMBER.get(p.task), p.planFile), {
     label: `verify:${p.task}`,
     phase: 'Verify',
     schema: VERIFY_SCHEMA,
-  })))
+  }))))
 
 const verified = PLANNED.map((p, i) => results[i] ?? {
   task: p.task,
   verdict: 'rejected',
   revised: false,
-  notes: 'verifier agent returned no result (killed, errored, or blocked)',
+  notes: 'verifier agent returned no result after 3 attempts (killed, errored, or blocked)',
   reviewer: 'none',
 })
 

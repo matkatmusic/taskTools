@@ -112,6 +112,15 @@ delete a test to make it pass; to assert the current wrong output as the
 expected value; to run \`git add -A\` or \`git add .\`; to commit while anything
 fails; or to redecide the plan yourself.`
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 async function testGroup(group) {
   const tasks = group.tasks.filter((t) => DONE.some((d) => d.task === t.number))
   if (!tasks.length) return { groupId: group.groupId, passed: true, rounds: 0, failures: [], notes: 'no implemented tasks to test' }
@@ -120,13 +129,13 @@ async function testGroup(group) {
   let outcome = null
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-    const result = await agent(testerBrief(group, tasks), {
+    const result = await retryAgent(() => agent(testerBrief(group, tasks), {
       label: `test:${group.groupId}:r${round}`,
       phase: 'Test',
       effort: 'low',
       schema: TEST_SCHEMA,
-    })
-    outcome = result ?? { passed: false, failures: tasks.map((t) => ({ task: t.number, detail: 'test agent returned no result' })) }
+    }))
+    outcome = result ?? { passed: false, failures: tasks.map((t) => ({ task: t.number, detail: 'test agent returned no result after 3 attempts' })) }
 
     if (outcome.passed) return { groupId: group.groupId, passed: true, rounds: round, failures: [], notes: '' }
     if (round === MAX_ROUNDS) break
@@ -136,11 +145,11 @@ async function testGroup(group) {
 
     log(`group ${group.groupId} round ${round}: fixing ${fixable.length} failing task(s)`)
     await parallel(fixable.map((f) => () =>
-      agent(fixerBrief(taskByNumber.get(f.task), group, f.detail), {
+      retryAgent(() => agent(fixerBrief(taskByNumber.get(f.task), group, f.detail), {
         label: `fix:${f.task}:r${round}`,
         phase: 'Fix',
         schema: FIX_SCHEMA,
-      })))
+      }))))
   }
 
   return {
