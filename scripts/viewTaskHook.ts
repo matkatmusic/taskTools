@@ -1,15 +1,12 @@
-// UserPromptSubmit hook: intercepts "/view-task <N...>" and answers it directly with a
-// block-decision JSON ({"decision":"block","reason":<text>}), so the prompt never reaches
-// the model — zero token cost. The point is readability: tasks.json stores descriptions
-// as JSON-escaped one-liners; the block reason prints them with real newlines.
-// Any other prompt: exit 0 with empty stdout (silent passthrough).
+// UserPromptSubmit hook: intercepts /view-task <N> and blocks with real-newline task text; other prompts pass through.
 import { readFileSync } from "node:fs";
 import { type TaskRecord, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 function formatTask(task: TaskRecord, status: string): string {
   const lines = [`Task ${task.taskNumber} (${status}): ${task.title ?? ""}`];
+  if (task.userDescription) lines.push("", "User request:", String(task.userDescription));
   if (task.description) lines.push("", String(task.description));
-  const extras = Object.entries(task).filter(([key]) => !["taskNumber", "title", "description"].includes(key));
+  const extras = Object.entries(task).filter(([key]) => !["taskNumber", "title", "description", "userDescription"].includes(key));
   if (extras.length > 0) lines.push("");
   for (const [key, value] of extras) {
     if (Array.isArray(value)) {

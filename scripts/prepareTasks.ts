@@ -111,6 +111,7 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     const content = [
         `# Task ${task.taskNumber}: ${task.title ?? ""}`,
         "",
+        ...(task.userDescription ? [`## User request\n\n${task.userDescription}`, ""] : []),
         task.description ?? "",
         "",
         ...fileSections,
