@@ -107,3 +107,22 @@ test("a Record closureNote missing an entry for a closing task throws before wri
   );
   assert.equal(readCompleted(root).length, 1);
 });
+
+test("folds unblockDependents into the same write: closing a task clears it from dependents' blockedBy", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  writeFileSync(
+    join(root, "tasks.json"),
+    JSON.stringify([
+      { taskNumber: 64, title: "first" },
+      { taskNumber: 65, title: "second", blockedBy: [{ taskNum: 64, reason: "needs task 64" }] },
+    ]),
+  );
+  writeFileSync(join(root, "completedTasks.json"), "[]");
+
+  const { closed, unblocked } = closeTasks([64], "fixed by abc123", root);
+
+  assert.deepEqual(closed, [64]);
+  assert.deepEqual(unblocked, [65]);
+  const tasks = readTasks(root);
+  assert.equal("blockedBy" in tasks.find((t) => t.taskNumber === 65), false);
+});
