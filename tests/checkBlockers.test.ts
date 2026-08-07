@@ -28,7 +28,7 @@ function runScript(cwd: string, ...args: string[]): string {
 
 test("flags open blockers, ignores closed ones, passes unblocked tasks", () => {
   const out = runScript(makeProjectRoot(), "2", "4", "1");
-  assert.match(out, /task 2: BLOCKED by open task\(s\) \[\{"taskNum":1,"reason":"needs task 1"\}\]/);
+  assert.match(out, /task 2: BLOCKED by open task\(s\) 1/);
   assert.match(out, /task 4: unblocked/);
   assert.match(out, /task 1: unblocked/);
 });
@@ -41,16 +41,16 @@ test("--unblocked prints only unblocked numbers, space-separated", () => {
 test("no task numbers checks every open task", () => {
   const out = runScript(makeProjectRoot());
   assert.match(out, /task 1: unblocked/);
-  assert.match(out, /task 2: BLOCKED by open task\(s\) \[\{"taskNum":1,"reason":"needs task 1"\}\]/);
+  assert.match(out, /task 2: BLOCKED by open task\(s\) 1/);
   assert.match(out, /task 4: unblocked/);
 });
 
 test("non-numeric args like 'valid' are ignored", () => {
   const out = runScript(makeProjectRoot(), "2", "valid");
-  assert.equal(out, 'task 2: BLOCKED by open task(s) [{"taskNum":1,"reason":"needs task 1"}]\n');
+  assert.equal(out, "task 2: BLOCKED by open task(s) 1\n");
 });
 
 test("digits after prose are not task numbers, even as one quoted string", () => {
   const out = runScript(makeProjectRoot(), "2 valid see task 4 from 2026-07-21");
-  assert.equal(out, 'task 2: BLOCKED by open task(s) [{"taskNum":1,"reason":"needs task 1"}]\n');
+  assert.equal(out, "task 2: BLOCKED by open task(s) 1\n");
 });

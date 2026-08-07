@@ -12,15 +12,15 @@ const named = leadingTaskNumbers(process.argv.slice(2).filter(a => a !== "--unbl
 const requested = named.length > 0 ? named : openTasks.map(t => t.taskNumber);
 const openBlockersOf = (n: number) => {
   const task = openTasks.find(t => t.taskNumber === n);
-  const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNum: number; reason: string }[]) : [];
-  return blockedBy.filter(b => openNumbers.has(b.taskNum));
+  const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNum: number }[]) : [];
+  return blockedBy.map(b => b.taskNum).filter(b => openNumbers.has(b));
 };
 if (unblockedOnly) {
   process.stdout.write(requested.filter(n => openBlockersOf(n).length === 0).join(" ") + "\n");
 } else {
   const lines = requested.map(n => {
     const blockers = openBlockersOf(n);
-    return blockers.length > 0 ? `task ${n}: BLOCKED by open task(s) ${JSON.stringify(blockers)}` : `task ${n}: unblocked`;
+    return blockers.length > 0 ? `task ${n}: BLOCKED by open task(s) ${blockers.join(", ")}` : `task ${n}: unblocked`;
   });
   process.stdout.write((lines.length > 0 ? lines.join("\n") : "no task numbers given") + "\n");
 }

@@ -6,20 +6,12 @@ allowed-tools: Bash(git add *), Bash(node *)
 ---
 
 - blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" '$ARGUMENTS'`
+- task details (unblocked tasks only): !`u=$(node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked '$ARGUMENTS'); [ -n "$u" ] && node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" "$u" || echo "none of the requested tasks are unblocked"`
+- pipeline args: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/prepareTasks.ts" '$ARGUMENTS'`
 
 Invocation format: the task numbers come first as a JSON array with **no spaces** — `[268,270,281]` — followed by `valid` and any free text. The scripts above read the whole argument string and stop at the first token that is not part of the array, so anything after it is ignored by them. Avoid apostrophes and backticks in that trailing text; it reaches the shell inside single quotes.
 
-Every task reported BLOCKED above lists its open blocker(s) as a JSON array — investigate before trusting the report. Parse each BLOCKED line's JSON array into one `{ blockedTask, blockerTask, reason }` entry per element (`blockedTask` is the task number named in "task N: BLOCKED", `blockerTask` is that element's `taskNum`, `reason` is that element's `reason` taken verbatim). Call Workflow with scriptPath `${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/blockers.workflow.js`, args `{ pairs }` where `pairs` is the full list built this way across every BLOCKED task above. It returns `{ disproven, stillBlocked }`. For every entry in `disproven`, in order, run with Bash:
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/blockerVerdicts.ts" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
-<the entry's reason, verbatim>
-BLOCKERREASONEOF
-```
-
-The delimiter must stay single-quoted so the shell performs no expansion on the reason text. Do not work on any task with an entry left in `stillBlocked` — report those open blockers and move on to the next requested task that is unblocked. If nothing was reported BLOCKED, skip straight to the next paragraph.
-
-Now get task details and the pipeline args yourself with Bash, in this order, so both run after any stripping above and see a disproven task as runnable, using only commands that start with `node` (the skill's `allowed-tools` permits `Bash(node *)`, not compound shell commands like `u=$(...)`): first run `node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" --unblocked '$ARGUMENTS'` and read its output. If that output is non-empty, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" <output>`, substituting the exact output text (the space-separated task numbers) in place of `<output>`. If that output is empty, skip that command and report "none of the requested tasks are unblocked" yourself instead. Then, regardless of the previous step, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/prepareTasks.ts" '$ARGUMENTS'`.
+Do not work on any task reported as BLOCKED in the "blocked status" above — report its open blockers and move on to the next requested task that is unblocked.
 
 Invoke `/ponytail:ponytail ultra`.
 
@@ -144,4 +136,6 @@ During implementation, you (the orchestrator) run typecheck only — no test sui
 
 ## Commit message
 
-Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them. Then invoke the `commit-message` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.
+Finally, follow these instructions:
+
+!`cat "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/COMMIT_MESSAGES.md"`
