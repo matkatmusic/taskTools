@@ -26,9 +26,24 @@ export type RollbackOutcome = {
     recoveryCommand: string;
 };
 
+export type CheckoutTransition = {
+    repoName: string;
+    occurrencePath: string;
+    refName: string;
+    oldOid: string;
+    newOid: string;
+};
+
+export type CheckoutRollbackOutcome = {
+    transition: CheckoutTransition;
+    rolledBack: boolean;
+    recoveryCommand: string;
+};
+
 export type PublicationResult = {
     published: boolean;
     rollback: RollbackOutcome[];
+    checkoutRollback: CheckoutRollbackOutcome[];
 };
 
 function runGit(repoPath: string, args: string[]): { ok: boolean; stdout: string } {
@@ -112,41 +127,111 @@ export function rollbackUpdatedRefs(updated: UpdatedRef[]): RollbackOutcome[] {
     });
 }
 
+function checkedOutTransition(repo: PublicationTarget): CheckoutTransition | null {
+    const head = runGit(repo.canonicalOccurrencePath, ["symbolic-ref", "--quiet", "HEAD"]);
+    if (!head.ok || head.stdout.trim() !== repo.canonicalRefName) return null;
+    return {
+        repoName: repo.name,
+        occurrencePath: repo.canonicalOccurrencePath,
+        refName: repo.canonicalRefName,
+        oldOid: repo.recordedBaseOid,
+        newOid: repo.targetOid,
+    };
+}
+
+function runCheckoutTransition(
+    transition: CheckoutTransition,
+    oldOid: string,
+    newOid: string,
+    dryRun: boolean,
+): boolean {
+    const args = ["read-tree", "--no-recurse-submodules"];
+    if (dryRun) args.push("-n");
+    args.push("-u", "-m", oldOid, newOid);
+    return runGit(transition.occurrencePath, args).ok;
+}
+
+function preflightCheckoutTransition(transition: CheckoutTransition): boolean {
+    return runCheckoutTransition(transition, transition.oldOid, transition.newOid, true);
+}
+
+function applyCheckoutTransition(transition: CheckoutTransition): boolean {
+    return runCheckoutTransition(transition, transition.oldOid, transition.newOid, false);
+}
+
+function formatCheckoutRecoveryCommand(transition: CheckoutTransition): string {
+    return `git -C ${transition.occurrencePath} read-tree --no-recurse-submodules -u -m ${transition.newOid} ${transition.oldOid}`;
+}
+
+function rollbackCheckoutTransitions(applied: CheckoutTransition[]): CheckoutRollbackOutcome[] {
+    return [...applied].reverse().map((transition) => ({
+        transition,
+        rolledBack: runCheckoutTransition(transition, transition.newOid, transition.oldOid, false),
+        recoveryCommand: formatCheckoutRecoveryCommand(transition),
+    }));
+}
+
 export function publishBases(
     repos: PublicationTarget[],
     approvalState: RunState,
     rootIntegration: { repoPath: string; refName: string },
 ): PublicationResult {
+    const notPublished = (): PublicationResult => ({
+        published: false,
+        rollback: [],
+        checkoutRollback: [],
+    });
+
     if (!checkRootIntegrationOidExists(rootIntegration.repoPath, rootIntegration.refName)) {
-        return { published: false, rollback: [] };
+        return notPublished();
     }
     if (!revalidateApprovalInputs(approvalState)) {
-        return { published: false, rollback: [] };
+        return notPublished();
     }
     if (!revalidateRecordedBaseOids(repos).ok) {
-        return { published: false, rollback: [] };
+        return notPublished();
+    }
+
+    const checkoutTransitions = repos.flatMap((repo) => {
+        const transition = checkedOutTransition(repo);
+        return transition === null ? [] : [transition];
+    });
+    if (!checkoutTransitions.every(preflightCheckoutTransition)) {
+        return notPublished();
     }
 
     const updatedSoFar: UpdatedRef[] = [];
-    let pass2Failed = false;
     for (const repo of repos) {
         const canonicalResult = publishCanonicalRef(repo);
         if (!canonicalResult.ok) {
-            pass2Failed = true;
-            break;
+            return {
+                published: false,
+                rollback: rollbackUpdatedRefs(updatedSoFar),
+                checkoutRollback: [],
+            };
         }
         updatedSoFar.push(canonicalResult.updated!);
 
         const fastForwardResult = fastForwardOtherOccurrences(repo);
         updatedSoFar.push(...fastForwardResult.updated);
         if (!fastForwardResult.ok) {
-            pass2Failed = true;
-            break;
+            return {
+                published: false,
+                rollback: rollbackUpdatedRefs(updatedSoFar),
+                checkoutRollback: [],
+            };
         }
     }
 
-    if (!pass2Failed) {
-        return { published: true, rollback: [] };
+    const appliedTransitions: CheckoutTransition[] = [];
+    for (const transition of checkoutTransitions) {
+        if (!applyCheckoutTransition(transition)) {
+            const checkoutRollback = rollbackCheckoutTransitions(appliedTransitions);
+            const rollback = rollbackUpdatedRefs(updatedSoFar);
+            return { published: false, rollback, checkoutRollback };
+        }
+        appliedTransitions.push(transition);
     }
-    return { published: false, rollback: rollbackUpdatedRefs(updatedSoFar) };
+
+    return { published: true, rollback: [], checkoutRollback: [] };
 }
