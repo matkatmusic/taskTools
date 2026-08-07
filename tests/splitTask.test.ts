@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
     closeParentTask,
     composeClosureNote,
+    parseFileGroups,
     partitionFiles,
     readParentTask,
     validateChildNumbers,
@@ -146,7 +147,7 @@ test("verifyChildFiles throws when the child's files differ from its assigned gr
 
 test("closeParentTask closes the parent and moves it to completedTasks.json", () => {
     const root = makeProjectRoot();
-    const result = closeParentTask(58, 2, [66, 67], root);
+    const result = closeParentTask(58, 2, [66, 67], [["a.ts", "b.ts"], ["c.ts", "d.ts"]], root);
     assert.deepEqual(result.closed, [58]);
 
     const completed = readCompleted(root);
@@ -159,7 +160,7 @@ test("closeParentTask closes the parent and moves it to completedTasks.json", ()
 
 test("closeParentTask throws and leaves the parent open when child numbers are invalid", () => {
     const root = makeProjectRoot();
-    assert.throws(() => closeParentTask(58, 2, [66, 999], root));
+    assert.throws(() => closeParentTask(58, 2, [66, 999], [["a.ts", "b.ts"], ["c.ts", "d.ts"]], root));
     assert.ok(readTasks(root).some((task) => task.taskNumber === 58));
 });
 
@@ -174,7 +175,7 @@ test("closeParentTask throws and leaves the parent open when a child omits a fil
         ],
         [],
     );
-    assert.throws(() => closeParentTask(58, 2, [66, 67], root));
+    assert.throws(() => closeParentTask(58, 2, [66, 67], [["a.ts", "b.ts"], ["c.ts"]], root));
     assert.ok(readTasks(root).some((task) => task.taskNumber === 58));
 });
 
@@ -189,7 +190,7 @@ test("closeParentTask throws and leaves the parent open when a child claims a fi
         ],
         [],
     );
-    assert.throws(() => closeParentTask(58, 2, [66, 67], root));
+    assert.throws(() => closeParentTask(58, 2, [66, 67], [["a.ts"], ["b.ts"]], root));
     assert.ok(readTasks(root).some((task) => task.taskNumber === 58));
 });
 
@@ -204,6 +205,40 @@ test("closeParentTask throws and leaves the parent open when a child's files dri
         ],
         [],
     );
-    assert.throws(() => closeParentTask(58, 2, [66, 67], root));
+    assert.throws(() => closeParentTask(58, 2, [66, 67], [["a.ts", "b.ts"], ["c.ts", "d.ts"]], root));
     assert.ok(readTasks(root).some((task) => task.taskNumber === 58));
+});
+
+test("closeParentTask succeeds with a non-contiguous file grouping that fully partitions the parent's files", () => {
+    const root = makeProjectRoot();
+    writeTaskFiles(
+        root,
+        [
+            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts", "d.ts"] },
+            { taskNumber: 66, title: "Child A", files: ["a.ts", "c.ts"] },
+            { taskNumber: 67, title: "Child B", files: ["b.ts", "d.ts"] },
+        ],
+        [],
+    );
+    const result = closeParentTask(58, 2, [66, 67], [["a.ts", "c.ts"], ["b.ts", "d.ts"]], root);
+    assert.deepEqual(result.closed, [58]);
+});
+
+test("closeParentTask throws when the number of file groups doesn't match numSplits", () => {
+    const root = makeProjectRoot();
+    assert.throws(() => closeParentTask(58, 2, [66, 67], [["a.ts", "b.ts", "c.ts", "d.ts"]], root));
+    assert.ok(readTasks(root).some((task) => task.taskNumber === 58));
+});
+
+test("parseFileGroups decodes valid JSON and rejects malformed or wrongly-shaped input", () => {
+    assert.deepEqual(parseFileGroups('[["a.ts","b.ts"],["c.ts"]]'), [["a.ts", "b.ts"], ["c.ts"]]);
+    assert.throws(() => parseFileGroups("not json"));
+    assert.throws(() => parseFileGroups('[["a.ts"], "b.ts"]'));
+});
+
+test("SKILL.md advertises the guidance argument and extracts it via $ARGUMENTS, not the truncating $3", () => {
+    const skillMd = readFileSync(join(import.meta.dirname, "..", "skills", "split-task", "SKILL.md"), "utf8");
+    assert.match(skillMd, /argument-hint: "<taskNum> <numSplits> \[guidance\]"/);
+    assert.match(skillMd, /\$ARGUMENTS/);
+    assert.doesNotMatch(skillMd, /\$3/);
 });
