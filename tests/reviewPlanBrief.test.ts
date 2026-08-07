@@ -2,15 +2,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { amendmentPath, repoRelativePlanPath, splitPlanPath } from "../scripts/reviewPlanBrief.ts";
 
 const scriptPath = new URL("../scripts/reviewPlanBrief.ts", import.meta.url).pathname;
 
-function runScript(argumentString: string): string {
-  return execFileSync("node", [scriptPath], { input: argumentString, encoding: "utf8" });
+function runScript(argumentString: string, cwd?: string): string {
+  return execFileSync("node", [scriptPath], { input: argumentString, encoding: "utf8", cwd });
 }
 
 test("splits an unquoted plan path from the target", () => {
@@ -44,10 +44,16 @@ test("names the amendment file next to the plan copy, without the .md suffix", (
 });
 
 test("emits a brief naming the plans/ copy, the target, and the amendment file, all absolute", () => {
-  const brief = runScript("/tmp/elsewhere/ultra-fuzzy-star.md the codebase's state, isn't it");
-  assert.ok(brief.includes(`review ${resolve("plans/ultra-fuzzy-star.md")} against the codebase's state, isn't it.`));
-  assert.ok(brief.includes(`may create or modify is ${resolve("plans/ultra-fuzzy-star-amendment.md")}.`));
-  assert.doesNotMatch(brief, /\/tmp\/elsewhere/);
+  // realpathSync: the script reports its cwd resolved, and macOS symlinks /var onto /private/var.
+  const projectRoot = realpathSync(mkdtempSync(join(tmpdir(), "review-plan-")));
+  const source = join(projectRoot, "elsewhere", "ultra-fuzzy-star.md");
+  mkdirSync(dirname(source), { recursive: true });
+  writeFileSync(source, "original plan\n");
+
+  const brief = runScript(`${source} the codebase's state, isn't it`, projectRoot);
+  assert.ok(brief.includes(`review ${join(projectRoot, "plans", "ultra-fuzzy-star.md")} against the codebase's state, isn't it.`));
+  assert.ok(brief.includes(`may create or modify is ${join(projectRoot, "plans", "ultra-fuzzy-star-amendment.md")}.`));
+  assert.doesNotMatch(brief, /\/elsewhere\//);
   assert.doesNotMatch(brief, /[^/]plans\/ultra-fuzzy-star\.md/);
 });
 
