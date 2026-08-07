@@ -1,10 +1,12 @@
 // Moves task numbers from tasks.json to completedTasks.json with a closure note and commit hashes.
 import { writeFileSync } from "node:fs";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { unblockDependents } from "./unblockDependents.ts";
 
 export interface CloseTasksResult {
   closed: number[];
   skipped: number[];
+  unblocked: number[];
 }
 
 // Local calendar date, not UTC — toISOString() rolls to tomorrow during US evening hours.
@@ -73,12 +75,14 @@ export function closeTasks(
     closed.push(taskNumber);
   }
 
+  let unblocked: number[] = [];
   if (closed.length > 0) {
+    unblocked = unblockDependents(tasks, closed);
     writeFileSync(tasksPath, JSON.stringify(tasks, null, 2) + "\n");
     writeFileSync(completedTasksPath, JSON.stringify(completedTasks, null, 2) + "\n");
   }
 
-  return { closed, skipped };
+  return { closed, skipped, unblocked };
 }
 
 function parseCloseNoteArg(raw: string): string | Record<number, string> {
@@ -103,12 +107,15 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   const taskNumbers = leadingTaskNumbers([process.argv[2] ?? ""]);
   const closureNote = parseCloseNoteArg(process.argv[3] ?? "");
   const commitHashes = parseCommitHashesArg(process.argv[4]);
-  const { closed, skipped } =
+  const { closed, skipped, unblocked } =
     commitHashes === undefined
       ? closeTasks(taskNumbers, closureNote)
       : closeTasks(taskNumbers, closureNote, undefined, commitHashes);
   process.stdout.write(
     `closed: ${closed.length > 0 ? closed.join(", ") : "none"}\n` +
-      `skipped (already completed or not found): ${skipped.length > 0 ? skipped.join(", ") : "none"}\n`,
+      `skipped (already completed or not found): ${skipped.length > 0 ? skipped.join(", ") : "none"}\n` +
+      (unblocked.length > 0
+        ? `removed closed task(s) from blockedBy of task(s): ${unblocked.join(", ")}\n`
+        : "no blockedBy references to the closed task(s)\n"),
   );
 }
