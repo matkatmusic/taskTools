@@ -116,13 +116,16 @@ export function closeParentTask(
     parentNumber: number,
     numSplits: number,
     childNumbers: number[],
+    childFileGroups: string[][],
     projectRoot?: string,
 ): CloseTasksResult {
     const parent = readParentTask(parentNumber, projectRoot);
     validateChildNumbers(childNumbers, numSplits, parentNumber, projectRoot);
-    const fileGroups = partitionFiles((parent.files as string[] | undefined) ?? [], numSplits);
-    validateFileGroups(parent.files as string[] | undefined, fileGroups);
-    childNumbers.forEach((childNumber, index) => verifyChildFiles(childNumber, fileGroups[index], projectRoot));
+    if (childFileGroups.length !== numSplits) {
+        throw new Error(`Expected ${numSplits} file group(s), got ${childFileGroups.length}`);
+    }
+    validateFileGroups(parent.files as string[] | undefined, childFileGroups);
+    childNumbers.forEach((childNumber, index) => verifyChildFiles(childNumber, childFileGroups[index], projectRoot));
 
     const result = closeTasks([parentNumber], composeClosureNote(childNumbers), projectRoot);
     if (!result.closed.includes(parentNumber)) {
@@ -147,11 +150,28 @@ function runInfo(taskNumberArg: string, numSplitsArg: string): void {
     console.log(JSON.stringify({ parent, fileGroups }, null, 2));
 }
 
-function runClose(parentNumberArg: string, numSplitsArg: string, childNumbersArg: string): void {
+export function parseFileGroups(raw: string): string[][] {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        throw new Error(`fileGroups must be valid JSON, got "${raw}"`);
+    }
+    if (
+        !Array.isArray(parsed) ||
+        !parsed.every((group) => Array.isArray(group) && group.every((file) => typeof file === "string"))
+    ) {
+        throw new Error(`fileGroups must be a JSON array of string arrays, got "${raw}"`);
+    }
+    return parsed as string[][];
+}
+
+function runClose(parentNumberArg: string, numSplitsArg: string, childNumbersArg: string, fileGroupsArg: string): void {
     const parentNumber = toPositiveInt(parentNumberArg, "parentNum");
     const numSplits = toPositiveInt(numSplitsArg, "numSplits");
     const childNumbers = (childNumbersArg ?? "").split(",").map((raw) => toPositiveInt(raw.trim(), "childNumber"));
-    const result = closeParentTask(parentNumber, numSplits, childNumbers);
+    const childFileGroups = parseFileGroups(fileGroupsArg ?? "");
+    const result = closeParentTask(parentNumber, numSplits, childNumbers, childFileGroups);
     console.log(JSON.stringify(result, null, 2));
 }
 
@@ -162,11 +182,11 @@ function main(): void {
         return;
     }
     if (command === "close") {
-        runClose(rest[0], rest[1], rest[2]);
+        runClose(rest[0], rest[1], rest[2], rest[3]);
         return;
     }
     console.error(
-        "Usage: splitTask.ts info <taskNum> <numSplits> | splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...>",
+        "Usage: splitTask.ts info <taskNum> <numSplits> | splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson>",
     );
     process.exitCode = 1;
 }
