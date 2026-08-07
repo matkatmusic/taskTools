@@ -36,13 +36,15 @@ export function judgeMergeRun(run: ScriptRun, repo: string, failedCommand: strin
     const blocked = (error: string, conflicts: unknown[], result: unknown): MergePhaseVerdict =>
         ({ status: "blocked", result, failure: { repo, failedCommand, conflicts, error } });
     if (run.exitCode !== 0) return blocked(`${run.exitCode}: ${run.stderr || run.stdout}`, [], null);
-    let output: { conflicts?: unknown[] };
+    let output: { conflicts?: unknown[]; publicationTargets?: unknown[] };
     try {
         output = JSON.parse(run.stdout);
     } catch {
         return blocked(`merge script printed output that is not JSON: ${run.stdout.slice(0, 500)}`, [], null);
     }
     if ((output.conflicts?.length ?? 0) > 0) return blocked("", output.conflicts!, output);
+    if ((output.publicationTargets?.length ?? 0) === 0)
+        return blocked("merge script exited clean but published nothing (publicationTargets is empty): the run was not ready for approval, or the source branch moved past its pinned baseOid before publish", [], output);
     return { status: "merged", result: output, failure: null };
 }
 

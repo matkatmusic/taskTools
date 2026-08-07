@@ -38,7 +38,8 @@ test("test_buildMergeOutcomesTreatsEveryMissingStepAsZero", () => {
 });
 
 test("test_judgeMergeRunReportsMergedWhenTheScriptExitsCleanWithNoConflicts", () => {
-    const verdict = judgeMergeRun({ exitCode: 0, stdout: JSON.stringify({ merged: [{ groupId: 1 }], conflicts: [] }), stderr: "" }, "/repo", "cmd");
+    const stdout = JSON.stringify({ merged: [{ groupId: 1 }], conflicts: [], publicationTargets: [{ branch: "new-usage-graph" }] });
+    const verdict = judgeMergeRun({ exitCode: 0, stdout, stderr: "" }, "/repo", "cmd");
 
     assert.equal(verdict.status, "merged");
     assert.equal(verdict.failure, null);
@@ -66,4 +67,12 @@ test("test_judgeMergeRunReportsBlockedWhenTheScriptPrintsSomethingOtherThanJson"
 
     assert.equal(verdict.status, "blocked");
     assert.match(verdict.failure?.error ?? "", /not JSON/);
+});
+
+test("test_judgeMergeRunReportsBlockedWhenTheScriptExitsCleanButPublishedNothing", () => {
+    const stdout = JSON.stringify({ merged: [{ groupId: 1 }], conflicts: [], publicationTargets: [], runState: { status: "approved" } });
+    const verdict = judgeMergeRun({ exitCode: 0, stdout, stderr: "" }, "/repo", "cmd");
+
+    assert.equal(verdict.status, "blocked");
+    assert.match(verdict.failure?.error ?? "", /published nothing/);
 });

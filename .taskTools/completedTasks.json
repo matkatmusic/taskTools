@@ -1154,5 +1154,23 @@
       "0873224"
     ],
     "closureNote": "blockedBy entries are now taskNum plus reason objects across all five readers and unblockDependents.ts, with a one-time legacy bare-number migration during close-tasks, plus schema and doc updates and rewritten tests. Codex approved the plan unmodified, all owned tests green."
+  },
+  {
+    "taskNumber": 63,
+    "title": "Investigate why runMergePhase reported merged while publishing nothing, leaving the source branch without the work",
+    "description": "Investigate why runMergePhase reported merged while publishing nothing for recent runs of /tackle-tasks [n..] valid.\n\nObserved on 2026-08-06: runMergePhase.ts printed {\"status\":\"merged\", ...,\"publicationTargets\":[]} and runState.status \"approved\", and mergeTaskWorktrees did commit tasks 59 and 60 onto branch task-group-1 (commits f798ced, 1ad8763) and onto the operation branch operations/mshpovbw-gr8sjg9nq3j/parsed-github-com-matkatmusic-tasktools-572765a1-c8146a02, but the source branch new-usage-graph never received the work.\n\nThe run pinned baseOid 99517e72ac5f8afffef2d9d627764dc08f4eb863 at start, and new-usage-graph advanced past it mid-run (commit dc1ec9e at 09:12, then 4a723f4 and 4fa5a4a from a concurrent session), so the branches diverged and the consolidation-back-to-source-branch step that produced commits like 58b4b8d runConsolidation in the previous run did not happen.\n\nTwo questions to answer:\n\n1. Why publicationTargets was empty and judgeMergeRun still returned merged.\n\n2. Whether a source branch that moved past the pinned baseOid should make the merge report blocked, or should instead trigger a rebase or re-consolidation, rather than silently reporting success.\n\nRelevant files: scripts/runMergePhase.ts (buildMergeOutcomes, judgeMergeRun), scripts/mergeTaskWorktrees.ts, scripts/mergePipeline.ts.\n\nA merge that reports merged while the user checkout does not contain the code is the dangerous case, because the orchestrator then invokes close-tasks and the task is archived as finished even though the work never reached the user's branch.",
+    "files": [
+      "scripts/runMergePhase.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/mergePipeline.ts",
+      "tests/runMergePhase.test.ts",
+      "scripts/repositoryManifest.ts",
+      "scripts/prepareTasks.ts"
+    ],
+    "tests": "End-to-end drift test in tests/runMergePhase.test.ts: 1. init a throwaway repo and commit A, so baseOid = A. 2. build pipeline args pinned to baseOid A. 3. commit B on the source branch, simulating the concurrent session that caused this bug. 4. run runMergePhase. Assert either status !== \"merged\", OR git log <sourceBranch> contains the task commits. That is, \"merged\" must imply the user's branch actually has the code.",
+    "difficulty": 4,
+    "completionDate": "2026-08-06",
+    "commitHashes": [],
+    "closureNote": "Root cause found and fixed: judgeMergeRun in scripts/runMergePhase.ts now returns blocked when the merge script exits clean with an empty publicationTargets, so a run whose source branch drifted past its pinned baseOid can no longer be reported as merged and archived while the user branch lacks the code. Both brief questions are answered in plans/task-63-plan.md. The requested automatic rebase-then-retest-then-retry recovery was rejected twice by codex as under-specified and is filed as task 88. Verified: typecheck clean, full suite 1117/1117 pass."
   }
 ]
