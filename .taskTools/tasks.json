@@ -59,7 +59,11 @@
       "skills/tackle-tasks/blockers.workflow.js",
       "skills/tackle-tasks/SKILL.md",
       "tests/blockerVerdicts.test.ts",
-      "tests/checkBlockers.test.ts"
+      "tests/checkBlockers.test.ts",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "scripts/unblockDependents.ts",
+      "scripts/getTaskDetails.ts"
     ],
     "tests": "Feed the main agent a canned set of subagent verdicts (one \"claim is true, still blocked\", one \"claim is false, not blocked\") for a run containing both tasks, and assert the run proceeds with the unblocked task and skips the genuinely blocked one. Define the allowed verdicts in a script file that the subagents use, and have the test import those verdict values from that script rather than hard-coding literal strings, so the fixture and the subagent contract cannot drift apart. Also assert that the disproven blockedBy entry is stripped from tasks.json while the upheld one is left intact, and that a missing or malformed verdict leaves the task blocked.",
     "difficulty": 4
