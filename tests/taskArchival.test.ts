@@ -15,11 +15,11 @@ function makeProjectRoot(): string {
     writeFileSync(
         join(root, "tasks.json"),
         JSON.stringify([
-            { taskNumber: 1, title: "partial rollback" },
-            { taskNumber: 2, title: "fully published" },
-            { taskNumber: 3, title: "conflicted" },
-            { taskNumber: 4, title: "skipped" },
-            { taskNumber: 5, title: "not in explicit list" },
+            { taskNumber: 1, title: "partial rollback", files: ["a.ts"] },
+            { taskNumber: 2, title: "fully published", files: ["b.ts"] },
+            { taskNumber: 3, title: "conflicted", files: ["c.ts"] },
+            { taskNumber: 4, title: "skipped", files: ["d.ts"] },
+            { taskNumber: 5, title: "not in explicit list", files: ["e.ts"] },
         ]),
     );
     writeFileSync(join(root, "completedTasks.json"), "[]");
@@ -124,4 +124,51 @@ test("duplicate task numbers in publishedTaskNumbers archive the task once", () 
 
     assert.deepEqual(archived, [2]);
     assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
+});
+
+test("a fully-published task with no declared files blocks the whole batch, archiving nothing", () => {
+    const root = makeProjectRoot();
+    const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
+    tasks.find((t: any) => t.taskNumber === 2).files = [];
+    writeFileSync(join(root, "tasks.json"), JSON.stringify(tasks));
+    const raw: RawTaskRepoOutcome[] = [
+        { taskNumber: 1, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
+        { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "bbb" } },
+    ];
+    const mergeResults = summarizeTaskMergeResults(raw);
+    assert.throws(() => archivePublishedTasks([1, 2], mergeResults, root), /declares no files/);
+    assert.equal(readTasks(root).length, 5);
+    assert.equal(readCompleted(root).length, 0);
+});
+
+test("a fully-published task with no usable commit hash throws before archiving any candidate", () => {
+    const root = makeProjectRoot();
+    const raw: RawTaskRepoOutcome[] = [
+        { taskNumber: 1, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
+        { taskNumber: 2, repo: { repoName: "r1", status: "published" } },
+    ];
+    const mergeResults = summarizeTaskMergeResults(raw);
+    assert.throws(() => archivePublishedTasks([1, 2], mergeResults, root), /no usable commit hash/);
+    assert.equal(readCompleted(root).length, 0);
+});
+
+test("a failing second write is rolled back, leaving both files exactly as they were", () => {
+    const root = makeProjectRoot();
+    const originalTasksRaw = readFileSync(join(root, "tasks.json"), "utf8");
+    const originalCompletedRaw = readFileSync(join(root, "completedTasks.json"), "utf8");
+    const raw: RawTaskRepoOutcome[] = [
+        { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
+    ];
+    const mergeResults = summarizeTaskMergeResults(raw);
+
+    let callCount = 0;
+    const flakyWrite = (path: string, data: string): void => {
+        callCount++;
+        if (callCount === 2) throw new Error("disk full");
+        writeFileSync(path, data);
+    };
+
+    assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWrite), /disk full/);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), originalTasksRaw);
+    assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), originalCompletedRaw);
 });

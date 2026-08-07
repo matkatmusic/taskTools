@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { readCurrentRefOid } from "./basePublication.ts";
 import type { CliInput } from "./mergePipeline.ts";
+import { archivePublishedTasks, type ArchiveRequest, type TaskMergeResult } from "./taskArchival.ts";
 import { rebaseGroupOntoSource, type RebaseOutcome } from "./mergeTaskWorktrees.ts";
 import { generateRunId, resolveMergeScriptPath, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "./prepareTasks.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
@@ -65,6 +66,54 @@ function runScript(command: string[], cwd?: string): ScriptRun {
 
 function blockedVerdict(repo: string, failedCommand: string, error: string): MergePhaseVerdict {
     return { status: "blocked", result: null, failure: { repo, failedCommand, conflicts: [], error } };
+}
+
+function isArchiveRequest(value: unknown): value is ArchiveRequest {
+    const request = value as Partial<ArchiveRequest> | null | undefined;
+    return !!request && Array.isArray(request.publishedTaskNumbers) && Array.isArray(request.mergeResults);
+}
+
+// Requires the flag, at least one repo, and every repo published with a commit hash.
+function isFullyPublishable(result: TaskMergeResult | undefined): result is TaskMergeResult {
+    return !!result
+        && result.fullyPublished
+        && result.repos.length > 0
+        && result.repos.every((repo) => repo.status === "published" && !!repo.commitHash);
+}
+
+// Every uniquely-requested task must resolve to exactly one fully-publishable mergeResult before archival is even attempted.
+function archiveRequestIsComplete(request: ArchiveRequest): boolean {
+    for (const taskNumber of new Set(request.publishedTaskNumbers)) {
+        const matches = request.mergeResults.filter((result) => result.taskNumber === taskNumber);
+        if (matches.length !== 1 || !isFullyPublishable(matches[0])) return false;
+    }
+    return true;
+}
+
+export function archiveIfMerged(
+    verdict: MergePhaseVerdict,
+    repo: string,
+    failedCommand: string,
+    archive: typeof archivePublishedTasks,
+): MergePhaseVerdict {
+    if (verdict.status !== "merged") return verdict;
+    const archiveRequest = (verdict.result as { archiveRequest?: unknown } | null)?.archiveRequest;
+    if (!isArchiveRequest(archiveRequest) || !archiveRequestIsComplete(archiveRequest)) {
+        return blockedVerdict(repo, failedCommand, "merge script reported a merged verdict with no valid, complete archiveRequest; refusing to archive");
+    }
+    try {
+        const { archived, leftOpen } = archive(archiveRequest.publishedTaskNumbers, archiveRequest.mergeResults, repo);
+        const requested = new Set(archiveRequest.publishedTaskNumbers);
+        const archivedSet = new Set(archived);
+        const archivedEverything = requested.size === archivedSet.size && [...requested].every((taskNumber) => archivedSet.has(taskNumber));
+        const noneLeftOpen = [...requested].every((taskNumber) => !leftOpen.includes(taskNumber));
+        if (!archivedEverything || !noneLeftOpen) {
+            return blockedVerdict(repo, failedCommand, `archival reported an incomplete result: archived [${archived.join(", ")}], leftOpen [${leftOpen.join(", ")}], requested [${[...requested].join(", ")}]`);
+        }
+        return verdict;
+    } catch (error) {
+        return blockedVerdict(repo, failedCommand, `archival failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 
 function resultIndicatesBaseDrift(verdict: MergePhaseVerdict): boolean {
@@ -218,7 +267,8 @@ function runAsCli(): void {
         command,
         deps,
     );
-    process.stdout.write(JSON.stringify(verdict));
+    const finalVerdict = archiveIfMerged(verdict, repoRoot, command.join(" "), archivePublishedTasks);
+    process.stdout.write(JSON.stringify(finalVerdict));
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
