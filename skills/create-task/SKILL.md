@@ -5,6 +5,7 @@ argument-hint: "<task description>"
 ---
 
 - taskNumber to use: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/nextTaskNumber.ts"`
+- version to use: !`git rev-parse HEAD`
 
 Task described by the user: $ARGUMENTS
 
@@ -21,6 +22,8 @@ Append ONE object to the `tasks.json` array as its LAST element — at the very 
 Populate `userDescription` with $ARGUMENTS verbatim, exactly as typed — never edit, summarize, or reword it. Populate `description` with only the agent's derived understanding gathered while writing the task: file paths, line numbers, root-cause findings, constraints, and decisions; it must not restate the raw prompt.
 
 Populate `files` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
+
+Populate `version` with the injected commit hash above. If that value is not a 40-character hexadecimal string — for example when `git rev-parse HEAD` failed because the repository has no commits yet — omit the field entirely.
 
 If the request names the source note/handoff file(s) the task came from (e.g. an `update-tasks` harvest), also include `"handoffFilePaths": [<those repo-relative paths>]` in the object; otherwise omit the field.
 
