@@ -130,3 +130,54 @@ test("CLI reports empty projects without crashing", () => {
     const output = execFileSync("node", [SCRIPT], { cwd: root, encoding: "utf8" });
     assert.match(output, /0 open/);
 });
+
+test("collapses a diamond blockedBy graph into one chain per sink", () => {
+    const open = [
+        openTask(1),
+        openTask(2, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(4, { blockedBy: [{ taskNum: 2, reason: "needs 2" }, { taskNum: 3, reason: "needs 3" }] }),
+    ];
+    const stats = computeTaskStats(open, [], TODAY);
+    assert.deepEqual(stats.blockerChains, [[[1], [2, 3], [4]]]);
+    assert.deepEqual(stats.fastestUnblockingSequence, [1]);
+    const text = formatTaskStats(stats);
+    assert.match(text, /blocked task chains:\n {2}\[1\] <- \[2,3\] <- \[4\]\n/);
+    assert.match(text, /fastest unblocking sequence: tackle-tasks \[1\]/);
+    assert.equal(/\[1\] <- \[2\]/.test(text), false);
+    assert.equal(/\[2\] <- \[4\]/.test(text), false);
+    assert.equal(/\[3\] <- \[4\]/.test(text), false);
+});
+
+test("two sinks sharing one root produce two chains and one deduplicated fastest sequence", () => {
+    const open = [
+        openTask(1),
+        openTask(2, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+    ];
+    const stats = computeTaskStats(open, [], TODAY);
+    assert.deepEqual(stats.blockerChains, [[[1], [2]], [[1], [3]]]);
+    assert.deepEqual(stats.fastestUnblockingSequence, [1]);
+});
+
+test("no blocked tasks produces empty chain data and no chain section in output", () => {
+    const open = [openTask(1), openTask(2)];
+    const stats = computeTaskStats(open, [], TODAY);
+    assert.deepEqual(stats.blockerChains, []);
+    assert.deepEqual(stats.fastestUnblockingSequence, []);
+    const text = formatTaskStats(stats);
+    assert.equal(/blocked task chains:/.test(text), false);
+    assert.equal(/fastest unblocking sequence:/.test(text), false);
+});
+
+test("a blockedBy cycle behind a genuine sink terminates with a finite chain", () => {
+    const open = [
+        openTask(1, { blockedBy: [{ taskNum: 2, reason: "needs 2" }] }),
+        openTask(2, { blockedBy: [{ taskNum: 3, reason: "needs 3" }] }),
+        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(4, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+    ];
+    const stats = computeTaskStats(open, [], TODAY);
+    assert.deepEqual(stats.blockerChains, [[[3], [2], [1], [4]]]);
+    assert.deepEqual(stats.fastestUnblockingSequence, [3]);
+});

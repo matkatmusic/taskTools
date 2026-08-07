@@ -17,6 +17,8 @@ export type TaskStats = {
     groupCount: number;
     largestGroupSize: number;
     contendedFiles: { path: string; taskCount: number }[];
+    blockerChains: number[][][];
+    fastestUnblockingSequence: number[];
 };
 
 const dayNumber = (isoDate: string) => Math.floor(Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000);
@@ -56,12 +58,53 @@ function rankContendedFiles(tasks: TaskRecord[]): { path: string; taskCount: num
         .map(([path, taskCount]) => ({ path, taskCount }));
 }
 
+function collapsedBlockerChains(open: TaskRecord[], openNumbers: Set<number>): number[][][] {
+    const byNumber = new Map<number, TaskRecord>(open.map(t => [t.taskNumber, t] as const));
+    const blockedTaskNumbers = new Set<number>();
+    for (const task of open) {
+        for (const blocker of openBlockersOf(task, openNumbers)) blockedTaskNumbers.add(blocker);
+    }
+    const sinks = open
+        .filter(t => openBlockersOf(t, openNumbers).length > 0 && !blockedTaskNumbers.has(t.taskNumber))
+        .map(t => t.taskNumber)
+        .sort((a, b) => a - b);
+
+    return sinks.map(sink => {
+        const levels: number[][] = [[sink]];
+        const seen = new Set<number>([sink]);
+        let frontier = [sink];
+        while (true) {
+            const next = new Set<number>();
+            for (const taskNumber of frontier) {
+                const task = byNumber.get(taskNumber);
+                if (!task) continue;
+                for (const blocker of openBlockersOf(task, openNumbers)) {
+                    if (!seen.has(blocker)) next.add(blocker);
+                }
+            }
+            if (next.size === 0) break;
+            const nextLevel = [...next].sort((a, b) => a - b);
+            levels.unshift(nextLevel);
+            for (const n of nextLevel) seen.add(n);
+            frontier = nextLevel;
+        }
+        return levels;
+    });
+}
+
+function unblockingRoots(chains: number[][][]): number[] {
+    const roots = new Set<number>();
+    for (const chain of chains) for (const n of chain[0]) roots.add(n);
+    return [...roots].sort((a, b) => a - b);
+}
+
 export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], today: string): TaskStats {
     const openNumbers = new Set(open.map(t => t.taskNumber));
     const unblocked = open.filter(t => openBlockersOf(t, openNumbers).length === 0);
     // tackle-tasks refuses blocked tasks and tasks declaring no files, so the forecast uses the same gate.
     const forecastable = unblocked.filter(t => declaredFiles(t).length > 0);
     const groups = forecastable.length > 0 ? groupTasksByFileOverlap(forecastable) : [];
+    const blockerChains = collapsedBlockerChains(open, openNumbers);
 
     return {
         openCount: open.length,
@@ -78,6 +121,8 @@ export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], to
         groupCount: groups.length,
         largestGroupSize: groups.reduce((n, g) => Math.max(n, g.taskNumbers.length), 0),
         contendedFiles: rankContendedFiles(open),
+        blockerChains,
+        fastestUnblockingSequence: unblockingRoots(blockerChains),
     };
 }
 
@@ -97,6 +142,11 @@ export function formatTaskStats(stats: TaskStats): string {
     if (stats.contendedFiles.length > 0) {
         lines.push("contended files (each shared task serializes):");
         for (const file of stats.contendedFiles) lines.push(`  ${file.path} — ${file.taskCount} tasks`);
+    }
+    if (stats.blockerChains.length > 0) {
+        lines.push("blocked task chains:");
+        for (const chain of stats.blockerChains) lines.push(`  ${chain.map(level => `[${level.join(",")}]`).join(" <- ")}`);
+        lines.push(`fastest unblocking sequence: tackle-tasks [${stats.fastestUnblockingSequence.join(",")}]`);
     }
     return lines.join("\n") + "\n";
 }
