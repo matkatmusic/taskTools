@@ -646,5 +646,17 @@
     ],
     "tests": "skip",
     "difficulty": 6
+  },
+  {
+    "taskNumber": 120,
+    "version": "8e431bb47fa271b45dc85dec4edbc4f2086b0283",
+    "title": "Tell the codex plan reviewer which classes of issue are not grounds for rejection",
+    "userDescription": "update the review instructions for codex to not include nitpicks, e.g.  missing ```ts in code snippets in plans.  these nitpicks are not grounds for rejecting a plan.",
+    "description": "The reviewer prompt is codexPrompt at skills/tackle-tasks/verify.workflow.js:23-31. It states three acceptance gates — the plan stays in the task's owned files, gives concrete steps rather than open design questions, and lets an implementer follow it without deciding anything the plan should have decided — then says to print APPROVED or REJECTED. It never states an exclusion list, so anything the reviewer notices is fair game for the PROBLEMS block, and a cosmetic observation lands in the same output slot as a correctness defect.\n\nAdd an explicit paragraph naming what is NOT grounds for rejection: missing or wrong code-fence language tags, markdown/heading/formatting choices, prose style or wording, section ordering, and any observation that would not change the implemented code. Instruct that such items may be mentioned at most as a trailing OPTIONAL note under an APPROVED verdict, and must never appear in PROBLEMS or FIXES.\n\nSame prompt string is reused verbatim for both Claude fallbacks at :36-37, so a single edit covers all three reviewers.\n\nRelated but deliberately out of scope (user decision): scripts/planReviewRuling.ts:40-52 derives the verdict from a raw fix COUNT, unweighted, so a cosmetic fix degrades the ruling exactly as much as a real bug. That amplifier is left alone here. Complements task 118, which attacks the same rejection rate from the planner side.",
+    "files": [
+      "skills/tackle-tasks/verify.workflow.js"
+    ],
+    "tests": "skip",
+    "difficulty": 3
   }
 ]
