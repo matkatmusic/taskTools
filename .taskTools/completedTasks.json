@@ -1411,8 +1411,9 @@
     "tests": "Same as tasks 71 through 76: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/task-stats/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
     "completionDate": "2026-08-07",
+    "closureNote": "Moved the task-stats skill body into scripts/taskStatsBrief.ts as a literal brief mirroring review-plan: skills/task-stats/SKILL.md collapsed to a single ! block invoking the new script, the prose lives in the script as a template literal, the script runs taskStats.ts itself and embeds the real output rather than a placeholder, and the ${CLAUDE_PLUGIN_ROOT} substitution became an absolute path resolved via fileURLToPath. tests/taskStatsBrief.test.ts asserts the copy was lossless and that no unexpanded ${CLAUDE_PLUGIN_ROOT} survives. Plan approved by codex on the first pass with zero revisions; typecheck clean and the full suite is 1145 pass / 0 fail on the merged tree. Recorded hash corrected from 844bf462 to 17b6c6ea: the automated merge pipeline archived this task against 844bf462, an empty consolidation commit carrying none of the task's files, and then reported blocked; the work actually landed via a hand fast-forward of task-group-1 after the base-drift retry could not run. See task 112.",
     "commitHashes": [
-      "844bf46239578152d2614df8fca7f26381b2eed3"
+      "17b6c6ea7408f3d326acba857213257db9328369"
     ]
   },
   {
