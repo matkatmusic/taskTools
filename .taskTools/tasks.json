@@ -88,12 +88,14 @@
   {
     "taskNumber": 63,
     "title": "Investigate why runMergePhase reported merged while publishing nothing, leaving the source branch without the work",
-    "description": "Investigate why runMergePhase reported merged while publishing nothing for recent runs of /tackle-tasks [n..] valid.\n\nObserved on 2026-08-06: runMergePhase.ts printed {\"status\":\"merged\", ...,\"publicationTargets\":[]} and runState.status \"approved\", and mergeTaskWorktrees did commit tasks 59 and 60 onto branch task-group-1 (commits f798ced, 1ad8763) and onto the operation branch operations/mshpovbw-gr8sjg9nq3j/parsed-github-com-matkatmusic-tasktools-572765a1-c8146a02, but the source branch new-usage-graph never received the work.\n\nThe run pinned baseOid 99517e72ac5f8afffef2d9d627764dc08f4eb863 at start, and new-usage-graph advanced past it mid-run (commit dc1ec9e at 09:12, then 4a723f4 and 4fa5a4a from a concurrent session), so the branches diverged and the consolidation-back-to-source-branch step that produced commits like 58b4b8d runConsolidation in the previous run did not happen.\n\nTwo questions to answer:\n\n1. Why publicationTargets was empty and judgeMergeRun still returned merged.\n\n2. Whether a source branch that moved past the pinned baseOid should make the merge report blocked, or should instead trigger a rebase or re-consolidation, rather than silently reporting success.\n\nRelevant files: scripts/runMergePhase.ts (buildMergeOutcomes, judgeMergeRun), scripts/mergeTaskWorktrees.ts, scripts/mergePipeline.ts.\n\nA merge that reports merged while the user checkout does not contain the code is the dangerous case, because the orchestrator then invokes close-tasks and the task is archived as finished even though the work never reached the user's branch.",
+    "description": "Investigate why runMergePhase reported merged while publishing nothing for recent runs of /tackle-tasks [n..] valid.\n\nObserved on 2026-08-06: runMergePhase.ts printed {\"status\":\"merged\", ...,\"publicationTargets\":[]} and runState.status \"approved\", and mergeTaskWorktrees did commit tasks 59 and 60 onto branch task-group-1 (commits f798ced, 1ad8763) and onto the operation branch operations/mshpovbw-gr8sjg9nq3j/parsed-github-com-matkatmusic-tasktools-572765a1-c8146a02, but the source branch new-usage-graph never received the work.\n\nThe run pinned baseOid 99517e72ac5f8afffef2d9d627764dc08f4eb863 at start, and new-usage-graph advanced past it mid-run (commit dc1ec9e at 09:12, then 4a723f4 and 4fa5a4a from a concurrent session), so the branches diverged and the consolidation-back-to-source-branch step that produced commits like 58b4b8d runConsolidation in the previous run did not happen.\n\nTwo questions to answer:\n\n1. Why publicationTargets was empty and judgeMergeRun still returned merged.\n\n2. Whether a source branch that moved past the pinned baseOid should make the merge report blocked, or should instead trigger a rebase or re-consolidation, rather than silently reporting success.\n\nRelevant files: scripts/runMergePhase.ts (buildMergeOutcomes, judgeMergeRun), scripts/mergeTaskWorktrees.ts, scripts/mergePipeline.ts.\n\nA merge that reports merged while the user checkout does not contain the code is the dangerous case, because the orchestrator then invokes close-tasks and the task is archived as finished even though the work never reached the user's branch.\n\nUSER DECISION (answers question 2, overrides any earlier plan): do NOT merely report blocked on base drift. When the source branch has moved past the pinned baseOid, rebase the group work onto the current tip of the source branch, run the tests covering the changed files (the full suite is acceptable), and only if those tests pass retry the merge/publication. Report blocked only if the rebase conflicts, the tests fail, or the retried merge still publishes nothing. The invariant stands: a verdict of merged must imply the source branch actually contains the task commits, so merged with an empty publicationTargets is always a bug.",
     "files": [
       "scripts/runMergePhase.ts",
       "scripts/mergeTaskWorktrees.ts",
       "scripts/mergePipeline.ts",
-      "tests/runMergePhase.test.ts"
+      "tests/runMergePhase.test.ts",
+      "scripts/repositoryManifest.ts",
+      "scripts/prepareTasks.ts"
     ],
     "tests": "End-to-end drift test in tests/runMergePhase.test.ts: 1. init a throwaway repo and commit A, so baseOid = A. 2. build pipeline args pinned to baseOid A. 3. commit B on the source branch, simulating the concurrent session that caused this bug. 4. run runMergePhase. Assert either status !== \"merged\", OR git log <sourceBranch> contains the task commits. That is, \"merged\" must imply the user's branch actually has the code.",
     "difficulty": 4
@@ -108,11 +110,14 @@
       "scripts/rateTask.ts",
       "tests/rateTask.test.ts",
       "skills/pick-a-task/SKILL.md",
-      "skills/create-task/template/taskTemplate.json"
+      "skills/create-task/template/taskTemplate.json",
+      "scripts/taskFiles.ts",
+      "scripts/taskArchival.ts",
+      "skills/split-task/SKILL.md"
     ],
     "tests": "Fixture tasks.json with two tasks: one sprawling multi-subsystem task and one one-line mechanical task. Assert rate-task gives the sprawling one a split score >= 5 plus at least two named split points, and the mechanical one a score < 5 with no split points.",
     "difficulty": 4,
-    "blockedBy": []
+    "blockedBy": [58]
   },
   {
     "taskNumber": 69,
@@ -395,6 +400,39 @@
       "tests/splitTask.test.ts"
     ],
     "tests": "Argument parsing only. Assert the multi-word guidance is captured whole from the invocation (not truncated at the first space) and reaches the agent — using the user's own example, `split-task 58 2 make splitting task-file ownership one task and making briefs point using filepaths the other task`, the guidance must arrive as the full string beginning \"make splitting\" and ending \"the other task\", with internal spacing preserved. Also assert that omitting guidance entirely leaves today's behaviour unchanged: `split-task 58 2` still produces the contiguous positional partition from partitionFiles and closes the parent exactly as it does now.",
+    "difficulty": 3
+  },
+  {
+    "taskNumber": 86,
+    "version": "ec95d8c722a62b3e0318969fed77a9793acc28ad",
+    "title": "Run tackle-tasks as one workflow per group instead of one workflow per phase",
+    "userDescription": "restructure the workflow of tackle-task so that multi-task invocations spawn separate workflows per task, so there's no 'waiting for phase [all tasks] to complete before nextPhase [all tasks] runs'.",
+    "description": "Current shape: skills/tackle-tasks/SKILL.md:25-127 (\"Running the pipeline\") tells the orchestrator to launch plan -> verify -> implement -> test as four separate Workflow calls, waiting for each to return before launching the next. Each of those workflows fans out across EVERY task/group and returns only when the slowest one finishes, which is where the cross-phase barrier lives: plan.workflow.js:92 `await parallel(TASKS.map(...))`, verify.workflow.js:97 `await parallel(PLANNED.map(...))`, implement.workflow.js:134 `await parallel(GROUPS.map(...))`, test.workflow.js:165 `await parallel(GROUPS.map(...))`. Four barriers, one per phase boundary.\n\nUnit of independence is the GROUP, not the individual task. scripts/prepareTasks.ts:211 calls groupTasksByFileOverlap, and buildWorkflowArguments (:156-174) creates one git worktree and one branch per group via createWorktreeForGroup (:133-153). Tasks that share files land in the same group and must stay in the same workflow; only groups are safe to run independently. Target shape is one workflow per group whose body is a pipeline of the four existing stages, so group A can be implementing while group B is still planning.\n\nThe per-group stage bodies mostly already exist and are reusable: test.workflow.js:126-157 (testGroup) already loops per group with its own retry rounds, and implement.workflow.js runs serial workers within a group. plan.workflow.js's missing-files retry (:101-124) is per task and currently runs after the parallel barrier; in the new shape it moves inside that group's own stage.\n\nWhat cannot become per-group: Step 5 (SKILL.md:74-77) is a user-interactive approval gate using AskUserQuestion and cannot live inside a workflow. Step 6 (SKILL.md:79-99) is a single script run (`mergeCommand` -> scripts/runMergePhase.ts) that reads one aggregated stepOutputsFile covering all groups; buildMergeOutcomes derives every merge argument from it. So the per-group workflow return values must still be collected by the orchestrator into the same aggregate shape SKILL.md:85-96 documents: {done, partial, blocked, needsClarification, requeueCount, testReceipts, reviewHandoffs}. testReceipts is keyed by groupId (test.workflow.js:167) and reviewHandoffs by task, so aggregation is concatenation, not recomputation.\n\nAlso needs deciding during implementation: whether the four phase workflow files stay as separate scriptPaths invoked per group, or collapse into one per-group workflow script; and how meta.phases/labels stay readable in /workflows when N groups run concurrently (today's phase titles are global and would collide).",
+    "files": [
+      "skills/tackle-tasks/SKILL.md",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js",
+      "skills/tackle-tasks/implement.workflow.js",
+      "skills/tackle-tasks/test.workflow.js",
+      "scripts/prepareTasks.ts",
+      "scripts/runMergePhase.ts"
+    ],
+    "tests": "skip",
+    "difficulty": 4
+  },
+  {
+    "taskNumber": 87,
+    "version": "ec95d8c722a62b3e0318969fed77a9793acc28ad",
+    "title": "Make plans/brief-N.md strictly derived: rebuild on every plan launch, stop treating it as hand-editable",
+    "userDescription": "Bug: If a planning run needs to be retried and the main agent edits the brief before launching the re-run, the edits are erased when the brief is programmatically rebuilt from tasks.json when the plan step is relaunched.",
+    "description": "Two root causes, opposite directions, same file.\n\n(A) Edits erased. scripts/prepareTasks.ts:209 runs `for (const task of tasks) writeTaskBriefFile(task, repoRoot)` in the CLI main path, and that CLI runs on every launch of the tackle-tasks skill via skills/tackle-tasks/SKILL.md:10. writeTaskBriefFile (prepareTasks.ts:103-121) ends in an unconditional writeFileSync, so any hand edit to plans/brief-N.md is destroyed with no read-back and no warning.\n\n(B) Edits silently kept, brief goes stale. Relaunching only the plan step (Workflow with scriptPath plan.workflow.js) does NOT regenerate any brief. The only in-workflow regeneration is command 2 of fileRetryPreamble, plan.workflow.js:24-34, which fires solely on the missing-files retry path. So a re-planned task reads whatever brief happens to be on disk, which can be older than tasks.json. Observed live on task 63: a decision recorded in the brief was wiped by (A), then after being moved into tasks.json it still did not reach the planner because of (B).\n\nThe brief is fully derived and has no slot for anything else: prepareTasks.ts:111-118 builds it from the task record's taskNumber/title/userDescription/description plus a fenced dump of every declared file (:106-110). Consumers are plan.workflow.js:41 (planner reads the brief) and verify.workflow.js:23 (codex reads brief + plan).\n\nDecision made with the user: keep the brief strictly derived rather than adding a preserved hand-edit block. That means (1) close root cause B so a plan relaunch always regenerates the brief from the current tasks.json, making the file deterministic regardless of which entry point ran; and (2) state in skills/tackle-tasks/SKILL.md that plans/brief-*.md is generated output and that durable per-task information must go into the task's `description` in tasks.json (via the create-task/update-task path), never into the brief. Where the plan workflow currently instructs an agent to regenerate the brief only on retry (plan.workflow.js:24-34, and the forbidden-files sentence at :70), that instruction becomes unconditional or moves into the workflow itself.\n\nExisting coverage to extend: tests/prepareTasks.test.ts:46-61 already asserts writeTaskBriefFile embeds declared file contents and tolerates missing files.",
+    "files": [
+      "scripts/prepareTasks.ts",
+      "skills/tackle-tasks/plan.workflow.js",
+      "skills/tackle-tasks/SKILL.md",
+      "tests/prepareTasks.test.ts"
+    ],
+    "tests": "Round-trip determinism test in tests/prepareTasks.test.ts: build a task record and call writeTaskBriefFile to produce plans/brief-N.md; capture that output; hand-edit the file on disk by appending a marker line such as '## Notes\\nmanual decision text'; call writeTaskBriefFile again with the same task record; assert the marker line is gone and the file is byte-identical to the first captured output — the brief is a pure function of the task record. Then mutate the task record's description, call writeTaskBriefFile again, and assert the new description is present, proving regeneration refreshes rather than no-ops. Add a second check for root cause B: relaunching the plan step regenerates the brief on the normal path, not only on the missing-files retry path.",
     "difficulty": 3
   }
 ]
