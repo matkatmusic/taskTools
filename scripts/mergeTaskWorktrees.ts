@@ -1,7 +1,7 @@
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
 import { type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
@@ -99,6 +99,75 @@ export function findUnmergedTaskWorktrees(
         };
     });
     return results.filter((r) => r.unmergedCommitCount > 0 || r.hasUncommittedChanges);
+}
+
+export type RebaseOutcome =
+    | { status: "rebased-clean" }
+    | { status: "conflicted"; conflictedFilePaths: string[] }
+    | { status: "cleanup-failed"; failureReason: string };
+
+function rebaseGitPath(worktreePath: string, relativePath: string): string {
+    const output = git(worktreePath, "rev-parse", "--git-path", relativePath).trim();
+    return isAbsolute(output) ? output : join(worktreePath, output);
+}
+
+function rebaseInProgress(worktreePath: string): boolean {
+    return existsSync(rebaseGitPath(worktreePath, "rebase-merge")) || existsSync(rebaseGitPath(worktreePath, "rebase-apply"));
+}
+
+function collectConflictedRebasePaths(worktreePath: string): string[] {
+    return git(worktreePath, "diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean);
+}
+
+function abortRebase(worktreePath: string): { aborted: boolean; failureReason: string | null } {
+    try {
+        git(worktreePath, "rebase", "--abort");
+        return { aborted: true, failureReason: null };
+    } catch (error) {
+        return { aborted: false, failureReason: gitErrorText(error) };
+    }
+}
+
+function combineFailureReasons(...parts: (string | null)[]): string {
+    return parts.filter((part): part is string => part !== null).join("; ");
+}
+
+export function rebaseGroupOntoSource(worktreePath: string, sourceBranch: string): RebaseOutcome {
+    try {
+        git(worktreePath, "rebase", sourceBranch);
+        return { status: "rebased-clean" };
+    } catch (rebaseError) {
+        const originalReason = gitErrorText(rebaseError);
+
+        let inProgress: boolean;
+        try {
+            inProgress = rebaseInProgress(worktreePath);
+        } catch (stateError) {
+            const abortResult = abortRebase(worktreePath);
+            const abortFailure = abortResult.aborted ? null : `abort also failed: ${abortResult.failureReason}`;
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, gitErrorText(stateError), abortFailure) };
+        }
+
+        if (!inProgress) return { status: "cleanup-failed", failureReason: originalReason };
+
+        let conflictedFilePaths: string[];
+        try {
+            conflictedFilePaths = collectConflictedRebasePaths(worktreePath);
+        } catch (collectionError) {
+            const abortResult = abortRebase(worktreePath);
+            const abortFailure = abortResult.aborted ? null : `abort also failed: ${abortResult.failureReason}`;
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, gitErrorText(collectionError), abortFailure) };
+        }
+
+        const abortResult = abortRebase(worktreePath);
+        if (!abortResult.aborted) {
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, `abort also failed: ${abortResult.failureReason}`) };
+        }
+
+        if (conflictedFilePaths.length === 0) return { status: "cleanup-failed", failureReason: originalReason };
+
+        return { status: "conflicted", conflictedFilePaths };
+    }
 }
 
 export function mergeGroupBranchIntoRepo(

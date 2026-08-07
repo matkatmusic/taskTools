@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
@@ -13,6 +13,7 @@ import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
+    rebaseGroupOntoSource,
     removeWorktreeAndBranch,
     resolveGitlinkConflicts,
 } from "../scripts/mergeTaskWorktrees.ts";
@@ -650,4 +651,95 @@ test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessArchives"
     assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "tasks.json"), []);
     assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "completedTasks.json"), [9102]);
     for (const path of clean.runFiles) assert.equal(existsSync(path), false);
+});
+
+function gitPathExists(worktreePath: string, relativePath: string): boolean {
+    const raw = git(worktreePath, "rev-parse", "--git-path", relativePath).trim();
+    const full = isAbsolute(raw) ? raw : join(worktreePath, raw);
+    return existsSync(full);
+}
+
+test("test_rebaseGroupOntoSourceReportsRebasedCleanForANonConflictingRebase", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "group.txt"), "group work\n");
+    git(group.worktree, "add", "group.txt");
+    git(group.worktree, "commit", "-q", "-m", "group work");
+
+    writeFileSync(join(repoRoot, "main.txt"), "main advance\n");
+    git(repoRoot, "add", "main.txt");
+    git(repoRoot, "commit", "-q", "-m", "advance main");
+
+    const outcome = rebaseGroupOntoSource(group.worktree, sourceBranch);
+    assert.deepEqual(outcome, { status: "rebased-clean" });
+});
+
+test("test_rebaseGroupOntoSourceReportsConflictedPathsAndLeavesNoRebaseInProgress", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    writeFileSync(join(repoRoot, "shared.txt"), "line1\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "add shared.txt");
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "shared.txt"), "line1-from-worktree\n");
+    git(group.worktree, "add", "shared.txt");
+    git(group.worktree, "commit", "-q", "-m", "worktree edit");
+
+    writeFileSync(join(repoRoot, "shared.txt"), "line1-from-main\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "main edit");
+
+    const outcome = rebaseGroupOntoSource(group.worktree, sourceBranch);
+    assert.deepEqual(outcome, { status: "conflicted", conflictedFilePaths: ["shared.txt"] });
+    assert.equal(gitPathExists(group.worktree, "rebase-merge"), false);
+    assert.equal(gitPathExists(group.worktree, "rebase-apply"), false);
+});
+
+test("test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    writeFileSync(join(repoRoot, "shared.txt"), "line1\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "add shared.txt");
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "shared.txt"), "line1-from-worktree\n");
+    git(group.worktree, "add", "shared.txt");
+    git(group.worktree, "commit", "-q", "-m", "worktree edit");
+
+    writeFileSync(join(repoRoot, "shared.txt"), "line1-from-main\n");
+    git(repoRoot, "add", "shared.txt");
+    git(repoRoot, "commit", "-q", "-m", "main edit");
+
+    // Only intercepts abortRebase's "-C <worktree> rebase --abort"; the earlier real rebase call above still hits real git.
+    const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+    const shimDir = mkdtempSync(join(tmpdir(), "fake-git-"));
+    const shimPath = join(shimDir, "git");
+    writeFileSync(
+        shimPath,
+        [
+            "#!/bin/sh",
+            'if [ "$1" = "-C" ] && [ "$3" = "rebase" ] && [ "$4" = "--abort" ]; then',
+            '  echo "fake abort failure" >&2',
+            "  exit 1",
+            "fi",
+            `exec "${realGit}" "$@"`,
+            "",
+        ].join("\n"),
+    );
+    execFileSync("chmod", ["+x", shimPath]);
+
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${shimDir}:${originalPath}`;
+    let outcome;
+    try {
+        outcome = rebaseGroupOntoSource(group.worktree, sourceBranch);
+    } finally {
+        process.env.PATH = originalPath;
+    }
+
+    assert.equal(outcome.status, "cleanup-failed");
+    if (outcome.status === "cleanup-failed") assert.match(outcome.failureReason, /abort also failed: fake abort failure/);
 });
