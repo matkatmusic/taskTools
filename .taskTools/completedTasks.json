@@ -1102,5 +1102,57 @@
       "f71cee3"
     ],
     "closureNote": "Added scripts/addTaskFiles.ts which appends repo-relative paths to a task entry while rejecting absolute and traversal paths without touching tasks.json, plus a bounded missingFiles retry in plan.workflow.js that regenerates the brief and replans once; the retry was reworked to run through an agent call after the sandbox parse test caught direct Node imports in a workflow file."
+  },
+  {
+    "taskNumber": 61,
+    "title": "Have the commit-message subagent collect the staged diff itself instead of receiving it from the main agent",
+    "userDescription": "make the commit-message subagent always get the latest git changes programmatically, instead of from the main agent, because the main agent's repo view goes stale after 1 conversation turn.",
+    "description": "The commit-message subagent must run the git commands itself, at the moment it starts, rather than being handed a diff the main agent captured earlier. The main agent's view of the repository goes stale as soon as anything else is staged, so a diff passed in as prompt text describes a snapshot that may no longer match HEAD's index.\n\nObserved in a real run of this pipeline: the commit-message subagent was launched, and tasks 58, 59 and 60 were staged afterwards. The returned message described neither of them and mischaracterised the code change it did see. Nothing errored — the message was simply wrong, which is the dangerous failure mode, because a wrong-but-plausible commit message gets used.\n\nThe wording that causes this is in skills/tackle-tasks/COMMIT_MESSAGES.md: \"give it the staged diff of every affected repo — collected after staging with git -C <repo> diff --staged ...\". \"Give it\" puts the collection in the caller's hands and makes the diff prompt text. Rewrite so the subagent is instructed to run `git -C <repo> diff --staged -- ':(exclude)*tasks.json' ':(exclude)*completedTasks.json' ':(exclude)plans/archived'` itself, along with whatever it needs to enumerate the affected repos and detect a moved submodule pointer. The caller should pass repository paths, not diff contents.\n\nskills/update-tasks/SKILL.md line 27 has the same defect and is vaguer still — it says to use a Sonnet 5 subagent to summarise \"the work done\" without saying where the diff comes from at all. Point it at COMMIT_MESSAGES.md rather than restating the procedure, so there is one source of truth.\n\nNote that scripts/stage-and-summarize-stop.ts (line 36) inlines COMMIT_MESSAGES.md into a Stop hook, and skills/tackle-tasks/SKILL.md (line 141) does the same, so both pick up the corrected wording automatically with no edit of their own. skills/close-tasks/SKILL.md line 22 is unaffected: it uses a fixed \"Closed tasks [...]\" message and no subagent.",
+    "files": [
+      "skills/tackle-tasks/COMMIT_MESSAGES.md",
+      "skills/update-tasks/SKILL.md",
+      "tests/commitMessageSubagent.test.ts"
+    ],
+    "tests": "in a throwaway repo, stage a change, spawn commit-message subagent, then make the commit with the subagent's message, then make another change, stage that 2nd change, spawn commit-message subagent again, and make sure the subagent's message is different (because the diff contents are different)",
+    "difficulty": 2,
+    "completionDate": "2026-08-06",
+    "commitHashes": [
+      "6ea8cd5",
+      "5a2e78b"
+    ],
+    "closureNote": "Commit-message subagent now runs git diff --staged itself against caller-supplied repo paths and detects moved submodule pointers via raw mode 160000; update-tasks SKILL.md now points at COMMIT_MESSAGES.md as the single source of truth. Codex approved after one plan revision, group-1 tests green."
+  },
+  {
+    "taskNumber": 69,
+    "title": "Give blockedBy entries a reason: turn each entry into { taskNum, reason } and migrate legacy numbers during close-tasks",
+    "userDescription": "blockedBy entries get a 'reason' key: .blockedBy: { .taskNum: number, .reason: string }.",
+    "description": "`blockedBy` is currently an array of bare task numbers, so nothing records WHY a task is blocked. Change every entry to an object `{ taskNum: number, reason: string }`.\n\nRead sites — five scripts, all sharing the same shape (coerce to array, keep only blocker numbers still open, never mutate the file). Each must pull `taskNum` out of the object instead of coercing the element itself:\n- scripts/checkBlockers.ts:17 — `(Array.isArray(task?.blockedBy) ? task.blockedBy : []).map(Number).filter(b => openNumbers.has(b))`\n- scripts/prepareTasks.ts:38-39 — `const blockedBy = Array.isArray(task.blockedBy) ? task.blockedBy : []` then `.filter((number): number is number => openNumbers.has(...))`\n- scripts/runStartup.ts:13-14 — casts to `number[]`, so the type annotation changes too\n- scripts/taskStats.ts:25-26 — `.map(Number).filter(n => openNumbers.has(n))`\n- scripts/getTaskDetails.ts:20 — renders `` [blockedBy: ${t.blockedBy.join(\",\")}] ``; with objects a bare join produces `[object Object]`, so this must map to taskNum, and it is the natural place to surface the new reason text in the listing.\n\nWrite site — scripts/unblockDependents.ts is the only script that mutates `blockedBy` in tasks.json (line 17 `if (!Array.isArray(t.blockedBy)) continue`, line 18 `t.blockedBy.filter(n => !closed.has(Number(n)))`, line 21 `delete t.blockedBy` when empty, line 22 reassign, line 25 the report string). Filtering must compare `closed.has(entry.taskNum)` and must preserve the surviving entries' `reason` values untouched.\n\nMigration decision: convert legacy bare-number entries as a one-time upgrade performed during a `close-tasks` invocation, not as a standalone migration script and not as permanent dual-shape tolerance in the readers. The close path already rewrites tasks.json via unblockDependents.ts (wired in per skills/close-tasks/SKILL.md:20), so the upgrade rides along there: on each close run, any `blockedBy` element that is still a plain number is rewritten to `{ taskNum: <that number>, reason: \"<placeholder>\" }` before the closed-number filter runs. Readers should therefore be written against the object shape only. Note open task #64 is replacing the hand-edited close-tasks flow with a new scripts/closeTasks.ts — this task is blocked on it so the migration lands in the final close-tasks surface rather than in code #64 is about to rewrite.\n\nSchema and docs to update:\n- skills/create-task/template/taskTemplate.json:9 — the canonical schema line, currently `\"blockedBy\": [<task numbers of any tasks that must be completed first; omit the field if none>]`. This is the ONLY schema/doc file that spells out the field shape (grep confirmed no `blockedBy` text in skills/create-task/SKILL.md or hooks/). It must describe the object form and require a reason.\n- skills/close-tasks/SKILL.md:20 — prose says the script \"removes the closed numbers from every remaining task's `blockedBy` array\"; extend to mention the legacy-number upgrade.\n- skills/goal-tasks/SKILL.md:16 and skills/tackle-unblocked-tasks/SKILL.md:3 mention blockedBy only as ordering/emptiness, so they need at most a wording touch-up.\n\nExisting data: two open tasks currently carry bare numbers — task 36 has `blockedBy: [35]` and task 62 has `blockedBy: [61]`. Both must survive the migration with their taskNum intact.\n\nUnrelated name collision — do NOT touch scripts/approvalReadiness.ts or tests/approvalReadiness.test.ts. They have a local `blockedBy` property of type `ApprovalBlockReason[]` on an approval-readiness result object; it is not the task-record field.",
+    "files": [
+      "scripts/checkBlockers.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/runStartup.ts",
+      "scripts/taskStats.ts",
+      "scripts/getTaskDetails.ts",
+      "scripts/unblockDependents.ts",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/close-tasks/SKILL.md",
+      "skills/goal-tasks/SKILL.md",
+      "skills/tackle-unblocked-tasks/SKILL.md",
+      "tests/checkBlockers.test.ts",
+      "tests/prepareTasks.test.ts",
+      "tests/runStartup.test.ts",
+      "tests/taskStats.test.ts",
+      "tests/getTaskDetails.test.ts",
+      "tests/unblockDependents.test.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "Skip a new test, update the existing 'blockedBy' tests to support this new object format. Concretely, the fixtures and assertions already covering blockedBy must be rewritten to the object shape: tests/prepareTasks.test.ts:170,193 (`blockedBy: [1]`), tests/runStartup.test.ts:24 (`blockedBy: [1]`), tests/taskStats.test.ts:28,91 (`blockedBy: [2]`, stale `blockedBy: [99]`, `blockedBy: [1]`), tests/getTaskDetails.test.ts:21,31-32,55,58 (`/OPEN 2: blocked task \\[blockedBy: 1,3\\]/` and `assert.deepEqual(...blockedBy, [1, 3])`), tests/unblockDependents.test.ts:19-20,32,36-38,47 (`blockedBy: [1]`, `blockedBy: [1, 3]`, the field-dropped-when-empty assertion, `assert.deepEqual(...blockedBy, [3])`, `/no blockedBy references/`), tests/checkBlockers.test.ts:20-21 (`blockedBy: [1]`, closed-blocker `blockedBy: [3]`), and tests/mergeTaskWorktrees.test.ts:606 (`blockedBy: []`). Add coverage inside those existing files for the two behaviours the change introduces: a surviving entry keeps its reason string after an unrelated blocker is closed, and a legacy bare-number entry is upgraded to the object form during a close-tasks run.",
+    "difficulty": 4,
+    "completionDate": "2026-08-06",
+    "commitHashes": [
+      "2c58ceb",
+      "0873224"
+    ],
+    "closureNote": "blockedBy entries are now taskNum plus reason objects across all five readers and unblockDependents.ts, with a one-time legacy bare-number migration during close-tasks, plus schema and doc updates and rewritten tests. Codex approved the plan unmodified, all owned tests green."
   }
 ]

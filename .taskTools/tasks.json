@@ -24,7 +24,10 @@
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
     "blockedBy": [
-      35
+      {
+        "taskNum": 35,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ],
     "difficulty": 4
   },
@@ -53,19 +56,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 61,
-    "title": "Have the commit-message subagent collect the staged diff itself instead of receiving it from the main agent",
-    "userDescription": "make the commit-message subagent always get the latest git changes programmatically, instead of from the main agent, because the main agent's repo view goes stale after 1 conversation turn.",
-    "description": "The commit-message subagent must run the git commands itself, at the moment it starts, rather than being handed a diff the main agent captured earlier. The main agent's view of the repository goes stale as soon as anything else is staged, so a diff passed in as prompt text describes a snapshot that may no longer match HEAD's index.\n\nObserved in a real run of this pipeline: the commit-message subagent was launched, and tasks 58, 59 and 60 were staged afterwards. The returned message described neither of them and mischaracterised the code change it did see. Nothing errored — the message was simply wrong, which is the dangerous failure mode, because a wrong-but-plausible commit message gets used.\n\nThe wording that causes this is in skills/tackle-tasks/COMMIT_MESSAGES.md: \"give it the staged diff of every affected repo — collected after staging with git -C <repo> diff --staged ...\". \"Give it\" puts the collection in the caller's hands and makes the diff prompt text. Rewrite so the subagent is instructed to run `git -C <repo> diff --staged -- ':(exclude)*tasks.json' ':(exclude)*completedTasks.json' ':(exclude)plans/archived'` itself, along with whatever it needs to enumerate the affected repos and detect a moved submodule pointer. The caller should pass repository paths, not diff contents.\n\nskills/update-tasks/SKILL.md line 27 has the same defect and is vaguer still — it says to use a Sonnet 5 subagent to summarise \"the work done\" without saying where the diff comes from at all. Point it at COMMIT_MESSAGES.md rather than restating the procedure, so there is one source of truth.\n\nNote that scripts/stage-and-summarize-stop.ts (line 36) inlines COMMIT_MESSAGES.md into a Stop hook, and skills/tackle-tasks/SKILL.md (line 141) does the same, so both pick up the corrected wording automatically with no edit of their own. skills/close-tasks/SKILL.md line 22 is unaffected: it uses a fixed \"Closed tasks [...]\" message and no subagent.",
-    "files": [
-      "skills/tackle-tasks/COMMIT_MESSAGES.md",
-      "skills/update-tasks/SKILL.md",
-      "tests/commitMessageSubagent.test.ts"
-    ],
-    "tests": "in a throwaway repo, stage a change, spawn commit-message subagent, then make the commit with the subagent's message, then make another change, stage that 2nd change, spawn commit-message subagent again, and make sure the subagent's message is different (because the diff contents are different)",
-    "difficulty": 2
-  },
-  {
     "taskNumber": 62,
     "title": "Convert COMMIT_MESSAGES.md into a skill so the staged diff is injected into its body at invocation time",
     "userDescription": "rewrite COMMIT_MESSAGE.md into a skill so the git diff command result can be injected into the skill body, then make every place that references COMMIT_MESSAGE.md reference that skill instead.",
@@ -80,9 +70,6 @@
       "tests/commitMessageSubagent.test.ts"
     ],
     "tests": "in a throwaway repo, stage a change, spawn commit-message subagent, then make the commit with the subagent's message, then make another change, stage that 2nd change, spawn commit-message subagent again, and make sure the subagent's message is different (because the diff contents are different)",
-    "blockedBy": [
-      61
-    ],
     "difficulty": 3
   },
   {
@@ -117,34 +104,12 @@
     ],
     "tests": "Fixture tasks.json with two tasks: one sprawling multi-subsystem task and one one-line mechanical task. Assert rate-task gives the sprawling one a split score >= 5 plus at least two named split points, and the mechanical one a score < 5 with no split points.",
     "difficulty": 4,
-    "blockedBy": [58]
-  },
-  {
-    "taskNumber": 69,
-    "title": "Give blockedBy entries a reason: turn each entry into { taskNum, reason } and migrate legacy numbers during close-tasks",
-    "userDescription": "blockedBy entries get a 'reason' key: .blockedBy: { .taskNum: number, .reason: string }.",
-    "description": "`blockedBy` is currently an array of bare task numbers, so nothing records WHY a task is blocked. Change every entry to an object `{ taskNum: number, reason: string }`.\n\nRead sites — five scripts, all sharing the same shape (coerce to array, keep only blocker numbers still open, never mutate the file). Each must pull `taskNum` out of the object instead of coercing the element itself:\n- scripts/checkBlockers.ts:17 — `(Array.isArray(task?.blockedBy) ? task.blockedBy : []).map(Number).filter(b => openNumbers.has(b))`\n- scripts/prepareTasks.ts:38-39 — `const blockedBy = Array.isArray(task.blockedBy) ? task.blockedBy : []` then `.filter((number): number is number => openNumbers.has(...))`\n- scripts/runStartup.ts:13-14 — casts to `number[]`, so the type annotation changes too\n- scripts/taskStats.ts:25-26 — `.map(Number).filter(n => openNumbers.has(n))`\n- scripts/getTaskDetails.ts:20 — renders `` [blockedBy: ${t.blockedBy.join(\",\")}] ``; with objects a bare join produces `[object Object]`, so this must map to taskNum, and it is the natural place to surface the new reason text in the listing.\n\nWrite site — scripts/unblockDependents.ts is the only script that mutates `blockedBy` in tasks.json (line 17 `if (!Array.isArray(t.blockedBy)) continue`, line 18 `t.blockedBy.filter(n => !closed.has(Number(n)))`, line 21 `delete t.blockedBy` when empty, line 22 reassign, line 25 the report string). Filtering must compare `closed.has(entry.taskNum)` and must preserve the surviving entries' `reason` values untouched.\n\nMigration decision: convert legacy bare-number entries as a one-time upgrade performed during a `close-tasks` invocation, not as a standalone migration script and not as permanent dual-shape tolerance in the readers. The close path already rewrites tasks.json via unblockDependents.ts (wired in per skills/close-tasks/SKILL.md:20), so the upgrade rides along there: on each close run, any `blockedBy` element that is still a plain number is rewritten to `{ taskNum: <that number>, reason: \"<placeholder>\" }` before the closed-number filter runs. Readers should therefore be written against the object shape only. Note open task #64 is replacing the hand-edited close-tasks flow with a new scripts/closeTasks.ts — this task is blocked on it so the migration lands in the final close-tasks surface rather than in code #64 is about to rewrite.\n\nSchema and docs to update:\n- skills/create-task/template/taskTemplate.json:9 — the canonical schema line, currently `\"blockedBy\": [<task numbers of any tasks that must be completed first; omit the field if none>]`. This is the ONLY schema/doc file that spells out the field shape (grep confirmed no `blockedBy` text in skills/create-task/SKILL.md or hooks/). It must describe the object form and require a reason.\n- skills/close-tasks/SKILL.md:20 — prose says the script \"removes the closed numbers from every remaining task's `blockedBy` array\"; extend to mention the legacy-number upgrade.\n- skills/goal-tasks/SKILL.md:16 and skills/tackle-unblocked-tasks/SKILL.md:3 mention blockedBy only as ordering/emptiness, so they need at most a wording touch-up.\n\nExisting data: two open tasks currently carry bare numbers — task 36 has `blockedBy: [35]` and task 62 has `blockedBy: [61]`. Both must survive the migration with their taskNum intact.\n\nUnrelated name collision — do NOT touch scripts/approvalReadiness.ts or tests/approvalReadiness.test.ts. They have a local `blockedBy` property of type `ApprovalBlockReason[]` on an approval-readiness result object; it is not the task-record field.",
-    "files": [
-      "scripts/checkBlockers.ts",
-      "scripts/prepareTasks.ts",
-      "scripts/runStartup.ts",
-      "scripts/taskStats.ts",
-      "scripts/getTaskDetails.ts",
-      "scripts/unblockDependents.ts",
-      "skills/create-task/template/taskTemplate.json",
-      "skills/close-tasks/SKILL.md",
-      "skills/goal-tasks/SKILL.md",
-      "skills/tackle-unblocked-tasks/SKILL.md",
-      "tests/checkBlockers.test.ts",
-      "tests/prepareTasks.test.ts",
-      "tests/runStartup.test.ts",
-      "tests/taskStats.test.ts",
-      "tests/getTaskDetails.test.ts",
-      "tests/unblockDependents.test.ts",
-      "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "tests": "Skip a new test, update the existing 'blockedBy' tests to support this new object format. Concretely, the fixtures and assertions already covering blockedBy must be rewritten to the object shape: tests/prepareTasks.test.ts:170,193 (`blockedBy: [1]`), tests/runStartup.test.ts:24 (`blockedBy: [1]`), tests/taskStats.test.ts:28,91 (`blockedBy: [2]`, stale `blockedBy: [99]`, `blockedBy: [1]`), tests/getTaskDetails.test.ts:21,31-32,55,58 (`/OPEN 2: blocked task \\[blockedBy: 1,3\\]/` and `assert.deepEqual(...blockedBy, [1, 3])`), tests/unblockDependents.test.ts:19-20,32,36-38,47 (`blockedBy: [1]`, `blockedBy: [1, 3]`, the field-dropped-when-empty assertion, `assert.deepEqual(...blockedBy, [3])`, `/no blockedBy references/`), tests/checkBlockers.test.ts:20-21 (`blockedBy: [1]`, closed-blocker `blockedBy: [3]`), and tests/mergeTaskWorktrees.test.ts:606 (`blockedBy: []`). Add coverage inside those existing files for the two behaviours the change introduces: a surviving entry keeps its reason string after an unrelated blocker is closed, and a legacy bare-number entry is upgraded to the object form during a close-tasks run.",
-    "difficulty": 4
+    "blockedBy": [
+      {
+        "taskNum": 58,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
+    ]
   },
   {
     "taskNumber": 70,
@@ -160,10 +125,7 @@
       "tests/checkBlockers.test.ts"
     ],
     "tests": "Feed the main agent a canned set of subagent verdicts (one \"claim is true, still blocked\", one \"claim is false, not blocked\") for a run containing both tasks, and assert the run proceeds with the unblocked task and skips the genuinely blocked one. Define the allowed verdicts in a script file that the subagents use, and have the test import those verdict values from that script rather than hard-coding literal strings, so the fixture and the subagent contract cannot drift apart. Also assert that the disproven blockedBy entry is stripped from tasks.json while the upheld one is left intact, and that a missing or malformed verdict leaves the task blocked.",
-    "difficulty": 4,
-    "blockedBy": [
-      69
-    ]
+    "difficulty": 4
   },
   {
     "taskNumber": 71,
@@ -176,10 +138,7 @@
       "tests/closeTasksBrief.test.ts"
     ],
     "tests": "Byte-for-byte snapshot, but based on the content of the brief at a particular commit hash, and the skill body at an earlier hash (before this skill was refactored). Concretely: pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/close-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
-    "difficulty": 2,
-    "blockedBy": [
-      69
-    ]
+    "difficulty": 2
   },
   {
     "taskNumber": 72,
@@ -194,7 +153,10 @@
     "tests": "Same as task 71: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/create-task/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
     "blockedBy": [
-      58
+      {
+        "taskNum": 58,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -223,7 +185,10 @@
     "tests": "Same as tasks 71, 72 and 73: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/pick-a-task/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
     "blockedBy": [
-      66
+      {
+        "taskNum": 66,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -239,8 +204,14 @@
     "tests": "Same as tasks 71 through 74: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 3,
     "blockedBy": [
-      62,
-      70
+      {
+        "taskNum": 62,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      },
+      {
+        "taskNum": 70,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -254,10 +225,7 @@
       "tests/tackleUnblockedTasksBrief.test.ts"
     ],
     "tests": "Same as tasks 71 through 75: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-unblocked-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
-    "difficulty": 2,
-    "blockedBy": [
-      69
-    ]
+    "difficulty": 2
   },
   {
     "taskNumber": 77,
@@ -285,7 +253,10 @@
     "tests": "Same as tasks 71 through 77: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/update-task-files/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
     "blockedBy": [
-      58
+      {
+        "taskNum": 58,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -301,8 +272,10 @@
     "tests": "Same as tasks 71 through 78: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/update-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
     "blockedBy": [
-      61,
-      62
+      {
+        "taskNum": 62,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -370,7 +343,10 @@
     "tests": "Ruling-to-action table. Drive the loop with each of the four Ruling values and assert the resulting action: 0 approve immediately with no planner re-invocation; 1 planner applies the amendment's fixes then approve, with no second review; 2 planner applies the fixes then a second review runs; 3 reject and stop. Then drive round 2 and assert 0 approves, 1 and 2 apply the fixes and approve without a third review, and 3 rejects. Include the planReviewRuling.ts boundaries — efficacy 100, 92 and 75 on the percentage scale (12+ sections) and fix counts 0, 1, 4 and 5 on the raw-count scale — and assert the review cap of 2 is never exceeded on any path.",
     "difficulty": 4,
     "blockedBy": [
-      82
+      {
+        "taskNum": 82,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
@@ -386,7 +362,10 @@
     "tests": "Hook stdin/stdout table. Feed the hook script JSON payloads on stdin and assert stdout: a single blocked number emits {\"decision\":\"block\"} with the blocker list in the reason; a single unblocked number emits the generated skill body as hookSpecificOutput.additionalContext together with decision block, so the SKILL.md does not also expand; multiple numbers exit 0 silently with no stdout; a prompt that is not a /tackle-tasks invocation exits 0 silently. Mirrors how scripts/viewTaskHook.ts would be tested — build the payload as JSON with `prompt` and `cwd` keys against a temp repo containing a fixture tasks.json.",
     "difficulty": 3,
     "blockedBy": [
-      75
+      {
+        "taskNum": 75,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
     ]
   },
   {
