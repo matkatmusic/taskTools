@@ -548,7 +548,7 @@ test("test_productionShapedNestedFinalizationSucceeds", () => {
 
     assert.deepEqual(
         Object.keys(output).sort(),
-        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets"].sort(),
+        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets", "abortReason"].sort(),
     );
     assert.equal(output.runState.readyForApproval, true);
 
