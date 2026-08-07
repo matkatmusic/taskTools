@@ -1,7 +1,9 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildMergeOutcomes, judgeMergeRun } from "../scripts/runMergePhase.ts";
+import { buildMergeOutcomes, judgeMergeRun, resolveMergeVerdict, type MergePhaseVerdict, type MergeRetryDeps } from "../scripts/runMergePhase.ts";
+import { buildOperationPushOccurrences } from "../scripts/operationBranches.ts";
+import type { CliInput } from "../scripts/mergePipeline.ts";
 
 test("test_buildMergeOutcomesDerivesCountsFromTheStepArrays", () => {
     const outcomes = buildMergeOutcomes({
@@ -75,4 +77,60 @@ test("test_judgeMergeRunReportsBlockedWhenTheScriptExitsCleanButPublishedNothing
 
     assert.equal(verdict.status, "blocked");
     assert.match(verdict.failure?.error ?? "", /published nothing/);
+});
+
+test("test_resolveMergeVerdictRetriesWithPopulatedOperationBranchesOnConfirmedBaseDrift", () => {
+    const occurrence: CliInput["repositoryManifest"]["occurrences"][number] = {
+        occurrenceId: "", checkoutPath: "/tmp/repo", parentOccurrenceId: null, pathInParent: null,
+        gitlinkOid: null, depth: 0, originUrl: "", baseBranch: "main", baseOid: "oldoid",
+        operationBranch: "", childOccurrenceIds: [], testState: "untested",
+    };
+    const [populatedOccurrence] = buildOperationPushOccurrences([occurrence], "oldrun123");
+    const group: CliInput["groups"][number] = { groupId: 1, worktree: "/tmp/repo", branch: "task-group-1", scope: "declared", tasks: [] };
+    const runArguments: CliInput = {
+        repo: "/tmp/repo", typecheckCommand: "true",
+        groups: [group],
+        repositorySources: [{ path: "", sourceBranch: "main" }],
+        runId: "oldrun123",
+        repositoryManifest: { version: 1, occurrences: [populatedOccurrence] },
+    };
+    const deps: MergeRetryDeps = {
+        runScript: () => ({ exitCode: 0, stdout: JSON.stringify({ conflicts: [], publicationTargets: [{ x: 1 }] }), stderr: "" }),
+        generateRunId: () => "newrun456",
+        readRefOid: () => "deadbeef",
+        writeRunArguments: () => {},
+        rebaseGroupOntoSource: () => ({ status: "rebased-clean" }),
+        discoverTestPolicy: () => ({ status: "resolved", policy: { occurrenceId: "", relatedTestCommand: "true", completeSuiteCommand: "true" } }),
+    };
+    const initialVerdict: MergePhaseVerdict = {
+        status: "blocked",
+        result: { abortReason: "the source branch moved past the pinned baseOid" },
+        failure: { repo: "/tmp/repo", failedCommand: "cmd", conflicts: [], error: "" },
+    };
+
+    const verdict = resolveMergeVerdict(initialVerdict, () => runArguments, ["node", "merge"], deps);
+
+    assert.equal(verdict.status, "merged");
+});
+
+test("test_resolveMergeVerdictDoesNotReadRunArgumentsWhenInitialVerdictIsNotConfirmedBaseDrift", () => {
+    const mergedVerdict: MergePhaseVerdict = { status: "merged", result: { conflicts: [], publicationTargets: [{ x: 1 }] }, failure: null };
+    let readCount = 0;
+    const readRunArguments = () => {
+        readCount++;
+        throw new Error("must not read run-arguments.json: mergePipeline.ts deletes it after a successful merge");
+    };
+    const deps: MergeRetryDeps = {
+        runScript: () => { throw new Error("must not run the merge command again"); },
+        generateRunId: () => "unused",
+        readRefOid: () => "unused",
+        writeRunArguments: () => {},
+        rebaseGroupOntoSource: () => ({ status: "rebased-clean" }),
+        discoverTestPolicy: () => ({ status: "resolved", policy: { occurrenceId: "", relatedTestCommand: "true", completeSuiteCommand: "true" } }),
+    };
+
+    const verdict = resolveMergeVerdict(mergedVerdict, readRunArguments, ["node", "merge"], deps);
+
+    assert.equal(readCount, 0);
+    assert.equal(verdict, mergedVerdict);
 });
