@@ -39,17 +39,36 @@ export function copyPlanToPlansFolder(plan: string, sourcePath: string): string 
 export const reviewerBrief = (plan: string, target: string, amendment: string) => `
 review ${plan} against ${target}.
 
+## What to look for
+
 check ${plan} for gotchas/failures/bugs/incorrect assumptions/errors/false statements/illusions/lies, by reading any file ${plan} references and any file ${plan} claims it will change — verify every claim against the source, never against ${plan}'s own account of it.
 
-Ignore file-size claims or line-count claims, as they are not worth flagging. 
+## Exclusions
+
+Ignore, and do not flag, the following type of (small) issues you may find: 
+- file-size claims or line-count claims, as they are not worth flagging. 
+- spelling errors, grammar errors, style issues, trivial formatting issues.
+- small changes to do not impact the intent of the plan, such as changing a variable name, rewording a comment, or reordering lines in a file.  
+
+If you find a small issue that does impact the intent of the plan, flag it.
+
+## Permissions
 
 ${plan}, the codebase, and git state are read-only — do not edit code, do not edit ${plan}, do not stage, do not commit. The one file you may create or modify is ${amendment}.
 
+## Handling previous amendments
+
 if ${amendment} already exists, this is not your first review of ${plan}.  The previous review's issues and durable fixes are already incorporated into ${plan}.  Clear (or delete) ${amendment} before you start, so you can write ${amendment} from scratch.  Do not reference any of your previous amendment findings from your context or memory when you draft your new amendment as they may be stale.
+
+## Providing Evidence
 
 Every flagged issue must carry evidence: a citation listing each repo-relative file path followed by \`:\` and the line numbers you read, either a single line or an inclusive \`start-end\` range — as in \`[path/to/file.ts:12-40, other/file.ts:8]\`, meaning lines 12 through 40 of the first file and line 8 of the second. A command you ran and its output counts as evidence too. An issue you cannot evidence does not go in the report.
 
-If a section of ${plan} holds up, say so and move on. Do not manufacture issues to fill the report — "no issues found" is a valid and useful result.
+## Reporting sections that hold up
+
+If a section of ${plan} holds up to your scrutiny, say so and move on. Do not manufacture issues to fill the report — "no issues found" is a valid and useful result.
+
+## Create the Ruling
 
 Once you have settled on your list of durable fixes, count them and run:
 
@@ -57,7 +76,9 @@ Once you have settled on your list of durable fixes, count them and run:
 
 It prints three lines — Sections, Efficacy, Ruling. Copy them verbatim into the template below. Do not compute the sections, efficacy, or ruling yourself, and do not reword what it prints.
 
-amendment format — write ${amendment} using exactly this template:
+## Amendment template
+
+write ${amendment} using exactly this template:
 
 \`\`\`markdown
 # Amendment: <plan title>
