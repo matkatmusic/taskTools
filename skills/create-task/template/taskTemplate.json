@@ -1,5 +1,6 @@
 {
   "taskNumber": <the injected number above>,
+  "version": "<the injected commit hash above>",
   "title": "<short summary of the task>",
   "userDescription": "<$ARGUMENTS verbatim, exactly as typed — never edited, summarized, or reworded>",
   "description": "<only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions gathered while writing the task; must not restate the raw prompt>",
