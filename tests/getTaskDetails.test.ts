@@ -57,3 +57,11 @@ test("full details include the blockedBy field", () => {
   assert.match(out, /task 2 \(OPEN\)/);
   assert.deepEqual(JSON.parse(out.slice(out.indexOf("{"))).blockedBy, [1, 3]);
 });
+
+test("findTask resolves open first, falls back to completed, and importing runs no CLI", async () => {
+  const root = makeProjectRoot();
+  const { findTask } = await import("../scripts/getTaskDetails.ts");
+  assert.equal(findTask(1, root)?.title, "unblocked task");
+  assert.equal(findTask(3, root)?.title, "done task");
+  assert.equal(findTask(99, root), undefined);
+});

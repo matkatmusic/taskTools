@@ -36,6 +36,7 @@ argument-hint: "<task description>"
 ---
 
 - taskNumber to use: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/nextTaskNumber.ts"`
+- version to use: !`git rev-parse HEAD`
 
 Task described by the user: $ARGUMENTS
 
@@ -53,6 +54,8 @@ Populate `userDescription` with $ARGUMENTS verbatim, exactly as typed — never 
 
 Populate `files` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
 
+Populate `version` with the injected commit hash above. If that value is not a 40-character hexadecimal string — for example when `git rev-parse HEAD` failed because the repository has no commits yet — omit the field entirely.
+
 If the request names the source note/handoff file(s) the task came from (e.g. an `update-tasks` harvest), also include `"handoffFilePaths": [<those repo-relative paths>]` in the object; otherwise omit the field.
 
 If `specs/SPEC.md` exists and this task belongs to one of its spec items, append the task number to that item's `Tasks:` line.
@@ -66,3 +69,71 @@ Finally, confirm to the user: the task number and title that were added.
 ### tests/splitTask.test.ts
 
 (missing: file not found on disk)
+
+---
+
+## Reference signatures (read-only — do NOT edit these files)
+
+These are the exact exports you may call from `scripts/splitTask.ts`. They are
+verified against the files on disk as of this run. Do not guess beyond them,
+and do not add these files to the owned list — you may import them, not edit them.
+
+### scripts/taskFiles.ts
+
+```ts
+export type TaskRecord = { taskNumber: number; title?: string; description?: string } & Record<string, unknown>;
+export type TaskFilePair = { tasksPath: string; completedTasksPath: string };
+export function resolveTaskFiles(root: string): TaskFilePair;
+export function seedTaskFilesIfAbsent(pair: TaskFilePair): void;
+export function leadingTaskNumbers(args: string[]): number[];
+export function readTaskFile(path: string): TaskRecord[];
+```
+
+`resolveTaskFiles` walks up the directory tree to locate `.taskTools/tasks.json`,
+so passing a temp fixture root in tests is supported.
+
+### scripts/getTaskDetails.ts
+
+```ts
+export function describeTask(taskNumber: number, openTasks: TaskRecord[], completedTasks: TaskRecord[]): string;
+export function listTaskTitles(tag: string, tasks: TaskRecord[]): string[];
+export function readTaskLists(projectRoot?: string): { openTasks: TaskRecord[]; completedTasks: TaskRecord[] };
+export function findTask(taskNumber: number, projectRoot?: string): TaskRecord | undefined;
+export function taskDetailsReport(taskNumbers: number[], projectRoot?: string): string;
+```
+
+`findTask(taskNumber, projectRoot)` is the one to use for loading the parent task
+object. It checks open tasks first, then completed tasks, and returns `undefined`
+when the number is in neither file. `projectRoot` defaults to `process.cwd()`.
+Importing this module runs no CLI code — the command-line entry point is guarded
+by `if (process.argv[1] && import.meta.url === \`file://${process.argv[1]}\`)`.
+
+### scripts/closeTasks.ts
+
+```ts
+export interface CloseTasksResult {
+  closed: number[];
+  skipped: number[];
+}
+
+export function closeTasks(
+  taskNumbers: number[],
+  closureNote: string | Record<number, string>,
+  projectRoot?: string,
+  commitHashes?: string[] | Record<number, string[]>,
+): CloseTasksResult;
+```
+
+`projectRoot` defaults to `process.cwd()` and is the third positional argument,
+so fixture tests can point it at a temp directory. `closeTasks` writes
+`completionDate` (local calendar date), `closureNote`, and `commitHashes` onto
+each closed record, splices it out of `tasks.json`, and appends it to
+`completedTasks.json`. It returns which numbers it closed and which it skipped
+(already completed, or not found in either file).
+
+## Correction to the task description
+
+The task description says `scripts/getTaskDetails.ts` "already resolves a task
+object by number and should be reused". That is now true — use `findTask` above.
+It was previously a pure CLI script with no exports; the exports listed above
+were added for this task. The CLI behaviour is unchanged.
