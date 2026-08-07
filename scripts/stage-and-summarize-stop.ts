@@ -1,7 +1,7 @@
 // Stop hook: reflow wrapped comments in this session's edited files, then flag any still-unstaged ones.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { emitReflows, reflowFile } from "./reflowComments.ts";
 
 const input = JSON.parse(readFileSync(0, "utf8"));
@@ -32,14 +32,10 @@ if (emitReflows("Stop", reflowed, sid)) process.exit(0);
 
 if (!unstaged) process.exit(0);
 
-const instructionsPath = resolve(
-  import.meta.dirname, "..", "skills", "tackle-tasks", "COMMIT_MESSAGES.md",
-);
-
 process.stdout.write(JSON.stringify({
   hookSpecificOutput: {
     hookEventName: "Stop",
     additionalContext:
-      `Files were changed, read ${instructionsPath} and follow those directions.`,
+      "Files were changed. Stage the changes made this session in each affected repo or submodule, but do not commit; then invoke the commit-message skill.",
   },
 }));
