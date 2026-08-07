@@ -9,6 +9,7 @@ import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { groupTasksByFileOverlap } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
+import { buildOperationPushOccurrences } from "./operationBranches.ts";
 
 export type PreparedTask = {
     number: number;
@@ -207,13 +208,15 @@ function runAsCli(): void {
         process.exit(1);
     }
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
+    const runId = generateRunId();
     const manifest = loadRepositoryManifest(repoRoot);
+    manifest.occurrences = buildOperationPushOccurrences(manifest.occurrences, runId);
     const groups = groupTasksByFileOverlap(tasks, manifest);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
     const pipelineArguments = {
         ...workflowArguments,
-        runId: generateRunId(),
+        runId,
         startTimestamp: new Date().toISOString(),
         mergeScript: resolveMergeScriptPath(),
         repositoryManifest: manifest,

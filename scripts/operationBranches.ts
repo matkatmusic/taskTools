@@ -1,6 +1,8 @@
 // Creates per-occurrence operation branches at their recorded base OID, checks them out, and records the branch name.
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import type { RepositoryOccurrence } from "./repositoryManifest.ts";
+import { normalizeRepositoryIdentity } from "./submoduleUrlIdentity.ts";
 
 export class OperationBranchSetupError extends Error {}
 export class OperationBranchConflictError extends Error {}
@@ -37,6 +39,17 @@ function validateOccurrencesReadyForBranching(occurrences: RepositoryOccurrence[
 export function operationBranchName(runId: string, occurrence: RepositoryOccurrence): string {
     const occurrenceSegment = occurrence.occurrenceId === "" ? "root" : occurrence.occurrenceId;
     return `operations/${runId}/${occurrenceSegment}`;
+}
+
+export function sanitizeSegment(segment: string): string {
+    const cleaned = segment.replace(/[^A-Za-z0-9_-]/g, "-") || "seg";
+    return `${cleaned}-${createHash("sha256").update(segment).digest("hex").slice(0, 8)}`;
+}
+
+export function identityKey(occurrence: RepositoryOccurrence): string {
+    if (occurrence.originUrl === "") return `blank:${occurrence.occurrenceId}`;
+    const parsed = normalizeRepositoryIdentity(occurrence.originUrl);
+    return parsed ? `parsed:${parsed.host}/${parsed.owner}/${parsed.repository}` : `opaque:${occurrence.originUrl}`;
 }
 
 function branchOid(repoPath: string, branchName: string): string | null {
@@ -76,11 +89,14 @@ export function setUpOperationBranches(
 export function buildOperationPushOccurrences(
     occurrences: RepositoryOccurrence[],
     runId: string,
-    segmentByOccurrenceId: Map<string, string>,
 ): RepositoryOccurrence[] {
+    const logicalIdByIdentity = new Map<string, string>();
+    for (const occurrence of occurrences) {
+        const key = identityKey(occurrence);
+        if (!logicalIdByIdentity.has(key)) logicalIdByIdentity.set(key, sanitizeSegment(key));
+    }
     return occurrences.map((occurrence) => {
-        const segment = segmentByOccurrenceId.get(occurrence.occurrenceId);
-        if (segment === undefined) throw new Error(`no operation-branch segment for occurrence "${occurrence.occurrenceId}"`);
-        return { ...occurrence, operationBranch: `operations/${runId}/${segment}` };
+        const logicalId = logicalIdByIdentity.get(identityKey(occurrence))!;
+        return { ...occurrence, operationBranch: `operations/${runId}/${sanitizeSegment(logicalId)}` };
     });
 }

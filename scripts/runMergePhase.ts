@@ -183,6 +183,17 @@ export function coordinateMergeRetry(
     return retryVerdict;
 }
 
+export function resolveMergeVerdict(
+    initialVerdict: MergePhaseVerdict,
+    readRunArguments: () => CliInput,
+    mergeCommand: string[],
+    deps: MergeRetryDeps,
+): MergePhaseVerdict {
+    if (!confirmedBaseDrift(initialVerdict)) return initialVerdict;
+    // Re-read only here: a successful merge deletes run-arguments.json, so an unconditional read would throw.
+    return coordinateMergeRetry(readRunArguments(), mergeCommand, deps);
+}
+
 function runAsCli(): void {
     const repoRoot = process.cwd();
     const stepsFile = resolveStepOutputsPath(repoRoot);
@@ -191,7 +202,6 @@ function runAsCli(): void {
     mkdirSync(dirname(outcomesFile), { recursive: true });
     writeFileSync(outcomesFile, JSON.stringify(buildMergeOutcomes(JSON.parse(readFileSync(stepsFile, "utf8")))));
     const runArgumentsPath = resolveRunArgumentsPath(repoRoot);
-    const runArguments: CliInput = JSON.parse(readFileSync(runArgumentsPath, "utf8"));
     const command = ["node", "--no-inspect", resolveMergeScriptPath(), "--run", runArgumentsPath, outcomesFile];
     const deps: MergeRetryDeps = {
         runScript,
@@ -202,7 +212,12 @@ function runAsCli(): void {
         discoverTestPolicy,
     };
     const initialVerdict = judgeMergeRun(runScript(command), repoRoot, command.join(" "));
-    const verdict = confirmedBaseDrift(initialVerdict) ? coordinateMergeRetry(runArguments, command, deps) : initialVerdict;
+    const verdict = resolveMergeVerdict(
+        initialVerdict,
+        () => JSON.parse(readFileSync(runArgumentsPath, "utf8")),
+        command,
+        deps,
+    );
     process.stdout.write(JSON.stringify(verdict));
 }
 

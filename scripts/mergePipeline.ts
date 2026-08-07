@@ -8,7 +8,7 @@ import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./t
 import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization, finalizeApprovedRun, computeApprovalDigest, type OccurrenceSnapshot, type RunState, type ApprovalDigestInput } from "./approvalGate.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
 import { validateRepositoryManifest, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
-import { buildOperationPushOccurrences } from "./operationBranches.ts";
+import { buildOperationPushOccurrences, identityKey, sanitizeSegment } from "./operationBranches.ts";
 import { normalizeRepositoryIdentity, type RepositoryIdentity } from "./submoduleUrlIdentity.ts";
 import type { LogicalRepository } from "./logicalRepository.ts";
 import { prepareNoFfMerge } from "./repositoryIntegration.ts";
@@ -31,10 +31,6 @@ type ConsolidationOutcome = { preparedIntegrationOid: string; canonicalRepoRoot:
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
-function sanitizeSegment(segment: string): string {
-    const cleaned = segment.replace(/[^A-Za-z0-9_-]/g, "-") || "seg";
-    return `${cleaned}-${createHash("sha256").update(segment).digest("hex").slice(0, 8)}`;
-}
 function digestIds(ids: string[]): string { return createHash("sha256").update([...ids].sort().join("\n")).digest("hex"); }
 function parseMergeTreeConflicts(stdout: string): string[] {
     const [, ...lines] = (stdout.split("\n\n")[0] ?? "").split("\n");
@@ -51,11 +47,6 @@ function buildCoordinates(repo: string, manifest: RepositoryManifest): Map<strin
         coordinates.set(occurrence.occurrenceId, { repoRoot, relativePath: relativePath === "." ? "" : relativePath });
     }
     return coordinates;
-}
-function identityKey(occurrence: RepositoryOccurrence): string {
-    if (occurrence.originUrl === "") return `blank:${occurrence.occurrenceId}`;
-    const parsed = normalizeRepositoryIdentity(occurrence.originUrl);
-    return parsed ? `parsed:${parsed.host}/${parsed.owner}/${parsed.repository}` : `opaque:${occurrence.originUrl}`;
 }
 function buildLogicalGroups(manifest: RepositoryManifest): LogicalGroup[] {
     const byKey = new Map<string, string[]>();
@@ -208,8 +199,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             git(canonicalRepoRoot, "update-ref", integrationRef, result.preparedIntegrationOid);
             consolidations.set(logicalGroup.logicalId, { preparedIntegrationOid: result.preparedIntegrationOid, canonicalRepoRoot, canonicalRefName: `refs/heads/${canonicalOccurrence.baseBranch}`, recordedBaseOid: canonicalOccurrence.baseOid, integrationRef });
         }
-        const operationBranchSegments = new Map(logicalGroups.flatMap((group) => group.occurrenceIds.map((id) => [id, sanitizeSegment(group.logicalId)] as const)));
-        const operationPushOccurrences = buildOperationPushOccurrences(manifest.occurrences, runId, operationBranchSegments);
+        const operationPushOccurrences = buildOperationPushOccurrences(manifest.occurrences, runId);
         const operationPushLogicalRepositories: LogicalRepository[] = logicalGroups.map((group) => ({
             normalizedIdentity: normalizeRepositoryIdentity(occurrenceById.get(group.canonicalOccurrenceId)!.originUrl) ?? ({ host: "opaque", owner: "opaque", repository: group.logicalId } as RepositoryIdentity),
             occurrenceIds: group.occurrenceIds, selectedBaseOccurrenceId: group.canonicalOccurrenceId, canonicalOccurrenceId: group.canonicalOccurrenceId,
