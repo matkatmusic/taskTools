@@ -10,6 +10,7 @@ import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.t
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
+import type { ArchiveRequest } from "../scripts/taskArchival.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -549,7 +550,7 @@ test("test_productionShapedNestedFinalizationSucceeds", () => {
 
     assert.deepEqual(
         Object.keys(output).sort(),
-        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets", "abortReason"].sort(),
+        ["merged", "conflicts", "testReceipts", "reviewHandoffs", "occurrenceDigests", "runState", "publicationTargets", "abortReason", "archiveRequest"].sort(),
     );
     assert.equal(output.runState.readyForApproval, true);
 
@@ -591,8 +592,9 @@ function buildNestedFixtureWithTask(taskNumber: number) {
 
     const sourceBranch = currentBranchName(rootPath);
     const submoduleSourceBranch = currentBranchName(join(rootPath, "vendor"));
+    const taskFiles = ["new.txt", "vendor/vendor-new.txt"];
     const group = makeGroup(rootPath, 1);
-    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: [] }];
+    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: taskFiles }];
     writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");
@@ -604,7 +606,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     mkdirSync(taskToolsDir, { recursive: true });
     writeFileSync(
         join(taskToolsDir, "tasks.json"),
-        JSON.stringify([{ taskNumber, title: "t", description: "d", files: [], difficulty: 1, blockedBy: [] }]) + "\n",
+        JSON.stringify([{ taskNumber, title: "t", description: "d", files: taskFiles, difficulty: 1, blockedBy: [] }]) + "\n",
     );
     writeFileSync(join(taskToolsDir, "completedTasks.json"), "[]\n");
     const runFiles = [resolveRunArgumentsPath(rootPath), resolveRunOutcomesPath(rootPath), resolveStepOutputsPath(rootPath)];
@@ -625,7 +627,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     return { rootPath, cliInput, runFiles, taskToolsDir };
 }
 
-function runPipelineCli(cliInput: unknown): { publicationTargets: unknown[] } {
+function runPipelineCli(cliInput: unknown): { publicationTargets: unknown[]; archiveRequest: ArchiveRequest | null } {
     return JSON.parse(execFileSync("node", ["--no-inspect", SCRIPT, JSON.stringify(cliInput)], { encoding: "utf8" }));
 }
 
@@ -633,23 +635,31 @@ function readTaskNumbers(taskToolsDir: string, fileName: string): number[] {
     return JSON.parse(readFileSync(join(taskToolsDir, fileName), "utf8")).map((task: { taskNumber: number }) => task.taskNumber);
 }
 
-test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessArchives", () => {
+// Task 112: pipeline no longer archives; it emits archiveRequest for a later step to act on.
+test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessEmitsArchiveRequest", () => {
     // Another writer moves the base ref after the manifest is captured, so publication must refuse.
     const raced = buildNestedFixtureWithTask(9101);
     writeFileSync(join(raced.rootPath, "raced.txt"), "another writer\n");
     git(raced.rootPath, "add", "raced.txt");
     git(raced.rootPath, "commit", "-q", "-m", "someone else moved the base");
 
-    assert.deepEqual(runPipelineCli(raced.cliInput).publicationTargets, []);
+    const racedOutput = runPipelineCli(raced.cliInput);
+    assert.deepEqual(racedOutput.publicationTargets, []);
+    assert.equal(racedOutput.archiveRequest, null);
     assert.deepEqual(readTaskNumbers(raced.taskToolsDir, "tasks.json"), [9101]);
     assert.deepEqual(readTaskNumbers(raced.taskToolsDir, "completedTasks.json"), []);
     for (const path of raced.runFiles) assert.equal(existsSync(path), true);
 
-    // Nothing races the base ref, so the task is archived and the run inputs are cleaned up.
+    // Nothing races the base ref, so publication succeeds; the pipeline still leaves archiving to the caller.
     const clean = buildNestedFixtureWithTask(9102);
-    assert.notDeepEqual(runPipelineCli(clean.cliInput).publicationTargets, []);
-    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "tasks.json"), []);
-    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "completedTasks.json"), [9102]);
+    const cleanOutput = runPipelineCli(clean.cliInput);
+    assert.notDeepEqual(cleanOutput.publicationTargets, []);
+    assert.deepEqual(cleanOutput.archiveRequest?.publishedTaskNumbers, [9102]);
+    assert.equal(cleanOutput.archiveRequest?.mergeResults.length, 1);
+    assert.equal(cleanOutput.archiveRequest?.mergeResults[0].taskNumber, 9102);
+    assert.equal(cleanOutput.archiveRequest?.mergeResults[0].fullyPublished, true);
+    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "tasks.json"), [9102]);
+    assert.deepEqual(readTaskNumbers(clean.taskToolsDir, "completedTasks.json"), []);
     for (const path of clean.runFiles) assert.equal(existsSync(path), false);
 });
 
