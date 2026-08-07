@@ -35,8 +35,8 @@ export type WorkflowArguments = {
 const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
 
 function getOpenBlockers(task: TaskRecord, openNumbers: Set<number>): number[] {
-    const blockedBy = Array.isArray(task.blockedBy) ? task.blockedBy : [];
-    return blockedBy.filter((number): number is number => openNumbers.has(number as number));
+    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNum: number }[]) : [];
+    return blockedBy.map((entry) => entry.taskNum).filter((number) => openNumbers.has(number));
 }
 
 // Never defaults to every open task: this creates worktrees and fans out agents.

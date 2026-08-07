@@ -25,7 +25,7 @@ test("counts open and completed tasks separately", () => {
 });
 
 test("a task is blocked only by blockers that are still open", () => {
-    const open = [openTask(1, { blockedBy: [2] }), openTask(2), openTask(3, { blockedBy: [99] })];
+    const open = [openTask(1, { blockedBy: [{ taskNum: 2, reason: "needs task 2" }] }), openTask(2), openTask(3, { blockedBy: [{ taskNum: 99, reason: "needs task 99" }] })];
     const stats = computeTaskStats(open, [], TODAY);
     assert.equal(stats.blockedCount, 1);
     assert.equal(stats.unblockedCount, 2);
@@ -88,7 +88,7 @@ test("group forecast joins tasks sharing a file and separates disjoint ones", ()
 test("group forecast excludes blocked tasks and tasks declaring no files", () => {
     const open = [
         openTask(1, { files: ["a.ts"] }),
-        openTask(2, { files: ["b.ts"], blockedBy: [1] }),
+        openTask(2, { files: ["b.ts"], blockedBy: [{ taskNum: 1, reason: "needs task 1" }] }),
         openTask(3),
     ];
     const stats = computeTaskStats(open, [], TODAY);

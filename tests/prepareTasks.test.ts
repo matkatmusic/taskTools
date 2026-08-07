@@ -167,7 +167,7 @@ test("test_selectRequestedTasksRefusesWhenARequestedNumberIsNotOpen", () => {
 
 test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
     // Setup: task 2 is blocked by open task 1; both are requested.
-    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [1], files: ["b.ts"] }];
+    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNum: 1, reason: "needs task 1" }], files: ["b.ts"] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
     // Verification: only the unblocked task survives, so no worktree is built for blocked work.
@@ -190,7 +190,7 @@ test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
 
 test("test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask", () => {
     // Setup: task 2 is blocked by open task 1 and declares no files; task 1 declares files.
-    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [1] }];
+    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNum: 1, reason: "needs task 1" }] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
     // Verification: the blocked task is dropped before the files check, not stopping the run.

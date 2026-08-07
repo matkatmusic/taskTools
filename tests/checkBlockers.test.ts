@@ -1,7 +1,4 @@
-// Behavioral checks for checkBlockers.ts: a requested task is BLOCKED only when
-// its blockedBy lists task numbers still present in tasks.json; blockers that
-// were already closed don't count.
-// Run with: node --test tests/*.test.ts
+// checkBlockers.ts: a task is BLOCKED only by still-open blockers; closed ones don't count. Run: node --test tests/*.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -17,8 +14,8 @@ function makeProjectRoot(): string {
     join(root, "tasks.json"),
     JSON.stringify([
       { taskNumber: 1, title: "open blocker" },
-      { taskNumber: 2, title: "blocked by open task", blockedBy: [1] },
-      { taskNumber: 4, title: "blocked only by closed task", blockedBy: [3] },
+      { taskNumber: 2, title: "blocked by open task", blockedBy: [{ taskNum: 1, reason: "needs task 1" }] },
+      { taskNumber: 4, title: "blocked only by closed task", blockedBy: [{ taskNum: 3, reason: "needs task 3" }] },
     ]),
   );
   writeFileSync(join(root, "completedTasks.json"), JSON.stringify([{ taskNumber: 3, title: "closed blocker" }]));
