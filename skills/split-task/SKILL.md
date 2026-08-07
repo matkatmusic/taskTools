@@ -4,9 +4,9 @@ description: Break an oversized open task into N smaller child tasks at reasonab
 argument-hint: "<taskNum> <numSplits> [guidance]"
 ---
 
-- parent task and file groups: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" info $1 $2`
+- parent task and file groups: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" info $ARGUMENTS[0] $ARGUMENTS[1]`
 
-Parent task number: $1. Number of children to create: $2.
+Parent task number: $ARGUMENTS[0]. Number of children to create: $ARGUMENTS[1].
 
 Guidance (optional): take the raw `$ARGUMENTS` for this invocation and strip its first two whitespace-delimited tokens (the task number and the split count) from the front. Whatever text remains, with its internal spacing preserved exactly, is the guidance string — do not use the third positional substitution, which captures only the first remaining word and would silently truncate a multi-word guidance. If nothing remains after stripping the first two tokens, there is no guidance for this invocation.
 
