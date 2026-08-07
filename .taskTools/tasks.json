@@ -642,7 +642,9 @@
       "scripts/runMergePhase.ts",
       "scripts/recoveryRefs.ts",
       "scripts/runConsolidation.ts",
-      "scripts/repositoryIntegration.ts"
+      "scripts/repositoryIntegration.ts",
+      "scripts/basePublication.ts",
+      "tests/basePublication.test.ts"
     ],
     "tests": "skip",
     "difficulty": 6
