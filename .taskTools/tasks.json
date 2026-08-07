@@ -447,5 +447,36 @@
         "reason": "briefs and plans can only be written into a task's own worktree once task 86 has restructured tackle-tasks to run each task in its own workflow and worktree; until then there is no stable per-task worktree to root briefFile and planFile at"
       }
     ]
+  },
+  {
+    "taskNumber": 106,
+    "version": "1491aefba42080e34cf43ee0bdb16deabbfc5057",
+    "title": "Stop stagedDiffs.ts excluding tasks.json so a task-only change still produces a commit message",
+    "userDescription": "the commit-message skill deliberately excludes tasks.json, so it will see an empty diff. So a task-only change produces no message at all, and there's no subagent to spawn because there's nothing to summarize. the empty-diff case above means any close-tasks or create-task run gets a blank commit message.  This causes the main agent to produce the diff message.  fix: update the skill to stop excluding tasks.json.  Blocked by the task to inject the diff directly into the subagents promt.",
+    "description": "The exclusion lives in exactly one place: `EXCLUDES` at scripts/stagedDiffs.ts:5, holding `:(exclude)*tasks.json`, `:(exclude)*completedTasks.json` and `:(exclude)plans/archived`. It is spread into both git invocations in that file — the diff itself at :8 and the `--raw -z` scan for moved submodule pointers at :12. Only the :8 use matters for this fix; the :12 use is a pathspec on a submodule-pointer scan, where task files are irrelevant either way, so unexcluding is harmless there.\n\nThe blank result is produced at stagedDiffs.ts:38, `if (diff.trim().length > 0)`, which suppresses the entire `=== repo ===` section when a repo's filtered diff is empty. A staging set consisting only of task files therefore yields zero bytes on stdout, and skills/commit-message/SKILL.md:10 — which instructs the agent to hand \"the diffs above\" to a Sonnet 5 subagent — has nothing to hand over. Confirmed by direct observation: several task-only sessions in a row produced no commit message at all.\n\nHistory of the exclusion: it is inherited verbatim from the pre-skill era. The identical three-pathspec list appeared in skills/tackle-tasks/COMMIT_MESSAGES.md, which task 62 deleted when it converted that document into skills/commit-message/. The list was never re-justified for the skill; it was copied.\n\nDecision and open point: remove `:(exclude)*tasks.json` only, as the user specified. `:(exclude)*completedTasks.json` is a judgment call the implementer should settle and state — completedTasks.json is 222KB and its diffs are proportionally large, but a close-tasks run stages BOTH files simultaneously, so leaving it excluded means such a run is summarised from the removal side alone. That is still a non-empty, summarisable diff, so it is not a blocker either way. `plans/archived` should stay excluded; that directory does not exist and the entry is inert.\n\nSize is not a concern for tasks.json itself: the file is 134KB but a single create-task addition diffs to roughly 18 lines and a closure to a similar size, because the array is pretty-printed one field per line.",
+    "files": [
+      "scripts/stagedDiffs.ts",
+      "tests/stagedDiffs.test.ts"
+    ],
+    "tests": "In a throwaway git repo: stage a change to .taskTools/tasks.json and nothing else, run stagedDiffs.ts, and assert stdout is non-empty and names the tasks.json path — the case that produces a blank commit message today. Add a second case staging both tasks.json and completedTasks.json together, which is what a close-tasks run does, and assert the output is still not blank. Keep a negative case proving the change did not unexclude everything: stage a file under plans/archived alone and assert stdout is still empty.",
+    "difficulty": 2,
+    "blockedBy": [
+      {
+        "taskNum": 107,
+        "reason": "unexcluding tasks.json makes the injected diff larger, and today that diff lands in the main agent's context via the skill body before reaching the subagent; task 107 moves the injection into the subagent's own prompt first, so this change adds bytes to the subagent rather than to the orchestrator"
+      }
+    ]
+  },
+  {
+    "taskNumber": 107,
+    "version": "1491aefba42080e34cf43ee0bdb16deabbfc5057",
+    "title": "Inject the staged diff into the commit-message subagent's own prompt instead of the skill body",
+    "userDescription": "inject the diff directly into the subagents prompt",
+    "description": "skills/commit-message/SKILL.md:8 runs `!`node \"${CLAUDE_PLUGIN_ROOT}/scripts/stagedDiffs.ts\"`` in the skill body, so the full staged diff is expanded into the ORCHESTRATING agent's context. Line 10 then tells that agent to \"pass it the diffs above\" to a single Sonnet 5 subagent. The whole diff is therefore paid for twice — once in the main context, once in the subagent's — and the main agent, having read it, is positioned to write the message itself rather than delegating.\n\nThis is a regression of already-completed work. Task 61 (\"Have the commit-message subagent collect the staged diff itself instead of receiving it from the main agent\", closed 2026-08-06) explicitly moved diff collection into the subagent. Task 62 (\"Convert COMMIT_MESSAGES.md into a skill so the staged diff is injected into its body at invocation time\", closed 2026-08-07) then re-introduced body injection, undoing 61's benefit. The skill is the survivor, so the fix belongs in the skill rather than by reverting 62.\n\nFix shape: drop the `!` command from the skill body and instead inline the command into the subagent's prompt, so the subagent runs `scripts/stagedDiffs.ts` itself with Bash and the bytes never enter the orchestrator. There is a working precedent for exactly this move in this repo — commit 72a6c40 rewrote the planner's missing-files retry to inline its commands into the agent's own prompt instead of running them with execFileSync, and skills/tackle-tasks/plan.workflow.js:24-34 shows the resulting prompt shape.\n\nConstraint to preserve: the subagent must still be told which repos to cover. stagedDiffs.ts already walks the root repo plus every submodule with a moved pointer (stagedDiffs.ts:26-48) and labels each section `=== label ===`, so having the subagent run the script keeps that behaviour without the orchestrator enumerating repos. SKILL.md:11 (a parent repo whose only change is a submodule pointer counts as an affected repo) and SKILL.md:13-17 (the `Repo:` / `Message:` output format) must survive the rewrite unchanged.",
+    "files": [
+      "skills/commit-message/SKILL.md"
+    ],
+    "tests": "skip",
+    "difficulty": 2
   }
 ]
