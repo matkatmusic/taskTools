@@ -136,6 +136,4 @@ During implementation, you (the orchestrator) run typecheck only — no test sui
 
 ## Commit message
 
-Finally, follow these instructions:
-
-!`cat "${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/COMMIT_MESSAGES.md"`
+Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them. Then invoke the `commit-message` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.
