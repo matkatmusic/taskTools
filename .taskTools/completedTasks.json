@@ -1043,5 +1043,23 @@
       "243cb1f"
     ],
     "closureNote": "Added scripts/closeTasks.ts with a closeTasks() export and CLI entry point, and rewrote skills/close-tasks/SKILL.md to invoke it instead of hand-editing the JSON files; typecheck clean and 1083 tests pass."
+  },
+  {
+    "taskNumber": 67,
+    "title": "Add a version key to every new task, set by create-task to the active branch's HEAD commit hash",
+    "userDescription": "a task needs a 'version' key.  'create-task' should provide it. version comes from the latest commit hash of the active branch.  parsing of tasks based on version key value comes later, in a separate codebase addition.",
+    "description": "Scope is deliberately write-only: create-task records the key, nothing reads it yet. No consumer, no validation, no backfill of the tasks already in .taskTools/tasks.json — a task without a version key stays without one, and every reader must tolerate its absence. The `version` key does not appear anywhere in .taskTools/tasks.json today.\n\nTwo files change. skills/create-task/template/taskTemplate.json gains a `\"version\"` entry (place it next to `taskNumber` at line 2, since both are machine-supplied rather than authored). skills/create-task/SKILL.md gains two lines: an injection alongside the existing one at line 7 — line 7 is currently `- taskNumber to use: !`node \"${CLAUDE_PLUGIN_ROOT}/scripts/nextTaskNumber.ts\"`` — plus a \"Populate `version` with ...\" instruction near the existing ones at lines 21-23.\n\nUse the shell injection `!`git rev-parse HEAD`` directly rather than adding a script under scripts/. Nothing needs resolving the way nextTaskNumber.ts resolves the task-file location; it is one git command, and the injection already runs with the user's project as its working directory, which is the repo whose HEAD is wanted — not the plugin's own repo. Record the full 40-character hash, not an abbreviation, so it stays unambiguous as history grows.\n\nTwo edge cases the implementer must decide in the SKILL.md prose, not leave to the agent at runtime: a repository with zero commits (`git rev-parse HEAD` exits non-zero and prints to stderr) and a detached HEAD (the command still succeeds and the hash is still the right answer, so only the empty-repo case needs a fallback). Note that scripts/prepareTasks.ts already refuses to run against a repo with no origin remote, but that guard does not cover the no-commits case here.\n\nEvery other task-creating surface — skills/update-tasks, skills/goal-tasks, and the split-task skill from task #65 — routes through create-task rather than writing tasks.json directly, so they inherit the key with no edits of their own.",
+    "files": [
+      "skills/create-task/SKILL.md",
+      "skills/create-task/template/taskTemplate.json",
+      "tests/createTaskVersion.test.ts"
+    ],
+    "tests": "In a temp git repo with a known commit, run create-task, then assert the appended task's version equals that repo's `git rev-parse HEAD` output exactly, and that it is a 40-character hex string. Also assert an existing task with no version key is left untouched — no backfill.",
+    "difficulty": 2,
+    "completionDate": "2026-08-06",
+    "commitHashes": [
+      "4bf49ca97d6f2fbbe5f876485bd03a4104a78e5a"
+    ],
+    "closureNote": "create-task now injects git rev-parse HEAD and populates a version key on every new task, with the template updated to match and the empty-repository case handled by omitting the field; the declared test file was intentionally skipped with user approval because the change is skill prose rather than executable code."
   }
 ]
