@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -120,6 +120,37 @@ test("test_compareAndSwapPreventsClobberingConcurrentUpdate", () => {
 
     assert.equal(result.ok, false);
     assert.equal(git(repo.canonicalOccurrencePath, "rev-parse", repo.canonicalRefName), concurrentOid);
+});
+
+test("test_publishingCheckedOutCanonicalRefRefreshesRealIndexAndWorkingTree", () => {
+    const canonicalPath = makeRepo();
+    const recordedBaseOid = commitFile(canonicalPath, "tracked.txt", "before");
+    writeFileSync(join(canonicalPath, "tracked.txt"), "after");
+    writeFileSync(join(canonicalPath, "merged.txt"), "merged");
+    git(canonicalPath, "add", "-A");
+    git(canonicalPath, "commit", "-q", "-m", "target");
+    const targetOid = git(canonicalPath, "rev-parse", "HEAD");
+
+    // Simulate pre-publication state: checkout still at recordedBaseOid, targetOid already prepared.
+    git(canonicalPath, "reset", "--hard", recordedBaseOid);
+    const repo: PublicationTarget = {
+        name: "checked-out-canonical",
+        canonicalOccurrencePath: canonicalPath,
+        canonicalRefName: "refs/heads/main",
+        otherOccurrences: [],
+        recordedBaseOid,
+        targetOid,
+    };
+
+    const result = publishBases([repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assert.equal(git(canonicalPath, "rev-parse", "HEAD"), targetOid);
+    assert.equal(git(canonicalPath, "write-tree"), git(canonicalPath, "rev-parse", `${targetOid}^{tree}`));
+    assert.equal(existsSync(join(canonicalPath, "merged.txt")), true);
+    assert.equal(readFileSync(join(canonicalPath, "merged.txt"), "utf8"), "merged");
+    assert.equal(readFileSync(join(canonicalPath, "tracked.txt"), "utf8"), "after");
+    assert.equal(git(canonicalPath, "status", "--short"), "");
 });
 
 test("test_midSequenceFailureRollsBackEveryAlreadyUpdatedRefToRecordedOid", () => {
