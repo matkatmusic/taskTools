@@ -10,8 +10,8 @@ export type DiscoveryResult = {
 };
 
 function openBlockersOf(task: TaskRecord, openNumbers: Set<number>): number[] {
-    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as number[]) : [];
-    return blockedBy.filter((n) => openNumbers.has(n));
+    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNum: number }[]) : [];
+    return blockedBy.map((entry) => entry.taskNum).filter((n) => openNumbers.has(n));
 }
 
 // Read-only: reads tasks.json only. No fs writes, no git, no worktree/branch creation.

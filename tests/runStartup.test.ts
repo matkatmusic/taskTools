@@ -21,7 +21,7 @@ function makeProjectRoot(): string {
         join(root, "tasks.json"),
         JSON.stringify([
             { taskNumber: 1, title: "open, unblocked" },
-            { taskNumber: 2, title: "blocked by open task", blockedBy: [1] },
+            { taskNumber: 2, title: "blocked by open task", blockedBy: [{ taskNum: 1, reason: "needs task 1" }] },
         ]),
     );
     writeFileSync(join(root, "completedTasks.json"), "[]");
