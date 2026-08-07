@@ -81,7 +81,7 @@ else:
 if you reach timeBudget before finishing:
     return status "partial" with the not-yet-done plan steps in remaining
 
-You are forbidden to touch anything outside ownedFiles; to add scope or
+You are forbidden to touch anything outside ownedFiles excluding the matching test files for the ownedFiles; to add scope or
 refactors the plan does not call for; to redecide anything the plan already
 decided; to run the full suite, \`git add -A\`, or \`git add .\`; to commit while
 anything fails; to attempt more than ${MAX_FIX_ROUNDS} fix rounds; or to return
