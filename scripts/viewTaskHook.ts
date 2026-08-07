@@ -32,7 +32,8 @@ try {
 } catch {
   process.exit(0);
 }
-const prompt = typeof payload.prompt === "string" ? payload.prompt.trimStart() : "";
+// Plugin skills reach the hook namespaced, as /taskTools:view-task.
+const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
 if (prompt !== "/view-task" && !prompt.startsWith("/view-task ")) process.exit(0);
 
 const root = typeof payload.cwd === "string" && payload.cwd ? payload.cwd : process.cwd();

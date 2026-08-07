@@ -33,6 +33,12 @@ test("hook loads and answers /view-task with a block decision", () => {
   assert.match(decision.reason, /first task/);
 });
 
+test("namespaced /taskTools:view-task is matched like the bare form", () => {
+  const decision = JSON.parse(runHook("/taskTools:view-task 1", makeProjectRoot()));
+  assert.equal(decision.decision, "block");
+  assert.match(decision.reason, /first task/);
+});
+
 test("hook is silent passthrough for other prompts", () => {
   const out = runHook("unrelated prompt", makeProjectRoot());
   assert.equal(out, "");
