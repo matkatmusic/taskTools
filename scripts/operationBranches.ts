@@ -36,7 +36,7 @@ function validateOccurrencesReadyForBranching(occurrences: RepositoryOccurrence[
 
 export function operationBranchName(runId: string, occurrence: RepositoryOccurrence): string {
     const occurrenceSegment = occurrence.occurrenceId === "" ? "root" : occurrence.occurrenceId;
-    return `tackle-op/${runId}/${occurrenceSegment}`;
+    return `operations/${runId}/${occurrenceSegment}`;
 }
 
 function branchOid(repoPath: string, branchName: string): string | null {
@@ -70,5 +70,17 @@ export function setUpOperationBranches(
         ensureOperationBranchAtOid(occurrence.checkoutPath, branchName, occurrence.baseOid);
         git(occurrence.checkoutPath, "checkout", branchName);
         return { ...occurrence, operationBranch: branchName };
+    });
+}
+
+export function buildOperationPushOccurrences(
+    occurrences: RepositoryOccurrence[],
+    runId: string,
+    segmentByOccurrenceId: Map<string, string>,
+): RepositoryOccurrence[] {
+    return occurrences.map((occurrence) => {
+        const segment = segmentByOccurrenceId.get(occurrence.occurrenceId);
+        if (segment === undefined) throw new Error(`no operation-branch segment for occurrence "${occurrence.occurrenceId}"`);
+        return { ...occurrence, operationBranch: `operations/${runId}/${segment}` };
     });
 }

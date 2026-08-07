@@ -8,6 +8,7 @@ import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./t
 import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization, finalizeApprovedRun, computeApprovalDigest, type OccurrenceSnapshot, type RunState, type ApprovalDigestInput } from "./approvalGate.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
 import { validateRepositoryManifest, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
+import { buildOperationPushOccurrences } from "./operationBranches.ts";
 import { normalizeRepositoryIdentity, type RepositoryIdentity } from "./submoduleUrlIdentity.ts";
 import type { LogicalRepository } from "./logicalRepository.ts";
 import { prepareNoFfMerge } from "./repositoryIntegration.ts";
@@ -207,10 +208,8 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             git(canonicalRepoRoot, "update-ref", integrationRef, result.preparedIntegrationOid);
             consolidations.set(logicalGroup.logicalId, { preparedIntegrationOid: result.preparedIntegrationOid, canonicalRepoRoot, canonicalRefName: `refs/heads/${canonicalOccurrence.baseBranch}`, recordedBaseOid: canonicalOccurrence.baseOid, integrationRef });
         }
-        const operationPushOccurrences = manifest.occurrences.map((occurrence) => {
-            const logicalGroup = logicalGroups.find((g) => g.occurrenceIds.includes(occurrence.occurrenceId))!;
-            return { ...occurrence, operationBranch: `operations/${runId}/${sanitizeSegment(logicalGroup.logicalId)}` };
-        });
+        const operationBranchSegments = new Map(logicalGroups.flatMap((group) => group.occurrenceIds.map((id) => [id, sanitizeSegment(group.logicalId)] as const)));
+        const operationPushOccurrences = buildOperationPushOccurrences(manifest.occurrences, runId, operationBranchSegments);
         const operationPushLogicalRepositories: LogicalRepository[] = logicalGroups.map((group) => ({
             normalizedIdentity: normalizeRepositoryIdentity(occurrenceById.get(group.canonicalOccurrenceId)!.originUrl) ?? ({ host: "opaque", owner: "opaque", repository: group.logicalId } as RepositoryIdentity),
             occurrenceIds: group.occurrenceIds, selectedBaseOccurrenceId: group.canonicalOccurrenceId, canonicalOccurrenceId: group.canonicalOccurrenceId,
