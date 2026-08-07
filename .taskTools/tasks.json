@@ -557,5 +557,55 @@
     ],
     "tests": "Blocked run archives nothing: temp repo, run the pipeline so the merge phase returns blocked. Assert the task is still in tasks.json and absent from completedTasks.json. Second case: force a successful run and assert every path in the task's files array exists in the recorded commitHashes entry (git cat-file -e <hash>:<path>).",
     "difficulty": 7
+  },
+  {
+    "taskNumber": 113,
+    "version": "94a63561408ad7a01729ae4e89e32707263bbde5",
+    "title": "Reorganize scripts/ into skillBodyGenerators/ plus topic subfolders, updating every reference",
+    "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
+    "description": "**Measured scope.** scripts/ holds 65 .ts files, flat. References that must move with them: 236 relative-import lines across 96 files (scripts/ and tests/ combined), 7 command paths in hooks/hooks.json of the form `node \"${CLAUDE_PLUGIN_ROOT}/scripts/<name>.ts\"`, and 17 skill files whose `!` command lines name a script path.\n\n**The generators folder is nearly empty today, and that is the whole scheduling story.** Only two files match the skill-body-generator shape right now: scripts/reviewPlanBrief.ts and scripts/taskStatsBrief.ts. Eight open tasks — 71, 72, 73, 74, 75, 76, 78, 79 — each add one more, one per skill (close-tasks, create-task, merge-worktree-tasks, pick-a-task, tackle-tasks, tackle-unblocked-tasks, update-task-files, update-tasks); 77 already landed taskStatsBrief.ts. Blocking on all eight means skillBodyGenerators/ is populated in a single move of ten files instead of moving two now and having eight more land in the old root afterwards. Decided with the user.\n\n**Four runtime path computations that a typecheck will NOT catch.** These build script paths as strings, so moving a file silently breaks them while tsc stays green:\n- scripts/prepareTasks.ts:72-74, `join(import.meta.dirname, \"mergeTaskWorktrees.ts\")`\n- scripts/prepareTasks.ts:91-93, `join(import.meta.dirname, \"runMergePhase.ts\")`\n- scripts/taskStatsBrief.ts:5, `fileURLToPath(new URL(\"./taskStats.ts\", import.meta.url))`\n- scripts/reviewPlanBrief.ts:7, `fileURLToPath(new URL(\"./planReviewRuling.ts\", import.meta.url))`\nNote both brief generators are on that list, and both point at a NON-generator sibling. Moving reviewPlanBrief.ts into skillBodyGenerators/ while planReviewRuling.ts goes to a topic folder breaks line 7 unless the relative prefix is fixed in the same edit. This is the single likeliest way to ship a green build that fails at runtime.\n\n**What survives a move untouched.** The 14 CLI entry guards keyed on `process.argv[1]` are safe: the `import.meta.url === \\`file://${process.argv[1]}\\`` form is self-referential and moves with its file, and the `process.argv[1]?.endsWith(\"<name>.ts\")` form matches a basename, not a directory.\n\n**Scope note the files array cannot express.** This task renames essentially every file under scripts/ and rewrites imports throughout tests/ and skills/, plus hooks/hooks.json. Enumerating ~180 paths in `files` is not useful, so the array below lists only the files needing hand-authored edits rather than a mechanical rename. The planner and implementer should treat scripts/, tests/, skills/ and hooks/ as in scope for this task specifically.\n\n**Conflict warning.** 27 of the 34 currently open tasks declare at least one scripts/ path. Whenever this lands, every other in-flight task rebases over moved files. Sequence it against a quiet backlog, not alongside a wide tackle-tasks run.\n\n**Taxonomy is left to the implementer** beyond the two fixed points the user gave: skillBodyGenerators/ for the brief emitters, topic folders for the rest. One grouping worth considering that the request does not name: the hook entry points (viewTaskHook.ts, relatedTests.ts, reflow-comments-post.ts, session-end-cleanup.ts, stage-and-summarize-stop.ts, turn-modified-flag.ts) are a distinct category because hooks/hooks.json hardcodes their paths and they are never imported.",
+    "files": [
+      "hooks/hooks.json",
+      "scripts/prepareTasks.ts",
+      "scripts/taskStatsBrief.ts",
+      "scripts/reviewPlanBrief.ts",
+      "tests/scriptReferences.test.ts"
+    ],
+    "tests": "No-dangling-reference sweep, as a real test rather than a manual check: walk every command string in hooks/hooks.json, every `!` command line in skills/**/SKILL.md, and every relative import specifier in scripts/ and tests/, resolve each to an absolute path, and assert the file exists — so a missed rename fails loudly in CI instead of at hook-fire or skill-invocation time. Extend it to the four runtime path computations specifically: assert resolveMergeScriptPath() and resolveMergePhaseScriptPath() both point at existing files, and that the sibling URLs resolved in the two brief generators exist. The test must be written so it would FAIL against a deliberately broken path, not merely pass vacuously when a glob matches nothing. Alongside it, the full existing suite and the typecheck must stay green.",
+    "difficulty": 8,
+    "blockedBy": [
+      {
+        "taskNum": 71,
+        "reason": "adds the close-tasks brief generator; moving scripts/ before it lands means this new generator arrives in the old flat root and has to be relocated a second time"
+      },
+      {
+        "taskNum": 72,
+        "reason": "adds the create-task brief generator, which belongs in skillBodyGenerators/ from the moment it is written rather than being moved afterwards"
+      },
+      {
+        "taskNum": 73,
+        "reason": "adds the merge-worktree-tasks brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      },
+      {
+        "taskNum": 74,
+        "reason": "adds the pick-a-task brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      },
+      {
+        "taskNum": 75,
+        "reason": "adds the tackle-tasks brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      },
+      {
+        "taskNum": 76,
+        "reason": "adds the tackle-unblocked-tasks brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      },
+      {
+        "taskNum": 78,
+        "reason": "adds the update-task-files brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      },
+      {
+        "taskNum": 79,
+        "reason": "adds the update-tasks brief generator, one of the ten files skillBodyGenerators/ should receive in a single move"
+      }
+    ]
   }
 ]
