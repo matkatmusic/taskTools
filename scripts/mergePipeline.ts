@@ -7,13 +7,13 @@ import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization, finalizeApprovedRun, computeApprovalDigest, type OccurrenceSnapshot, type RunState, type ApprovalDigestInput } from "./approvalGate.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
-import { validateRepositoryManifest, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
+import { validateRepositoryManifest, type RepositoryManifest } from "./repositoryManifest.ts";
 import { buildOperationPushOccurrences, identityKey, sanitizeSegment } from "./operationBranches.ts";
 import { normalizeRepositoryIdentity, type RepositoryIdentity } from "./submoduleUrlIdentity.ts";
 import type { LogicalRepository } from "./logicalRepository.ts";
 import { prepareNoFfMerge } from "./repositoryIntegration.ts";
 import { consolidateRun, type GroupOccurrenceBranch, type LogicalRepositoryConsolidationInput } from "./runConsolidation.ts";
-import { pushOperationBranches, type OperationPushInput } from "./operationPush.ts";
+import { pushOperationBranches } from "./operationPush.ts";
 import { publishBases, readCurrentRefOid, type PublicationTarget } from "./basePublication.ts";
 import { summarizeTaskMergeResults, archivePublishedTasks, type RawTaskRepoOutcome } from "./taskArchival.ts";
 import { runFinalization } from "./runAuthorization.ts";
