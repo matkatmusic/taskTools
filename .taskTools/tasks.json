@@ -423,5 +423,18 @@
     ],
     "tests": "Two-session collision test: prepare two runs over different task numbers against the same repo, back to back without cleanup in between, and assert they receive different worktree paths and different branch names, and that a commit made in the first run's worktree still exists after the second run has prepared — proving the second run no longer force-resets the first. Add a case where both runs claim the same task number and assert preparation errors with a message naming the conflicting task instead of running `checkout --force -B` and destroying the first run's commits. Add the equivalent assertion for the run artifacts: two concurrent runs must resolve to distinct run-arguments/run-outcomes/run-steps paths, so the second run's preparation does not overwrite the first run's pipeline state.",
     "difficulty": 8
+  },
+  {
+    "taskNumber": 105,
+    "version": "cd03eb62914b167e589ba1ba49a01844d4da97d3",
+    "title": "Delete a task's brief and plan files from plans/ when close-tasks archives it",
+    "userDescription": "remove brief-N.md and task-N-plan.md from the plans/ when task N is closed via '/close-tasks'.",
+    "description": "Closing a task leaves plans/brief-N.md and plans/task-N-plan.md behind forever. Nothing ever removes them, so plans/ only grows: it held 142 files against 53 completed tasks when this was reported, and the ratio has worsened since.\n\nDelete both files outright — do not move them to plans/archived. That directory does not exist; it appears only as a pathspec exclude in the commit-message tooling and was never created. The files are recoverable from git history once committed, and the user chose deletion over archiving.\n\nThe deletion belongs in scripts/closeTasks.ts, which owns the archival move and exports a single closeTasks function at line 38 (121 lines, well under the file cap). Do not put it in skills/close-tasks/SKILL.md — the skill is 20 lines of prose and the script is what actually mutates state, so prose-only instructions would be skipped whenever the script is called directly.\n\nAlso drain the existing backlog on every invocation rather than as a separate one-shot script: for each task number already present in completedTasks.json, delete plans/brief-N.md and plans/task-N-plan.md if they exist. This is the same drain-on-every-invocation pattern task 98 uses for the legacy files key, so the backlog clears itself over the next few closures with no migration step to remember.\n\nA missing file is not an error — a task closed without ever being planned has neither file, and a task may have one but not the other. Use existence-tolerant removal.\n\nMatch on the exact filenames only. plans/ holds unrelated documents such as 'amended task 13.md', plans/tackle-metrics.jsonl and plans/tackle-tasks-v2.md, and a loose glob would take them. Guard against a number prefix collision too: closing task 1 must not touch brief-10.md or brief-100.md.\n\nRelated but not blocking: task 87 makes plans/brief-N.md strictly derived and rebuilt on every plan launch, which is consistent with deleting it at closure.",
+    "files": [
+      "scripts/closeTasks.ts",
+      "tests/closeTasks.test.ts"
+    ],
+    "tests": "In a throwaway repo, create plans/brief-N.md and plans/task-N-plan.md for an open task N, run close-tasks on N, then assert neither file is in plans/ any more, that an unrelated brief-M.md is untouched, and that closing a task with no plan files does not error.",
+    "difficulty": 4
   }
 ]
