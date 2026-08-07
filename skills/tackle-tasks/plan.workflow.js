@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import { readTaskFile, resolveTaskFiles } from '../../scripts/taskFiles.ts'
+import { writeTaskBriefFile } from '../../scripts/prepareTasks.ts'
+
 export const meta = {
   name: 'tackle-tasks-plan',
   description: 'Write one plan file per task, one planner agent each',
@@ -15,6 +19,7 @@ const PLAN_SCHEMA = {
     status: { type: 'string', enum: ['planned', 'needs-clarification', 'not-relevant'] },
     planFile: { type: 'string' },
     question: { type: 'string' },
+    missingFiles: { type: 'array', items: { type: 'string' } },
   },
   required: ['task', 'status', 'planFile', 'question'],
 }
@@ -43,11 +48,15 @@ The plan must be exact enough that the implementer makes no discovery of its own
 
 If the plan would need to edit a file outside the owned list above, set status
 "needs-clarification" and name that file in "question" — do not plan the edit anyway.
+If the blocker is instead that you need to READ a file outside the owned list
+to write an exact plan, set status "needs-clarification", populate
+missingFiles with the repo-relative path(s) of each file you need, and use
+"question" to explain why each path is needed.
 If the task is unclear, set status "needs-clarification" and put your
 question in "question". If the task no longer applies to the codebase, set
 status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
-Return {task: ${t.number}, status, planFile: "${t.planFile}", question}.
+Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
 
 You are forbidden to edit any file other than ${t.planFile}; to read a file outside
 the owned list; to leave a decision for the implementer; or to write a plan step
@@ -72,12 +81,42 @@ const runPlanner = (t) => {
 }
 
 const results = await parallel(TASKS.map((t) => () => runPlanner(t)))
-const plans = TASKS.map((t, i) => results[i] ?? {
+const firstPass = TASKS.map((t, i) => results[i] ?? {
   task: t.number,
   status: 'needs-clarification',
   planFile: '',
   question: 'planner returned no result after 3 attempts',
 })
+
+// Retries a needs-clarification verdict, not a null result; distinct from retryAgent above.
+const needsFileRetry = (p) => p.status === 'needs-clarification' && Array.isArray(p.missingFiles) && p.missingFiles.length > 0
+
+const retryWithFiles = async (t, p) => {
+  execFileSync('bun', ['scripts/addTaskFiles.ts', JSON.stringify([t.number]), ...p.missingFiles], { cwd: ARGS.repo, stdio: 'inherit' })
+  const pair = resolveTaskFiles(ARGS.repo)
+  const updated = readTaskFile(pair.tasksPath).find((task) => task.taskNumber === t.number)
+  if (!updated) throw new Error(`task ${t.number} disappeared from tasks.json`)
+  t.files = [...new Set([
+    ...t.files,
+    ...(Array.isArray(updated.files) ? updated.files : []),
+  ])]
+  writeTaskBriefFile(updated, ARGS.repo)
+  const retryResult = await runPlanner(t)
+  return retryResult ?? {
+    task: t.number,
+    status: 'needs-clarification',
+    planFile: '',
+    question: 'planner returned no result after 3 attempts on file retry',
+  }
+}
+
+const plans = []
+for (let i = 0; i < TASKS.length; i++) {
+  const result = firstPass[i]
+  plans.push(needsFileRetry(result)
+    ? await retryWithFiles(TASKS[i], result)
+    : result)
+}
 
 return {
   plans,
