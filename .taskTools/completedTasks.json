@@ -741,7 +741,7 @@
     ],
     "handoffFilePaths": [],
     "blockedBy": [],
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-04",
     "commitHashes": [
       "219c256",
@@ -760,7 +760,7 @@
       "scripts/repositoryGraph.ts",
       "tests/repositoryGraph.test.ts"
     ],
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-04",
     "commitHashes": [
       "64f8bbd",
@@ -778,7 +778,7 @@
       "scripts/taskGroups.ts",
       "tests/taskGroups.test.ts"
     ],
-    "difficulty": 5,
+    "difficulty": 10,
     "completionDate": "2026-08-04",
     "commitHashes": [
       "06f616e",
@@ -798,7 +798,7 @@
     ],
     "handoffFilePaths": [],
     "blockedBy": [],
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-05",
     "commitHashes": [
       "ee0bd6b",
@@ -824,7 +824,7 @@
       "tests/runConsolidation.test.ts",
       "tests/testPolicy.test.ts"
     ],
-    "difficulty": 2,
+    "difficulty": 4,
     "blockedBy": [],
     "completionDate": "2026-08-05",
     "commitHashes": [
@@ -842,7 +842,7 @@
     ],
     "handoffFilePaths": [],
     "blockedBy": [],
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-05",
     "commitHashes": [
       "f462cfc",
@@ -860,7 +860,7 @@
       "skills/tackle-tasks/plan.workflow.js",
       "skills/tackle-tasks/implement.workflow.js"
     ],
-    "difficulty": 3,
+    "difficulty": 6,
     "blockedBy": [],
     "completionDate": "2026-08-05",
     "commitHashes": [
@@ -883,7 +883,7 @@
       "skills/tackle-tasks/merge.workflow.js",
       "scripts/mergeTaskWorktrees.ts"
     ],
-    "difficulty": 4,
+    "difficulty": 8,
     "blockedBy": [],
     "completionDate": "2026-08-05",
     "commitHashes": [
@@ -900,7 +900,7 @@
       "skills/tackle-tasks/verify.workflow.js",
       "skills/tackle-tasks/SKILL.md"
     ],
-    "difficulty": 3,
+    "difficulty": 6,
     "blockedBy": [],
     "completionDate": "2026-08-05",
     "commitHashes": [
@@ -920,7 +920,7 @@
       "tests/mergeTaskWorktrees.test.ts",
       "skills/tackle-tasks/merge.workflow.js"
     ],
-    "difficulty": 5,
+    "difficulty": 10,
     "completionDate": "2026-08-05",
     "commitHashes": [
       "ebbc081",
@@ -948,7 +948,7 @@
       "scripts/gitlinkReader.ts",
       "scripts/approvalGate.ts"
     ],
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-05",
     "commitHashes": [
       "d5580e1",
@@ -965,7 +965,7 @@
       "skills/tackle-tasks/tackle-tasks.workflow.js",
       "skills/tackle-tasks/SKILL.md"
     ],
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-06",
     "commitHashes": [],
     "closureNote": "Closed with no code change: the target file skills/tackle-tasks/tackle-tasks.workflow.js no longer exists, having been split into plan/verify/implement/test/merge workflow scripts by commit ee0bd6b, and skills/tackle-tasks/SKILL.md already runs the single whole-run approval gate at step 5 before any finalize, merge or archive at step 6, so the brief's goal was already met by a different route; user confirmed closing it as already done."
@@ -979,7 +979,7 @@
       "scripts/mergeTaskWorktrees.ts",
       "tests/legacyManifest.test.ts"
     ],
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "efcc0e7",
@@ -998,7 +998,7 @@
       "tests/repositoryDiscovery.test.ts"
     ],
     "tests": "Init a throwaway git repo with a commit and no origin remote, run prepareTasks.ts against it, and assert exit code 1, stderr containing the exact sentence, and no stack trace or the word rootcommit anywhere in the output.",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "4bed4cc"
@@ -1018,7 +1018,7 @@
       "tests/prepareTasks.test.ts"
     ],
     "tests": "Create a task from a short raw prompt, then assert userDescription is that prompt verbatim, description is the agent's expanded version and does not merely repeat the prompt, and that both the generated brief and the viewTaskHook output show each field under its own heading.",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "67aff6e"
@@ -1036,7 +1036,7 @@
       "tests/closeTasks.test.ts"
     ],
     "tests": "Round-trip on temp files: const dir = mkdtempSync(...); write tasks.json -> [ {64}, {65}, {66} ] and completedTasks.json -> []. Run closeTasks([65], \"fixed by abc123\", dir). Assert tasks.json == [ {64}, {66} ] with the original order kept; assert completedTasks == [ {65, completionDate, commitHashes, closureNote} ]; assert JSON.parse of both files does not throw.",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "b74e355",
@@ -1055,7 +1055,7 @@
       "tests/createTaskVersion.test.ts"
     ],
     "tests": "In a temp git repo with a known commit, run create-task, then assert the appended task's version equals that repo's `git rev-parse HEAD` output exactly, and that it is a 40-character hex string. Also assert an existing task with no version key is left untouched — no backfill.",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "4bf49ca97d6f2fbbe5f876485bd03a4104a78e5a"
@@ -1074,7 +1074,7 @@
       "tests/splitTask.test.ts"
     ],
     "tests": "Given a fixture tasks.json holding one difficulty-4 task, running split-task produces N child tasks appended at the end with fresh sequential numbers, each child's files array is a subset of the parent's, the union of children's files equals the parent's, and the parent is closed with closureNote \"Split into <child numbers>\". The user can pass in how many parts the task should be split into: 'split-task <taskNum> <numSplits>': 'split-task 58 4'.",
-    "difficulty": 3,
+    "difficulty": 6,
     "blockedBy": [],
     "completionDate": "2026-08-06",
     "commitHashes": [
@@ -1095,7 +1095,7 @@
       "tests/addTaskFiles.test.ts"
     ],
     "tests": "Write the narrow unit test first: given a planner result containing a missingFiles list, assert the tasks.json entry for that task number is updated with those paths (appended, de-duplicated, existing paths preserved) and that the brief text is rebuilt to include them — no real planner run. A script must be used to append the subagent's list of missing files to the tasks.json entry the subagent was planning; the test drives that script, not inline JSON editing. Only if that proves insufficient, add the end-to-end test: run the plan phase with a task whose files list is missing a needed file, have the planner return needs-clarification with a missingFiles list, then assert tasks.json got the new paths, the brief was regenerated with them, and the planner ran a second time.",
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "ab3e796c423167478fe76a1010b4f56df21e5d67",
@@ -1114,7 +1114,7 @@
       "tests/commitMessageSubagent.test.ts"
     ],
     "tests": "in a throwaway repo, stage a change, spawn commit-message subagent, then make the commit with the subagent's message, then make another change, stage that 2nd change, spawn commit-message subagent again, and make sure the subagent's message is different (because the diff contents are different)",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "6ea8cd5",
@@ -1147,7 +1147,7 @@
       "tests/mergeTaskWorktrees.test.ts"
     ],
     "tests": "Skip a new test, update the existing 'blockedBy' tests to support this new object format. Concretely, the fixtures and assertions already covering blockedBy must be rewritten to the object shape: tests/prepareTasks.test.ts:170,193 (`blockedBy: [1]`), tests/runStartup.test.ts:24 (`blockedBy: [1]`), tests/taskStats.test.ts:28,91 (`blockedBy: [2]`, stale `blockedBy: [99]`, `blockedBy: [1]`), tests/getTaskDetails.test.ts:21,31-32,55,58 (`/OPEN 2: blocked task \\[blockedBy: 1,3\\]/` and `assert.deepEqual(...blockedBy, [1, 3])`), tests/unblockDependents.test.ts:19-20,32,36-38,47 (`blockedBy: [1]`, `blockedBy: [1, 3]`, the field-dropped-when-empty assertion, `assert.deepEqual(...blockedBy, [3])`, `/no blockedBy references/`), tests/checkBlockers.test.ts:20-21 (`blockedBy: [1]`, closed-blocker `blockedBy: [3]`), and tests/mergeTaskWorktrees.test.ts:606 (`blockedBy: []`). Add coverage inside those existing files for the two behaviours the change introduces: a surviving entry keeps its reason string after an unrelated blocker is closed, and a legacy bare-number entry is upgraded to the object form during a close-tasks run.",
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "2c58ceb",
@@ -1168,7 +1168,7 @@
       "scripts/prepareTasks.ts"
     ],
     "tests": "End-to-end drift test in tests/runMergePhase.test.ts: 1. init a throwaway repo and commit A, so baseOid = A. 2. build pipeline args pinned to baseOid A. 3. commit B on the source branch, simulating the concurrent session that caused this bug. 4. run runMergePhase. Assert either status !== \"merged\", OR git log <sourceBranch> contains the task commits. That is, \"merged\" must imply the user's branch actually has the code.",
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-06",
     "commitHashes": [],
     "closureNote": "Root cause found and fixed: judgeMergeRun in scripts/runMergePhase.ts now returns blocked when the merge script exits clean with an empty publicationTargets, so a run whose source branch drifted past its pinned baseOid can no longer be reported as merged and archived while the user branch lacks the code. Both brief questions are answered in plans/task-63-plan.md. The requested automatic rebase-then-retest-then-retry recovery was rejected twice by codex as under-specified and is filed as task 88. Verified: typecheck clean, full suite 1117/1117 pass."
@@ -1186,7 +1186,7 @@
       "tests/unblockDependents.test.ts"
     ],
     "tests": "One-call close-and-unblock. In a temp repo, close task M in a single closeTasks call where another task lists M in blockedBy. Assert M landed in completedTasks.json AND the dependent's blockedBy lost M — both after one invocation, with tasks.json written once, not twice. Cover the field-drops-when-empty case (a dependent blocked only by M ends with no blockedBy key at all) and the partial case (a dependent blocked by M and another still-open task keeps the other entry).",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "764b0da",
@@ -1205,7 +1205,7 @@
       "tests/splitTask.test.ts"
     ],
     "tests": "Argument parsing only. Assert the multi-word guidance is captured whole from the invocation (not truncated at the first space) and reaches the agent — using the user's own example, `split-task 58 2 make splitting task-file ownership one task and making briefs point using filepaths the other task`, the guidance must arrive as the full string beginning \"make splitting\" and ending \"the other task\", with internal spacing preserved. Also assert that omitting guidance entirely leaves today's behaviour unchanged: `split-task 58 2` still produces the contiguous positional partition from partitionFiles and closes the parent exactly as it does now.",
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-06",
     "commitHashes": [
       "af4f39f",
@@ -1225,7 +1225,7 @@
       "tests/runMergePhase.test.ts"
     ],
     "tests": "End-to-end, using real linked worktrees created with git worktree add -b task-group-N from the canonical repository (not clones), with the source branch advanced mid-run to force drift. Prove: (a) the tests are run after the rebase completes, not before; (b) a failing test returns a blocked verdict and the merge script is never invoked; (c) a passing test invokes the merge script exactly once, with refreshed per-occurrence base OIDs, a fresh runId, and every occurrence operationBranch rewritten to the new runId; (d) an empty publicationTargets on the retry, or a second base-drift result, returns blocked without attempting a further retry. Assert rebase state with git rev-parse --git-path rather than reading group/.git/... paths directly.",
-    "difficulty": 5,
+    "difficulty": 10,
     "userDescription": "Auto-rebase and retry the merge phase when the source branch drifts past the pinned baseOid. Task 63 shipped the safety half of this: judgeMergeRun in scripts/runMergePhase.ts now reports blocked when the merge script exits clean but publicationTargets is empty, so a drifted run can no longer be archived as merged. This task builds the recovery half the user asked for: when mergePipeline.ts aborts because the source branch moved past the pinned baseOid, rebase the group work onto the current tip of the source branch, run the tests covering the changed files (full suite acceptable), and only if those tests pass retry the merge and publication once. Report blocked if the rebase conflicts, the tests fail, or the retried merge still publishes nothing. Codex reviewed a draft of this and rejected it, and its findings are the requirements: (1) in mergePipeline.ts the abortReason variable must be declared outside the runFinalization callback so it is in scope for the later if (aborted) check, otherwise the file does not compile; (2) the retry must not only mint a fresh runId but also rewrite every manifest occurrence operationBranch from operations/{oldRunId}/... to operations/{newRunId}/..., and return blocked if an occurrence lacks the expected old-run prefix, otherwise the retry reuses stale refs; (3) rebaseInProgress must treat git rev-parse --git-path output as absolute when it is absolute rather than always joining it onto the worktree root, and must wrap rebase-state detection, conflict collection and rebase --abort so nothing escapes the function, reporting cleanup failure in failureReason instead of leaving a linked worktree mid-rebase; (4) git test fixtures must build groups with git worktree add -b task-group-N from the canonical repository rather than independent clones, so they match production linked worktrees and inherit git identity, and must assert rebase state via git rev-parse --git-path; (5) the retry coordinator must be exported or extracted as a testable function with tests proving tests run after the rebase, a failed test returns blocked without invoking the merge script, a successful test invokes it once with refreshed base OIDs runId and operation branches, and that an empty publication or a second base-drift result is blocked without a further retry. Files: scripts/mergePipeline.ts, scripts/mergeTaskWorktrees.ts, scripts/runMergePhase.ts, tests/runMergePhase.test.ts. Difficulty 5.",
     "completionDate": "2026-08-06",
     "commitHashes": [],
@@ -1253,7 +1253,7 @@
       "tests/taskGroups.test.ts"
     ],
     "tests": "Prepare a task declaring modifiableFiles plus readOnlyFiles, and a second legacy task declaring only files. Assert both group and prepare identically, that each brief lists its file paths and contains no file contents, and that the task omitting readOnlyFiles is treated as [*].",
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-06",
     "commitHashes": [],
     "closureNote": "Split into 93, 94, 95, 96, 97, 98"
@@ -1268,7 +1268,7 @@
       "scripts/mergePipeline.ts"
     ],
     "tests": "Type-check the project to prove abortReason is in scope at the `if (aborted)` check (the review's finding-1 failure mode is a compile error, so a passing tsc is a real assertion here). Then run the pipeline against a fixture whose source branch is advanced after the baseOid is pinned, and assert the printed result carries a non-empty, drift-specific reason naming the pinned and live OIDs — not an empty conflicts array alongside an empty publicationTargets.",
-    "difficulty": 2,
+    "difficulty": 4,
     "completionDate": "2026-08-07",
     "closureNote": "Implemented as commit 5c94c33 and merged to new-usage-graph as a3905bf: printResult now takes an abortReason argument, abortReason is declared outside the runFinalization callback so it is in scope at the if (aborted) check, the base-drift check assigns a drift-specific reason naming the pinned and live OIDs, and the aborted path passes that reason through to the printed result instead of an empty conflicts array. Codex approved the plan after one revision; typecheck clean and the full suite is 1122/1122 green after updating the printed-key assertion in tests/mergeTaskWorktrees.test.ts to include abortReason.",
     "commitHashes": [
@@ -1287,7 +1287,7 @@
       "tests/mergeTaskWorktrees.test.ts"
     ],
     "tests": "Integration tests against a real linked worktree created with `git worktree add -b task-group-N` from a canonical temp repository, never an independent clone: linked worktrees are the exact case the --git-path handling gets wrong, and they inherit the canonical repo's git identity while clones do not. Prove (a) a clean rebase onto a source branch that moved forward reports rebased-clean and the group branch's commits sit on top of the new tip; (b) a rebase whose changes textually conflict reports conflicted with the conflicting paths collected, and leaves no rebase in progress; (c) when `git rebase --abort` itself fails, the function returns cleanup-failed with failureReason set rather than throwing. Assert rebase state only via `git rev-parse --git-path`, never by reading group/.git/... directly.",
-    "difficulty": 3,
+    "difficulty": 6,
     "completionDate": "2026-08-07",
     "commitHashes": [
       "289e5638",
@@ -1311,9 +1311,42 @@
       "skills/split-task/SKILL.md"
     ],
     "tests": "Fixture tasks.json with two tasks: one sprawling multi-subsystem task and one one-line mechanical task. Assert rate-task gives the sprawling one a split score >= 5 plus at least two named split points, and the mechanical one a score < 5 with no split points.",
-    "difficulty": 4,
+    "difficulty": 8,
     "completionDate": "2026-08-07",
     "commitHashes": [],
     "closureNote": "Split into 99, 100, 101"
+  },
+  {
+    "taskNumber": 99,
+    "version": "9f292c98dbfbc0013ea91a23a2499c08e2495153",
+    "title": "Remap stored difficulty values from the 1-5 scale to the 1-10 scale",
+    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `scripts/taskFiles.ts`, `scripts/taskArchival.ts`.\n\nTITLE: Remap stored difficulty values from the 1-5 scale to the 1-10 scale\n\nThis is child 1 of 3 split out of parent task 66 (\"Widen the difficulty scale from 1-5 to 1-10 and add a rate-task skill that scores difficulty and split-worthiness\"). This child owns ONLY the one-time data remap of already-stored difficulty numbers. Child 2 rewrites the prose scale anchors; child 3 builds the rate-task skill.\n\nWHAT TO DO: every stored `difficulty` value was written on the old 1-5 scale where 5 meant \"hardest\". The new scale is 1-10 where 10 means \"hardest\". Existing values must be remapped, not reinterpreted in place, so old and new tasks stay comparable: double every non-null value — 2 becomes 4, 3 becomes 6, 4 becomes 8, 5 becomes 10, 1 becomes 2. Records with `difficulty: null` stay null.\n\nSCOPE: both .taskTools/tasks.json (open tasks) and .taskTools/completedTasks.json (archived tasks). Note the task lists live under .taskTools/, not the repo root. At the time parent 66 was written, tasks.json held nine open tasks with difficulties [3,4,4,2,3,4,2,3,3] and completedTasks.json held 42 records with `difficulty: null` plus 4 twos, 5 threes, 4 fours and 2 fives — do not rely on those exact counts, they have drifted; the remap must be computed from whatever the files hold at run time.\n\nUSER DECISION (amended): the actual .taskTools/tasks.json and .taskTools/completedTasks.json files MUST be updated to the new difficulty range as part of this child. Reporting a command for the user to run later is NOT sufficient — the remap must be applied and land in the diff.\n\nApply it against the live repo checkout, not a task worktree copy, and re-run it immediately before merging so any task appended by a concurrent session in the meantime is remapped too. Concurrent sessions append to tasks.json constantly and this collision has already been hit twice, so print a before/after preview of every taskNumber whose value will change before writing, and confirm afterwards that the resulting diff touches `difficulty` lines only.\n\nThe two owned files are references for building the remap, not files to rewrite: scripts/taskFiles.ts supplies `readTaskFile` and `resolveTaskFiles` for locating and parsing both JSON files, and scripts/taskArchival.ts shows the established write pattern — `JSON.stringify(..., null, 2) + \"\\n\"`. The remap must reuse those helpers and that exact write pattern rather than hand-editing JSON, so trailing-newline and indentation formatting stays byte-identical to what the rest of the tooling produces.\n\nTESTS: no new library test required — this child is a data migration. Verify by dry-running against a temporary copy of both JSON files first and confirming: every non-null value exactly doubled, every null left null, and the re-serialized output differs from the input only on `difficulty` lines. Then apply for real.\n\nDIFFICULTY: 2 on the OLD 1-5 scale (this child runs before the widening lands, and the remap it performs will itself double this number).\n\nBLOCKED BY: nothing.",
+    "description": "Child 1 of 3 split from parent task 66. Owns the one-time data migration only; child 2 (task 100) owns the prose scale anchors and child 3 (task 101) owns the new rate-task skill.\n\nFILES CORRECTION: this task's edit targets are the two task-list JSON files themselves — .taskTools/tasks.json and .taskTools/completedTasks.json — not scripts/taskFiles.ts and scripts/taskArchival.ts. Those two scripts were originally listed in `files` but are read-only references: taskFiles.ts exports `readTaskFile` and `resolveTaskFiles` for locating and parsing the pair, and taskArchival.ts establishes the serialization contract every writer in the repo uses, `JSON.stringify(value, null, 2) + \"\\n\"`. Neither script changes. `files` now names the two JSON files so the record matches what the task actually rewrites.\n\nMapping is a straight doubling of every non-null `difficulty`: 1→2, 2→4, 3→6, 4→8, 5→10. `difficulty: null` records (the bulk of completedTasks.json) are left null. Doubling is chosen over reinterpretation so an old 5 (\"hardest\" on the retiring scale) lands on 10 (\"hardest\" on the new scale) and old and new tasks stay directly comparable when pick-a-task sorts ascending.\n\nBoth task lists live under .taskTools/, not the repo root.\n\nDeliverable is the applied migration itself: both files must come out of this task holding remapped values. An unapplied \"here is the command to run\" hand-off does not satisfy this child (explicit user amendment overriding parent 66's original report-only phrasing).\n\nThe remap must be performed by a script that reuses `readTaskFile` / `resolveTaskFiles` and the `JSON.stringify(value, null, 2) + \"\\n\"` write pattern — not by hand-editing JSON with the Edit tool. That keeps trailing-newline and indentation formatting byte-identical to what the rest of the tooling produces, so the resulting diff shows `difficulty` lines and nothing else.\n\nWorktree hazard: concurrent sessions append to tasks.json continuously and this collision was hit twice during work on parent 66. Mitigate rather than defer — run the remap against the live repo checkout rather than a worktree copy, print a before/after preview of every taskNumber whose value will change before writing, and abort if any stored value already exceeds 5 (which would mean the remap had already been applied).\n\nNo code changes are required for the widened range itself: no script validates or bounds the numeric value, and pick-a-task merely sorts ascending. This child is pure data.\n\nUnblocked.",
+    "files": [
+      ".taskTools/tasks.json",
+      ".taskTools/completedTasks.json"
+    ],
+    "tests": "skip",
+    "difficulty": 4,
+    "completionDate": "2026-08-07",
+    "commitHashes": [],
+    "closureNote": "remap applied to .taskTools/tasks.json and .taskTools/completedTasks.json by a script reusing readTaskFile and resolveTaskFiles plus the JSON.stringify 2-space write pattern; 30 open and 29 completed records doubled, 42 null records untouched, diff against HEAD contains difficulty lines only; codex verified PASS with no findings"
+  },
+  {
+    "taskNumber": 100,
+    "version": "9f292c98dbfbc0013ea91a23a2499c08e2495153",
+    "title": "Widen the difficulty scale definition from 1-5 to 1-10 across the skill prose",
+    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `skills/pick-a-task/SKILL.md`, `skills/create-task/template/taskTemplate.json`, `skills/split-task/SKILL.md`.\n\nTITLE: Widen the difficulty scale definition from 1-5 to 1-10 across the skill prose\n\nThis is child 2 of 3 split out of parent task 66 (\"Widen the difficulty scale from 1-5 to 1-10 and add a rate-task skill that scores difficulty and split-worthiness\"). Child 1 (task 99) remaps the already-stored numbers; this child rewrites the human-readable scale definitions so new tasks are rated on the widened scale. Child 3 builds the rate-task skill.\n\nWHAT TO DO: the 1-5 anchors are spelled out in prose in exactly these places, and all of them must be rewritten with ten anchors:\n\n1. skills/create-task/template/taskTemplate.json line 8 — the `difficulty` template comment, currently `1 = one-line or single-file mechanical change; 2 = contained change to one file plus its test; 3 = several files in one subsystem, design already settled; 4 = crosses subsystems or needs design decisions during implementation; 5 = wide blast radius, unclear scope, or a previously reverted attempt`. Replace with ten distinct anchors spanning the same span of effort and risk, so that the old anchors land on their doubled positions: the old 1 anchor becomes the new 2, old 2 becomes 4, old 3 becomes 6, old 4 becomes 8, old 5 becomes 10, and the five odd-numbered slots get new intermediate anchors. This keeps the anchors consistent with child 1's doubling remap, so a task rated 6 today means the same thing as a task rated 3 yesterday.\n\n2. skills/pick-a-task/SKILL.md line 3 — the front-matter `description`, currently reads `sort by difficulty (1=easiest, 5=hardest)`. Must become 1=easiest, 10=hardest.\n\n3. skills/pick-a-task/SKILL.md line 14 — the inline anchor list repeating the same 1-5 definitions. Must be rewritten to match the new ten anchors in taskTemplate.json exactly, word for word, so the two copies cannot drift apart.\n\n4. skills/split-task/SKILL.md — its trigger prose currently says split-task fires when \"a task's difficulty is above 3\". On the widened scale that threshold must move to above 6, otherwise every remapped task suddenly looks oversized. Check both the front-matter `description` and any repetition of the threshold in the skill body, and update every occurrence.\n\nCONSTRAINTS: no script reads or validates the numeric bound — skills/pick-a-task/SKILL.md only sorts ascending on line 16 — so widening the scale needs no code change, only these prose definitions. Do not add validation. Line numbers cited above were accurate when parent 66 was written; verify them before editing rather than trusting them.\n\nDo NOT edit .taskTools/tasks.json or .taskTools/completedTasks.json in this child — the stored numbers are child 1's (task 99) job.\n\nTESTS: skip.\n\nDIFFICULTY: 2 on the OLD 1-5 scale.\n\nBLOCKED BY: nothing. It is independent of child 1 (task 99); the two touch disjoint files, though merging both before rating any new task keeps the numbers coherent.",
+    "description": "Child 2 of 3 split from parent task 66. Pure prose/definition work: this child changes what the numbers MEAN, child 1 (task 99) changes the numbers already stored, child 3 adds the rate-task skill that produces new ones.\n\nThe 1-5 anchors are duplicated in three skill files and nowhere else:\n\n- skills/create-task/template/taskTemplate.json, the `difficulty` template comment (line 8 at the time parent 66 was written) — the canonical anchor list.\n- skills/pick-a-task/SKILL.md front-matter `description` (line 3), which states `sort by difficulty (1=easiest, 5=hardest)`.\n- skills/pick-a-task/SKILL.md inline anchor list (line 14), a verbatim second copy of the taskTemplate anchors.\n- skills/split-task/SKILL.md, whose trigger prose fires on \"difficulty above 3\".\n\nAnchor placement decision: the ten new anchors must be positioned so the old five land on their doubled slots — old 1 → new 2, old 2 → new 4, old 3 → new 6, old 4 → new 8, old 5 → new 10 — with new intermediate anchors filling 1, 3, 5, 7, 9. This is what makes child 1's doubling remap semantically correct rather than an arbitrary rescale; a task carrying 6 after the remap must read the same as a task that carried 3 before it.\n\nsplit-task's threshold has to move with the scale: \"above 3\" on the old scale is \"above 6\" on the new one. Left unchanged, every task child 1 remaps would trip the oversized heuristic. Both the front-matter description and any body repetition of the threshold need updating.\n\nNo code change is required. Nothing validates or bounds the numeric value; pick-a-task's script only sorts ascending. Adding validation is explicitly out of scope.\n\nThe two pick-a-task copies must stay word-for-word identical to the taskTemplate copy so they cannot drift.\n\nCited line numbers were accurate as of parent 66 and should be re-verified before editing. Unblocked and file-disjoint from task 99.",
+    "files": [
+      "skills/pick-a-task/SKILL.md",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/split-task/SKILL.md"
+    ],
+    "tests": "skip",
+    "difficulty": 4,
+    "completionDate": "2026-08-07",
+    "commitHashes": [],
+    "closureNote": "ten 1-10 difficulty anchors written into skills/create-task/template/taskTemplate.json and repeated character-identically in skills/pick-a-task/SKILL.md, front-matter now reads 1=easiest 10=hardest, split-task trigger moved from above 3 to above 6, and skills/create-task/SKILL.md oversized heuristic moved from the 1-5 scale 4-or-5 to the 1-10 scale 7-or-higher so both thresholds agree; codex verified PASS with no findings"
   }
 ]
