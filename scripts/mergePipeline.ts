@@ -155,11 +155,11 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             conflictCount, argumentsHash: computeArgumentsHash(workflowArguments),
         });
     };
-    const printResult = (publicationTargets: PublicationTargetSummary[]): void => { process.stdout.write(JSON.stringify({ merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, publicationTargets })); };
+    const printResult = (publicationTargets: PublicationTargetSummary[], abortReason: string | null = null): void => { process.stdout.write(JSON.stringify({ merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, publicationTargets, abortReason })); };
     if (!readyForApproval) { endMetrics(conflicts.length); printResult([]); return; }
     recordApproval(runState);
     const token = issueApprovalAuthorization(runState);
-    const digest = computeApprovalDigest(runState.digestInput);
+    const digest = computeApprovalDigest(runState.digestInput); let abortReason: string | null = null;
     const aborted = await runFinalization(token, digest, async (): Promise<boolean> => {
         const consolidations = new Map<string, ConsolidationOutcome>();
         for (const logicalGroup of logicalGroups) {
@@ -218,7 +218,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             consolidationState: group.occurrenceIds.length === 1 ? "single" : "grouped",
         }));
         await pushOperationBranches({ logicalRepositories: operationPushLogicalRepositories, occurrences: operationPushOccurrences }, token, digest);
-        for (const occurrence of manifest.occurrences) if (readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`) !== occurrence.baseOid) return true;
+        for (const occurrence of manifest.occurrences) { const liveOid = readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`); if (liveOid !== occurrence.baseOid) { abortReason = `the source branch moved past the pinned baseOid (pinned ${occurrence.baseOid}, now ${liveOid})`; return true; } }
         const publicationTargets: PublicationTarget[] = logicalGroups.map((group) => {
             const consolidation = consolidations.get(group.logicalId)!;
             return {
@@ -245,5 +245,5 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         printResult(summaryTargets);
         return false;
     });
-    if (aborted) { endMetrics(conflicts.length + 1); printResult([]); }
+    if (aborted) { endMetrics(conflicts.length + 1); printResult([], abortReason); }
 }
