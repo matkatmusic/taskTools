@@ -6,11 +6,12 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+    defaultCheckoutOperations,
     publishBases,
     publishCanonicalRef,
     rollbackUpdatedRefs,
 } from "../scripts/basePublication.ts";
-import type { PublicationTarget, UpdatedRef } from "../scripts/basePublication.ts";
+import type { CheckoutOperations, PublicationTarget, UpdatedRef } from "../scripts/basePublication.ts";
 import type { RunState } from "../scripts/approvalGate.ts";
 
 function git(repoPath: string, ...args: string[]): string {
@@ -81,6 +82,63 @@ function makeLogicalRepoFixture(name: string): { repo: PublicationTarget; otherP
     };
 }
 
+type CheckedOutPublicationFixture = {
+    repo: PublicationTarget;
+    canonicalPath: string;
+    recordedBaseOid: string;
+    targetOid: string;
+};
+
+// Rewinds branch, index and files to the recorded base: the state publication receives.
+function makeCheckedOutPublicationFixture(name: string): CheckedOutPublicationFixture {
+    const canonicalPath = makeRepo();
+    writeFileSync(join(canonicalPath, "local.txt"), "unchanged\n");
+    const recordedBaseOid = commitFile(canonicalPath, "tracked.txt", "before\n");
+
+    writeFileSync(join(canonicalPath, "tracked.txt"), "after\n");
+    writeFileSync(join(canonicalPath, "merged.txt"), "merged\n");
+    git(canonicalPath, "add", "-A");
+    git(canonicalPath, "commit", "-q", "-m", "target");
+    const targetOid = git(canonicalPath, "rev-parse", "HEAD");
+
+    git(canonicalPath, "reset", "--hard", recordedBaseOid);
+    return {
+        canonicalPath,
+        recordedBaseOid,
+        targetOid,
+        repo: {
+            name,
+            canonicalOccurrencePath: canonicalPath,
+            canonicalRefName: "refs/heads/main",
+            otherOccurrences: [],
+            recordedBaseOid,
+            targetOid,
+        },
+    };
+}
+
+function treeOid(repoPath: string, commitOid: string): string {
+    return git(repoPath, "rev-parse", `${commitOid}^{tree}`);
+}
+
+function assertCheckoutAtRecordedBase(fixture: CheckedOutPublicationFixture): void {
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "HEAD"), fixture.recordedBaseOid);
+    assert.equal(git(fixture.canonicalPath, "write-tree"), treeOid(fixture.canonicalPath, fixture.recordedBaseOid));
+    assert.equal(readFileSync(join(fixture.canonicalPath, "tracked.txt"), "utf8"), "before\n");
+    assert.equal(existsSync(join(fixture.canonicalPath, "merged.txt")), false);
+}
+
+function assertPublishedFilesAtTarget(fixture: CheckedOutPublicationFixture): void {
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "HEAD"), fixture.targetOid);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "tracked.txt"), "utf8"), "after\n");
+    assert.equal(readFileSync(join(fixture.canonicalPath, "merged.txt"), "utf8"), "merged\n");
+}
+
+function assertCheckoutAtTarget(fixture: CheckedOutPublicationFixture): void {
+    assertPublishedFilesAtTarget(fixture);
+    assert.equal(git(fixture.canonicalPath, "write-tree"), treeOid(fixture.canonicalPath, fixture.targetOid));
+}
+
 test("test_nothingPublishesBeforeRootIntegrationOidExists", () => {
     const { repo } = makeLogicalRepoFixture("repo-a");
     const rootIntegration = makeRootIntegration(false);
@@ -123,34 +181,226 @@ test("test_compareAndSwapPreventsClobberingConcurrentUpdate", () => {
 });
 
 test("test_publishingCheckedOutCanonicalRefRefreshesRealIndexAndWorkingTree", () => {
-    const canonicalPath = makeRepo();
-    const recordedBaseOid = commitFile(canonicalPath, "tracked.txt", "before");
-    writeFileSync(join(canonicalPath, "tracked.txt"), "after");
-    writeFileSync(join(canonicalPath, "merged.txt"), "merged");
-    git(canonicalPath, "add", "-A");
-    git(canonicalPath, "commit", "-q", "-m", "target");
-    const targetOid = git(canonicalPath, "rev-parse", "HEAD");
+    const fixture = makeCheckedOutPublicationFixture("checked-out-canonical");
 
-    // Simulate pre-publication state: checkout still at recordedBaseOid, targetOid already prepared.
-    git(canonicalPath, "reset", "--hard", recordedBaseOid);
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assert.deepEqual(result.rollback, []);
+    assert.deepEqual(result.checkoutRollback, []);
+    assertCheckoutAtTarget(fixture);
+    assert.equal(git(fixture.canonicalPath, "status", "--short"), "");
+});
+
+test("test_publishingCheckedOutCanonicalRefInstallsTargetAddedFile", () => {
+    const fixture = makeCheckedOutPublicationFixture("target-add");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assert.equal(existsSync(join(fixture.canonicalPath, "merged.txt")), true);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "merged.txt"), "utf8"), "merged\n");
+    assert.equal(git(fixture.canonicalPath, "status", "--short", "--", "merged.txt"), "");
+});
+
+test("test_publishingCheckedOutCanonicalRefPreservesUnrelatedUnstagedEdit", () => {
+    const fixture = makeCheckedOutPublicationFixture("unstaged-edit");
+    writeFileSync(join(fixture.canonicalPath, "local.txt"), "real unstaged edit\n");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assertCheckoutAtTarget(fixture);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "local.txt"), "utf8"), "real unstaged edit\n");
+    assert.match(git(fixture.canonicalPath, "status", "--short", "--", "local.txt"), /M local\.txt$/);
+    assert.equal(git(fixture.canonicalPath, "diff", "--cached", "--name-only", "--", "local.txt"), "");
+});
+
+test("test_publishingCheckedOutCanonicalRefPreservesUnrelatedStagedEdit", () => {
+    const fixture = makeCheckedOutPublicationFixture("staged-edit");
+    writeFileSync(join(fixture.canonicalPath, "local.txt"), "real staged edit\n");
+    git(fixture.canonicalPath, "add", "--", "local.txt");
+    const stagedBlobBefore = git(fixture.canonicalPath, "rev-parse", ":local.txt");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assertPublishedFilesAtTarget(fixture);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", ":local.txt"), stagedBlobBefore);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "local.txt"), "utf8"), "real staged edit\n");
+    assert.equal(git(fixture.canonicalPath, "diff", "--name-only", "--", "local.txt"), "");
+    assert.equal(git(fixture.canonicalPath, "diff", "--cached", "--name-only", "--", "local.txt"), "local.txt");
+});
+
+test("test_publishingCheckedOutCanonicalRefPreservesUnrelatedUntrackedFile", () => {
+    const fixture = makeCheckedOutPublicationFixture("untracked-file");
+    writeFileSync(join(fixture.canonicalPath, "scratch.txt"), "do not touch\n");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assertCheckoutAtTarget(fixture);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "scratch.txt"), "utf8"), "do not touch\n");
+    assert.equal(git(fixture.canonicalPath, "status", "--short", "--", "scratch.txt"), "?? scratch.txt");
+});
+
+test("test_overlappingTrackedEditBlocksCheckedOutRefPublication", () => {
+    const fixture = makeCheckedOutPublicationFixture("overlapping-edit");
+    writeFileSync(join(fixture.canonicalPath, "tracked.txt"), "real overlapping edit\n");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, false);
+    assert.deepEqual(result.rollback, []);
+    assert.deepEqual(result.checkoutRollback, []);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "refs/heads/main"), fixture.recordedBaseOid);
+    assert.equal(git(fixture.canonicalPath, "write-tree"), treeOid(fixture.canonicalPath, fixture.recordedBaseOid));
+    assert.equal(readFileSync(join(fixture.canonicalPath, "tracked.txt"), "utf8"), "real overlapping edit\n");
+});
+
+test("test_untrackedTargetPathBlocksCheckedOutRefPublication", () => {
+    const fixture = makeCheckedOutPublicationFixture("untracked-collision");
+    writeFileSync(join(fixture.canonicalPath, "merged.txt"), "local untracked bytes\n");
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, false);
+    assert.deepEqual(result.rollback, []);
+    assert.deepEqual(result.checkoutRollback, []);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "refs/heads/main"), fixture.recordedBaseOid);
+    assert.equal(readFileSync(join(fixture.canonicalPath, "merged.txt"), "utf8"), "local untracked bytes\n");
+    assert.equal(git(fixture.canonicalPath, "status", "--short", "--", "merged.txt"), "?? merged.txt");
+});
+
+test("test_publishingRefDoesNotRefreshDetachedCanonicalCheckout", () => {
+    const fixture = makeCheckedOutPublicationFixture("detached-head");
+    git(fixture.canonicalPath, "checkout", "-q", "--detach", fixture.recordedBaseOid);
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "refs/heads/main"), fixture.targetOid);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "HEAD"), fixture.recordedBaseOid);
+    assert.equal(git(fixture.canonicalPath, "write-tree"), treeOid(fixture.canonicalPath, fixture.recordedBaseOid));
+    assert.equal(existsSync(join(fixture.canonicalPath, "merged.txt")), false);
+    assert.equal(git(fixture.canonicalPath, "status", "--short"), "");
+});
+
+test("test_publishingRefDoesNotRefreshDifferentCheckedOutBranch", () => {
+    const fixture = makeCheckedOutPublicationFixture("different-branch");
+    git(fixture.canonicalPath, "checkout", "-q", "-b", "local-work", fixture.recordedBaseOid);
+
+    const result = publishBases([fixture.repo], approvedRunState(), makeRootIntegration(true));
+
+    assert.equal(result.published, true);
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "refs/heads/main"), fixture.targetOid);
+    assert.equal(git(fixture.canonicalPath, "symbolic-ref", "HEAD"), "refs/heads/local-work");
+    assert.equal(git(fixture.canonicalPath, "rev-parse", "HEAD"), fixture.recordedBaseOid);
+    assert.equal(git(fixture.canonicalPath, "write-tree"), treeOid(fixture.canonicalPath, fixture.recordedBaseOid));
+    assert.equal(existsSync(join(fixture.canonicalPath, "merged.txt")), false);
+});
+
+// The other occurrence has its destination branch checked out, so its fetch refuses after both refs moved.
+test("test_laterRefFailureRollsBackRefsBeforeAnyCheckoutIsTransitioned", () => {
+    const fixtureA = makeCheckedOutPublicationFixture("repo-a");
+    const fixtureB = makeCheckedOutPublicationFixture("repo-b");
+    const checkedOutOtherOccurrence = makeRepo();
+    commitFile(checkedOutOtherOccurrence, "other.txt", "divergent checkout\n");
+    fixtureB.repo.otherOccurrences = [{
+        path: checkedOutOtherOccurrence,
+        refName: "refs/heads/main",
+    }];
+
+    const result = publishBases(
+        [fixtureA.repo, fixtureB.repo],
+        approvedRunState(),
+        makeRootIntegration(true),
+    );
+
+    assert.equal(result.published, false);
+    assert.equal(result.rollback.length, 2);
+    assert.ok(result.rollback.every((outcome) => outcome.rolledBack));
+    assert.deepEqual(result.checkoutRollback, []);
+    assertCheckoutAtRecordedBase(fixtureA);
+    assertCheckoutAtRecordedBase(fixtureB);
+});
+
+test("test_checkoutApplicationFailureReversesAppliedCheckoutsAndPublishedRefs", () => {
+    const fixtureA = makeCheckedOutPublicationFixture("repo-a");
+    const fixtureB = makeCheckedOutPublicationFixture("repo-b");
+    let applyCount = 0;
+    const failSecondApply: CheckoutOperations = {
+        ...defaultCheckoutOperations,
+        apply: (transition) => {
+            applyCount += 1;
+            return applyCount === 2 ? false : defaultCheckoutOperations.apply(transition);
+        },
+    };
+
+    const result = publishBases(
+        [fixtureA.repo, fixtureB.repo],
+        approvedRunState(),
+        makeRootIntegration(true),
+        failSecondApply,
+    );
+
+    assert.equal(result.published, false);
+    assert.equal(applyCount, 2);
+    assert.equal(result.checkoutRollback.length, 1);
+    assert.equal(result.checkoutRollback[0].rolledBack, true);
+    assert.equal(result.rollback.length, 2);
+    assert.ok(result.rollback.every((outcome) => outcome.rolledBack));
+    assertCheckoutAtRecordedBase(fixtureA);
+    assertCheckoutAtRecordedBase(fixtureB);
+    assert.equal(git(fixtureA.canonicalPath, "status", "--short"), "");
+    assert.equal(git(fixtureB.canonicalPath, "status", "--short"), "");
+});
+
+test("test_parentCheckoutRefreshDoesNotRecurseIntoDetachedNestedCheckout", () => {
+    const childSource = makeRepo();
+    const childBaseOid = commitFile(childSource, "child.txt", "child before\n");
+    const childTargetOid = commitFile(childSource, "child.txt", "child after\n");
+    git(childSource, "reset", "--hard", childBaseOid);
+
+    const parentPath = makeRepo();
+    git(
+        parentPath,
+        "-c",
+        "protocol.file.allow=always",
+        "submodule",
+        "add",
+        "-q",
+        childSource,
+        "vendor",
+    );
+    git(parentPath, "commit", "-q", "-m", "parent base");
+    const parentBaseOid = git(parentPath, "rev-parse", "HEAD");
+    const nestedPath = join(parentPath, "vendor");
+    git(nestedPath, "checkout", "-q", "--detach", childBaseOid);
+
+    git(parentPath, "update-index", "--cacheinfo", `160000,${childTargetOid},vendor`);
+    git(parentPath, "commit", "-q", "-m", "parent target gitlink");
+    const parentTargetOid = git(parentPath, "rev-parse", "HEAD");
+    git(parentPath, "reset", "--hard", parentBaseOid);
+
     const repo: PublicationTarget = {
-        name: "checked-out-canonical",
-        canonicalOccurrencePath: canonicalPath,
+        name: "parent",
+        canonicalOccurrencePath: parentPath,
         canonicalRefName: "refs/heads/main",
         otherOccurrences: [],
-        recordedBaseOid,
-        targetOid,
+        recordedBaseOid: parentBaseOid,
+        targetOid: parentTargetOid,
     };
 
     const result = publishBases([repo], approvedRunState(), makeRootIntegration(true));
 
     assert.equal(result.published, true);
-    assert.equal(git(canonicalPath, "rev-parse", "HEAD"), targetOid);
-    assert.equal(git(canonicalPath, "write-tree"), git(canonicalPath, "rev-parse", `${targetOid}^{tree}`));
-    assert.equal(existsSync(join(canonicalPath, "merged.txt")), true);
-    assert.equal(readFileSync(join(canonicalPath, "merged.txt"), "utf8"), "merged");
-    assert.equal(readFileSync(join(canonicalPath, "tracked.txt"), "utf8"), "after");
-    assert.equal(git(canonicalPath, "status", "--short"), "");
+    assert.equal(git(parentPath, "rev-parse", "HEAD"), parentTargetOid);
+    assert.equal(git(parentPath, "ls-files", "-s", "vendor").split(/\s+/)[1], childTargetOid);
+    assert.equal(git(nestedPath, "rev-parse", "HEAD"), childBaseOid);
+    assert.equal(readFileSync(join(nestedPath, "child.txt"), "utf8"), "child before\n");
+    assert.equal(git(nestedPath, "status", "--short"), "");
+    assert.match(git(parentPath, "status", "--short", "--", "vendor"), /vendor$/);
 });
 
 test("test_midSequenceFailureRollsBackEveryAlreadyUpdatedRefToRecordedOid", () => {

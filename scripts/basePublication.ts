@@ -171,10 +171,23 @@ function rollbackCheckoutTransitions(applied: CheckoutTransition[]): CheckoutRol
     }));
 }
 
+export type CheckoutOperations = {
+    preflight: (transition: CheckoutTransition) => boolean;
+    apply: (transition: CheckoutTransition) => boolean;
+    rollback: (applied: CheckoutTransition[]) => CheckoutRollbackOutcome[];
+};
+
+export const defaultCheckoutOperations: CheckoutOperations = {
+    preflight: preflightCheckoutTransition,
+    apply: applyCheckoutTransition,
+    rollback: rollbackCheckoutTransitions,
+};
+
 export function publishBases(
     repos: PublicationTarget[],
     approvalState: RunState,
     rootIntegration: { repoPath: string; refName: string },
+    checkoutOperations: CheckoutOperations = defaultCheckoutOperations,
 ): PublicationResult {
     const notPublished = (): PublicationResult => ({
         published: false,
@@ -196,7 +209,7 @@ export function publishBases(
         const transition = checkedOutTransition(repo);
         return transition === null ? [] : [transition];
     });
-    if (!checkoutTransitions.every(preflightCheckoutTransition)) {
+    if (!checkoutTransitions.every((transition) => checkoutOperations.preflight(transition))) {
         return notPublished();
     }
 
@@ -225,8 +238,8 @@ export function publishBases(
 
     const appliedTransitions: CheckoutTransition[] = [];
     for (const transition of checkoutTransitions) {
-        if (!applyCheckoutTransition(transition)) {
-            const checkoutRollback = rollbackCheckoutTransitions(appliedTransitions);
+        if (!checkoutOperations.apply(transition)) {
+            const checkoutRollback = checkoutOperations.rollback(appliedTransitions);
             const rollback = rollbackUpdatedRefs(updatedSoFar);
             return { published: false, rollback, checkoutRollback };
         }
