@@ -1024,5 +1024,24 @@
       "67aff6e"
     ],
     "closureNote": "Splits a task record raw user prompt into userDescription separate from the agent-derived description across skills/create-task/template/taskTemplate.json, skills/create-task/SKILL.md, writeTaskBriefFile in scripts/prepareTasks.ts and scripts/viewTaskHook.ts; planned, codex-approved, implemented and tested green in worktree group-1, then recovered onto new-usage-graph by cherry-pick after task-group-1 was reset."
+  },
+  {
+    "taskNumber": 64,
+    "title": "Give close-tasks a script to move tasks between tasks.json and completedTasks.json",
+    "userDescription": "the close-tasks tool should use a script to remove entries from tasks.json, not the Edit() tool. same for adding the completed task to completedTasks.json.",
+    "description": "skills/close-tasks/SKILL.md currently tells the agent to \"move its object from tasks.json to completedTasks.json\" in prose, with no script named, so the agent hand-edits both JSON files with the Edit tool. Hand-editing risks malformed JSON, dropped or reordered sibling entries, and inconsistent field shapes across closures.\n\nThe merge path already solves the same problem programmatically: scripts/taskArchival.ts exports archivePublishedTasks(), which reads both files via readTaskFile/resolveTaskFiles from scripts/taskFiles.ts, splices the task out of tasks.json, pushes it onto completedTasks with completionDate and commitHashes, and writes both back with JSON.stringify(..., null, 2) + \"\\n\". It is not reusable for manual closure: it derives which tasks to archive from TaskMergeResult.fullyPublished, and it never writes a closureNote.\n\nAdd a new scripts/closeTasks.ts (the user chose a separate file over extending taskArchival.ts) exporting a closeTasks() function plus a CLI entry point the SKILL.md can invoke as `node \"${CLAUDE_PLUGIN_ROOT}/scripts/closeTasks.ts\" '[64,65]' '<closureNote>'`, matching the no-space-JSON-array argument convention already used by getTaskDetails.ts and unblockDependents.ts. It must accept per-task closure notes and commit hashes, write completionDate as today in YYYY-MM-DD, preserve the order of the remaining tasks, skip task numbers that are already in completedTasks.json or absent from both, and report what it closed and what it skipped. Reuse readTaskFile and resolveTaskFiles from scripts/taskFiles.ts rather than reimplementing file resolution.\n\nThen edit skills/close-tasks/SKILL.md to invoke that script instead of describing the move in prose, and widen its allowed-tools front-matter (currently only `Bash(git add *)`) so the script may run.",
+    "files": [
+      "scripts/closeTasks.ts",
+      "skills/close-tasks/SKILL.md",
+      "tests/closeTasks.test.ts"
+    ],
+    "tests": "Round-trip on temp files: const dir = mkdtempSync(...); write tasks.json -> [ {64}, {65}, {66} ] and completedTasks.json -> []. Run closeTasks([65], \"fixed by abc123\", dir). Assert tasks.json == [ {64}, {66} ] with the original order kept; assert completedTasks == [ {65, completionDate, commitHashes, closureNote} ]; assert JSON.parse of both files does not throw.",
+    "difficulty": 2,
+    "completionDate": "2026-08-06",
+    "commitHashes": [
+      "b74e355",
+      "243cb1f"
+    ],
+    "closureNote": "Added scripts/closeTasks.ts with a closeTasks() export and CLI entry point, and rewrote skills/close-tasks/SKILL.md to invoke it instead of hand-editing the JSON files; typecheck clean and 1083 tests pass."
   }
 ]

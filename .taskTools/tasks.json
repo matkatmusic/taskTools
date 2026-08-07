@@ -99,19 +99,6 @@
     "difficulty": 4
   },
   {
-    "taskNumber": 64,
-    "title": "Give close-tasks a script to move tasks between tasks.json and completedTasks.json",
-    "userDescription": "the close-tasks tool should use a script to remove entries from tasks.json, not the Edit() tool. same for adding the completed task to completedTasks.json.",
-    "description": "skills/close-tasks/SKILL.md currently tells the agent to \"move its object from tasks.json to completedTasks.json\" in prose, with no script named, so the agent hand-edits both JSON files with the Edit tool. Hand-editing risks malformed JSON, dropped or reordered sibling entries, and inconsistent field shapes across closures.\n\nThe merge path already solves the same problem programmatically: scripts/taskArchival.ts exports archivePublishedTasks(), which reads both files via readTaskFile/resolveTaskFiles from scripts/taskFiles.ts, splices the task out of tasks.json, pushes it onto completedTasks with completionDate and commitHashes, and writes both back with JSON.stringify(..., null, 2) + \"\\n\". It is not reusable for manual closure: it derives which tasks to archive from TaskMergeResult.fullyPublished, and it never writes a closureNote.\n\nAdd a new scripts/closeTasks.ts (the user chose a separate file over extending taskArchival.ts) exporting a closeTasks() function plus a CLI entry point the SKILL.md can invoke as `node \"${CLAUDE_PLUGIN_ROOT}/scripts/closeTasks.ts\" '[64,65]' '<closureNote>'`, matching the no-space-JSON-array argument convention already used by getTaskDetails.ts and unblockDependents.ts. It must accept per-task closure notes and commit hashes, write completionDate as today in YYYY-MM-DD, preserve the order of the remaining tasks, skip task numbers that are already in completedTasks.json or absent from both, and report what it closed and what it skipped. Reuse readTaskFile and resolveTaskFiles from scripts/taskFiles.ts rather than reimplementing file resolution.\n\nThen edit skills/close-tasks/SKILL.md to invoke that script instead of describing the move in prose, and widen its allowed-tools front-matter (currently only `Bash(git add *)`) so the script may run.",
-    "files": [
-      "scripts/closeTasks.ts",
-      "skills/close-tasks/SKILL.md",
-      "tests/closeTasks.test.ts"
-    ],
-    "tests": "Round-trip on temp files: const dir = mkdtempSync(...); write tasks.json -> [ {64}, {65}, {66} ] and completedTasks.json -> []. Run closeTasks([65], \"fixed by abc123\", dir). Assert tasks.json == [ {64}, {66} ] with the original order kept; assert completedTasks == [ {65, completionDate, commitHashes, closureNote} ]; assert JSON.parse of both files does not throw.",
-    "difficulty": 2
-  },
-  {
     "taskNumber": 65,
     "title": "Add a split-task skill that breaks an oversized task into N smaller tasks",
     "userDescription": "new skill 'split-task':  When a task description is particularly long or contains lots of steps or the task difficulty is high (above 3), allow splitting the task into smaller tasks at reasonable split points.  For example: task 58 should have been split into 'add readOnlyFiles: [*] to every task in tasks.json that is missing the key as part of 'close-tasks'\" \"add support for putting the readOnlyFiles values into the brief creation step\" and \"make 'close-tasks' rename 'files' in existing tasks.json to 'modifiableFiles\", and \"make create-task populate readOnlyFiles and modifiableFiles through subagent codebase research for the task being logged.\"",
@@ -194,8 +181,7 @@
       "tests/mergeTaskWorktrees.test.ts"
     ],
     "tests": "Skip a new test, update the existing 'blockedBy' tests to support this new object format. Concretely, the fixtures and assertions already covering blockedBy must be rewritten to the object shape: tests/prepareTasks.test.ts:170,193 (`blockedBy: [1]`), tests/runStartup.test.ts:24 (`blockedBy: [1]`), tests/taskStats.test.ts:28,91 (`blockedBy: [2]`, stale `blockedBy: [99]`, `blockedBy: [1]`), tests/getTaskDetails.test.ts:21,31-32,55,58 (`/OPEN 2: blocked task \\[blockedBy: 1,3\\]/` and `assert.deepEqual(...blockedBy, [1, 3])`), tests/unblockDependents.test.ts:19-20,32,36-38,47 (`blockedBy: [1]`, `blockedBy: [1, 3]`, the field-dropped-when-empty assertion, `assert.deepEqual(...blockedBy, [3])`, `/no blockedBy references/`), tests/checkBlockers.test.ts:20-21 (`blockedBy: [1]`, closed-blocker `blockedBy: [3]`), and tests/mergeTaskWorktrees.test.ts:606 (`blockedBy: []`). Add coverage inside those existing files for the two behaviours the change introduces: a surviving entry keeps its reason string after an unrelated blocker is closed, and a legacy bare-number entry is upgraded to the object form during a close-tasks run.",
-    "difficulty": 4,
-    "blockedBy": [64]
+    "difficulty": 4
   },
   {
     "taskNumber": 70,
@@ -212,7 +198,9 @@
     ],
     "tests": "Feed the main agent a canned set of subagent verdicts (one \"claim is true, still blocked\", one \"claim is false, not blocked\") for a run containing both tasks, and assert the run proceeds with the unblocked task and skips the genuinely blocked one. Define the allowed verdicts in a script file that the subagents use, and have the test import those verdict values from that script rather than hard-coding literal strings, so the fixture and the subagent contract cannot drift apart. Also assert that the disproven blockedBy entry is stripped from tasks.json while the upheld one is left intact, and that a missing or malformed verdict leaves the task blocked.",
     "difficulty": 4,
-    "blockedBy": [69]
+    "blockedBy": [
+      69
+    ]
   },
   {
     "taskNumber": 71,
@@ -226,7 +214,9 @@
     ],
     "tests": "Byte-for-byte snapshot, but based on the content of the brief at a particular commit hash, and the skill body at an earlier hash (before this skill was refactored). Concretely: pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/close-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [64, 69]
+    "blockedBy": [
+      69
+    ]
   },
   {
     "taskNumber": 72,
@@ -240,7 +230,11 @@
     ],
     "tests": "Same as task 71: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/create-task/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [58, 65, 67]
+    "blockedBy": [
+      58,
+      65,
+      67
+    ]
   },
   {
     "taskNumber": 73,
@@ -267,7 +261,9 @@
     ],
     "tests": "Same as tasks 71, 72 and 73: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/pick-a-task/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [66]
+    "blockedBy": [
+      66
+    ]
   },
   {
     "taskNumber": 75,
@@ -281,7 +277,10 @@
     ],
     "tests": "Same as tasks 71 through 74: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 3,
-    "blockedBy": [62, 70]
+    "blockedBy": [
+      62,
+      70
+    ]
   },
   {
     "taskNumber": 76,
@@ -295,7 +294,9 @@
     ],
     "tests": "Same as tasks 71 through 75: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-unblocked-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [69]
+    "blockedBy": [
+      69
+    ]
   },
   {
     "taskNumber": 77,
@@ -322,7 +323,9 @@
     ],
     "tests": "Same as tasks 71 through 77: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/update-task-files/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [58]
+    "blockedBy": [
+      58
+    ]
   },
   {
     "taskNumber": 79,
@@ -336,6 +339,27 @@
     ],
     "tests": "Same as tasks 71 through 78: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/update-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 2,
-    "blockedBy": [61, 62]
+    "blockedBy": [
+      61,
+      62
+    ]
+  },
+  {
+    "taskNumber": 80,
+    "title": "Detect destination-branch drift in the merge phase and rebase the worktree before merging instead of aborting the run",
+    "userDescription": "merge workflow needs to check if the destination branch's commit the worktree was created from is still the tip of the destination branch or if the destination branch has new commits, and handle the 'new commits' situation appropriately (has merge conflicts ? rebase worktree and resolve conflicts before merge attempt : merge attempt)",
+    "description": "Root-cause findings from reading the merge subsystem:\n\n**The base commit is never recorded at worktree-creation time.** scripts/prepareTasks.ts:133-154 `createWorktreeForGroup` cuts the branch with `git -C <repoRoot> worktree add -B <branch> <worktreePath> HEAD` (or, when the worktree directory already exists from a prior run, `git -C <worktreePath> checkout --force -B <branch> <currentBranchName>`). It returns only the path and never runs `rev-parse HEAD`. A base OID does exist in the system, but it comes from a different subsystem at a different moment: scripts/repositoryDiscovery.ts:39-49 and 89-118 capture `git rev-parse HEAD` per occurrence into `RepositoryOccurrence.baseOid` (type at scripts/repositoryManifest.ts:16-17), and prepareTasks.ts:194-212 `runAsCli` loads that manifest BEFORE calling buildWorkflowArguments, which is what creates the worktrees. The two are never re-synced, so today's `baseOid` is an approximation of the worktree's true fork point, not a record of it. It is persisted to disk in .taskTools/run-arguments.json under `repositoryManifest.occurrences[].baseOid` (prepareTasks.ts:77-79, 221-223), never as a git ref.\n\n**There is no drift check between creation and merge — only a compare-and-abort at the point of no return.** scripts/basePublication.ts:48-53 `revalidateRecordedBaseOids` compares the recorded `baseOid` against `readCurrentRefOid(...)` (basePublication.ts:39-42) and, if the ref moved, aborts the whole publish with `published: false`. scripts/mergePipeline.ts:221 does the same inline: `if (readCurrentRefOid(...) !== occurrence.baseOid) return true;` — an abort. `publishCanonicalRef` (basePublication.ts:59-77) then relies on `git update-ref <ref> <target> <expected-old>` so git itself refuses on a race. Every one of these is compare-and-abort; none recomputes against the new tip and retries. That abort-the-run behaviour is exactly what this task replaces with reconciliation.\n\n**Nothing named baseBranchResolution or baseReconciliation does what this task needs.** scripts/baseBranchResolution.ts `resolveBaseBranchCandidates` only answers which local branch name currently has tip == this OID, at discovery time. scripts/baseReconciliation.ts `checkBaseReconciliation` only settles disagreement between multiple occurrences of the same logical subrepo. Neither compares a worktree's fork point to a destination tip.\n\n**`git merge-base` is invoked nowhere in the codebase, and `rebase` appears zero times** across scripts/, skills/ and tests/ (grepped). This task introduces the first use of both.\n\n**Two distinct merge paths exist; be explicit about which one changes.**\n- Path A — the one the tackle-tasks pipeline actually runs (runMergePhase.ts to `mergeTaskWorktrees.ts --run` to `runMergePipeline` in scripts/mergePipeline.ts) never calls `git merge`. It is plumbing-only: a dry-run conflict probe at mergePipeline.ts:124 (`git merge-tree --write-tree <baseOid> <tipOid>`, which throws on conflict and sets the group's `failed` flag at lines 118 and 126), then a hand-built no-ff merge commit via `prepareNoFfMerge` (scripts/repositoryIntegration.ts:96-110: `merge-tree --write-tree` then `commit-tree ... -p base -p tip`), called from mergePipeline.ts:195, with `git update-ref` at 188 and 207.\n- Path B — scripts/mergeTaskWorktrees.ts:104-121 `mergeGroupBranchIntoRepo` does a real working-tree `git merge --no-ff`, with `resolveGitlinkConflicts` (123-138) auto-resolving submodule-pointer-only conflicts and `git merge --abort` otherwise. This path backs the merge-worktree-tasks skill for leftover worktrees, NOT the main pipeline.\nThe drift check belongs in Path A, before the merge-tree probe at mergePipeline.ts:124, because that is where the pipeline decides a group is conflicted. Path B should get the same treatment so an orphaned worktree recovered days later is not silently merged against a stale fork point.\n\n**Work to do:**\n1. Record the true fork point when the worktree is created — capture `git rev-parse HEAD` inside createWorktreeForGroup (prepareTasks.ts:133-154) and carry it on the PreparedGroup so it reaches run-arguments.json. This is the value the drift check compares, not the manifest's discovery-time `baseOid`.\n2. Add the drift check: compare that recorded fork point against the destination branch's current tip. `git merge-base --is-ancestor <forkPoint> <destTip>` plus an equality test distinguishes still-the-tip from destination-has-advanced from histories-diverged.\n3. No drift: today's behaviour, unchanged.\n4. Drift with no conflicts: proceed straight to the merge attempt against the new tip. The `merge-tree --write-tree` probe already answers the conflict question cheaply; run it against the new tip rather than the stale base.\n5. Drift with conflicts: rebase the worktree branch onto the new tip and resolve, then merge. Decision taken: conflict resolution routes to the EXISTING unblock subagent, skills/tackle-tasks/merge.workflow.js, which already diagnoses and fixes conflicted merges (it spawns its agent at merge.workflow.js:93-94) and escalates genuine judgement calls to the user through its `decisions` array (62-76). Do not build a second conflict-resolution path. Note that workflow explicitly forbids force-push and hard-reset; a rebase rewrites the task branch, so the new instructions must make clear that rewriting the TASK branch is permitted while the destination branch stays untouchable.\n\n**Constraints:**\n- scripts/mergePipeline.ts is 249 lines against a 250-line source cap — effectively already at the ceiling. Put the new drift logic in its own module (e.g. scripts/baseDrift.ts) and split mergePipeline.ts before adding to it, not after. scripts/prepareTasks.ts is at 231 lines and has the same problem coming.\n- `MergeOutcome` (mergePipeline.ts:24-26) and `MergeFailure` (runMergePhase.ts:18, `{repo, failedCommand, conflicts, error}`) carry no OIDs today, so a drift-caused failure is currently indistinguishable from any other. Extend whichever type the workflow reads so the report can name the fork point and the new tip; `judgeMergeRun` (runMergePhase.ts:35-47) is what turns a run into merged or blocked.\n- Preserve the existing update-ref CAS in basePublication.ts. Reconciling drift earlier does not make the final compare-and-swap redundant — it is the last line of defence against a race between check and publish.\n\n**Soft interaction, not a blocker:** open task #58 also edits scripts/prepareTasks.ts and scripts/mergePipeline.ts for the modifiableFiles/readOnlyFiles split. Different concern, but expect to rebase one onto the other; #58 has been rejected in plan review twice.",
+    "files": [
+      "scripts/baseDrift.ts",
+      "scripts/mergePipeline.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/runMergePhase.ts",
+      "skills/tackle-tasks/merge.workflow.js",
+      "tests/baseDrift.test.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "Temp-repo drift matrix. Build a temp git repo, branch a worktree off a known commit, then advance the destination branch three ways: (a) no drift, (b) drift touching different files, (c) drift touching the same file. Assert (a) and (b) merge cleanly and (c) triggers the rebase path. Reuse the existing fixture pattern at tests/mergeTaskWorktrees.test.ts:26-40 — `makeTempRepoWithCommit()` (git init, config user.email/user.name, seed.txt, commit) plus `makeGroup()` which calls createWorktreeForGroup — and add the destination-branch commits with a plain `git commit` on the source branch after the worktree exists. Assert on the recorded fork point too: case (a) must show it equal to the destination tip, (b) and (c) must show it strictly behind.",
+    "difficulty": 4
   }
 ]
