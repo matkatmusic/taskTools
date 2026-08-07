@@ -24,4 +24,4 @@ Titles: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts"`
 5. **Archive the processed files**: run `node "${CLAUDE_PLUGIN_ROOT}/scripts/archiveProcessed.ts" <the step-1 file list>`. It moves each given file into `plans/archived/` (a file that yielded no new tasks is still retired by processing it) and leaves any file in place whose name already exists in `plans/archived/`, printing `COLLISION` for it — report those collisions.
 
 Finally, report a short table: each archived file → the task numbers created from it (or "none / duplicate of task N"). 
-Stage the changes but do not commit. Follow `skills/tackle-tasks/COMMIT_MESSAGES.md` to generate a commit-message summary for each affected repo, and show the summaries to the user.
+Stage the changes but do not commit. Invoke the `commit-message` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.

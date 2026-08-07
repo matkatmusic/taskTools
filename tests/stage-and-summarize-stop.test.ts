@@ -38,7 +38,7 @@ test("unstaged edit: emits Stop additionalContext once, consumes flag", () => {
   const home = homeWithFlag("s1", [repoWithEdit(false)]);
   const out = JSON.parse(run(home, { session_id: "s1", stop_hook_active: false }));
   assert.equal(out.hookSpecificOutput.hookEventName, "Stop");
-  assert.match(out.hookSpecificOutput.additionalContext, /COMMIT_MESSAGES\.md/);
+  assert.match(out.hookSpecificOutput.additionalContext, /commit-message skill/);
   assert.equal(existsSync(join(home, ".claude", "turn-flags", "s1")), false);
   assert.equal(run(home, { session_id: "s1", stop_hook_active: false }), "");
 });
