@@ -1,4 +1,4 @@
-import { BLOCKER_VERDICTS, BLOCKER_VERDICT_VALUES, BLOCKER_VERDICT_SCHEMA_FRAGMENT, buildBlockerInvestigationPrompt, encodeBlockerReasonToken } from '../../scripts/blockerVerdicts.ts'
+import { BLOCKER_VERDICTS, BLOCKER_VERDICT_VALUES, BLOCKER_VERDICT_SCHEMA_FRAGMENT, buildBlockerInvestigationPrompt } from '../../scripts/blockerVerdicts.ts'
 
 export const meta = {
   name: 'tackle-tasks-blockers',
@@ -59,7 +59,6 @@ const verdicts = PAIRS.map((pair, i) => {
   const valid = isValidVerdict(pair, result)
   return {
     ...pair,
-    reasonToken: encodeBlockerReasonToken(pair.reason),
     verdict: valid && result.verdict === BLOCKER_VERDICTS.DISPROVEN ? BLOCKER_VERDICTS.DISPROVEN : BLOCKER_VERDICTS.STILL_BLOCKED,
     notes: valid
       ? result.notes

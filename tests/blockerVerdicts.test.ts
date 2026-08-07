@@ -1,4 +1,4 @@
-// blockerVerdicts.ts: exported verdict vocabulary/schema/prompt/token helpers, and the CLI that strips one exact disproven blockedBy entry. Run: node --test tests/*.test.ts
+// Tests blockerVerdicts.ts exports and its stdin-driven strip CLI. Run: node --test tests/*.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -10,26 +10,14 @@ import {
   BLOCKER_VERDICT_VALUES,
   BLOCKER_VERDICT_SCHEMA_FRAGMENT,
   buildBlockerInvestigationPrompt,
-  encodeBlockerReasonToken,
-  decodeBlockerReasonToken,
 } from "../scripts/blockerVerdicts.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "blockerVerdicts.ts");
 
-test("exports the verdict vocabulary, derived values, schema fragment, and a token round-trip for Unicode and shell-metacharacter reasons", () => {
+test("exports the verdict vocabulary, derived values, and schema fragment", () => {
   assert.deepEqual(BLOCKER_VERDICTS, { DISPROVEN: "disproven", STILL_BLOCKED: "still-blocked" });
   assert.deepEqual(BLOCKER_VERDICT_VALUES, ["disproven", "still-blocked"]);
   assert.deepEqual(BLOCKER_VERDICT_SCHEMA_FRAGMENT, { type: "string", enum: ["disproven", "still-blocked"] });
-  const reason = 'needs "task 1" $(rm -rf /) `whoami` \\ backslash 日本語 emoji 🎉\nline two';
-  const token = encodeBlockerReasonToken(reason);
-  assert.match(token, /^r[A-Za-z0-9_-]*$/);
-  assert.equal(decodeBlockerReasonToken(token), reason);
-});
-
-test("encodeBlockerReasonToken/decodeBlockerReasonToken round-trip an empty reason as the bare 'r' token", () => {
-  const token = encodeBlockerReasonToken("");
-  assert.equal(token, "r");
-  assert.equal(decodeBlockerReasonToken(token), "");
 });
 
 test("buildBlockerInvestigationPrompt renders the exact investigation question", () => {
@@ -38,6 +26,9 @@ test("buildBlockerInvestigationPrompt renders the exact investigation question",
     "Find out if task 70 is actually blocked by task 69 due to: needs task 69",
   );
 });
+
+const METACHAR_REASON = 'needs "task 1" $(rm -rf /) `whoami` \\ backslash 日本語 emoji 🎉';
+const MULTILINE_REASON = "needs task 1\nsee also task 5\nand the docs";
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-blockerVerdicts-"));
@@ -63,14 +54,20 @@ function makeProjectRoot(): string {
         ],
       },
       { taskNumber: 7, title: "blocked with an empty reason", blockedBy: [{ taskNum: 1, reason: "" }] },
+      { taskNumber: 8, title: "blocked with shell metacharacters", blockedBy: [{ taskNum: 1, reason: METACHAR_REASON }] },
+      { taskNumber: 9, title: "blocked with a multi-line reason", blockedBy: [{ taskNum: 1, reason: MULTILINE_REASON }] },
     ]),
   );
   writeFileSync(join(root, "completedTasks.json"), JSON.stringify([]));
   return root;
 }
 
-function runScript(cwd: string, ...args: string[]): string {
-  return execFileSync("node", ["--no-inspect", SCRIPT, ...args], { cwd, encoding: "utf8" });
+function runScript(cwd: string, blockedArg: string, blockerArg: string, reason: string): string {
+  return execFileSync("node", ["--no-inspect", SCRIPT, blockedArg, blockerArg], {
+    cwd,
+    encoding: "utf8",
+    input: reason + "\n",
+  });
 }
 
 function readTasks(root: string): any[] {
@@ -79,7 +76,7 @@ function readTasks(root: string): any[] {
 
 test("removes only the exact matching entry, keeping a same-taskNum entry with a different reason", () => {
   const root = makeProjectRoot();
-  const out = runScript(root, "2", "1", encodeBlockerReasonToken("needs task 1"));
+  const out = runScript(root, "2", "1", "needs task 1");
   assert.equal(out, "removed blockedBy entry from task 2 for blocker task 1\n");
   const task2 = readTasks(root).find((t: any) => t.taskNumber === 2);
   assert.deepEqual(task2.blockedBy, [
@@ -90,15 +87,15 @@ test("removes only the exact matching entry, keeping a same-taskNum entry with a
 
 test("deletes blockedBy entirely when the last entry is removed", () => {
   const root = makeProjectRoot();
-  runScript(root, "4", "3", encodeBlockerReasonToken("needs task 3"));
+  runScript(root, "4", "3", "needs task 3");
   const task4 = readTasks(root).find((t: any) => t.taskNumber === 4);
   assert.equal("blockedBy" in task4, false);
 });
 
-test("reports no match and leaves tasks.json untouched when the decoded reason doesn't match", () => {
+test("reports no match and leaves tasks.json untouched when the reason doesn't match", () => {
   const root = makeProjectRoot();
   const before = readFileSync(join(root, "tasks.json"), "utf8");
-  const out = runScript(root, "2", "1", encodeBlockerReasonToken("some other reason entirely"));
+  const out = runScript(root, "2", "1", "some other reason entirely");
   assert.equal(out, "no matching blockedBy entry for task 2 blocked by task 1 with that reason\n");
   assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), before);
 });
@@ -106,23 +103,39 @@ test("reports no match and leaves tasks.json untouched when the decoded reason d
 test("reports no match and leaves tasks.json untouched when the pair doesn't exist", () => {
   const root = makeProjectRoot();
   const before = readFileSync(join(root, "tasks.json"), "utf8");
-  const out = runScript(root, "2", "99", encodeBlockerReasonToken("needs task 99"));
+  const out = runScript(root, "2", "99", "needs task 99");
   assert.equal(out, "no matching blockedBy entry for task 2 blocked by task 99 with that reason\n");
   assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), before);
 });
 
 test("two identical blockedBy entries: one CLI invocation removes exactly one", () => {
   const root = makeProjectRoot();
-  const out = runScript(root, "6", "1", encodeBlockerReasonToken("needs task 1"));
+  const out = runScript(root, "6", "1", "needs task 1");
   assert.equal(out, "removed blockedBy entry from task 6 for blocker task 1\n");
   const task6 = readTasks(root).find((t: any) => t.taskNumber === 6);
   assert.deepEqual(task6.blockedBy, [{ taskNum: 1, reason: "needs task 1" }]);
 });
 
-test("removes a blockedBy entry whose reason is the empty string, via the bare 'r' token", () => {
+test("removes a blockedBy entry whose reason is the empty string", () => {
   const root = makeProjectRoot();
-  const out = runScript(root, "7", "1", encodeBlockerReasonToken(""));
+  const out = runScript(root, "7", "1", "");
   assert.equal(out, "removed blockedBy entry from task 7 for blocker task 1\n");
   const task7 = readTasks(root).find((t: any) => t.taskNumber === 7);
   assert.equal("blockedBy" in task7, false);
+});
+
+test("a reason with Unicode and shell metacharacters survives the heredoc round trip unchanged", () => {
+  const root = makeProjectRoot();
+  const out = runScript(root, "8", "1", METACHAR_REASON);
+  assert.equal(out, "removed blockedBy entry from task 8 for blocker task 1\n");
+  const task8 = readTasks(root).find((t: any) => t.taskNumber === 8);
+  assert.equal("blockedBy" in task8, false);
+});
+
+test("a multi-line reason survives the heredoc round trip unchanged", () => {
+  const root = makeProjectRoot();
+  const out = runScript(root, "9", "1", MULTILINE_REASON);
+  assert.equal(out, "removed blockedBy entry from task 9 for blocker task 1\n");
+  const task9 = readTasks(root).find((t: any) => t.taskNumber === 9);
+  assert.equal("blockedBy" in task9, false);
 });

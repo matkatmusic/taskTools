@@ -1,5 +1,5 @@
-// Single source of truth for blocker verdicts: allowed values, investigation prompt, reason tokens, and the strip-entry CLI.
-import { writeFileSync } from "node:fs";
+// Single source of truth for blocker verdicts: allowed values, investigation prompt, and the strip-entry CLI.
+import { writeFileSync, readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 export const BLOCKER_VERDICTS = { DISPROVEN: "disproven", STILL_BLOCKED: "still-blocked" } as const;
@@ -10,14 +10,6 @@ export const BLOCKER_VERDICT_SCHEMA_FRAGMENT = { type: "string", enum: [...BLOCK
 
 export function buildBlockerInvestigationPrompt(blockedTask: number, blockerTask: number, reason: string): string {
   return `Find out if task ${blockedTask} is actually blocked by task ${blockerTask} due to: ${reason}`;
-}
-
-export function encodeBlockerReasonToken(reason: string): string {
-  return "r" + Buffer.from(reason, "utf8").toString("base64url");
-}
-
-export function decodeBlockerReasonToken(token: string): string {
-  return Buffer.from(token.slice(1), "base64url").toString("utf8");
 }
 
 export function stripDisprovenBlocker(tasks: any[], blockedTaskNumber: number, blockerTaskNumber: number, reason: string): boolean {
@@ -31,15 +23,25 @@ export function stripDisprovenBlocker(tasks: any[], blockedTaskNumber: number, b
   return true;
 }
 
+function readStdin(): string {
+  try {
+    return readFileSync(0, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
-  const [blockedArg, blockerArg, reasonTokenArg] = process.argv.slice(2);
+  const [blockedArg, blockerArg] = process.argv.slice(2);
   const blockedTaskNumber = Number(blockedArg);
   const blockerTaskNumber = Number(blockerArg);
-  if (!Number.isFinite(blockedTaskNumber) || !Number.isFinite(blockerTaskNumber) || !reasonTokenArg || !/^r[A-Za-z0-9_-]*$/.test(reasonTokenArg)) {
-    process.stderr.write("usage: node blockerVerdicts.ts <blockedTaskNumber> <blockerTaskNumber> <reasonToken>\n");
+  if (!Number.isFinite(blockedTaskNumber) || !Number.isFinite(blockerTaskNumber)) {
+    process.stderr.write(
+      "usage: node blockerVerdicts.ts <blockedTaskNumber> <blockerTaskNumber> <<'BLOCKERREASONEOF'\n<reason>\nBLOCKERREASONEOF\n",
+    );
     process.exit(1);
   }
-  const reason = decodeBlockerReasonToken(reasonTokenArg);
+  const reason = readStdin().replace(/\n$/, "");
 
   const { tasksPath } = resolveTaskFiles(process.cwd());
   const tasks = readTaskFile(tasksPath);
