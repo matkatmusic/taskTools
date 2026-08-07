@@ -1,7 +1,3 @@
-import { execFileSync } from 'node:child_process'
-import { readTaskFile, resolveTaskFiles } from '../../scripts/taskFiles.ts'
-import { writeTaskBriefFile } from '../../scripts/prepareTasks.ts'
-
 export const meta = {
   name: 'tackle-tasks-plan',
   description: 'Write one plan file per task, one planner agent each',
@@ -20,15 +16,28 @@ const PLAN_SCHEMA = {
     planFile: { type: 'string' },
     question: { type: 'string' },
     missingFiles: { type: 'array', items: { type: 'string' } },
+    files: { type: 'array', items: { type: 'string' } },
   },
   required: ['task', 'status', 'planFile', 'question'],
 }
+
+const fileRetryPreamble = (t, missingFiles) => `Before planning, run these two commands with Bash from ${ARGS.repo} to gain read access to the files you flagged as missing, then continue below:
+
+1. cd ${ARGS.repo} && node "scripts/addTaskFiles.ts" '[${t.number}]' ${missingFiles.map((f) => JSON.stringify(f)).join(' ')}
+2. cd ${ARGS.repo} && node -e "(async()=>{const {resolveTaskFiles,readTaskFile}=await import('./scripts/taskFiles.ts');const {writeTaskBriefFile}=await import('./scripts/prepareTasks.ts');const pair=resolveTaskFiles(process.cwd());const task=readTaskFile(pair.tasksPath).find(x=>x.taskNumber===${t.number});if(!task)throw new Error('task ${t.number} disappeared from tasks.json');writeTaskBriefFile(task,process.cwd());console.log(JSON.stringify(task.files));})()"
+
+Command 1 adds the missing paths to this task's owned files in tasks.json.
+Command 2 regenerates plans/brief-${t.number}.md from the updated task record and prints
+the task's full current owned-files list as a JSON array on stdout — record that array,
+you will return it as "files" below.
+
+`
 
 const testsInstruction = (t) => t.tests && t.tests !== 'skip'
   ? `The task's tests field holds an example test the user wrote — put it into the plan's verification section as the concrete check to run, expanded with a few extra cases covering the individual functions/subparts it touches: ${t.tests}`
   : 'This task has no tests field, or it is the literal string "skip" — do not require TDD; write ordinary verification commands in the plan instead.'
 
-const plannerBrief = (t) => `Invoke /ponytail:ponytail ultra.
+const plannerBrief = (t, preamble = '') => `${preamble}Invoke /ponytail:ponytail ultra.
 Read this brief file: ${t.briefFile}
 You may also READ these owned files, and nothing else: ${t.files.join(', ')}
 Read them — a plan that guesses at their contents will be rejected by the reviewer.
@@ -57,8 +66,8 @@ question in "question". If the task no longer applies to the codebase, set
 status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
 Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
-
-You are forbidden to edit any file other than ${t.planFile}; to read a file outside
+${preamble ? `Also return "files": the JSON array command 2 above printed.\n` : ''}
+You are forbidden to edit any file other than ${t.planFile}${preamble ? ', tasks.json, and plans/brief-*.md — those only via the two commands given above' : ''}; to read a file outside
 the owned list; to leave a decision for the implementer; or to write a plan step
 whose exact target you did not read.`
 
@@ -74,10 +83,10 @@ const retryAgent = async (spawn, attempts = 3) => {
   return null
 }
 
-const runPlanner = (t) => {
+const runPlanner = (t, preamble = '') => {
   const options = { label: `plan:${t.number}`, phase: 'Plan', schema: PLAN_SCHEMA }
   if (PLAN_MODEL) options.model = PLAN_MODEL
-  return retryAgent(() => agent(plannerBrief(t), options))
+  return retryAgent(() => agent(plannerBrief(t, preamble), options))
 }
 
 const results = await parallel(TASKS.map((t) => () => runPlanner(t)))
@@ -92,16 +101,12 @@ const firstPass = TASKS.map((t, i) => results[i] ?? {
 const needsFileRetry = (p) => p.status === 'needs-clarification' && Array.isArray(p.missingFiles) && p.missingFiles.length > 0
 
 const retryWithFiles = async (t, p) => {
-  execFileSync('bun', ['scripts/addTaskFiles.ts', JSON.stringify([t.number]), ...p.missingFiles], { cwd: ARGS.repo, stdio: 'inherit' })
-  const pair = resolveTaskFiles(ARGS.repo)
-  const updated = readTaskFile(pair.tasksPath).find((task) => task.taskNumber === t.number)
-  if (!updated) throw new Error(`task ${t.number} disappeared from tasks.json`)
+  const readableTask = { ...t, files: [...new Set([...t.files, ...p.missingFiles])] }
+  const retryResult = await runPlanner(readableTask, fileRetryPreamble(t, p.missingFiles))
   t.files = [...new Set([
     ...t.files,
-    ...(Array.isArray(updated.files) ? updated.files : []),
+    ...(Array.isArray(retryResult?.files) ? retryResult.files : p.missingFiles),
   ])]
-  writeTaskBriefFile(updated, ARGS.repo)
-  const retryResult = await runPlanner(t)
   return retryResult ?? {
     task: t.number,
     status: 'needs-clarification',
