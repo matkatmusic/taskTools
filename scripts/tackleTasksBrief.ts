@@ -88,6 +88,33 @@ straight from tasks.json.
 Each task workflow's completion sends a task-notification back to you. That
 notification — not polling — is how you learn a task is ready.
 
+## Gate each task
+
+The moment a task's own task-notification says it finished plan+implement,
+gate that task immediately, in this main conversation — never inside a
+workflow or a subagent, since \`AskUserQuestion\` is stripped from every
+subagent and is not a workflow-script hook. Do not wait for any other
+task's workflow to finish; one task's gate never waits on another task's
+notification.
+
+Call \`AskUserQuestion\` once for that task. Include an explicit decision
+for the task itself — "Approve for merge" or "Do not approve" — alongside
+its status, the fence violations the implement stage recorded for it
+(task 138), and the codex objections that survived that task's
+plan-review rounds (task 135). Present each fence violation and each
+surviving objection as its own proposed task, separate from the approval
+decision, that the user can accept or reject. For every proposed task the
+user accepts, invoke the \`create-task\` skill once, never edit
+\`tasks.json\` directly. Drop every proposed task the user rejects without
+recording it anywhere.
+
+Only "Approve for merge" clears a task to merge; "Do not approve" means
+the task never enters the merge queue and never merges. An approved task
+enters the merge queue immediately on approval — even while other tasks
+are still planning or implementing. Never hold an approved task back to
+gate or merge it alongside the rest, and never let this gate become a
+barrier that waits for the whole batch.
+
 ## Closing your tasks
 
 Close every task that is not problematic and was completed successfully, rendering its \`tasks.json\` entry stale, with **one** invocation of the \`close-tasks\` skill for all of them. Its first argument must be a JSON array of the task numbers with no spaces — \`[268,270,281]\` — followed by your reasoning for the \`closureNote\`s, naming each task (\`#268 …, #270 …\`) when the reasons differ.
