@@ -529,7 +529,9 @@
       "scripts/repositoryManifest.ts",
       "scripts/repositoryBranches.ts",
       "scripts/resolutionRequests.ts",
-      "scripts/manifestBootstrap.ts"
+      "scripts/manifestBootstrap.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/runMergePhase.ts"
     ],
     "tests": "skip",
     "difficulty": 5,
