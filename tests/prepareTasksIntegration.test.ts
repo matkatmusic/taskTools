@@ -9,7 +9,6 @@ import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import { getOwningOccurrence } from "../scripts/repositoryGraph.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
-import { groupTasksByFileOverlap } from "../scripts/taskGroups.ts";
 const prepareTasksModulePath = new URL("../scripts/prepareTasks.ts", import.meta.url).href;
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
@@ -77,23 +76,21 @@ test("test_everyOccurrenceHasANonEmptyOriginUrl", () => {
     }
 });
 
-test("test_groupTasksByFileOverlapReturnsRealGroupsInsteadOfThrowing", () => {
+test("test_buildWorkflowArgumentsCreatesOneWorktreePerTaskAgainstARealRepo", () => {
     const tasks: TaskRecord[] = [
         { taskNumber: 1, files: ["scripts/foo.ts"] },
         { taskNumber: 2, files: ["external/sub/src/bar.ts"] },
     ];
-    const groups = groupTasksByFileOverlap(tasks);
-    assert.ok(groups.length > 0);
 
     // Bun drops process.env edits for children, so only a spawned process can carry the git override.
     const script = `
         const { buildWorkflowArguments } = await import(${JSON.stringify(prepareTasksModulePath)});
-        const built = buildWorkflowArguments(${JSON.stringify(rootPath)}, "npx tsc --noEmit", ${JSON.stringify(groups)});
+        const built = buildWorkflowArguments(${JSON.stringify(rootPath)}, "npx tsc --noEmit", ${JSON.stringify(tasks)});
         process.stdout.write(String(built.groups.length));
     `;
     const groupCount = execFileSync("bun", ["-e", script], {
         encoding: "utf8",
         env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigPath },
     });
-    assert.ok(Number(groupCount) > 0);
+    assert.equal(Number(groupCount), 2);
 });
