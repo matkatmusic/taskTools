@@ -24,6 +24,34 @@ export function readParentTask(taskNumber: number, projectRoot?: string): TaskRe
     return parent;
 }
 
+export interface SplitCandidate {
+    taskNumber: number;
+    title: string;
+    difficulty: number | undefined;
+    fileCount: number;
+    unsplittable: boolean;
+}
+
+export function findSplitCandidates(projectRoot?: string): SplitCandidate[] {
+    const { openTasks } = readTaskLists(projectRoot);
+    const candidates: SplitCandidate[] = [];
+    for (const task of openTasks) {
+        const record = task as unknown as Record<string, unknown>;
+        const difficulty = record.difficulty as number | undefined;
+        const fileCount = ((record.files as string[] | undefined) ?? []).length;
+        if ((difficulty ?? 0) >= 3 || fileCount > 3) {
+            candidates.push({
+                taskNumber: task.taskNumber,
+                title: record.title as string,
+                difficulty,
+                fileCount,
+                unsplittable: fileCount < 2,
+            });
+        }
+    }
+    return candidates.sort((a, b) => a.taskNumber - b.taskNumber);
+}
+
 export function partitionFiles(files: string[], numSplits: number): string[][] {
     assertValidSplitCount(numSplits);
     // if (files.length < numSplits) {
@@ -176,6 +204,11 @@ function runClose(parentNumberArg: string, numSplitsArg: string, childNumbersArg
     console.log(JSON.stringify(result, null, 2));
 }
 
+function runCandidates(): void {
+    const candidates = findSplitCandidates();
+    console.log(JSON.stringify(candidates, null, 2));
+}
+
 function main(): void {
     const [command, ...rest] = process.argv.slice(2);
     if (command === "info") {
@@ -186,8 +219,12 @@ function main(): void {
         runClose(rest[0], rest[1], rest[2], rest[3]);
         return;
     }
+    if (command === "candidates") {
+        runCandidates();
+        return;
+    }
     console.error(
-        "Usage: splitTask.ts info <taskNum> <numSplits> | splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson>",
+        "Usage: splitTask.ts info <taskNum> <numSplits> | splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson> | splitTask.ts candidates",
     );
     process.exitCode = 1;
 }
