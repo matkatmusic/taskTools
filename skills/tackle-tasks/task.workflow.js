@@ -26,6 +26,18 @@ const PLAN_SCHEMA = {
   required: ['task', 'status', 'planFile', 'question'],
 }
 
+const VERIFY_SCHEMA = {
+  type: 'object',
+  properties: {
+    task: { type: 'integer' },
+    verdict: { type: 'string', enum: ['approved', 'rejected'] },
+    notes: { type: 'string' },
+    reviewer: { type: 'string', enum: ['codex', 'claude'] },
+    missingFiles: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['task', 'verdict', 'notes', 'reviewer'],
+}
+
 const fileRetryPreamble = (t, missingFiles) => `Before planning, run these two commands with Bash from ${ARGS.repo} to gain read access to the files you flagged as missing, then continue below:
 
 1. cd ${ARGS.repo} && node "scripts/addTaskFiles.ts" '[${t.number}]' ${missingFiles.map((f) => JSON.stringify(f)).join(' ')}
@@ -76,6 +88,60 @@ You are forbidden to edit any file other than ${t.planFile}${preamble ? ', tasks
 the owned list; to leave a decision for the implementer; or to write a plan step
 whose exact target you did not read.`
 
+const codexPrompt = (t, planFile) => `Review an implementation plan. Read only these two files: the brief ${t.briefFile} and the plan ${planFile}. Do not edit anything.
+
+Decide whether the plan is good enough to hand to an implementer: it stays within the task's owned files (${t.files.join(', ')}), it gives concrete steps rather than open design questions, and someone could follow it without having to decide anything the plan should have already decided.
+
+Print APPROVED or REJECTED alone on the first line.
+
+If APPROVED, follow it with one short paragraph saying why.
+
+If REJECTED, follow it with two sections. First "PROBLEMS:" — what is wrong and why. Then "FIXES:" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, replace the FIXES section with a "MISSING_FILES:" section instead: one repo-relative file path per line, the paths the plan would need read access to, and no other text in that section.`
+
+const verifierBrief = (t, planFile) => {
+  const prompt = JSON.stringify(codexPrompt(t, planFile))
+  const command = `codex exec -s read-only ${prompt}`
+  // ponytail: opus/high, not fable/medium — the fallback replaces the strictest gate in the pipeline
+  const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model claude-opus-4-8 --effort high`
+  const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`
+  return `Review the plan for task #${t.number} by running exactly this command:
+
+${command}
+
+If that command exits with an error code, codex is unavailable — not a
+verdict. Unavailability looks like a non-zero exit with no APPROVED or
+REJECTED first line and no PROBLEMS or FIXES block: overloaded api, usage
+exceeded, not logged in, rate limited, or no codex binary on PATH. In that
+case run this command instead, and treat its output exactly as you would
+codex's:
+
+${fableFallbackCommand}
+if that command also exits with an error code, run this command instead, and treat its output exactly as you would codex's:
+
+${opusFallbackCommand}
+
+Whichever reviewer answers prints its verdict on the first line. Never edit
+any file — this agent only reviews the plan, it never applies fixes to it.
+Never run any command other than the ones above.
+
+Report which reviewer actually produced the verdict you return: reviewer
+"codex" if the codex command answered, reviewer "claude" if you had to fall
+back. Never report a fallback review as codex.
+
+If the run prints APPROVED: return verdict "approved", missingFiles [], and
+the reviewer's reasoning in notes.
+
+If the run prints REJECTED: it also prints a PROBLEMS section, and either a
+FIXES section or a MISSING_FILES section. Copy the PROBLEMS section and
+whichever of FIXES or MISSING_FILES it printed into notes verbatim — that
+text is the only thing anyone sees before deciding what to do about this
+plan. If it printed a MISSING_FILES section, also copy each line of that
+section into missingFiles as an array of repo-relative path strings.
+Otherwise return missingFiles as an empty array.
+
+Return {task: ${t.number}, verdict, notes, reviewer, missingFiles}.`
+}
+
 // ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
 const retryAgent = async (spawn, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -102,7 +168,7 @@ const runPlan = async () => {
     tests: task.tests,
   }
   const result = await retryAgent(() => agent(plannerBrief(preparedTask), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
-  return {
+  const planResult = {
     stage: 'plan',
     ...(result ?? {
       task: N,
@@ -111,6 +177,15 @@ const runPlan = async () => {
       question: 'planner returned no result after 3 attempts',
     }),
   }
+  if (planResult.status !== 'planned') return planResult
+  const verify = await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
+    task: N,
+    verdict: 'rejected',
+    notes: 'verifier agent returned no result after 3 attempts (killed, errored, or blocked)',
+    reviewer: 'none',
+    missingFiles: [],
+  }
+  return { ...planResult, verify }
 }
 
 const runImplement = () => {
