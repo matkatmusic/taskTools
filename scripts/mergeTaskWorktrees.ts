@@ -137,23 +137,30 @@ function combineFailureReasons(...parts: (string | null)[]): string {
     return parts.filter((part): part is string => part !== null).join("; ");
 }
 
-export function rebaseGroupOntoSource(worktreePath: string, sourceBranch: string): RebaseOutcome {
+export function rebaseGroupOntoSource(
+    worktreePath: string,
+    sourceBranch: string,
+    submodulePathsAllowedToConflict: string[] = [],
+): RebaseOutcome {
+    let pendingReason: string;
     try {
         git(worktreePath, "rebase", sourceBranch);
         return { status: "rebased-clean" };
     } catch (rebaseError) {
-        const originalReason = gitErrorText(rebaseError);
+        pendingReason = gitErrorText(rebaseError);
+    }
 
+    while (true) {
         let inProgress: boolean;
         try {
             inProgress = rebaseInProgress(worktreePath);
         } catch (stateError) {
             const abortResult = abortRebase(worktreePath);
             const abortFailure = abortResult.aborted ? null : `abort also failed: ${abortResult.failureReason}`;
-            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, gitErrorText(stateError), abortFailure) };
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, gitErrorText(stateError), abortFailure) };
         }
 
-        if (!inProgress) return { status: "cleanup-failed", failureReason: originalReason };
+        if (!inProgress) return { status: "cleanup-failed", failureReason: pendingReason };
 
         let conflictedFilePaths: string[];
         try {
@@ -161,17 +168,40 @@ export function rebaseGroupOntoSource(worktreePath: string, sourceBranch: string
         } catch (collectionError) {
             const abortResult = abortRebase(worktreePath);
             const abortFailure = abortResult.aborted ? null : `abort also failed: ${abortResult.failureReason}`;
-            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, gitErrorText(collectionError), abortFailure) };
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, gitErrorText(collectionError), abortFailure) };
         }
 
-        const abortResult = abortRebase(worktreePath);
-        if (!abortResult.aborted) {
-            return { status: "cleanup-failed", failureReason: combineFailureReasons(originalReason, `abort also failed: ${abortResult.failureReason}`) };
+        // Every conflict in this round is an allowed submodule gitlink: stage the already-rebased commits and continue instead of aborting.
+        const allConflictsAreAllowedSubmodules =
+            conflictedFilePaths.length > 0 && conflictedFilePaths.every((path) => submodulePathsAllowedToConflict.includes(path));
+
+        if (!allConflictsAreAllowedSubmodules) {
+            const abortResult = abortRebase(worktreePath);
+            if (!abortResult.aborted) {
+                return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, `abort also failed: ${abortResult.failureReason}`) };
+            }
+
+            if (conflictedFilePaths.length === 0) return { status: "cleanup-failed", failureReason: pendingReason };
+
+            return { status: "conflicted", conflictedFilePaths };
         }
 
-        if (conflictedFilePaths.length === 0) return { status: "cleanup-failed", failureReason: originalReason };
+        try {
+            for (const path of conflictedFilePaths) git(worktreePath, "add", path);
+        } catch (stagingError) {
+            // A failed `git add` leaves the same conflict in place: abort immediately, never loop on it.
+            const abortResult = abortRebase(worktreePath);
+            const abortFailure = abortResult.aborted ? null : `abort also failed: ${abortResult.failureReason}`;
+            return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, gitErrorText(stagingError), abortFailure) };
+        }
 
-        return { status: "conflicted", conflictedFilePaths };
+        try {
+            git(worktreePath, "rebase", "--continue");
+            return { status: "rebased-clean" };
+        } catch (continueError) {
+            // Only a failed `git rebase --continue` loops: it may mean a later commit hit another conflict.
+            pendingReason = combineFailureReasons(pendingReason, gitErrorText(continueError));
+        }
     }
 }
 
@@ -304,6 +334,42 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
         completedLayers.push(outcome);
     }
     return { completedLayers, stoppedAt: null };
+}
+
+export type ParentRebaseOutcome =
+    | { status: "rebased-and-tested" }
+    | { status: "conflicted"; conflictedFilePaths: string[] }
+    | { status: "cleanup-failed"; failureReason: string }
+    | { status: "tests-failed"; testOutput: string }
+    | { status: "untested"; resolutionRequests: ResolutionRequest[] };
+
+// Rebases the parent's task-N branch onto its source tip, resolving submodule gitlink conflicts, then tests it.
+export function rebaseParentOntoSourceAndTest(
+    occurrenceId: string,
+    worktreePath: string,
+    sourceBranch: string,
+    submodulePaths: string[],
+    resolutionManifest: ResolutionManifest,
+): ParentRebaseOutcome {
+    const rebaseOutcome = rebaseGroupOntoSource(worktreePath, sourceBranch, submodulePaths);
+    if (rebaseOutcome.status === "conflicted") {
+        return { status: "conflicted", conflictedFilePaths: rebaseOutcome.conflictedFilePaths };
+    }
+    if (rebaseOutcome.status === "cleanup-failed") {
+        return { status: "cleanup-failed", failureReason: rebaseOutcome.failureReason };
+    }
+
+    const testPolicyResult = discoverTestPolicy(occurrenceId, worktreePath, resolutionManifest);
+    if (testPolicyResult.status === "needsResolution") {
+        return { status: "untested", resolutionRequests: testPolicyResult.resolutionRequests };
+    }
+
+    try {
+        execSync(testPolicyResult.policy.completeSuiteCommand, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        return { status: "rebased-and-tested" };
+    } catch (error) {
+        return { status: "tests-failed", testOutput: testFailureOutput(error) };
+    }
 }
 
 export function mergeGroupBranchIntoRepo(
