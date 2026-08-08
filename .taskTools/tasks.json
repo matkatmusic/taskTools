@@ -181,20 +181,6 @@
     "difficulty": 3
   },
   {
-    "taskNumber": 116,
-    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Cap description length and cite function names, not line numbers, in the create-task wording",
-    "userDescription": "task descriptions have become massive and unreadable for humans.  Find out where the source of the increase in verbosity is coming from and reduce it.\n\nnever put exact line numbers in a task description, only function names.  reason: line numbers drift as tasks are implemented and closed. function names drift far less frequently.",
-    "description": "Root cause traced to commit 67aff6e (task 60), which split the raw prompt into userDescription and redefined description. Before: \"the task in the user's own wording, plus any refinements gathered\". After: \"only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions\". The word \"fleshed-out\" plus the five-item shopping list reads as an instruction to write an essay, and no length cap exists anywhere in the skill.\n\nMeasured: tasks predating the change (#35, #36) have ~1.2k-char descriptions. Every task from #71 on runs 1.4k-8.2k, median 2.9k, max 8.2k (#80). The tests field grew the same way, up to 1.1k.\n\nThe wording is duplicated in two places and both must change together: the description placeholder in skills/create-task/template/taskTemplate.json, and the \"Populate `description` with\" sentence now emitted by scripts/createTaskBrief.ts. Drop \"fleshed-out\", trim the enumerated list, and add an explicit cap, e.g. \"at most 6 sentences; link to code rather than restating it\".\n\nSecondary ratchet: skills/update-tasks/SKILL.md instructs the agent to extend an existing task's description when de-duplicating, which only ever grows it. Add the same cap there.\n\nScope decided with the user: wording fix only. The 37 existing long descriptions are left alone and age out as tasks close.\n\nAmendment, folded in on the user's second request rather than filed separately because it rewrites the same sentence: that enumerated list must name function names, NOT line numbers. Line numbers in a task description go stale as other tasks land and close, so a description written today cites the wrong lines by the time an implementer reads it; function and symbol names survive far longer. Apply to both wording sites above. Deliberately NOT changed: skills/tackle-tasks/plan.workflow.js (plannerBrief), which requires line numbers per edit, and scripts/reviewPlanBrief.ts, which requires line-range citations as evidence. Both consume their artifact within a single run, so drift cannot occur there.\n\nState of play as of commit 9a6d699, verified by reading both files: scripts/createTaskBrief.ts ALREADY carries the function-names-not-line-numbers rule and needs only the length cap. skills/create-task/template/taskTemplate.json still reads \"fleshed-out ... file paths, line numbers, root-cause findings\" and needs both changes. The two sites therefore contradict each other right now — the template instructs what the brief forbids. Reconciling them is the point of this task. (This task was originally written against skills/create-task/SKILL.md, since reduced to a stub that shells out; the files list has been corrected.)",
-    "files": [
-      "scripts/createTaskBrief.ts",
-      "skills/create-task/template/taskTemplate.json",
-      "skills/update-tasks/SKILL.md"
-    ],
-    "tests": "skip",
-    "difficulty": 3
-  },
-  {
     "taskNumber": 117,
     "version": "7c28efbc48e2262b947beeb6a6d71c20837ea14c",
     "title": "test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails passes under node but fails under bun",
@@ -697,5 +683,25 @@
     ],
     "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
     "difficulty": 5
+  },
+  {
+    "taskNumber": 156,
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Backfill goal and chainGoal on every open task in tasks.json",
+    "userDescription": "yes, create a task to backfill goals for tasks in tasks.json.  completedTasks.json is excluded.",
+    "goal": [
+      "- every task in .taskTools/tasks.json carries a non-empty goal array; completedTasks.json is untouched",
+      "- each goal entry is one line with no embedded newline, and at least one entry per task names what is NOT in scope",
+      "- tasks that belong to a chain share one identical chainGoal array across that chain",
+      "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
+      "- rewriting or shortening existing description text is NOT in scope; that is task 116"
+    ],
+    "description": "Measured against the current file: 41 open tasks, 40 without a goal. 23 of those declare blockedBy — chiefly the 131-153 pipeline chain — so they need a shared chainGoal per chain, authored once and copied identically across that chain's members. 25 have a real tests field that states the acceptance condition and is the best raw material for the goal bullets; the rest carry tests \"skip\" and must be derived from the description alone.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches. Expect roughly 40 rounds.\n\nFormat is fixed by the work already landed this session: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.",
+    "files": [
+      ".taskTools/tasks.json",
+      "tests/taskFiles.test.ts"
+    ],
+    "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
+    "difficulty": 6
   }
 ]

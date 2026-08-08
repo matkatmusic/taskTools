@@ -2212,5 +2212,24 @@
       "da88f2f"
     ],
     "closureNote": "manually implemented: writeTaskBriefFile now emits one file pointer per declared file instead of pasting file bodies, with the missing-file annotation kept and the tests updated to guard both"
+  },
+  {
+    "taskNumber": 116,
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Cap description length and cite function names, not line numbers, in the create-task wording",
+    "userDescription": "task descriptions have become massive and unreadable for humans.  Find out where the source of the increase in verbosity is coming from and reduce it.\n\nnever put exact line numbers in a task description, only function names.  reason: line numbers drift as tasks are implemented and closed. function names drift far less frequently.",
+    "description": "Root cause traced to commit 67aff6e (task 60), which split the raw prompt into userDescription and redefined description. Before: \"the task in the user's own wording, plus any refinements gathered\". After: \"only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions\". The word \"fleshed-out\" plus the five-item shopping list reads as an instruction to write an essay, and no length cap exists anywhere in the skill.\n\nMeasured: tasks predating the change (#35, #36) have ~1.2k-char descriptions. Every task from #71 on runs 1.4k-8.2k, median 2.9k, max 8.2k (#80). The tests field grew the same way, up to 1.1k.\n\nThe wording is duplicated in two places and both must change together: the description placeholder in skills/create-task/template/taskTemplate.json, and the \"Populate `description` with\" sentence now emitted by scripts/createTaskBrief.ts. Drop \"fleshed-out\", trim the enumerated list, and add an explicit cap, e.g. \"at most 6 sentences; link to code rather than restating it\".\n\nSecondary ratchet: skills/update-tasks/SKILL.md instructs the agent to extend an existing task's description when de-duplicating, which only ever grows it. Add the same cap there.\n\nScope decided with the user: wording fix only. The 37 existing long descriptions are left alone and age out as tasks close.\n\nAmendment, folded in on the user's second request rather than filed separately because it rewrites the same sentence: that enumerated list must name function names, NOT line numbers. Line numbers in a task description go stale as other tasks land and close, so a description written today cites the wrong lines by the time an implementer reads it; function and symbol names survive far longer. Apply to both wording sites above. Deliberately NOT changed: skills/tackle-tasks/plan.workflow.js (plannerBrief), which requires line numbers per edit, and scripts/reviewPlanBrief.ts, which requires line-range citations as evidence. Both consume their artifact within a single run, so drift cannot occur there.\n\nState of play as of commit 9a6d699, verified by reading both files: scripts/createTaskBrief.ts ALREADY carries the function-names-not-line-numbers rule and needs only the length cap. skills/create-task/template/taskTemplate.json still reads \"fleshed-out ... file paths, line numbers, root-cause findings\" and needs both changes. The two sites therefore contradict each other right now — the template instructs what the brief forbids. Reconciling them is the point of this task. (This task was originally written against skills/create-task/SKILL.md, since reduced to a stub that shells out; the files list has been corrected.)",
+    "files": [
+      "scripts/createTaskBrief.ts",
+      "skills/create-task/template/taskTemplate.json",
+      "skills/update-tasks/SKILL.md"
+    ],
+    "tests": "skip",
+    "difficulty": 3,
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "990022681ee93df0e4ba49cc83bcc7b58f949ac7"
+    ],
+    "closureNote": "Closed after verifying all three wording sites in HEAD commit 9900226: createTaskBrief.ts and taskTemplate.json now cite function names with a ten-sentence cap and forbid line numbers, and updateTasksBrief.ts caps the de-duplicate extend instruction so it can no longer only grow a description; typecheck clean, and the 11 remaining suite failures are pre-existing merge and finalizer tests unrelated to this work."
   }
 ]
