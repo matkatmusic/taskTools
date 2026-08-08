@@ -742,5 +742,27 @@
     ],
     "tests": "A guard test asserting no \"taskNum\" key remains in .taskTools/tasks.json or .taskTools/completedTasks.json, plus the existing blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key and passing.",
     "difficulty": 5
+  },
+  {
+    "taskNumber": 158,
+    "version": "70500c09ac6e4889764da6ab2bcea6123136c6a2",
+    "title": "Second codex review only rechecks round-one findings instead of hunting for new ones",
+    "userDescription": "the codex review prompt needs to indicate that a 2nd review by codex should only verify that the first round's flagged issues were resolved and not try to find new issues.  the purpose is to prevent a runaway review-reject-fix-review-reject-fix loop that happens often.",
+    "goal": [
+      "- On a REJECTED first round, the reviewer's round-one PROBLEMS and FIXES text is written to a file alongside the plan, and that file survives the run so the recheck has something concrete to confirm against.",
+      "- Reading skills/tackle-tasks/verify.workflow.js shows the second review runs a distinct recheck prompt — the brief no longer instructs the agent to rerun the identical round-one command.",
+      "- The recheck prompt carries the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — so a plan whose round-one items were fixed comes back APPROVED even when the reviewer could find something else.",
+      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected in round two for a brand-new reason.",
+      "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This was investigated with the user and ruled out for the current pipeline — writeTaskBriefFile runs once per plan launch and the verify loop has no separate planner re-write agent. Tasks #83 and #87 in the taskTools-86 chain own that redesign.",
+      "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language tags — task #120 in the taskTools-86 chain owns that lever.",
+      "- NOT in scope: the sibling-task and blockedBy scope being added to the same reviewer prompt — task #155 owns that.",
+      "- NOT in scope: any test asserting the prompt wording. The user chose no test here because a prompt's instructions change often and such a test would only pin wording."
+    ],
+    "description": "skills/tackle-tasks/verify.workflow.js builds one prompt, codexPrompt(t, planFile), and uses it for both review rounds; verifierBrief then tells the agent to run that same reviewer's command a second time against the updated plan. That is the root cause — round two is a fresh full review with no memory of round one, so it is free to reject on problems it never raised before, and the same command string is shared verbatim by the codex, fable, and opus fallbacks. The fix needs a second prompt, not just changed prose, because prose alone cannot alter what the already-quoted codex exec command asks for. The user chose to pass round-one findings via a file next to the plan rather than interpolating reviewer output into a shell command; this repo already carries tests for metacharacter-laden reason strings, so quoting arbitrary reviewer text is a known hazard. Prompts are JSON.stringify'd into commands at workflow-build time, which is another reason runtime text belongs in a file the reviewer reads rather than in the command itself. The existing two-review cap and the codex/fable/opus fallback chain stay as they are. Task #155 edits the same reviewer prompt for a different purpose, and groupTasksByFileOverlap will place both in the same worktree group, so no blockedBy is declared. The taskTools-86 chain's task #83 will eventually delete codexPrompt entirely in favour of reviewerBrief and a 4-value Ruling; the user decided to fix today's loop anyway, so expect this wording to be carried over rather than kept verbatim when that chain lands. The recheck wording is not a guess — the user confirmed it working in a real codex session, and it depends on the reviewer having an audit file to point at, which is exactly the round-one findings file this task creates. The alternative delivery the user named, amending codex findings onto the task record in tasks.json so a regenerated brief carries them as the audit, does not apply here because the current pipeline regenerates the brief only once per plan launch; in the taskTools-86 design a regenerated brief is written only on the missingFiles path, and reviewer prose is never persisted to tasks.json on either design.",
+    "files": [
+      "skills/tackle-tasks/verify.workflow.js"
+    ],
+    "tests": "skip",
+    "difficulty": 3
   }
 ]
