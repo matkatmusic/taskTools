@@ -38,6 +38,15 @@ const VERIFY_SCHEMA = {
   required: ['task', 'verdict', 'notes', 'reviewer'],
 }
 
+const APPLY_FEEDBACK_SCHEMA = {
+  type: 'object',
+  properties: {
+    task: { type: 'integer' },
+    applied: { type: 'boolean' },
+  },
+  required: ['task', 'applied'],
+}
+
 const fileRetryPreamble = (t, missingFiles) => `Before planning, run these two commands with Bash from ${ARGS.repo} to gain read access to the files you flagged as missing, then continue below:
 
 1. cd ${ARGS.repo} && node "scripts/addTaskFiles.ts" '[${t.number}]' ${missingFiles.map((f) => JSON.stringify(f)).join(' ')}
@@ -142,6 +151,16 @@ Otherwise return missingFiles as an empty array.
 Return {task: ${t.number}, verdict, notes, reviewer, missingFiles}.`
 }
 
+const applyFeedbackBrief = (t, planFile, notes) => `Apply reviewer feedback to a plan file. The reviewer's PROBLEMS and FIXES are below, verbatim:
+
+${notes}
+
+Read ${planFile}, then edit it so it satisfies every fix listed above. The only file you may ever edit is ${planFile} — never touch a source file, the brief, or any other file, and never run any command.
+
+If the text above has no FIXES section to apply (for example a MISSING_FILES section instead), make no edits and return applied false.
+
+Return {task: ${t.number}, applied: true} once you have made the edits, or {task: ${t.number}, applied: false} if there was nothing to apply.`
+
 // ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
 const retryAgent = async (spawn, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -150,6 +169,8 @@ const retryAgent = async (spawn, attempts = 3) => {
   }
   return null
 }
+
+const MAX_REVIEW_ROUNDS = 3
 
 const runPlan = async () => {
   log(`task ${N}: plan stage`)
@@ -178,14 +199,22 @@ const runPlan = async () => {
     }),
   }
   if (planResult.status !== 'planned') return planResult
-  const verify = await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
+  const runVerify = async () => await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
     task: N,
     verdict: 'rejected',
     notes: 'verifier agent returned no result after 3 attempts (killed, errored, or blocked)',
     reviewer: 'none',
     missingFiles: [],
   }
-  return { ...planResult, verify }
+  let reviewRounds = MAX_REVIEW_ROUNDS
+  let verify = await runVerify()
+  reviewRounds -= 1
+  while (verify.verdict !== 'approved' && reviewRounds > 0) {
+    await retryAgent(() => agent(applyFeedbackBrief(preparedTask, preparedTask.planFile, verify.notes), { label: `applyFeedback:${N}`, phase: 'Plan', schema: APPLY_FEEDBACK_SCHEMA }))
+    verify = await runVerify()
+    reviewRounds -= 1
+  }
+  return { ...planResult, verify, reviewRounds }
 }
 
 const runImplement = () => {
