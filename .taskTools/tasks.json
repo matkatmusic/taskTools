@@ -182,13 +182,13 @@
   },
   {
     "taskNumber": 116,
-    "version": "8e431bb47fa271b45dc85dec4edbc4f2086b0283",
-    "title": "Cap task description length in the create-task template and skill wording",
-    "userDescription": "task descriptions have become massive and unreadable for humans.  Find out where the source of the increase in verbosity is coming from and reduce it.",
-    "description": "Root cause traced to commit 67aff6e (task 60), which split the raw prompt into userDescription and redefined description. Before: \"the task in the user's own wording, plus any refinements gathered\". After: \"only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions\". The word \"fleshed-out\" plus the five-item shopping list reads as an instruction to write an essay, and no length cap exists anywhere in the skill.\n\nMeasured: tasks predating the change (#35, #36) have ~1.2k-char descriptions. Every task from #71 on runs 1.4k-8.2k, median 2.9k, max 8.2k (#80). The tests field grew the same way, up to 1.1k.\n\nThe wording is duplicated in two places and both must change together: skills/create-task/template/taskTemplate.json:6 and skills/create-task/SKILL.md:24. Drop \"fleshed-out\", trim the enumerated list to what is actually load-bearing (file paths and line numbers), and add an explicit cap, e.g. \"at most 6 sentences; link to code rather than restating it\".\n\nSecondary ratchet: skills/update-tasks/SKILL.md:19 instructs the agent to extend an existing task's description when de-duplicating, which only ever grows it. Add the same cap there.\n\nScope decided with the user: wording fix only. The 37 existing long descriptions are left alone and age out as tasks close.",
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Cap description length and cite function names, not line numbers, in the create-task wording",
+    "userDescription": "task descriptions have become massive and unreadable for humans.  Find out where the source of the increase in verbosity is coming from and reduce it.\n\nnever put exact line numbers in a task description, only function names.  reason: line numbers drift as tasks are implemented and closed. function names drift far less frequently.",
+    "description": "Root cause traced to commit 67aff6e (task 60), which split the raw prompt into userDescription and redefined description. Before: \"the task in the user's own wording, plus any refinements gathered\". After: \"only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions\". The word \"fleshed-out\" plus the five-item shopping list reads as an instruction to write an essay, and no length cap exists anywhere in the skill.\n\nMeasured: tasks predating the change (#35, #36) have ~1.2k-char descriptions. Every task from #71 on runs 1.4k-8.2k, median 2.9k, max 8.2k (#80). The tests field grew the same way, up to 1.1k.\n\nThe wording is duplicated in two places and both must change together: the description placeholder in skills/create-task/template/taskTemplate.json, and the \"Populate `description` with\" sentence now emitted by scripts/createTaskBrief.ts. Drop \"fleshed-out\", trim the enumerated list, and add an explicit cap, e.g. \"at most 6 sentences; link to code rather than restating it\".\n\nSecondary ratchet: skills/update-tasks/SKILL.md instructs the agent to extend an existing task's description when de-duplicating, which only ever grows it. Add the same cap there.\n\nScope decided with the user: wording fix only. The 37 existing long descriptions are left alone and age out as tasks close.\n\nAmendment, folded in on the user's second request rather than filed separately because it rewrites the same sentence: that enumerated list must name function names, NOT line numbers. Line numbers in a task description go stale as other tasks land and close, so a description written today cites the wrong lines by the time an implementer reads it; function and symbol names survive far longer. Apply to both wording sites above. Deliberately NOT changed: skills/tackle-tasks/plan.workflow.js (plannerBrief), which requires line numbers per edit, and scripts/reviewPlanBrief.ts, which requires line-range citations as evidence. Both consume their artifact within a single run, so drift cannot occur there.\n\nState of play as of commit 9a6d699, verified by reading both files: scripts/createTaskBrief.ts ALREADY carries the function-names-not-line-numbers rule and needs only the length cap. skills/create-task/template/taskTemplate.json still reads \"fleshed-out ... file paths, line numbers, root-cause findings\" and needs both changes. The two sites therefore contradict each other right now — the template instructs what the brief forbids. Reconciling them is the point of this task. (This task was originally written against skills/create-task/SKILL.md, since reduced to a stub that shells out; the files list has been corrected.)",
     "files": [
+      "scripts/createTaskBrief.ts",
       "skills/create-task/template/taskTemplate.json",
-      "skills/create-task/SKILL.md",
       "skills/update-tasks/SKILL.md"
     ],
     "tests": "skip",
@@ -677,5 +677,25 @@
     ],
     "tests": "Unit-test the two accessors directly, then one integration assertion for the type change.\n\nassert modifiableFiles({files: [\"a.ts\"]})            -> [\"a.ts\"]     // legacy key still honoured\nassert modifiableFiles({modifiableFiles: [\"a.ts\"]})  -> [\"a.ts\"]     // new key\n\nassert readOnlyFiles({files: [\"a.ts\"]})              -> [\"*\"]        // absent read fence defaults wide\nassert readOnlyFiles({readOnlyFiles: [\"b.ts\"]})      -> [\"b.ts\"]\n\nThen: build a task declaring modifiableFiles plus readOnlyFiles and a legacy task declaring only files, and assert both prepare identically, so the legacy fallback is invisible downstream.\n\nFinally, run buildWorkflowArguments over a prepared group and assert groups[0].tasks[0].readOnlyFiles is present, proving the field survives from the type through the construction site into the printed pipeline args.",
     "difficulty": 3
+  },
+  {
+    "taskNumber": 155,
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Give the codex reviewer sibling-task and blockedBy scope so chain boundaries read as intent",
+    "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
+    "goal": [
+      "- run-arguments.json carries a blockedBy array for every task that declares one",
+      "- the reviewer prompt names each sibling task sharing the group's files, by number and title",
+      "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
+      "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
+    ],
+    "description": "The two halves start from different places, verified against a real run-arguments.json in the taskTools-86 worktree.\n\nSibling scope is already in hand: verify.workflow.js builds TASK_BY_NUMBER by flat-mapping every group's tasks, so each task and its files are reachable; codexPrompt simply never mentions them. Note that buildWorkflowArguments in scripts/prepareTasks.ts sets each task's files to the GROUP's union rather than the task's own declared files, so \"tasks owning overlapping files\" is exactly \"tasks in the same group\" — no new grouping logic is needed.\n\nblockedBy is the missing half: buildWorkflowArguments emits only number, briefFile, planFile, and files per task, and the string blockedBy appears nowhere in the produced arguments. It must be carried through from the TaskRecord before verify.workflow.js can cite it.\n\nThen extend codexPrompt to state the sibling list and the blocker relationships, and to say plainly that work assigned to a named sibling or blocker is out of scope for this plan and must not be reported as an omission. Pairs with task 120, which tells the same reviewer what is not grounds for rejection; this one supplies the scope facts that make those judgements possible.",
+    "files": [
+      "skills/tackle-tasks/verify.workflow.js",
+      "scripts/prepareTasks.ts",
+      "tests/prepareTasks.test.ts"
+    ],
+    "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
+    "difficulty": 5
   }
 ]

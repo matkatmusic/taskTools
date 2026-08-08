@@ -1,6 +1,4 @@
-// Resolves a project's tasks.json / completedTasks.json pair: .taskTools/ when present,
-// project root otherwise (pre-plugin repos keep their root files); neither present -> the
-// .taskTools/ pair, which seedTaskFilesIfAbsent creates on first task creation.
+// Resolves a project's tasks.json / completedTasks.json pair: .taskTools/ when present, project root otherwise (pre-plugin repos keep their root files); neither present -> the .taskTools/ pair, which seedTaskFilesIfAbsent creates on first task creation.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -11,8 +9,7 @@ function pairIn(folder: string): TaskFilePair {
   return { tasksPath: join(folder, "tasks.json"), completedTasksPath: join(folder, "completedTasks.json") };
 }
 
-// Walks up from `root` so a shell cwd left in a subdirectory still finds the
-// project's task files (mid-session `cd`s were silently breaking every skill).
+// Walks up from `root` so a shell cwd left in a subdirectory still finds the project's task files (mid-session `cd`s were silently breaking every skill).
 export function resolveTaskFiles(root: string): TaskFilePair {
   for (let dir = root; ; dir = dirname(dir)) {
     const housed = pairIn(join(dir, ".taskTools"));
@@ -31,11 +28,7 @@ export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
   }
 }
 
-// Task numbers lead a skill invocation; free text (closureNote, flags) may follow.
-// Stop at the first non-numeric token so digits inside prose — dates, "task 162",
-// durations — aren't mistaken for task numbers.
-// Brackets and stray quotes are tolerated so a single no-space JSON array token —
-// [268,270,281], the shell-safe form skills pass as "$1" — parses like bare numbers.
+// Task numbers lead a skill invocation; free text (closureNote, flags) may follow.  Stop at the first non-numeric token so digits inside prose — dates, "task 162", durations — aren't mistaken for task numbers.  Brackets and stray quotes are tolerated so a single no-space JSON array token — [268,270,281], the shell-safe form skills pass as "$1" — parses like bare numbers.
 export function leadingTaskNumbers(args: string[]): number[] {
   const tokens = args.join(" ").trim().split(/\s+/);
   const numeric: number[] = [];
@@ -53,4 +46,10 @@ export function readTaskFile(path: string): TaskRecord[] {
   } catch {
     return [];
   }
+}
+
+// One array entry per line keeps tasks.json readable; older tasks hold a string.
+export function goalText(goal: unknown): string {
+  if (Array.isArray(goal)) return goal.map(line => String(line)).join("\n");
+  return typeof goal === "string" ? goal : "";
 }

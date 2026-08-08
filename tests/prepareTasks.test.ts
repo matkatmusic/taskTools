@@ -64,6 +64,25 @@ test("test_writeTaskBriefFileAnnotatesMissingFilesWithoutThrowing", () => {
     assert.match(text, /\(missing: file not found on disk\)/);
 });
 
+test("test_writeTaskBriefFileJoinsTheGoalArrayIntoOneMarkdownBlock", () => {
+    // goal is stored one line per entry; the brief must rejoin them, not comma-join them.
+    const repoRoot = makeTempRepoWithCommit();
+    const chainGoal = ["Tasks 1-2 ship it", "end to end"];
+    const goal = ["- the gate passes", "- renaming is task 2, not this task"];
+    const briefFile = writeTaskBriefFile({ taskNumber: 3, title: "t3", chainGoal, goal, description: "desc", files: [] }, repoRoot);
+    const text = readFileSync(briefFile, "utf8");
+    assert.match(text, /## Chain goal\n\nTasks 1-2 ship it\nend to end/);
+    assert.match(text, /## Goal\n\n\*\*This task is considered done when all of these are true:\*\*\n\n- the gate passes\n- renaming is task 2, not this task/);
+    assert.doesNotMatch(text, /ship it,/); // a comma means the array was stringified instead of joined
+});
+
+test("test_writeTaskBriefFileOmitsTheGoalHeadingWhenNoGoalIsDeclared", () => {
+    // Tasks written before the goal field must produce the same brief they always did.
+    const repoRoot = makeTempRepoWithCommit();
+    const briefFile = writeTaskBriefFile({ taskNumber: 4, title: "t4", description: "desc", files: [] }, repoRoot);
+    assert.doesNotMatch(readFileSync(briefFile, "utf8"), /## Goal/);
+});
+
 test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };

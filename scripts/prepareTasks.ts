@@ -7,7 +7,7 @@ import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "./repositoryManifest.ts";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { groupTasksByFileOverlap } from "./taskGroups.ts";
-import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { goalText, leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 import { buildOperationPushOccurrences } from "./operationBranches.ts";
 
@@ -117,6 +117,8 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     const content = [
         `# Task ${task.taskNumber}: ${task.title ?? ""}`,
         "",
+        ...(goalText(task.chainGoal) ? [`## Chain goal\n\n${goalText(task.chainGoal)}`, ""] : []),
+        ...(goalText(task.goal) ? [`## Goal\n\n**This task is considered done when all of these are true:**\n\n${goalText(task.goal)}`, ""] : []),
         ...(task.userDescription ? [`## User request\n\n${task.userDescription}`, ""] : []),
         task.description ?? "",
         "",

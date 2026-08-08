@@ -1,12 +1,17 @@
 // UserPromptSubmit hook: intercepts /view-task <N> and blocks with real-newline task text; other prompts pass through.
 import { readFileSync } from "node:fs";
-import { type TaskRecord, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { type TaskRecord, goalText, readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 function formatTask(task: TaskRecord, status: string): string {
   const lines = [`Task ${task.taskNumber} (${status}): ${task.title ?? ""}`];
+  // Goal lines are already markdown; bulleting them like other arrays would double the dashes.
+  const chainGoal = goalText(task.chainGoal);
+  if (chainGoal) lines.push("", "Chain goal:", chainGoal);
+  const goal = goalText(task.goal);
+  if (goal) lines.push("", "This task is considered done when all of these are true:", goal);
   if (task.userDescription) lines.push("", "User request:", String(task.userDescription));
   if (task.description) lines.push("", String(task.description));
-  const extras = Object.entries(task).filter(([key]) => !["taskNumber", "title", "description", "userDescription"].includes(key));
+  const extras = Object.entries(task).filter(([key]) => !["taskNumber", "title", "description", "userDescription", "chainGoal", "goal"].includes(key));
   if (extras.length > 0) lines.push("");
   for (const [key, value] of extras) {
     if (Array.isArray(value)) {

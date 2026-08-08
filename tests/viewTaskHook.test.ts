@@ -39,6 +39,19 @@ test("namespaced /taskTools:view-task is matched like the bare form", () => {
   assert.match(decision.reason, /first task/);
 });
 
+test("goal and chainGoal arrays print as lines, not as bulleted extras", () => {
+    // The default array branch would prefix each entry with "  - ", double-dashing lines that are already bullets.
+    const root = makeProjectRoot();
+    writeFileSync(
+        join(root, "tasks.json"),
+        JSON.stringify([{ taskNumber: 1, title: "first task", chainGoal: ["Tasks 1-2 ship it"], goal: ["- the gate passes", "- renaming is task 2"] }]),
+    );
+    const decision = JSON.parse(runHook("/view-task 1", root));
+    assert.ok(decision.reason.includes("Chain goal:\nTasks 1-2 ship it"));
+    assert.ok(decision.reason.includes("This task is considered done when all of these are true:\n- the gate passes\n- renaming is task 2"));
+    assert.ok(!decision.reason.includes("  - - the gate passes"));
+});
+
 test("hook is silent passthrough for other prompts", () => {
   const out = runHook("unrelated prompt", makeProjectRoot());
   assert.equal(out, "");

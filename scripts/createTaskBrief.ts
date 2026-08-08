@@ -24,7 +24,11 @@ Append ONE object to the \`tasks.json\` array as its LAST element — at the ver
 ${taskTemplate}
 \`\`\`
 
-Populate \`userDescription\` with ${argsValue} verbatim, exactly as typed — never edit, summarize, or reword it. Populate \`description\` with only the agent's derived understanding gathered while writing the task: file paths, line numbers, root-cause findings, constraints, and decisions; it must not restate the raw prompt.
+Populate \`userDescription\` with ${argsValue} verbatim, exactly as typed — never edit, summarize, or reword it. Populate \`description\` with only the agent's derived understanding gathered while writing the task: file paths, function names, root-cause findings, constraints, and decisions; it must not restate the raw prompt. Keep it under ten sentences — cite code rather than restating it. Do not include line numbers; line numbers grow stale as tasks are completed and the codebase evolves.
+
+Populate \`goal\` with an ARRAY of strings, one line per entry and no embedded newlines — the brief and \`/view-task\` rejoin them with newlines, so splitting them keeps \`tasks.json\` readable. Settle the goal with the user through AskUserQuestion, then record their answer as those lines; do not invent conditions they did not agree to. Each entry starts \`- \` and states one condition a reviewer can confirm without reading the diff: a command that succeeds, output a user can see, a symptom that no longer reproduces. At least one entry must name what is explicitly NOT in scope and which sibling task owns it instead — those boundaries stop a reviewer reading a deliberate handoff as an omission. Do not restate the work itself as the goal, and do not repeat the "This task is considered done when all of these are true:" heading — the brief emits it.
+
+Populate \`chainGoal\` only when this task is one of a chain of related tasks: an ARRAY of strings, same one-line-per-entry rule, saying what the whole chain achieves and which task numbers belong to it. Omit the field entirely for a standalone task.
 
 Populate \`files\` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
 
