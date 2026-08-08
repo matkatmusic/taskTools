@@ -1520,5 +1520,38 @@
     "commitHashes": [
       "6c41131716b7beb2e74e7d3efa21edc877c2edd4"
     ]
+  },
+  {
+    "taskNumber": 75,
+    "title": "Move the tackle-tasks skill body into a script that emits it as a literal brief, mirroring review-plan",
+    "userDescription": "convert 'tackle-tasks' skill body into a script, just like the skill body\n  of 'review-plan'.  Keep it simple for now, just copy the task body directly into a\n  'const brief = ' object that gets returned.  refactoring the skill body to be like\n  'review-plan's skill body with logical code being used to dynamically generate the\n  skill body is a separate task.",
+    "description": "Fifth and by far the largest in the family with open tasks #71 (close-tasks), #72 (create-task), #73 (merge-worktree-tasks) and #74 (pick-a-task). Same pattern, same constraints, different source file. Do not merge them.\n\nPattern to copy — skills/review-plan/SKILL.md is 12 lines: frontmatter then a single `!` block (lines 7-11) piping $ARGUMENTS on stdin through a single-quoted heredoc into `node \"${CLAUDE_PLUGIN_ROOT}/scripts/reviewPlanBrief.ts\"`. The prose lives in scripts/reviewPlanBrief.ts as the exported template literal `reviewerBrief` (lines 39-113); the CLI entry at 132-139 writes it to stdout, guarded by `process.argv[1]?.endsWith(\"reviewPlanBrief.ts\")` so the module stays importable by its test. Mirror its stdin read (readStdin, lines 115-121) and its loud failure path (fail, 124-130).\n\nCurrent state — skills/tackle-tasks/SKILL.md is 142 lines, roughly five times the size of any sibling in this family. Frontmatter 1-6 (name, description, `argument-hint: \"[N,N,...] [valid]\"`, `allowed-tools: Bash(git add *), Bash(node *)`), body 8-141.\n\nFour shell substitutions the script must handle:\n1. Line 8 — `node \"${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts\" '$ARGUMENTS'`\n2. Line 9 — a compound shell one-liner: `u=$(node .../checkBlockers.ts --unblocked '$ARGUMENTS'); [ -n \"$u\" ] && node .../getTaskDetails.ts \"$u\" || echo \"none of the requested tasks are unblocked\"`. Decision taken: shell out verbatim rather than reimplementing the conditional in JS — run that exact string through a shell so behaviour is provably identical. This is a deliberate exception to the approach used elsewhere in the family; the quoting hazards are accepted in exchange for not re-deriving the fallback logic.\n3. Line 10 — `node \"${CLAUDE_PLUGIN_ROOT}/scripts/prepareTasks.ts\" '$ARGUMENTS'`\n4. Line 141 — `cat \"${CLAUDE_PLUGIN_ROOT}/skills/tackle-tasks/COMMIT_MESSAGES.md\"`. Keep this a runtime file read, not a hard-coded copy.\n\n`$ARGUMENTS` also appears in prose at line 18 (the `valid` keyword rule), independent of the three shell uses. Use review-plan's single-quoted heredoc delimiter so nothing is shell-expanded on the way in.\n\nThe rest is a verbatim copy into one `const brief` template literal: invocation format (12), the BLOCKED refusal (14), the `/ponytail:ponytail ultra` invocation (16), the `valid` shortcut (18), `## Verification` (20-23), `## Running the pipeline` (25-127) covering the pipeline-args key list, Steps 1 through 6, the merge/unblock loop and the no-serial-fallback line, `## Closing your tasks` (129-135), and `## Commit message` (137-141). No logic may be introduced to generate any of that prose; deriving the body dynamically is explicitly a later, separate task.\n\nWhy this one is riskier than its siblings:\n- `${CLAUDE_PLUGIN_ROOT}` appears roughly ten times, and five of those — lines 41, 45, 57, 63 and 106 — are `scriptPath` values (plan/verify/implement/test/merge .workflow.js) that the reading agent passes straight to the Workflow tool. A placeholder that fails to resolve breaks the entire pipeline, not just a sentence. Inside a JS template literal `${...}` is interpolation, not literal text, and the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand regardless. reviewPlanBrief.ts solved this at lines 6-7 with `fileURLToPath(new URL(\"./planReviewRuling.ts\", import.meta.url))` and the comment \"Absolute, because the reviewer's shell has no CLAUDE_PLUGIN_ROOT to expand\". Apply that to every occurrence.\n- Lines 85-91 are a fenced ```json block whose content is a brace-heavy object literal; lines 27-127 are dense with backticks around key names. All of it needs escaping inside a template literal, which is exactly what the byte-for-byte snapshot test exists to catch.\n\nOrdering — two open tasks also edit skills/tackle-tasks/SKILL.md and must land first, or their edits will target a body that has since moved into the script: #62 converts COMMIT_MESSAGES.md into an invocation-time skill, which rewrites lines 137-141 (the `cat` substitution above); #70 adds the blockedBy-reason investigation step to the preamble at lines 8-14. Note #70 is itself blocked by #69 and #64, so this is a long chain.",
+    "files": [
+      "scripts/tackleTasksBrief.ts",
+      "skills/tackle-tasks/SKILL.md",
+      "tests/tackleTasksBrief.test.ts",
+      "scripts/taskStatsBrief.ts",
+      "skills/task-stats/SKILL.md",
+      "tests/taskStatsBrief.test.ts",
+      "scripts/reviewPlanBrief.ts",
+      "tests/reviewPlanBrief.test.ts"
+    ],
+    "tests": "Same as tasks 71 through 74: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNum": 62,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      },
+      {
+        "taskNum": 70,
+        "reason": "reason not recorded (migrated from legacy blockedBy format)"
+      }
+    ],
+    "completionDate": "2026-08-07",
+    "commitHashes": [
+      "85232c8"
+    ],
+    "closureNote": "Moved the tackle-tasks skill body into scripts/tackleTasksBrief.ts as a literal brief mirroring reviewPlanBrief.ts: SKILL.md collapsed from 148 lines to a 12-line single-quoted-heredoc invocation piping arguments on stdin, the prose lives in the script inside a const brief template literal that is returned, the script runs checkBlockers.ts itself and embeds its real output, and every CLAUDE_PLUGIN_ROOT placeholder became an absolute path resolved with fileURLToPath. tests/tackleTasksBrief.test.ts pins pre-refactor commit 57f3ae1d and asserts the emitted brief reproduces that skill body byte-for-byte once substitutions are applied, that no unexpanded placeholder survives, that stdin drives the live checkBlockers embed, and that empty stdin fails loudly. Verified typecheck clean and full suite 1182 pass 0 fail. The task description was stale on the cat COMMIT_MESSAGES.md substitution and the compound shell one-liner, both already removed by tasks 62 and 70, so the work followed the live SKILL.md and the task 77 precedent."
   }
 ]
