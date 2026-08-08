@@ -524,7 +524,11 @@
       "plans/task-86-spec.md",
       "skills/tackle-tasks/task.workflow.js",
       "skills/tackle-tasks/merge.workflow.js",
-      "scripts/mergeTaskWorktrees.ts"
+      "scripts/mergeTaskWorktrees.ts",
+      "scripts/repositoryDiscovery.ts",
+      "scripts/repositoryManifest.ts",
+      "scripts/repositoryBranches.ts",
+      "scripts/resolutionRequests.ts"
     ],
     "tests": "skip",
     "difficulty": 5,
