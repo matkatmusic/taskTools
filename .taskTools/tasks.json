@@ -118,25 +118,6 @@
     "difficulty": 3
   },
   {
-    "taskNumber": 136,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: programmatic missing-file widening and planner re-run",
-    "userDescription": "## Goal\n\n**Chain goal (tasks 134-136):** The plan stage checks the plan it just produced, up to three times — a `verify` agent finds problems and a separate `applyFeedback` agent fixes them — and when the plan needs a file the task does not own, the workflow widens the task's own files list and re-plans without asking a human.\n\n**This task is done when all of these are true:**\n\n- When the verify agent returns a non-empty `missingFiles`, the workflow itself — plain code, not an agent — runs `node scripts/addTaskFiles.ts '[N]' <paths>`.\n- The workflow then regenerates the brief.\n- The workflow re-runs the planner FROM SCRATCH using the existing `fileRetryPreamble` — a fresh plan, not an amendment of the old one (plans/task-86-spec.md:43).\n- That re-run consumes one of the three rounds from task 135.\n- The widened files list is the same list the implement stage later uses, because one process handles the whole task.\n\n---\n\n[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"scripts/addTaskFiles.ts\"]`.\n\nTitle should be about: tackle-tasks: programmatic missing-file widening and planner re-run.\n\nDescription:\n\nSplit of task 124, step 3 of 3. When the verify agent returns a non-empty missingFiles array, the workflow itself — plain code, not an agent — runs `node scripts/addTaskFiles.ts '[N]' <paths>`, regenerates the brief, and re-runs the planner from scratch using the existing fileRetryPreamble. That counts as one of the three rounds from step 2.\n\nThis is only possible because one workflow per task means one process holding one live files list; today each phase receives a frozen args snapshot, so a widened list never reaches the implementer.\n\ntests: skip. difficulty: around 5.",
-    "description": "Split of task 124, step 3 of 3. Closes the loop on the missingFiles field task 134 added to VERIFY_SCHEMA.\n\nWhen verify returns a non-empty missingFiles array, the workflow itself — plain code in skills/tackle-tasks/task.workflow.js, not an agent — must:\n- run `node scripts/addTaskFiles.ts '[N]' <paths>` to widen the task's files list in tasks.json (addTaskFiles.ts already enforces the repo-relative path boundary, so do not re-validate paths in the workflow);\n- regenerate the task brief from the widened list;\n- re-run the planner from scratch using the existing fileRetryPreamble.\n\nThat widening counts as one of the three rounds the loop from task 135 allows, so it decrements the same counter rather than running outside it.\n\nWhy this works only now: one workflow per task means one process holds one live files list. Today each phase receives a frozen args snapshot at launch, so a list widened mid-run never reaches the implementer — the bug this step exists to remove.\n\nscripts/addTaskFiles.ts is listed because the workflow shells out to it; change it only if the widening call needs an interface it does not already have.\n\nThis task shares task.workflow.js with tasks 134 and 135 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js",
-      "scripts/addTaskFiles.ts"
-    ],
-    "tests": "skip",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 135,
-        "reason": "135 builds the three-round loop and round counter this widening consumes a round from; both edit the same file"
-      }
-    ]
-  },
-  {
     "taskNumber": 137,
     "version": "f2569508451026710ed33235ffc306289fc28c9a",
     "title": "tackle-tasks: implement stage — worker agent, own tests, commit",
