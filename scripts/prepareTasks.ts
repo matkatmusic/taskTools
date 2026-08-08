@@ -94,7 +94,8 @@ export function resolveMergePhaseScriptPath(): string {
 }
 
 function branchNameForGroup(groupId: number): string {
-    return `task-group-${groupId}`;
+    // ponytail: offset by 1 so task-group-1 stays free for the long-running task-86 chain worktree
+    return `task-group-${groupId + 1}`;
 }
 
 function declaredFiles(task: TaskRecord): string[] {

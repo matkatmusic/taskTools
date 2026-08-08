@@ -69,7 +69,7 @@ test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     assert.equal(existsSync(worktreePath), true);
     const branch = git(worktreePath, "branch", "--show-current").trim();
-    assert.equal(branch, "task-group-1");
+    assert.equal(branch, "task-group-2");
 });
 
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
@@ -213,7 +213,7 @@ test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const branch = git(join(worktreePath, "vendor"), "branch", "--show-current").trim();
-    assert.equal(branch, "task-group-1");
+    assert.equal(branch, "task-group-2");
 });
 
 test("test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory", () => {
