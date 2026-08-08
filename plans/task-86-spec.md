@@ -145,6 +145,19 @@ byte-identical. That early exit applies only when no task workflow is still
 outstanding; an empty queue mid-run means "nothing to do yet", not "nothing
 left to do".
 
+**An unmerged task is reported with two fields, not one.** "What went wrong" and
+"why nothing further was tried" are different questions, and one field cannot
+answer both.
+
+| field | holds | carried forward? |
+| --- | --- | --- |
+| `lastFailure` | the concrete failure of the task's last attempt — rebase conflict, unresolved merge conflict, a layer still red after `MAX_REBASE_FIX_ROUNDS`, an UNTESTED layer, or a cleanup / merge / close failure | yes — from the attempt that produced it, never re-derived afterwards from repository state |
+| `terminalReason` | why no further attempt happened — the 2-lap ceiling reached, or the zero-merge lap ending the queue while the task was still retryable | no — it is a property of the loop, not of any attempt |
+
+Both are populated for every unmerged task. A task that failed its second lap on
+an unresolved conflict reports that conflict as `lastFailure` **and** the ceiling
+as `terminalReason`. Neither field substitutes for the other.
+
 The parent never references an unmerged submodule commit.
 
 **"Nothing lands" means a source branch never moved.** Only a merge moves a
@@ -160,10 +173,10 @@ Reuse from `scripts/mergeTaskWorktrees.ts`:
 
 | function | step |
 | --- | --- |
-| `rebaseGroupOntoSource` | 7a |
-| `collectConflictedRebasePaths` | 7b |
-| `mergeGroupBranchIntoRepo`, `mergeSubmoduleBranchIntoRepo`, `resolveGitlinkConflicts` | 8b |
-| `removeWorktreeAndBranch` | cleanup |
+| `rebaseGroupOntoSource` | serial-tail steps 1 and 3 |
+| `collectConflictedRebasePaths` | serial-tail step 4 |
+| `mergeGroupBranchIntoRepo`, `mergeSubmoduleBranchIntoRepo`, `resolveGitlinkConflicts` | serial-tail step 5 |
+| `removeWorktreeAndBranch` | serial-tail step 6, cleanup |
 | `unmergedCommitCount` | "am I on the tip?" |
 
 Write a **new** merge orchestration from scratch, submodule-aware, **inside**
@@ -196,6 +209,11 @@ history of shipping wrong quietly. Its `tests` field must ask for at least:
   lap leaves the queue unmerged; a lap that merges zero tasks with no task
   workflow outstanding ends the queue, while a zero-merge lap with a workflow
   still outstanding does not.
+- **Both report fields, never one.** A task that failed its second lap on an
+  unresolved conflict reports that conflict as `lastFailure` and the ceiling as
+  `terminalReason`. A task still retryable when a zero-merge lap ended the queue
+  reports its own concrete `lastFailure` with `terminalReason` naming the queue
+  exit, not the ceiling.
 - **Cross-repo test discovery.** A submodule with its own test configuration,
   distinct from the parent's, has that configuration found and run by
   `discoverTestPolicy` from inside the submodule. Nothing exercises test
@@ -262,3 +280,11 @@ runs `addTaskFiles.ts`, tasks.json updates and `plan.workflow.js` mutates its
 local copy, but **`implement.workflow.js` still gets the old list.** The
 widened files never reach the implementer. Fixed for free by one workflow per
 task — one process, one live list.
+
+Task 156 predates that fix and **stays open on purpose**. Task 157 is blocked by
+it, so the fix is reassessed before `plan.workflow.js` is deleted rather than
+assumed dead. What survives to reassess: `skills/tackle-tasks/task.workflow.js`
+never reads `.taskTools/run-arguments.json` at all, and the last production
+reader of that file is `scripts/runMergePhase.ts` — the same batch path task 147
+retires. If nothing still needs a persisted-arguments refresh once 153 lands,
+156 closes as obsolete.
