@@ -87,15 +87,18 @@ test("validateFileGroups throws when a group claims a file the parent doesn't ha
     assert.throws(() => validateFileGroups(["a.ts", "b.ts"], [["a.ts"], ["b.ts", "z.ts"]]));
 });
 
-test("validateFileGroups throws when a file is assigned to more than one child", () => {
-    assert.throws(() => validateFileGroups(["a.ts", "b.ts"], [["a.ts", "b.ts"], ["b.ts"]]));
+// test("validateFileGroups throws when a file is assigned to more than one child", () => {
+//     assert.throws(() => validateFileGroups(["a.ts", "b.ts"], [["a.ts", "b.ts"], ["b.ts"]]));
+// });
+
+test("validateFileGroups allows a file shared by more than one child", () => {
+    assert.doesNotThrow(() => validateFileGroups(["a.ts", "b.ts"], [["a.ts", "b.ts"], ["b.ts"]]));
 });
 
 test("validateFileGroups reports every violation category in one error, not just the first", () => {
     assert.throws(
-        () => validateFileGroups(["a.ts", "b.ts", "c.ts"], [["a.ts", "a.ts"], ["z.ts"]]),
+        () => validateFileGroups(["a.ts", "b.ts", "c.ts"], [["a.ts"], ["z.ts"]]),
         (error: Error) =>
-            error.message.includes("assigned to more than one child") &&
             error.message.includes("not in the parent's files array") &&
             error.message.includes("missing from every child group"),
     );

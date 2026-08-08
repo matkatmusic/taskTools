@@ -26,9 +26,9 @@ export function readParentTask(taskNumber: number, projectRoot?: string): TaskRe
 
 export function partitionFiles(files: string[], numSplits: number): string[][] {
     assertValidSplitCount(numSplits);
-    if (files.length < numSplits) {
-        throw new Error(`Cannot split into ${numSplits} groups: parent has only ${files.length} file(s)`);
-    }
+    // if (files.length < numSplits) {
+    //     throw new Error(`Cannot split into ${numSplits} groups: parent has only ${files.length} file(s)`);
+    // }
     const base = Math.floor(files.length / numSplits);
     const remainder = files.length % numSplits;
     const groups: string[][] = [];
@@ -46,10 +46,11 @@ export function validateFileGroups(parentFiles: string[] | undefined, groups: st
     const flattened = groups.flat();
     const problems: string[] = [];
 
-    const assignedTwice = [...new Set(flattened.filter((file, index) => flattened.indexOf(file) !== index))];
-    if (assignedTwice.length > 0) {
-        problems.push(`File(s) assigned to more than one child: ${assignedTwice.join(", ")}`);
-    }
+    // A file may now belong to more than one child (chained children edit the same file in turn).
+    // const assignedTwice = [...new Set(flattened.filter((file, index) => flattened.indexOf(file) !== index))];
+    // if (assignedTwice.length > 0) {
+    //     problems.push(`File(s) assigned to more than one child: ${assignedTwice.join(", ")}`);
+    // }
 
     const extra = flattened.filter((file) => !parentList.includes(file));
     if (extra.length > 0) {
