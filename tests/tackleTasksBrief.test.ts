@@ -46,3 +46,19 @@ test("running the pipeline launches task.workflow.js once per task in the backgr
   assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} task\\.workflow\\.js runs in flight`));
   assert.match(brief, /sliding window, not\s+batches of/);
 });
+
+test("gate: each finished task is presented as one AskUserQuestion gate, never batched", () => {
+  const brief = tackleTasksBrief("[1]", "task 1: unblocked");
+  assert.match(brief, /## Gate each task/);
+  assert.match(brief, /Call `AskUserQuestion` once for that task/);
+  assert.match(brief, /"Approve for merge"/);
+  assert.match(brief, /"Do not approve"/);
+  assert.match(brief, /fence\s+violations the implement stage recorded for it\s+\(task 138\)/);
+  assert.match(brief, /codex\s+objections that survived that task's\s+plan-review rounds \(task 135\)/);
+  assert.match(brief, /Present each fence violation and each\s+surviving objection as its own proposed task/);
+  assert.match(brief, /invoke the `create-task`\s+skill once, never edit\s+`tasks\.json` directly\./);
+  assert.match(brief, /Do not wait for any other\s+task's workflow to finish/);
+  assert.match(brief, /the task never enters the merge queue and never merges\./);
+  assert.match(brief, /enters the merge queue\s+immediately on approval/);
+  assert.match(brief, /never let this gate become a\s+barrier that waits for the whole batch\./);
+});
