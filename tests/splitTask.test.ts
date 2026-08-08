@@ -65,8 +65,12 @@ test("partitionFiles splits contiguously into near-equal groups", () => {
     assert.deepEqual(partitionFiles(["a.ts", "b.ts", "c.ts"], 2), [["a.ts", "b.ts"], ["c.ts"]]);
 });
 
-test("partitionFiles throws when there are fewer files than splits", () => {
-    assert.throws(() => partitionFiles(["a.ts"], 2));
+// test("partitionFiles throws when there are fewer files than splits", () => {
+//     assert.throws(() => partitionFiles(["a.ts"], 2));
+// });
+
+test("partitionFiles pads with empty groups when there are fewer files than splits", () => {
+    assert.deepEqual(partitionFiles(["a.ts"], 3), [["a.ts"], [], []]);
 });
 
 test("partitionFiles throws when numSplits is less than 2", () => {

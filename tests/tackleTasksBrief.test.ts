@@ -45,6 +45,15 @@ test("script reads arguments from stdin and embeds the live checkBlockers.ts out
   assert.ok(output.startsWith(`- blocked status: ${expectedStatus}\n`));
 });
 
+test("series adds the serial-mode section and leaves the brief untouched without it", () => {
+  const parallel = tackleTasksBrief("[131,132] valid", "task 131: unblocked");
+  const serial = tackleTasksBrief("[131,132] valid series", "task 131: unblocked");
+  assert.doesNotMatch(parallel, /Serial mode/);
+  assert.match(serial, /## Serial mode/);
+  const withoutSection = serial.replace(/\n## Serial mode[\s\S]*?not per task\.\n/, "");
+  assert.equal(withoutSection.replaceAll(" series", ""), parallel);
+});
+
 test("script fails loudly rather than emitting a brief that points nowhere", () => {
   assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });

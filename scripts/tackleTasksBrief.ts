@@ -15,6 +15,22 @@ const implementWorkflowPath = fileURLToPath(new URL("implement.workflow.js", ski
 const testWorkflowPath = fileURLToPath(new URL("test.workflow.js", skillDir));
 const mergeWorkflowPath = fileURLToPath(new URL("merge.workflow.js", skillDir));
 
+// Opt-in, so a brief without `series` stays byte-identical to the parallel one.
+const seriesSection = (argsValue: string) =>
+  /\bseries\b/.test(argsValue)
+    ? `
+## Serial mode
+
+\`series\` is in the arguments: treat the task numbers as a chain. Run everything below once per task number, in the order given, and finish one task completely — through **Closing your tasks** — before starting the next. Never prepare or plan two of them together.
+
+The blocked status at the top of this brief was computed once, before any of these tasks closed, so it is stale for every task after the first. Ignore it and re-run \`node "${checkBlockersPath}" '[N]'\` for each task as you reach it. Re-run the \`${getTaskDetailsPath}\` and \`${prepareTasksPath}\` commands above the same way, with a single-element array \`'[N]'\`, so each task gets its own details and its own pipeline args.
+
+If a task ends with anything unmerged, stop the chain and report. The next task's blocker is still open, and planning it against a base its predecessor never landed on wastes the run.
+
+Do the **Commit message** section once, after the last task, not per task.
+`
+    : "";
+
 export const tackleTasksBrief = (argsValue: string, blockedStatus: string) => {
   const brief = `- blocked status: ${blockedStatus}
 
@@ -35,7 +51,7 @@ Now get task details and the pipeline args yourself with Bash, in this order, so
 Invoke \`/ponytail:ponytail ultra\`.
 
 When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
-
+${seriesSection(argsValue)}
 ## Verification
 
 Review the task details above (each object comes from \`tasks.json\` if the task is open, or \`completedTasks.json\` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
