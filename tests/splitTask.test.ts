@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
     closeParentTask,
     composeClosureNote,
+    findSplitCandidates,
     parseFileGroups,
     partitionFiles,
     readParentTask,
@@ -243,9 +244,33 @@ test("parseFileGroups decodes valid JSON and rejects malformed or wrongly-shaped
     assert.throws(() => parseFileGroups('[["a.ts"], "b.ts"]'));
 });
 
+test("findSplitCandidates lists open tasks qualifying on difficulty or file count, sorted ascending, unsplittable flagged, closed tasks excluded", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(
+        root,
+        [
+            { taskNumber: 91, title: "Hard task", difficulty: 5, files: ["a.ts"] },
+            { taskNumber: 12, title: "Wide task", difficulty: 1, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] },
+            { taskNumber: 5, title: "Small task", difficulty: 2, files: ["a.ts", "b.ts"] },
+        ],
+        [{ taskNumber: 999, title: "Closed but would qualify", difficulty: 9, files: ["a.ts", "b.ts", "c.ts", "d.ts"] }],
+    );
+    const candidates = findSplitCandidates(root);
+    assert.deepEqual(
+        candidates.map((c) => c.taskNumber),
+        [12, 91],
+    );
+    const task91 = candidates.find((c) => c.taskNumber === 91)!;
+    assert.equal(task91.unsplittable, true);
+    assert.equal(task91.fileCount, 1);
+    const task12 = candidates.find((c) => c.taskNumber === 12)!;
+    assert.equal(task12.unsplittable, false);
+    assert.equal(task12.fileCount, 5);
+});
+
 test("SKILL.md advertises the guidance argument and extracts it via $ARGUMENTS, not the truncating $3", () => {
     const skillMd = readFileSync(join(import.meta.dirname, "..", "skills", "split-task", "SKILL.md"), "utf8");
-    assert.match(skillMd, /argument-hint: "<taskNum> <numSplits> \[guidance\]"/);
+    assert.match(skillMd, /argument-hint: "\[<taskNum> <numSplits> \[guidance\]\]"/);
     assert.match(skillMd, /\$ARGUMENTS/);
     assert.doesNotMatch(skillMd, /\$3/);
 });
