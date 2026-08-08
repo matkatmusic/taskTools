@@ -8,13 +8,16 @@ import { dirname, isAbsolute, join } from "node:path";
 import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import type { ArchiveRequest } from "../scripts/taskArchival.ts";
+import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
+import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
 import {
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
     rebaseGroupOntoSource,
+    rebaseSubmoduleLayersDeepestFirst,
     removeWorktreeAndBranch,
     resolveGitlinkConflicts,
 } from "../scripts/mergeTaskWorktrees.ts";
@@ -78,6 +81,34 @@ function makeManifest(
         testState: "untested" as const,
     }));
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [root, ...subOccurrences] };
+}
+
+function makeOccurrence(
+    occurrenceId: string,
+    parentOccurrenceId: string | null,
+    baseBranch: string,
+    baseOid: string,
+    operationBranch: string,
+    sourceCheckoutPath: string,
+): RepositoryOccurrence {
+    return {
+        occurrenceId,
+        checkoutPath: sourceCheckoutPath,
+        parentOccurrenceId,
+        pathInParent: null,
+        gitlinkOid: null,
+        depth: 0,
+        originUrl: "",
+        baseBranch,
+        baseOid,
+        operationBranch,
+        childOccurrenceIds: [],
+        testState: "untested" as const,
+    };
+}
+
+function emptyResolutionManifest(): ResolutionManifest {
+    return { resolutionAnswers: {} } as unknown as ResolutionManifest;
 }
 
 function makeTempRepoWithLocalSubmodule(): string {
@@ -752,4 +783,283 @@ test("test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails", () => {
 
     assert.equal(outcome.status, "cleanup-failed");
     if (outcome.status === "cleanup-failed") assert.match(outcome.failureReason, /abort also failed: fake abort failure/);
+});
+
+test("test_rebaseGroupOntoSourceRebasesABranchInsideASubmodule", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+
+    writeFileSync(join(worktreeSubmodulePath, "vendor-work.txt"), "vendor work\n");
+    git(worktreeSubmodulePath, "add", "vendor-work.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "vendor work");
+
+    writeFileSync(join(mainSubmodulePath, "main-advance.txt"), "main advance\n");
+    git(mainSubmodulePath, "add", "main-advance.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "advance main submodule");
+    git(worktreeSubmodulePath, "fetch", mainSubmodulePath, `${submoduleSourceBranch}:${submoduleSourceBranch}`);
+
+    const outcome = rebaseGroupOntoSource(worktreeSubmodulePath, submoduleSourceBranch);
+    assert.deepEqual(outcome, { status: "rebased-clean" });
+    assert.doesNotThrow(() => git(worktreeSubmodulePath, "merge-base", "--is-ancestor", submoduleSourceBranch, "HEAD"));
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstTreatsASubmoduleAlreadyOnItsSourceTipAsANoOp", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const submoduleBaseOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const submoduleOperationBranch = currentBranchName(worktreeSubmodulePath);
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", submoduleSourceBranch, submoduleBaseOid, submoduleOperationBranch, mainSubmodulePath)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(group.worktree, manifest);
+
+    assert.deepEqual(report.completedLayers, [{ occurrenceId: "vendor", checkoutPath: worktreeSubmodulePath, status: "no-op" }]);
+    assert.equal(report.stoppedAt, null);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstRebasesTheDeepestSubmoduleBeforeItsContainerAndRecordsItsRebasedGitlink", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const testScriptPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(innerOrigin, "package.json"), testScriptPackageJson);
+    git(innerOrigin, "add", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), testScriptPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+    const innerTaskCommitBeforeRebase = git(innerCheckoutPath, "rev-parse", "HEAD").trim();
+
+    // Reproduce the real starting state: parent's task branch already records child's pre-rebase gitlink.
+    git(vendorCheckoutPath, "add", "inner");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "bump inner to task-1 work");
+
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    // Advance both source branches independently, after the task branches already diverged.
+    writeFileSync(join(innerOrigin, "inner-source-advance.txt"), "inner source advance\n");
+    git(innerOrigin, "add", "inner-source-advance.txt");
+    git(innerOrigin, "commit", "-q", "-m", "advance inner source");
+    const innerSourceTip = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    writeFileSync(join(vendorOrigin, "vendor-source-advance.txt"), "vendor source advance\n");
+    git(vendorOrigin, "add", "vendor-source-advance.txt");
+    git(vendorOrigin, "commit", "-q", "-m", "advance vendor source");
+    const vendorSourceTip = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.stoppedAt, null);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor/inner", "vendor"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested", "rebased-and-tested"]);
+
+    // Both task branches were rebased onto their freshly-fetched (post-advance) source tips.
+    assert.doesNotThrow(() => git(innerCheckoutPath, "merge-base", "--is-ancestor", innerSourceTip, "HEAD"));
+    assert.doesNotThrow(() => git(vendorCheckoutPath, "merge-base", "--is-ancestor", vendorSourceTip, "HEAD"));
+
+    const innerTaskCommitAfterRebase = git(innerCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(innerTaskCommitAfterRebase, innerTaskCommitBeforeRebase);
+
+    // vendor's task-1 branch now records inner's rebased commit, not its pre-rebase one.
+    const vendorRecordedInnerOid = git(vendorCheckoutPath, "rev-parse", "task-1:inner").trim();
+    assert.equal(vendorRecordedInnerOid, innerTaskCommitAfterRebase);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstRecordsAndTestsAContainerWhoseOwnRefsAreIdenticalButWhoseChildGitlinkChanged", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const testScriptPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(innerOrigin, "package.json"), testScriptPackageJson);
+    git(innerOrigin, "add", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), testScriptPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    // vendor's task-1 gets no commit of its own: it stays at vendorSourceBranch's tip, refs trivially identical.
+    const vendorTaskCommitBeforeWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.equal(vendorTaskCommitBeforeWalk, vendorBaseOid);
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+    const innerTaskCommitBeforeRebase = git(innerCheckoutPath, "rev-parse", "HEAD").trim();
+
+    // Only inner's source advances; vendor's own source is left untouched, so vendor's task-1 and source stay identical.
+    writeFileSync(join(innerOrigin, "inner-source-advance.txt"), "inner source advance\n");
+    git(innerOrigin, "add", "inner-source-advance.txt");
+    git(innerOrigin, "commit", "-q", "-m", "advance inner source");
+    const innerSourceTip = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    // Confirm the precondition the fix targets: vendor's own task-1 and source are identical before the walk runs.
+    assert.equal(git(vendorCheckoutPath, "rev-list", "--count", `${vendorSourceBranch}..task-1`).trim(), "0");
+    assert.equal(git(vendorCheckoutPath, "rev-list", "--count", `task-1..${vendorSourceBranch}`).trim(), "0");
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.stoppedAt, null);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor/inner", "vendor"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested", "rebased-and-tested"]);
+
+    const innerTaskCommitAfterRebase = git(innerCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(innerTaskCommitAfterRebase, innerTaskCommitBeforeRebase);
+    assert.doesNotThrow(() => git(innerCheckoutPath, "merge-base", "--is-ancestor", innerSourceTip, "HEAD"));
+
+    // vendor's own refs were identical, yet it still recorded inner's commit and tested, not "no-op".
+    const vendorTaskCommitAfterWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(vendorTaskCommitAfterWalk, vendorTaskCommitBeforeWalk);
+    const vendorRecordedInnerOid = git(vendorCheckoutPath, "rev-parse", "task-1:inner").trim();
+    assert.equal(vendorRecordedInnerOid, innerTaskCommitAfterRebase);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstStopsAndReportsBothOutputStreamsWhenALayersTestsFailWithoutProcessingItsContainer", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const passingTestPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(
+        join(innerOrigin, "test-fail.js"),
+        "console.log('layer-stdout-marker');\nconsole.error('layer-stderr-marker');\nprocess.exit(1);\n",
+    );
+    writeFileSync(join(innerOrigin, "package.json"), JSON.stringify({ scripts: { test: "node test-fail.js" } }));
+    git(innerOrigin, "add", "test-fail.js", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add failing test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), passingTestPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+
+    const vendorTaskCommitBeforeWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.deepEqual(report.completedLayers, []);
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.occurrenceId, "vendor/inner");
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
+    if (report.stoppedAt !== null && report.stoppedAt.status === "tests-failed") {
+        assert.match(report.stoppedAt.testOutput, /layer-stdout-marker/);
+        assert.match(report.stoppedAt.testOutput, /layer-stderr-marker/);
+    }
+
+    // vendor (inner's container) was never rebased: its task-1 branch is exactly as it was.
+    const vendorTaskCommitAfterWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.equal(vendorTaskCommitAfterWalk, vendorTaskCommitBeforeWalk);
 });
