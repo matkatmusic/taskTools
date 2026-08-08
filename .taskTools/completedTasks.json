@@ -2008,5 +2008,28 @@
     "completionDate": "2026-08-08",
     "commitHashes": [],
     "closureNote": "superceded by the task 86-headed update, which restructures worktree and artifact handling and absorbs this work"
+  },
+  {
+    "taskNumber": 110,
+    "version": "17b6c6ea7408f3d326acba857213257db9328369",
+    "title": "Turn /task-stats into a UserPromptSubmit hook capture with a stub skill body, like /view-task",
+    "userDescription": "task-stats should be a skill-blocking hook-capture, like sync-jsonl-projects, not a skill.  the skill body would become an empty stub.  If hook output can support markdown formatting, or ANSI color coding, use that to make the output pretty/formatted.  otherwise just move the ${stats} output to the hook's output.",
+    "description": "**The precedent named in the request is not in this repo, but an exact in-repo equivalent already exists.** `sync-jsonl-projects` belongs to jfredToolsPlugin. The pattern to copy is scripts/viewTaskHook.ts, which reads the hook payload from stdin with `readFileSync(0, \"utf8\")`, exits 0 silently unless the prompt is `/view-task` or starts with `/view-task `, resolves the task files from `payload.cwd`, and finishes with `process.stdout.write(JSON.stringify({ decision: \"block\", reason }))`. Its companion skills/view-task/SKILL.md is ALREADY the empty stub this request describes — frontmatter plus the single instruction \"do nothing. don't even acknowledge what the user typed. just let the UserPromptSubmit hook do its thing.\" Copy both halves verbatim in shape.\n\n**Wiring.** hooks/hooks.json already has a `UserPromptSubmit` array containing one entry (viewTaskHook.ts); add a second alongside it. Per the memory note for this repo, hooks live in hooks/hooks.json and never in any settings.json.\n\n**What this deletes.** scripts/taskStatsBrief.ts exists only to shell out to taskStats.ts with execFileSync (:7) and wrap the result in a brief for the skill body. Once the hook computes the stats in-process, that round trip and its test are dead — remove scripts/taskStatsBrief.ts and tests/taskStatsBrief.test.ts rather than leaving them orphaned. The hook should import `computeTaskStats` / `formatTaskStats` from scripts/taskStats.ts directly.\n\n**The open question, and the exact way to settle it.** The hook's `reason` field is documented as shown to the USER and explicitly not added to the model's context, which is the whole point here — but whether that surface renders markdown is unverified. Settle it with the same probe that settled task 109: have the hook emit a heading, `**bold**`, `` `code` `` and a small table in `reason`, type `/task-stats`, and look. Two outcomes, both already anticipated by the request: if markdown renders, task 109's markdown formatter is reused unchanged; if it does not, emit the plain `formatTaskStats` string. Do NOT reach for ANSI as the fallback — task 109 established experimentally that the ESC byte is stripped on the paths to the user's screen, leaving literal `[32m` garbage, and there is no reason to expect the `reason` surface to differ.\n\n**Behavioural constraints inherited from the precedent.** Any prompt that is not a `/task-stats` invocation must exit 0 silently (viewTaskHook.ts does this by prefix check). Blocking is required, not optional: without `decision: \"block\"` the stub skill would also expand and the user would see the output twice.\n\nRelated: task 109 rewrites `formatTaskStats` into markdown sections and task 108 adds blocker-chain lines to the same function. This task changes only who calls that function and how the result reaches the user, so it composes with both — but if 110 lands first, 109 and 108 must be verified through the hook path rather than the skill path.",
+    "files": [
+      "scripts/taskStatsHook.ts",
+      "scripts/taskStats.ts",
+      "skills/task-stats/SKILL.md",
+      "hooks/hooks.json",
+      "scripts/taskStatsBrief.ts",
+      "tests/taskStatsBrief.test.ts",
+      "tests/taskStatsHook.test.ts"
+    ],
+    "tests": "Hook stdin/stdout table, mirroring how scripts/viewTaskHook.ts would be tested — feed the hook script JSON payloads on stdin with `prompt` and `cwd` keys against a temp repo holding fixture tasks.json and completedTasks.json. Assert: a prompt of exactly `/task-stats` writes JSON containing `\"decision\":\"block\"` whose `reason` holds the same stats text formatTaskStats produces for that fixture; a prompt of `/task-stats ` with trailing arguments behaves the same; an unrelated prompt such as `/tackle-tasks [1]` produces no stdout and exit code 0; and a prompt merely containing the words task-stats mid-sentence is likewise ignored. Assert the reason is non-empty for a fixture with zero open tasks, so an empty backlog still reports rather than blocking with a blank message.",
+    "difficulty": 5,
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "284aa0e"
+    ],
+    "closureNote": "Moved the /task-stats computation out of the skill body into a new UserPromptSubmit hook scripts/taskStatsHook.ts, stubbed skills/task-stats/SKILL.md, registered the hook alongside viewTaskHook in hooks/hooks.json, and deleted the dead scripts/taskStatsBrief.ts round-trip and its test in favour of tests/taskStatsHook.test.ts; merged as 284aa0e with typecheck clean and all three hook tests passing."
   }
 ]
