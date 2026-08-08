@@ -2231,5 +2231,55 @@
       "990022681ee93df0e4ba49cc83bcc7b58f949ac7"
     ],
     "closureNote": "Closed after verifying all three wording sites in HEAD commit 9900226: createTaskBrief.ts and taskTemplate.json now cite function names with a ten-sentence cap and forbid line numbers, and updateTasksBrief.ts caps the de-duplicate extend instruction so it can no longer only grow a description; typecheck clean, and the 11 remaining suite failures are pre-existing merge and finalizer tests unrelated to this work."
+  },
+  {
+    "taskNumber": 109,
+    "version": "17b6c6ea7408f3d326acba857213257db9328369",
+    "title": "Format task-stats output as markdown sections — ANSI is stripped on every path to the user",
+    "goal": [
+      "formatTaskStats emits basic markdown: headed sections plus one table for contended files.",
+      "The markdown renders correctly on the /task-stats skill path, not as literal characters.",
+      "The layout stays plain enough to hand-tweak later; no clever or generated styling.",
+      "Every number and label the current plain formatter emits still appears in the new output.",
+      "The output contains no ESC byte (0x1b) anywhere.",
+      "A fixture with zero contended files omits that section instead of emitting an empty table."
+    ],
+    "userDescription": "make the output of task-stats pretty with some color coding if possible.  TODO: decide on color scheme/sections.",
+    "description": "**The TODO in the request is resolved: use markdown, not ANSI. This was settled experimentally, not by argument.**\n\nProbe 1 — ANSI through the skill path. A line `\\x1b[32mGREEN-PROBE\\x1b[0m` was added to the brief and `/task-stats` invoked. `node scripts/taskStatsBrief.ts | cat -v` confirmed the raw bytes leave the script intact (`^[[32mGREEN-PROBE^[[0m`), but what reached the skill body was `[32mGREEN-PROBE[0m` — Claude Code strips the ESC control byte when injecting `!`-command output and leaves the rest as literal garbage. Note the encoding is NOT the cause: `encoding: \"utf8\"` at taskStatsBrief.ts:7 only makes execFileSync return a string, and ESC survives that fine.\n\nProbe 2 — ANSI in the assistant's own message. Same result: the escape renders as literal text, never as color. So there is no path from this script to the user's screen on which ANSI survives, and `node:util styleText` would buy nothing here.\n\nProbe 3 — markdown through the same path. A heading, `**bold**`, `` `code` ``, `*italic*` and a two-column table were injected the same way; all survived the injection byte-for-byte and rendered correctly in the terminal. Markdown is the mechanism.\n\n**Where the work goes.** `formatTaskStats` at scripts/taskStats.ts:84-102 already assembles a `string[]` and joins it — it just emits flat prose lines today. Reshape those into headed sections and render `contendedFiles` (:97-100) as a markdown table instead of two-space-indented lines. `computeTaskStats` and the `TaskStats` type need no change; this is presentation only.\n\n**Proposed sections**, derived from the existing lines: Backlog (open/unblocked/blocked from :86, files coverage from :87), Velocity (completed + hashes from :88, closure counts from :89, busiest day from :91), Parallelism (:92-96), Contended files (:97-100, as a table).\n\n**Collision warning.** Task 108 also edits `formatTaskStats` to add blocker-chain lines and a `fastest unblocking sequence:` line. Both tasks rewrite the same function. Doing 108 first means styling the finished content set once; doing 109 first means 108 must match the new section layout. Deliberately left unblocked so either can start, but whoever goes second must expect a conflict here.",
+    "files": [
+      "scripts/taskStats.ts",
+      "tests/taskStats.test.ts"
+    ],
+    "tests": "Content-preservation test over a fixed fixture: capture every number and label the current plain formatter emits, run the new markdown formatter on the same TaskStats object, and assert each of those values still appears — so restyling cannot silently drop a stat. Assert the contended-files section renders as a markdown table with one row per file and its task count. Assert the output contains no ESC byte (0x1b) anywhere, since ANSI is provably useless on this path and emitting it would only produce literal garbage. Assert a fixture with zero contended files omits the whole section rather than emitting an empty table.",
+    "difficulty": 4,
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "e5e2bd9ef012cb091e9419751343a72162dd3cba"
+    ]
+  },
+  {
+    "taskNumber": 114,
+    "version": "28c852c50bf3b20aaad4aa6f2fb8205248c271d1",
+    "title": "checkBlockers halts the run when the open-task blockedBy graph contains a cycle",
+    "goal": [
+      "checkBlockers walks the open-task blockedBy graph and finds any cycle.",
+      "On a cycle it prints every task number in that cycle.",
+      "On a cycle it exits non-zero, so the tackle-tasks run halts before any planning cost.",
+      "A self-blocking task (1 blockedBy 1) is reported the same way.",
+      "Acyclic data produces unchanged output and exit code zero.",
+      "A blockedBy entry naming a completed or nonexistent task is ignored, not reported as a cycle."
+    ],
+    "userDescription": "Add a blockedBy cycle check to scripts/checkBlockers.ts so a tackle-tasks run halts loudly instead of silently mis-reporting. Today no script anywhere detects cycles: scripts/checkBlockers.ts:15-16, scripts/taskStats.ts:25-26 and scripts/runStartup.ts:12-14 each independently resolve only ONE level of blockedBy and filter to still-open task numbers, so a loop like 1 blockedBy 2, 2 blockedBy 3, 3 blockedBy 1 is never noticed. The consequence is that every task in such a loop reports as permanently BLOCKED with no path to unblocking, and task-stats chain rendering (task 108) silently omits them because a pure cycle contains no sink. Verified against the live .taskTools/tasks.json at the time of writing: 36 open tasks, 8 blocked (36, 83, 84, 96, 97, 105, 106, 113), zero cycles - so this is a guard against a future bad edit, not a fix for existing data. checkBlockers.ts is the right home because it already runs at the start of every tackle-tasks invocation, before any planning or implementation work happens, so a cycle surfaces at the cheapest possible moment. Implementation should walk the open-task blockedBy graph with a depth-first search tracking an in-progress set, and on detecting a back edge print the offending cycle as the task numbers involved and exit non-zero so the run stops. Files: scripts/checkBlockers.ts and tests/checkBlockers.test.ts. Tests: assert a three-task cycle 1-2-3 is detected and reported with all three numbers and a non-zero exit; assert a self-blocking task 1 blockedBy 1 is detected; assert the existing acyclic fixtures in tests/checkBlockers.test.ts still pass unchanged and exit zero; assert a blockedBy entry pointing at an already-completed or nonexistent task number is ignored rather than treated as a cycle. Do NOT add strongly-connected-component machinery or change how chains are rendered - this task is detection and halting only. Difficulty around 3.",
+    "description": "**Why here.** `scripts/checkBlockers.ts` is the first script every `tackle-tasks` invocation runs (see skills/tackle-tasks/SKILL.md, which calls it with `--unblocked` before `getTaskDetails.ts` and `prepareTasks.ts`), so a cycle detected there stops the run before any planning, worktree creation, or implementation cost is paid.\n\n**The gap, confirmed by reading all three call sites.** `openBlockersOf` exists three times with effectively the same body and none of them recurse: `scripts/checkBlockers.ts:15-16` returns the full blockedBy entry objects filtered to open task numbers; `scripts/taskStats.ts:25-26` and `scripts/runStartup.ts:13-14` return just the numbers. Every one resolves exactly one level, so a back edge is indistinguishable from an ordinary dependency.\n\n**Two downstream symptoms this prevents.** (1) Tasks in a cycle report BLOCKED forever with no unblocking path, and `tackle-tasks` refuses to run them without ever explaining why the blocker never clears. (2) Task 108 renders blocker chains by walking backward from sinks - an open task with open blockers that no other open task lists as a blocker. A pure cycle contains no sink, so those tasks are omitted from the chain output entirely while still counting toward `blockedCount`. Task 108 deliberately declined to solve this with strongly-connected-component sink selection (see the Declined review suggestion section in plans/task-108-plan.md); detecting and halting here is the cheaper answer, and this task is that answer.\n\n**Live data checked before filing.** `.taskTools/tasks.json` at commit 28c852c: 36 open tasks, 8 with open blockers (36, 83, 84, 96, 97, 105, 106, 113), zero cycles found by depth-first search. This is a guard against a future bad hand-edit, not a repair of current state - so it must not change the exit code or output of any currently-passing run.\n\n**Scope boundary.** Detection and halting only. Do not add SCC machinery, do not change chain rendering, and do not extract the duplicated `openBlockersOf` into a shared module - that dedup is separately noted in task 108 and task 84 as non-blocking in either direction.",
+    "files": [
+      "scripts/checkBlockers.ts",
+      "tests/checkBlockers.test.ts"
+    ],
+    "tests": "Assert a three-task cycle (1 blockedBy 2, 2 blockedBy 3, 3 blockedBy 1) is detected, that the reported message names all three task numbers, and that the process exits non-zero. Assert a self-blocking task (1 blockedBy 1) is detected the same way. Assert every existing acyclic fixture in tests/checkBlockers.test.ts still produces its current output unchanged and exits zero, proving the guard is inert on good data. Assert a blockedBy entry pointing at an already-completed or nonexistent task number is ignored rather than reported as a cycle.",
+    "difficulty": 3,
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "e5e2bd9ef012cb091e9419751343a72162dd3cba"
+    ]
   }
 ]
