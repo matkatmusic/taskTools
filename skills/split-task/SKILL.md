@@ -1,12 +1,14 @@
 ---
 name: split-task
 description: Break an oversized open task into N smaller child tasks at reasonable split points. Trigger when a task's difficulty is above 6, or its description lists many enumerated steps, and it would be clearer as several smaller tasks.
-argument-hint: "<taskNum> <numSplits> [guidance]"
+argument-hint: "[<taskNum> <numSplits> [guidance]]"
 ---
 
-- parent task and file groups: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" info $ARGUMENTS[0] $ARGUMENTS[1]`
+- parent task and file groups, or split candidates when no arguments were given: !`if [ -z "$ARGUMENTS" ]; then node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" candidates; else node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" info $ARGUMENTS[0] $ARGUMENTS[1]; fi`
 
-Parent task number: $ARGUMENTS[0]. Number of children to create: $ARGUMENTS[1].
+If no arguments were given ($ARGUMENTS is empty), the command above ran in `candidates` mode and printed a JSON array of open tasks that qualify for splitting (difficulty >= 3 or more than 3 files), sorted ascending by task number; a qualifying task with fewer than 2 files carries `unsplittable: true` and its real `fileCount`. Report that list to the user — each task's number, title, and whether it is splittable or marked unsplittable with its file count — and stop here: do not create any child tasks, do not run the `close` command, and skip the rest of this skill for this invocation. If the array is empty, tell the user no open tasks currently qualify for splitting.
+
+Otherwise, arguments were given and the command above ran in `info` mode. Parent task number: $ARGUMENTS[0]. Number of children to create: $ARGUMENTS[1].
 
 Guidance (optional): take the raw `$ARGUMENTS` for this invocation and strip its first two whitespace-delimited tokens (the task number and the split count) from the front. Whatever text remains, with its internal spacing preserved exactly, is the guidance string — do not use the third positional substitution, which captures only the first remaining word and would silently truncate a multi-word guidance. If nothing remains after stripping the first two tokens, there is no guidance for this invocation.
 
