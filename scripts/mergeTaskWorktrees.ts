@@ -65,7 +65,7 @@ function commitChangedFiles(repoRoot: string, sourceBranch: string, branch: stri
 }
 
 // Porcelain v1 rename lines read "R  old -> new"; every other status line is "XY path".
-function uncommittedChangedFiles(worktreePath: string): string[] {
+export function uncommittedChangedFiles(worktreePath: string): string[] {
     return git(worktreePath, "status", "--porcelain").split("\n").filter(Boolean).map((line) => {
         const path = line.slice(3);
         if (!path.includes(" -> ")) return path;
@@ -141,6 +141,7 @@ export function rebaseGroupOntoSource(
     worktreePath: string,
     sourceBranch: string,
     submodulePathsAllowedToConflict: string[] = [],
+    leaveConflictLive: boolean = false,
 ): RebaseOutcome {
     let pendingReason: string;
     try {
@@ -176,6 +177,11 @@ export function rebaseGroupOntoSource(
             conflictedFilePaths.length > 0 && conflictedFilePaths.every((path) => submodulePathsAllowedToConflict.includes(path));
 
         if (!allConflictsAreAllowedSubmodules) {
+            // Live mode hands the caller the still-in-progress rebase and real conflict markers, instead of aborting first.
+            if (conflictedFilePaths.length > 0 && leaveConflictLive) {
+                return { status: "conflicted", conflictedFilePaths };
+            }
+
             const abortResult = abortRebase(worktreePath);
             if (!abortResult.aborted) {
                 return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, `abort also failed: ${abortResult.failureReason}`) };
@@ -252,6 +258,7 @@ function rebaseAndTestSubmoduleLayer(
     sourceCheckoutPath: string,
     resolutionManifest: ResolutionManifest,
     childrenByParentId: Map<string, RepositoryOccurrence[]>,
+    leaveConflictLive: boolean = false,
 ): SubmoduleLayerOutcome {
     const { occurrenceId, checkoutPath, baseBranch, operationBranch } = occurrence;
 
@@ -273,7 +280,7 @@ function rebaseAndTestSubmoduleLayer(
 
     // Refs differ: rebase this layer's own branch. Refs identical but a child changed: skip the rebase entirely.
     if (!refsIdentical) {
-        const rebaseOutcome = rebaseGroupOntoSource(checkoutPath, baseBranch);
+        const rebaseOutcome = rebaseGroupOntoSource(checkoutPath, baseBranch, [], leaveConflictLive);
         if (rebaseOutcome.status === "conflicted") {
             return { occurrenceId, checkoutPath, status: "conflicted", conflictedFilePaths: rebaseOutcome.conflictedFilePaths };
         }
@@ -310,7 +317,7 @@ function groupChildrenByParentId(occurrences: RepositoryOccurrence[]): Map<strin
 }
 
 // Rebases each submodule deepest-first, testing every layer before moving up; stops on the first red layer.
-export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest): SubmoduleLayerWalkReport {
+export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest, leaveConflictLive: boolean = false): SubmoduleLayerWalkReport {
     const sourceCheckoutPathByOccurrenceId = new Map(
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
     );
@@ -327,7 +334,7 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
     const completedLayers: SubmoduleLayerOutcome[] = [];
     for (const occurrence of submoduleLayersDeepestFirst) {
         const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId) ?? "";
-        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId);
+        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive);
         if (outcome.status !== "no-op" && outcome.status !== "rebased-and-tested") {
             return { completedLayers, stoppedAt: outcome };
         }
@@ -350,8 +357,9 @@ export function rebaseParentOntoSourceAndTest(
     sourceBranch: string,
     submodulePaths: string[],
     resolutionManifest: ResolutionManifest,
+    leaveConflictLive: boolean = false,
 ): ParentRebaseOutcome {
-    const rebaseOutcome = rebaseGroupOntoSource(worktreePath, sourceBranch, submodulePaths);
+    const rebaseOutcome = rebaseGroupOntoSource(worktreePath, sourceBranch, submodulePaths, leaveConflictLive);
     if (rebaseOutcome.status === "conflicted") {
         return { status: "conflicted", conflictedFilePaths: rebaseOutcome.conflictedFilePaths };
     }
