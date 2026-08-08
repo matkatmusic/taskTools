@@ -47,15 +47,7 @@ const APPLY_FEEDBACK_SCHEMA = {
   required: ['task', 'applied'],
 }
 
-const fileRetryPreamble = (t, missingFiles) => `Before planning, run these two commands with Bash from ${ARGS.repo} to gain read access to the files you flagged as missing, then continue below:
-
-1. cd ${ARGS.repo} && node "scripts/addTaskFiles.ts" '[${t.number}]' ${missingFiles.map((f) => JSON.stringify(f)).join(' ')}
-2. cd ${ARGS.repo} && node -e "(async()=>{const {resolveTaskFiles,readTaskFile}=await import('./scripts/taskFiles.ts');const {writeTaskBriefFile}=await import('./scripts/prepareTasks.ts');const pair=resolveTaskFiles(process.cwd());const task=readTaskFile(pair.tasksPath).find(x=>x.taskNumber===${t.number});if(!task)throw new Error('task ${t.number} disappeared from tasks.json');writeTaskBriefFile(task,process.cwd());console.log(JSON.stringify(task.files));})()"
-
-Command 1 adds the missing paths to this task's owned files in tasks.json.
-Command 2 regenerates plans/brief-${t.number}.md from the updated task record and prints
-the task's full current owned-files list as a JSON array on stdout — record that array,
-you will return it as "files" below.
+const fileRetryPreamble = (missingFiles) => `Before planning: the workflow has already widened this task's owned files in tasks.json to include ${missingFiles.join(', ')} and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.
 
 `
 
@@ -92,8 +84,7 @@ question in "question". If the task no longer applies to the codebase, set
 status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
 Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
-${preamble ? `Also return "files": the JSON array command 2 above printed.\n` : ''}
-You are forbidden to edit any file other than ${t.planFile}${preamble ? ', tasks.json, and plans/brief-*.md — those only via the two commands given above' : ''}; to read a file outside
+You are forbidden to edit any file other than ${t.planFile}; to read a file outside
 the owned list; to leave a decision for the implementer; or to write a plan step
 whose exact target you did not read.`
 
@@ -172,8 +163,9 @@ const retryAgent = async (spawn, attempts = 3) => {
 
 const MAX_REVIEW_ROUNDS = 3
 
-const runPlan = async () => {
-  log(`task ${N}: plan stage`)
+let preparedTask = null
+
+const loadPreparedTask = async () => {
   const { resolveTaskFiles, readTaskFile } = await import('./scripts/taskFiles.ts')
   const { writeTaskBriefFile } = await import('./scripts/prepareTasks.ts')
   const repoRoot = process.cwd()
@@ -181,15 +173,25 @@ const runPlan = async () => {
   const task = readTaskFile(pair.tasksPath).find((entry) => entry.taskNumber === N)
   if (!task) throw new Error(`task.workflow.js: task ${N} not found in tasks.json`)
   const briefFile = writeTaskBriefFile(task, repoRoot)
-  const preparedTask = {
+  return {
     number: N,
     briefFile,
     planFile: `${repoRoot}/plans/task-${N}-plan.md`,
     files: Array.isArray(task.files) ? task.files : [],
     tests: task.tests,
+    repoRoot,
+    pair,
   }
+}
+
+const runPlan = async () => {
+  log(`task ${N}: plan stage`)
+  preparedTask = await loadPreparedTask()
+  const { execFileSync } = await import('node:child_process')
+  const { readTaskFile } = await import('./scripts/taskFiles.ts')
+  const { writeTaskBriefFile } = await import('./scripts/prepareTasks.ts')
   const result = await retryAgent(() => agent(plannerBrief(preparedTask), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
-  const planResult = {
+  let planResult = {
     stage: 'plan',
     ...(result ?? {
       task: N,
@@ -198,6 +200,7 @@ const runPlan = async () => {
       question: 'planner returned no result after 3 attempts',
     }),
   }
+  planResult.files = preparedTask.files
   if (planResult.status !== 'planned') return planResult
   const runVerify = async () => await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
     task: N,
@@ -206,20 +209,44 @@ const runPlan = async () => {
     reviewer: 'none',
     missingFiles: [],
   }
+  const widenFilesAndReplan = async (missingFiles) => {
+    execFileSync('node', ['scripts/addTaskFiles.ts', JSON.stringify([N]), ...missingFiles], { cwd: preparedTask.repoRoot })
+    const widenedTask = readTaskFile(preparedTask.pair.tasksPath).find((entry) => entry.taskNumber === N)
+    if (!widenedTask) throw new Error(`task.workflow.js: task ${N} disappeared from tasks.json`)
+    writeTaskBriefFile(widenedTask, preparedTask.repoRoot)
+    preparedTask.files = Array.isArray(widenedTask.files) ? widenedTask.files : []
+    const rePlanned = await retryAgent(() => agent(plannerBrief(preparedTask, fileRetryPreamble(missingFiles)), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
+    planResult = {
+      stage: 'plan',
+      ...(rePlanned ?? {
+        task: N,
+        status: 'needs-clarification',
+        planFile: '',
+        question: 'planner returned no result after 3 attempts',
+      }),
+    }
+    planResult.files = preparedTask.files
+  }
   let reviewRounds = MAX_REVIEW_ROUNDS
   let verify = await runVerify()
   reviewRounds -= 1
   while (verify.verdict !== 'approved' && reviewRounds > 0) {
-    await retryAgent(() => agent(applyFeedbackBrief(preparedTask, preparedTask.planFile, verify.notes), { label: `applyFeedback:${N}`, phase: 'Plan', schema: APPLY_FEEDBACK_SCHEMA }))
+    if (Array.isArray(verify.missingFiles) && verify.missingFiles.length > 0) {
+      await widenFilesAndReplan(verify.missingFiles)
+      if (planResult.status !== 'planned') return planResult
+    } else {
+      await retryAgent(() => agent(applyFeedbackBrief(preparedTask, preparedTask.planFile, verify.notes), { label: `applyFeedback:${N}`, phase: 'Plan', schema: APPLY_FEEDBACK_SCHEMA }))
+    }
     verify = await runVerify()
     reviewRounds -= 1
   }
   return { ...planResult, verify, reviewRounds }
 }
 
-const runImplement = () => {
+const runImplement = async () => {
   log(`task ${N}: implement stage (stub)`)
-  return { stage: 'implement', task: N }
+  if (!preparedTask) preparedTask = await loadPreparedTask()
+  return { stage: 'implement', task: N, files: preparedTask.files }
 }
 
 const runRebaseTest = () => {
@@ -234,13 +261,13 @@ const runMerge = () => {
 
 const STAGE_RUNNERS = {
   plan: async () => [await runPlan()],
-  implement: () => [runImplement()],
+  implement: async () => [await runImplement()],
   'rebase-test': () => [runRebaseTest()],
   merge: () => [runMerge()],
   'plan+implement': async () => {
     const planResult = await runPlan()
     if (planResult.status !== 'planned') return [planResult]
-    return [planResult, runImplement()]
+    return [planResult, await runImplement()]
   },
 }
 
