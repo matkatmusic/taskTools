@@ -15,6 +15,41 @@ const openBlockersOf = (n: number) => {
   const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNum: number; reason: string }[]) : [];
   return blockedBy.filter(b => openNumbers.has(b.taskNum));
 };
+
+// Depth-first search with an in-progress set: a back edge into a task still "visiting" is a cycle.
+function findCycle(): number[] | null {
+  const state = new Map<number, "visiting" | "done">();
+  const stack: number[] = [];
+  const visit = (n: number): number[] | null => {
+    state.set(n, "visiting");
+    stack.push(n);
+    for (const b of openBlockersOf(n)) {
+      const seen = state.get(b.taskNum);
+      if (seen === "visiting") return stack.slice(stack.indexOf(b.taskNum));
+      if (seen !== "done") {
+        const found = visit(b.taskNum);
+        if (found) return found;
+      }
+    }
+    stack.pop();
+    state.set(n, "done");
+    return null;
+  };
+  for (const t of openTasks) {
+    if (!state.has(t.taskNumber)) {
+      const found = visit(t.taskNumber);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+const cycle = findCycle();
+if (cycle) {
+  process.stderr.write(`cycle detected among open tasks: ${cycle.join(", ")}\n`);
+  process.exit(1);
+}
+
 if (unblockedOnly) {
   process.stdout.write(requested.filter(n => openBlockersOf(n).length === 0).join(" ") + "\n");
 } else {
