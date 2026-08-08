@@ -1,6 +1,9 @@
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 const N = ARGS.task
 const STAGE = ARGS.stage ?? 'plan+implement'
+const TYPECHECK_COMMAND = ARGS.typecheckCommand ?? 'npx tsc --noEmit'
+const WORKER_MODEL = ARGS.workerModel
+const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
 
 export const meta = {
   name: `task-${N}`,
@@ -45,6 +48,18 @@ const APPLY_FEEDBACK_SCHEMA = {
     applied: { type: 'boolean' },
   },
   required: ['task', 'applied'],
+}
+
+const WORKER_SCHEMA = {
+  type: 'object',
+  properties: {
+    task: { type: 'integer' },
+    status: { type: 'string', enum: ['done', 'partial', 'blocked'] },
+    summary: { type: 'string' },
+    remaining: { type: 'array', items: { type: 'string' } },
+    notesFile: { type: 'string' },
+  },
+  required: ['task', 'status', 'summary', 'remaining', 'notesFile'],
 }
 
 const fileRetryPreamble = (missingFiles) => `Before planning: the workflow has already widened this task's owned files in tasks.json to include ${missingFiles.join(', ')} and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.
@@ -152,6 +167,73 @@ If the text above has no FIXES section to apply (for example a MISSING_FILES sec
 
 Return {task: ${t.number}, applied: true} once you have made the edits, or {task: ${t.number}, applied: false} if there was nothing to apply.`
 
+const tddInstruction = (t) => t.tests && t.tests !== 'skip'
+  ? `This task's tests field holds an example test the user wrote: ${t.tests}\nWrite that test first, then expand it to also cover the individual functions/subparts you build, before writing the implementation.`
+  : 'This task has no tests field, or it is the literal string "skip" — skip TDD entirely and just write the code.'
+
+const workerBrief = (t, note) => `You are implementing EXACTLY ONE pre-planned task from
+./.taskTools/tasks.json: #${t.number}.
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`name = value\` means record that value and use it later.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+ownedFiles = ${t.files.join(', ')}
+plan = ${t.planFile}
+notesFile = ${t.notesFile}
+timeBudget = 10 minutes
+${note ? `note = ${note}\n` : ''}
+${tddInstruction(t)}
+
+use jot:implement ${t.planFile}, writing its implementation-notes log to exactly notesFile
+
+if the plan is impossible as written:
+    return {task: ${t.number}, status: "blocked", summary: why it cannot be done, remaining: [], notesFile: notesFile}
+
+implement every step of the plan, editing only ownedFiles
+
+typecheck = run(${TYPECHECK_COMMAND})
+if typecheck reported errors in ownedFiles:
+    fix them
+
+if scripts/relatedTests.ts exists:
+    tests = run it to discover the tests covering ownedFiles
+else:
+    tests = the test file belonging to each file in ownedFiles
+// never run the full suite; that is the close-tasks gate, not yours
+
+results = run(tests)
+fixRound = 0
+while any test failed and fixRound is less than ${MAX_FIX_ROUNDS}:
+    fixRound = fixRound + 1
+    fix the cause
+    typecheck = run(${TYPECHECK_COMMAND})
+    results = run(tests)
+
+if any test still failed after ${MAX_FIX_ROUNDS} fix rounds:
+    return {task: ${t.number}, status: "blocked", summary: what is still failing after ${MAX_FIX_ROUNDS} fix rounds, remaining: the failing test names, notesFile: notesFile}
+
+if typecheck is clean and every test passed:
+    run: ${t.files.length ? `git add -- ${[...t.files, t.notesFile].map((f) => JSON.stringify(f)).join(' ')}` : `git add -- ${JSON.stringify(t.notesFile)} (plus every other path you edited, listed explicitly)`}
+    run: git commit -m "task ${t.number}: one-line summary"
+    return {task: ${t.number}, status: "done", summary: one sentence, remaining: [], notesFile: notesFile}
+else if part of the plan is implemented:
+    return {task: ${t.number}, status: "partial", summary: one sentence, remaining: the plan steps not yet done, plus any failing test names, notesFile: notesFile}
+else:
+    return {task: ${t.number}, status: "blocked", summary: one sentence, remaining: the failing test names, notesFile: notesFile}
+
+if you reach timeBudget before finishing:
+    return status "partial" with the not-yet-done plan steps in remaining, notesFile still set to notesFile
+
+You are forbidden to touch anything outside ownedFiles excluding notesFile; to
+add scope or refactors the plan does not call for; to redecide anything the
+plan already decided; to run the full suite, \`git add -A\`, or \`git add .\`; to
+commit while anything fails; to attempt more than ${MAX_FIX_ROUNDS} fix
+rounds; or to return status "done" with a failing test. Any test file created
+or modified must be listed in ownedFiles; otherwise return status "blocked"
+without editing it.`
+
 // ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
 const retryAgent = async (spawn, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -177,6 +259,7 @@ const loadPreparedTask = async () => {
     number: N,
     briefFile,
     planFile: `${repoRoot}/plans/task-${N}-plan.md`,
+    notesFile: `${repoRoot}/plans/task-${N}-implementation-notes.md`,
     files: Array.isArray(task.files) ? task.files : [],
     tests: task.tests,
     repoRoot,
@@ -243,10 +326,31 @@ const runPlan = async () => {
   return { ...planResult, verify, reviewRounds }
 }
 
+const runWorker = (t, note) => {
+  const options = {
+    label: `implement:${t.number}`,
+    phase: `${t.number} Implement`,
+    schema: WORKER_SCHEMA,
+  }
+  if (WORKER_MODEL) options.model = WORKER_MODEL
+  return retryAgent(() => agent(workerBrief(t, note), options))
+}
+
 const runImplement = async () => {
-  log(`task ${N}: implement stage (stub)`)
+  log(`task ${N}: implement stage`)
   if (!preparedTask) preparedTask = await loadPreparedTask()
-  return { stage: 'implement', task: N, files: preparedTask.files }
+  let result = await runWorker(preparedTask, '') ?? {
+    task: N,
+    status: 'blocked',
+    summary: 'worker agent returned no result after 3 attempts (killed, errored, or blocked)',
+    remaining: [],
+    notesFile: preparedTask.notesFile,
+  }
+  if (result.status === 'partial') {
+    const note = `A previous worker finished part of this plan; still remaining: ${result.remaining.join('; ')}. Check the file state before redoing anything.`
+    result = (await runWorker(preparedTask, note)) ?? result
+  }
+  return { stage: 'implement', ...result, files: preparedTask.files }
 }
 
 const runRebaseTest = () => {
