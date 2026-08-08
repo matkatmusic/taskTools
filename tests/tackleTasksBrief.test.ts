@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tackleTasksBrief } from "../scripts/tackleTasksBrief.ts";
+import { TASKS_PER_COMMAND } from "../scripts/taskStats.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackleTasksBrief.ts", import.meta.url));
 const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
@@ -42,4 +43,6 @@ test("running the pipeline launches task.workflow.js once per task in the backgr
   assert.doesNotMatch(brief, /stepOutputsFile/);
   assert.doesNotMatch(brief, /mergeCommand/);
   assert.doesNotMatch(brief, /Step 1 — plan/);
+  assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} task\\.workflow\\.js runs in flight`));
+  assert.match(brief, /sliding window, not\s+batches of/);
 });
