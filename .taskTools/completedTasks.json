@@ -1953,5 +1953,29 @@
     "commitHashes": [
       "ef242fc7eb5047361802ef3e6f5fcb461d537956"
     ]
+  },
+  {
+    "taskNumber": 134,
+    "version": "f2569508451026710ed33235ffc306289fc28c9a",
+    "title": "tackle-tasks: review stage — verify agent and VERIFY_SCHEMA with missingFiles",
+    "userDescription": "## Goal\n\n**Chain goal (tasks 134-136):** The plan stage checks the plan it just produced, up to three times — a `verify` agent finds problems and a separate `applyFeedback` agent fixes them — and when the plan needs a file the task does not own, the workflow widens the task's own files list and re-plans without asking a human.\n\n**This task is done when all of these are true:**\n\n- A `verify` agent runs inside the plan stage of `task.workflow.js` and reviews the plan.\n- `VERIFY_SCHEMA` gains `missingFiles: {type: 'array', items: {type: 'string'}}`.\n- The verify agent returns repo-relative path strings in `missingFiles` when the plan cannot be carried out inside the task's owned files — exact paths, not prose.\n- Deleting `verify.workflow.js` is NOT part of this task.\n\n---\n\n[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: review stage — verify agent and VERIFY_SCHEMA with missingFiles.\n\nDescription:\n\nSplit of task 124, step 1 of 3. Covers the review half of items 3, 4 and 5 of the \"stage plan\" section of plans/task-86-spec.md.\n\nAdd the `verify` agent to the plan stage of skills/tackle-tasks/task.workflow.js: it runs the codex review of the plan and returns structured output. Move the review half of skills/tackle-tasks/verify.workflow.js:33-84 across — today one agent both reviews and applies fixes; this task takes only the reviewing.\n\nAdd `missingFiles: {type: 'array', items: {type: 'string'}}` to VERIFY_SCHEMA and change codexPrompt so a plan that cannot be fixed inside the task's owned files returns repo-relative paths instead of prose (verify.workflow.js:31 currently asks it to \"say so explicitly in FIXES\").\n\nDo not delete verify.workflow.js — step 2 of this split moves the applyFeedback half across and deletes it then.\n\ntests: skip. difficulty: around 5.",
+    "description": "Split of task 124, step 1 of 3. Covers the review half of items 3, 4 and 5 of the \"stage plan\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nAdd a `verify` agent to the plan stage of skills/tackle-tasks/task.workflow.js. It runs the codex review of plans/task-<N>-plan.md and returns structured output against VERIFY_SCHEMA. Source material is skills/tackle-tasks/verify.workflow.js:33-84, where a single agent today both reviews and applies its own FIXES block — this task lifts out only the reviewing half.\n\nAdd `missingFiles: {type: 'array', items: {type: 'string'}}` to VERIFY_SCHEMA, and rewrite codexPrompt so a plan that cannot be fixed inside the task's owned files returns repo-relative paths in that field instead of prose. verify.workflow.js:31 currently asks codex to \"say so explicitly in FIXES\", which is unparseable — the widening step (step 3 of this split) needs machine-readable paths to feed scripts/addTaskFiles.ts.\n\nNothing consumes missingFiles yet; this task only produces it. The three-round loop, the applyFeedback agent, and the widening logic are steps 2 and 3.\n\nDo not delete skills/tackle-tasks/verify.workflow.js here — step 2 moves its remaining half across and deletes it then. This task, step 2 and step 3 all edit task.workflow.js and are chained so no two run at once.",
+    "files": [
+      "plans/task-86-spec.md",
+      "skills/tackle-tasks/task.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js"
+    ],
+    "tests": "skip",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNum": 133,
+        "reason": "133 finishes the plan stage of task.workflow.js that this task extends; both edit the same file"
+      }
+    ],
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "fba977a9003172bfac0f41054b3e0c1438992200"
+    ]
   }
 ]
