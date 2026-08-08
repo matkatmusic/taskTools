@@ -1,6 +1,6 @@
 // Aggregates tasks.json and completedTasks.json: closure velocity, files coverage, blocking, and the parallelism a tackle-tasks run would get.
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
-import { declaredFiles, groupTasksByFileOverlap } from "./taskGroups.ts";
+import { declaredFiles, groupTasksByFileOverlap, type TaskGroup } from "./taskGroups.ts";
 
 export type TaskStats = {
     openCount: number;
@@ -19,7 +19,10 @@ export type TaskStats = {
     contendedFiles: { path: string; taskCount: number }[];
     blockerChains: number[][][];
     fastestUnblockingSequence: number[];
+    parallelBatches: number[][];
 };
+
+const TASKS_PER_COMMAND = 6;
 
 const dayNumber = (isoDate: string) => Math.floor(Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000);
 
@@ -98,6 +101,16 @@ function unblockingRoots(chains: number[][][]): number[] {
     return [...roots].sort((a, b) => a - b);
 }
 
+// Round i is the i-th task of every group, so no round holds two tasks that share a file.
+function buildParallelBatches(groups: TaskGroup[]): number[][] {
+    const rounds: number[][] = [];
+    for (const group of groups) group.taskNumbers.forEach((taskNumber, i) => (rounds[i] ??= []).push(taskNumber));
+    return rounds.flatMap(round =>
+        Array.from({ length: Math.ceil(round.length / TASKS_PER_COMMAND) }, (_, i) =>
+            round.slice(i * TASKS_PER_COMMAND, (i + 1) * TASKS_PER_COMMAND).sort((a, b) => a - b)),
+    );
+}
+
 export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], today: string): TaskStats {
     const openNumbers = new Set(open.map(t => t.taskNumber));
     const unblocked = open.filter(t => openBlockersOf(t, openNumbers).length === 0);
@@ -123,6 +136,7 @@ export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], to
         contendedFiles: rankContendedFiles(open),
         blockerChains,
         fastestUnblockingSequence: unblockingRoots(blockerChains),
+        parallelBatches: buildParallelBatches(groups),
     };
 }
 
@@ -147,6 +161,10 @@ export function formatTaskStats(stats: TaskStats): string {
         lines.push("blocked task chains:");
         for (const chain of stats.blockerChains) lines.push(`  ${chain.map(level => `[${level.join(",")}]`).join(" <- ")}`);
         lines.push(`fastest unblocking sequence: tackle-tasks [${stats.fastestUnblockingSequence.join(",")}]`);
+    }
+    if (stats.parallelBatches.length > 0) {
+        lines.push(`parallel commands:`);
+        for (const batch of stats.parallelBatches) lines.push(`  tackle-tasks [${batch.join(",")}]`);
     }
     return lines.join("\n") + "\n";
 }

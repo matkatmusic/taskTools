@@ -131,6 +131,24 @@ test("CLI reports empty projects without crashing", () => {
     assert.match(output, /0 open/);
 });
 
+test("each parallel command holds at most 6 tasks that share no files", () => {
+    const filesOf = new Map<number, string[]>([
+        ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, ["hot.ts"]] as [number, string[]]),
+        ...[10, 11, 12, 13, 14, 15, 16].map(n => [n, [`solo-${n}.ts`]] as [number, string[]]),
+    ]);
+    const open = [...filesOf].map(([taskNumber, files]) => openTask(taskNumber, { files }));
+    const stats = computeTaskStats(open, [], TODAY);
+
+    assert.deepEqual(stats.parallelBatches.flat().sort((a, b) => a - b), open.map(t => t.taskNumber));
+    for (const batch of stats.parallelBatches) {
+        assert.ok(batch.length <= 6, `batch [${batch}] exceeds 6 tasks`);
+        const files = batch.flatMap(n => filesOf.get(n) ?? []);
+        assert.equal(new Set(files).size, files.length, `batch [${batch}] shares a file`);
+    }
+    assert.deepEqual(stats.parallelBatches[0], [1, 10, 11, 12, 13, 14]);
+    assert.match(formatTaskStats(stats), /parallel commands:\n {2}tackle-tasks \[1,10,11,12,13,14\]\n/);
+});
+
 test("collapses a diamond blockedBy graph into one chain per sink", () => {
     const open = [
         openTask(1),
