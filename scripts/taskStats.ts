@@ -22,7 +22,7 @@ export type TaskStats = {
     parallelBatches: number[][];
 };
 
-const TASKS_PER_COMMAND = 6;
+export const TASKS_PER_COMMAND = 6;
 
 const dayNumber = (isoDate: string) => Math.floor(Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000);
 

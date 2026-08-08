@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { TASKS_PER_COMMAND } from "./taskStats.ts";
 
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand
 const checkBlockersPath = fileURLToPath(new URL("./checkBlockers.ts", import.meta.url));
@@ -62,7 +63,13 @@ and each entry's task number is at \`tasks[0].number\`.
 
 Launch \`${taskWorkflowPath}\` once per entry in \`groups\`, as a **background**
 workflow — the call returns immediately, so the orchestrator stays free to
-launch the next task's workflow right away. Nothing waits on anything else.
+launch the next task's workflow right away.
+
+Keep up to ${TASKS_PER_COMMAND} task.workflow.js runs in flight, and start
+the next task as soon as any one of them finishes — a sliding window, not
+batches of ${TASKS_PER_COMMAND} with a barrier between them. Fewer tasks
+than ${TASKS_PER_COMMAND} means fewer runs; ${TASKS_PER_COMMAND} is a
+ceiling, never a batch size to fill.
 
 Args for each launch: \`{task, typecheckCommand}\`, where \`task\` is that
 entry's \`tasks[0].number\` and \`typecheckCommand\` is the value from the
