@@ -433,6 +433,173 @@ export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, 
     git(repoRoot, "branch", "-D", branchName);
 }
 
+export type MergeStepOperations = {
+    mergeSubmodule: (mainSubmodulePath: string, worktreeSubmodulePath: string, sourceBranch: string) => { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null };
+    mergeGroup: (repoRoot: string, group: PreparedGroup, sourceBranch: string, submodulePaths: string[]) => MergeOutcome;
+};
+
+export const defaultMergeStepOperations: MergeStepOperations = {
+    mergeSubmodule: mergeSubmoduleBranchIntoRepo,
+    mergeGroup: mergeGroupBranchIntoRepo,
+};
+
+function displayOccurrenceId(occurrenceId: string): string {
+    return occurrenceId === "" ? "root" : occurrenceId;
+}
+
+export type MergeLayerOutcome =
+    | { occurrenceId: string; checkoutPath: string; status: "no-op"; oid: string }
+    | { occurrenceId: string; checkoutPath: string; status: "merged"; oid: string };
+
+export type MergeTaskWalkReport =
+    | { status: "merged"; completedLayers: MergeLayerOutcome[] }
+    | {
+          status: "submodule-conflicted";
+          completedLayers: MergeLayerOutcome[];
+          occurrenceId: string;
+          checkoutPath: string;
+          stage: "rebase" | "test" | "merge";
+          conflictedFilePaths: string[];
+          failureReason: string | null;
+      }
+    | {
+          status: "parent-conflicted";
+          completedLayers: MergeLayerOutcome[];
+          checkoutPath: string;
+          stage: "rebase" | "test" | "merge";
+          conflictedFilePaths: string[];
+          failureReason: string | null;
+      };
+
+// Checks out each child's merged tip for real, so `git add` records a gitlink matching the checkout.
+function propagateChildGitlinks(
+    occurrence: RepositoryOccurrence,
+    childrenByParentId: Map<string, RepositoryOccurrence[]>,
+    sourceTipByOccurrenceId: Map<string, string>,
+    sourceCheckoutPathByOccurrenceId: Map<string, string>,
+): void {
+    let stagedAnyChange = false;
+    for (const child of childrenByParentId.get(occurrence.occurrenceId) ?? []) {
+        const childSourceTip = sourceTipByOccurrenceId.get(child.occurrenceId);
+        const childSourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(child.occurrenceId);
+        if (childSourceTip === undefined || child.pathInParent === null || childSourceCheckoutPath === undefined) continue;
+        const recordedOid = git(occurrence.checkoutPath, "rev-parse", `HEAD:${child.pathInParent}`).trim();
+        if (recordedOid === childSourceTip) continue;
+        git(child.checkoutPath, "fetch", childSourceCheckoutPath, `${child.baseBranch}:refs/heads/${child.baseBranch}`);
+        git(child.checkoutPath, "checkout", child.baseBranch);
+        git(occurrence.checkoutPath, "add", child.pathInParent);
+        stagedAnyChange = true;
+    }
+    if (!stagedAnyChange) return;
+    git(occurrence.checkoutPath, "commit", "-m", "taskTools: point submodule gitlinks at merged source tips");
+}
+
+// Rebases, tests, and merges each occurrence deepest-first; skips occurrences already merged into their own source branch.
+export function mergeTaskDeepestFirst(
+    worktreePath: string,
+    manifest: DiscoveryManifest,
+    mergeStepOperations: MergeStepOperations = defaultMergeStepOperations,
+): MergeTaskWalkReport {
+    const sourceCheckoutPathByOccurrenceId = new Map(
+        manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
+    );
+
+    const discovery = discoverRepositoryTree(worktreePath, manifest);
+    if (discovery.status === "needsResolution") {
+        throw new Error(`repository tree discovery needs resolution for: ${discovery.resolutionRequests.map((request) => request.occurrenceId).join(", ")}`);
+    }
+
+    const rootOccurrence = discovery.graph.find((occurrence) => occurrence.parentOccurrenceId === null)!;
+    const submoduleOccurrencesDeepestFirst = discovery.graph
+        .filter((occurrence) => occurrence.parentOccurrenceId !== null)
+        .sort((a, b) => b.depth - a.depth);
+    const orderedOccurrences = [...submoduleOccurrencesDeepestFirst, rootOccurrence];
+    const childrenByParentId = groupChildrenByParentId(discovery.graph);
+
+    // Fetch each task branch first and mark occurrences already merged into source; those skip rebase, test, and merge.
+    const skippedOccurrenceIds = new Set<string>();
+    for (const occurrence of orderedOccurrences) {
+        const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId)!;
+        if (occurrence.parentOccurrenceId !== null) {
+            git(sourceCheckoutPath, "fetch", occurrence.checkoutPath, `${occurrence.operationBranch}:refs/heads/${occurrence.operationBranch}`);
+        }
+        if (unmergedCommitCount(sourceCheckoutPath, occurrence.baseBranch, occurrence.operationBranch) === 0) {
+            skippedOccurrenceIds.add(occurrence.occurrenceId);
+        }
+    }
+
+    const completedLayers: MergeLayerOutcome[] = [];
+    // Every completed occurrence's source tip, so its container can record that OID rather than the child's pre-merge tip.
+    const sourceTipByOccurrenceId = new Map<string, string>();
+    for (const occurrence of orderedOccurrences) {
+        const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId)!;
+        const displayId = displayOccurrenceId(occurrence.occurrenceId);
+
+        if (skippedOccurrenceIds.has(occurrence.occurrenceId)) {
+            const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+            sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
+            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid });
+            continue;
+        }
+
+        propagateChildGitlinks(occurrence, childrenByParentId, sourceTipByOccurrenceId, sourceCheckoutPathByOccurrenceId);
+
+        if (occurrence.parentOccurrenceId !== null) {
+            const rebaseOutcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId);
+            if (rebaseOutcome.status === "conflicted") {
+                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: rebaseOutcome.conflictedFilePaths, failureReason: null };
+            }
+            if (rebaseOutcome.status === "cleanup-failed" || rebaseOutcome.status === "source-sync-failed") {
+                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: rebaseOutcome.failureReason };
+            }
+            if (rebaseOutcome.status === "tests-failed") {
+                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: rebaseOutcome.testOutput };
+            }
+            if (rebaseOutcome.status === "untested") {
+                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
+            }
+
+            const result = mergeStepOperations.mergeSubmodule(sourceCheckoutPath, occurrence.checkoutPath, occurrence.baseBranch);
+            if (!result.merged) {
+                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
+            }
+            const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+            sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
+            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
+            continue;
+        }
+
+        const directChildPathsInParent = (childrenByParentId.get(occurrence.occurrenceId) ?? [])
+            .map((child) => child.pathInParent)
+            .filter((pathInParent): pathInParent is string => pathInParent !== null);
+
+        const parentOutcome = rebaseParentOntoSourceAndTest(occurrence.occurrenceId, occurrence.checkoutPath, occurrence.baseBranch, directChildPathsInParent, manifest.resolutionManifest);
+        if (parentOutcome.status === "conflicted") {
+            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: parentOutcome.conflictedFilePaths, failureReason: null };
+        }
+        if (parentOutcome.status === "cleanup-failed") {
+            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: parentOutcome.failureReason };
+        }
+        if (parentOutcome.status === "tests-failed") {
+            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: parentOutcome.testOutput };
+        }
+        if (parentOutcome.status === "untested") {
+            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
+        }
+
+        const group: PreparedGroup = { groupId: 0, worktree: occurrence.checkoutPath, branch: occurrence.operationBranch, scope: "unknown", tasks: [] };
+        const result = mergeStepOperations.mergeGroup(sourceCheckoutPath, group, occurrence.baseBranch, directChildPathsInParent);
+        if (!result.merged) {
+            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
+        }
+        const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+        sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
+        completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
+    }
+
+    return { status: "merged", completedLayers };
+}
+
 function runDiscoverCli(): void {
     const repoRoot = process.cwd();
     const sourceBranch = currentBranchName(repoRoot);
