@@ -1904,5 +1904,54 @@
     "commitHashes": [
       "240484aaadc836b4619bea91201234a312edc782"
     ]
+  },
+  {
+    "taskNumber": 132,
+    "version": "f2569508451026710ed33235ffc306289fc28c9a",
+    "title": "tackle-tasks: create task.workflow.js with the stage dispatcher",
+    "userDescription": "## Goal\n\n**Chain goal (tasks 131-133):** Running the tackle-tasks skill for a task gives that task its own git worktree at `<tmpdir>/taskTools-wt/<repoBasename>/task-<N>` and its own branch `task-<N>` in the root repo and in every submodule, and a single `skills/tackle-tasks/task.workflow.js` produces that task's plan inside that worktree.\n\n**This task is done when:** `skills/tackle-tasks/task.workflow.js` exists and can be launched for a single task with a `stage` argument selecting plan / implement / rebase-test / merge, defaulting to plan+implement. The workflow's `meta.name` is `task-<N>`, and the workflow's phase titles carry the task number, so six concurrently running task workflows are individually identifiable in /workflows. The stage bodies are still stubs.\n\n---\n\n[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: create task.workflow.js with the stage dispatcher.\n\nDescription:\n\nSplit of task 123, step 2 of 3. Creates skills/tackle-tasks/task.workflow.js: one workflow file per task, with a `stage` launch argument selecting plan / implement / rebase-test / merge, defaulting to plan+implement. This step builds only the dispatcher shell — argument parsing, stage selection, meta.name of `task-<N>`, and phase titles carrying the task number (e.g. `86 Plan`) so six concurrent runs stay distinguishable in /workflows. Stage bodies are stubs; step 3 fills in the plan stage and later tasks fill in the rest.\n\ntests: skip. difficulty: around 5.",
+    "description": "Split of task 123, step 2 of 3. Creates skills/tackle-tasks/task.workflow.js — the single per-task workflow file that replaces the current one-workflow-per-phase layout.\n\nScope is the dispatcher shell only:\n- a `stage` launch argument selecting plan / implement / rebase-test / merge, defaulting to plan+implement when unset;\n- meta.name is `task-<N>`, so each concurrent run is separately identifiable;\n- phase titles carry the task number (`86 Plan`, `86 Implement`, ...) so six concurrent runs stay distinguishable in /workflows;\n- stage bodies are stubs that log and return; nothing calls an agent yet.\n\nThe existing skills/tackle-tasks/plan.workflow.js stays untouched here — step 3 moves its planner code across and deletes it. This task and step 3 both edit task.workflow.js, so they are chained: this one must land first.\n\nRead plans/task-86-spec.md (already in the repo) for the full stage plan before writing the dispatcher, even though it is not in this task's files list.",
+    "files": [
+      "skills/tackle-tasks/task.workflow.js",
+      "plans/task-86-spec.md",
+      "skills/tackle-tasks/plan.workflow.js"
+    ],
+    "tests": "skip",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNum": 131,
+        "reason": "prepareTasks must create the per-task worktree and branch this workflow file runs inside"
+      }
+    ],
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "1c52a50b067751d5f0f59517a5dfaca7668f4943"
+    ]
+  },
+  {
+    "taskNumber": 133,
+    "version": "f2569508451026710ed33235ffc306289fc28c9a",
+    "title": "tackle-tasks: fill in the plan stage and delete plan.workflow.js",
+    "userDescription": "## Goal\n\n**Chain goal (tasks 131-133):** Running the tackle-tasks skill for a task gives that task its own git worktree at `<tmpdir>/taskTools-wt/<repoBasename>/task-<N>` and its own branch `task-<N>` in the root repo and in every submodule, and a single `skills/tackle-tasks/task.workflow.js` produces that task's plan inside that worktree.\n\n**This task is done when:** The plan stage of `task.workflow.js` really plans: the stage writes the brief via `writeTaskBriefFile` and runs the planner agent, producing `plans/task-<N>-plan.md` in that task's worktree. `plannerBrief`, `PLAN_SCHEMA`, `retryAgent` and `fileRetryPreamble` now live in `task.workflow.js`.\n\nDeleting `plan.workflow.js` is NOT part of this task — the old workflow files are removed at the end of the chain.\n\n---\n\n[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/plan.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: fill in the plan stage and delete plan.workflow.js.\n\nDescription:\n\nSplit of task 123, step 3 of 3. Fills in the plan stage of the dispatcher created by step 2: the brief written programmatically via writeTaskBriefFile, and the planner agent writing plans/task-<N>-plan.md. Move plannerBrief, PLAN_SCHEMA, retryAgent and fileRetryPreamble across from skills/tackle-tasks/plan.workflow.js into task.workflow.js, then delete plan.workflow.js.\n\nThis is only the plan stage's first half; later tasks (124 onward) fill in the remaining stages of the same file and are chained behind this one.\n\ntests: skip. difficulty: around 6.",
+    "description": "Split of task 123, step 3 of 3. Fills in the plan stage inside skills/tackle-tasks/task.workflow.js, the dispatcher shell created by task 132.\n\nWork:\n- write the task brief programmatically via writeTaskBriefFile (already exists in scripts/prepareTasks.ts — reuse it, do not re-implement brief formatting);\n- run the planner agent so it writes plans/task-<N>-plan.md;\n- move plannerBrief, PLAN_SCHEMA, retryAgent and fileRetryPreamble across from skills/tackle-tasks/plan.workflow.js into task.workflow.js unchanged, then delete plan.workflow.js.\n\nScope is the plan stage's first half only. The implement / rebase-test / merge stages stay stubs; tasks 124 onward fill them in and are chained behind this one so no two ever edit task.workflow.js at the same time.\n\nThis task shares skills/tackle-tasks/task.workflow.js with task 132 by design — the blockedBy chain, not file exclusivity, is what keeps them from colliding.",
+    "files": [
+      "skills/tackle-tasks/task.workflow.js",
+      "skills/tackle-tasks/plan.workflow.js",
+      "scripts/prepareTasks.ts",
+      "scripts/taskFiles.ts"
+    ],
+    "tests": "skip",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNum": 132,
+        "reason": "creates the task.workflow.js dispatcher whose plan stage this task fills in; both edit the same file"
+      }
+    ],
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "ef242fc7eb5047361802ef3e6f5fcb461d537956"
+    ]
   }
 ]
