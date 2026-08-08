@@ -91,7 +91,12 @@
     "files": [
       "scripts/tackleTasksBrief.ts",
       "skills/tackle-tasks/SKILL.md",
-      "tests/tackleTasksBrief.test.ts"
+      "tests/tackleTasksBrief.test.ts",
+      "scripts/taskStatsBrief.ts",
+      "skills/task-stats/SKILL.md",
+      "tests/taskStatsBrief.test.ts",
+      "scripts/reviewPlanBrief.ts",
+      "tests/reviewPlanBrief.test.ts"
     ],
     "tests": "Same as tasks 71 through 74: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/tackle-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 6,
