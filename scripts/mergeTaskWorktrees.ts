@@ -1,5 +1,5 @@
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -10,6 +10,11 @@ import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 import { runMergePipeline } from "./mergePipeline.ts";
 import type { MergeOutcome, SubmoduleConflict } from "./mergePipeline.ts";
+import { discoverRepositoryTree } from "./repositoryDiscovery.ts";
+import type { DiscoveryManifest } from "./repositoryDiscovery.ts";
+import type { RepositoryOccurrence } from "./repositoryManifest.ts";
+import { discoverTestPolicy } from "./testPolicy.ts";
+import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -168,6 +173,137 @@ export function rebaseGroupOntoSource(worktreePath: string, sourceBranch: string
 
         return { status: "conflicted", conflictedFilePaths };
     }
+}
+
+export type SubmoduleLayerOutcome =
+    | { occurrenceId: string; checkoutPath: string; status: "no-op" }
+    | { occurrenceId: string; checkoutPath: string; status: "rebased-and-tested" }
+    | { occurrenceId: string; checkoutPath: string; status: "conflicted"; conflictedFilePaths: string[] }
+    | { occurrenceId: string; checkoutPath: string; status: "cleanup-failed"; failureReason: string }
+    | { occurrenceId: string; checkoutPath: string; status: "tests-failed"; testOutput: string }
+    | { occurrenceId: string; checkoutPath: string; status: "untested"; resolutionRequests: ResolutionRequest[] }
+    | { occurrenceId: string; checkoutPath: string; status: "source-sync-failed"; failureReason: string };
+
+// "rebased-and-tested" also covers a layer whose own branch was already current but whose child gitlink changed.
+
+export type SubmoduleLayerWalkReport = {
+    completedLayers: SubmoduleLayerOutcome[];
+    stoppedAt: SubmoduleLayerOutcome | null;
+};
+
+function testFailureOutput(error: unknown): string {
+    const failure = error as { stdout?: string; stderr?: string; message?: string };
+    return [failure.stdout, failure.stderr].filter(Boolean).join("\n").trim() || failure.message || "test command failed";
+}
+
+// Fetches baseBranch fresh from the real source checkout, without touching whatever branch is checked out.
+function fetchBaseBranchFromSource(checkoutPath: string, sourceCheckoutPath: string, baseBranch: string): void {
+    git(checkoutPath, "fetch", sourceCheckoutPath, `${baseBranch}:${baseBranch}`);
+}
+
+// Which of occurrence's direct children have a gitlink in occurrence's tree that no longer matches their checked-out commit.
+function changedChildGitlinkPaths(occurrence: RepositoryOccurrence, childrenByParentId: Map<string, RepositoryOccurrence[]>): string[] {
+    const children = childrenByParentId.get(occurrence.occurrenceId) ?? [];
+    return children
+        .map((child) => child.pathInParent)
+        .filter((pathInParent): pathInParent is string => pathInParent !== null)
+        .filter((pathInParent) => git(occurrence.checkoutPath, "status", "--porcelain", "--", pathInParent).trim() !== "");
+}
+
+// Stages and commits the gitlink bump for every already-computed changed child path. No-op when the list is empty.
+function recordRebasedChildGitlinks(occurrence: RepositoryOccurrence, changedChildPaths: string[]): void {
+    if (changedChildPaths.length === 0) return;
+    for (const pathInParent of changedChildPaths) git(occurrence.checkoutPath, "add", pathInParent);
+    git(occurrence.checkoutPath, "commit", "-q", "-m", `record rebased submodule commit: ${changedChildPaths.join(", ")}`);
+}
+
+function rebaseAndTestSubmoduleLayer(
+    occurrence: RepositoryOccurrence,
+    sourceCheckoutPath: string,
+    resolutionManifest: ResolutionManifest,
+    childrenByParentId: Map<string, RepositoryOccurrence[]>,
+): SubmoduleLayerOutcome {
+    const { occurrenceId, checkoutPath, baseBranch, operationBranch } = occurrence;
+
+    try {
+        fetchBaseBranchFromSource(checkoutPath, sourceCheckoutPath, baseBranch);
+    } catch (error) {
+        return { occurrenceId, checkoutPath, status: "source-sync-failed", failureReason: gitErrorText(error) };
+    }
+
+    const aheadOfSource = unmergedCommitCount(checkoutPath, baseBranch, operationBranch);
+    const behindSource = unmergedCommitCount(checkoutPath, operationBranch, baseBranch);
+    const refsIdentical = aheadOfSource === 0 && behindSource === 0;
+    const changedChildPaths = changedChildGitlinkPaths(occurrence, childrenByParentId);
+
+    // Refs identical and no child gitlink changed: nothing for this layer to do at all.
+    if (refsIdentical && changedChildPaths.length === 0) {
+        return { occurrenceId, checkoutPath, status: "no-op" };
+    }
+
+    // Refs differ: rebase this layer's own branch. Refs identical but a child changed: skip the rebase entirely.
+    if (!refsIdentical) {
+        const rebaseOutcome = rebaseGroupOntoSource(checkoutPath, baseBranch);
+        if (rebaseOutcome.status === "conflicted") {
+            return { occurrenceId, checkoutPath, status: "conflicted", conflictedFilePaths: rebaseOutcome.conflictedFilePaths };
+        }
+        if (rebaseOutcome.status === "cleanup-failed") {
+            return { occurrenceId, checkoutPath, status: "cleanup-failed", failureReason: rebaseOutcome.failureReason };
+        }
+    }
+
+    // Either the rebase above just happened, or refs were identical but a child's gitlink still needs recommitting.
+    recordRebasedChildGitlinks(occurrence, changedChildPaths);
+
+    const testPolicyResult = discoverTestPolicy(occurrenceId, checkoutPath, resolutionManifest);
+    if (testPolicyResult.status === "needsResolution") {
+        return { occurrenceId, checkoutPath, status: "untested", resolutionRequests: testPolicyResult.resolutionRequests };
+    }
+
+    try {
+        execSync(testPolicyResult.policy.completeSuiteCommand, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        return { occurrenceId, checkoutPath, status: "rebased-and-tested" };
+    } catch (error) {
+        return { occurrenceId, checkoutPath, status: "tests-failed", testOutput: testFailureOutput(error) };
+    }
+}
+
+function groupChildrenByParentId(occurrences: RepositoryOccurrence[]): Map<string, RepositoryOccurrence[]> {
+    const childrenByParentId = new Map<string, RepositoryOccurrence[]>();
+    for (const occurrence of occurrences) {
+        if (occurrence.parentOccurrenceId === null) continue;
+        const siblings = childrenByParentId.get(occurrence.parentOccurrenceId) ?? [];
+        siblings.push(occurrence);
+        childrenByParentId.set(occurrence.parentOccurrenceId, siblings);
+    }
+    return childrenByParentId;
+}
+
+// Rebases each submodule deepest-first, testing every layer before moving up; stops on the first red layer.
+export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest): SubmoduleLayerWalkReport {
+    const sourceCheckoutPathByOccurrenceId = new Map(
+        manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
+    );
+
+    const discovery = discoverRepositoryTree(worktreePath, manifest);
+    if (discovery.status === "needsResolution") {
+        throw new Error(`repository tree discovery needs resolution for: ${discovery.resolutionRequests.map((request) => request.occurrenceId).join(", ")}`);
+    }
+
+    const submoduleOccurrences = discovery.graph.filter((occurrence) => occurrence.parentOccurrenceId !== null);
+    const childrenByParentId = groupChildrenByParentId(submoduleOccurrences);
+    const submoduleLayersDeepestFirst = [...submoduleOccurrences].sort((a, b) => b.depth - a.depth);
+
+    const completedLayers: SubmoduleLayerOutcome[] = [];
+    for (const occurrence of submoduleLayersDeepestFirst) {
+        const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId) ?? "";
+        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId);
+        if (outcome.status !== "no-op" && outcome.status !== "rebased-and-tested") {
+            return { completedLayers, stoppedAt: outcome };
+        }
+        completedLayers.push(outcome);
+    }
+    return { completedLayers, stoppedAt: null };
 }
 
 export function mergeGroupBranchIntoRepo(
