@@ -51,7 +51,7 @@ test("prints nothing when there is nothing staged", () => {
   assert.equal(run(root), "");
 });
 
-test("excludes tasks.json, completedTasks.json, and plans/archived", () => {
+test("includes tasks.json and completedTasks.json, still excludes plans/archived", () => {
   const root = newRoot();
   initRepo(root);
   mkdirSync(join(root, "plans", "archived"), { recursive: true });
@@ -64,9 +64,28 @@ test("excludes tasks.json, completedTasks.json, and plans/archived", () => {
   stageFile(root, "plans/archived/note.md", "new");
   stageFile(root, "keep.txt", "changed\n");
   const out = run(root);
-  assert.ok(!out.includes("tasks.json"));
+  assert.ok(out.includes("tasks.json"));
+  assert.ok(out.includes("completedTasks.json"));
   assert.ok(!out.includes("archived/note.md"));
   assert.ok(out.includes("keep.txt"));
+});
+
+test("prints a diff when only tasks.json is staged", () => {
+  const root = newRoot();
+  initRepo(root);
+  commitFile(root, "tasks.json", "[]");
+  stageFile(root, "tasks.json", "[1]");
+  const out = run(root);
+  assert.ok(out.includes("tasks.json"));
+});
+
+test("prints nothing when only plans/archived is staged", () => {
+  const root = newRoot();
+  initRepo(root);
+  mkdirSync(join(root, "plans", "archived"), { recursive: true });
+  commitFile(root, "plans/archived/note.md", "old");
+  stageFile(root, "plans/archived/note.md", "new");
+  assert.equal(run(root), "");
 });
 
 test("resolves the root and labels correctly when invoked from a nested directory", () => {

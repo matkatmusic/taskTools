@@ -2,7 +2,8 @@
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
 
-const EXCLUDES = ["--", ":(exclude)*tasks.json", ":(exclude)*completedTasks.json", ":(exclude)plans/archived"];
+// task 106
+const EXCLUDES = ["--", /*":(exclude)*tasks.json", ":(exclude)*completedTasks.json",*/ ":(exclude)plans/archived"];
 
 function stagedDiff(repo: string): string {
   return execFileSync("git", ["-C", repo, "diff", "--staged", ...EXCLUDES], { encoding: "utf8" });
