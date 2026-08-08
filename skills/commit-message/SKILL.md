@@ -3,12 +3,9 @@ name: commit-message
 description: generate a short commit-message summary for each git repo with staged changes, from the diff injected fresh at invocation
 ---
 
-Staged diff, one section per affected repo (the current repo plus any submodule whose pointer moved):
+!`printf 'workflowPath=%s\nstagedDiffsPath=%s\n' "${CLAUDE_PLUGIN_ROOT}/skills/commit-message/commitMessage.workflow.js" "${CLAUDE_PLUGIN_ROOT}/scripts/stagedDiffs.ts"`
 
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/stagedDiffs.ts"`
-
-Use a single subagent running `Sonnet 5` (fall back to `Opus 5` if Sonnet is unavailable or errors): pass it the diffs above and have it generate, per affected repo, a short (40 words or less) single-sentence summary of the work done in that repo, so the user can use each summary as that repo's commit message.
-A parent repo whose only change is a submodule pointer counts as an affected repo — its message should name the submodule being updated and why.
+Call Workflow with scriptPath the `workflowPath` value above, args `{"stagedDiffsPath": "<the stagedDiffsPath value above>"}`. The workflow runs that script itself and pastes the resulting staged diff straight into its subagent's prompt, so the diff never enters your context. It returns `{summaries}`, one `{repo, message}` per affected repo — the current repo plus any submodule whose pointer moved.
 
 Report the summaries to the user, one line per repo, in the following format:
 ```
