@@ -166,11 +166,18 @@ Reuse from `scripts/mergeTaskWorktrees.ts`:
 | `removeWorktreeAndBranch` | cleanup |
 | `unmergedCommitCount` | "am I on the tip?" |
 
-Write a **new** merge orchestration from scratch, submodule-aware.
-`scripts/runMergePhase.ts` goes, along with `buildMergeOutcomes`,
+Write a **new** merge orchestration from scratch, submodule-aware, **inside**
+`scripts/runMergePhase.ts`. "From scratch" describes the design owing nothing to
+the old one; it does not mean emptying the file. `buildMergeOutcomes`,
 `coordinateMergeRetry`, `refreshBaseOids`, and the aggregated `stepOutputsFile`
-— all built for a batch model that no longer exists. The queue makes base drift
-structurally impossible instead of recovering from it.
+plumbing were all built for a batch model that no longer exists, and the queue
+makes base drift structurally impossible instead of recovering from it — so they
+are **commented out in place** under `// RETIRED (task 147): ...` headers, never
+deleted. `resolveStepOutputsPath` in `scripts/prepareTasks.ts` and its callers
+stay untouched.
+
+**Retired code is commented out; only whole superseded files are removed, and
+only by the end-of-chain task.** That applies everywhere in this chain.
 
 ## Progress display
 
@@ -206,11 +213,19 @@ history of shipping wrong quietly. Its `tests` field must ask for at least:
   submodule's source branch *before* the parent's gitlink bump lands. Assert
   the parent's source branch never points at a commit that exists only on a
   task branch.
-- **Failure is atomic.** When any step of a lap fails, nothing further lands:
-  `git rev-parse` of the parent's source branch returns exactly the hash it
-  returned before that lap began, the worktree and branch survive intact, and
-  the task is still open in tasks.json. Submodule source branches that already
-  merged before the failure stay merged.
+- **Failure is atomic, and "atomic" means three different things depending on
+  where the lap failed.** In every case the worktree and its `task-N` branch
+  survive intact and the task is still open in tasks.json.
+  - *Before any merge* — a rebase, conflict, test or cleanup failure moves no
+    source branch at any layer: `git rev-parse` of the parent's source branch
+    returns exactly the hash it returned before that lap began.
+  - *During the ordered merge* — submodule source branches that already merged
+    before a later layer fails stay merged and are never rolled back. The
+    parent's source branch is unchanged until its own merge succeeds.
+  - *After the parent merge* — a **close** failure does **not** unwind the
+    merge. The parent's source branch legitimately carries it, and the run
+    reports MERGED BUT NOT CLOSED with that hash. Asserting an unchanged parent
+    hash for this case is wrong.
 - **The tree matches the commit.** After a successful merge, the source
   branch's index and working tree equal the merged commit. This is the task
   119 bug — `git update-ref` advancing a checked-out branch while index and
