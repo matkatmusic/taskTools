@@ -142,21 +142,25 @@ export function computeTaskStats(open: TaskRecord[], completed: TaskRecord[], to
 
 export function formatTaskStats(stats: TaskStats): string {
     const lines = [
+        "## Backlog",
+        "",
         `${stats.openCount} open (${stats.unblockedCount} unblocked, ${stats.blockedCount} blocked)`,
         `${stats.openWithFiles} of ${stats.openCount} open tasks declare files — ${stats.openWithoutFiles} would be refused by tackle-tasks`,
+        "",
+        "## Velocity",
+        "",
         `${stats.completedCount} completed, ${stats.completedWithCommitHashes} with commit hashes recorded`,
         `closed: ${stats.closedLast7} in the last 7 days, ${stats.closedLast30} in the last 30`,
     ];
     if (stats.busiestDay) lines.push(`busiest day: ${stats.busiestDay.date} (${stats.busiestDay.count} closed)`);
     lines.push(
+        "",
+        "## Parallelism",
+        "",
         stats.forecastTaskCount > 0
             ? `parallelism: ${stats.forecastTaskCount} runnable tasks would form ${stats.groupCount} groups, largest ${stats.largestGroupSize} tasks (serialized within a group)`
             : `parallelism: no runnable tasks — nothing to group`,
     );
-    if (stats.contendedFiles.length > 0) {
-        lines.push("contended files (each shared task serializes):");
-        for (const file of stats.contendedFiles) lines.push(`  ${file.path} — ${file.taskCount} tasks`);
-    }
     if (stats.blockerChains.length > 0) {
         lines.push("blocked task chains:");
         for (const chain of stats.blockerChains) lines.push(`  ${chain.map(level => `[${level.join(",")}]`).join(" <- ")}`);
@@ -165,6 +169,10 @@ export function formatTaskStats(stats: TaskStats): string {
     if (stats.parallelBatches.length > 0) {
         lines.push(`parallel commands:`);
         for (const batch of stats.parallelBatches) lines.push(`  tackle-tasks [${batch.join(",")}]`);
+    }
+    if (stats.contendedFiles.length > 0) {
+        lines.push("", "## Contended files", "", "Each shared task serializes.", "", "| File | Tasks |", "| --- | --- |");
+        for (const file of stats.contendedFiles) lines.push(`| ${file.path} | ${file.taskCount} |`);
     }
     return lines.join("\n") + "\n";
 }

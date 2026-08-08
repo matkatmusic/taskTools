@@ -186,6 +186,7 @@ test("no blocked tasks produces empty chain data and no chain section in output"
     const text = formatTaskStats(stats);
     assert.equal(/blocked task chains:/.test(text), false);
     assert.equal(/fastest unblocking sequence:/.test(text), false);
+    assert.equal(/## Contended files/.test(text), false);
 });
 
 test("a blockedBy cycle behind a genuine sink terminates with a finite chain", () => {
