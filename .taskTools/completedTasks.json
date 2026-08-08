@@ -1977,5 +1977,28 @@
     "commitHashes": [
       "fba977a9003172bfac0f41054b3e0c1438992200"
     ]
+  },
+  {
+    "taskNumber": 135,
+    "version": "f2569508451026710ed33235ffc306289fc28c9a",
+    "title": "tackle-tasks: applyFeedback stage and the three-round review loop",
+    "userDescription": "## Goal\n\n**Chain goal (tasks 134-136):** The plan stage checks the plan it just produced, up to three times — a `verify` agent finds problems and a separate `applyFeedback` agent fixes them — and when the plan needs a file the task does not own, the workflow widens the task's own files list and re-plans without asking a human.\n\n**This task is done when all of these are true:**\n\n- A separate `applyFeedback` agent applies the reviewer's fixes — verify and applyFeedback are two agents, not one.\n- verify + applyFeedback run in a loop of up to three rounds inside the plan stage.\n- The verify agent returns the reviewer's PROBLEMS and FIXES text verbatim in the existing `notes` field of `VERIFY_SCHEMA`.\n- The workflow passes that `notes` string straight into the applyFeedback agent's prompt, held in memory between the two agent calls — no file, no shared state.\n- `applyFeedback` may edit only the plan file.\n- After three rounds the workflow moves on to implement regardless of the verdict, and any objections codex still holds are left available for the later approval gate to show.\n- A round counter exists that task 136 can decrement.\n- Deleting `verify.workflow.js` is NOT part of this task.\n\n---\n\n[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: applyFeedback stage and the three-round review loop.\n\nDescription:\n\nSplit of task 124, step 2 of 3. Adds the separate `applyFeedback` agent that applies the FIXES block produced by the verify agent from step 1, and wraps verify + applyFeedback in a loop of up to three rounds inside the plan stage of skills/tackle-tasks/task.workflow.js.\n\nMove the fix-applying half of skills/tackle-tasks/verify.workflow.js:33-84 across, then delete verify.workflow.js — step 1 already moved the reviewing half.\n\nAfter three rounds, proceed to implement regardless of the verdict. Objections codex still holds are carried forward to the approval gate as proposed tasks; the gate itself is a later task, so just make the surviving objections available.\n\nmissingFiles handling is step 3 of this split — leave a round counter the widening step can decrement.\n\ntests: skip. difficulty: around 6.",
+    "description": "Split of task 124, step 2 of 3. Adds the second half of the review loop to the plan stage of skills/tackle-tasks/task.workflow.js.\n\nWork:\n- add a separate `applyFeedback` agent that applies the FIXES block the verify agent (task 134) produced. Splitting review from apply is the point: today skills/tackle-tasks/verify.workflow.js:33-84 has one agent doing both, which lets it rationalize its own review;\n- wrap verify + applyFeedback in a loop of up to three rounds;\n- after three rounds, proceed to implement regardless of the verdict, and make the objections codex still holds available to the caller so a later task can carry them to the approval gate as proposed tasks;\n- move the fix-applying half of verify.workflow.js across and then delete that file — task 134 already moved the reviewing half, so nothing should still import it.\n\nLeave the round counter reachable by step 3: a programmatic missingFiles widening consumes one of the three rounds, so the counter must be decrementable from outside the verify/applyFeedback pair rather than hidden inside the loop body.\n\nThis task shares task.workflow.js with tasks 134 and 136 by design; the blockedBy chain keeps them from colliding.",
+    "files": [
+      "skills/tackle-tasks/task.workflow.js",
+      "skills/tackle-tasks/verify.workflow.js"
+    ],
+    "tests": "skip",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNum": 134,
+        "reason": "134 adds the verify agent and VERIFY_SCHEMA this loop applies feedback from; both edit the same file"
+      }
+    ],
+    "completionDate": "2026-08-08",
+    "commitHashes": [
+      "19e9e198245cd3894e6c00cd78bf470979c75eb6"
+    ]
   }
 ]
