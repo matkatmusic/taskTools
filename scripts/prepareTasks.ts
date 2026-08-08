@@ -107,8 +107,12 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     mkdirSync(dirname(briefFile), { recursive: true });
     const fileSections = declaredFiles(task).map((file) => {
         const fullPath = join(repoRoot, file);
-        if (!existsSync(fullPath)) return `### ${file}\n\n(missing: file not found on disk)\n`;
-        return `### ${file}\n\n\`\`\`\n${readFileSync(fullPath, "utf8")}\n\`\`\`\n`;
+        if (!existsSync(fullPath)) 
+            return `### ${file}\n\n(missing: file not found on disk)\n`;
+        // const fileContent = readFileSync(fullPath, "utf8");
+        // const output = `### ${file}\n\n\`\`\`\n${fileContent}\n\`\`\`\n`;
+        const output = `@${file}`;
+        return output;
     });
     const content = [
         `# Task ${task.taskNumber}: ${task.title ?? ""}`,
@@ -116,6 +120,7 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
         ...(task.userDescription ? [`## User request\n\n${task.userDescription}`, ""] : []),
         task.description ?? "",
         "",
+        "## Files\n",
         ...fileSections,
     ].join("\n");
     writeFileSync(briefFile, content);

@@ -43,7 +43,7 @@ function makeTempRepoWithLocalSubmodule(): { repoRoot: string; submoduleOrigin: 
     return { repoRoot, submoduleOrigin };
 }
 
-test("test_writeTaskBriefFileEmbedsTheDeclaredFileContents", () => {
+test("test_writeTaskBriefFileEmbedsTheDeclaredFilePointers", () => {
     const repoRoot = makeTempRepoWithCommit();
     writeFileSync(join(repoRoot, "fileA.txt"), "MARKER-abc123\n");
     const task = { taskNumber: 1, title: "t1", description: "do the thing", files: ["fileA.txt"] };
@@ -51,16 +51,17 @@ test("test_writeTaskBriefFileEmbedsTheDeclaredFileContents", () => {
     assert.equal(briefFile, join(repoRoot, "plans", "brief-1.md"));
     const text = readFileSync(briefFile, "utf8");
     assert.match(text, /do the thing/);
-    assert.match(text, /MARKER-abc123/);
+    assert.match(text, /@fileA\.txt/);
+    assert.doesNotMatch(text, /MARKER-abc123/); // make sure the file content is not embedded, only the pointer
 });
 
-test("test_writeTaskBriefFileOmitsMissingFilesWithoutThrowing", () => {
+test("test_writeTaskBriefFileAnnotatesMissingFilesWithoutThrowing", () => {
     const repoRoot = makeTempRepoWithCommit();
     const task = { taskNumber: 2, title: "t2", description: "desc", files: ["missing.txt"] };
     const briefFile = writeTaskBriefFile(task, repoRoot);
     const text = readFileSync(briefFile, "utf8");
     assert.match(text, /missing\.txt/);
-    assert.match(text, /missing/i);
+    assert.match(text, /\(missing: file not found on disk\)/);
 });
 
 test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
