@@ -537,17 +537,5 @@
     ],
     "tests": "Follow the approach in tests/tackleTasksRetry.test.ts. Find the marker comment \"// ponytail: workflow scripts cannot import\" in skills/tackle-tasks/blockers.workflow.js, slice the source from there to the line before `const ARGS`, and compile it with `new Function(block + \"; return {BLOCKER_VERDICTS, BLOCKER_VERDICT_SCHEMA_FRAGMENT, buildBlockerInvestigationPrompt}\")()`. Then assert against the real imports from scripts/blockerVerdicts.ts: deepEqual on BLOCKER_VERDICTS, deepEqual on BLOCKER_VERDICT_SCHEMA_FRAGMENT, and equal on buildBlockerInvestigationPrompt(1, 2, \"some reason\") called on both. Assert the marker comment is present, failing with a clear message if the slice comes back empty, so a deleted or renamed marker fails loudly instead of silently passing. Add a negative control proving the gate fails: run the same compile-and-compare against a source string whose verdict value has been altered, and assert it throws. Also add \"blockers\" to WORKFLOW_NAMES and EXPECTED_AGENT_CALLS.blockers = 1 in tests/tackleTasksRetry.test.ts so the identical-retryAgent, wrapped-agent-call, and sandbox-parse gates cover that file too.",
     "difficulty": 3
-  },
-  {
-    "taskNumber": 122,
-    "version": "bc419c3bde4a99500f474416896798b7c056d0bd",
-    "title": "Dummy smoke task: create docs/dyn-inj-smoke.md",
-    "userDescription": "create a dummy task that I can use to see if the most recent commit that changed all tasks to be dyn-Inj-based works.",
-    "description": "Throwaway payload task. Its only purpose is to be run end to end through /tackle-tasks to confirm the dynamically-injected brief-script skills still drive a full plan-implement-verify-merge cycle.\n\nContext: commit 09c412b moved five SKILL.md bodies (close-tasks, create-task, merge-worktree-tasks, tackle-unblocked-tasks, update-task-files) into scripts/<name>Brief.ts, each SKILL.md collapsing to frontmatter plus one `!` injection block. Commit 85232c8 (task 75) did the same for tackle-tasks. The full set of brief scripts is now scripts/closeTasksBrief.ts, createTaskBrief.ts, mergeWorktreeTasksBrief.ts, reviewPlanBrief.ts, tackleTasksBrief.ts, tackleUnblockedTasksBrief.ts, taskStatsBrief.ts and updateTaskFilesBrief.ts.\n\nThe work: create docs/dyn-inj-smoke.md containing exactly one line, `dyn-Inj smoke test OK`. Nothing else. No existing file is touched, so a failed or partial run leaves no real diff to unwind.\n\nDeliberately trivial so that any failure observed during the run belongs to the skill-injection pipeline rather than to this task's own difficulty. Delete docs/dyn-inj-smoke.md and close this task once the smoke run has been observed.",
-    "files": [
-      "docs/dyn-inj-smoke.md"
-    ],
-    "tests": "skip",
-    "difficulty": 1
   }
 ]
