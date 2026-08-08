@@ -4,33 +4,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tackleTasksBrief } from "../scripts/tackleTasksBrief.ts";
 
-// The commit whose SKILL.md still carried the body inline — the source text this script copied.
-const preRefactorCommit = "57f3ae1dc201ff311c9f540d6fd6b53bafc08424";
-
-const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const scriptPath = fileURLToPath(new URL("../scripts/tackleTasksBrief.ts", import.meta.url));
 const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
-
-function preRefactorBody(): string {
-  const skill = execFileSync("git", ["show", `${preRefactorCommit}:skills/tackle-tasks/SKILL.md`], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  return skill.split("\n").slice(7).join("\n");
-}
-
-test("brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied", () => {
-  const argsValue = "[75] valid";
-  const blockedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8" }).trimEnd();
-  const expected = preRefactorBody()
-    .replace(
-      '- blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts" \'$ARGUMENTS\'`',
-      `- blocked status: ${blockedStatus}`,
-    )
-    .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot)
-    .replaceAll("$ARGUMENTS", argsValue);
-  assert.equal(tackleTasksBrief(argsValue, blockedStatus), expected);
-});
 
 test("brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder", () => {
   const brief = tackleTasksBrief("[1]", "task 1: unblocked");
@@ -56,4 +31,15 @@ test("series adds the serial-mode section and leaves the brief untouched without
 
 test("script fails loudly rather than emitting a brief that points nowhere", () => {
   assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
+});
+
+test("running the pipeline launches task.workflow.js once per task in the background, with no phase barriers", () => {
+  const brief = tackleTasksBrief("[1]", "task 1: unblocked");
+  assert.match(brief, /Launch `.*task\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
+  assert.match(brief, /Args for each launch: `\{task, typecheckCommand\}`/);
+  assert.match(brief, /task-notification back to you/);
+  assert.doesNotMatch(brief, /wait for each to finish before starting/);
+  assert.doesNotMatch(brief, /stepOutputsFile/);
+  assert.doesNotMatch(brief, /mergeCommand/);
+  assert.doesNotMatch(brief, /Step 1 — plan/);
 });
