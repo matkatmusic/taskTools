@@ -1,10 +1,15 @@
-import { BLOCKER_VERDICTS, BLOCKER_VERDICT_VALUES, BLOCKER_VERDICT_SCHEMA_FRAGMENT, buildBlockerInvestigationPrompt } from '../../scripts/blockerVerdicts.ts'
-
 export const meta = {
   name: 'tackle-tasks-blockers',
   description: 'Investigate each blocked-task/blocker pair with one subagent, so a disproven reason can be stripped before the run',
   phases: [{ title: 'Blockers', detail: 'one investigator per blocked-task/blocker pair' }],
 }
+
+// ponytail: workflow scripts cannot import; these mirror scripts/blockerVerdicts.ts
+const BLOCKER_VERDICTS = { DISPROVEN: 'disproven', STILL_BLOCKED: 'still-blocked' }
+const BLOCKER_VERDICT_VALUES = Object.values(BLOCKER_VERDICTS)
+const BLOCKER_VERDICT_SCHEMA_FRAGMENT = { type: 'string', enum: [...BLOCKER_VERDICT_VALUES] }
+const buildBlockerInvestigationPrompt = (blockedTask, blockerTask, reason) =>
+  `Find out if task ${blockedTask} is actually blocked by task ${blockerTask} due to: ${reason}`
 
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 const PAIRS = ARGS.pairs ?? []
