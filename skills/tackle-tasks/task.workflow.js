@@ -339,6 +339,8 @@ const runWorker = (t, note) => {
 const runImplement = async () => {
   log(`task ${N}: implement stage`)
   if (!preparedTask) preparedTask = await loadPreparedTask()
+  const { execFileSync } = await import('node:child_process')
+  const base = execFileSync('git', ['-C', preparedTask.repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
   let result = await runWorker(preparedTask, '') ?? {
     task: N,
     status: 'blocked',
@@ -350,7 +352,16 @@ const runImplement = async () => {
     const note = `A previous worker finished part of this plan; still remaining: ${result.remaining.join('; ')}. Check the file state before redoing anything.`
     result = (await runWorker(preparedTask, note)) ?? result
   }
-  return { stage: 'implement', ...result, files: preparedTask.files }
+  const notesRelative = preparedTask.notesFile.slice(preparedTask.repoRoot.length + 1)
+  const changedPaths = execFileSync(
+    'git',
+    ['-C', preparedTask.repoRoot, 'diff', '--name-only', '-z', `${base}..HEAD`],
+    { encoding: 'utf8' },
+  ).split('\0').filter(Boolean)
+  const fenceViolations = changedPaths.filter(
+    (p) => p !== notesRelative && !preparedTask.files.includes(p),
+  )
+  return { stage: 'implement', ...result, files: preparedTask.files, fenceViolations }
 }
 
 const runRebaseTest = () => {
