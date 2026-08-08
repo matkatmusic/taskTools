@@ -1,4 +1,4 @@
-// Writes task briefs, creates one worktree per file-disjoint group, prints WorkflowArguments. CLI entry point at bottom.
+// Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,7 +6,6 @@ import { basename, dirname, join } from "node:path";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "./repositoryManifest.ts";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
-import { groupTasksByFileOverlap } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 import { buildOperationPushOccurrences } from "./operationBranches.ts";
@@ -94,7 +93,7 @@ export function resolveMergePhaseScriptPath(): string {
 }
 
 function branchNameForGroup(groupId: number): string {
-    return `task-group-${groupId}`;
+    return `task-${groupId}`;
 }
 
 function declaredFiles(task: TaskRecord): string[] {
@@ -132,7 +131,7 @@ function initializeSubmodulesInWorktree(worktreePath: string): void {
 }
 
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `group-${group.groupId}`);
+    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
     if (existsSync(worktreePath)) {
         // A worktree left by an earlier run holds that run's commits; re-base it on the source branch tip.
@@ -157,21 +156,29 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): stri
 export function buildWorkflowArguments(
     repoRoot: string,
     typecheckCommand: string,
-    groups: TaskGroup[],
+    tasks: TaskRecord[],
 ): WorkflowArguments {
     const repositorySources = collectRepositorySources(repoRoot);
-    const preparedGroups: PreparedGroup[] = groups.map((group) => ({
-        groupId: group.groupId,
-        worktree: createWorktreeForGroup(repoRoot, group),
-        branch: branchNameForGroup(group.groupId),
-        scope: group.scope,
-        tasks: group.taskNumbers.map((number) => ({
-            number,
-            briefFile: join(repoRoot, "plans", `brief-${number}.md`),
-            planFile: join(repoRoot, "plans", `task-${number}-plan.md`),
-            files: group.filePaths,
-        })),
-    }));
+    const preparedGroups: PreparedGroup[] = tasks.map((task) => {
+        const group: TaskGroup = {
+            groupId: task.taskNumber,
+            taskNumbers: [task.taskNumber],
+            filePaths: declaredFiles(task),
+            scope: "declared",
+        };
+        return {
+            groupId: group.groupId,
+            worktree: createWorktreeForGroup(repoRoot, group),
+            branch: branchNameForGroup(group.groupId),
+            scope: group.scope,
+            tasks: [{
+                number: task.taskNumber,
+                briefFile: join(repoRoot, "plans", `brief-${task.taskNumber}.md`),
+                planFile: join(repoRoot, "plans", `task-${task.taskNumber}-plan.md`),
+                files: declaredFiles(task),
+            }],
+        };
+    });
     return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
 }
 
@@ -211,8 +218,7 @@ function runAsCli(): void {
     const runId = generateRunId();
     const manifest = loadRepositoryManifest(repoRoot);
     manifest.occurrences = buildOperationPushOccurrences(manifest.occurrences, runId);
-    const groups = groupTasksByFileOverlap(tasks, manifest);
-    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, groups);
+    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
     const pipelineArguments = {
         ...workflowArguments,

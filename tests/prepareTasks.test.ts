@@ -14,6 +14,7 @@ import {
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
+import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -69,7 +70,7 @@ test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     assert.equal(existsSync(worktreePath), true);
     const branch = git(worktreePath, "branch", "--show-current").trim();
-    assert.equal(branch, "task-group-1");
+    assert.equal(branch, "task-1");
 });
 
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
@@ -122,18 +123,21 @@ test("test_createWorktreeForGroupThrowsWhenSubmoduleInitFails", () => {
 
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
     const repoRoot = makeTempRepoWithCommit();
-    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [268, 270], filePaths: ["a.ts"], scope: "declared" }];
-    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
-    const tasks = workflowArguments.groups[0].tasks;
+    const taskRecords: TaskRecord[] = [
+        { taskNumber: 268, files: ["a.ts"] },
+        { taskNumber: 270, files: ["b.ts"] },
+    ];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    const tasks = workflowArguments.groups.flatMap((g) => g.tasks);
     assert.match(tasks.find((t) => t.number === 268)!.planFile, /plans\/task-268-plan\.md$/);
     assert.match(tasks.find((t) => t.number === 270)!.planFile, /plans\/task-270-plan\.md$/);
 });
 
 test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () => {
     const repoRoot = makeTempRepoWithCommit();
-    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" }];
-    const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
-    const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     assert.equal(JSON.stringify(first), JSON.stringify(second));
 });
 
@@ -213,22 +217,53 @@ test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const branch = git(join(worktreePath, "vendor"), "branch", "--show-current").trim();
-    assert.equal(branch, "task-group-1");
+    assert.equal(branch, "task-1");
 });
 
 test("test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
     git(join(repoRoot, "vendor"), "checkout", "--detach", "HEAD");
-    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" }];
-    assert.throws(() => buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups));
-    assert.equal(existsSync(join(tmpdir(), "taskTools-wt", basename(repoRoot), "group-1")), false);
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    assert.throws(() => buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords));
+    assert.equal(existsSync(join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1")), false);
 });
 
 test("test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
-    const groups: TaskGroup[] = [{ groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" }];
-    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", groups);
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     const paths = workflowArguments.repositorySources.map((source) => source.path);
     assert.ok(paths.includes(""));
     assert.ok(paths.includes("vendor"));
+});
+
+test("test_buildWorkflowArgumentsGivesEachTaskItsOwnFilesNotTheCombinedList", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const taskRecords: TaskRecord[] = [
+        { taskNumber: 1, files: ["a.ts"] },
+        { taskNumber: 2, files: ["b.ts"] },
+    ];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    const tasks = workflowArguments.groups.flatMap((g) => g.tasks);
+    assert.deepEqual(tasks.find((t) => t.number === 1)!.files, ["a.ts"]);
+    assert.deepEqual(tasks.find((t) => t.number === 2)!.files, ["b.ts"]);
+});
+
+test("test_buildWorkflowArgumentsGivesEachTaskItsOwnWorktreeAndBranchAsASingletonGroup", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const taskRecords: TaskRecord[] = [
+        { taskNumber: 1, files: ["a.ts"] },
+        { taskNumber: 2, files: ["b.ts"] },
+    ];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    assert.equal(workflowArguments.groups.length, 2);
+    const group1 = workflowArguments.groups.find((g) => g.tasks[0].number === 1)!;
+    const group2 = workflowArguments.groups.find((g) => g.tasks[0].number === 2)!;
+    assert.equal(group1.tasks.length, 1);
+    assert.equal(group2.tasks.length, 1);
+    assert.notEqual(group1.worktree, group2.worktree);
+    assert.match(group1.worktree, /task-1$/);
+    assert.match(group2.worktree, /task-2$/);
+    assert.equal(group1.branch, "task-1");
+    assert.equal(group2.branch, "task-2");
 });
