@@ -38,7 +38,7 @@ function makeTempRepoWithCommit(): string {
 
 function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
     const worktree = createWorktreeForGroup(repoRoot, { groupId, taskNumbers: [groupId], filePaths: [], scope: "unknown" });
-    return { groupId, worktree, branch: `task-group-${groupId}`, scope: "unknown", tasks: [] };
+    return { groupId, worktree, branch: `task-${groupId}`, scope: "unknown", tasks: [] };
 }
 
 type SubmoduleManifestSpec = { checkoutPath: string; baseBranch: string; baseOid: string; operationBranch: string };
