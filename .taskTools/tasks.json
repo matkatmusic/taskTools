@@ -703,5 +703,44 @@
     ],
     "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
     "difficulty": 6
+  },
+  {
+    "taskNumber": 157,
+    "version": "2f698b27960017e7f4c461d811438ee8a72eea11",
+    "title": "Rename the blockedBy entry key from taskNum to taskNumber everywhere",
+    "userDescription": "change every task's 'blockedBy[i].taskNum' to '.taskNumber'.  update every place that reads the blockedBy entry's taskNum to match the new key name.",
+    "goal": [
+      "- `rg -n '\"taskNum\"' .taskTools/tasks.json .taskTools/completedTasks.json` returns no matches, and every former entry now reads `{\"taskNumber\": N, \"reason\": \"...\"}`.",
+      "- `rg -n 'taskNum\\b' scripts/ tests/ skills/create-task/` returns no blockedBy-related matches; the only surviving hits are the unrelated splitTask.ts CLI argument label and the split-task SKILL.md argument-hint.",
+      "- `npm test` passes with the blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key.",
+      "- `npx tsc --noEmit` passes — the inline `{ taskNum: number }` casts in the reader scripts are updated, not left as stale types.",
+      "- A guard test asserts no `\"taskNum\"` key survives in either task data file, so a future task written from a stale template fails the suite.",
+      "- NOT in scope: any backwards-compatible fallback that still reads the old `taskNum` key. The user explicitly chose a clean one-shot rename; no reader keeps a dual-key path.",
+      "- NOT in scope: the `taskNum` CLI argument label in scripts/splitTask.ts and skills/split-task/SKILL.md, and the stale `taskNum` mentions in plans/*.md — those name a command-line argument or are historical notes, not the blockedBy field."
+    ],
+    "description": "Seven scripts read the blockedBy entry key: checkBlockers.ts, blockerVerdicts.ts, unblockDependents.ts, taskStats.ts, runStartup.ts, prepareTasks.ts, and getTaskDetails.ts. Each declares its own inline cast (`{ taskNum: number }` or `{ taskNum: number; reason: string }`) rather than sharing a type, so the rename touches both the cast and the property read in every one. unblockDependents.ts additionally constructs the object when migrating the legacy plain-number blockedBy format, so its emitted key must change too. checkBlockers.ts JSON.stringifies whole blockedBy entries into its BLOCKED output line, which makes the key user-visible: scripts/tackleTasksBrief.ts contains prompt prose instructing the agent to read that element's `taskNum`, and tests/checkBlockers.test.ts asserts on the literal JSON string. The authoring template at skills/create-task/template/taskTemplate.json still documents the old key and must be updated or every new task reintroduces it. Data lives in .taskTools/tasks.json (23 entries) and .taskTools/completedTasks.json (12 entries); completedTasks entries are historical records but share the same reader path via unblockDependents and should be migrated in the same commit for consistency. No shared TypeScript interface for the entry exists, so there is no single choke point — this is a genuine multi-file mechanical rename.",
+    "files": [
+      ".taskTools/tasks.json",
+      ".taskTools/completedTasks.json",
+      "scripts/checkBlockers.ts",
+      "scripts/blockerVerdicts.ts",
+      "scripts/unblockDependents.ts",
+      "scripts/taskStats.ts",
+      "scripts/runStartup.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/getTaskDetails.ts",
+      "scripts/tackleTasksBrief.ts",
+      "skills/create-task/template/taskTemplate.json",
+      "tests/checkBlockers.test.ts",
+      "tests/blockerVerdicts.test.ts",
+      "tests/unblockDependents.test.ts",
+      "tests/taskStats.test.ts",
+      "tests/runStartup.test.ts",
+      "tests/prepareTasks.test.ts",
+      "tests/getTaskDetails.test.ts",
+      "tests/closeTasks.test.ts"
+    ],
+    "tests": "A guard test asserting no \"taskNum\" key remains in .taskTools/tasks.json or .taskTools/completedTasks.json, plus the existing blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key and passing.",
+    "difficulty": 5
   }
 ]
