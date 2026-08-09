@@ -653,8 +653,27 @@ const runRebaseTest = async () => {
   return { stage: 'rebase-test', task: N, status: 'green', fenceViolations }
 }
 
-const runMerge = () => {
-  log(`task ${N}: merge stage (stub)`)
+const cleanupPlanAndBriefFiles = (execFileSync, existsSync, unlinkSync, join, repoRoot) => {
+  const relativePaths = [`plans/task-${N}-plan.md`, `plans/brief-${N}.md`]
+  execFileSync('git', ['-C', repoRoot, 'rm', '-f', '--ignore-unmatch', '--', ...relativePaths], { stdio: 'ignore' })
+  for (const relativePath of relativePaths) {
+    const absolutePath = join(repoRoot, relativePath)
+    if (existsSync(absolutePath)) unlinkSync(absolutePath)
+  }
+  try {
+    execFileSync('git', ['-C', repoRoot, 'diff', '--cached', '--quiet'], { stdio: 'ignore' })
+  } catch {
+    execFileSync('git', ['-C', repoRoot, 'commit', '-m', `task ${N}: remove plan and brief`], { stdio: 'ignore' })
+  }
+}
+
+const runMerge = async () => {
+  log(`task ${N}: merge stage`)
+  const repoRoot = process.cwd()
+  const { execFileSync } = await import('node:child_process')
+  const { existsSync, unlinkSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  cleanupPlanAndBriefFiles(execFileSync, existsSync, unlinkSync, join, repoRoot)
   return { stage: 'merge', task: N }
 }
 
@@ -662,7 +681,7 @@ const STAGE_RUNNERS = {
   plan: async () => [await runPlan()],
   implement: async () => [await runImplement()],
   'rebase-test': async () => [await runRebaseTest()],
-  merge: () => [runMerge()],
+  merge: async () => [await runMerge()],
   'plan+implement': async () => {
     const planResult = await runPlan()
     if (planResult.status !== 'planned') return [planResult]
