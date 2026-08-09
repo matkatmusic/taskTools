@@ -8,31 +8,113 @@ A `.workflow.js` script cannot run a command. `require` and `process` are `undef
 
 So the command has exactly two places to run: the main agent's shell, or the workflow agent's Bash. Only the second keeps the output out of the main agent.
 
+## Parts
+- Data scripts: These are scripts that produce some content that was previously used in the SKILL.md via !`<command>` and their output is used to dynamically inject content into the skill's body. 
+- workflow agent's prompt: These are blocks of text normally in the workflow.js file. 
+- Skill body: the current body of the skill being converted.  usually contains mostly prose and some lines of !`<command>` to dynamically inject content into the skill body when the skill is invoked. 
+
 ## Steps
 
 Names below use the commit-message skill as the worked example. Substitute your own.
 
-1. **Make the data script return instead of print.** Wrap the top-level body of the data script (`stagedDiffs.ts`) in `export function stagedDiffs(): string`, returning the text it used to write. Keep it runnable alone with a main guard: `if (process.argv[1]?.endsWith("stagedDiffs.ts")) process.stdout.write(stagedDiffs())`.
+1. **Make the data script return instead of print.** Wrap the top-level body of the data script in `export function <functionName>(): string`, returning the text it previously wrote to stdout directly via `process.stdout.write(<script output>)`. 
+example using`stagedDiffs.ts``:
+```ts
+export function stageDiffs(): string {
+   return "<whatever the function returns as a string>";
+}
+```
+Keep the script as a standalone runnable script with a main guard using the filename.
+Generically: 
+```ts
+if( process.argv[1]?.endsWith("<fileName.ts"))
+   process.stdout.write( <functionName>());
+```
+example using `stagedDiffs.ts`:
+```ts
+if (process.argv[1]?.endsWith("stagedDiffs.ts"))      
+   process.stdout.write(stagedDiffs())`;
+```
 
-2. **Move the workflow agent's prompt into a brief script.** Create `<name>DiffBrief.ts` next to it: `export const commitDiffBrief = (diffs: string) => \`<prompt text>\n\n${diffs}\`` with the data interpolated **last**, long content at the end. Same main guard: `if (process.argv[1]?.endsWith("commitDiffBrief.ts")) process.stdout.write(commitDiffBrief(stagedDiffs()))`.
+2. **Move the workflow agent's prompt into a brief script that builds and returns the subagent's prompt.** Create `<name>Brief.ts>` next to the data script.  Now that it is a script file, you can import objects. 
+Example:
+for the commit-message skill, the function that returns the prompt (i.e. `<name> = commitDiff`) needs to be given the diff, and combine that diff string with the actual prompt text: 
+```ts
+export const commitDiffBrief = (diffs: string) => \`<prompt text>
 
-3. **Reduce the workflow's prompt to one instruction.** In `<name>.workflow.js`, the whole prompt becomes `Run \`node ${ARGS.commitDiffBriefPath}\` with Bash and follow the instructions it prints.` Keep the schema on the `agent()` call so the return shape is enforced. Never import anything here.
+${diffs}\`
+```
+Use the same main guard approach as in step 1: 
+```ts
+if (process.argv[1]?.endsWith("commitDiffBrief.ts")) 
+   process.stdout.write(commitDiffBrief(stagedDiffs()))`;
+```
 
-4. **Move the SKILL.md body into an emitter script.** Create `<name>MessageBrief.ts` that resolves absolute paths from `import.meta.url` — `fileURLToPath(new URL("../skills/<name>/<name>.workflow.js", import.meta.url))` — and prints the ready-to-run call: `WORKFLOW: {"scriptPath": "<path>", "args": {"commitDiffBriefPath": "<path>"}}` followed by `execute \`Workflow(WORKFLOW)\``, the return shape, and the report format. Paths must be absolute; the reading agent's shell has no `CLAUDE_PLUGIN_ROOT`.
+
+3. **Reduce the workflow's prompt to one instruction.** 
+In `<name>.workflow.js`, the whole prompt becomes `Run \`node ${ARGS.commitDiffBriefPath}\` with Bash and follow the instructions it prints.` Keep the schema on the `agent()` call so the return shape is enforced. Never import anything here.
+
+4. **Move the SKILL.md body into an emitter script.** 
+Create `<skillname>MessageBrief.ts`.
+The main goal for this step is to programmatically generate the entire command to run the workflow, and give the agent the least amout of prose possible to run the workflow.
+
+You'll need the path to the workflow, and the paths to any other files needed to populate all the args the workflow needs. 
+Inside, you need to resolve absolute paths from `import.meta.url`.
+Paths must be absolute; the reading agent's shell has no `CLAUDE_PLUGIN_ROOT`:
+```ts
+const WORKFLOW_PATH fileURLToPath(new URL("../skills/<name>/<name>.workflow.js", import.meta.url));` 
+```
+Use `WORKFLOW_PATH` to create the ready-to-run call that will be printed out as dynamically-injected content into the skill body.
+```
+WORKFLOW: {"scriptPath": "<path>", "args": {"<brief>Path": "<path>"}}` 
+```
+Follow this declaration with instructions to execute the workflow, the return shape of the workflow, and the report format.
+
+example from `commitMessageBrief.ts`:
+```ts
+import { fileURLToPath } from "node:url";
+// Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand.
+const WORKFLOW_PATH = fileURLToPath(new URL("../skills/commit-message/commitMessage.workflow.js", import.meta.url));
+const COMMIT_DIFF_BRIEF_PATH = fileURLToPath(new URL("./commitDiffBrief.ts", import.meta.url));
+
+export const commitMessageBrief = (workflowPath: string, commitDiffBriefPath: string) => `WORKFLOW: {"scriptPath": "${workflowPath}", "args": {"commitDiffBriefPath": "${commitDiffBriefPath}"}}
+
+execute \`Workflow(WORKFLOW)\`
+
+The workflow's subagent reads the staged diff itself, so the diff never enters your context. It returns this shape, one entry per affected repo — the current repo plus any submodule whose pointer moved:
+\`\`\`
+{
+   "summaries": [
+      { "repo": <repoName>, "message": <commitMessage> }
+   ]
+}
+\`\`\`
+
+Report the summaries to the user, one line per repo, in the following format:
+\`\`\`
+Repo: <repo name>
+Message: <summary>
+\`\`\`
+`;
+
+if (process.argv[1]?.endsWith("commitMessageBrief.ts")) process.stdout.write(commitMessageBrief(WORKFLOW_PATH, COMMIT_DIFF_BRIEF_PATH));
+```
 
 5. **Empty the SKILL.md body.** After the frontmatter, the only content is the emitter call:
    ````
    ```!
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/commitMessageBrief.ts"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/<skillname>MessageBrief.ts"
    ```
    ````
    Add `allowed-tools: Bash(node *)` to the frontmatter.
+
+
 
 6. **Execute the data script in the brief script, not in the SKILL.md.** This is the whole point. The emitter (step 4) prints paths only — it must never import the data script or run a subprocess. Guard it: `rg -n 'execFileSync|spawn|<dataScript>' scripts/<name>MessageBrief.ts` must return no hits.
 
 ## Verify
 
 - `node scripts/<name>MessageBrief.ts` — prints paths and instructions, no data.
-- `node scripts/<name>DiffBrief.ts` — prints the prompt with the data appended.
+- `node scripts/<name>Brief.ts` — prints the prompt with the data appended.
 - `node scripts/<dataScript>.ts` — output byte-identical to before the refactor; diff it against `git show HEAD:scripts/<dataScript>.ts`.
 - Invoke the skill for real. The workflow agent should reach the answer in about two tool calls, and the data must not appear anywhere in the main agent's transcript.
