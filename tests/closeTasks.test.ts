@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { closeTasks } from "../scripts/closeTasks.ts";
+import { closeTasks, hashGuardedRewrite } from "../scripts/closeTasks.ts";
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
@@ -125,4 +125,51 @@ test("folds unblockDependents into the same write: closing a task clears it from
   assert.deepEqual(unblocked, [65]);
   const tasks = readTasks(root);
   assert.equal("blockedBy" in tasks.find((t) => t.taskNumber === 65), false);
+});
+
+test("hashGuardedRewrite detects a concurrent rewrite before rename, retries onto the new bytes, and does not clobber it", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  const filePath = join(root, "tasks.json");
+  writeFileSync(filePath, JSON.stringify([{ taskNumber: 1 }]));
+
+  let interfered = false;
+  const result = hashGuardedRewrite<{ taskNumber: number }[]>(
+    filePath,
+    (parsed) => [...parsed, { taskNumber: 2 }],
+    () => {
+      if (interfered) return;
+      interfered = true;
+      writeFileSync(filePath, JSON.stringify([{ taskNumber: 1 }, { taskNumber: 99 }]));
+    },
+  );
+
+  assert.deepEqual(result, [{ taskNumber: 1 }, { taskNumber: 99 }, { taskNumber: 2 }]);
+  assert.deepEqual(
+    JSON.parse(readFileSync(filePath, "utf8")),
+    [{ taskNumber: 1 }, { taskNumber: 99 }, { taskNumber: 2 }],
+  );
+});
+
+test("retrying a task already archived from a prior partial close still removes it from tasks.json, without duplicating or losing the new hash", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  writeFileSync(
+    join(root, "tasks.json"),
+    JSON.stringify([{ taskNumber: 65, title: "second" }]),
+  );
+  writeFileSync(
+    join(root, "completedTasks.json"),
+    JSON.stringify([
+      { taskNumber: 65, title: "second", completionDate: "2020-01-01", commitHashes: ["stale"], closureNote: "stale note" },
+    ]),
+  );
+
+  const { closed, skipped } = closeTasks([65], "merged to main at abc123", root, ["abc123"]);
+
+  assert.deepEqual(closed, [65]);
+  assert.deepEqual(skipped, []);
+  assert.deepEqual(readTasks(root).map((t) => t.taskNumber), []);
+  const completed = readCompleted(root).filter((t) => t.taskNumber === 65);
+  assert.equal(completed.length, 1);
+  assert.deepEqual(completed[0].commitHashes, ["abc123"]);
+  assert.equal(completed[0].closureNote, "merged to main at abc123");
 });
