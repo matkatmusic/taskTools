@@ -699,5 +699,25 @@
     ],
     "tests": "In tests/taskGroups.test.ts, build four fixture tasks: one declaring only `files`, one declaring only `modifiableFiles`, one declaring both, and one declaring neither. Assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively. Also assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise, and that addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one.",
     "difficulty": 4
+  },
+  {
+    "taskNumber": 160,
+    "version": "9d691066dfd2322286e8bf0676d6fc7f18aff4c8",
+    "title": "Make the Stop hook auto-stage only this session's hunks before asking for a commit message",
+    "userDescription": "make the hook that produces the 'invoke the commit-message' skill auto-stage only the chunks in this session by keeping a list of files modified during the session, via the hook's payload that provides the transcript path and reading the list of files modified in the transcript path, unless there's an easier way to find out (maybe the hook payload lists files?).",
+    "goal": [
+      "- After the Stop hook runs, `git diff --cached` shows only hunks this session produced; hunks another agent or an earlier session left in the same file stay unstaged.",
+      "- A session that modified no files stages nothing and does not ask the agent to invoke the commit-message skill.",
+      "- A missing or unreadable per-session flag file makes the hook stage nothing and print why, rather than falling back to staging everything.",
+      "- Explicitly NOT in scope: committing. The hook stages and then hands off to the commit-message skill, which the agent still invokes; no task here makes the hook run `git commit`."
+    ],
+    "description": "The Stop/SubagentStop hook `scripts/stage-and-summarize-stop.ts` already reads a per-session file list from `~/.claude/turn-flags/<session_id>`, written by the PostToolUse hook `scripts/turn-modified-flag.ts` from `input.tool_input.file_path`. No transcript parsing is needed — the hook payload already supplies file paths directly, so the user's transcript-reading premise is unnecessary. Today the Stop hook only checks whether those paths are unstaged and emits `additionalContext` telling the agent to stage them itself; it stages nothing. This task makes the hook stage, scoping `git add` per repo or submodule via `dirname(p)` the way the existing porcelain check does. Per-hunk scoping is in scope and is the hard part: `turn-modified-flag.ts` records paths only, not line ranges, so the hook needs either a pre-session content snapshot per file or scripted patch selection to separate this session's hunks from unrelated ones inside the same file. Choosing between those two is the main design decision.",
+    "files": [
+      "scripts/stage-and-summarize-stop.ts",
+      "tests/stage-and-summarize-stop.test.ts",
+      "scripts/turn-modified-flag.ts"
+    ],
+    "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
+    "difficulty": 7
   }
 ]

@@ -2,37 +2,251 @@
 
 Here is how to get shell command output to not land in the main agent's context window and stay exclusively in a workflow agent's prompt.
 
+## File/Folder Naming Structure
+
+### The `skills/` directory:
+`skills/<SKILL_DIR>/SKILL.md`
+`skills/<SKILL_DIR>/<PHASE>.workflow.js`
+
+### The `scripts/` directory: 
+The script that generates the actual body of SKILL.md, as a dynamic injection:
+`scripts/<SKILL_DIR>_SkillBodyEmitter.ts` 
+contains: `export const skillBody = (): string =>`
+
+The script that generates the actual workflow agent's prompt:
+`scripts/<SKILL_DIR>_AgentPromptEmitter.ts`  
+contains: `export const agentPrompt = (<data>: string): string =>`
+
+Any data scripts that either of the above scripts need to create the `agentPrompt()` output string correctly: 
+`scripts/<DATA_SCRIPT>.ts`
+contains: `export function <DATA_SCRIPT>(<args>...): string` or `export const <DATA_SCRIPT> = (<args>...): string =>`, your choice.
+
 ## Why it has to be done this way
 
 A `.workflow.js` script cannot run a command. `require` and `process` are `undefined`, and an `import` statement is rejected because `meta` must be the first statement. `` !`cmd` `` expands only in a SKILL.md body, never in an `agent()` prompt. Re-verify both with `probes/sandboxProbe.workflow.js`.
 
 So the command has exactly two places to run: the main agent's shell, or the workflow agent's Bash. Only the second keeps the output out of the main agent.
 
+## Parts
+- Data scripts: These are scripts that produce some content that was previously used in the SKILL.md via !`<command>` and their output is used to dynamically inject content into the skill's body. 
+- workflow agent's prompt: These are blocks of text normally in the workflow.js file. 
+- Skill body: the current body of the skill being converted.  usually contains mostly prose and some lines of !`<command>` to dynamically inject content into the skill body when the skill is invoked. 
+
 ## Steps
 
-Names below use the commit-message skill as the worked example. Substitute your own.
+Names below use the commit-message skill as the worked example, so `SKILL_DIR = commit-message` and `DATA_SCRIPT = stagedDiffs`. Substitute your own.
 
-1. **Make the data script return instead of print.** Wrap the top-level body of the data script (`stagedDiffs.ts`) in `export function stagedDiffs(): string`, returning the text it used to write. Keep it runnable alone with a main guard: `if (process.argv[1]?.endsWith("stagedDiffs.ts")) process.stdout.write(stagedDiffs())`.
+1. **Make the data script return instead of print.** 
+The output must stay byte-identical to the previously-printed output. 
+Wrap the top-level body of the data script in `export function <DATA_SCRIPT>(): string`, returning the text it previously wrote to stdout directly via `process.stdout.write(...)`. 
+Generically:
+```ts
+export function <DATA_SCRIPT>(): string {
+   return "<whatever the script used to print>";
+}
+```
+example using `stagedDiffs.ts`:
+```ts
+export function stagedDiffs(): string {
+   return "<whatever the script used to print>";
+}
+```
+Keep the script as a standalone runnable script with a main guard using the filename.
+Generically: 
+```ts
+if( process.argv[1]?.endsWith("<DATA_SCRIPT>.ts"))
+   process.stdout.write( <DATA_SCRIPT>());
+```
+example using `stagedDiffs.ts`:
+```ts
+if (process.argv[1]?.endsWith("stagedDiffs.ts"))      
+   process.stdout.write(stagedDiffs());
+```
 
-2. **Move the workflow agent's prompt into a brief script.** Create `<name>DiffBrief.ts` next to it: `export const commitDiffBrief = (diffs: string) => \`<prompt text>\n\n${diffs}\`` with the data interpolated **last**, long content at the end. Same main guard: `if (process.argv[1]?.endsWith("commitDiffBrief.ts")) process.stdout.write(commitDiffBrief(stagedDiffs()))`.
+2. **Move the workflow agent's prompt into the agent prompt emitter.** Create `scripts/<SKILL_DIR>_AgentPromptEmitter.ts` next to the `<DATA_SCRIPT>.ts`.  Now that the prompt generator is a script file, you can import objects. 
+```ts
+import { <DATA_SCRIPT> } from "./<DATA_SCRIPT>.ts";
+export const agentPrompt = (<args>...): string => 
+`
+<prompt text>
 
-3. **Reduce the workflow's prompt to one instruction.** In `<name>.workflow.js`, the whole prompt becomes `Run \`node ${ARGS.commitDiffBriefPath}\` with Bash and follow the instructions it prints.` Keep the schema on the `agent()` call so the return shape is enforced. Never import anything here.
+${<args>}
+`;
+```
+Inside `<prompt text>` you can use prose and any named argument. Interpolate the data **last**, so the long content sits at the end.
 
-4. **Move the SKILL.md body into an emitter script.** Create `<name>MessageBrief.ts` that resolves absolute paths from `import.meta.url` — `fileURLToPath(new URL("../skills/<name>/<name>.workflow.js", import.meta.url))` — and prints the ready-to-run call: `WORKFLOW: {"scriptPath": "<path>", "args": {"commitDiffBriefPath": "<path>"}}` followed by `execute \`Workflow(WORKFLOW)\``, the return shape, and the report format. Paths must be absolute; the reading agent's shell has no `CLAUDE_PLUGIN_ROOT`.
+Use the same main guard approach as in step 1, to pass data from a data script into the prompt-generating function:
+```ts
+if( process.argv[1]?.endsWith("<SKILL_DIR>_AgentPromptEmitter.ts"))
+   process.stdout.write( agentPrompt( <DATA_SCRIPT>() ));
+```
 
-5. **Empty the SKILL.md body.** After the frontmatter, the only content is the emitter call:
-   ````
+Example:
+for the commit-message skill, `agentPrompt()` needs to be given the `diff`, and combine that `diff` string with the actual prompt text.  the `diff` is generated by `stagedDiffs.ts`, which is imported, and provides the argument to `agentPrompt()`:
+```ts
+import { stagedDiffs } from "./stagedDiffs.ts";
+
+export cnost agentPrompt = (diffs: string): string => 
+`
+<the actual prompt text>
+
+${diffs}
+`;
+
+if (process.argv[1]?.endsWith("commit-message_AgentPromptEmitter.ts")) 
+   process.stdout.write(agentPrompt(stagedDiffs()));
+```
+
+3. **Reduce the workflow's prompt to one instruction.** 
+In `skills/<SKILL_DIR>/<PHASE>.workflow.js`, the whole prompt becomes: 
+```
+Run `Bash(node ${ARGS.agentPromptEmitterPath})`.
+Follow the printed instructions.
+```
+That one line is the entire prompt.
+Keep the schema on the `agent()` call so the return shape is enforced, and never import anything in a `.workflow.js`.
+
+4. **Move the SKILL.md body into the skill body emitter.** 
+Create `scripts/<SKILL_DIR>_SkillBodyEmitter.ts`.
+The main goal for this step is to programmatically generate the entire command to run the workflow, and give the agent the least amout of prose possible to run the workflow.
+
+You'll need the path to the workflow, and the paths to any other files needed to populate all the args the workflow needs. 
+Inside, you need to resolve absolute paths from `import.meta.url`.
+Paths must be absolute; the reading agent's shell has no `CLAUDE_PLUGIN_ROOT`:
+```ts
+const WORKFLOW_PATH = fileURLToPath(new URL("../skills/<SKILL_DIR>/<PHASE>.workflow.js", import.meta.url));
+const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./<SKILL_DIR>_AgentPromptEmitter.ts", import.meta.url));
+```
+Use those constants to create the ready-to-run call that will be printed out as dynamically-injected content into the skill body.
+```ts
+WORKFLOW: {"scriptPath": "${WORKFLOW_PATH}", "args": {"agentPromptEmitterPath": "${AGENT_PROMPT_EMITTER_PATH}"}}
+```
+Follow this declaration with instructions to execute the workflow, the return shape of the workflow, and the report format.
+
+example from `commit-message_SkillBodyEmitter.ts`:
+
+```ts
+import { fileURLToPath } from "node:url";
+// Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand.
+const WORKFLOW_PATH = fileURLToPath(new URL("../skills/commit-message/commit-message.workflow.js", import.meta.url));
+const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./commit-message_AgentPromptEmitter.ts", import.meta.url));
+
+export const skillBody: string => 
+`WORKFLOW: {"scriptPath": "${WORKFLOW_PATH}", "args": {"agentPromptEmitterPath": "${AGENT_PROMPT_EMITTER_PATH}"}}
+
+execute \`Workflow(WORKFLOW)\`
+
+The workflow's subagent reads the staged diff itself, so the diff never enters your context. It returns this shape, one entry per affected repo — the current repo plus any submodule whose pointer moved:
+\`\`\`
+{
+   "summaries": [
+      { "repo": <repoName>, "message": <commitMessage> }
+   ]
+}
+\`\`\`
+
+Report the summaries to the user, one line per repo, in the following format:
+\`\`\`
+Repo: <repo name>
+Message: <summary>
+\`\`\`
+`;
+
+if (process.argv[1]?.endsWith("commit-message_SkillBodyEmitter.ts")) 
+   process.stdout.write(skillBody());
+```
+**What to pass to `skillBody`:** only values that change from one invocation to the next. In practice that is exactly one — the `$ARGUMENTS` string read from stdin (section 7). A skill that takes no arguments has a `skillBody()` with no parameters, which is why the commit-message example above has none.
+
+**Never pass a path.** A path is a fact about where a file lives, so resolve it from `import.meta.url` as a module constant. Passing a path adds a way to hand the emitter wrong paths and buys nothing.
+
+### Generic form for a skill that makes use of $ARGUMENTS 
+discussed further in Section 7, use this snippet to pass $ARGUMENTS to your skillBody():
+`argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");`
+```ts
+export const skillBody = (argsValue: string): string => 
+`WORKFLOW: {"scriptPath": "${WORKFLOW_PATH}", "args": {"agentPromptEmitterPath": "${AGENT_PROMPT_EMITTER_PATH}", "argsValue": "${argsValue}"}}
+...
+`;
+
+if (process.argv[1]?.endsWith("<SKILL_DIR>_SkillBodyEmitter.ts")) 
+{
+   const argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");
+   process.stdout.write(skillBody(argumentsFromSkillBeingInvoked));
+}
+```
+
+The same rule governs `agentPrompt`: data in, paths never.
+
+5. **Empty the SKILL.md body.** 
+
+Add `allowed-tools: Bash(node *)` to the frontmatter.
+After the frontmatter, the only content is the emitter call, as a triple-backticked dynamic-injection command:
+````
    ```!
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/commitMessageBrief.ts"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/<SKILL_DIR>_SkillBodyEmitter.ts"
    ```
-   ````
-   Add `allowed-tools: Bash(node *)` to the frontmatter.
+````
 
-6. **Execute the data script in the brief script, not in the SKILL.md.** This is the whole point. The emitter (step 4) prints paths only — it must never import the data script or run a subprocess. Guard it: `rg -n 'execFileSync|spawn|<dataScript>' scripts/<name>MessageBrief.ts` must return no hits.
+6. **Use the data script in the agent prompt emitter, NOT in the SKILL.md.** 
+The whole point of this approach is to keep data script output out of the main agent's context window and only in the workflow agent's context window, by putting it all in the workflow agent's prompt, and doing as much work programmatically as possible.  Programmatic execution is deterministic. Prose is interpreted.  Eliminating prose with specific code makes the agent's output more consistent and correct.  
+
+The skill body emitter (step 4) prints paths only — it must never run a subprocess, and it must import neither the data script nor the agent prompt emitter. 
+
+The skill body emitter's only legal import is `node:url`. Any relative import is a violation, because the data script and the agent prompt emitter are the only things that live next to it. So check for relative imports, not for names:
+```
+rg -n 'execFileSync|spawn|from "\.' scripts/<SKILL_DIR>_SkillBodyEmitter.ts
+```
+No hits means clean. Do not match on `<DATA_SCRIPT>` or `AgentPromptEmitter` — the emitter has to name the agent prompt emitter's path in a string, so a name-based pattern flags the one line that is supposed to be there.
+
+
+## 7. Passing $ARGUMENTS
+
+Pass `$ARGUMENTS` on stdin with a quoted heredoc. Never as a command-line argument.
+The loader substitutes the user's text before the shell parses the line, so any ", $, `, *, or ; in it would otherwise be read as shell syntax — corrupting the arguments, or running a command. A single-quoted heredoc tag stops all expansion, so the bytes reach stdin exactly as typed.
+````
+```!
+node "${CLAUDE_PLUGIN_ROOT}/scripts/<SKILL_DIR>_SkillBodyEmitter.ts" <<'<HEREDOC_TAG>'
+$ARGUMENTS
+<HEREDOC_TAG>
+```
+````
+example from `skills/tackle-tasks/SKILL.md`:
+````
+```!
+node "${CLAUDE_PLUGIN_ROOT}/scripts/tackleTasksBrief.ts" <<'TACKLETASKSEOF'
+$ARGUMENTS
+TACKLETASKSEOF
+```
+````
+
+Three rules, all load-bearing:
+- **`<<` is two characters**, and there is a space before it.
+- **Single-quote the tag** — `<<'TACKLETASKSEOF'`, not `<<TACKLETASKSEOF`.
+- **Both tag lines start at column 0.** An indented closing tag never terminates the heredoc.
+
+Do not wrap `$ARGUMENTS` in backticks or quotes. It is already a whole line by itself.
+
+### Why the quoted heredoc solves the escaping problem
+
+The skill loader replaces `$ARGUMENTS` with whatever the user typed **before** the shell runs the line. So the user's text becomes part of the command, and every shell metacharacter in it becomes live: `"` ends a quote, `$` starts a variable, `` ` `` starts a command substitution, `;` starts a new command. A user typing `/create-task fix the "size" check` would break the command, and a user typing `` `rm -rf .` `` would run it.
+
+Single-quoting the heredoc tag turns the whole body into literal text. The shell performs no expansion and no word splitting inside it — it copies the bytes to stdin as typed. So no quoting, escaping, or sanitising is needed anywhere, for any input.
+
+Then read stdin in the emitter, and stop if it is empty:
+```ts
+function readStdin(): string {
+   try { return readFileSync(0, "utf8"); } catch { return ""; }
+}
+
+const argsValue = readStdin().replace(/\n$/, "");
+if (argsValue === "") { process.stderr.write("<SKILL_DIR>: no arguments on stdin\n"); process.exit(1); }
+```
+The `.replace(/\n$/, "")` drops the newline the heredoc adds. Empty stdin must fail loudly, because a brief built from missing arguments points nowhere.
 
 ## Verify
 
-- `node scripts/<name>MessageBrief.ts` — prints paths and instructions, no data.
-- `node scripts/<name>DiffBrief.ts` — prints the prompt with the data appended.
-- `node scripts/<dataScript>.ts` — output byte-identical to before the refactor; diff it against `git show HEAD:scripts/<dataScript>.ts`.
+- `node scripts/<SKILL_DIR>_SkillBodyEmitter.ts` — prints paths and instructions, no data.
+- `node scripts/<SKILL_DIR>_AgentPromptEmitter.ts` — prints the prompt with the data appended.
+- `node scripts/<DATA_SCRIPT>.ts` — output byte-identical to before the refactor; diff it against `git show HEAD:scripts/<DATA_SCRIPT>.ts`.
 - Invoke the skill for real. The workflow agent should reach the answer in about two tool calls, and the data must not appear anywhere in the main agent's transcript.
+- after the frontmatter there is nothing but the ! block.
