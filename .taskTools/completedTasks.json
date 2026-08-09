@@ -2542,5 +2542,43 @@
     "commitHashes": [
       "d5eb6b81f46a643f262a0b70874624ca306f54f3"
     ]
+  },
+  {
+    "taskNumber": 167,
+    "version": "a31ec173ab32df38308885a6cb6a55a90b9a4a81",
+    "title": "Use one branch identity end to end so the manifest names branches prepareTasks actually creates (audit C86-02)",
+    "userDescription": "The repository manifest names branches that `prepareTasks` never creates. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by previous task.",
+    "goal": [
+      "- An integration test drives the merge using the manifest prepareTasks actually returns, with no hand-built manifest and no hardcoded operationBranch value.",
+      "- Every branch name the merge path asks Git for exists in the worktree it is asked of, for the parent repository and for submodules.",
+      "- The two tests that currently hardcode operationBranch to task-N (tests/taskWorkflowMergeStage.test.ts, tests/runMergePhase.test.ts) no longer need that hardcoding to pass.",
+      "- A production-shaped run no longer fails or silently finds zero commits because it queried an operations/... ref that was never created.",
+      "- `npm test` passes.",
+      "- NOT in scope: threading the prepared worktree into the workflows, which is audit finding C86-01 and is owned by task 166, the blocker for this task; the hanging gitlink rebase (C86-03), owned by a third sibling task; and shortening the operations branch name, owned by open task 165."
+    ],
+    "description": "This is finding C86-02 (BLOCKER) in plans/task-86-codex-audit.md.\n\nprepareTasks.ts creates the actual task-N worktree and branch via branchNameForGroup (used at createWorktreeForGroup and createBranchInEveryRepository), but the repositoryManifest it returns is then rewritten by buildOperationPushOccurrences in operationBranches.ts, whose operationBranchName produces operations/<runId>/<sanitized-logical-id> values -- names that are never created from the task-N worktrees.\n\nskills/tackle-tasks/task.workflow.js passes that manifest through unchanged (repositoryManifest: ARGS.repositoryManifest in both the merge-stage and close-stage functions). mergeTaskDeepestFirst in mergeTaskWorktrees.ts then fetches and diffs using occurrence.operationBranch (unmergedCommitCount and the git fetch call), so a production run asks Git for an operations/... ref that was never created, while the task's real commits sit on task-N.\n\ntests/taskWorkflowMergeStage.test.ts and tests/runMergePhase.test.ts mask this by hand-building manifests where operationBranch is hardcoded to task-N instead of exercising prepareTasks' real output.\n\nThe fix needs one consistent branch identity end to end, root and submodules alike, plus an integration test that uses prepareTasks' actual returned manifest rather than a hand-built one.\n\nBlocked by the C86-01 task (task 166): both touch the same manifest-to-workflow plumbing, and C86-01's fix changes how and whether the manifest's branch fields are consumed.\n\nRelated but deliberately NOT a blocker, per the user: open task 165 shortens operations/<runId>/<slug> to operations/<runId>. Whichever of the two lands second may need to adjust to the other's naming.",
+    "files": [
+      "scripts/prepareTasks.ts",
+      "scripts/operationBranches.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "skills/tackle-tasks/task.workflow.js",
+      "tests/taskWorkflowMergeStage.test.ts",
+      "tests/runMergePhase.test.ts"
+    ],
+    "tests": "An integration test that uses the REAL manifest prepareTasks returns -- not a hand-built one. Run prepareTasks for a task with a submodule; take the manifest it actually returns; feed it to mergeTaskDeepestFirst; assert every branch name it asks git for really exists in that worktree, parent and submodule alike.",
+    "difficulty": 8,
+    "blockedBy": [
+      {
+        "taskNum": 166,
+        "reason": "C86-01 changes how the launch path and workflow consume the manifest's branch fields; fixing the branch identity first would be written against plumbing that is about to move"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-09",
+    "commitHashes": [
+      "eedbd11d22882e68aa69f4c21aecce53518372f5"
+    ]
   }
 ]
