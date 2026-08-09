@@ -1106,5 +1106,26 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 184,
+    "version": "47a75b61f82835e53c10b57c7b798d045f08bc41",
+    "title": "Port the frozen serial-mode brief fix into tackleTasksBrief.ts and skip the wasted blocker check",
+    "userDescription": "incorporate tackle-tasks-v2's serial mode, and the fix for serial mode's prompt being given the blockedBy list, when its unneeded that was just added.",
+    "goal": [
+      "- A series invocation's brief contains no `- blocked status:` line at all.",
+      "- A series brief tells the reader to run checkBlockers, getTaskDetails and prepareTasks per task with a single-element array, and says explicitly not to run them against the full array.",
+      "- A non-series invocation's brief is byte-identical to what it emits today.",
+      "- A series run does not invoke the checkBlockers subprocess at all, so nothing is computed and discarded.",
+      "- `npm test` passes.",
+      "- NOT in scope: porting anything else out of the frozen copy. Its five separate plan/verify/implement/test/merge workflows are the retired pipeline that the task-86 chain replaced; bringing them across would undo tasks 123-153."
+    ],
+    "description": "The tackle-tasks and tackle-tasks-v2 skills run the SAME script; v2's SKILL.md just points at the frozen copy under /Users/matkatmusicllc/Programming/taskTools-frozen. So serial mode itself is already present in the live scripts/tackleTasksBrief.ts (the `## Serial mode` seriesSection). What the live copy lacks is the later fix, frozen commit efdc483, \"Skip serial-mode brief's stale blocker snapshot; check blockers, task details, and pipeline args per task via single-element arrays instead, via a new isSeries() helper.\"\n\nWHAT TO PORT, from the frozen file:\n\n1. Add an `isSeries = (argsValue: string) => /\\bseries\\b/.test(argsValue)` helper and use it in place of the inline regex in seriesSection.\n2. In tackleTasksBrief(), emit the leading `- blocked status: ${blockedStatus}` line ONLY when isSeries is false. A series brief carries no blocked-status snapshot at all, rather than carrying a stale one with a note telling the reader to ignore it.\n3. Replace the serial-mode paragraph that begins \"The blocked status at the top of this brief was computed once...\" with the frozen wording, which explains that the brief deliberately carries no snapshot, tells the reader to run checkBlockers, getTaskDetails and prepareTasks per task with a single-element array '[N]', and states that this REPLACES the one-shot run described above -- do not run those commands against the full array.\n\n4. ADDITIONALLY, and NOT part of efdc483: at scripts/tackleTasksBrief.ts:186 the CLI still runs `execFileSync(\"node\", [checkBlockersPath, argsValue])` unconditionally. In series mode the resulting blockedStatus is now dropped on the floor, so that subprocess is pure waste. Skip the call when series is in the arguments. The frozen copy still has this defect; this task fixes it rather than copying it.\n\nDO NOT port anything else from the frozen file. The rest of it is the OLD five-workflow pipeline (plan/verify/implement/test/merge.workflow.js) that the live copy has already replaced with the consolidated task.workflow.js and merge queue. Copying that would undo the whole task-86 chain.\n\nWatch out: tests pin this brief's output byte-for-byte, so the non-series form must stay byte-identical while the series form changes.\n\nSCHEDULING NOTE: tasks 169, 170, 171 and 182 in the audit chain also edit scripts/tackleTasksBrief.ts. This task is not blocked by them, but running it concurrently with any of them will conflict.",
+    "files": [
+      "scripts/tackleTasksBrief.ts",
+      "tests/tackleTasksBrief.test.ts"
+    ],
+    "tests": "Series invocation: assert the brief has NO `- blocked status:` line at all, and that it tells the reader to run the commands per task with '[N]'. Non-series invocation: assert the brief is BYTE-IDENTICAL to what it emits today. Plus: assert checkBlockers is not invoked for a series run.",
+    "difficulty": 3
   }
 ]
