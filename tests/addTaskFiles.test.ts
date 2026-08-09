@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -84,4 +84,29 @@ test("absolute paths and directory traversal are rejected, leaving tasks.json by
     assert.match(stderr, /addTaskFiles: rejected/, `expected rejection for ${JSON.stringify(bad)}`);
   }
   assert.equal(readFileSync(tasksPath(root), "utf8"), before);
+});
+
+test("refreshes each task's files array in .taskTools/run-arguments.json to match tasks.json", () => {
+  const root = makeProjectRoot();
+  const snapshotPath = join(root, ".taskTools", "run-arguments.json");
+  const snapshot = {
+    runId: "unchanged-run-id",
+    groups: [
+      { groupId: 1, worktree: "/tmp/wt1", branch: "task-1", scope: "declared", tasks: [{ number: 1, briefFile: "brief1.md", planFile: "plan1.md", files: ["existing.ts"] }] },
+      { groupId: 2, worktree: "/tmp/wt2", branch: "task-2", scope: "declared", tasks: [{ number: 2, briefFile: "brief2.md", planFile: "plan2.md", files: [] }] },
+    ],
+  };
+  writeFileSync(snapshotPath, JSON.stringify(snapshot));
+  run(root, "[1]", "existing.ts", "new.ts");
+  const refreshed = JSON.parse(readFileSync(snapshotPath, "utf8"));
+  assert.deepEqual(refreshed.groups[0].tasks[0].files, ["existing.ts", "new.ts"]);
+  assert.deepEqual(refreshed.groups[1].tasks[0].files, []);
+  assert.equal(refreshed.runId, "unchanged-run-id");
+  assert.equal(refreshed.groups[0].worktree, "/tmp/wt1");
+});
+
+test("when .taskTools/run-arguments.json is absent, addTaskFiles.ts succeeds and creates nothing", () => {
+  const root = makeProjectRoot();
+  run(root, "[1]", "new.ts");
+  assert.equal(existsSync(join(root, ".taskTools", "run-arguments.json")), false);
 });

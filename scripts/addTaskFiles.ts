@@ -1,7 +1,8 @@
 // The only script that appends paths to a task's file list in .taskTools/tasks.json.
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { resolveRunArgumentsPath } from "./prepareTasks.ts";
 
 const FILES_KEY = "files" as const; // repoint here if task 58 splits files into modifiableFiles/readOnlyFiles
 
@@ -35,6 +36,21 @@ function appendFiles(task: TaskRecord, paths: string[]): void {
     task[FILES_KEY] = merged;
 }
 
+type RunArgumentsSnapshot = { groups: { tasks: { number: number; files: string[] }[] }[] } & Record<string, unknown>;
+
+function refreshRunArgumentsSnapshot(repoRoot: string, tasks: TaskRecord[]): void {
+    const argumentsPath = resolveRunArgumentsPath(repoRoot);
+    if (!existsSync(argumentsPath)) return;
+    const snapshot = JSON.parse(readFileSync(argumentsPath, "utf8")) as RunArgumentsSnapshot;
+    const filesByNumber = new Map(tasks.map((task) => [task.taskNumber, (task[FILES_KEY] as string[] | undefined) ?? []]));
+    for (const group of snapshot.groups) {
+        for (const task of group.tasks) {
+            if (filesByNumber.has(task.number)) task.files = filesByNumber.get(task.number)!;
+        }
+    }
+    writeFileSync(argumentsPath, JSON.stringify(snapshot));
+}
+
 function runAsCli(): void {
     const repoRoot = process.cwd();
     const argv = process.argv.slice(2);
@@ -57,6 +73,7 @@ function runAsCli(): void {
         if (numbers.includes(task.taskNumber)) appendFiles(task, paths);
     }
     writeFileSync(pair.tasksPath, JSON.stringify(tasks, null, 2) + "\n");
+    refreshRunArgumentsSnapshot(repoRoot, tasks);
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();
