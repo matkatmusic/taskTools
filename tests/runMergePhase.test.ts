@@ -1,43 +1,7 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildMergeOutcomes, hasLapRemaining, judgeMergeRun, MAX_LAPS, resolveMergeVerdict, type MergePhaseVerdict, type MergeRetryDeps } from "../scripts/runMergePhase.ts";
-import { buildOperationPushOccurrences } from "../scripts/operationBranches.ts";
-import type { CliInput } from "../scripts/mergePipeline.ts";
-
-test("test_buildMergeOutcomesDerivesCountsFromTheStepArrays", () => {
-    const outcomes = buildMergeOutcomes({
-        done: [1, 2, 3],
-        partial: [4],
-        blocked: [],
-        needsClarification: [5, 6],
-        requeueCount: 2,
-        testReceipts: [{ groupId: "1", status: "green" }],
-        reviewHandoffs: ["reviewed by codex"],
-    });
-
-    assert.deepEqual(outcomes, {
-        doneCount: 3,
-        partialCount: 1,
-        blockedCount: 0,
-        needsClarificationCount: 2,
-        requeueCount: 2,
-        testReceipts: [{ groupId: "1", status: "green" }],
-        reviewHandoffs: ["reviewed by codex"],
-    });
-});
-
-test("test_buildMergeOutcomesTreatsEveryMissingStepAsZero", () => {
-    assert.deepEqual(buildMergeOutcomes({}), {
-        doneCount: 0,
-        partialCount: 0,
-        blockedCount: 0,
-        needsClarificationCount: 0,
-        requeueCount: 0,
-        testReceipts: [],
-        reviewHandoffs: [],
-    });
-});
+import { beginNextLap, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordStageOutcome } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -86,58 +50,37 @@ test("test_judgeMergeRunReportsBlockedWhenTheScriptExitsCleanButPublishedNothing
     assert.match(verdict.failure?.error ?? "", /published nothing/);
 });
 
-test("test_resolveMergeVerdictRetriesWithPopulatedOperationBranchesOnConfirmedBaseDrift", () => {
-    const occurrence: CliInput["repositoryManifest"]["occurrences"][number] = {
-        occurrenceId: "", checkoutPath: "/tmp/repo", parentOccurrenceId: null, pathInParent: null,
-        gitlinkOid: null, depth: 0, originUrl: "", baseBranch: "main", baseOid: "oldoid",
-        operationBranch: "", childOccurrenceIds: [], testState: "untested",
-    };
-    const [populatedOccurrence] = buildOperationPushOccurrences([occurrence], "oldrun123");
-    const group: CliInput["groups"][number] = { groupId: 1, worktree: "/tmp/repo", branch: "task-group-1", scope: "declared", tasks: [] };
-    const runArguments: CliInput = {
-        repo: "/tmp/repo", typecheckCommand: "true",
-        groups: [group],
-        repositorySources: [{ path: "", sourceBranch: "main" }],
-        runId: "oldrun123",
-        repositoryManifest: { version: 1, occurrences: [populatedOccurrence] },
-    };
-    const deps: MergeRetryDeps = {
-        runScript: () => ({ exitCode: 0, stdout: JSON.stringify({ conflicts: [], publicationTargets: [{ x: 1 }] }), stderr: "" }),
-        generateRunId: () => "newrun456",
-        readRefOid: () => "deadbeef",
-        writeRunArguments: () => {},
-        rebaseGroupOntoSource: () => ({ status: "rebased-clean" }),
-        discoverTestPolicy: () => ({ status: "resolved", policy: { occurrenceId: "", relatedTestCommand: "true", completeSuiteCommand: "true" } }),
-    };
-    const initialVerdict: MergePhaseVerdict = {
-        status: "blocked",
-        result: { abortReason: "the source branch moved past the pinned baseOid" },
-        failure: { repo: "/tmp/repo", failedCommand: "cmd", conflicts: [], error: "" },
-    };
+test("test_recordStageOutcomeRequeuesAFailedTaskToTheBackAndRetriesItNextLapWhileAnotherTaskMerges", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 10);
+    queue = enqueueApprovedTask(queue, 20);
 
-    const verdict = resolveMergeVerdict(initialVerdict, () => runArguments, ["node", "merge"], deps);
+    assert.deepEqual(nextQueueStep(queue), { taskNumber: 10, stage: "rebase-test" });
+    queue = recordStageOutcome(queue, 10, "rebase-test", { status: "success" });
+    assert.deepEqual(nextQueueStep(queue), { taskNumber: 10, stage: "merge" });
+    queue = recordStageOutcome(queue, 10, "merge", { status: "success" });
+    assert.deepEqual(queue.merged, [10]);
 
-    assert.equal(verdict.status, "merged");
+    assert.deepEqual(nextQueueStep(queue), { taskNumber: 20, stage: "rebase-test" });
+    queue = recordStageOutcome(queue, 20, "rebase-test", { status: "failure", reason: "rebase conflicted: a.ts" });
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.deepEqual(queue.merged, [10]);
+    assert.deepEqual(queue.unmerged, []);
+    assert.deepEqual(queue.carryover, [{ taskNumber: 20, stage: "rebase-test", lapsAttempted: 1, lastFailure: "rebase conflicted: a.ts" }]);
+
+    queue = beginNextLap(queue);
+    assert.deepEqual(nextQueueStep(queue), { taskNumber: 20, stage: "rebase-test" });
 });
 
-test("test_resolveMergeVerdictDoesNotReadRunArgumentsWhenInitialVerdictIsNotConfirmedBaseDrift", () => {
-    const mergedVerdict: MergePhaseVerdict = { status: "merged", result: { conflicts: [], publicationTargets: [{ x: 1 }] }, failure: null };
-    let readCount = 0;
-    const readRunArguments = () => {
-        readCount++;
-        throw new Error("must not read run-arguments.json: mergePipeline.ts deletes it after a successful merge");
-    };
-    const deps: MergeRetryDeps = {
-        runScript: () => { throw new Error("must not run the merge command again"); },
-        generateRunId: () => "unused",
-        readRefOid: () => "unused",
-        writeRunArguments: () => {},
-        rebaseGroupOntoSource: () => ({ status: "rebased-clean" }),
-        discoverTestPolicy: () => ({ status: "resolved", policy: { occurrenceId: "", relatedTestCommand: "true", completeSuiteCommand: "true" } }),
-    };
+test("test_recordStageOutcomeLeavesATaskUnmergedAfterItsSecondLapFails", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 30);
+    queue = recordStageOutcome(queue, 30, "rebase-test", { status: "failure", reason: "rebase conflicted: b.ts" });
+    queue = beginNextLap(queue);
+    queue = recordStageOutcome(queue, 30, "rebase-test", { status: "failure", reason: "rebase conflicted: b.ts again" });
 
-    const verdict = resolveMergeVerdict(mergedVerdict, readRunArguments, ["node", "merge"], deps);
-
-    assert.equal(readCount, 0);
-    assert.equal(verdict, mergedVerdict);
+    assert.deepEqual(queue.merged, []);
+    assert.deepEqual(queue.carryover, []);
+    assert.deepEqual(queue.unmerged, [{ taskNumber: 30, stage: "rebase-test", lapsAttempted: 2, lastFailure: "rebase conflicted: b.ts again" }]);
 });
