@@ -560,8 +560,9 @@ const runRebaseTest = async () => {
   const { pathToFileURL } = await import('node:url')
   const { rebaseSubmoduleLayersDeepestFirst, rebaseParentOntoSourceAndTest, uncommittedChangedFiles } = await import(pathToFileURL(join(WORKTREE, 'scripts/mergeTaskWorktrees.ts')).href)
   const { createEmptyResolutionManifest } = await import(pathToFileURL(join(WORKTREE, 'scripts/resolutionRequests.ts')).href)
+  const { attachOperationBranch } = await import(pathToFileURL(join(WORKTREE, 'scripts/prepareTasks.ts')).href)
   const worktreePath = preparedTask.repoRoot
-  const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
+  const manifest = { repositoryManifest: { ...ARGS.repositoryManifest, occurrences: attachOperationBranch(ARGS.repositoryManifest.occurrences, `task-${N}`) }, resolutionManifest: createEmptyResolutionManifest() }
   const occurrences = manifest.repositoryManifest.occurrences
   const rootOccurrence = occurrences.find((o) => o.occurrenceId === '')
   const sourceBranch = rootOccurrence.baseBranch
@@ -685,8 +686,9 @@ const runMerge = async () => {
   const { createEmptyResolutionManifest } = await import(pathToFileURL(join(repoRoot, 'scripts/resolutionRequests.ts')).href)
   const { currentBranchName } = await import(pathToFileURL(join(repoRoot, 'scripts/repositoryBranches.ts')).href)
   const { closeTasks } = await import(pathToFileURL(join(repoRoot, 'scripts/closeTasks.ts')).href)
+  const { attachOperationBranch } = await import(pathToFileURL(join(repoRoot, 'scripts/prepareTasks.ts')).href)
   cleanupPlanAndBriefFiles(execFileSync, existsSync, unlinkSync, join, repoRoot)
-  const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
+  const manifest = { repositoryManifest: { ...ARGS.repositoryManifest, occurrences: attachOperationBranch(ARGS.repositoryManifest.occurrences, `task-${N}`) }, resolutionManifest: createEmptyResolutionManifest() }
   // mergeTaskDeepestFirst rewrites occurrence.checkoutPath to the worktree; read the root before it runs.
   const rootOccurrence = manifest.repositoryManifest.occurrences.find((o) => o.occurrenceId === '')
   const mainRepoRoot = rootOccurrence.checkoutPath

@@ -4,11 +4,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "./repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { goalText, leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
-import { buildOperationPushOccurrences } from "./operationBranches.ts";
 
 export type PreparedTask = {
     number: number;
@@ -94,6 +93,10 @@ export function resolveMergePhaseScriptPath(): string {
 
 function branchNameForGroup(groupId: number): string {
     return `task-${groupId}`;
+}
+
+export function attachOperationBranch(occurrences: RepositoryOccurrence[], branch: string): RepositoryOccurrence[] {
+    return occurrences.map((occurrence) => ({ ...occurrence, operationBranch: branch }));
 }
 
 function declaredFiles(task: TaskRecord): string[] {
@@ -189,7 +192,7 @@ export function buildWorkflowArguments(
     return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
 }
 
-function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
+export function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
     const result = bootstrapRepositoryManifest(repoRoot);
     if (result.refused) {
         throw new Error(`repository at "${repoRoot}" needs branch resolution before it can be discovered`);
@@ -224,7 +227,6 @@ function runAsCli(): void {
     for (const task of tasks) writeTaskBriefFile(task, repoRoot);
     const runId = generateRunId();
     const manifest = loadRepositoryManifest(repoRoot);
-    manifest.occurrences = buildOperationPushOccurrences(manifest.occurrences, runId);
     const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
     const pipelineArguments = {
