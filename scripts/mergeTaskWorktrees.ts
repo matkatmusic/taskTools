@@ -17,7 +17,11 @@ import { discoverTestPolicy } from "./testPolicy.ts";
 import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
-    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execFileSync("git", ["-C", repoRoot, ...args], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, GIT_EDITOR: "true" },
+    });
 }
 
 function gitErrorText(error: unknown): string {
