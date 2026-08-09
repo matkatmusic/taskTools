@@ -524,7 +524,8 @@
       "plans/task-86-spec.md",
       "scripts/closeTasks.ts",
       "skills/tackle-tasks/task.workflow.js",
-      "tests/closeTasks.test.ts"
+      "tests/closeTasks.test.ts",
+      "tests/taskWorkflowMergeStage.test.ts"
     ],
     "tests": "Run one case per failing step and assert the point of the contract that step falls under. Rebase, conflict, suite and cleanup failures: the parent's source branch hash and every submodule source branch hash are unchanged from before the lap. Merge failure at a later layer: submodule source branches that already merged are NOT rolled back, while the parent's source branch is unchanged. Close failure after a successful parent merge: the merge is NOT unwound — the parent's source branch carries it, the task is reported MERGED BUT NOT CLOSED with that hash, and the task is still open. In every case the worktree and its task-N branch still exist and the task is still present in tasks.json rather than completedTasks.json. Also assert the task 119 regression: after a successful merge the source branch's index and working tree equal the merged commit.",
     "difficulty": 6,
