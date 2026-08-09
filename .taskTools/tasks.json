@@ -1126,6 +1126,12 @@
       "tests/tackleTasksBrief.test.ts"
     ],
     "tests": "Series invocation: assert the brief has NO `- blocked status:` line at all, and that it tells the reader to run the commands per task with '[N]'. Non-series invocation: assert the brief is BYTE-IDENTICAL to what it emits today. Plus: assert checkBlockers is not invoked for a series run.",
-    "difficulty": 3
+    "difficulty": 3,
+    "blockedBy": [
+      {
+        "taskNum": 182,
+        "reason": "tasks 169, 170, 171 and 182 all edit scripts/tackleTasksBrief.ts; 182 is the last of them, so waiting for it keeps this port from conflicting with the audit chain"
+      }
+    ]
   }
 ]
