@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const WORKFLOW_NAMES = ["plan", "verify", "implement", "test", "merge"];
-const EXPECTED_AGENT_CALLS: Record<string, number> = { plan: 1, verify: 1, implement: 1, test: 2, merge: 1 };
+// Task 157 deleted the five per-stage workflow files; blockers and task are what survive.
+const WORKFLOW_NAMES = ["blockers", "task"];
+const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, task: 7 };
 const HELPER_MARKER = "// ponytail: null/undefined means the harness returned no result";
 
 const readWorkflow = (name: string) =>
@@ -21,7 +22,7 @@ const extractHelper = (source: string) => {
 
 // The workflow files cannot be imported, so compile the extracted helper text instead.
 const loadRetryAgent = () =>
-    new Function(`${extractHelper(readWorkflow("plan"))}\nreturn retryAgent`)();
+    new Function(`${extractHelper(readWorkflow("task"))}\nreturn retryAgent`)();
 
 const countingSpawn = (results: unknown[]) => {
     const spawn = () => { spawn.calls++; return Promise.resolve(results[spawn.calls - 1]); };
