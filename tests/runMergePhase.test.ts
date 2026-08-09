@@ -1,7 +1,7 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildMergeOutcomes, judgeMergeRun, resolveMergeVerdict, type MergePhaseVerdict, type MergeRetryDeps } from "../scripts/runMergePhase.ts";
+import { buildMergeOutcomes, hasLapRemaining, judgeMergeRun, MAX_LAPS, resolveMergeVerdict, type MergePhaseVerdict, type MergeRetryDeps } from "../scripts/runMergePhase.ts";
 import { buildOperationPushOccurrences } from "../scripts/operationBranches.ts";
 import type { CliInput } from "../scripts/mergePipeline.ts";
 
@@ -37,6 +37,13 @@ test("test_buildMergeOutcomesTreatsEveryMissingStepAsZero", () => {
         testReceipts: [],
         reviewHandoffs: [],
     });
+});
+
+test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
+    assert.equal(MAX_LAPS, 2);
+    assert.equal(hasLapRemaining(0), true);
+    assert.equal(hasLapRemaining(1), true);
+    assert.equal(hasLapRemaining(2), false);
 });
 
 test("test_judgeMergeRunReportsMergedWhenTheScriptExitsCleanWithNoConflicts", () => {

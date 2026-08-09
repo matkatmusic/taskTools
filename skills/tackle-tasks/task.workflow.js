@@ -4,6 +4,7 @@ const STAGE = ARGS.stage ?? 'plan+implement'
 const TYPECHECK_COMMAND = ARGS.typecheckCommand ?? 'npx tsc --noEmit'
 const WORKER_MODEL = ARGS.workerModel
 const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
+const MAX_REBASE_FIX_ROUNDS = ARGS.maxRebaseFixRounds ?? 3
 
 export const meta = {
   name: `task-${N}`,
@@ -69,6 +70,15 @@ const MERGE_CONFLICT_SCHEMA = {
     summary: { type: 'string' },
   },
   required: ['resolved', 'summary'],
+}
+
+const REBASE_FIX_SCHEMA = {
+  type: 'object',
+  properties: {
+    fixed: { type: 'boolean' },
+    summary: { type: 'string' },
+  },
+  required: ['fixed', 'summary'],
 }
 
 const fileRetryPreamble = (missingFiles) => `Before planning: the workflow has already widened this task's owned files in tasks.json to include ${missingFiles.join(', ')} and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.
@@ -277,6 +287,33 @@ disappear; to force-push or hard-reset anything you did not create; to run
 in a different repository uncommitted. Returning resolved false is a correct
 outcome when a conflict genuinely cannot be resolved, not a failure.`
 
+const rebaseFixBrief = (checkoutPath, occurrenceId, testOutput, forbiddenPaths) => `The test suite for layer "${occurrenceId === '' ? 'root' : occurrenceId}" is RED after a rebase, in ${checkoutPath}. Fix the cause.
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+Failure output from the test run:
+${testOutput}
+
+You may READ anything, anywhere in the tree. You may EDIT any file inside ${checkoutPath} — the failing test, or the code it covers. Do not edit any file outside ${checkoutPath}. These paths inside ${checkoutPath} are OTHER layers (separate occurrences) and are out of scope even though they sit on disk under ${checkoutPath} — do not edit anything inside them: ${forbiddenPaths.length === 0 ? '(none)' : forbiddenPaths.join(', ')}
+
+fix the cause of the failure
+
+run(git -C ${checkoutPath} add -A)
+run(git -C ${checkoutPath} commit -m "task ${N}: fix rebase-test failure in ${occurrenceId === '' ? 'root' : occurrenceId}")
+// rebase needs a clean tree; this commit is never undone — it survives for the next lap
+
+if git -C ${checkoutPath} status --porcelain prints nothing (the fix is committed):
+    return {fixed: true, summary: what you changed}
+else:
+    return {fixed: false, summary: why the tree is still dirty}
+
+You are forbidden to weaken, delete, or stub out a test or the code it covers
+to make the failure disappear; to edit any file outside ${checkoutPath}, or
+inside a layer listed above as out of scope; to force-push or hard-reset
+anything you did not create; or to leave your edit uncommitted.`
+
 // ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
 const retryAgent = async (spawn, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -465,6 +502,11 @@ const runMergeConflictAgent = (checkoutPath, conflictedFilePaths) => retryAgent(
   { label: `rebase-conflict:${N}`, phase: `${N} Rebase-Test`, schema: MERGE_CONFLICT_SCHEMA },
 ))
 
+const runRebaseFixAgent = (checkoutPath, occurrenceId, testOutput, forbiddenPaths) => retryAgent(() => agent(
+  rebaseFixBrief(checkoutPath, occurrenceId, testOutput, forbiddenPaths),
+  { label: `rebase-fix:${N}`, phase: `${N} Rebase-Test`, schema: REBASE_FIX_SCHEMA },
+))
+
 // Resolves one conflict, commits cross-layer edits deepest-first, drives continue/abort.
 const advanceLiveConflict = async (execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, activeOccurrenceId, conflictedFilePaths, fenceViolations) => {
   const checkoutPath = checkoutPaths.get(activeOccurrenceId)
@@ -508,7 +550,7 @@ const runRebaseTest = async () => {
   log(`task ${N}: rebase-test stage`)
   if (!preparedTask) preparedTask = await loadPreparedTask()
   const { execFileSync } = await import('node:child_process')
-  const { join } = await import('node:path')
+  const { join, relative } = await import('node:path')
   const { rebaseSubmoduleLayersDeepestFirst, rebaseParentOntoSourceAndTest, uncommittedChangedFiles } = await import('./scripts/mergeTaskWorktrees.ts')
   const { createEmptyResolutionManifest } = await import('./scripts/resolutionRequests.ts')
   const worktreePath = preparedTask.repoRoot
@@ -523,31 +565,89 @@ const runRebaseTest = async () => {
   const checkoutPaths = taskWorktreeCheckoutPaths(occurrences, worktreePath, join)
   const occurrencesDeepestFirst = [...occurrences].sort((a, b) => b.depth - a.depth)
   const fenceViolations = []
+  const fixRoundsByOccurrenceId = new Map()
+  const consumeFixRound = (occurrenceId) => {
+    const used = (fixRoundsByOccurrenceId.get(occurrenceId) ?? 0) + 1
+    fixRoundsByOccurrenceId.set(occurrenceId, used)
+    return used
+  }
+  // A parent's checkoutPath contains every submodule's checkoutPath; exclude those nested layers explicitly.
+  const descendantCheckoutPaths = (occurrenceId) => {
+    const ownPath = checkoutPaths.get(occurrenceId)
+    return occurrencesDeepestFirst
+      .filter((o) => o.occurrenceId !== occurrenceId)
+      .map((o) => checkoutPaths.get(o.occurrenceId))
+      .filter((path) => {
+        const rel = relative(ownPath, path)
+        return rel !== '' && !rel.startsWith('..')
+      })
+  }
+  // Verifies a fix attempt before any rebase/test cycle re-runs: unfixed, dirty, or another layer touched all fail.
+  const attemptRebaseFix = async (occurrenceId, checkoutPath, testOutput) => {
+    const otherOccurrences = occurrencesDeepestFirst.filter((o) => o.occurrenceId !== occurrenceId)
+    const beforeOids = otherOccurrences.map((o) => [o.occurrenceId, readHeadOid(execFileSync, checkoutPaths.get(o.occurrenceId))])
+    const fixOutcome = await runRebaseFixAgent(checkoutPath, occurrenceId, testOutput, descendantCheckoutPaths(occurrenceId))
+    let otherLayerTouched = false
+    for (const [otherId, beforeOid] of beforeOids) {
+      const otherPath = checkoutPaths.get(otherId)
+      const touchedPaths = new Set([...changedPathsSinceOid(execFileSync, otherPath, beforeOid), ...uncommittedChangedFiles(otherPath)])
+      for (const path of touchedPaths) {
+        fenceViolations.push({ occurrenceId: otherId, path })
+        otherLayerTouched = true
+      }
+    }
+    const ownCheckoutClean = uncommittedChangedFiles(checkoutPath).length === 0
+    return fixOutcome != null && fixOutcome.fixed === true && ownCheckoutClean && !otherLayerTouched
+  }
 
   let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
-  while (layerWalk.stoppedAt !== null && layerWalk.stoppedAt.status === 'conflicted') {
-    const { occurrenceId, conflictedFilePaths } = layerWalk.stoppedAt
-    const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, occurrenceId, conflictedFilePaths, fenceViolations)
-    if (!outcome.advanced) {
-      return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId, fenceViolations }
+  while (layerWalk.stoppedAt !== null && (layerWalk.stoppedAt.status === 'conflicted' || layerWalk.stoppedAt.status === 'tests-failed')) {
+    const stopped = layerWalk.stoppedAt
+    if (stopped.status === 'conflicted') {
+      const { occurrenceId, conflictedFilePaths } = stopped
+      const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, occurrenceId, conflictedFilePaths, fenceViolations)
+      if (!outcome.advanced) {
+        return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId, fenceViolations }
+      }
+    } else {
+      const { occurrenceId, checkoutPath, testOutput } = stopped
+      let fixSucceeded = false
+      while (!fixSucceeded) {
+        if (consumeFixRound(occurrenceId) > MAX_REBASE_FIX_ROUNDS) {
+          return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'layer still red after MAX_REBASE_FIX_ROUNDS', occurrenceId, fenceViolations }
+        }
+        fixSucceeded = await attemptRebaseFix(occurrenceId, checkoutPath, testOutput)
+      }
     }
     layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
   }
   if (layerWalk.stoppedAt !== null) {
     const stopped = layerWalk.stoppedAt
-    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: stopped.status, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
+    const lastFailure = stopped.status === 'untested' ? 'untested layer' : stopped.status
+    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
   }
 
   let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
-  while (parentOutcome.status === 'conflicted') {
-    const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, '', parentOutcome.conflictedFilePaths, fenceViolations)
-    if (!outcome.advanced) {
-      return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId: '', fenceViolations }
+  while (parentOutcome.status === 'conflicted' || parentOutcome.status === 'tests-failed') {
+    if (parentOutcome.status === 'conflicted') {
+      const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, '', parentOutcome.conflictedFilePaths, fenceViolations)
+      if (!outcome.advanced) {
+        return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId: '', fenceViolations }
+      }
+    } else {
+      let fixSucceeded = false
+      while (!fixSucceeded) {
+        if (consumeFixRound('') > MAX_REBASE_FIX_ROUNDS) {
+          return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'layer still red after MAX_REBASE_FIX_ROUNDS', occurrenceId: '', fenceViolations }
+        }
+        fixSucceeded = await attemptRebaseFix('', worktreePath, parentOutcome.testOutput)
+      }
     }
     parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
   }
   if (parentOutcome.status !== 'rebased-and-tested') {
-    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: parentOutcome.status, occurrenceId: '', parentOutcome, fenceViolations }
+    const lastFailure = parentOutcome.status === 'untested' ? 'untested layer' : parentOutcome.status
+    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: '', parentOutcome, fenceViolations }
   }
 
   return { stage: 'rebase-test', task: N, status: 'green', fenceViolations }

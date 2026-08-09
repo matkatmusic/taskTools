@@ -25,6 +25,13 @@ export type StepOutputs = {
 export type MergeFailure = { repo: string; failedCommand: string; conflicts: unknown[]; error: string };
 export type MergePhaseVerdict = { status: "merged" | "blocked"; result: unknown; failure: MergeFailure | null };
 
+// Fixed 2-lap ceiling; task 147's queue must carry it forward (see task-86-spec.md, Serial tail).
+export const MAX_LAPS = 2;
+
+export function hasLapRemaining(lapsAttempted: number): boolean {
+    return lapsAttempted < MAX_LAPS;
+}
+
 export function buildMergeOutcomes(steps: StepOutputs) {
     return {
         doneCount: steps.done?.length ?? 0,
