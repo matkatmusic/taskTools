@@ -31,6 +31,12 @@ test("test_produceSkillBodyEscapesQuotesInTheTaskDescription", () => {
     assert.equal(payload.args.taskDescription, `a "quoted" \\ description`);
 });
 
+// The goal step was being half-skipped when its AskUserQuestion imperative sat mid-paragraph.
+test("test_produceSkillBodyOpensTheGoalStepWithTheAskUserQuestionImperative", () => {
+    const body = produceSkillBody("test task");
+    assert.match(body, /^4\. Invoke AskUserQuestion to settle `goal` with the user/m);
+});
+
 test("test_skillBodyEmitterScriptFailsWhenStdinIsEmpty", () => {
     assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });
