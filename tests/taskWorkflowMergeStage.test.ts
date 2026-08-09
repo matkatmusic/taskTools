@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { compileFunction, constants as vmConstants } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
+import { createWorktreeForGroup } from '../scripts/prepareTasks.ts'
 
 const REPO_ROOT = process.cwd()
 const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), 'utf8')
@@ -20,24 +21,18 @@ type WorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, ag
 
 const throwingAgent = async () => { throw new Error('merge stage must not call an agent') }
 
-// filename resolves relative imports (e.g. './scripts/taskFiles.ts') against the worktree, not this test file.
+// filename is the real script path; imports resolve against args.worktree, not cwd or a relocated filename.
 const runMergeStage = async (worktreePath: string, args: Record<string, unknown>, agentImpl: (...values: unknown[]) => Promise<unknown> = throwingAgent) => {
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(worktreePath, 'task.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
   ) as WorkflowRunner
-  const previousCwd = process.cwd()
-  process.chdir(worktreePath)
-  try {
-    return await fn(
-      JSON.stringify(args),
-      () => {},
-      agentImpl,
-    )
-  } finally {
-    process.chdir(previousCwd)
-  }
+  return await fn(
+    JSON.stringify({ worktree: worktreePath, ...args }),
+    () => {},
+    agentImpl,
+  )
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
@@ -429,5 +424,58 @@ test('merge stage: after a submodule layer merges, an untested parent layer bloc
   } finally {
     removeFixture(root, worktreePath)
     rmSync(submoduleSource, { recursive: true, force: true })
+  }
+})
+
+test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path', async () => {
+  const taskNumber = 9008
+  const root = mkdtempSync(join(tmpdir(), 'task-workflow-prepare-root-'))
+  git(root, 'init', '-q', '-b', 'main')
+  git(root, 'config', 'user.email', 'test@example.com')
+  git(root, 'config', 'user.name', 'Test')
+  git(root, 'config', 'commit.gpgsign', 'false')
+  writeFileSync(join(root, 'README.md'), 'root\n')
+  git(root, 'add', 'README.md')
+  git(root, 'commit', '-q', '-m', 'init')
+  addTestScript(root, 'true')
+  const sourceBranch = 'main'
+  const baseOid = git(root, 'rev-parse', sourceBranch)
+  const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' })
+  symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
+  mkdirSync(join(worktreePath, 'plans'), { recursive: true })
+  const repositoryManifest: RepositoryManifest = {
+    version: REPOSITORY_MANIFEST_VERSION,
+    occurrences: [{
+      occurrenceId: '',
+      checkoutPath: root,
+      parentOccurrenceId: null,
+      pathInParent: null,
+      gitlinkOid: null,
+      depth: 0,
+      originUrl: '',
+      baseBranch: sourceBranch,
+      baseOid,
+      operationBranch: `task-${taskNumber}`,
+      childOccurrenceIds: [],
+      testState: 'untested',
+    }],
+  }
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'plans', `task-${taskNumber}-plan.md`), 'plan\n')
+    writeFileSync(join(worktreePath, 'plans', `brief-${taskNumber}.md`), 'brief\n')
+    git(worktreePath, 'add', `plans/task-${taskNumber}-plan.md`, `plans/brief-${taskNumber}.md`)
+    git(worktreePath, 'commit', '-q', '-m', 'plan and brief')
+
+    const cwdBefore = process.cwd()
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
+    assert.equal(process.cwd(), cwdBefore)
+
+    const merged = result.results[0] as { status: string, closed: number[] }
+    assert.equal(merged.status, 'merged')
+    assert.deepEqual(merged.closed, [taskNumber])
+    assert.equal(existsSync(worktreePath), false)
+  } finally {
+    removeFixture(root, worktreePath)
   }
 })
