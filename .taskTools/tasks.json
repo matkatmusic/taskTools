@@ -913,5 +913,34 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 177,
+    "version": "6137da13b0047bffa5e1be55916524057d39f406",
+    "title": "Stop re-preparing a failed task from force-resetting its retained worktree (audit C86-12)",
+    "userDescription": "Re-preparing a failed task destroys the work that failure handling intentionally retained. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-11.",
+    "goal": [
+      "- Re-preparing task N whose task-N worktree still holds unmerged commits/files from a failed run does NOT force-reset that worktree onto the current source tip.",
+      "- The retained commits/files are either reused/recovered or the preparer requires an explicit cleanup/reset decision instead of silently discarding them.",
+      "- test_createWorktreeForGroupRebasesAStaleWorktreeOntoTheSourceBranchTip in tests/prepareTasks.test.ts no longer asserts that the prior commit/file disappears; it asserts the failure-retention contract instead.",
+      "- `npm test` passes.",
+      "- NOT in scope: making --discover/findUnmergedTaskWorktrees recognize task-N worktrees at all, which is audit finding C86-11 (task 176), the blocker for this task."
+    ],
+    "description": "This is finding C86-12 (MEDIUM) in plans/task-86-codex-audit.md.\n\ncreateWorktreeForGroup in scripts/prepareTasks.ts, when a task-N worktree already exists, runs `git checkout --force -B task-N <source>` inside it. That discards any commits/files a two-lap failure intentionally left behind for inspection or recovery.\n\ntests/prepareTasks.test.ts's test_createWorktreeForGroupRebasesAStaleWorktreeOntoTheSourceBranchTip currently asserts the prior commit and file are gone after re-preparation, so the test validates the data loss rather than the failure-retention contract; it needs to become a retention/recovery assertion instead.\n\nThe fix must either preserve/reuse the failed worktree's work or require an explicit cleanup/reset decision before discarding it, rather than doing so silently during normal preparation.\n\nBlocked by the C86-11 task (task 176): that task teaches --discover/findUnmergedTaskWorktrees to recognize task-N worktrees, which this fix's recovery path is expected to build on.",
+    "files": [
+      "scripts/prepareTasks.ts",
+      "tests/prepareTasks.test.ts"
+    ],
+    "tests": "Prepare task N and let it fail, leaving worktree task-N with an unmerged commit and file from that run. Re-run prepare for task N and assert the prior commit/file is still present (or explicitly, safely handled) instead of being force-reset away.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNum": 176,
+        "reason": "C86-11 makes task-N worktrees discoverable/recoverable via --discover; this fix's retention/recovery behavior should be written against that discovery path rather than duplicating it"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ]
   }
 ]
