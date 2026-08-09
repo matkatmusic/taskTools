@@ -24,16 +24,7 @@ const SUMMARY_SCHEMA = {
   required: ['summaries'],
 }
 
-const { execFileSync } = await import('node:child_process')
-const diffs = execFileSync('node', [ARGS.stagedDiffsPath], { encoding: 'utf8' })
-
-const prompt = `Staged diff, one section per affected repo (the current repo plus any submodule whose pointer moved):
-
-${diffs}
-Generate, per affected repo, a short (40 words or less) single-sentence summary of the work done in that repo, so the user can use each summary as that repo's commit message.
-A parent repo whose only change is a submodule pointer counts as an affected repo — its message should name the submodule being updated and why.
-
-Return {summaries}: one {repo, message} per affected repo.`
+const prompt = `Run \`node ${ARGS.commitDiffBriefPath}\` with Bash and follow the instructions it prints.`
 
 // ponytail: one fallback attempt (Sonnet then Opus), not plan.workflow.js's 3x retry-on-null loop
 const runAgent = (model) => agent(prompt, { label: 'commit-message', phase: 'Commit message', schema: SUMMARY_SCHEMA, model })

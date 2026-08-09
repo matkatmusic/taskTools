@@ -24,26 +24,32 @@ function movedSubmodulePaths(repo: string): string[] {
   return [...paths];
 }
 
-const root = execFileSync("git", ["-C", process.cwd(), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const seen = new Set<string>([root]);
-const queue = [root];
+export function stagedDiffs(): string {
+  const root = execFileSync("git", ["-C", process.cwd(), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  const seen = new Set<string>([root]);
+  const queue = [root];
+  let out = "";
 
-while (queue.length > 0) {
-  const repo = queue.shift()!;
-  let diff: string;
-  try {
-    diff = stagedDiff(repo);
-  } catch {
-    continue;
+  while (queue.length > 0) {
+    const repo = queue.shift()!;
+    let diff: string;
+    try {
+      diff = stagedDiff(repo);
+    } catch {
+      continue;
+    }
+    if (diff.trim().length > 0) {
+      const label = repo === root ? basename(root) : repo.slice(root.length + 1);
+      out += `=== ${label} ===\n${diff}\n`;
+    }
+    for (const path of movedSubmodulePaths(repo)) {
+      const submodule = `${repo}/${path}`;
+      if (seen.has(submodule)) continue;
+      seen.add(submodule);
+      queue.push(submodule);
+    }
   }
-  if (diff.trim().length > 0) {
-    const label = repo === root ? basename(root) : repo.slice(root.length + 1);
-    process.stdout.write(`=== ${label} ===\n${diff}\n`);
-  }
-  for (const path of movedSubmodulePaths(repo)) {
-    const submodule = `${repo}/${path}`;
-    if (seen.has(submodule)) continue;
-    seen.add(submodule);
-    queue.push(submodule);
-  }
+  return out;
 }
+
+if (process.argv[1]?.endsWith("stagedDiffs.ts")) process.stdout.write(stagedDiffs());
