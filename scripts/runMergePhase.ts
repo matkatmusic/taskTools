@@ -51,6 +51,7 @@ export type MergeQueue = {
     pending: QueueTask[];
     carryover: QueueTask[];
     merged: number[];
+    mergedThisLap: number;
     unmerged: QueueTask[];
 };
 
@@ -59,7 +60,7 @@ export type QueueStep = { taskNumber: number; stage: QueueStage };
 export type StageOutcome = { status: "success" } | { status: "failure"; reason: string };
 
 export function createMergeQueue(): MergeQueue {
-    return { pending: [], carryover: [], merged: [], unmerged: [] };
+    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [] };
 }
 
 // An approved task enters the queue right away, at the back of the current lap's pending list.
@@ -78,9 +79,14 @@ export function currentLapIsComplete(queue: MergeQueue): boolean {
     return queue.pending.length === 0;
 }
 
+// Ends the queue after a zero-merge lap, unless a task workflow is still outstanding (task 148).
+export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean): boolean {
+    return currentLapIsComplete(queue) && queue.mergedThisLap === 0 && !workflowOutstanding;
+}
+
 // Rotates a finished lap's carryover (failures with a lap remaining) into the next lap's pending list.
 export function beginNextLap(queue: MergeQueue): MergeQueue {
-    return { ...queue, pending: queue.carryover, carryover: [] };
+    return { ...queue, pending: queue.carryover, carryover: [], mergedThisLap: 0 };
 }
 
 export function recordStageOutcome(queue: MergeQueue, taskNumber: number, stage: QueueStage, outcome: StageOutcome): MergeQueue {
@@ -91,7 +97,7 @@ export function recordStageOutcome(queue: MergeQueue, taskNumber: number, stage:
     const rest = queue.pending.slice(1);
     if (outcome.status === "success") {
         if (stage === "rebase-test") return { ...queue, pending: [{ ...head, stage: "merge" }, ...rest] };
-        return { ...queue, pending: rest, merged: [...queue.merged, taskNumber] };
+        return { ...queue, pending: rest, merged: [...queue.merged, taskNumber], mergedThisLap: queue.mergedThisLap + 1 };
     }
     const lapsAttempted = head.lapsAttempted + 1;
     const failed: QueueTask = { taskNumber, stage: "rebase-test", lapsAttempted, lastFailure: outcome.reason };
