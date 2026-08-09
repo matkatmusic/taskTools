@@ -1,5 +1,7 @@
 # Task 86 — one worktree per task
 
+**Status: complete.** Task 157 closed this chain — the serial tail launches from the orchestrator's generated instructions and the superseded `*.workflow.js` files are deleted.
+
 Agreed design, from the grilling session on 2026-08-07. Supersedes the approach
 described in the task 86 record (whose SKILL.md line references are stale — the
 pipeline text moved to `scripts/tackleTasksBrief.ts`).
@@ -261,14 +263,14 @@ hypotheticals.
   is tangled into `coordinateMergeRetry`. Untangling submodule/multi-repo
   publication from the batch retry machinery without breaking task 119's fix is
   the hard bit of this job.
-- `merge.workflow.js` — today the "unblock" workflow launched on a blocked
-  merge. Decided: whatever remains useful in its conflict-fixing prompt is
-  folded into the `rebase-test` stage. Deleting it, and the other superseded
-  `*.workflow.js` files, happens at the **end of the chain**, not in the task
-  that supersedes each one.
+- `merge.workflow.js` — was the "unblock" workflow launched on a blocked
+  merge. Whatever remained useful in its conflict-fixing prompt was folded
+  into the `rebase-test` stage (task 145). Task 157, the end of the chain,
+  deleted it along with the other superseded `*.workflow.js` files.
 - `blockers.workflow.js` — assumed unchanged, still runs before task prep.
-- `test.workflow.js` disappears as a separate phase; its work splits between
-  the implementer's own tests and the tail's full-suite gate.
+- `test.workflow.js` disappeared as a separate phase; its work split between
+  the implementer's own tests and the tail's full-suite gate. Task 157
+  deleted it.
 - `groupTasksByFileOverlap` loses its caller in `prepareTasks.ts`.
   `scripts/taskStats.ts` still uses it for the parallel-commands display.
 
