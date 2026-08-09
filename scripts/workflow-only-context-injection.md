@@ -90,7 +90,7 @@ You'll need the path to the workflow, and the paths to any other files needed to
 Inside, you need to resolve absolute paths from `import.meta.url`.
 Paths must be absolute; the reading agent's shell has no `CLAUDE_PLUGIN_ROOT`:
 ```ts
-const WORKFLOW_PATH = fileURLToPath(new URL("../skills/<SKILL_DIR>/<skill-name>.workflow.js", import.meta.url));
+const WORKFLOW_PATH = fileURLToPath(new URL("../skills/<SKILL_DIR>/<SKILL_DIR>.workflow.js", import.meta.url));
 const <PROMPT_BRIEF>_BRIEF_PATH = fileURLToPath(new URL("../scripts/<PROMPT_BRIEF>Brief.ts"));
 ```
 Use `WORKFLOW_PATH` to create the ready-to-run call that will be printed out as dynamically-injected content into the skill body.
