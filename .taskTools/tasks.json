@@ -573,35 +573,6 @@
     "difficulty": 6
   },
   {
-    "taskNumber": 166,
-    "version": "9351084fb63b67cc060398f4cb5092930a80e6f2",
-    "title": "Thread the prepared task-N worktree into the generated workflows so every task works in its own checkout (audit C86-01)",
-    "userDescription": "Prepared per-task worktrees are never selected by the generated workflows. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md.",
-    "goal": [
-      "- A production-shaped test drives prepareTasks -> the launch arguments tackleTasksBrief generates -> task.workflow.js, and each task's commit lands in that task's own task-N worktree.",
-      "- That test calls neither process.chdir nor any relocation of the compiled workflow filename; the two existing tests that do so (tests/taskWorkflowMergeStage.test.ts, tests/runMergePhase.test.ts) no longer need those tricks to pass.",
-      "- After a run, the orchestrator's own checkout carries none of the tasks' edits or commits.",
-      "- The launch arguments tackleTasksBrief emits visibly name the prepared worktree path, for both the plan/implement launch and the tail-stage launch.",
-      "- The workflow reaches its worktree by an explicit threaded path, not by process.chdir, so it still parses under the sandbox gate in tests/tackleTasksRetry.test.ts.",
-      "- `npm test` passes.",
-      "- NOT in scope: the operations/<runId> vs task-N branch-name mismatch, which is audit finding C86-02 and is owned by the sibling task blocked on this one; and the hanging gitlink rebase (C86-03), owned by a third sibling task."
-    ],
-    "description": "This is finding C86-01 (BLOCKER) in plans/task-86-codex-audit.md.\n\nprepareTasks (scripts/prepareTasks.ts) creates a per-task worktree via createWorktreeForGroup and returns it as groups[].worktree, but nothing downstream consumes it. tackleTasksBrief.ts builds plan/implement launch args as only {task, typecheckCommand} and tail-stage launch args as only {task, stage, repositoryManifest} -- neither carries the worktree path. task.workflow.js derives repoRoot from process.cwd() in both its plan/implement path and its rebase-test/merge tail path, and nothing in the generated launch instructions changes cwd (or otherwise directs execution) to the prepared worktree first.\n\nNet effect: all six background workflows plan, edit, commit, rebase, and clean up in the source/orchestrator checkout instead of the isolated task-N worktree, defeating the isolation prepareTasks exists to provide.\n\nExisting tests mask this. tests/taskWorkflowMergeStage.test.ts and tests/runMergePhase.test.ts explicitly chdir into a fixture worktree and relocate the compiled workflow file there; production launch code does neither. The artificial filename also makes relative imports such as ./scripts/taskFiles.ts resolve, whereas the real workflow lives under skills/tackle-tasks/ where that relative path does not exist. tests/prepareTasks.test.ts covers only worktree creation itself, not that it is ever selected downstream.\n\nThe fix must thread the worktree path from prepareTasks' groups[].worktree through tackleTasksBrief's launch arguments into task.workflow.js so every filesystem and git operation runs there. It must NOT rely on process.chdir -- the sandboxed workflow runtime forbids it (tests/tackleTasksRetry.test.ts:65-68), so the worktree path has to be an explicit parameter threaded to every git/fs call site rather than ambient state. It needs a production-shaped prepare -> launch -> workflow test that does not cheat via chdir or filename relocation.\n\nScope settled with the user: fix C86-01 only. The operations/<runId> vs task-N branch-name mismatch is audit finding C86-02 and belongs to its own sibling task, which is blocked by this one.",
-    "files": [
-      "scripts/prepareTasks.ts",
-      "scripts/tackleTasksBrief.ts",
-      "skills/tackle-tasks/task.workflow.js",
-      "tests/taskWorkflowMergeStage.test.ts",
-      "tests/runMergePhase.test.ts",
-      "tests/prepareTasks.test.ts"
-    ],
-    "tests": "A production-shaped prepare -> launch -> workflow test that does NOT call process.chdir and does NOT relocate the compiled filename. Run prepareTasks for 2 tasks; build the launch instructions from tackleTasksBrief; compile task.workflow.js at its REAL path; run both; assert task 1's commit is in worktree task-1, task 2's commit is in worktree task-2, and the orchestrator checkout is untouched.",
-    "difficulty": 8,
-    "handoffFilePaths": [
-      "plans/task-86-codex-audit.md"
-    ]
-  },
-  {
     "taskNumber": 167,
     "version": "a31ec173ab32df38308885a6cb6a55a90b9a4a81",
     "title": "Use one branch identity end to end so the manifest names branches prepareTasks actually creates (audit C86-02)",
