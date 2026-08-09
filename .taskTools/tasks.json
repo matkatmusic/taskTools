@@ -662,5 +662,36 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 169,
+    "version": "f121680abd26788e82652c6a26bc26a7ed72e281",
+    "title": "Give the merge queue an all-work-complete terminal state distinct from the zero-merge ceiling (audit C86-04)",
+    "userDescription": "The merge queue cannot finish after its final successful merge. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md.  blocked by C86-03.",
+    "goal": [
+      "- After the final successful merge (pending=[], carryover=[], mergedThisLap=1, no outstanding workflow), the queue reports a terminal done state and the run finishes instead of waiting forever.",
+      "- A zero-merge lap reports a DIFFERENT value from the all-work-complete state, so the driver can tell a finished run from a stuck one.",
+      "- The generated driver text in scripts/tackleTasksBrief.ts acts on the new terminal state, and its byte-for-byte assertions are updated to the new wording.",
+      "- tests/runMergePhase.test.ts:113-121 and :277-281 no longer assert false after the final successful merge.",
+      "- `npm test` passes.",
+      "- NOT in scope: the outstanding-workflow immediate-retry defect (audit C86-05) and the wrong result-envelope reads in the generated driver (audit C86-06) -- each needs its own task; and the gitlink rebase hang (audit C86-03, task 168, the blocker for this task)."
+    ],
+    "description": "This is finding C86-04 (HIGH) in plans/task-86-codex-audit.md.\n\nshouldEndQueue in scripts/runMergePhase.ts (around lines 86-97) returns true only for a zero-merge lap: currentLapIsComplete(queue) && queue.mergedThisLap === 0 && !workflowOutstanding. After the final successful task the normal state is pending=[], carryover=[], mergedThisLap=1, and no outstanding workflow, so it returns false.\n\nThe generated driver in scripts/tackleTasksBrief.ts (the \"Run shouldEndQueue...\" step, around lines 143-147) treats false plus empty carryover as \"a task is still planning/implementing/waiting on its gate -- wait for the next enqueue or completion notification\". No workflow remains to send one, so the queue stalls forever.\n\nThe tests enshrine the defect: tests/runMergePhase.test.ts:113-121 and the purported end-to-end case at :277-281 explicitly expect false after the final successful merge. Those assertions must be corrected, not preserved.\n\nThe fix must represent the all-work-complete terminal state independently of the zero-merge failure ceiling -- for example, lap complete with no carryover and no outstanding workflow, regardless of mergedThisLap -- and must be a DIFFERENT reported value from the zero-merge ceiling so the driver can tell success from stuck. The driver prose in scripts/tackleTasksBrief.ts must be updated to match.\n\nWatch out: tests pin scripts/tackleTasksBrief.ts output byte-for-byte, so changing the generated driver prose will require updating those assertions in step with the wording.",
+    "files": [
+      "scripts/runMergePhase.ts",
+      "scripts/tackleTasksBrief.ts",
+      "tests/runMergePhase.test.ts"
+    ],
+    "tests": "Test the all-work-complete terminal state separately from the zero-merge failure ceiling. Given state after the LAST successful merge (pending=[], carryover=[], mergedThisLap=1, no outstanding workflow), assert the queue reports DONE as a distinct terminal state. Separately, given a zero-merge lap, assert the queue reports the stuck/ceiling value -- a DIFFERENT value, not the same one. Fix tests/runMergePhase.test.ts:113-121 and :277-281, which expect false today.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNum": 168,
+        "reason": "the merge stage must be able to finish at all before a queue-termination fix can be verified end to end; C86-03 leaves it hanging"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ]
   }
 ]
