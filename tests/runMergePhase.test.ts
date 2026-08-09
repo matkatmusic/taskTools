@@ -1,7 +1,7 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beginNextLap, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
+import { beginNextLap, buildMergeReport, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -111,4 +111,61 @@ test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergedAtLeastOneTask", () => 
 
     assert.equal(currentLapIsComplete(queue), true);
     assert.equal(shouldEndQueue(queue, false), false);
+});
+
+test("test_buildMergeReportOmitsATaskThatFailedItsFirstLapButMergedItsSecondLap", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 70);
+    queue = recordStageOutcome(queue, 70, "rebase-test", { status: "failure", reason: "rebase conflicted: e.ts" });
+    queue = beginNextLap(queue);
+    queue = recordStageOutcome(queue, 70, "rebase-test", { status: "success" });
+    queue = recordStageOutcome(queue, 70, "merge", { status: "success" });
+
+    const report = buildMergeReport(queue);
+
+    assert.deepEqual(queue.merged, [70]);
+    assert.deepEqual(report.unmerged, []);
+});
+
+test("test_buildMergeReportCarriesBothFieldsForATaskThatHitTheTwoLapCeiling", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 80);
+    queue = recordStageOutcome(queue, 80, "rebase-test", { status: "failure", reason: "unresolved merge conflict: f.ts" });
+    queue = beginNextLap(queue);
+    queue = recordStageOutcome(queue, 80, "rebase-test", { status: "failure", reason: "unresolved merge conflict: f.ts again" });
+
+    const report = buildMergeReport(queue);
+
+    assert.deepEqual(report.unmerged, [
+        { taskNumber: 80, lastFailure: "unresolved merge conflict: f.ts again", terminalReason: "2-lap ceiling reached" },
+    ]);
+});
+
+test("test_buildMergeReportNamesTheQueueExitNotTheCeilingWhenATaskWasStillRetryable", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 90);
+    queue = recordStageOutcome(queue, 90, "rebase-test", { status: "failure", reason: "rebase conflicted: g.ts" });
+
+    assert.equal(shouldEndQueue(queue, false), true);
+    const report = buildMergeReport(queue);
+
+    assert.deepEqual(report.unmerged, [
+        { taskNumber: 90, lastFailure: "rebase conflicted: g.ts", terminalReason: "zero-merge lap ended the queue" },
+    ]);
+});
+
+test("test_buildMergeReportReportsMergedNotClosedAsItsOwnOutcomeWithTheCommitHash", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 100);
+    queue = recordStageOutcome(queue, 100, "rebase-test", { status: "success" });
+    queue = recordStageOutcome(queue, 100, "merge", { status: "success" });
+    queue = recordMergedNotClosed(queue, 100, "abc123", "close failure: archival reported an incomplete result");
+
+    const report = buildMergeReport(queue);
+
+    assert.deepEqual(queue.merged, [100]);
+    assert.deepEqual(report.unmerged, []);
+    assert.deepEqual(report.mergedNotClosed, [
+        { taskNumber: 100, commitHash: "abc123", lastFailure: "close failure: archival reported an incomplete result" },
+    ]);
 });
