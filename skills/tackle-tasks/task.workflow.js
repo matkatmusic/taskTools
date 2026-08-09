@@ -5,6 +5,8 @@ const TYPECHECK_COMMAND = ARGS.typecheckCommand ?? 'npx tsc --noEmit'
 const WORKER_MODEL = ARGS.workerModel
 const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
 const MAX_REBASE_FIX_ROUNDS = ARGS.maxRebaseFixRounds ?? 3
+const WORKTREE = ARGS.worktree
+if (!WORKTREE) throw new Error('task.workflow.js: no "worktree" in args; every stage must run inside the prepared task worktree')
 
 export const meta = {
   name: `task-${N}`,
@@ -328,9 +330,11 @@ const MAX_REVIEW_ROUNDS = 3
 let preparedTask = null
 
 const loadPreparedTask = async () => {
-  const { resolveTaskFiles, readTaskFile } = await import('./scripts/taskFiles.ts')
-  const { writeTaskBriefFile } = await import('./scripts/prepareTasks.ts')
-  const repoRoot = process.cwd()
+  const { join } = await import('node:path')
+  const { pathToFileURL } = await import('node:url')
+  const { resolveTaskFiles, readTaskFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/taskFiles.ts')).href)
+  const { writeTaskBriefFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/prepareTasks.ts')).href)
+  const repoRoot = WORKTREE
   const pair = resolveTaskFiles(repoRoot)
   const task = readTaskFile(pair.tasksPath).find((entry) => entry.taskNumber === N)
   if (!task) throw new Error(`task.workflow.js: task ${N} not found in tasks.json`)
@@ -351,8 +355,10 @@ const runPlan = async () => {
   log(`task ${N}: plan stage`)
   preparedTask = await loadPreparedTask()
   const { execFileSync } = await import('node:child_process')
-  const { readTaskFile } = await import('./scripts/taskFiles.ts')
-  const { writeTaskBriefFile } = await import('./scripts/prepareTasks.ts')
+  const { join } = await import('node:path')
+  const { pathToFileURL } = await import('node:url')
+  const { readTaskFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/taskFiles.ts')).href)
+  const { writeTaskBriefFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/prepareTasks.ts')).href)
   const result = await retryAgent(() => agent(plannerBrief(preparedTask), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
   let planResult = {
     stage: 'plan',
@@ -551,8 +557,9 @@ const runRebaseTest = async () => {
   if (!preparedTask) preparedTask = await loadPreparedTask()
   const { execFileSync } = await import('node:child_process')
   const { join, relative } = await import('node:path')
-  const { rebaseSubmoduleLayersDeepestFirst, rebaseParentOntoSourceAndTest, uncommittedChangedFiles } = await import('./scripts/mergeTaskWorktrees.ts')
-  const { createEmptyResolutionManifest } = await import('./scripts/resolutionRequests.ts')
+  const { pathToFileURL } = await import('node:url')
+  const { rebaseSubmoduleLayersDeepestFirst, rebaseParentOntoSourceAndTest, uncommittedChangedFiles } = await import(pathToFileURL(join(WORKTREE, 'scripts/mergeTaskWorktrees.ts')).href)
+  const { createEmptyResolutionManifest } = await import(pathToFileURL(join(WORKTREE, 'scripts/resolutionRequests.ts')).href)
   const worktreePath = preparedTask.repoRoot
   const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
   const occurrences = manifest.repositoryManifest.occurrences
@@ -669,7 +676,7 @@ const cleanupPlanAndBriefFiles = (execFileSync, existsSync, unlinkSync, join, re
 
 const runMerge = async () => {
   log(`task ${N}: merge stage`)
-  const repoRoot = process.cwd()
+  const repoRoot = WORKTREE
   const { execFileSync } = await import('node:child_process')
   const { existsSync, unlinkSync } = await import('node:fs')
   const { join } = await import('node:path')
