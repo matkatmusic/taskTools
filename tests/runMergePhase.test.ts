@@ -1,6 +1,13 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { compileFunction, constants as vmConstants } from "node:vm";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { beginNextLap, buildMergeReport, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
@@ -168,4 +175,115 @@ test("test_buildMergeReportReportsMergedNotClosedAsItsOwnOutcomeWithTheCommitHas
     assert.deepEqual(report.mergedNotClosed, [
         { taskNumber: 100, commitHash: "abc123", lastFailure: "close failure: archival reported an incomplete result" },
     ]);
+});
+
+const REPO_ROOT = process.cwd();
+const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, "skills/tackle-tasks/task.workflow.js"), "utf8")
+    .replace("export const meta", "const meta");
+
+type TaskWorkflowResult = { task: number; stage: string; results: Array<Record<string, unknown>> };
+type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
+
+const throwingAgent = async () => { throw new Error("end-to-end merge queue lap must not call an agent"); };
+
+// Mirrors runMergeStage in tests/taskWorkflowMergeStage.test.ts, driving the same task.workflow.js source.
+const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>) => {
+    const fn = compileFunction(
+        `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
+        ["args", "log", "agent"],
+        { filename: join(worktreePath, "task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    ) as TaskWorkflowRunner;
+    const previousCwd = process.cwd();
+    process.chdir(worktreePath);
+    try {
+        return await fn(JSON.stringify(args), () => {}, throwingAgent);
+    } finally {
+        process.chdir(previousCwd);
+    }
+};
+
+const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+
+// Mirrors makeRootWithWorktree in tests/taskWorkflowMergeStage.test.ts, plus seedTaskFiles/seedWorktreeTaskFile.
+const makeQueueFixtureRepo = (taskNumber: number) => {
+    const root = mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-"));
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test");
+    git(root, "config", "commit.gpgsign", "false");
+    writeFileSync(join(root, "README.md"), "root\n");
+    git(root, "add", "README.md");
+    git(root, "commit", "-q", "-m", "init");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(root, "add", "package.json");
+    git(root, "commit", "-q", "-m", "add test script");
+    const sourceBranch = "main";
+    const baseOid = git(root, "rev-parse", sourceBranch);
+    const operationBranch = `task-${taskNumber}`;
+    const worktreePath = join(tmpdir(), `run-merge-phase-e2e-wt-${randomUUID()}`);
+    git(root, "worktree", "add", "-q", "-b", operationBranch, worktreePath, sourceBranch);
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
+    mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
+    writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
+    const repositoryManifest: RepositoryManifest = {
+        version: REPOSITORY_MANIFEST_VERSION,
+        occurrences: [{
+            occurrenceId: "",
+            checkoutPath: root,
+            parentOccurrenceId: null,
+            pathInParent: null,
+            gitlinkOid: null,
+            depth: 0,
+            originUrl: "",
+            baseBranch: sourceBranch,
+            baseOid,
+            operationBranch,
+            childOccurrenceIds: [],
+            testState: "untested",
+        }],
+    };
+    return { root, worktreePath, repositoryManifest };
+};
+
+test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMerged", async () => {
+    const taskNumber = 9101;
+    const { root, worktreePath, repositoryManifest } = makeQueueFixtureRepo(taskNumber);
+    try {
+        writeFileSync(join(worktreePath, "taskfile.txt"), "task change\n");
+        git(worktreePath, "add", "taskfile.txt");
+        git(worktreePath, "commit", "-q", "-m", "task change");
+
+        let queue = createMergeQueue();
+        queue = enqueueApprovedTask(queue, taskNumber);
+
+        let step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "rebase-test" });
+        const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest });
+        const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
+        assert.equal(rebaseTestOutcome.status, "green");
+        queue = recordStageOutcome(queue, taskNumber, "rebase-test", { status: "success" });
+
+        step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "merge" });
+        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest });
+        const mergeOutcome = mergeResult.results[0] as { status: string };
+        assert.equal(mergeOutcome.status, "merged");
+        queue = recordStageOutcome(queue, taskNumber, "merge", { status: "success" });
+
+        assert.deepEqual(queue.merged, [taskNumber]);
+        assert.equal(nextQueueStep(queue), null);
+        // shouldEndQueue only fires on a zero-merge lap; a merged lap waits for the next enqueue.
+        assert.equal(shouldEndQueue(queue, false), false);
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
+
+        const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+        assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber]);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+    }
 });
