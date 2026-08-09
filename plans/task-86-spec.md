@@ -283,10 +283,11 @@ local copy, but **`implement.workflow.js` still gets the old list.** The
 widened files never reach the implementer. Fixed for free by one workflow per
 task — one process, one live list.
 
-Task 156 predates that fix and **stays open on purpose**. Task 157 is blocked by
-it, so the fix is reassessed before `plan.workflow.js` is deleted rather than
-assumed dead. What survives to reassess: `skills/tackle-tasks/task.workflow.js`
-never reads `.taskTools/run-arguments.json` at all, and the last production
-reader of that file is `scripts/runMergePhase.ts` — the same batch path task 147
-retires. If nothing still needs a persisted-arguments refresh once 153 lands,
-156 closes as obsolete.
+Task 156 predated that fix and was reassessed before `plan.workflow.js` was
+deleted, rather than assumed dead. **Done.** The reassessment found the planning
+half already fixed — `skills/tackle-tasks/task.workflow.js` re-reads `tasks.json`
+at every stage — but a narrower bug surviving: `.taskTools/run-arguments.json`
+stayed stale after a mid-run fence widening, and `scripts/mergePipeline.ts` reads
+that snapshot to verify a task's code landed before archiving it. Task 156 was
+retargeted to that, and `scripts/addTaskFiles.ts` now refreshes the snapshot
+whenever it widens a fence.
