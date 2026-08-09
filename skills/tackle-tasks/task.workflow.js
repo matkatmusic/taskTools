@@ -62,6 +62,15 @@ const WORKER_SCHEMA = {
   required: ['task', 'status', 'summary', 'remaining', 'notesFile'],
 }
 
+const MERGE_CONFLICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    resolved: { type: 'boolean' },
+    summary: { type: 'string' },
+  },
+  required: ['resolved', 'summary'],
+}
+
 const fileRetryPreamble = (missingFiles) => `Before planning: the workflow has already widened this task's owned files in tasks.json to include ${missingFiles.join(', ')} and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.
 
 `
@@ -234,6 +243,40 @@ rounds; or to return status "done" with a failing test. Any test file created
 or modified must be listed in ownedFiles; otherwise return status "blocked"
 without editing it.`
 
+const mergeConflictBrief = (checkoutPath, conflictedFilePaths) => `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve exactly these conflicted paths — this is the complete list, do not search the repository for more:
+${conflictedFilePaths.map((p) => `  - ${p}`).join('\n')}
+
+Carry out every step below, in order, from top to bottom.
+A line reading \`run(...)\` means actually execute that command now.
+A line reading \`return {...}\` means stop and report exactly those fields.
+
+You may READ anything, anywhere in the tree — callers, callees, tests, other layers.
+You may EDIT any file in any layer — resolving a conflict often means updating a call
+site, and a call site can live in a different repository.
+
+for each path in the list above:
+    open ${checkoutPath}/path
+    resolve every <<<<<<< / ======= / >>>>>>> block, keeping BOTH sides' intent
+    remove the conflict markers
+    run(git -C ${checkoutPath} add path)
+
+if resolving a conflict required editing a file in a DIFFERENT repository than ${checkoutPath}:
+    run(git add) and run(git commit) for that edit, in that repository's own checkout, before moving on
+    // a rebase requires a clean tree; an uncommitted edit in a not-yet-rebased layer would break that layer's own rebase
+
+Do not run \`git rebase --continue\` or \`git rebase --abort\` in ${checkoutPath} yourself — the caller drives that after you return.
+
+if git -C ${checkoutPath} diff --name-only --diff-filter=U prints nothing (every listed path is resolved and staged):
+    return {resolved: true, summary: what you changed}
+else:
+    return {resolved: false, summary: what is still unresolved and why}
+
+You are forbidden to weaken, delete, or stub out code to make a conflict
+disappear; to force-push or hard-reset anything you did not create; to run
+\`git rebase --continue\` or \`git rebase --abort\` yourself; or to leave an edit
+in a different repository uncommitted. Returning resolved false is a correct
+outcome when a conflict genuinely cannot be resolved, not a failure.`
+
 // ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
 const retryAgent = async (spawn, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -364,9 +407,150 @@ const runImplement = async () => {
   return { stage: 'implement', ...result, files: preparedTask.files, fenceViolations }
 }
 
-const runRebaseTest = () => {
-  log(`task ${N}: rebase-test stage (stub)`)
-  return { stage: 'rebase-test', task: N }
+const readHeadOid = (execFileSync, checkoutPath) => execFileSync('git', ['-C', checkoutPath, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+
+const changedPathsSinceOid = (execFileSync, checkoutPath, beforeOid) => execFileSync('git', ['-C', checkoutPath, 'diff', '--name-only', `${beforeOid}..HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean)
+
+// occurrenceId -> checkout path in THIS worktree, never the source manifest's checkoutPath.
+const taskWorktreeCheckoutPaths = (occurrences, worktreePath, join) => {
+  const byId = new Map(occurrences.map((o) => [o.occurrenceId, o]))
+  const resolved = new Map()
+  const resolve = (occurrenceId) => {
+    if (resolved.has(occurrenceId)) return resolved.get(occurrenceId)
+    const occurrence = byId.get(occurrenceId)
+    const checkoutPath = occurrence.parentOccurrenceId === null
+      ? worktreePath
+      : join(resolve(occurrence.parentOccurrenceId), occurrence.pathInParent)
+    resolved.set(occurrenceId, checkoutPath)
+    return checkoutPath
+  }
+  for (const occurrence of occurrences) resolve(occurrence.occurrenceId)
+  return resolved
+}
+
+const commitOccurrenceChanges = (execFileSync, checkoutPath, occurrenceId) => {
+  try {
+    execFileSync('git', ['-C', checkoutPath, 'add', '-A'], { stdio: 'ignore' })
+    execFileSync('git', ['-C', checkoutPath, 'commit', '-q', '-m', `resolve merge conflict: cross-layer edit in ${occurrenceId === '' ? 'root' : occurrenceId}`], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+const abortRebaseChecked = (execFileSync, checkoutPath) => {
+  try {
+    execFileSync('git', ['-C', checkoutPath, 'rebase', '--abort'], { stdio: 'ignore' })
+    return { aborted: true, failureReason: null }
+  } catch (error) {
+    return { aborted: false, failureReason: String((error && error.message) || error) }
+  }
+}
+
+// Editor disabled: a plain --continue must never block on an interactive prompt.
+const continueRebaseChecked = (execFileSync, checkoutPath) => {
+  try {
+    execFileSync('git', ['-C', checkoutPath, 'rebase', '--continue'], { stdio: 'ignore', env: { ...process.env, GIT_EDITOR: 'true' } })
+    return { continued: true, freshConflict: false, failureReason: null }
+  } catch (error) {
+    const stillConflicted = execFileSync('git', ['-C', checkoutPath, 'diff', '--name-only', '--diff-filter=U'], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    // A later commit hit a fresh conflict: the next walk call reports it, not a failure.
+    if (stillConflicted.length > 0) return { continued: false, freshConflict: true, failureReason: null }
+    return { continued: false, freshConflict: false, failureReason: String((error && error.message) || error) }
+  }
+}
+
+const runMergeConflictAgent = (checkoutPath, conflictedFilePaths) => retryAgent(() => agent(
+  mergeConflictBrief(checkoutPath, conflictedFilePaths),
+  { label: `rebase-conflict:${N}`, phase: `${N} Rebase-Test`, schema: MERGE_CONFLICT_SCHEMA },
+))
+
+// Resolves one conflict, commits cross-layer edits deepest-first, drives continue/abort.
+const advanceLiveConflict = async (execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, activeOccurrenceId, conflictedFilePaths, fenceViolations) => {
+  const checkoutPath = checkoutPaths.get(activeOccurrenceId)
+  const otherOccurrences = occurrencesDeepestFirst.filter((o) => o.occurrenceId !== activeOccurrenceId)
+  const beforeOids = otherOccurrences.map((o) => [o.occurrenceId, readHeadOid(execFileSync, checkoutPaths.get(o.occurrenceId))])
+
+  const result = await runMergeConflictAgent(checkoutPath, conflictedFilePaths)
+  if (result === null || result === undefined || result.resolved !== true) {
+    const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
+    return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? null : `abort failed: ${abortResult.failureReason}` }
+  }
+
+  for (const path of uncommittedChangedFiles(checkoutPath)) {
+    if (!conflictedFilePaths.includes(path)) fenceViolations.push({ occurrenceId: activeOccurrenceId, path })
+    execFileSync('git', ['-C', checkoutPath, 'add', path], { stdio: 'ignore' })
+  }
+
+  for (const [occurrenceId, beforeOid] of beforeOids) {
+    const otherPath = checkoutPaths.get(occurrenceId)
+    const uncommitted = uncommittedChangedFiles(otherPath)
+    for (const path of new Set([...changedPathsSinceOid(execFileSync, otherPath, beforeOid), ...uncommitted])) {
+      fenceViolations.push({ occurrenceId, path })
+    }
+    if (uncommitted.length === 0) continue
+    const committed = commitOccurrenceChanges(execFileSync, otherPath, occurrenceId)
+    if (!committed || uncommittedChangedFiles(otherPath).length > 0) {
+      const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
+      const reason = `commit failed for occurrence "${occurrenceId}"`
+      return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
+    }
+  }
+
+  const continuation = continueRebaseChecked(execFileSync, checkoutPath)
+  if (continuation.continued || continuation.freshConflict) return { advanced: true, lastFailure: null, cleanupFailure: null }
+  const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
+  const reason = `continue failed: ${continuation.failureReason}`
+  return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
+}
+
+const runRebaseTest = async () => {
+  log(`task ${N}: rebase-test stage`)
+  if (!preparedTask) preparedTask = await loadPreparedTask()
+  const { execFileSync } = await import('node:child_process')
+  const { join } = await import('node:path')
+  const { rebaseSubmoduleLayersDeepestFirst, rebaseParentOntoSourceAndTest, uncommittedChangedFiles } = await import('./scripts/mergeTaskWorktrees.ts')
+  const { createEmptyResolutionManifest } = await import('./scripts/resolutionRequests.ts')
+  const worktreePath = preparedTask.repoRoot
+  const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
+  const occurrences = manifest.repositoryManifest.occurrences
+  const rootOccurrence = occurrences.find((o) => o.occurrenceId === '')
+  const sourceBranch = rootOccurrence.baseBranch
+  const submodulePaths = occurrences
+    .filter((o) => o.parentOccurrenceId === '')
+    .map((o) => o.pathInParent)
+    .filter((p) => p !== null)
+  const checkoutPaths = taskWorktreeCheckoutPaths(occurrences, worktreePath, join)
+  const occurrencesDeepestFirst = [...occurrences].sort((a, b) => b.depth - a.depth)
+  const fenceViolations = []
+
+  let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+  while (layerWalk.stoppedAt !== null && layerWalk.stoppedAt.status === 'conflicted') {
+    const { occurrenceId, conflictedFilePaths } = layerWalk.stoppedAt
+    const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, occurrenceId, conflictedFilePaths, fenceViolations)
+    if (!outcome.advanced) {
+      return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId, fenceViolations }
+    }
+    layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+  }
+  if (layerWalk.stoppedAt !== null) {
+    const stopped = layerWalk.stoppedAt
+    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: stopped.status, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
+  }
+
+  let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+  while (parentOutcome.status === 'conflicted') {
+    const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, '', parentOutcome.conflictedFilePaths, fenceViolations)
+    if (!outcome.advanced) {
+      return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: outcome.lastFailure, cleanupFailure: outcome.cleanupFailure, occurrenceId: '', fenceViolations }
+    }
+    parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+  }
+  if (parentOutcome.status !== 'rebased-and-tested') {
+    return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: parentOutcome.status, occurrenceId: '', parentOutcome, fenceViolations }
+  }
+
+  return { stage: 'rebase-test', task: N, status: 'green', fenceViolations }
 }
 
 const runMerge = () => {
@@ -377,7 +561,7 @@ const runMerge = () => {
 const STAGE_RUNNERS = {
   plan: async () => [await runPlan()],
   implement: async () => [await runImplement()],
-  'rebase-test': () => [runRebaseTest()],
+  'rebase-test': async () => [await runRebaseTest()],
   merge: () => [runMerge()],
   'plan+implement': async () => {
     const planResult = await runPlan()
