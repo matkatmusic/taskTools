@@ -673,8 +673,13 @@ const runMerge = async () => {
   const { execFileSync } = await import('node:child_process')
   const { existsSync, unlinkSync } = await import('node:fs')
   const { join } = await import('node:path')
+  const { pathToFileURL } = await import('node:url')
+  const { mergeTaskDeepestFirst } = await import(pathToFileURL(join(repoRoot, 'scripts/mergeTaskWorktrees.ts')).href)
+  const { createEmptyResolutionManifest } = await import(pathToFileURL(join(repoRoot, 'scripts/resolutionRequests.ts')).href)
   cleanupPlanAndBriefFiles(execFileSync, existsSync, unlinkSync, join, repoRoot)
-  return { stage: 'merge', task: N }
+  const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
+  const { stage: failedAtStage, ...report } = mergeTaskDeepestFirst(repoRoot, manifest)
+  return { stage: 'merge', task: N, failedAtStage, ...report }
 }
 
 const STAGE_RUNNERS = {
