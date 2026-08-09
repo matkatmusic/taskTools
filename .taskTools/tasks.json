@@ -551,27 +551,6 @@
     ]
   },
   {
-    "taskNumber": 156,
-    "version": "4ceaf298bb0d0d73ca1317fbf8b172832e796bde",
-    "title": "Refresh the pipeline args snapshot when the plan phase widens a task files fence",
-    "userDescription": "When the plan workflow widens a task's owned files mid-run, refresh the pipeline args snapshot so later stages see the wider fence.\n\nProblem observed live on task 144. Sequence: prepareTasks.ts reads tasks.json and bakes the task's `files` array into the pipeline args JSON, writing it to .taskTools/run-arguments.json. The planner then returned status \"needs-clarification\" with missingFiles [scripts/runMergePhase.ts, scripts/mergePipeline.ts]. plan.workflow.js's needsFileRetry path ran scripts/addTaskFiles.ts, which appended those two paths to task 144's `files` in tasks.json, and the retried planner produced a plan spanning all six files.\n\nBut nothing refreshed the args. The args JSON is a point-in-time snapshot taken once by prepareTasks, never re-read. Both verify.workflow.js (line 25, which tells codex the plan must stay within the task's owned files) and implement.workflow.js (line 38 ownedFiles, line 73 the `git add` list) read `t.files` from that snapshot. So codex would reject a correct plan for straying outside a fence that had already been widened, and the implementer would stage only the original files. runMergePhase/mergePipeline also consume task.files.\n\nThe orchestrator worked around it by manually re-running prepareTasks after the plan step, which re-snapshots the args. That workaround should not be necessary.\n\nFix so that widening a task's files during the plan phase propagates to every later stage: after addTaskFiles.ts mutates tasks.json, the run's args (both the in-memory object returned to the orchestrator and .taskTools/run-arguments.json on disk) must be updated to match, or the later stages must read the fence from tasks.json rather than from the frozen snapshot.\n\nfiles: scripts/addTaskFiles.ts, scripts/prepareTasks.ts, skills/tackle-tasks/plan.workflow.js\n\ndifficulty: around 4",
-    "description": "The pipeline args are a point-in-time snapshot, not a live view of tasks.json, and one stage mutates tasks.json after that snapshot is taken.\n\n`writeTaskBriefFile`/`buildWorkflowArguments` in scripts/prepareTasks.ts read each task's `files` array once, embed it at `groups[].tasks[].files`, and persist the whole args object to `.taskTools/run-arguments.json` via `resolveRunArgumentsPath`. Nothing re-reads tasks.json for the rest of the run.\n\nskills/tackle-tasks/plan.workflow.js defines `needsFileRetry` (a plan result with status \"needs-clarification\" and a non-empty `missingFiles`). Its `fileRetryPreamble` instructs the retried planner to run `node \"scripts/addTaskFiles.ts\" '[N]' <paths>`, which appends those paths to the task's `files` in tasks.json. The retry then plans against the widened set and returns it as `planned[].files`. So after a file-retry, tasks.json and the args disagree — the args hold the pre-widening list.\n\nEvery later stage reads the stale copy:\n- skills/tackle-tasks/verify.workflow.js:25 interpolates `t.files` into the reviewer prompt as the plan's allowed scope, so codex is told to reject a plan that touches the newly added files.\n- skills/tackle-tasks/implement.workflow.js:38 interpolates `t.files` as `ownedFiles`, and :73 builds the `git add -- <paths>` command from it, so newly added files would be edited but never staged.\n- scripts/mergePipeline.ts consumes task.files as well, so the merge stage inherits the same narrow list.\n\nObserved on task 144 during the 86 chain: prepareTasks snapshotted 4 files; the planner flagged scripts/runMergePhase.ts and scripts/mergePipeline.ts as missing; addTaskFiles.ts grew tasks.json to 6; the args stayed at 4. The orchestrator recovered only by re-running prepareTasks by hand between the plan and verify steps.\n\nTwo viable fixes: have addTaskFiles.ts (or plan.workflow.js after calling it) rewrite `.taskTools/run-arguments.json` and return refreshed args to the orchestrator; or have the later stages resolve the fence from tasks.json at use time instead of from the frozen snapshot. Either way the plan workflow's return value should carry args the orchestrator can pass straight to verify without a manual re-prepare.",
-    "files": [
-      "scripts/addTaskFiles.ts",
-      "scripts/prepareTasks.ts",
-      "skills/tackle-tasks/plan.workflow.js",
-      "tests/prepareTasks.test.ts"
-    ],
-    "tests": "Write a tasks.json whose task declares 2 files, run prepareTasks for that task, then run addTaskFiles.ts adding a 3rd file. Assert that both the returned args object and the persisted .taskTools/run-arguments.json now list all 3 files for that task.",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 153,
-        "reason": "wait until after 153 is done to reassess if 156 is still an issue in the new taskTools-86 workflow; 153 also serialises this task after 147, which shares scripts/prepareTasks.ts"
-      }
-    ]
-  },
-  {
     "taskNumber": 157,
     "version": "ddba45172cdb1936642bed937e3dff1a2bf7cc6e",
     "title": "tackle-tasks: orchestrator drives the merge scheduling queue and deletes the superseded workflow files",
@@ -603,10 +582,6 @@
     "tests": "Drive real worktrees through the merge scheduling queue end to end. No agents are spawned in tests, so only cases that need an agent may fail. (1) Add a mergeable worktree with no submodule to the queue, run the queue, and assert the queue empties and the task merged. (2) Add a mergeable worktree that includes a submodule, run the queue, and assert the queue empties, the submodule's source branch contains the merge, and the parent's gitlink points at a commit reachable from that submodule's SOURCE branch rather than only from a task-N branch. (3) Add a conflicted worktree with a submodule, run the queue, and assert the task never merges, is reported unmerged with an unresolved-conflict reason, its worktree and task-N branch still exist, and it is still present in tasks.json rather than completedTasks.json — resolving that conflict needs an agent, which tests do not spin up. SECOND GROUP — assert on the generated instructions and on the removals: (4) the generated instructions launch both the `rebase-test` and `merge` stages rather than stopping at \"enters the merge queue\"; (5) the generated instructions no longer mention the close-tasks skill, which task 152 replaces with a hash-gated direct call to scripts/closeTasks.ts; (6) all five superseded workflow files are gone from the tree and nothing imports or names them.",
     "difficulty": 6,
     "blockedBy": [
-      {
-        "taskNum": 153,
-        "reason": "153 completes the merge stage and the nothing-lands-on-failure guarantee that this orchestrator launches and that these end-to-end tests exercise"
-      },
       {
         "taskNum": 156,
         "reason": "possibly stale bug — reassess 156 validity after 153 is done, before deleting plan.workflow.js"
