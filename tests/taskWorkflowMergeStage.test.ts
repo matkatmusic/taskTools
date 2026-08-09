@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { compileFunction, constants as vmConstants } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
-import { createWorktreeForGroup } from '../scripts/prepareTasks.ts'
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from '../scripts/prepareTasks.ts'
 
 const REPO_ROOT = process.cwd()
 const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), 'utf8')
@@ -443,23 +443,9 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' })
   symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
   mkdirSync(join(worktreePath, 'plans'), { recursive: true })
-  const repositoryManifest: RepositoryManifest = {
-    version: REPOSITORY_MANIFEST_VERSION,
-    occurrences: [{
-      occurrenceId: '',
-      checkoutPath: root,
-      parentOccurrenceId: null,
-      pathInParent: null,
-      gitlinkOid: null,
-      depth: 0,
-      originUrl: '',
-      baseBranch: sourceBranch,
-      baseOid,
-      operationBranch: `task-${taskNumber}`,
-      childOccurrenceIds: [],
-      testState: 'untested',
-    }],
-  }
+  // Real production manifest; its empty operationBranch forces task.workflow.js to supply the branch.
+  const repositoryManifest = loadRepositoryManifest(root)
+  assert.equal(repositoryManifest.occurrences[0].operationBranch, '')
   seedTaskFiles(root, taskNumber)
   try {
     writeFileSync(join(worktreePath, 'plans', `task-${taskNumber}-plan.md`), 'plan\n')
@@ -478,4 +464,17 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   } finally {
     removeFixture(root, worktreePath)
   }
+})
+
+test('attachOperationBranch sets the given branch on every occurrence, independent of any other invocation', () => {
+  const occurrences = [
+    { occurrenceId: '', checkoutPath: '/root', parentOccurrenceId: null, pathInParent: null, gitlinkOid: null, depth: 0, originUrl: '', baseBranch: 'main', baseOid: 'x', operationBranch: 'stale', childOccurrenceIds: ['vendor'], testState: 'untested' as const },
+    { occurrenceId: 'vendor', checkoutPath: '/root/vendor', parentOccurrenceId: '', pathInParent: 'vendor', gitlinkOid: null, depth: 1, originUrl: '', baseBranch: 'main', baseOid: 'y', operationBranch: 'stale', childOccurrenceIds: [], testState: 'untested' as const },
+  ]
+  const forTask111 = attachOperationBranch(occurrences, 'task-111')
+  const forTask222 = attachOperationBranch(occurrences, 'task-222')
+  assert.deepEqual(forTask111.map((o) => o.operationBranch), ['task-111', 'task-111'])
+  assert.deepEqual(forTask222.map((o) => o.operationBranch), ['task-222', 'task-222'])
+  // Same occurrences, different results: proves branch comes from each call's own argument.
+  assert.notDeepEqual(forTask111, forTask222)
 })
