@@ -1009,5 +1009,38 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 180,
+    "version": "3dbb13b4bac01a37a10d39b4c2e7142718dd49db",
+    "title": "Complete the production-shaped end-to-end matrix: root success, submodule success, submodule conflict (audit C86-15)",
+    "userDescription": "The closing task's required end-to-end test matrix is incomplete. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-14.",
+    "goal": [
+      "- Three production-shaped end-to-end scenarios exist: root-only success, submodule success, and submodule conflict.",
+      "- Each of the three drives the FULL chain: prepare -> notification -> gate -> queue -> close -> cleanup.",
+      "- The EXISTING root-success case is repaired to use real prepared outputs.",
+      "- None of the three uses an artificial cwd or a hand-built operationBranch.",
+      "- `npm test` passes.",
+      "- NOT in scope: the merged-but-not-closed retry hash (audit C86-14, task 179, the blocker for this task), and the deleted retired instruction text (audit C86-16), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-15 (MEDIUM) in plans/task-86-codex-audit.md.\n\nThe closing plan requires end-to-end orchestration coverage of prepare -> notification -> gate -> queue -> close -> cleanup for THREE scenarios: root-only success, submodule success, and a conflicted submodule.\n\ntests/runMergePhase.test.ts contains only the root-success case, test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMerged, and that case builds its fixture with an artificial cwd and a hand-set operationBranch=task-N rather than real prepareTasks output -- the same two shortcuts flagged in C86-01 and C86-02. Other lower-level submodule tests do not exercise the prepare -> notification -> gate -> queue -> close -> cleanup chain at all, so they do not close this gap.\n\nSCOPE settled with the user: repair the existing root scenario HERE as well as adding the two new ones, so all three are production-shaped and consistent. None of the three may use an artificial cwd or a hand-built operationBranch.\n\nReuse available: tests/mergeTaskWorktrees.test.ts already has submodule fixture-building helpers (the makeSubmoduleManifest-style setup using `git submodule add` and SubmoduleManifestSpec) that the new submodule scenarios can reuse or mirror rather than rebuild.\n\nNote that tasks 166 and 167 land earlier in this chain and also require production-shaped tests; by the time this task runs, some of the root-scenario repair may already be done. Finish whatever remains rather than assuming either state.",
+    "files": [
+      "tests/runMergePhase.test.ts",
+      "scripts/runMergePhase.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "CASE 1 root-only success, CASE 2 submodule success, CASE 3 conflicted submodule. Each drives the FULL chain: prepare -> notification -> gate -> queue -> close -> cleanup. No artificial cwd, and no operationBranch=task-N set by hand. Today only case 1 exists, and it uses both of those tricks.",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNum": 179,
+        "reason": "end-to-end coverage exercises the merged-but-not-closed retry path, so C86-14's merge-hash correctness must land before these scenarios can assert the right outcome"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ]
   }
 ]
