@@ -39,7 +39,7 @@ test("script fails loudly rather than emitting a brief that points nowhere", () 
 test("running the pipeline launches task.workflow.js once per task in the background, with no phase barriers", () => {
   const brief = tackleTasksBrief("[1]", "task 1: unblocked");
   assert.match(brief, /Launch `.*task\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
-  assert.match(brief, /Args for each launch: `\{task, typecheckCommand\}`/);
+  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree\}`/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
@@ -73,7 +73,7 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
   assert.match(brief, /nextQueueStep\(queue\)/);
-  assert.match(brief, /launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, repositoryManifest\}`/);
+  assert.match(brief, /launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, repositoryManifest, worktree\}`/);
   assert.match(brief, /rebase-test.*or merge workflow.*outstanding/s);
   assert.match(brief, /recordStageOutcome\(queue, taskNumber, stage, outcome\)/);
   assert.match(brief, /shouldEndQueue\(queue, workflowOutstanding\)/);
