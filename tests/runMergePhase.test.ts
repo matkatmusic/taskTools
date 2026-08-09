@@ -1,7 +1,7 @@
 // Covers the two pieces of step-6 logic that used to be prose in SKILL.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { beginNextLap, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordStageOutcome } from "../scripts/runMergePhase.ts";
+import { beginNextLap, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -83,4 +83,32 @@ test("test_recordStageOutcomeLeavesATaskUnmergedAfterItsSecondLapFails", () => {
     assert.deepEqual(queue.merged, []);
     assert.deepEqual(queue.carryover, []);
     assert.deepEqual(queue.unmerged, [{ taskNumber: 30, stage: "rebase-test", lapsAttempted: 2, lastFailure: "rebase conflicted: b.ts again" }]);
+});
+
+test("test_shouldEndQueueEndsTheQueueWhenALapMergesZeroTasksAndNoWorkflowIsOutstanding", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 40);
+    queue = recordStageOutcome(queue, 40, "rebase-test", { status: "failure", reason: "rebase conflicted: c.ts" });
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), true);
+});
+
+test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergesZeroTasksButAWorkflowIsOutstanding", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 50);
+    queue = recordStageOutcome(queue, 50, "rebase-test", { status: "failure", reason: "rebase conflicted: d.ts" });
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, true), false);
+});
+
+test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergedAtLeastOneTask", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 60);
+    queue = recordStageOutcome(queue, 60, "rebase-test", { status: "success" });
+    queue = recordStageOutcome(queue, 60, "merge", { status: "success" });
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), false);
 });
