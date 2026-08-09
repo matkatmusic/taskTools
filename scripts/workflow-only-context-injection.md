@@ -2,6 +2,25 @@
 
 Here is how to get shell command output to not land in the main agent's context window and stay exclusively in a workflow agent's prompt.
 
+## File/Folder Naming Structure
+
+### The `skills/` directory:
+`skills/<SKILL_DIR>/SKILL.md`
+`skills/<SKILL_DIR>/<PHASE>.workflow.js`
+
+### The `scripts/` directory: 
+The script that generates the actual body of SKILL.md, as a dynamic injection:
+`scripts/<SKILL_DIR>_SkillBodyEmitter.ts` 
+contains: `export function skillBody(): string`
+
+The script that generates the actual workflow agent's prompt:
+`scripts/<SKILL_DIR>_AgentPromptEmitter.ts`  
+contains: `export function agentPrompt(<data>: string): string`
+
+Any data scripts that either of the above scripts need to create the `agentPrompt()` output string correctly: 
+`scripts/<DATA_SCRIPT>.ts`
+contains: `export function <DATA_SCRIPT>(): string`
+
 ## Why it has to be done this way
 
 A `.workflow.js` script cannot run a command. `require` and `process` are `undefined`, and an `import` statement is rejected because `meta` must be the first statement. `` !`cmd` `` expands only in a SKILL.md body, never in an `agent()` prompt. Re-verify both with `probes/sandboxProbe.workflow.js`.
