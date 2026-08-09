@@ -674,12 +674,38 @@ const runMerge = async () => {
   const { existsSync, unlinkSync } = await import('node:fs')
   const { join } = await import('node:path')
   const { pathToFileURL } = await import('node:url')
-  const { mergeTaskDeepestFirst } = await import(pathToFileURL(join(repoRoot, 'scripts/mergeTaskWorktrees.ts')).href)
+  const { mergeTaskDeepestFirst, removeWorktreeAndBranch } = await import(pathToFileURL(join(repoRoot, 'scripts/mergeTaskWorktrees.ts')).href)
   const { createEmptyResolutionManifest } = await import(pathToFileURL(join(repoRoot, 'scripts/resolutionRequests.ts')).href)
+  const { currentBranchName } = await import(pathToFileURL(join(repoRoot, 'scripts/repositoryBranches.ts')).href)
+  const { closeTasks } = await import(pathToFileURL(join(repoRoot, 'scripts/closeTasks.ts')).href)
   cleanupPlanAndBriefFiles(execFileSync, existsSync, unlinkSync, join, repoRoot)
   const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
   const { stage: failedAtStage, ...report } = mergeTaskDeepestFirst(repoRoot, manifest)
-  return { stage: 'merge', task: N, failedAtStage, ...report }
+  if (report.status !== 'merged') {
+    return { stage: 'merge', task: N, failedAtStage, ...report }
+  }
+  const rootOccurrence = manifest.repositoryManifest.occurrences.find((o) => o.occurrenceId === '')
+  const mainRepoRoot = rootOccurrence.checkoutPath
+  const sourceBranch = rootOccurrence.baseBranch
+  const rootLayer = report.completedLayers.find((layer) => layer.occurrenceId === 'root')
+  const mergedCommitHash = rootLayer.oid
+  const branch = currentBranchName(repoRoot)
+  let closeResult
+  try {
+    closeResult = closeTasks([N], `merged to ${sourceBranch} at ${mergedCommitHash}`, mainRepoRoot, [mergedCommitHash])
+  } catch (error) {
+    return { stage: 'merge', task: N, failedAtStage, ...report, status: 'merged-but-not-closed', mergedCommitHash, closeError: String((error && error.message) || error) }
+  }
+  if (!closeResult.closed.includes(N)) {
+    return { stage: 'merge', task: N, failedAtStage, ...report, status: 'merged-but-not-closed', mergedCommitHash, closed: closeResult.closed, skipped: closeResult.skipped, unblocked: closeResult.unblocked }
+  }
+  try {
+    removeWorktreeAndBranch(mainRepoRoot, repoRoot, branch)
+  } catch (error) {
+    const cleanupWarning = `failed to remove worktree ${repoRoot} and branch ${branch}: ${String((error && error.message) || error)}`
+    return { stage: 'merge', task: N, failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, cleanupWarning }
+  }
+  return { stage: 'merge', task: N, failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked }
 }
 
 const STAGE_RUNNERS = {
