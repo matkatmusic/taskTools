@@ -191,15 +191,9 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
     const fn = compileFunction(
         `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
         ["args", "log", "agent"],
-        { filename: join(worktreePath, "task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+        { filename: join(REPO_ROOT, "skills/tackle-tasks/task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
     ) as TaskWorkflowRunner;
-    const previousCwd = process.cwd();
-    process.chdir(worktreePath);
-    try {
-        return await fn(JSON.stringify(args), () => {}, throwingAgent);
-    } finally {
-        process.chdir(previousCwd);
-    }
+    return await fn(JSON.stringify({ worktree: worktreePath, ...args }), () => {}, throwingAgent);
 };
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();

@@ -72,19 +72,20 @@ batches of ${TASKS_PER_COMMAND} with a barrier between them. Fewer tasks
 than ${TASKS_PER_COMMAND} means fewer runs; ${TASKS_PER_COMMAND} is a
 ceiling, never a batch size to fill.
 
-Args for each launch: \`{task, typecheckCommand}\`, where \`task\` is that
-entry's \`tasks[0].number\` and \`typecheckCommand\` is the value from the
-pipeline args above. For example, for the group whose \`tasks[0].number\` is
-\`268\`:
+Args for each launch: \`{task, typecheckCommand, worktree}\`, where \`task\`
+is that entry's \`tasks[0].number\`, \`typecheckCommand\` is the value from
+the pipeline args above, and \`worktree\` is that same entry's \`worktree\`.
+For example, for the group whose \`tasks[0].number\` is \`268\` and whose
+\`worktree\` is \`/tmp/taskTools-wt/repo/task-268\`:
 
 \`\`\`json
-{"task": 268, "typecheckCommand": "npx tsc --noEmit"}
+{"task": 268, "typecheckCommand": "npx tsc --noEmit", "worktree": "/tmp/taskTools-wt/repo/task-268"}
 \`\`\`
 
 Pass nothing else. \`task.workflow.js\` reads only \`task\`, \`stage\`,
-\`typecheckCommand\`, \`workerModel\`, and \`maxRounds\` from its args — it loads
-everything else about the task (its brief, plan path, owned files) itself,
-straight from tasks.json.
+\`typecheckCommand\`, \`worktree\`, \`workerModel\`, and \`maxRounds\` from its
+args — it loads everything else about the task (its brief, plan path, owned
+files) itself, straight from the worktree's own checkout of tasks.json.
 
 Each task workflow's completion sends a task-notification back to you. That
 notification — not polling — is how you learn a task is ready.
@@ -142,7 +143,7 @@ Track \`outstandingEntries\`, a map from task number to \`"plan+implement"\`, \`
 
 \`workflowOutstanding\`, passed to \`shouldEndQueue\`, is \`outstandingEntries.size > 0\`. After every enqueue and every completion notification, repeat:
 
-1. Run \`nextQueueStep(queue)\`. If it prints \`null\`, skip to step 3. If it prints a step \`{taskNumber, stage}\`: if any task's entry in \`outstandingEntries\` is \`"rebase-test"\` or \`"merge"\`, a rebase-test or merge workflow you launched is still outstanding — do not launch anything; wait for that workflow's completion notification, then go back to step 1. Otherwise, launch \`${taskWorkflowPath}\` as a background workflow with args \`{task: taskNumber, stage, repositoryManifest}\` — \`repositoryManifest\` is the pipeline args value from above — add \`taskNumber → stage\` to \`outstandingEntries\`, and go back to step 1. Merging stays serial: never launch a second rebase-test or merge workflow while one is still outstanding, because every merge moves the tip the next task rebases onto.
+1. Run \`nextQueueStep(queue)\`. If it prints \`null\`, skip to step 3. If it prints a step \`{taskNumber, stage}\`: if any task's entry in \`outstandingEntries\` is \`"rebase-test"\` or \`"merge"\`, a rebase-test or merge workflow you launched is still outstanding — do not launch anything; wait for that workflow's completion notification, then go back to step 1. Otherwise, launch \`${taskWorkflowPath}\` as a background workflow with args \`{task: taskNumber, stage, repositoryManifest, worktree}\` — \`repositoryManifest\` is the pipeline args value from above and \`worktree\` is the \`worktree\` field of the \`groups\` entry whose \`tasks[0].number\` equals \`taskNumber\` — add \`taskNumber → stage\` to \`outstandingEntries\`, and go back to step 1. Merging stays serial: never launch a second rebase-test or merge workflow while one is still outstanding, because every merge moves the tip the next task rebases onto.
 2. When a launched rebase-test or merge workflow's completion notification arrives, read its result's \`status\` (\`green\` is success for \`rebase-test\`; \`merged\` or \`merged-but-not-closed\` is success for \`merge\`; anything else is a failure, with \`lastFailure\` naming why). Run \`recordStageOutcome(queue, taskNumber, stage, outcome)\` — \`outcome\` is \`{"status":"success"}\` or \`{"status":"failure","reason":lastFailure}\` — and record the printed JSON as the new \`queue\`. If the merge stage reported \`merged-but-not-closed\`, also run \`recordMergedNotClosed(queue, taskNumber, mergedCommitHash, closeError)\` and record that printed JSON as the new \`queue\`. Remove that task's entry from \`outstandingEntries\`. Then go back to step 1.
 3. Run \`shouldEndQueue(queue, workflowOutstanding)\`. If it prints \`true\`, the queue is done: run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user. If it prints \`false\` and \`queue\`'s \`carryover\` is non-empty, run \`beginNextLap(queue)\`, record the printed JSON as the new \`queue\`, and go back to step 1. If it prints \`false\` and \`carryover\` is empty, a task is still planning, implementing, or waiting on its own gate — wait for the next enqueue or completion notification, then go back to step 1.
 
