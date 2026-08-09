@@ -693,5 +693,37 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 170,
+    "version": "3717a4320cff2767d2e1504bb84c922b264cb5fc",
+    "title": "Wait for an outstanding workflow instead of starting another lap against an unchanged tip (audit C86-05)",
+    "userDescription": "The outstanding-workflow exception immediately retries against an unchanged tip. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-04.",
+    "goal": [
+      "- With task A on carryover after a zero-merge lap and task B's workflow still outstanding, the generated driver's next action is to wait, not to call beginNextLap.",
+      "- Task A's retry count does not go up while it is waiting, so it cannot reach its ceiling against a source tip that never moved.",
+      "- Once B is approved and merged and the source tip advances, A retries against the new tip.",
+      "- The generated driver text names waiting-for-an-outstanding-workflow and starting-another-lap as two distinct next actions, and the byte-for-byte assertions in tests/tackleTasksBrief.test.ts are updated to that wording.",
+      "- A test drives the complete transition sequence, not a single shouldEndQueue boolean.",
+      "- `npm test` passes.",
+      "- NOT in scope: the all-work-complete terminal state (audit C86-04, task 169, the blocker for this task) and the wrong result-envelope reads in the generated driver (audit C86-06), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-05 (HIGH) in plans/task-86-codex-audit.md.\n\nAfter task A fails a zero-merge lap while task B is still planning, shouldEndQueue(queue, true) correctly does not terminate (scripts/runMergePhase.ts:91-93 -- the outstanding-workflow exception added by task 148). The next generated instruction is the wrong one.\n\nIn scripts/tackleTasksBrief.ts step 3 (around line 147), when shouldEndQueue prints false and queue.carryover is non-empty, the instructions unconditionally call beginNextLap(queue) with no check on workflowOutstanding / outstandingEntries.size. Task A therefore consumes lap 2 against the same source tip and can reach its retry ceiling before B is ever approved and merged.\n\nThat defeats the entire purpose of task 148's outstanding-workflow exception, which exists to wait for another approval that may advance the source tip.\n\nFix: gate the beginNextLap branch on outstandingEntries.size === 0. Start the next lap only when nothing is outstanding; otherwise wait for the next completion notification, the same as the empty-carryover branch already does. The generated driver must therefore distinguish \"wait for an outstanding workflow\" from \"start another lap\" as two different next actions.\n\nExisting coverage is inadequate by design: tests/runMergePhase.test.ts:104-111 checks only that shouldEndQueue returns false and never executes or models the erroneous next action.\n\nWatch out: tests/tackleTasksBrief.test.ts asserts the generated brief text byte-for-byte, so the new branch wording must land in step with those assertions.",
+    "files": [
+      "scripts/tackleTasksBrief.ts",
+      "tests/tackleTasksBrief.test.ts",
+      "tests/runMergePhase.test.ts"
+    ],
+    "tests": "Drive the whole transition sequence, not one boolean. Task A fails a zero-merge lap while B still plans: assert the next action is WAIT, NOT beginNextLap, and that A's retry count did NOT go up. Then B is approved and merged and the source tip moves: assert A now retries against the NEW tip and reaches its ceiling no earlier than it should. Today tests/runMergePhase.test.ts:104-111 checks only shouldEndQueue===false and never models the next action.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNum": 169,
+        "reason": "C86-04 gives the queue a real all-work-complete terminal state; both findings rewrite the same next-action branch in the generated driver, so landing 169 first avoids writing this gate against wording that is about to change"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ]
   }
 ]
