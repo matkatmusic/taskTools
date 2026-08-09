@@ -47,12 +47,20 @@ export type QueueTask = {
     lastFailure: string | null;
 };
 
+// Task 152 reports through here: the merge itself is not unwound, so this is tracked apart from `merged`.
+export type MergedNotClosedTask = {
+    taskNumber: number;
+    commitHash: string;
+    lastFailure: string;
+};
+
 export type MergeQueue = {
     pending: QueueTask[];
     carryover: QueueTask[];
     merged: number[];
     mergedThisLap: number;
     unmerged: QueueTask[];
+    mergedNotClosed: MergedNotClosedTask[];
 };
 
 export type QueueStep = { taskNumber: number; stage: QueueStage };
@@ -60,7 +68,7 @@ export type QueueStep = { taskNumber: number; stage: QueueStage };
 export type StageOutcome = { status: "success" } | { status: "failure"; reason: string };
 
 export function createMergeQueue(): MergeQueue {
-    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [] };
+    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [], mergedNotClosed: [] };
 }
 
 // An approved task enters the queue right away, at the back of the current lap's pending list.
@@ -104,6 +112,39 @@ export function recordStageOutcome(queue: MergeQueue, taskNumber: number, stage:
     return hasLapRemaining(lapsAttempted)
         ? { ...queue, pending: rest, carryover: [...queue.carryover, failed] }
         : { ...queue, pending: rest, unmerged: [...queue.unmerged, failed] };
+}
+
+// Task 152 calls this when merge succeeds but archival fails; the merge stays, reported separately from unmerged.
+export function recordMergedNotClosed(queue: MergeQueue, taskNumber: number, commitHash: string, lastFailure: string): MergeQueue {
+    return { ...queue, mergedNotClosed: [...queue.mergedNotClosed, { taskNumber, commitHash, lastFailure }] };
+}
+
+export type TerminalReason = "2-lap ceiling reached" | "zero-merge lap ended the queue";
+
+export type UnmergedTaskReport = {
+    taskNumber: number;
+    lastFailure: string;
+    terminalReason: TerminalReason;
+};
+
+export type MergeReport = {
+    unmerged: UnmergedTaskReport[];
+    mergedNotClosed: MergedNotClosedTask[];
+};
+
+// Reports queue.unmerged (hit the ceiling) and queue.carryover (retryable when the queue ended early); both left pending, unmerged.
+export function buildMergeReport(queue: MergeQueue): MergeReport {
+    const ceilingFailures: UnmergedTaskReport[] = queue.unmerged.map((task): UnmergedTaskReport => ({
+        taskNumber: task.taskNumber,
+        lastFailure: task.lastFailure as string,
+        terminalReason: "2-lap ceiling reached",
+    }));
+    const queueExitFailures: UnmergedTaskReport[] = queue.carryover.map((task): UnmergedTaskReport => ({
+        taskNumber: task.taskNumber,
+        lastFailure: task.lastFailure as string,
+        terminalReason: "zero-merge lap ended the queue",
+    }));
+    return { unmerged: [...ceilingFailures, ...queueExitFailures], mergedNotClosed: queue.mergedNotClosed };
 }
 
 // RETIRED (task 147): derived run-outcomes.json's aggregate counts from one batch's StepOutputs arrays.
