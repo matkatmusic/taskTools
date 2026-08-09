@@ -85,9 +85,17 @@ const removeFixture = (root: string, worktreePath: string) => {
   rmSync(root, { recursive: true, force: true })
 }
 
-test('merge stage deletes plan and brief, keeps notes, and the merge lands the result on the source branch', async () => {
+// A real merge lap closes the task, so the main repo needs both task files or closeTasks throws.
+const seedTaskFiles = (root: string, taskNumber: number) => {
+  mkdirSync(join(root, '.taskTools'), { recursive: true })
+  writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files: [], blockedBy: [] }]))
+  writeFileSync(join(root, '.taskTools', 'completedTasks.json'), '[]')
+}
+
+test('merge stage deletes plan and brief, keeps notes, closes the task against the merged hash, and removes the worktree last', async () => {
   const taskNumber = 9001
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
   try {
     writeFileSync(join(worktreePath, 'plans', `task-${taskNumber}-implementation-notes.md`), 'notes\n')
     git(worktreePath, 'add', `plans/task-${taskNumber}-implementation-notes.md`)
@@ -101,21 +109,31 @@ test('merge stage deletes plan and brief, keeps notes, and the merge lands the r
     const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
     assert.equal(result.stage, 'merge')
     assert.equal(result.task, taskNumber)
-    assert.deepEqual(result.results, [{ stage: 'merge', task: taskNumber, failedAtStage: undefined, status: 'merged', completedLayers: result.results[0].completedLayers }])
-
-    assert.equal(existsSync(join(worktreePath, 'plans', `task-${taskNumber}-plan.md`)), false)
-    assert.equal(existsSync(join(worktreePath, 'plans', `brief-${taskNumber}.md`)), false)
-    assert.equal(existsSync(join(worktreePath, 'plans', `task-${taskNumber}-implementation-notes.md`)), true)
+    const merged = result.results[0] as { status: string, mergedCommitHash: string, closed: number[] }
+    assert.equal(merged.status, 'merged')
+    assert.deepEqual(merged.closed, [taskNumber])
 
     assert.equal(git(root, 'show', `main:plans/task-${taskNumber}-implementation-notes.md`), 'notes')
     assert.throws(() => git(root, 'show', `main:plans/task-${taskNumber}-plan.md`))
     assert.throws(() => git(root, 'show', `main:plans/brief-${taskNumber}.md`))
+
+    // The archived record must carry the commit the source branch actually points at.
+    assert.equal(merged.mergedCommitHash, git(root, 'rev-parse', 'main'))
+    const stillOpen = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8'))
+    const archived = JSON.parse(readFileSync(join(root, '.taskTools', 'completedTasks.json'), 'utf8'))
+    assert.deepEqual(stillOpen, [])
+    assert.deepEqual(archived.map((task: { taskNumber: number }) => task.taskNumber), [taskNumber])
+    assert.deepEqual(archived[0].commitHashes, [merged.mergedCommitHash])
+
+    // removeWorktreeAndBranch runs last, after the verified close.
+    assert.equal(existsSync(worktreePath), false)
   } finally {
     removeFixture(root, worktreePath)
   }
 })
 
-test('merge stage cleanup is idempotent: a retried lap with plan and brief already gone makes no cleanup commit', async () => {
+// No task files, so the close fails and the worktree survives: the only retryable lap.
+test('a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit', async () => {
   const taskNumber = 9002
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
   try {
@@ -123,14 +141,17 @@ test('merge stage cleanup is idempotent: a retried lap with plan and brief alrea
     writeFileSync(join(worktreePath, 'plans', `brief-${taskNumber}.md`), 'brief\n')
 
     const first = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
-    assert.equal((first.results[0] as { status: string }).status, 'merged')
+    assert.equal((first.results[0] as { status: string }).status, 'merged-but-not-closed')
+    assert.equal(existsSync(worktreePath), true)
     assert.equal(existsSync(join(worktreePath, 'plans', `task-${taskNumber}-plan.md`)), false)
-    assert.equal(existsSync(join(worktreePath, 'plans', `brief-${taskNumber}-plan.md`)), false)
+    assert.equal(existsSync(join(worktreePath, 'plans', `brief-${taskNumber}.md`)), false)
 
     const headBeforeRetry = git(root, 'rev-parse', 'main')
+    const worktreeHeadBeforeRetry = git(worktreePath, 'rev-parse', 'HEAD')
     const second = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
-    assert.equal((second.results[0] as { status: string }).status, 'merged')
+    assert.equal((second.results[0] as { status: string }).status, 'merged-but-not-closed')
     assert.equal(git(root, 'rev-parse', 'main'), headBeforeRetry)
+    assert.equal(git(worktreePath, 'rev-parse', 'HEAD'), worktreeHeadBeforeRetry)
   } finally {
     removeFixture(root, worktreePath)
   }

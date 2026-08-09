@@ -680,13 +680,14 @@ const runMerge = async () => {
   const { closeTasks } = await import(pathToFileURL(join(repoRoot, 'scripts/closeTasks.ts')).href)
   cleanupPlanAndBriefFiles(execFileSync, existsSync, unlinkSync, join, repoRoot)
   const manifest = { repositoryManifest: ARGS.repositoryManifest, resolutionManifest: createEmptyResolutionManifest() }
+  // mergeTaskDeepestFirst rewrites occurrence.checkoutPath to the worktree; read the root before it runs.
+  const rootOccurrence = manifest.repositoryManifest.occurrences.find((o) => o.occurrenceId === '')
+  const mainRepoRoot = rootOccurrence.checkoutPath
+  const sourceBranch = rootOccurrence.baseBranch
   const { stage: failedAtStage, ...report } = mergeTaskDeepestFirst(repoRoot, manifest)
   if (report.status !== 'merged') {
     return { stage: 'merge', task: N, failedAtStage, ...report }
   }
-  const rootOccurrence = manifest.repositoryManifest.occurrences.find((o) => o.occurrenceId === '')
-  const mainRepoRoot = rootOccurrence.checkoutPath
-  const sourceBranch = rootOccurrence.baseBranch
   const rootLayer = report.completedLayers.find((layer) => layer.occurrenceId === 'root')
   const mergedCommitHash = rootLayer.oid
   const branch = currentBranchName(repoRoot)
