@@ -758,5 +758,39 @@
     "handoffFilePaths": [
       "plans/task-86-codex-audit.md"
     ]
+  },
+  {
+    "taskNumber": 172,
+    "version": "3bb19833abf90ce94307d5464827f13e5020cb7a",
+    "title": "Return typed failure results for cleanup, merge and close so the queue's failure contract is satisfied (audit C86-07)",
+    "userDescription": "Real cleanup, merge, and close failures do not satisfy the queue's failure contract. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-06.",
+    "goal": [
+      "- A real cleanup failure, a real merge failure, and a real close failure each produce a typed failure result the queue can record; none escapes as a thrown or rejected promise.",
+      "- Every unmerged result carries a concrete lastFailure, never undefined.",
+      "- The final JSON report from buildMergeReport names the terminal reason for each unmerged task, with no missing reason field.",
+      "- Failure of the final worktree removal remains a warning only: the task still counts as merged and closed.",
+      "- Tests feed REAL stage results through the driver and queue, with no synthetic reason injected directly into recordStageOutcome, and a rejected promise no longer counts as cleanup coverage.",
+      "- `npm test` passes.",
+      "- NOT in scope: the wrong result-envelope reads in the generated driver (audit C86-06, task 171, the blocker for this task), and addTaskFiles concurrency (audit C86-08), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-07 (HIGH) in plans/task-86-codex-audit.md.\n\nThe spec requires a concrete lastFailure for every unmerged result and a terminal reason in the final report. The three implemented stage paths do not provide it.\n\n1. cleanupPlanAndBriefFiles in skills/tackle-tasks/task.workflow.js (around lines 656-681) can throw on git rm/commit failures, and that throw escapes runMerge entirely, so a real cleanup failure produces NO queue outcome at all.\n2. When mergeTaskDeepestFirst's report has status !== 'merged', runMerge returns it as-is (around :687-690) with failureReason and failedAtStage but no lastFailure -- yet the generated driver in scripts/tackleTasksBrief.ts (the recordStageOutcome step, around lines 143-146) reads result.lastFailure unconditionally.\n3. When closeTasks throws or closeResult.closed excludes N, runMerge returns 'merged-but-not-closed' (around :697-701) with closeError or nothing resembling lastFailure, again mismatched with what the driver text and recordMergedNotClosed expect.\n\nDownstream, recordStageOutcome stores the undefined value and buildMergeReport can omit the reason from the JSON entirely (scripts/runMergePhase.ts:100-114 and :136-147).\n\nCoverage today is fake: the queue tests inject synthetic, compliant reasons straight into recordStageOutcome and never pass a real workflow result through the driver. The cleanup test (tests/taskWorkflowMergeStage.test.ts:304-330) treats a rejected workflow promise as sufficient, even though a rejected promise carries no structured result and so cannot be queued, retried, or reported.\n\nFix: runMerge and cleanupPlanAndBriefFiles's caller must catch and convert each failure into a discrete typed result carrying a concrete lastFailure (and closeError where appropriate), matching what the generated instructions and recordStageOutcome / recordMergedNotClosed / buildMergeReport already assume. Then feed each REAL result through the queue and the final-report path.\n\nPreserve the intended warning-only behavior for failure of the final worktree removal: removeWorktreeAndBranch failure stays a non-fatal cleanupWarning.",
+    "files": [
+      "skills/tackle-tasks/task.workflow.js",
+      "scripts/tackleTasksBrief.ts",
+      "scripts/runMergePhase.ts",
+      "tests/taskWorkflowMergeStage.test.ts",
+      "tests/runMergePhase.test.ts"
+    ],
+    "tests": "For each of cleanup fails, merge fails, and close fails: run the real stage, keep its REAL result, and feed it through the driver -> queue -> buildMergeReport. Assert a typed failure result comes back (no thrown promise escaping), that lastFailure is a concrete reason and never undefined, and that the final JSON report names that reason. Separately, when the final worktree removal fails, assert it is a WARNING only and the task still counts as merged and closed.",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNum": 171,
+        "reason": "C86-06 defines one documented result type per stage; the typed failure results here must be written against that settled envelope, not against the one it is about to replace"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ]
   }
 ]
