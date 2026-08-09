@@ -1,6 +1,6 @@
 # Task 86 — one worktree per task
 
-**Status: complete.** Task 157 closed this chain — the serial tail launches from the orchestrator's generated instructions and the superseded `*.workflow.js` files are deleted.
+**Status: complete.** Task 163 closed this chain — the serial tail launches from the orchestrator's generated instructions and the superseded `*.workflow.js` files are deleted.
 
 Agreed design, from the grilling session on 2026-08-07. Supersedes the approach
 described in the task 86 record (whose SKILL.md line references are stale — the
@@ -265,11 +265,11 @@ hypotheticals.
   the hard bit of this job.
 - `merge.workflow.js` — was the "unblock" workflow launched on a blocked
   merge. Whatever remained useful in its conflict-fixing prompt was folded
-  into the `rebase-test` stage (task 145). Task 157, the end of the chain,
+  into the `rebase-test` stage (task 145). Task 163, the end of the chain,
   deleted it along with the other superseded `*.workflow.js` files.
 - `blockers.workflow.js` — assumed unchanged, still runs before task prep.
 - `test.workflow.js` disappeared as a separate phase; its work split between
-  the implementer's own tests and the tail's full-suite gate. Task 157
+  the implementer's own tests and the tail's full-suite gate. Task 163
   deleted it.
 - `groupTasksByFileOverlap` loses its caller in `prepareTasks.ts`.
   `scripts/taskStats.ts` still uses it for the parallel-commands display.
@@ -283,11 +283,11 @@ local copy, but **`implement.workflow.js` still gets the old list.** The
 widened files never reach the implementer. Fixed for free by one workflow per
 task — one process, one live list.
 
-Task 156 predated that fix and was reassessed before `plan.workflow.js` was
+Task 162 predated that fix and was reassessed before `plan.workflow.js` was
 deleted, rather than assumed dead. **Done.** The reassessment found the planning
 half already fixed — `skills/tackle-tasks/task.workflow.js` re-reads `tasks.json`
 at every stage — but a narrower bug surviving: `.taskTools/run-arguments.json`
 stayed stale after a mid-run fence widening, and `scripts/mergePipeline.ts` reads
-that snapshot to verify a task's code landed before archiving it. Task 156 was
+that snapshot to verify a task's code landed before archiving it. Task 162 was
 retargeted to that, and `scripts/addTaskFiles.ts` now refreshes the snapshot
 whenever it widens a fence.

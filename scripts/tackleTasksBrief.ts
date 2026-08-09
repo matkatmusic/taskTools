@@ -161,7 +161,7 @@ Finally, stage the changes made this session — which may span multiple git rep
   return brief;
 };
 
-// RETIRED (task 157): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.
+// RETIRED (task 163): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.
 
 function readStdin(): string {
   try {
