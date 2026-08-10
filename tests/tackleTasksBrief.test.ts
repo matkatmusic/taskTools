@@ -52,16 +52,16 @@ test("script fails loudly rather than emitting a brief that points nowhere", () 
   assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });
 
-test("running the pipeline launches task.workflow.js once per task in the background, with no phase barriers", () => {
+test("running the pipeline launches tackle-tasks.workflow.js once per task in the background, with no phase barriers", () => {
   const brief = tackleTasksBrief("[1]", "task 1: unblocked");
-  assert.match(brief, /Launch `.*task\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
-  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree, sourceRoot\}`/);
+  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
+  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath\}`/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
   assert.doesNotMatch(brief, /mergeCommand/);
   assert.doesNotMatch(brief, /Step 1 — plan/);
-  assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} task\\.workflow\\.js runs in flight`));
+  assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} tackle-tasks\\.workflow\\.js runs in flight`));
   assert.match(brief, /sliding window, not\s+batches of/);
 });
 
@@ -95,14 +95,14 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
   assert.match(brief, /nextQueueAction\(queue, outstanding\)/);
-  assert.match(brief, /Launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot\}`/);
+  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath\}`/);
   assert.match(brief, /rebase-test or merge workflow is still outstanding/s);
   assert.match(brief, /`FN` = `consumeTaskWorkflowResult`/);
   assert.doesNotMatch(brief, /results\[[01]\]/);
   assert.match(brief, /buildMergeReport\(queue\)/);
   assert.match(brief, /outstandingEntries/);
   assert.match(brief, /immediately ask that task's own approval gate/);
-  assert.match(brief, /`"launch"`:.*Launch `.*task\.workflow\.js`/s);
+  assert.match(brief, /`"launch"`:.*Launch `.*tackle-tasks\.workflow\.js`/s);
   assert.doesNotMatch(brief, /close-tasks/);
 });
 
@@ -139,22 +139,42 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
 });
 
 const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
-const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/task.workflow.js"), "utf8")
+const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
   .replace("export const meta", "const meta");
+const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks_AgentPromptEmitter.ts");
 
 type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test" | "merge"; results: Array<Record<string, unknown>> };
-type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
+type WorkflowAgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>;
+type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: WorkflowAgentImpl) => Promise<TaskWorkflowResult>;
+
+// Every agent() prompt from tackle-tasks.workflow.js is one `node <emitter> <task> <role> <<'TT_PAYLOAD'` command.
+const EMITTER_COMMAND_RE = /node (\S+) (\d+) (\S+) <<'TT_PAYLOAD'\n(.*)\nTT_PAYLOAD/;
+const DRIVER_RESULT_PREFIX = "Return exactly this JSON as your structured result, with no other keys added or removed:\n";
+
+// Driver roles resolve via the real emitter; judgment roles use the stand-in.
+const agentThatRunsRealEmitterAndScriptsJudgment = (scriptedJudgment: WorkflowAgentImpl): WorkflowAgentImpl => async (prompt, options) => {
+  const match = prompt.match(EMITTER_COMMAND_RE);
+  if (!match) throw new Error(`prompt has no embedded emitter command: ${prompt.slice(0, 200)}`);
+  const [, emitterPath, taskArg, role, payloadJson] = match;
+  const output = execFileSync("node", [emitterPath!, taskArg!, role!], { input: payloadJson, encoding: "utf8" });
+  if (output.startsWith(DRIVER_RESULT_PREFIX)) return JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim());
+  return scriptedJudgment(prompt, options);
+};
 
 // ponytail: duplicated from tests/runMergePhase.test.ts rather than importing a .test.ts module,
 // which would re-register that file's own tests under this file's run. Extract to a shared
 // helper module if a third caller needs the same fixture.
-const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>, agent: (...values: unknown[]) => Promise<unknown>) => {
+const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>, judgmentAgent: WorkflowAgentImpl) => {
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
     ["args", "log", "agent"],
-    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
   ) as TaskWorkflowRunner;
-  return await fn(JSON.stringify({ worktree: worktreePath, ...args }), () => {}, agent);
+  return await fn(
+    JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),
+    () => {},
+    agentThatRunsRealEmitterAndScriptsJudgment(judgmentAgent),
+  );
 };
 
 const gitForWorkflowFixture = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();

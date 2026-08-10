@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { TASKS_PER_COMMAND } from "./taskStats.ts";
+import { WORKFLOW_PATH as taskWorkflowPath, AGENT_PROMPT_EMITTER_PATH as agentPromptEmitterPath } from "./tackle-tasks_SkillBodyEmitter.ts";
 
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand
 const checkBlockersPath = fileURLToPath(new URL("./checkBlockers.ts", import.meta.url));
@@ -10,7 +11,6 @@ const getTaskDetailsPath = fileURLToPath(new URL("./getTaskDetails.ts", import.m
 const prepareTasksPath = fileURLToPath(new URL("./prepareTasks.ts", import.meta.url));
 const skillDir = new URL("../skills/tackle-tasks/", import.meta.url);
 const blockersWorkflowPath = fileURLToPath(new URL("blockers.workflow.js", skillDir));
-const taskWorkflowPath = fileURLToPath(new URL("task.workflow.js", skillDir));
 const runMergePhaseUrl = new URL("./runMergePhase.ts", import.meta.url).href;
 
 // Opt-in, so a brief without `series` stays byte-identical to the parallel one.
@@ -66,36 +66,40 @@ Launch \`${taskWorkflowPath}\` once per entry in \`groups\`, as a **background**
 workflow — the call returns immediately, so the orchestrator stays free to
 launch the next task's workflow right away.
 
-Keep up to ${TASKS_PER_COMMAND} task.workflow.js runs in flight, and start
+Keep up to ${TASKS_PER_COMMAND} tackle-tasks.workflow.js runs in flight, and start
 the next task as soon as any one of them finishes — a sliding window, not
 batches of ${TASKS_PER_COMMAND} with a barrier between them. Fewer tasks
 than ${TASKS_PER_COMMAND} means fewer runs; ${TASKS_PER_COMMAND} is a
 ceiling, never a batch size to fill.
 
-Args for each launch: \`{task, typecheckCommand, worktree, sourceRoot}\`,
+Args for each launch: \`{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath}\`,
 where \`task\` is that entry's \`tasks[0].number\`, \`typecheckCommand\` is
 the value from the pipeline args above, \`worktree\` is that same entry's
-\`worktree\`, and \`sourceRoot\` is the top-level pipeline args \`repo\` value —
+\`worktree\`, \`sourceRoot\` is the top-level pipeline args \`repo\` value —
 the authoritative checkout that owns \`.taskTools/tasks.json\`, never the
-task worktree. For example, for the group whose \`tasks[0].number\` is
-\`268\` and whose \`worktree\` is \`/tmp/taskTools-wt/repo/task-268\`:
+task worktree — and \`agentPromptEmitterPath\` is always exactly
+\`${JSON.stringify(agentPromptEmitterPath)}\`. For example, for the group
+whose \`tasks[0].number\` is \`268\` and whose \`worktree\` is
+\`/tmp/taskTools-wt/repo/task-268\`:
 
 \`\`\`json
-{"task": 268, "typecheckCommand": "npx tsc --noEmit", "worktree": "/tmp/taskTools-wt/repo/task-268", "sourceRoot": "/path/to/repo"}
+{"task": 268, "typecheckCommand": "npx tsc --noEmit", "worktree": "/tmp/taskTools-wt/repo/task-268", "sourceRoot": "/path/to/repo", "agentPromptEmitterPath": ${JSON.stringify(agentPromptEmitterPath)}}
 \`\`\`
 
-Pass nothing else. \`task.workflow.js\` reads only \`task\`, \`stage\`,
-\`typecheckCommand\`, \`worktree\`, \`sourceRoot\`, \`workerModel\`, and
-\`maxRounds\` from its args — it loads everything else about the task (its
-brief, plan path, owned files) itself, straight from the worktree's own
-checkout of tasks.json.
+Pass nothing else. \`tackle-tasks.workflow.js\` reads only \`task\`, \`stage\`,
+\`typecheckCommand\`, \`worktree\`, \`sourceRoot\`, \`agentPromptEmitterPath\`,
+\`workerModel\`, and \`maxRounds\` from its args — it never imports or runs a
+command itself; every git/fs/task-state operation runs through the agent
+prompt emitter at that path. It loads everything else about the task (its
+brief, plan path, owned files) itself, via the emitter, straight from the
+worktree's own checkout of tasks.json.
 
 Each task workflow's completion sends a task-notification back to you. That
 notification — not polling — is how you learn a task is ready.
 
 ## Task workflow results
 
-Every task.workflow.js run returns \`{task, stage, results}\`, where
+Every tackle-tasks.workflow.js run returns \`{task, stage, results}\`, where
 \`results\` is an array of per-step results for that run's \`stage\`:
 
 - \`rebase-test\`: \`results\` has one entry, the rebase-test result —
@@ -178,7 +182,7 @@ Track \`outstandingEntries\`, a map from task number to \`"plan+implement"\`, \`
 
 After every enqueue and every completion notification, compute \`outstanding\` (above) and run \`nextQueueAction(queue, outstanding)\` (the "Action" row). \`nextQueueAction\` is the single source of truth for whether to launch, wait, roll the lap, or stop — never derive that decision from \`pending\`, \`carryover\`, or \`outstandingEntries\` in prose. Handle the printed \`action\` by its \`kind\` and repeat until you hit \`"report"\`:
 
-- \`"launch"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch \`${taskWorkflowPath}\` as a background workflow with args \`{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot}\` — \`typecheckCommand\` is the pipeline args value from above (the same value passed to the very first launch), \`repositoryManifest\` is the pipeline args value from above, \`worktree\` is the \`worktree\` field of the \`groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`, and \`sourceRoot\` is the top-level pipeline args \`repo\` value (the same value passed to the very first launch) — add \`taskNumber → stage\` to \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
+- \`"launch"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch \`${taskWorkflowPath}\` as a background workflow with args \`{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath}\` — \`typecheckCommand\` is the pipeline args value from above (the same value passed to the very first launch), \`repositoryManifest\` is the pipeline args value from above, \`worktree\` is the \`worktree\` field of the \`groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`, \`sourceRoot\` is the top-level pipeline args \`repo\` value (the same value passed to the very first launch), and \`agentPromptEmitterPath\` is always exactly \`${JSON.stringify(agentPromptEmitterPath)}\` — add \`taskNumber → stage\` to \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"wait"\`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet. Wait for the next enqueue or completion notification, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"begin-next-lap"\`: run \`beginNextLap(queue)\`, record the printed JSON as the new \`queue\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"report"\`: no pending or retryable work remains (\`action.endState\` is \`"done"\` or \`"stuck"\`). Run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user. Stop driving the queue.
@@ -187,7 +191,7 @@ When a launched rebase-test or merge workflow's completion notification arrives,
 
 ## Closing your tasks
 
-Closing each merged task happens automatically: \`${taskWorkflowPath}\`'s merge stage calls scripts/closeTasks.ts directly once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up.
+Closing each merged task happens automatically: \`${taskWorkflowPath}\`'s merge stage, via the agent prompt emitter's \`merge\` role, calls scripts/closeTasks.ts once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up.
 
 If the user requests adding tasks, invoke the \`create-task\` skill once per task — never edit \`tasks.json\` directly.
 
