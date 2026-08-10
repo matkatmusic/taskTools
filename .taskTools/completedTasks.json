@@ -2684,5 +2684,42 @@
     "commitHashes": [
       "4feb2ffd6e5bd214dc76b1fd3351abe01064ed5d"
     ]
+  },
+  {
+    "taskNumber": 171,
+    "version": "9f2c2d6f1bb0a06cab2c8735c9beb2fad689a8ae",
+    "title": "Drive the generated orchestration against task.workflow.js's real result envelope (audit C86-06)",
+    "userDescription": "The generated driver reads the wrong workflow result envelope. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-05.",
+    "goal": [
+      "- The generated driver instructions name, per stage, which member of the results array carries status and failure, matching what task.workflow.js actually returns.",
+      "- The approval-gate instructions map the plan/implement results array to the verifier result and to the fence violations.",
+      "- A literal executor following the generated text records the correct queue outcome, with no undefined status or failure field.",
+      "- No test needs to hand-index workflowResult.results[0] to make the driver work; tests/runMergePhase.test.ts:266-275 no longer papers over the mismatch.",
+      "- One documented result type exists per stage, so the driver and the workflow agree by definition rather than by coincidence.",
+      "- `npm test` passes, with the byte-for-byte brief assertions updated to the new wording.",
+      "- NOT in scope: the outstanding-workflow wait-vs-lap fix (audit C86-05, task 170, the blocker for this task) and the cleanup/merge/close failure contract (audit C86-07), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-06 (HIGH) in plans/task-86-codex-audit.md.\n\ntask.workflow.js returns { task, stage, results: [...] } (skills/tackle-tasks/task.workflow.js:712-727). The generated driver text in scripts/tackleTasksBrief.ts (the merge-queue loop step, around lines 143-146) tells the executor to inspect the workflow result's status and lastFailure DIRECTLY, instead of reading the relevant member of results. The approval gate instructions likewise never map the plan/implement results array to the verifier result and the fence violations.\n\nA literal executor therefore observes undefined status and failure fields and records the wrong queue outcome.\n\nThe tests mask the mismatch: tests/runMergePhase.test.ts:266-275 knows the true shape and manually unwraps workflowResult.results[0]. That hand-indexing is exactly what hides the instruction/API gap, so a fix must remove the need for it rather than keep it.\n\nFix: define ONE documented result type per stage, then rewrite the driver prose in tackleTasksBrief.ts to name which results member each stage reads -- rebase-test, merge, and the plan/implement stage's plan, implement and verifier outputs plus fence violations -- matching the envelope task.workflow.js actually returns. Add or extend a test that drives the generated instructions against a real, non-synthetic workflow result.\n\nWatch out: tests pin the generated brief text byte-for-byte, so the new driver wording and those assertions must land together.",
+    "files": [
+      "scripts/tackleTasksBrief.ts",
+      "skills/tackle-tasks/task.workflow.js",
+      "tests/runMergePhase.test.ts",
+      "tests/tackleTasksBrief.test.ts"
+    ],
+    "tests": "Run task.workflow.js and keep its REAL return, { task, stage, results: [...] }. Feed that envelope to the generated driver instructions as written. Assert the queue outcome recorded is correct, not undefined, and that the approval gate sees both the verifier result AND the fence violations. No test may hand-index results[0] -- tests/runMergePhase.test.ts:266-275 does exactly that today.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNum": 170,
+        "reason": "C86-05 rewrites the next-action logic in the same generated driver step; landing it first keeps two tasks from rewriting the same driver-generation lines out of order"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-10",
+    "commitHashes": [
+      "5860a5d293f92ffe76838dc9dc6c05a1c99f6db7"
+    ]
   }
 ]
