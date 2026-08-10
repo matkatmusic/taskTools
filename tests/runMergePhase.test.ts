@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -312,4 +312,51 @@ test("test_shouldEndQueueReportsStuckWhenALapMergesNothingAndAPriorLapsFailureIs
     assert.deepEqual(queue.carryover, []);
     assert.equal(currentLapIsComplete(queue), true);
     assert.equal(shouldEndQueue(queue, false), "stuck");
+});
+
+test("test_endToEndQueueFeedsARealMergeStageCleanupFailureIntoRecordStageOutcomeAndBuildMergeReport", async () => {
+    const taskNumber = 9102;
+    const { root, worktreePath, repositoryManifest } = makeQueueFixtureRepo(taskNumber);
+    try {
+        writeFileSync(join(worktreePath, "taskfile.txt"), "task change\n");
+        git(worktreePath, "add", "taskfile.txt");
+        git(worktreePath, "commit", "-q", "-m", "task change");
+
+        let queue = createMergeQueue();
+        queue = enqueueApprovedTask(queue, taskNumber);
+
+        let step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "rebase-test" });
+        const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest });
+        const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
+        assert.equal(rebaseTestOutcome.status, "green");
+        queue = recordStageOutcome(queue, taskNumber, "rebase-test", { status: "success" });
+
+        step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "merge" });
+
+        writeFileSync(join(worktreePath, "plans", `task-${taskNumber}-plan.md`), "plan\n");
+        writeFileSync(join(worktreePath, "plans", `brief-${taskNumber}.md`), "brief\n");
+        git(worktreePath, "add", `plans/task-${taskNumber}-plan.md`, `plans/brief-${taskNumber}.md`);
+        git(worktreePath, "commit", "-q", "-m", "plan and brief");
+
+        writeFileSync(join(root, ".git", "hooks", "pre-commit"), "#!/bin/sh\nexit 1\n");
+        chmodSync(join(root, ".git", "hooks", "pre-commit"), 0o755);
+
+        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest });
+        const mergeOutcome = mergeResult.results[0] as { status: string; lastFailure: string };
+        assert.equal(mergeOutcome.status, "blocked");
+        assert.match(mergeOutcome.lastFailure, /cleanup failed/);
+
+        queue = recordStageOutcome(queue, taskNumber, "merge", { status: "failure", reason: mergeOutcome.lastFailure });
+
+        assert.equal(shouldEndQueue(queue, false), "stuck");
+        const report = buildMergeReport(queue);
+        assert.deepEqual(report.unmerged, [
+            { taskNumber, lastFailure: mergeOutcome.lastFailure, terminalReason: "zero-merge lap ended the queue" },
+        ]);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+    }
 });
