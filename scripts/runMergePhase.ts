@@ -87,9 +87,13 @@ export function currentLapIsComplete(queue: MergeQueue): boolean {
     return queue.pending.length === 0;
 }
 
-// Ends the queue after a zero-merge lap, unless a task workflow is still outstanding (task 148).
-export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean): boolean {
-    return currentLapIsComplete(queue) && queue.mergedThisLap === 0 && !workflowOutstanding;
+// "done": nothing left to retry, regardless of mergedThisLap. "stuck": zero-merge lap with recorded failures. Else "continue" (task 169).
+export type QueueEndState = "continue" | "done" | "stuck";
+
+export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean): QueueEndState {
+    if (workflowOutstanding || !currentLapIsComplete(queue)) return "continue";
+    if (queue.mergedThisLap === 0 && (queue.carryover.length > 0 || queue.unmerged.length > 0)) return "stuck";
+    return queue.carryover.length === 0 ? "done" : "continue";
 }
 
 // Rotates a finished lap's carryover (failures with a lap remaining) into the next lap's pending list.
