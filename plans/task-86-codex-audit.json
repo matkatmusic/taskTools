@@ -517,56 +517,32 @@
       "existingOpenTask": "No matching open task. Task 121 extends sandbox/retry coverage for blockers.workflow.js but does not guard the rewritten tackle-tasks workflow's forbidden capabilities."
     },
     {
-      "number": 38,
-      "title": "C86-38 — Low: the superseded imported workflow is retained as task.workflow.js.old and the deletion test ignores it",
-      "class": "low",
-      "cause": "The rewrite renamed the complete import-based workflow to skills/tackle-tasks/task.workflow.js.old instead of deleting the superseded whole file. Task 157's retirement rule says whole superseded files are removed, not kept as live-tree backup copies. The existing deletion test lists only the older five phase workflows and therefore passes while the newly superseded implementation remains in the skill directory.",
-      "locations": [
-        {
-          "path": "skills/tackle-tasks/task.workflow.js.old",
-          "lines": "1-859",
-          "role": "Entire superseded import-based workflow remains in the deliverable."
-        },
-        {
-          "path": "tests/tackleTasksBrief.test.ts",
-          "lines": "115-138",
-          "role": "Deletion guard does not include task.workflow.js.old or reject backup workflow suffixes."
-        }
-      ],
-      "provingTest": "Assert that skills/tackle-tasks contains no superseded task.workflow.js, task.workflow.js.old, or other workflow backup file after the rewrite. The current assertion fails on task.workflow.js.old, while the existing test remains green.",
-      "suggestedFixApproach": [
-        "Delete task.workflow.js.old; Git history is the backup.",
-        "Extend the superseded-file guard to reject the old consolidated filename and backup suffixes in skills/tackle-tasks, while allowing only the current tackle-tasks.workflow.js and blockers.workflow.js files."
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
       "number": 39,
-      "title": "C86-39 — Medium: the new SkillBodyEmitter is empty and the skill still injects command output into the main context",
+      "title": "C86-39 — Medium: SkillBodyEmitter still runs data scripts and injects the full orchestration brief into the main context",
       "class": "medium",
-      "cause": "The referenced workflow-only-context-injection design requires scripts/<skill>_SkillBodyEmitter.ts to emit the complete minimal workflow invocation, import only node:url, and avoid subprocess or data-script execution. The new tackle-tasks_SkillBodyEmitter.ts resolves paths but skillBody returns an empty string, and SKILL.md does not invoke it. SKILL.md still invokes tackleTasksBrief.ts, whose CLI executes checkBlockers and injects its output plus the large orchestration brief into the main agent's context. This is the older task-75 brief-emitter design, not the claimed workflow-only context-injection boundary.",
+      "cause": "The staged changes make tackle-tasks_SkillBodyEmitter.ts the canonical nonempty emitter, wire SKILL.md to it, and delete tackleTasksBrief.ts, but they move the older task-75 emitter behavior into the renamed file instead of implementing the referenced workflow-only-context-injection boundary. The emitter imports node:child_process, node:fs, and taskStats.ts in addition to node:url; its CLI executes checkBlockers.ts; and it embeds that live output plus the full orchestration brief into the main agent's context. The required emitter is instead a path-only boundary that emits the minimal workflow invocation without running subprocesses or data scripts.",
       "locations": [
         {
           "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
-          "lines": "1-10",
-          "role": "Named skill-body emitter emits zero bytes and is used only as a path-constant module."
+          "lines": "1-15, 32-215, 218-237",
+          "role": "Canonical emitter now contains the old full brief, imports subprocess/data dependencies, executes checkBlockers.ts, and embeds its result in injected output."
         },
         {
           "path": "skills/tackle-tasks/SKILL.md",
           "lines": "8-11",
-          "role": "Dynamic injection invokes tackleTasksBrief.ts instead of the new skill-body emitter."
+          "role": "Dynamic injection now invokes the canonical emitter, so that emitter's command output and full orchestration brief enter the main context."
         },
         {
-          "path": "scripts/tackleTasksBrief.ts",
-          "lines": "1-14, 230-234",
-          "role": "Actual skill-body emitter imports subprocess/data dependencies and executes checkBlockers in the main-context injection path."
+          "path": "tests/tackle-tasks_SkillBodyEmitter.test.ts",
+          "lines": "35-40",
+          "role": "The renamed test explicitly requires the emitter to execute checkBlockers.ts and embed its live output, preserving the behavior this finding identifies."
         }
       ],
-      "provingTest": "Run node scripts/tackle-tasks_SkillBodyEmitter.ts; it prints zero bytes instead of a workflow invocation. Invoke the tackle-tasks skill and observe that checkBlockers output and the full generated orchestration brief are injected before any workflow subagent runs. The workflow-only design's verification commands should instead show a nonempty path-only skill body and keep data-script output inside a workflow agent prompt.",
+      "provingTest": "Pipe '[75] valid' to node scripts/tackle-tasks_SkillBodyEmitter.ts and observe that its injected output begins with the live checkBlockers.ts result and continues with the full orchestration brief before any workflow subagent runs. A source check also finds imports other than node:url. The corrected emitter should remain nonempty but emit only a minimal absolute-path workflow invocation, with task-data command output kept inside a workflow agent prompt.",
       "suggestedFixApproach": [
-        "Choose one canonical skill-body emitter and wire SKILL.md to it. To conform to workflow-only-context-injection.md, tackle-tasks_SkillBodyEmitter.ts must emit the minimal absolute-path workflow invocation and must not import or execute checkBlockers, prepareTasks, task data, or the agent prompt emitter.",
+        "Keep the now-canonical tackle-tasks_SkillBodyEmitter.ts wired from SKILL.md, but reduce it to the minimal absolute-path workflow invocation required by workflow-only-context-injection.md; it must not import or execute checkBlockers, prepareTasks, task data, or the agent prompt emitter.",
         "Move the current tackleTasksBrief orchestration/data gathering behind workflow-agent Bash prompt emitters or a top-level import-free workflow that can launch the per-task workflows through the injected workflow() global. Keep raw $ARGUMENTS on quoted-heredoc stdin.",
-        "Add conformance tests: the named skill-body emitter is nonempty; its only import is node:url; SKILL.md invokes it; its output contains paths/instructions but no task data; and a real skill invocation keeps command output out of the main transcript."
+        "Replace the test that requires embedded checkBlockers output with conformance tests: the named skill-body emitter is nonempty; its only import is node:url; SKILL.md invokes it; its output contains paths/instructions but no task data; and a real skill invocation keeps command output out of the main transcript."
       ],
       "existingOpenTask": "No matching open task. Completed task 75 intentionally created the older tackleTasksBrief.ts main-context emitter, but it predates and does not satisfy the newly claimed workflow-only context-injection design."
     }

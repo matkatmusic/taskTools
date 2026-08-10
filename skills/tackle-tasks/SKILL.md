@@ -6,7 +6,7 @@ allowed-tools: Bash(git add *), Bash(node *)
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/tackleTasksBrief.ts" <<'TACKLETASKSEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/tackle-tasks_SkillBodyEmitter.ts" <<'TACKLETASKSEOF'
 $ARGUMENTS
 TACKLETASKSEOF
 ```
