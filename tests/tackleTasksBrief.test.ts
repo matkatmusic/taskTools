@@ -10,6 +10,7 @@ import { compileFunction, constants as vmConstants } from "node:vm";
 import { tackleTasksBrief } from "../scripts/tackleTasksBrief.ts";
 import { TASKS_PER_COMMAND } from "../scripts/taskStats.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackleTasksBrief.ts", import.meta.url));
 const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
@@ -27,8 +28,8 @@ test("RETIRED (task 163) marker keeps its commented paragraph body, not a bare t
   const afterMarker = source.slice(markerIndex, markerIndex + 1000);
   const bodyLines = afterMarker.split("\n").slice(1, 5);
   assert.ok(bodyLines.every((line) => line === "" || line.startsWith("//")));
-  assert.match(afterMarker, /one\*\* invocation of the \\`close-tasks\\` skill/);
-  assert.match(afterMarker, /orchestrator\) run typecheck only/);
+  assert.match(afterMarker, /one \\`close-tasks\\` skill call/);
+  assert.match(afterMarker, /Orchestrator ran typecheck only/);
 });
 
 test("script reads arguments from stdin and embeds the live checkBlockers.ts output", () => {
@@ -54,7 +55,7 @@ test("script fails loudly rather than emitting a brief that points nowhere", () 
 test("running the pipeline launches task.workflow.js once per task in the background, with no phase barriers", () => {
   const brief = tackleTasksBrief("[1]", "task 1: unblocked");
   assert.match(brief, /Launch `.*task\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
-  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree\}`/);
+  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree, sourceRoot\}`/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
@@ -62,6 +63,12 @@ test("running the pipeline launches task.workflow.js once per task in the backgr
   assert.doesNotMatch(brief, /Step 1 — plan/);
   assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} task\\.workflow\\.js runs in flight`));
   assert.match(brief, /sliding window, not\s+batches of/);
+});
+
+test("initial and tail launch args both name sourceRoot as the pipeline args repo value", () => {
+  const brief = tackleTasksBrief("[1]", "task 1: unblocked");
+  assert.match(brief, /`sourceRoot` is the top-level pipeline args `repo` value/);
+  assert.match(brief, /"sourceRoot": "\/path\/to\/repo"/);
 });
 
 test("gate: each finished task is presented as one AskUserQuestion gate, never batched", () => {
@@ -87,22 +94,22 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.doesNotMatch(brief, /node -e "/);
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
-  assert.match(brief, /nextQueueStep\(queue\)/);
-  assert.match(brief, /launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree\}`/);
-  assert.match(brief, /rebase-test.*or merge workflow.*outstanding/s);
-  assert.match(brief, /recordStageOutcome\(queue, taskNumber, stage, outcome\)/);
-  assert.match(brief, /shouldEndQueue\(queue, workflowOutstanding\)/);
+  assert.match(brief, /nextQueueAction\(queue, outstanding\)/);
+  assert.match(brief, /Launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot\}`/);
+  assert.match(brief, /rebase-test or merge workflow is still outstanding/s);
+  assert.match(brief, /`FN` = `consumeTaskWorkflowResult`/);
+  assert.doesNotMatch(brief, /results\[[01]\]/);
   assert.match(brief, /buildMergeReport\(queue\)/);
   assert.match(brief, /outstandingEntries/);
   assert.match(brief, /immediately ask that task's own approval gate/);
-  assert.match(brief, /do not launch anything.*wait for that workflow's completion notification/s);
+  assert.match(brief, /`"launch"`:.*Launch `.*task\.workflow\.js`/s);
   assert.doesNotMatch(brief, /close-tasks/);
 });
 
 test("merge queue: the next-lap branch waits for an outstanding workflow instead of starting another lap against the same tip", () => {
   const brief = tackleTasksBrief("[1]", "task 1: unblocked");
-  assert.match(brief, /carryover` is non-empty and `outstandingEntries\.size === 0`, run `beginNextLap\(queue\)`/);
-  assert.match(brief, /either `carryover` is empty or `outstandingEntries\.size` is greater than `0`, a task is still planning, implementing, or waiting on its own gate, or another task's workflow is still outstanding — wait for the next enqueue or completion notification/);
+  assert.match(brief, /`"begin-next-lap"`: run `beginNextLap\(queue\)`/s);
+  assert.match(brief, /`"wait"`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet\./s);
 });
 
 test("the superseded workflow files are deleted and nothing outside plans/ or .taskTools/ imports them", () => {
@@ -135,7 +142,7 @@ const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
 const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/task.workflow.js"), "utf8")
   .replace("export const meta", "const meta");
 
-type TaskWorkflowResult = { task: number; stage: string; results: Array<Record<string, unknown>> };
+type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test" | "merge"; results: Array<Record<string, unknown>> };
 type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
 
 // ponytail: duplicated from tests/runMergePhase.test.ts rather than importing a .test.ts module,
@@ -207,12 +214,12 @@ test("generated brief's results[] references match a real, non-synthetic task.wo
     gitForWorkflowFixture(worktreePath, "add", "taskfile.txt");
     gitForWorkflowFixture(worktreePath, "commit", "-q", "-m", "task change");
 
-    const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest }, throwingAgentForWorkflowFixture);
+    const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest, sourceRoot: root }, throwingAgentForWorkflowFixture);
     const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
     assert.equal((rebaseTestResult as unknown as { status?: string }).status, undefined);
     assert.equal(typeof rebaseTestOutcome.status, "string");
 
-    const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest }, throwingAgentForWorkflowFixture);
+    const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root }, throwingAgentForWorkflowFixture);
     const mergeOutcome = mergeResult.results[0] as { status: string; mergedCommitHash?: string };
     assert.equal((mergeResult as unknown as { status?: string }).status, undefined);
     assert.equal(typeof mergeOutcome.status, "string");
@@ -223,30 +230,42 @@ test("generated brief's results[] references match a real, non-synthetic task.wo
   }
 });
 
-test("generated brief's results[0]/results[1] mapping for plan+implement matches a real, non-synthetic workflow envelope, and the brief text names those paths", async () => {
+test("generated brief's plan+implement handling matches a real, non-synthetic workflow envelope through consumeTaskWorkflowResult, and the brief text never indexes results[]", async () => {
   const taskNumber = 9172;
   const { root, worktreePath, repositoryManifest } = makeWorkflowFixtureRepo(taskNumber);
   const fakeAgent = async (_briefText: unknown, optionsValue: unknown) => {
     const options = optionsValue as { label: string };
-    if (options.label.startsWith("plan:")) return { task: taskNumber, status: "planned", planFile: join(worktreePath, `plans/task-${taskNumber}-plan.md`), question: "" };
+    if (options.label.startsWith("plan:")) {
+      const planFile = join(worktreePath, `plans/task-${taskNumber}-plan.md`);
+      mkdirSync(join(worktreePath, "plans"), { recursive: true });
+      writeFileSync(planFile, "plan\n");
+      return { task: taskNumber, status: "planned", planFile, question: "" };
+    }
     if (options.label.startsWith("verify:")) return { task: taskNumber, verdict: "approved", notes: "looks good", reviewer: "codex", missingFiles: [] };
-    if (options.label.startsWith("implement:")) return { task: taskNumber, status: "done", summary: "did it", remaining: [], notesFile: join(worktreePath, `plans/task-${taskNumber}-implementation-notes.md`) };
+    if (options.label.startsWith("implement:")) {
+      const notesFile = join(worktreePath, `plans/task-${taskNumber}-implementation-notes.md`);
+      writeFileSync(notesFile, "notes\n");
+      gitForWorkflowFixture(worktreePath, "add", `plans/task-${taskNumber}-implementation-notes.md`);
+      gitForWorkflowFixture(worktreePath, "commit", "-q", "-m", `task ${taskNumber}: implement`);
+      return { task: taskNumber, status: "done", summary: "did it", remaining: [], notesFile };
+    }
     throw new Error(`unexpected agent label ${options.label}`);
   };
   try {
-    const result = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "plan+implement", repositoryManifest }, fakeAgent);
-    const planOutcome = result.results[0] as { status: string; verify?: { verdict: string } };
-    const implementOutcome = result.results[1] as { fenceViolations: unknown[] };
-    assert.equal((result as unknown as { status?: string }).status, undefined);
-    assert.equal(planOutcome.status, "planned");
-    assert.equal(planOutcome.verify?.verdict, "approved");
-    assert.ok(Array.isArray(implementOutcome.fenceViolations));
+    const result = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "plan+implement", repositoryManifest, sourceRoot: root }, fakeAgent);
+    const consumed = consumeTaskWorkflowResult(createMergeQueue(), result);
+    assert.equal(consumed.kind, "approval");
+    if (consumed.kind !== "approval") return assert.fail("expected approval result");
+    assert.equal(consumed.approval.status, "done");
+    assert.equal((consumed.approval.verifier as { verdict?: string } | null)?.verdict, "approved");
+    assert.ok(Array.isArray(consumed.approval.fenceViolations));
 
     const brief = tackleTasksBrief("[1]", "task 1: unblocked");
-    assert.match(brief, /results\[0\]\.status/);
-    assert.match(brief, /results\[0\]\.lastFailure/);
-    assert.match(brief, /results\[1\]\.fenceViolations/);
-    assert.match(brief, /results\[0\]\.verify/);
+    assert.match(brief, /consumeTaskWorkflowResult/);
+    assert.match(brief, /consumed\.approval\.status/);
+    assert.match(brief, /consumed\.approval\.fenceViolations/);
+    assert.match(brief, /consumed\.approval\.verifier/);
+    assert.doesNotMatch(brief, /results\[[01]\]/);
   } finally {
     rmSync(worktreePath, { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });

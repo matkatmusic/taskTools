@@ -1,6 +1,6 @@
 // Removes closed task numbers from blockedBy arrays; CLI below re-reads/rewrites tasks.json standalone.
-import { writeFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export function unblockDependents(tasks: any[], closedTaskNumbers: number[]): number[] {
   const closed = new Set(closedTaskNumbers.map(Number));
@@ -33,10 +33,14 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
 
-  const { tasksPath } = resolveTaskFiles(process.cwd());
-  const tasks = readTaskFile(tasksPath);
-  const before = JSON.stringify(tasks);
-  const unblocked = unblockDependents(tasks, [...closed]);
-  if (JSON.stringify(tasks) !== before) writeFileSync(tasksPath, JSON.stringify(tasks, null, 2) + "\n");
+  const sourceRoot = process.cwd();
+  const { tasksPath } = resolveTaskFiles(sourceRoot);
+  const unblocked = withTaskStateLock(sourceRoot, () => {
+    const tasks = readTaskFile(tasksPath);
+    const before = JSON.stringify(tasks);
+    const result = unblockDependents(tasks, [...closed]);
+    if (JSON.stringify(tasks) !== before) writeJsonAtomically(tasksPath, tasks);
+    return result;
+  });
   process.stdout.write((unblocked.length > 0 ? `removed closed task(s) from blockedBy of task(s): ${unblocked.join(", ")}` : "no blockedBy references to the closed task(s)") + "\n");
 }

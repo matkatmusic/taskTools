@@ -1,10 +1,9 @@
 // Moves task numbers from tasks.json to completedTasks.json with a closure note and commit hashes.
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
-import { basename, dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export interface CloseTasksResult {
   closed: number[];
@@ -38,42 +37,17 @@ function hashesFor(
   return commitHashes[taskNumber];
 }
 
-const MAX_WRITE_RETRIES = 5;
-
-function sha256Hex(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-// Random suffix stops two nested same-process calls from colliding on one tmp file.
-function tmpPathFor(targetPath: string): string {
-  return join(dirname(targetPath), `.${basename(targetPath)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
-}
-
-// Re-hashes before rename; a mismatch means another writer landed, so this retries onto the new bytes.
-// ponytail: detect-and-retry only, the re-hash-to-rename gap is still unsafe; upgrade path is a stale-timeout lockfile.
-export function hashGuardedRewrite<T>(
-  targetPath: string,
-  mutate: (parsed: T) => T,
-  afterWriteTmp?: () => void,
-): T {
-  for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
-    const before = readFileSync(targetPath);
-    const hashBefore = sha256Hex(before);
-    const next = mutate(JSON.parse(before.toString("utf8")) as T);
-    const tmpPath = tmpPathFor(targetPath);
-    writeFileSync(tmpPath, JSON.stringify(next, null, 2) + "\n");
-    afterWriteTmp?.();
-    const after = readFileSync(targetPath);
-    if (sha256Hex(after) !== hashBefore) {
-      unlinkSync(tmpPath);
-      continue;
+function upsertInto(base: TaskRecord[], records: Map<number, TaskRecord>): TaskRecord[] {
+  const appended = [...base];
+  for (const [taskNumber, record] of records) {
+    const existingIndex = appended.findIndex((t) => t.taskNumber === taskNumber);
+    if (existingIndex === -1) {
+      appended.push(record);
+    } else {
+      appended[existingIndex] = record;
     }
-    renameSync(tmpPath, targetPath);
-    return next;
   }
-  throw new Error(
-    `closeTasks: concurrent writes to ${targetPath} prevented an atomic update after ${MAX_WRITE_RETRIES} attempts`,
-  );
+  return appended;
 }
 
 export function closeTasks(
@@ -81,13 +55,20 @@ export function closeTasks(
   closureNote: string | Record<number, string>,
   projectRoot: string = process.cwd(),
   commitHashes: string[] | Record<number, string[]> = [],
-  // Test-only: fires after the tasksPath tmp write, before the hash-guard rename check.
-  afterTasksWriteAttempt?: () => void,
-  // Test-only: fires after the correction-write tmp write to completedTasksPath (step 3).
-  afterCorrectionWriteAttempt?: () => void,
+): CloseTasksResult {
+  return withTaskStateLock(projectRoot, () =>
+    closeTasksLocked(taskNumbers, closureNote, projectRoot, commitHashes));
+}
+
+function closeTasksLocked(
+  taskNumbers: number[],
+  closureNote: string | Record<number, string>,
+  projectRoot: string,
+  commitHashes: string[] | Record<number, string[]>,
 ): CloseTasksResult {
   const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
   const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as TaskRecord[];
+  const completed = JSON.parse(readFileSync(completedTasksPath, "utf8")) as TaskRecord[];
   const completionDate = localDate();
 
   // Duplicates would make the second findIndex return -1 and splice off an unrelated task.
@@ -116,55 +97,20 @@ export function closeTasks(
     ]),
   );
 
-  function recordFor(taskNumber: number, source: TaskRecord[]): TaskRecord {
+  // The archived records and the removal both come from this one locked snapshot.
+  const records = new Map(willClose.map((taskNumber) => {
+    const task = tasks.find((t) => t.taskNumber === taskNumber)!;
     const { closureNote: note, commitHashes: hashes } = resolved.get(taskNumber)!;
-    return { ...source.find((task) => task.taskNumber === taskNumber)!, completionDate, commitHashes: hashes, closureNote: note };
-  }
+    return [taskNumber, { ...task, completionDate, commitHashes: hashes, closureNote: note }];
+  }));
 
-  function upsertInto(base: TaskRecord[], records: Map<number, TaskRecord>): TaskRecord[] {
-    const appended = [...base];
-    for (const [taskNumber, record] of records) {
-      const existingIndex = appended.findIndex((t) => t.taskNumber === taskNumber);
-      if (existingIndex === -1) {
-        appended.push(record);
-      } else {
-        appended[existingIndex] = record;
-      }
-    }
-    return appended;
-  }
+  const nextCompleted = upsertInto(completed, records);
+  const remaining = tasks.filter((task) => !willClose.includes(task.taskNumber));
+  const unblocked = unblockDependents(remaining, willClose);
 
-  // Step 1: archive first, so a failure below never removes a task without archiving it.
-  const initialRecords = new Map(willClose.map((taskNumber) => [taskNumber, recordFor(taskNumber, tasks)]));
-  hashGuardedRewrite<TaskRecord[]>(completedTasksPath, (parsedCompleted) => upsertInto(parsedCompleted, initialRecords));
-
-  // Step 2: remove from tasks.json; freshRecords comes from this guarded snapshot, rebuilt on every retry.
-  let freshRecords = new Map<number, TaskRecord>();
-  let unblocked: number[] = [];
-  hashGuardedRewrite<TaskRecord[]>(
-    tasksPath,
-    (parsedTasks) => {
-      freshRecords = new Map(willClose.map((taskNumber) => [taskNumber, recordFor(taskNumber, parsedTasks)]));
-      const remaining = parsedTasks.filter((task) => !willClose.includes(task.taskNumber));
-      unblocked = unblockDependents(remaining, willClose);
-      return remaining;
-    },
-    afterTasksWriteAttempt,
-  );
-
-  // Step 3: correct the archive, but only for records a concurrent writer actually changed.
-  const changedRecords = new Map(
-    willClose
-      .filter((taskNumber) => JSON.stringify(freshRecords.get(taskNumber)) !== JSON.stringify(initialRecords.get(taskNumber)))
-      .map((taskNumber) => [taskNumber, freshRecords.get(taskNumber)!]),
-  );
-  if (changedRecords.size > 0) {
-    hashGuardedRewrite<TaskRecord[]>(
-      completedTasksPath,
-      (parsedCompleted) => upsertInto(parsedCompleted, changedRecords),
-      afterCorrectionWriteAttempt,
-    );
-  }
+  // Archive first: a removal failure leaves the task in both files, safely retryable.
+  writeJsonAtomically(completedTasksPath, nextCompleted);
+  writeJsonAtomically(tasksPath, remaining);
 
   return { closed: willClose, skipped, unblocked };
 }

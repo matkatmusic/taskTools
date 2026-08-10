@@ -1,6 +1,6 @@
 // Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
@@ -8,6 +8,7 @@ import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOc
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export type PreparedTask = {
     number: number;
@@ -109,6 +110,7 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     const fileSections = declaredFiles(task).map((file) => {
         const fullPath = join(repoRoot, file);
         if (!existsSync(fullPath)) return `### ${file}\n\n(missing: file not found on disk)\n`;
+        if (statSync(fullPath).isDirectory()) return `### ${file}\n\n(directory, likely a submodule: see its own history)\n`;
         return `### ${file}\n\n\`\`\`\n${readFileSync(fullPath, "utf8")}\n\`\`\`\n`;
     });
     const content = [
@@ -252,7 +254,7 @@ function runAsCli(): void {
     };
     const argumentsFile = resolveRunArgumentsPath(repoRoot);
     mkdirSync(dirname(argumentsFile), { recursive: true });
-    writeFileSync(argumentsFile, JSON.stringify(pipelineArguments));
+    withTaskStateLock(repoRoot, () => writeJsonAtomically(argumentsFile, pipelineArguments));
     process.stdout.write(JSON.stringify({
         ...pipelineArguments,
         stepOutputsFile: resolveStepOutputsPath(repoRoot),

@@ -1,12 +1,53 @@
 // addTaskFiles.ts: appends repo-relative paths to a task's files array in .taskTools/tasks.json.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addTaskFiles } from "../scripts/addTaskFiles.ts";
-import { closeTasks } from "../scripts/closeTasks.ts";
+import { pathToFileURL } from "node:url";
+
+const ADD_TASK_FILES_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts")).href;
+const CLOSE_TASKS_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "closeTasks.ts")).href;
+
+function requireExitZero(child: ChildProcess): Promise<void> {
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+  return new Promise((resolve, reject) => {
+    child.on("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`child exited ${code}: ${stderr}`));
+    });
+  });
+}
+
+// Waits on startFile, optionally sleeps delayMs to bias lock-acquisition order, then calls addTaskFiles once.
+function spawnWidenChild(sourceRoot: string, taskNumber: number, path: string, startFile: string, delayMs = 0): ChildProcess {
+  const code = `
+import { existsSync } from "node:fs";
+import { setTimeout } from "node:timers/promises";
+import { addTaskFiles } from ${JSON.stringify(ADD_TASK_FILES_URL)};
+const WAIT = new Int32Array(new SharedArrayBuffer(4));
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+await setTimeout(${delayMs});
+addTaskFiles([${taskNumber}], [${JSON.stringify(path)}], ${JSON.stringify(sourceRoot)});
+`;
+  return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+// Waits on startFile, optionally sleeps delayMs, then calls closeTasks once.
+function spawnCloseChild(sourceRoot: string, taskNumber: number, closureNote: string, startFile: string, delayMs = 0): ChildProcess {
+  const code = `
+import { existsSync } from "node:fs";
+import { setTimeout } from "node:timers/promises";
+import { closeTasks } from ${JSON.stringify(CLOSE_TASKS_URL)};
+const WAIT = new Int32Array(new SharedArrayBuffer(4));
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+await setTimeout(${delayMs});
+closeTasks([${taskNumber}], ${JSON.stringify(closureNote)}, ${JSON.stringify(sourceRoot)});
+`;
+  return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts");
 
@@ -113,49 +154,59 @@ test("when .taskTools/run-arguments.json is absent, addTaskFiles.ts succeeds and
   assert.equal(existsSync(join(root, ".taskTools", "run-arguments.json")), false);
 });
 
-test("two concurrent widen calls forced to interleave: the second call's write, injected mid-transaction, forces the first to retry so both widenings land", () => {
-  const root = makeProjectRoot();
-  let innerRan = false;
-  addTaskFiles([1], ["from-a.ts"], root, () => {
-    if (innerRan) return;
-    innerRan = true;
-    addTaskFiles([2], ["from-b.ts"], root);
-  });
-  const tasks = readTasks(root);
-  assert.deepEqual(tasks.find((t) => t.taskNumber === 1).files, ["existing.ts", "from-a.ts"]);
-  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).files, ["from-b.ts"]);
-});
-
-test("a task closes mid-transaction while a different task is being widened: the widen retries onto fresh bytes and does not resurrect the closed task", () => {
-  const root = makeProjectRoot();
-  writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
-  let closedInline = false;
-  addTaskFiles([2], ["shared.ts"], root, () => {
-    if (closedInline) return;
-    closedInline = true;
-    closeTasks([1], "closed during race", root);
-  });
-  const tasks = readTasks(root);
-  assert.equal(tasks.some((t) => t.taskNumber === 1), false);
-  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).files, ["shared.ts"]);
-  const completed = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
-  assert.equal(completed.some((t: any) => t.taskNumber === 1), true);
-});
-
-test("two concurrent widen calls forced to interleave inside the run-arguments write: neither widening's run-arguments entry is erased", () => {
+test("concurrent CLI wideners preserve the full union in both authoritative files", async () => {
   const root = makeProjectRoot();
   writeFileSync(
     join(root, ".taskTools", "run-arguments.json"),
-    JSON.stringify({ groups: [{ tasks: [{ number: 1, files: [] }, { number: 2, files: [] }] }] }),
+    JSON.stringify({ groups: [{ tasks: [{ number: 1, files: ["existing.ts"] }] }] }),
   );
-  let innerRan = false;
-  addTaskFiles([1], ["from-a.ts"], root, undefined, () => {
-    if (innerRan) return;
-    innerRan = true;
-    addTaskFiles([2], ["from-b.ts"], root);
-  });
+  const startFile = join(root, "start");
+  const paths = Array.from({ length: 16 }, (_, index) => `from-${index}.ts`);
+
+  const children = paths.map((path) => spawnWidenChild(root, 1, path, startFile));
+  writeFileSync(startFile, "go");
+  await Promise.all(children.map(requireExitZero));
+
+  const task = readTasks(root).find((t) => t.taskNumber === 1);
+  assert.deepEqual(new Set(task.files), new Set(["existing.ts", ...paths]));
   const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
-  const allFiles = snapshot.groups.flatMap((g: any) => g.tasks).flatMap((t: any) => t.files);
-  assert.ok(allFiles.includes("from-a.ts"));
-  assert.ok(allFiles.includes("from-b.ts"));
+  assert.deepEqual(new Set(snapshot.groups[0].tasks[0].files), new Set(["existing.ts", ...paths]));
+});
+
+test("widener wins the lock, closer follows: the archived task carries the widened file and the run snapshot has it too", async () => {
+  const root = makeProjectRoot();
+  writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
+  writeFileSync(
+    join(root, ".taskTools", "run-arguments.json"),
+    JSON.stringify({ groups: [{ tasks: [{ number: 1, files: ["existing.ts"] }] }] }),
+  );
+  const startFile = join(root, "start");
+
+  const widen = spawnWidenChild(root, 1, "b.ts", startFile, 0);
+  const close = spawnCloseChild(root, 1, "closed during race", startFile, 50);
+  writeFileSync(startFile, "go");
+  await Promise.all([requireExitZero(widen), requireExitZero(close)]);
+
+  assert.equal(readTasks(root).some((t) => t.taskNumber === 1), false);
+  const completed = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+  const archived = completed.find((t: any) => t.taskNumber === 1);
+  assert.deepEqual(archived.files, ["existing.ts", "b.ts"]);
+  const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
+  assert.deepEqual(snapshot.groups[0].tasks[0].files, ["existing.ts", "b.ts"]);
+});
+
+test("closer wins the lock, widener follows: the widener exits non-zero and the task is not resurrected", async () => {
+  const root = makeProjectRoot();
+  writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
+  const startFile = join(root, "start");
+
+  const close = spawnCloseChild(root, 1, "closed during race", startFile, 0);
+  const widen = spawnWidenChild(root, 1, "b.ts", startFile, 50);
+  writeFileSync(startFile, "go");
+  await requireExitZero(close);
+  await assert.rejects(requireExitZero(widen), /exited [^0]/);
+
+  assert.equal(readTasks(root).some((t) => t.taskNumber === 1), false);
+  const completed = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+  assert.equal(completed.filter((t: any) => t.taskNumber === 1).length, 1);
 });

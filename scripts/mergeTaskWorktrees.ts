@@ -1,15 +1,15 @@
 // Merges each group's branch (and its submodules') back onto their source branches, deepest submodule first.
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
-import { type PreparedGroup, type WorkflowArguments } from "./prepareTasks.ts";
+import { type PreparedGroup } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 import { runMergePipeline } from "./mergePipeline.ts";
-import type { MergeOutcome, SubmoduleConflict } from "./mergePipeline.ts";
+import type { MergeOutcome } from "./mergePipeline.ts";
 import { discoverRepositoryTree } from "./repositoryDiscovery.ts";
 import type { DiscoveryManifest } from "./repositoryDiscovery.ts";
 import type { RepositoryOccurrence } from "./repositoryManifest.ts";
@@ -215,12 +215,14 @@ export function rebaseGroupOntoSource(
     }
 }
 
+export type FailedCheck = "typecheck" | "complete-suite";
+
 export type SubmoduleLayerOutcome =
     | { occurrenceId: string; checkoutPath: string; status: "no-op" }
     | { occurrenceId: string; checkoutPath: string; status: "rebased-and-tested" }
     | { occurrenceId: string; checkoutPath: string; status: "conflicted"; conflictedFilePaths: string[] }
     | { occurrenceId: string; checkoutPath: string; status: "cleanup-failed"; failureReason: string }
-    | { occurrenceId: string; checkoutPath: string; status: "tests-failed"; testOutput: string }
+    | { occurrenceId: string; checkoutPath: string; status: "tests-failed"; failedCheck: FailedCheck; testOutput: string }
     | { occurrenceId: string; checkoutPath: string; status: "untested"; resolutionRequests: ResolutionRequest[] }
     | { occurrenceId: string; checkoutPath: string; status: "source-sync-failed"; failureReason: string };
 
@@ -301,7 +303,7 @@ function rebaseAndTestSubmoduleLayer(
         try {
             execSync(typecheckCommand, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
         } catch (error) {
-            return { occurrenceId, checkoutPath, status: "tests-failed", testOutput: testFailureOutput(error) };
+            return { occurrenceId, checkoutPath, status: "tests-failed", failedCheck: "typecheck", testOutput: testFailureOutput(error) };
         }
     }
 
@@ -314,7 +316,7 @@ function rebaseAndTestSubmoduleLayer(
         execSync(testPolicyResult.policy.completeSuiteCommand, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
         return { occurrenceId, checkoutPath, status: "rebased-and-tested" };
     } catch (error) {
-        return { occurrenceId, checkoutPath, status: "tests-failed", testOutput: testFailureOutput(error) };
+        return { occurrenceId, checkoutPath, status: "tests-failed", failedCheck: "complete-suite", testOutput: testFailureOutput(error) };
     }
 }
 
@@ -360,7 +362,7 @@ export type ParentRebaseOutcome =
     | { status: "rebased-and-tested" }
     | { status: "conflicted"; conflictedFilePaths: string[] }
     | { status: "cleanup-failed"; failureReason: string }
-    | { status: "tests-failed"; testOutput: string }
+    | { status: "tests-failed"; failedCheck: FailedCheck; testOutput: string }
     | { status: "untested"; resolutionRequests: ResolutionRequest[] };
 
 // Rebases the parent's task-N branch onto its source tip, resolving submodule gitlink conflicts, then tests it.
@@ -385,7 +387,7 @@ export function rebaseParentOntoSourceAndTest(
         try {
             execSync(typecheckCommand, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
         } catch (error) {
-            return { status: "tests-failed", testOutput: testFailureOutput(error) };
+            return { status: "tests-failed", failedCheck: "typecheck", testOutput: testFailureOutput(error) };
         }
     }
 
@@ -398,7 +400,7 @@ export function rebaseParentOntoSourceAndTest(
         execSync(testPolicyResult.policy.completeSuiteCommand, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
         return { status: "rebased-and-tested" };
     } catch (error) {
-        return { status: "tests-failed", testOutput: testFailureOutput(error) };
+        return { status: "tests-failed", failedCheck: "complete-suite", testOutput: testFailureOutput(error) };
     }
 }
 
@@ -463,6 +465,33 @@ export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, 
     git(repoRoot, "branch", "-D", branchName);
 }
 
+function deleteLocalBranchIfPresent(repoRoot: string, branchName: string): void {
+    try {
+        git(repoRoot, "show-ref", "--verify", "--quiet", `refs/heads/${branchName}`);
+    } catch {
+        return; // idempotent after a partially completed prior cleanup
+    }
+    git(repoRoot, "branch", "-D", branchName);
+}
+
+export type SourceBranchCleanupTarget = {
+    checkoutPath: string;
+    depth: number;
+};
+
+// Close has already succeeded: delete canonical source-submodule refs deepest-first, then remove the root task worktree/branch last.
+export function removeTaskWorktreeAndBranches(
+    repoRoot: string,
+    worktreePath: string,
+    branchName: string,
+    sourceSubmodules: SourceBranchCleanupTarget[],
+): void {
+    for (const target of [...sourceSubmodules].sort((a, b) => b.depth - a.depth)) {
+        deleteLocalBranchIfPresent(target.checkoutPath, branchName);
+    }
+    removeWorktreeAndBranch(repoRoot, worktreePath, branchName);
+}
+
 export type MergeStepOperations = {
     mergeSubmodule: (mainSubmodulePath: string, worktreeSubmodulePath: string, sourceBranch: string) => { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null };
     mergeGroup: (repoRoot: string, group: PreparedGroup, sourceBranch: string, submodulePaths: string[]) => MergeOutcome;
@@ -481,22 +510,53 @@ function mergedCommitRefName(operationBranch: string): string {
     return `refs/taskTools/merged-commits/${operationBranch}`;
 }
 
-// Records the merge commit at merge time so a later retry's no-op path reuses it instead of guessing.
-function recordMergedCommit(repoRoot: string, operationBranch: string, oid: string): void {
-    git(repoRoot, "update-ref", mergedCommitRefName(operationBranch), oid);
+function mergeIntentRefName(operationBranch: string): string {
+    return `refs/taskTools/merge-intents/${operationBranch}`;
 }
 
-function readRecordedMergedCommit(repoRoot: string, operationBranch: string): string | null {
+// Written before the real merge; a survivor means the process died mid-merge.
+function recordMergeIntent(repoRoot: string, operationBranch: string, operationOid: string): void {
+    git(repoRoot, "update-ref", mergeIntentRefName(operationBranch), operationOid);
+}
+
+function clearMergeIntent(repoRoot: string, operationBranch: string): void {
+    git(repoRoot, "update-ref", "-d", mergeIntentRefName(operationBranch));
+}
+
+// Records the merge commit at merge time so a later retry's no-op path reuses it instead of guessing.
+function recordMergedCommit(repoRoot: string, operationBranch: string, mergedOid: string): void {
+    git(repoRoot, "update-ref", mergedCommitRefName(operationBranch), mergedOid);
+}
+
+function readOptionalRef(repoRoot: string, refName: string): string | null {
     try {
-        return git(repoRoot, "rev-parse", mergedCommitRefName(operationBranch)).trim();
+        return git(repoRoot, "rev-parse", "--verify", refName).trim();
     } catch {
         return null;
     }
 }
 
+// Deletes both persistence refs; safe to call on refs that are already absent.
+export function deleteTaskMergePersistence(repoRoot: string, operationBranch: string): void {
+    if (readOptionalRef(repoRoot, mergedCommitRefName(operationBranch)) !== null) {
+        git(repoRoot, "update-ref", "-d", mergedCommitRefName(operationBranch));
+    }
+    if (readOptionalRef(repoRoot, mergeIntentRefName(operationBranch)) !== null) {
+        git(repoRoot, "update-ref", "-d", mergeIntentRefName(operationBranch));
+    }
+}
+
 export type MergeLayerOutcome =
-    | { occurrenceId: string; checkoutPath: string; status: "no-op"; oid: string }
-    | { occurrenceId: string; checkoutPath: string; status: "merged"; oid: string };
+    | {
+          occurrenceId: string;
+          checkoutPath: string;
+          status: "no-op";
+          // Current source tip: used only for child-gitlink propagation.
+          oid: string;
+          // Historical task merge commit: used for close/archive; null for an untouched layer.
+          mergedCommitOid: string | null;
+      }
+    | { occurrenceId: string; checkoutPath: string; status: "merged"; oid: string; mergedCommitOid: string };
 
 export type MergeTaskWalkReport =
     | { status: "merged"; completedLayers: MergeLayerOutcome[] }
@@ -516,6 +576,14 @@ export type MergeTaskWalkReport =
           stage: "rebase" | "test" | "merge";
           conflictedFilePaths: string[];
           failureReason: string | null;
+      }
+    | {
+          status: "merge-record-missing";
+          completedLayers: MergeLayerOutcome[];
+          occurrenceId: string;
+          checkoutPath: string;
+          stage: "merge";
+          failureReason: string;
       };
 
 // Checks out each child's merged tip for real, so `git add` records a gitlink matching the checkout.
@@ -583,10 +651,29 @@ export function mergeTaskDeepestFirst(
         const displayId = displayOccurrenceId(occurrence.occurrenceId);
 
         if (skippedOccurrenceIds.has(occurrence.occurrenceId)) {
-            const oid = readRecordedMergedCommit(sourceCheckoutPath, occurrence.operationBranch) ?? git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
-            sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
-            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid });
-            if (occurrence.parentOccurrenceId !== null) git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
+            const currentSourceOid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+            const mergedCommitOid = readOptionalRef(sourceCheckoutPath, mergedCommitRefName(occurrence.operationBranch));
+            const pendingIntent = readOptionalRef(sourceCheckoutPath, mergeIntentRefName(occurrence.operationBranch));
+
+            // A surviving intent means the prior process may have died mid-merge; refuse to guess.
+            if (pendingIntent !== null || (occurrence.parentOccurrenceId === null && mergedCommitOid === null)) {
+                return {
+                    status: "merge-record-missing",
+                    completedLayers,
+                    occurrenceId: displayId,
+                    checkoutPath: occurrence.checkoutPath,
+                    stage: "merge",
+                    failureReason:
+                        `task branch "${occurrence.operationBranch}" is already merged in `
+                        + `occurrence "${displayId}", but its merge-time commit record is missing; `
+                        + `refusing to guess from the current ${occurrence.baseBranch} tip`,
+                };
+            }
+
+            // Propagate the current child source tip, not this task's older merge commit.
+            sourceTipByOccurrenceId.set(occurrence.occurrenceId, currentSourceOid);
+            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid: currentSourceOid, mergedCommitOid });
+            // C86-10: retain the fetched source-submodule task ref until the whole task closes.
             continue;
         }
 
@@ -607,15 +694,22 @@ export function mergeTaskDeepestFirst(
                 return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
             }
 
+            // A gitlink-bump commit since the initial fetch may not be in sourceCheckoutPath yet.
+            git(sourceCheckoutPath, "fetch", occurrence.checkoutPath, `${occurrence.operationBranch}:refs/heads/${occurrence.operationBranch}`);
+            const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
+            recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
+
             const result = mergeStepOperations.mergeSubmodule(sourceCheckoutPath, occurrence.checkoutPath, occurrence.baseBranch);
             if (!result.merged) {
+                clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
                 return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
             }
-            git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
+            // Do not delete occurrence.operationBranch here: parent merge and close can still fail.
             const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
             recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
+            clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
-            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
+            completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
             continue;
         }
 
@@ -638,14 +732,19 @@ export function mergeTaskDeepestFirst(
         }
 
         const group: PreparedGroup = { groupId: 0, worktree: occurrence.checkoutPath, branch: occurrence.operationBranch, scope: "unknown", tasks: [] };
+        const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
+        recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
+
         const result = mergeStepOperations.mergeGroup(sourceCheckoutPath, group, occurrence.baseBranch, directChildPathsInParent);
         if (!result.merged) {
+            clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
             return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
         }
         const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
         recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
+        clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
         sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
-        completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
+        completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
     }
 
     return { status: "merged", completedLayers };

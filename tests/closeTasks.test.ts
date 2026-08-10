@@ -1,10 +1,10 @@
 // closeTasks.ts moves closed tasks to completedTasks.json and skips already-completed or absent task numbers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { closeTasks, hashGuardedRewrite } from "../scripts/closeTasks.ts";
+import { closeTasks } from "../scripts/closeTasks.ts";
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
@@ -127,29 +127,6 @@ test("folds unblockDependents into the same write: closing a task clears it from
   assert.equal("blockedBy" in tasks.find((t) => t.taskNumber === 65), false);
 });
 
-test("hashGuardedRewrite detects a concurrent rewrite before rename, retries onto the new bytes, and does not clobber it", () => {
-  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
-  const filePath = join(root, "tasks.json");
-  writeFileSync(filePath, JSON.stringify([{ taskNumber: 1 }]));
-
-  let interfered = false;
-  const result = hashGuardedRewrite<{ taskNumber: number }[]>(
-    filePath,
-    (parsed) => [...parsed, { taskNumber: 2 }],
-    () => {
-      if (interfered) return;
-      interfered = true;
-      writeFileSync(filePath, JSON.stringify([{ taskNumber: 1 }, { taskNumber: 99 }]));
-    },
-  );
-
-  assert.deepEqual(result, [{ taskNumber: 1 }, { taskNumber: 99 }, { taskNumber: 2 }]);
-  assert.deepEqual(
-    JSON.parse(readFileSync(filePath, "utf8")),
-    [{ taskNumber: 1 }, { taskNumber: 99 }, { taskNumber: 2 }],
-  );
-});
-
 test("retrying a task already archived from a prior partial close still removes it from tasks.json, without duplicating or losing the new hash", () => {
   const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
   writeFileSync(
@@ -174,53 +151,49 @@ test("retrying a task already archived from a prior partial close still removes 
   assert.equal(completed[0].closureNote, "merged to main at abc123");
 });
 
-test("a task record widened by another writer (e.g. addTaskFiles) mid-close is archived with the NEW fields, not the stale ones read at the start of closeTasks", () => {
+test("close archives the same widened record it removes", () => {
   const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
-  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts"] }]));
+  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]));
   writeFileSync(join(root, "completedTasks.json"), "[]");
 
-  let widened = false;
-  const { closed } = closeTasks([65], "fixed by abc123", root, [], () => {
-    if (widened) return;
-    widened = true;
-    writeFileSync(
-      join(root, "tasks.json"),
-      JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]),
-    );
-  });
+  const { closed } = closeTasks([65], "fixed by abc123", root);
 
   assert.deepEqual(closed, [65]);
-  const completed = readCompleted(root).find((t) => t.taskNumber === 65);
-  assert.deepEqual(completed.files, ["a.ts", "b.ts"]);
+  assert.equal(readTasks(root).some((t) => t.taskNumber === 65), false);
+  const archived = readCompleted(root).find((t) => t.taskNumber === 65)!;
+  assert.deepEqual(archived.files, ["a.ts", "b.ts"]);
+  assert.equal(archived.closureNote, "fixed by abc123");
 });
 
-test("if the final correction to completedTasks.json fails, the task stays archived and removed -- nothing is lost", () => {
+test("failure before removal leaves the fresh task recoverable without stale archival", () => {
   const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
-  const completedPath = join(root, "completedTasks.json");
-  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts"] }]));
-  writeFileSync(completedPath, "[]");
+  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]));
+  // completedTasks.json is a directory, so its atomic rename throws before tasks.json is ever touched.
+  mkdirSync(join(root, "completedTasks.json"));
 
-  let widened = false;
-  const afterTasksWriteAttempt = () => {
-    if (widened) return;
-    widened = true;
-    writeFileSync(
-      join(root, "tasks.json"),
-      JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]),
-    );
-  };
-  let fakeWriterCount = 0;
-  const afterCorrectionWriteAttempt = () => {
-    fakeWriterCount += 1;
-    const current = JSON.parse(readFileSync(completedPath, "utf8"));
-    writeFileSync(completedPath, JSON.stringify([...current, { taskNumber: 900 + fakeWriterCount }]));
-  };
+  assert.throws(() => closeTasks([65], "fixed by abc123", root));
 
-  assert.throws(() =>
-    closeTasks([65], "fixed by abc123", root, [], afterTasksWriteAttempt, afterCorrectionWriteAttempt),
+  const active = readTasks(root).find((t) => t.taskNumber === 65)!;
+  assert.deepEqual(active.files, ["a.ts", "b.ts"]);
+});
+
+// Simulates a crash between the two atomic writes: task 65 is present in both files at once.
+test("a retry after a partial close (task present in both files) is idempotent and completes the removal", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]));
+  writeFileSync(
+    join(root, "completedTasks.json"),
+    JSON.stringify([{
+      taskNumber: 65, title: "second", files: ["a.ts", "b.ts"],
+      completionDate: "2020-01-01", commitHashes: [], closureNote: "fixed by abc123",
+    }]),
   );
 
-  assert.deepEqual(readTasks(root).map((t) => t.taskNumber), []);
-  const completed = readCompleted(root).find((t) => t.taskNumber === 65);
-  assert.ok(completed, "task 65 must still be archived even though the correction write failed");
+  const retried = closeTasks([65], "fixed by abc123", root);
+
+  assert.deepEqual(retried.closed, [65]);
+  assert.equal(readTasks(root).some((t) => t.taskNumber === 65), false);
+  const archived = readCompleted(root).filter((t) => t.taskNumber === 65);
+  assert.equal(archived.length, 1);
+  assert.deepEqual(archived[0].files, ["a.ts", "b.ts"]);
 });

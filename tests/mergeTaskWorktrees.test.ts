@@ -1060,6 +1060,7 @@ test("test_rebaseSubmoduleLayersDeepestFirstStopsAndReportsBothOutputStreamsWhen
     assert.equal(report.stoppedAt !== null && report.stoppedAt.occurrenceId, "vendor/inner");
     assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
     if (report.stoppedAt !== null && report.stoppedAt.status === "tests-failed") {
+        assert.equal(report.stoppedAt.failedCheck, "complete-suite");
         assert.match(report.stoppedAt.testOutput, /layer-stdout-marker/);
         assert.match(report.stoppedAt.testOutput, /layer-stderr-marker/);
     }
@@ -1153,7 +1154,8 @@ test("test_rebaseParentOntoSourceAndTestReportsUntestedWhenTheParentHasNoTestCon
 
 test("test_rebaseParentOntoSourceAndTestReportsTestsFailedWhenTheTypecheckCommandFails", () => {
     const repoRoot = makeTempRepoWithCommit();
-    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    const suiteMarkerPath = join(repoRoot, "suite-ran.txt");
+    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: `node -e "require('fs').writeFileSync('${suiteMarkerPath}','yes')"` } }));
     git(repoRoot, "add", "package.json");
     git(repoRoot, "commit", "-q", "-m", "add test script");
     const sourceBranch = currentBranchName(repoRoot);
@@ -1163,9 +1165,12 @@ test("test_rebaseParentOntoSourceAndTestReportsTestsFailedWhenTheTypecheckComman
     git(group.worktree, "add", "group-work.txt");
     git(group.worktree, "commit", "-q", "-m", "group work");
 
+    // "false" is a typecheck command that always fails.
     const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest(), false, "false");
 
     assert.equal(outcome.status, "tests-failed");
+    assert.equal((outcome as { failedCheck: string }).failedCheck, "typecheck");
+    assert.equal(existsSync(suiteMarkerPath), false);
 });
 
 test("test_rebaseSubmoduleLayersDeepestFirstRunsTheSubmodulesOwnTestCommandNotTheParents", () => {
@@ -1248,6 +1253,9 @@ test("test_rebaseSubmoduleLayersDeepestFirstReportsTestsFailedWhenTheTypecheckCo
 
     assert.notEqual(report.stoppedAt, null);
     assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
+    if (report.stoppedAt !== null && report.stoppedAt.status === "tests-failed") {
+        assert.equal(report.stoppedAt.failedCheck, "typecheck");
+    }
     assert.equal(existsSync(join(vendorCheckoutPath, "test-marker.txt")), false);
 });
 
@@ -1582,9 +1590,9 @@ test("test_mergeTaskDeepestFirstLeavesNoDanglingGitlinkAfterEveryTaskBranchIsDel
     // T is still reachable from M, so nothing the parent previously pointed at was lost.
     assert.doesNotThrow(() => git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", vendorTaskCommitOid, fixture.submoduleSourceBranch));
 
-    // mergeTaskDeepestFirst must have already deleted the fetched submodule task branch itself.
+    // Merge alone is not close: the fetched submodule task branch must remain recoverable until close succeeds.
     const submoduleBranches = git(fixture.mainSubmodulePath, "branch", "--list", submoduleTaskBranch);
-    assert.equal(submoduleBranches.includes(submoduleTaskBranch), false);
+    assert.equal(submoduleBranches.includes(submoduleTaskBranch), true);
 
     removeWorktreeAndBranch(fixture.rootPath, fixture.group.worktree, fixture.group.branch);
 
