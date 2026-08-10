@@ -608,7 +608,7 @@ const runRebaseTest = async () => {
     return fixOutcome != null && fixOutcome.fixed === true && ownCheckoutClean && !otherLayerTouched
   }
 
-  let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+  let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true, TYPECHECK_COMMAND)
   while (layerWalk.stoppedAt !== null && (layerWalk.stoppedAt.status === 'conflicted' || layerWalk.stoppedAt.status === 'tests-failed')) {
     const stopped = layerWalk.stoppedAt
     if (stopped.status === 'conflicted') {
@@ -627,7 +627,7 @@ const runRebaseTest = async () => {
         fixSucceeded = await attemptRebaseFix(occurrenceId, checkoutPath, testOutput)
       }
     }
-    layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+    layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true, TYPECHECK_COMMAND)
   }
   if (layerWalk.stoppedAt !== null) {
     const stopped = layerWalk.stoppedAt
@@ -635,7 +635,7 @@ const runRebaseTest = async () => {
     return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
   }
 
-  let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+  let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true, TYPECHECK_COMMAND)
   while (parentOutcome.status === 'conflicted' || parentOutcome.status === 'tests-failed') {
     if (parentOutcome.status === 'conflicted') {
       const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, '', parentOutcome.conflictedFilePaths, fenceViolations)
@@ -651,7 +651,7 @@ const runRebaseTest = async () => {
         fixSucceeded = await attemptRebaseFix('', worktreePath, parentOutcome.testOutput)
       }
     }
-    parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+    parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true, TYPECHECK_COMMAND)
   }
   if (parentOutcome.status !== 'rebased-and-tested') {
     const lastFailure = parentOutcome.status === 'untested' ? 'untested layer' : parentOutcome.status
