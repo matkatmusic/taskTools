@@ -133,11 +133,32 @@ function initializeSubmodulesInWorktree(worktreePath: string): void {
     );
 }
 
+// A two-lap failure can leave commits or edits in the worktree for inspection/recovery.
+function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): boolean {
+    const status = execFileSync("git", ["-C", worktreePath, "status", "--porcelain"], { encoding: "utf8" });
+    if (status.trim().length > 0) return true;
+    const worktreeHead = execFileSync("git", ["-C", worktreePath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const sourceTip = execFileSync("git", ["-C", repoRoot, "rev-parse", currentBranchName(repoRoot)], { encoding: "utf8" }).trim();
+    if (worktreeHead === sourceTip) return false;
+    try {
+        execFileSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", worktreeHead, sourceTip], { stdio: "ignore" });
+        return false;
+    } catch {
+        return true;
+    }
+}
+
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
     const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
     if (existsSync(worktreePath)) {
-        // A worktree left by an earlier run holds that run's commits; re-base it on the source branch tip.
+        if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
+            throw new Error(
+                `worktree at "${worktreePath}" holds retained work from a previous run; `
+                + `resolve or remove it before re-preparing task-${group.groupId}`,
+            );
+        }
+        // No retained work: safe to re-base this worktree onto the source branch tip.
         execFileSync(
             "git",
             ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
