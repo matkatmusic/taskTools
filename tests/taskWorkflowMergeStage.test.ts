@@ -181,6 +181,48 @@ test('a lap that merges but cannot close keeps the worktree, and its retried cle
   }
 })
 
+// C86-14: an unrelated later commit on main must not get archived as this task's hash.
+test('a merged-but-not-closed retry archives the original merge commit even after main advances in between', async () => {
+  const taskNumber = 9010
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    writeFileSync(join(worktreePath, 'plans', `task-${taskNumber}-plan.md`), 'plan\n')
+    writeFileSync(join(worktreePath, 'plans', `brief-${taskNumber}.md`), 'brief\n')
+
+    rmSync(join(root, '.taskTools', 'completedTasks.json'))
+    mkdirSync(join(root, '.taskTools', 'completedTasks.json'))
+
+    const first = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
+    const firstOutcome = first.results[0] as { status: string, mergedCommitHash: string }
+    assert.equal(firstOutcome.status, 'merged-but-not-closed')
+
+    rmSync(join(root, '.taskTools', 'completedTasks.json'), { recursive: true, force: true })
+    writeFileSync(join(root, '.taskTools', 'completedTasks.json'), '[]')
+
+    writeFileSync(join(root, 'advanced-by-another-task.txt'), 'another task merged later\n')
+    git(root, 'add', 'advanced-by-another-task.txt')
+    git(root, 'commit', '-q', '-m', 'unrelated later merge advances main')
+
+    const second = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
+    const secondOutcome = second.results[0] as { status: string, mergedCommitHash: string, closed: number[] }
+    assert.equal(secondOutcome.status, 'merged')
+    assert.deepEqual(secondOutcome.closed, [taskNumber])
+    assert.equal(secondOutcome.mergedCommitHash, firstOutcome.mergedCommitHash)
+    assert.notEqual(secondOutcome.mergedCommitHash, git(root, 'rev-parse', 'main'))
+
+    const archived = JSON.parse(readFileSync(join(root, '.taskTools', 'completedTasks.json'), 'utf8'))
+    assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+    assert.deepEqual(archived[0].commitHashes, [firstOutcome.mergedCommitHash])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
 test('rebase stage: a failing rebase command blocks the lap before any agent runs', async () => {
   const taskNumber = 9007
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
