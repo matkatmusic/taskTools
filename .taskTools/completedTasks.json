@@ -2796,5 +2796,38 @@
     "commitHashes": [
       "aa0847858ac102c72dc51ea3f17cf99becff60b7"
     ]
+  },
+  {
+    "taskNumber": 174,
+    "version": "27bcd4eb8183b6e2b85c5a4881f993360bb546f8",
+    "title": "Build the archived record from the guarded removal snapshot so closeTasks cannot archive a stale task (audit C86-09)",
+    "userDescription": "`closeTasks` can archive a stale version of the task it closes. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-08.",
+    "goal": [
+      "- The record written to completedTasks.json comes from the SAME guarded snapshot used to remove it from tasks.json.",
+      "- A writer that edits the closing record mid-close loses nothing: the archived record carries their change.",
+      "- On a hash-guard retry, the archived record is rebuilt from the retried bytes, not from the first read.",
+      "- `npm test` passes.",
+      "- NOT in scope: the unlocked addTaskFiles writer on the other side of the race (audit C86-08, task 173, the blocker for this task), and the leaked submodule task branches (audit C86-10), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-09 (HIGH) in plans/task-86-codex-audit.md.\n\ncloseTasks reads tasks.json once and freezes the closing task record early (scripts/closeTasks.ts:85 and :103-113), building a `resolved` map keyed by taskNumber whose `task` field comes from that initial read. The completedTasks.json hashGuardedRewrite then archives each record as { ...task, completionDate, commitHashes, closureNote } using that STALE task (:115-129).\n\nOnly afterward does the guarded removal reread the current tasks.json bytes (:132-136), and it merely filters the task out with parsedTasks.filter(...). It never re-derives the archived record from that fresh read.\n\nSo if another writer -- for example addTaskFiles widening the task's files, the C86-08 path in task 173 -- mutates the same task record between the initial read and the guarded removal, the NEW record is removed from active tasks while the OLD record is what lands in completedTasks.json. That violates task 152's requirement that a retry reapply the archive operation to the other writer's bytes without losing either change.\n\nFIX DIRECTION, settled with the user: derive the archived record from the same successfully guarded current snapshot used for the removal -- one read, one truth -- rather than detecting the change and aborting the close. Take the record from inside the tasksPath hashGuardedRewrite mutate callback. closureNote and commitHashes can still come from `resolved`, since they are caller-supplied and are not part of the racing record. On a hash-guard retry the archive must be rebuilt from the retried bytes, never from the first read.\n\nExisting coverage in tests/closeTasks.test.ts exercises the hash-guard helper and preservation of unrelated bytes. It does NOT cover a close race that mutates the closing record itself.",
+    "files": [
+      "scripts/closeTasks.ts",
+      "tests/closeTasks.test.ts"
+    ],
+    "tests": "Start closing task N so closeTasks reads and freezes N early. INJECT another writer that edits task N itself, widening its files. Let the guarded removal run. Assert completedTasks.json holds the NEW record with the widened files, not the frozen old one, and that neither writer's change is lost.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNum": 173,
+        "reason": "C86-08 routes addTaskFiles through the hash-guarded protocol; this fix must be written against that guarded writer, which is the other side of the race it repairs"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-10",
+    "commitHashes": [
+      "b1191e2543c268c38a1f8966f9c6c1c32ad28010"
+    ]
   }
 ]
