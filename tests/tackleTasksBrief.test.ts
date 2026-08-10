@@ -84,6 +84,12 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.doesNotMatch(brief, /close-tasks/);
 });
 
+test("merge queue: the next-lap branch waits for an outstanding workflow instead of starting another lap against the same tip", () => {
+  const brief = tackleTasksBrief("[1]", "task 1: unblocked");
+  assert.match(brief, /carryover` is non-empty and `outstandingEntries\.size === 0`, run `beginNextLap\(queue\)`/);
+  assert.match(brief, /either `carryover` is empty or `outstandingEntries\.size` is greater than `0`, a task is still planning, implementing, or waiting on its own gate, or another task's workflow is still outstanding — wait for the next enqueue or completion notification/);
+});
+
 test("the superseded workflow files are deleted and nothing outside plans/ or .taskTools/ imports them", () => {
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
   const superseded = [
