@@ -152,23 +152,27 @@ test("a fully-published task with no usable commit hash throws before archiving 
     assert.equal(readCompleted(root).length, 0);
 });
 
-test("a failing second write is rolled back, leaving both files exactly as they were", () => {
+test("a failing second write leaves an archive-first partial state that a retry resolves idempotently", () => {
     const root = makeProjectRoot();
-    const originalTasksRaw = readFileSync(join(root, "tasks.json"), "utf8");
-    const originalCompletedRaw = readFileSync(join(root, "completedTasks.json"), "utf8");
     const raw: RawTaskRepoOutcome[] = [
         { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
     ];
     const mergeResults = summarizeTaskMergeResults(raw);
 
     let callCount = 0;
-    const flakyWrite = (path: string, data: string): void => {
+    const flakyWriteJson = (path: string, value: unknown): void => {
         callCount++;
         if (callCount === 2) throw new Error("disk full");
-        writeFileSync(path, data);
+        writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
     };
 
-    assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWrite), /disk full/);
-    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), originalTasksRaw);
-    assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), originalCompletedRaw);
+    assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWriteJson), /disk full/);
+    // Archive-first: completedTasks.json already has the record, tasks.json still has the task too.
+    assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
+    assert.equal(readTasks(root).some((t) => t.taskNumber === 2), true);
+
+    const { archived } = archivePublishedTasks([2], mergeResults, root);
+    assert.deepEqual(archived, [2]);
+    assert.equal(readTasks(root).some((t) => t.taskNumber === 2), false);
+    assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
 });

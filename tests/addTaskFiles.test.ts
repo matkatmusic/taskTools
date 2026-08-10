@@ -173,6 +173,32 @@ test("concurrent CLI wideners preserve the full union in both authoritative file
   assert.deepEqual(new Set(snapshot.groups[0].tasks[0].files), new Set(["existing.ts", ...paths]));
 });
 
+test("root and nested-cwd writers use the same authoritative lock", async () => {
+  const root = makeProjectRoot();
+  const nested = join(root, "packages", "child");
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(
+    join(root, ".taskTools", "run-arguments.json"),
+    JSON.stringify({ groups: [{ tasks: [{ number: 1, files: ["existing.ts"] }] }] }),
+  );
+  const startFile = join(root, "start");
+  const rootPaths = Array.from({ length: 8 }, (_, index) => `root-${index}.ts`);
+  const nestedPaths = Array.from({ length: 8 }, (_, index) => `nested-${index}.ts`);
+
+  const children = [
+    ...rootPaths.map((path) => spawnWidenChild(root, 1, path, startFile)),
+    ...nestedPaths.map((path) => spawnWidenChild(nested, 1, path, startFile)),
+  ];
+  writeFileSync(startFile, "go");
+  await Promise.all(children.map(requireExitZero));
+
+  const task = readTasks(root).find((t) => t.taskNumber === 1);
+  assert.deepEqual(new Set(task.files), new Set(["existing.ts", ...rootPaths, ...nestedPaths]));
+  const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
+  assert.deepEqual(new Set(snapshot.groups[0].tasks[0].files), new Set(["existing.ts", ...rootPaths, ...nestedPaths]));
+  assert.equal(existsSync(join(nested, ".taskTools", "task-state.lock")), false);
+});
+
 test("widener wins the lock, closer follows: the archived task carries the widened file and the run snapshot has it too", async () => {
   const root = makeProjectRoot();
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");

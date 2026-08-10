@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
-import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, taskFilesProjectRoot, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
@@ -252,9 +252,21 @@ function runAsCli(): void {
         mergeScript: resolveMergeScriptPath(),
         repositoryManifest: manifest,
     };
-    const argumentsFile = resolveRunArgumentsPath(repoRoot);
+    const argumentsFile = resolveRunArgumentsPath(taskFilesProjectRoot(pair));
     mkdirSync(dirname(argumentsFile), { recursive: true });
-    withTaskStateLock(repoRoot, () => writeJsonAtomically(argumentsFile, pipelineArguments));
+    withTaskStateLock(pair.tasksPath, () => {
+        const latestByNumber = new Map(readTaskFile(pair.tasksPath).map((task) => [task.taskNumber, task]));
+        for (const group of pipelineArguments.groups) {
+            for (const preparedTask of group.tasks) {
+                const latest = latestByNumber.get(preparedTask.number);
+                if (!latest) {
+                    throw new Error(`prepareTasks: task ${preparedTask.number} changed or closed during preparation`);
+                }
+                preparedTask.files = declaredFiles(latest);
+            }
+        }
+        writeJsonAtomically(argumentsFile, pipelineArguments);
+    });
     process.stdout.write(JSON.stringify({
         ...pipelineArguments,
         stepOutputsFile: resolveStepOutputsPath(repoRoot),

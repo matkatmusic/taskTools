@@ -1,7 +1,7 @@
 // The only script that appends paths to a task's file list in .taskTools/tasks.json.
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, normalize } from "node:path";
-import { leadingTaskNumbers, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { leadingTaskNumbers, resolveTaskFiles, taskFilesProjectRoot, type TaskRecord } from "./taskFiles.ts";
 import { resolveRunArgumentsPath } from "./prepareTasks.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
@@ -65,8 +65,9 @@ export function addTaskFiles(
     const rejected = firstRejectedPath(paths);
     if (rejected) throw new Error(`addTaskFiles: rejected ${rejected}`);
 
-    return withTaskStateLock(sourceRoot, () => {
-        const pair = resolveTaskFiles(sourceRoot);
+    const pair = resolveTaskFiles(sourceRoot);
+    const authoritativeRoot = taskFilesProjectRoot(pair);
+    return withTaskStateLock(pair.tasksPath, () => {
         const tasks = JSON.parse(readFileSync(pair.tasksPath, "utf8")) as TaskRecord[];
         const present = new Set(tasks.map((task) => task.taskNumber));
         const missing = taskNumbers.filter((number) => !present.has(number));
@@ -77,7 +78,7 @@ export function addTaskFiles(
             if (taskNumbers.includes(task.taskNumber)) appendFiles(task, paths);
         }
 
-        const argumentsPath = resolveRunArgumentsPath(sourceRoot);
+        const argumentsPath = resolveRunArgumentsPath(authoritativeRoot);
         let snapshot: RunArgumentsSnapshot | null = null;
         if (existsSync(argumentsPath)) {
             snapshot = JSON.parse(readFileSync(argumentsPath, "utf8")) as RunArgumentsSnapshot;
