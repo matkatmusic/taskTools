@@ -2829,5 +2829,40 @@
     "commitHashes": [
       "b1191e2543c268c38a1f8966f9c6c1c32ad28010"
     ]
+  },
+  {
+    "taskNumber": 175,
+    "version": "6aac6908504d4b7086b97a6972449cc72558d833",
+    "title": "Delete the task branch at every repository layer after a successful close (audit C86-10)",
+    "userDescription": "Successful cleanup leaks every fetched task branch in source submodules. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-09.",
+    "goal": [
+      "- After a successful close, task-N is absent from the root AND from every source submodule.",
+      "- A repeat run over the same repository leaves no growing pile of task-N refs.",
+      "- The test proves it without deleting anything itself; tests/mergeTaskWorktrees.test.ts:1508-1530 no longer runs git branch -D by hand.",
+      "- A FAILED run still keeps its refs, so the work stays inspectable.",
+      "- `npm test` passes.",
+      "- NOT in scope: the stale-record archive race in closeTasks (audit C86-09, task 174, the blocker for this task), and worktree discovery still matching only group-N (audit C86-11), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-10 (HIGH) in plans/task-86-codex-audit.md.\n\nThe merge path fetches each submodule's task-N branch into the canonical source submodule (mergeSubmoduleBranchIntoRepo, scripts/mergeTaskWorktrees.ts:419-428), creating refs/heads/<groupBranch> there on every merge. On success the workflow calls removeWorktreeAndBranch exactly once, for the root (skills/tackle-tasks/task.workflow.js:703-705). That helper removes only the root worktree and the root branch (scripts/mergeTaskWorktrees.ts:439-442); it never deletes the fetched task-N refs from the source submodules. Every run therefore leaks one ref per submodule.\n\nmergeGroupBranchIntoRepo already iterates submodulePathsDeepestFirst and knows each submodule's checkout and source path during the merge loop, so that layer information needs to reach the cleanup step -- or cleanup must re-derive the submodule paths and branch names -- so the branch is deleted at every repository layer, not only the root.\n\nThe required cleanup test is a FALSE POSITIVE: tests/mergeTaskWorktrees.test.ts:1508-1530 manually runs `git branch -D` inside the submodule near the end of the test, supplying the very production behaviour it should have asserted. It must be rewritten to assert the fetched branch is absent without deleting anything itself.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "skills/tackle-tasks/task.workflow.js",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "Run a successful merge and close for a task with submodules. Do NOT run git branch -D anywhere in the test. Assert task-N is absent from the root AND absent from EVERY source submodule. Fix tests/mergeTaskWorktrees.test.ts:1508-1530, which supplies the production behaviour it should assert.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNum": 174,
+        "reason": "the user placed this after C86-09 in the audit chain; both land in the close-and-cleanup path, so serialising them avoids overlapping edits"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-10",
+    "commitHashes": [
+      "4c48227035e0d4e5ad92c777524f39a162654b7b"
+    ]
   }
 ]
