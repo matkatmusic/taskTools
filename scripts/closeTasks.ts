@@ -81,6 +81,8 @@ export function closeTasks(
   closureNote: string | Record<number, string>,
   projectRoot: string = process.cwd(),
   commitHashes: string[] | Record<number, string[]> = [],
+  // Test-only: fires after the tasksPath tmp write, before the hash-guard rename check.
+  afterTasksWriteAttempt?: () => void,
 ): CloseTasksResult {
   const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
   const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as TaskRecord[];
@@ -101,24 +103,39 @@ export function closeTasks(
     return { closed: [], skipped, unblocked: [] };
   }
 
-  // Resolve every note/hashes/record first, so a missing Record entry throws before any write.
+  // Resolve every note/hashes first, so a missing Record entry throws before any write.
   const resolved = new Map(
     willClose.map((taskNumber) => [
       taskNumber,
       {
-        task: tasks.find((task) => task.taskNumber === taskNumber)!,
         closureNote: noteFor(closureNote, taskNumber),
         commitHashes: hashesFor(commitHashes, taskNumber),
       },
     ]),
   );
 
-  // Written first; upserts, not skips, so a retry overwrites a stale prior-run record.
+  // Written first; freshRecords comes from this guarded snapshot, rebuilt on every retry.
+  let freshRecords = new Map<number, TaskRecord>();
+  let unblocked: number[] = [];
+  hashGuardedRewrite<TaskRecord[]>(
+    tasksPath,
+    (parsedTasks) => {
+      freshRecords = new Map(
+        willClose.map((taskNumber) => [taskNumber, parsedTasks.find((task) => task.taskNumber === taskNumber)!]),
+      );
+      const remaining = parsedTasks.filter((task) => !willClose.includes(task.taskNumber));
+      unblocked = unblockDependents(remaining, willClose);
+      return remaining;
+    },
+    afterTasksWriteAttempt,
+  );
+
+  // Upserts, not skips, so a retry overwrites a stale prior-run record.
   hashGuardedRewrite<TaskRecord[]>(completedTasksPath, (parsedCompleted) => {
     const appended = [...parsedCompleted];
     for (const taskNumber of willClose) {
-      const { task, closureNote: note, commitHashes: hashes } = resolved.get(taskNumber)!;
-      const record = { ...task, completionDate, commitHashes: hashes, closureNote: note };
+      const { closureNote: note, commitHashes: hashes } = resolved.get(taskNumber)!;
+      const record = { ...freshRecords.get(taskNumber)!, completionDate, commitHashes: hashes, closureNote: note };
       const existingIndex = appended.findIndex((t) => t.taskNumber === taskNumber);
       if (existingIndex === -1) {
         appended.push(record);
@@ -127,13 +144,6 @@ export function closeTasks(
       }
     }
     return appended;
-  });
-
-  let unblocked: number[] = [];
-  hashGuardedRewrite<TaskRecord[]>(tasksPath, (parsedTasks) => {
-    const remaining = parsedTasks.filter((task) => !willClose.includes(task.taskNumber));
-    unblocked = unblockDependents(remaining, willClose);
-    return remaining;
   });
 
   return { closed: willClose, skipped, unblocked };

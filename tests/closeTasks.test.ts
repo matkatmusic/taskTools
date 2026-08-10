@@ -173,3 +173,23 @@ test("retrying a task already archived from a prior partial close still removes 
   assert.deepEqual(completed[0].commitHashes, ["abc123"]);
   assert.equal(completed[0].closureNote, "merged to main at abc123");
 });
+
+test("a task record widened by another writer (e.g. addTaskFiles) mid-close is archived with the NEW fields, not the stale ones read at the start of closeTasks", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts"] }]));
+  writeFileSync(join(root, "completedTasks.json"), "[]");
+
+  let widened = false;
+  const { closed } = closeTasks([65], "fixed by abc123", root, [], () => {
+    if (widened) return;
+    widened = true;
+    writeFileSync(
+      join(root, "tasks.json"),
+      JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]),
+    );
+  });
+
+  assert.deepEqual(closed, [65]);
+  const completed = readCompleted(root).find((t) => t.taskNumber === 65);
+  assert.deepEqual(completed.files, ["a.ts", "b.ts"]);
+});
