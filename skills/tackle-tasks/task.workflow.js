@@ -2,6 +2,8 @@ const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 const N = ARGS.task
 const STAGE = ARGS.stage ?? 'plan+implement'
 const TYPECHECK_COMMAND = ARGS.typecheckCommand ?? 'npx tsc --noEmit'
+// Unlike TYPECHECK_COMMAND (brief-text display default), an unconfigured rebase-test must skip typecheck, not silently run one.
+const REBASE_TYPECHECK_COMMAND = ARGS.typecheckCommand ?? null
 const WORKER_MODEL = ARGS.workerModel
 const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
 const MAX_REBASE_FIX_ROUNDS = ARGS.maxRebaseFixRounds ?? 3
@@ -608,7 +610,7 @@ const runRebaseTest = async () => {
     return fixOutcome != null && fixOutcome.fixed === true && ownCheckoutClean && !otherLayerTouched
   }
 
-  let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+  let layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true, REBASE_TYPECHECK_COMMAND)
   while (layerWalk.stoppedAt !== null && (layerWalk.stoppedAt.status === 'conflicted' || layerWalk.stoppedAt.status === 'tests-failed')) {
     const stopped = layerWalk.stoppedAt
     if (stopped.status === 'conflicted') {
@@ -627,7 +629,7 @@ const runRebaseTest = async () => {
         fixSucceeded = await attemptRebaseFix(occurrenceId, checkoutPath, testOutput)
       }
     }
-    layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true)
+    layerWalk = rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true, REBASE_TYPECHECK_COMMAND)
   }
   if (layerWalk.stoppedAt !== null) {
     const stopped = layerWalk.stoppedAt
@@ -635,7 +637,7 @@ const runRebaseTest = async () => {
     return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
   }
 
-  let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+  let parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true, REBASE_TYPECHECK_COMMAND)
   while (parentOutcome.status === 'conflicted' || parentOutcome.status === 'tests-failed') {
     if (parentOutcome.status === 'conflicted') {
       const outcome = await advanceLiveConflict(execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, '', parentOutcome.conflictedFilePaths, fenceViolations)
@@ -651,7 +653,7 @@ const runRebaseTest = async () => {
         fixSucceeded = await attemptRebaseFix('', worktreePath, parentOutcome.testOutput)
       }
     }
-    parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true)
+    parentOutcome = rebaseParentOntoSourceAndTest('', worktreePath, sourceBranch, submodulePaths, manifest.resolutionManifest, true, REBASE_TYPECHECK_COMMAND)
   }
   if (parentOutcome.status !== 'rebased-and-tested') {
     const lastFailure = parentOutcome.status === 'untested' ? 'untested layer' : parentOutcome.status

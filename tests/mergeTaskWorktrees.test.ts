@@ -1143,9 +1143,29 @@ test("test_rebaseParentOntoSourceAndTestReportsUntestedWhenTheParentHasNoTestCon
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");
 
-    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest());
+    const markerPath = join(group.worktree, "typecheck-marker.txt");
+    const typecheckCommand = `node -e "require('fs').writeFileSync('${markerPath}','ran')"`;
+    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest(), false, typecheckCommand);
 
     assert.equal(outcome.status, "untested");
+    assert.equal(readFileSync(markerPath, "utf8"), "ran");
+});
+
+test("test_rebaseParentOntoSourceAndTestReportsTestsFailedWhenTheTypecheckCommandFails", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(repoRoot, "add", "package.json");
+    git(repoRoot, "commit", "-q", "-m", "add test script");
+    const sourceBranch = currentBranchName(repoRoot);
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "group-work.txt"), "group work\n");
+    git(group.worktree, "add", "group-work.txt");
+    git(group.worktree, "commit", "-q", "-m", "group work");
+
+    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest(), false, "false");
+
+    assert.equal(outcome.status, "tests-failed");
 });
 
 test("test_rebaseSubmoduleLayersDeepestFirstRunsTheSubmodulesOwnTestCommandNotTheParents", () => {
@@ -1191,6 +1211,44 @@ test("test_rebaseSubmoduleLayersDeepestFirstRunsTheSubmodulesOwnTestCommandNotTh
     assert.equal(report.stoppedAt, null);
     assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested"]);
     assert.equal(readFileSync(join(vendorCheckoutPath, "test-marker.txt"), "utf8"), "submodule-ran");
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstReportsTestsFailedWhenTheTypecheckCommandFailsEvenThoughTheSuiteWouldPass", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const rootPath = makeTempRepoWithCommit();
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(
+        join(vendorOrigin, "package.json"),
+        JSON.stringify({ scripts: { test: "node -e \"require('fs').writeFileSync('test-marker.txt','submodule-ran')\"" } }),
+    );
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add submodule test script");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest, false, "false");
+
+    assert.notEqual(report.stoppedAt, null);
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
+    assert.equal(existsSync(join(vendorCheckoutPath, "test-marker.txt")), false);
 });
 
 test("test_rebaseSubmoduleLayersDeepestFirstReportsUntestedWhenTheSubmoduleHasNoTestConfigurationEvenThoughTheParentDoes", () => {
