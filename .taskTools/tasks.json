@@ -573,38 +573,6 @@
     "difficulty": 6
   },
   {
-    "taskNumber": 173,
-    "version": "b7adf17602c1a5754a44cf0c387c5ad714f0edef",
-    "title": "Route addTaskFiles writes through the hash-guarded protocol so concurrent planners cannot clobber each other (audit C86-08)",
-    "userDescription": "`addTaskFiles` is unsafe under the newly introduced planning concurrency. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-07.",
-    "goal": [
-      "- Two planners widening different tasks at the same time both keep their additions; neither is silently erased.",
-      "- A widening that races a close cannot resurrect the closed task -- the closed task stays closed.",
-      "- Both guarantees hold for tasks.json AND for run-arguments.json.",
-      "- The widening lands in the authoritative source tasks.json and run-arguments.json, even when the planner runs inside its own private worktree.",
-      "- The concurrency tests run real concurrent writers, not a mocked or hand-ordered sequence.",
-      "- `npm test` passes.",
-      "- NOT in scope: the cleanup/merge/close failure contract (audit C86-07, task 172, the blocker for this task), and the stale-record archive race in closeTasks (audit C86-09), owned by the sibling task blocked on this one."
-    ],
-    "description": "This is finding C86-08 (HIGH) in plans/task-86-codex-audit.md.\n\nUp to six workflows may widen task ownership concurrently, but addTaskFiles performs unlocked whole-file read/modify/write operations on BOTH tasks.json and run-arguments.json (scripts/addTaskFiles.ts:41-51 and :64-76). runAsCli does an unlocked read / JSON.parse / mutate / writeFileSync on tasks.json, then a separate unlocked read-modify-write on run-arguments.json in refreshRunArgumentsSnapshot. Two planners can read the same bytes and the last writer silently erases the first planner's additions.\n\nThere is also a close/widen race: a planner can read [A, B], task A can close atomically to [B], and the planner can then write its stale [A, B] snapshot, resurrecting an already completed task. The guarded writer in closeTasks cannot protect against this unguarded writer.\n\nThe primitive already exists and is not being used: scripts/closeTasks.ts exports hashGuardedRewrite -- a retry-on-hash-mismatch read / mutate / write-tmp / rename compare-and-swap, this project's existing protocol for tasks.json. addTaskFiles.ts neither imports nor uses it. Route both writes through that same protocol so widen/widen and widen/close races retry onto fresh bytes instead of clobbering.\n\nAUTHORITATIVE-TARGET REQUIREMENT, settled with the user: the widening must land in the authoritative SOURCE tasks.json and run-arguments.json even when the planner runs inside its own private worktree. The audit flags this explicitly -- fixing C86-01 (task 166) by merely running inside the private worktree would introduce a second failure, because the private checkout has its own tasks.json while the authoritative source snapshot and source-created run-arguments.json would never receive the widening.\n\ntests/addTaskFiles.test.ts today covers only single-writer behaviour, driving the CLI with execFileSync against a temporary .taskTools directory. It needs adversarial concurrent-writer coverage.",
-    "files": [
-      "scripts/addTaskFiles.ts",
-      "scripts/closeTasks.ts",
-      "tests/addTaskFiles.test.ts"
-    ],
-    "tests": "RACE 1 -- lost update: planner A widens task 1 with fileA while planner B widens task 2 with fileB, concurrently, over the same files; assert BOTH additions are present. RACE 2 -- resurrection: a planner reads [A, B], task A closes atomically to [B], then the planner writes its stale snapshot; assert A stays CLOSED and is not resurrected. Both races must be exercised against tasks.json AND run-arguments.json.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 172,
-        "reason": "the user placed this after C86-07 in the audit chain; 172 settles the failure-result contract that the widen path reports through"
-      }
-    ],
-    "handoffFilePaths": [
-      "plans/task-86-codex-audit.md"
-    ]
-  },
-  {
     "taskNumber": 174,
     "version": "27bcd4eb8183b6e2b85c5a4881f993360bb546f8",
     "title": "Build the archived record from the guarded removal snapshot so closeTasks cannot archive a stale task (audit C86-09)",
