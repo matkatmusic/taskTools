@@ -77,7 +77,7 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
   assert.match(brief, /nextQueueStep\(queue\)/);
-  assert.match(brief, /launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, repositoryManifest, worktree\}`/);
+  assert.match(brief, /launch `.*task\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree\}`/);
   assert.match(brief, /rebase-test.*or merge workflow.*outstanding/s);
   assert.match(brief, /recordStageOutcome\(queue, taskNumber, stage, outcome\)/);
   assert.match(brief, /shouldEndQueue\(queue, workflowOutstanding\)/);
