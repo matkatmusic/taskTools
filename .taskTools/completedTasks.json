@@ -2864,5 +2864,38 @@
     "commitHashes": [
       "4c48227035e0d4e5ad92c777524f39a162654b7b"
     ]
+  },
+  {
+    "taskNumber": 176,
+    "version": "2a246eeac9d7629f9e6ec271c847a3353b6a68d9",
+    "title": "Make worktree discovery recognize task-N so --discover can recover a failed task (audit C86-11)",
+    "userDescription": "Worktree recovery/discovery still recognizes only the retired naming convention. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-10.",
+    "goal": [
+      "- --discover / findUnmergedTaskWorktrees finds task-N worktrees, which it cannot see today.",
+      "- Legacy group-* worktrees and task-group-* branches are NOT mentioned and NOT touched.",
+      "- A test recovers a FAILED new-format task end to end, rather than only checking the filter pattern.",
+      "- `npm test` passes.",
+      "- NOT in scope: anything about the retired group-* convention, deliberately, per the decision recorded above; and the leaked submodule task branches (audit C86-10, task 175, the blocker for this task)."
+    ],
+    "description": "This is finding C86-11 (MEDIUM) in plans/task-86-codex-audit.md.\n\nlistTaskWorktrees filters worktree basenames with /^group-\\d+$/ (scripts/mergeTaskWorktrees.ts:47-56), a naming convention from the retired tackle-tasks implementation. The current preparer creates task-N instead (createWorktreeForGroup, scripts/prepareTasks.ts). findUnmergedTaskWorktrees calls listTaskWorktrees, so the --discover recovery path cannot see any worktree this implementation creates -- it finds nothing.\n\nLEGACY DECISION, settled with the user: ignore legacy artifacts entirely. Fix the filter so discovery recognizes task-N, and do NOT report, migrate, or delete the leftover group-* worktrees and task-group-* branches from the previous implementation. They stay exactly as they are, untouched and unmentioned. This closes out the audit's open question about whether the migration should report or clean them: the answer is neither.\n\nContext for whoever reads this later: the administrative worktree list really does still contain several legacy group-* worktrees on task-group-* branches. The audit observed them and deleted nothing; so does this task.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "Prepare task N and let it FAIL, so worktree task-N survives with unmerged commits. Run --discover / findUnmergedTaskWorktrees. Assert it FINDS task-N and reports its unmerged commits. Today it finds nothing, because the filter only matches group-N.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNum": 175,
+        "reason": "C86-10 also edits the worktree and branch cleanup logic in mergeTaskWorktrees.ts; serialising them avoids overlapping edits to the same file"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-10",
+    "commitHashes": [
+      "75b1db6fc99a7cc9152ccced2cab8b6def57b034"
+    ]
   }
 ]
