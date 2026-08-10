@@ -263,6 +263,7 @@ function rebaseAndTestSubmoduleLayer(
     resolutionManifest: ResolutionManifest,
     childrenByParentId: Map<string, RepositoryOccurrence[]>,
     leaveConflictLive: boolean = false,
+    typecheckCommand: string | null = null,
 ): SubmoduleLayerOutcome {
     const { occurrenceId, checkoutPath, baseBranch, operationBranch } = occurrence;
 
@@ -296,6 +297,14 @@ function rebaseAndTestSubmoduleLayer(
     // Either the rebase above just happened, or refs were identical but a child's gitlink still needs recommitting.
     recordRebasedChildGitlinks(occurrence, changedChildPaths);
 
+    if (typecheckCommand !== null) {
+        try {
+            execSync(typecheckCommand, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        } catch (error) {
+            return { occurrenceId, checkoutPath, status: "tests-failed", testOutput: testFailureOutput(error) };
+        }
+    }
+
     const testPolicyResult = discoverTestPolicy(occurrenceId, checkoutPath, resolutionManifest);
     if (testPolicyResult.status === "needsResolution") {
         return { occurrenceId, checkoutPath, status: "untested", resolutionRequests: testPolicyResult.resolutionRequests };
@@ -321,7 +330,7 @@ function groupChildrenByParentId(occurrences: RepositoryOccurrence[]): Map<strin
 }
 
 // Rebases each submodule deepest-first, testing every layer before moving up; stops on the first red layer.
-export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest, leaveConflictLive: boolean = false): SubmoduleLayerWalkReport {
+export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest, leaveConflictLive: boolean = false, typecheckCommand: string | null = null): SubmoduleLayerWalkReport {
     const sourceCheckoutPathByOccurrenceId = new Map(
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
     );
@@ -338,7 +347,7 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
     const completedLayers: SubmoduleLayerOutcome[] = [];
     for (const occurrence of submoduleLayersDeepestFirst) {
         const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId) ?? "";
-        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive);
+        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive, typecheckCommand);
         if (outcome.status !== "no-op" && outcome.status !== "rebased-and-tested") {
             return { completedLayers, stoppedAt: outcome };
         }
@@ -362,6 +371,7 @@ export function rebaseParentOntoSourceAndTest(
     submodulePaths: string[],
     resolutionManifest: ResolutionManifest,
     leaveConflictLive: boolean = false,
+    typecheckCommand: string | null = null,
 ): ParentRebaseOutcome {
     const rebaseOutcome = rebaseGroupOntoSource(worktreePath, sourceBranch, submodulePaths, leaveConflictLive);
     if (rebaseOutcome.status === "conflicted") {
@@ -369,6 +379,14 @@ export function rebaseParentOntoSourceAndTest(
     }
     if (rebaseOutcome.status === "cleanup-failed") {
         return { status: "cleanup-failed", failureReason: rebaseOutcome.failureReason };
+    }
+
+    if (typecheckCommand !== null) {
+        try {
+            execSync(typecheckCommand, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        } catch (error) {
+            return { status: "tests-failed", testOutput: testFailureOutput(error) };
+        }
     }
 
     const testPolicyResult = discoverTestPolicy(occurrenceId, worktreePath, resolutionManifest);
