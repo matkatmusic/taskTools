@@ -5,9 +5,10 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { compileFunction, constants as vmConstants } from "node:vm";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from "../scripts/prepareTasks.ts";
+import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import { beginNextLap, buildMergeReport, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
@@ -197,15 +198,17 @@ type TaskWorkflowResult = { task: number; stage: string; results: Array<Record<s
 type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
 
 const throwingAgent = async () => { throw new Error("end-to-end merge queue lap must not call an agent"); };
+// Mirrors an agent that tried and gave up, so a real conflict reports unresolved instead of throwing.
+const givingUpAgent = async () => ({ resolved: false });
 
 // Mirrors runMergeStage in tests/taskWorkflowMergeStage.test.ts, driving the same task.workflow.js source.
-const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>) => {
+const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>, agent: (...values: unknown[]) => Promise<unknown> = throwingAgent) => {
     const fn = compileFunction(
         `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
         ["args", "log", "agent"],
         { filename: join(REPO_ROOT, "skills/tackle-tasks/task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
     ) as TaskWorkflowRunner;
-    return await fn(JSON.stringify({ worktree: worktreePath, ...args }), () => {}, throwingAgent);
+    return await fn(JSON.stringify({ worktree: worktreePath, ...args }), () => {}, agent);
 };
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -223,11 +226,8 @@ const makeQueueFixtureRepo = (taskNumber: number) => {
     writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
-    const sourceBranch = "main";
-    const baseOid = git(root, "rev-parse", sourceBranch);
-    const operationBranch = `task-${taskNumber}`;
-    const worktreePath = join(tmpdir(), `run-merge-phase-e2e-wt-${randomUUID()}`);
-    git(root, "worktree", "add", "-q", "-b", operationBranch, worktreePath, sourceBranch);
+    const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: "unknown" });
+    const operationBranch = currentBranchName(worktreePath);
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
     mkdirSync(join(root, ".taskTools"), { recursive: true });
@@ -235,23 +235,8 @@ const makeQueueFixtureRepo = (taskNumber: number) => {
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
     writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
-    const repositoryManifest: RepositoryManifest = {
-        version: REPOSITORY_MANIFEST_VERSION,
-        occurrences: [{
-            occurrenceId: "",
-            checkoutPath: root,
-            parentOccurrenceId: null,
-            pathInParent: null,
-            gitlinkOid: null,
-            depth: 0,
-            originUrl: "",
-            baseBranch: sourceBranch,
-            baseOid,
-            operationBranch,
-            childOccurrenceIds: [],
-            testState: "untested",
-        }],
-    };
+    const manifest = loadRepositoryManifest(root);
+    const repositoryManifest: RepositoryManifest = { ...manifest, occurrences: attachOperationBranch(manifest.occurrences, operationBranch) };
     return { root, worktreePath, repositoryManifest };
 };
 
@@ -358,5 +343,133 @@ test("test_endToEndQueueFeedsARealMergeStageCleanupFailureIntoRecordStageOutcome
     } finally {
         rmSync(worktreePath, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// Same production-shaped path as makeQueueFixtureRepo, extended with a real "git submodule add" child repo.
+const makeQueueFixtureRepoWithSubmodule = (taskNumber: number) => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const submoduleOrigin = mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-submodule-origin-"));
+    git(submoduleOrigin, "init", "-q", "-b", "main");
+    git(submoduleOrigin, "config", "user.email", "test@example.com");
+    git(submoduleOrigin, "config", "user.name", "Test");
+    git(submoduleOrigin, "config", "commit.gpgsign", "false");
+    writeFileSync(join(submoduleOrigin, "seed.txt"), "seed\n");
+    git(submoduleOrigin, "add", "seed.txt");
+    git(submoduleOrigin, "commit", "-q", "-m", "seed");
+    writeFileSync(join(submoduleOrigin, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(submoduleOrigin, "add", "package.json");
+    git(submoduleOrigin, "commit", "-q", "-m", "add test script");
+
+    const root = mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-"));
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test");
+    git(root, "config", "commit.gpgsign", "false");
+    writeFileSync(join(root, "README.md"), "root\n");
+    git(root, "add", "README.md");
+    git(root, "commit", "-q", "-m", "init");
+    git(root, "submodule", "add", "-q", submoduleOrigin, "vendor");
+    git(root, "commit", "-q", "-m", "add submodule");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(root, "add", "package.json");
+    git(root, "commit", "-q", "-m", "add test script");
+
+    const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: "unknown" });
+    const operationBranch = currentBranchName(worktreePath);
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
+    mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
+    writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
+    const manifest = loadRepositoryManifest(root);
+    const repositoryManifest: RepositoryManifest = { ...manifest, occurrences: attachOperationBranch(manifest.occurrences, operationBranch) };
+    return { root, worktreePath, submoduleOrigin, repositoryManifest };
+};
+
+test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndReportsItMerged", async () => {
+    const taskNumber = 9103;
+    const { root, worktreePath, submoduleOrigin, repositoryManifest } = makeQueueFixtureRepoWithSubmodule(taskNumber);
+    try {
+        writeFileSync(join(worktreePath, "vendor", "vendor-new.txt"), "vendor new\n");
+        git(join(worktreePath, "vendor"), "add", "vendor-new.txt");
+        git(join(worktreePath, "vendor"), "commit", "-q", "-m", "add vendor-new.txt");
+        git(worktreePath, "add", "vendor");
+        git(worktreePath, "commit", "-q", "-m", "bump vendor gitlink");
+
+        let queue = createMergeQueue();
+        queue = enqueueApprovedTask(queue, taskNumber);
+
+        let step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "rebase-test" });
+        const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest });
+        const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
+        assert.equal(rebaseTestOutcome.status, "green");
+        queue = recordStageOutcome(queue, taskNumber, "rebase-test", { status: "success" });
+
+        step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "merge" });
+        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest });
+        const mergeOutcome = mergeResult.results[0] as { status: string };
+        assert.equal(mergeOutcome.status, "merged");
+        queue = recordStageOutcome(queue, taskNumber, "merge", { status: "success" });
+
+        assert.deepEqual(queue.merged, [taskNumber]);
+        assert.equal(nextQueueStep(queue), null);
+        // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
+        assert.equal(shouldEndQueue(queue, false), "done");
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
+
+        const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+        assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber]);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+        rmSync(submoduleOrigin, { recursive: true, force: true });
+    }
+});
+
+test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeAndBuildMergeReport", async () => {
+    const taskNumber = 9104;
+    const { root, worktreePath, submoduleOrigin, repositoryManifest } = makeQueueFixtureRepoWithSubmodule(taskNumber);
+    try {
+        const worktreeVendorPath = join(worktreePath, "vendor");
+        const mainVendorPath = join(root, "vendor");
+        writeFileSync(join(worktreeVendorPath, "seed.txt"), "from-worktree\n");
+        git(worktreeVendorPath, "add", "seed.txt");
+        git(worktreeVendorPath, "commit", "-q", "-m", "worktree edit");
+
+        writeFileSync(join(mainVendorPath, "seed.txt"), "from-main\n");
+        git(mainVendorPath, "add", "seed.txt");
+        git(mainVendorPath, "commit", "-q", "-m", "main edit");
+
+        let queue = createMergeQueue();
+        queue = enqueueApprovedTask(queue, taskNumber);
+
+        const step = nextQueueStep(queue);
+        assert.deepEqual(step, { taskNumber, stage: "rebase-test" });
+        const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest }, givingUpAgent);
+        const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
+        assert.notEqual(rebaseTestOutcome.status, "green");
+        queue = recordStageOutcome(queue, taskNumber, "rebase-test", { status: "failure", reason: "submodule rebase conflicted: seed.txt" });
+
+        assert.equal(currentLapIsComplete(queue), true);
+        assert.deepEqual(queue.merged, []);
+        assert.deepEqual(queue.carryover, [{ taskNumber, stage: "rebase-test", lapsAttempted: 1, lastFailure: "submodule rebase conflicted: seed.txt" }]);
+        assert.equal(shouldEndQueue(queue, false), "stuck");
+
+        const report = buildMergeReport(queue);
+        assert.deepEqual(report.unmerged, [
+            { taskNumber, lastFailure: "submodule rebase conflicted: seed.txt", terminalReason: "zero-merge lap ended the queue" },
+        ]);
+
+        const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+        assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), []);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+        rmSync(submoduleOrigin, { recursive: true, force: true });
     }
 });
