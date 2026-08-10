@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { compileFunction, constants as vmConstants } from "node:vm";
 import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from "../scripts/prepareTasks.ts";
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 import { beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
@@ -273,8 +273,6 @@ type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test
 type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
 
 const throwingAgent = async () => { throw new Error("end-to-end merge queue lap must not call an agent"); };
-// Mirrors an agent that tried and gave up, so a real conflict reports unresolved instead of throwing.
-const givingUpAgent = async () => ({ resolved: false });
 
 // Mirrors runMergeStage in tests/taskWorkflowMergeStage.test.ts, driving the same task.workflow.js source.
 const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>, agent: (...values: unknown[]) => Promise<unknown> = throwingAgent) => {
@@ -347,14 +345,18 @@ const addBareOrigin = (root: string): string => {
     return origin;
 };
 
+type PreparedPipeline = WorkflowArguments & {
+    repositoryManifest: RepositoryManifest;
+};
+
 // Runs the real prepareTasks.ts CLI, so fixtures exercise the same origin-gated preparation path as production.
-const prepareThroughCli = (root: string, taskNumber: number): any => {
+const prepareThroughCli = (root: string, taskNumber: number): PreparedPipeline => {
     const stdout = execFileSync(
-        "node",
+        process.execPath,
         [join(REPO_ROOT, "scripts", "prepareTasks.ts"), String(taskNumber)],
         { cwd: root, encoding: "utf8" },
     );
-    return JSON.parse(stdout);
+    return JSON.parse(stdout) as PreparedPipeline;
 };
 
 const readTasks = (root: string): TaskRecord[] => JSON.parse(readFileSync(join(root, ".taskTools", "tasks.json"), "utf8"));
@@ -384,7 +386,8 @@ const makeQueueFixtureRepoV2 = (taskNumber: number, ownedFiles: string[]) => {
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);
-    const group = prepared.groups.find((entry: { tasks: { number: number }[] }) => entry.tasks[0]?.number === taskNumber);
+    const group = prepared.groups.find((entry) => entry.tasks[0]?.number === taskNumber);
+    if (!group) throw new Error(`prepareTasks did not return task ${taskNumber}`);
     const worktreePath = group.worktree;
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
@@ -738,7 +741,8 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);
-    const group = prepared.groups.find((entry: { tasks: { number: number }[] }) => entry.tasks[0]?.number === taskNumber);
+    const group = prepared.groups.find((entry) => entry.tasks[0]?.number === taskNumber);
+    if (!group) throw new Error(`prepareTasks did not return task ${taskNumber}`);
     const worktreePath = group.worktree;
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
@@ -823,7 +827,7 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
     }
 });
 
-test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeAndBuildMergeReport", async () => {
+test("test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict", async () => {
     const taskNumber = 9104;
     const trace: string[] = [];
     const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
@@ -834,7 +838,6 @@ test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeA
         const mainVendorPath = join(root, "vendor");
 
         let queue = createMergeQueue();
-
         const planEnvelope = await runTaskWorkflowStage(
             worktreePath,
             { task: taskNumber, stage: "plan+implement", typecheckCommand: prepared.typecheckCommand, sourceRoot: root, repositoryManifest },
@@ -853,22 +856,45 @@ test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeA
         trace.push("gate:approve");
         queue = enqueueApprovedTask(queue, consumedPlan.approval.taskNumber);
 
+        // Prove the serial tail reached a green rebase-test before the source-side conflict is introduced.
+        let action = nextQueueAction(queue, { any: false, tail: false });
+        assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "rebase-test" } });
+        const rebaseTestResult = await runTaskWorkflowStage(
+            worktreePath,
+            { task: taskNumber, stage: "rebase-test", repositoryManifest, sourceRoot: root },
+        );
+        trace.push("notification:rebase-test");
+        const consumedRebase = consumeTaskWorkflowResult(queue, rebaseTestResult);
+        assert.equal(consumedRebase.kind, "queue");
+        if (consumedRebase.kind !== "queue") return assert.fail("expected queue result");
+        assert.equal(consumedRebase.status, "green");
+        queue = consumedRebase.queue;
+
+        // Advance canonical vendor after the green check, so merge fetches task-N then conflicts rebasing it.
         writeFileSync(join(mainVendorPath, "seed.txt"), "from-main\n");
         git(mainVendorPath, "add", "seed.txt");
-        git(mainVendorPath, "commit", "-q", "-m", "main edit");
+        git(mainVendorPath, "commit", "-q", "-m", "main edit after green rebase-test");
 
-        const action = nextQueueAction(queue, { any: false, tail: false });
-        assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "rebase-test" } });
-        const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest, sourceRoot: root }, givingUpAgent);
-        trace.push("notification:rebase-test");
+        action = nextQueueAction(queue, { any: false, tail: false });
+        assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "merge" } });
+        const mergeResult = await runTaskWorkflowStage(
+            worktreePath,
+            { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root },
+        );
+        trace.push("notification:merge");
+        const consumedMerge = consumeTaskWorkflowResult(queue, mergeResult);
+        assert.equal(consumedMerge.kind, "queue");
+        if (consumedMerge.kind !== "queue") return assert.fail("expected queue result");
+        assert.equal(consumedMerge.status, "submodule-conflicted");
+        queue = consumedMerge.queue;
 
-        const consumed = consumeTaskWorkflowResult(queue, rebaseTestResult);
-        assert.equal(consumed.kind, "queue");
-        if (consumed.kind !== "queue") return assert.fail("expected queue result");
-        assert.notEqual(consumed.status, "green");
-        queue = consumed.queue;
-
-        assert.deepEqual(trace, ["prepare", "notification:plan+implement", "gate:approve", "notification:rebase-test"]);
+        assert.deepEqual(trace, [
+            "prepare",
+            "notification:plan+implement",
+            "gate:approve",
+            "notification:rebase-test",
+            "notification:merge",
+        ]);
         assert.equal(currentLapIsComplete(queue), true);
         assert.deepEqual(queue.merged, []);
         assert.equal(queue.carryover.length, 1);
@@ -884,16 +910,16 @@ test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeA
         assert.equal(report.unmerged[0]!.terminalReason, "zero-merge lap ended the queue");
         assert.match(report.unmerged[0]!.lastFailure, /submodule|vendor/i);
         assert.match(report.unmerged[0]!.lastFailure, /conflict|unresolved/i);
-
-        const archived = readCompleted(root);
-        assert.deepEqual(archived.map((t) => t.taskNumber), []);
-
-        // A conflict must leave every task ref recoverable: no cleanup ran.
-        const openTasks = readTasks(root);
-        assert.equal(openTasks.some((t) => t.taskNumber === taskNumber), true);
+        assert.deepEqual(readCompleted(root), []);
+        assert.equal(readTasks(root).some((task) => task.taskNumber === taskNumber), true);
         assert.equal(existsSync(worktreePath), true);
-        // Source submodule fetches the task branch only on merge; a rebase-test conflict has no such ref yet.
-        assert.doesNotThrow(() => git(root, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));
+
+        // mergeTaskDeepestFirst fetched task-N into canonical vendor before the conflicting rebase.
+        for (const repo of [root, mainVendorPath]) {
+            assert.doesNotThrow(() =>
+                git(repo, "show-ref", "--verify", `refs/heads/task-${taskNumber}`),
+            );
+        }
     } finally {
         rmSync(worktreePath, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });

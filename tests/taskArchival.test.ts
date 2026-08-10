@@ -9,6 +9,7 @@ import {
     summarizeTaskMergeResults,
     type RawTaskRepoOutcome,
 } from "../scripts/taskArchival.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-archival-"));
@@ -163,7 +164,7 @@ test("a failing second write leaves an archive-first partial state that a retry 
     const flakyWriteJson = (path: string, value: unknown): void => {
         callCount++;
         if (callCount === 2) throw new Error("disk full");
-        writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+        writeJsonAtomically(path, value);
     };
 
     assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWriteJson), /disk full/);
