@@ -1,0 +1,451 @@
+{
+  "verificationPerformed": [
+    "Compared 945eb22650d593bdcab2584460c58ef4bad04a3c..HEAD on task-86-chain; did not inspect the new-usage-graph worktree.",
+    "Read plans/task-86-spec.md, the task 131-153/closing-chain plans and records, and the relevant later fix-task records.",
+    "Checked every finding against .taskTools/tasks.json; exact overlaps are identified per issue, with partial or related overlaps distinguished from exact matches.",
+    "npx tsc --noEmit passed.",
+    "Focused preparation, task-state, workflow, queue, and nested-merge suites passed, including runs of 49/49, 119/119, 160/160, and 162/162 assertions.",
+    "Full npm test passed: 1,289 tests, 0 failures, 0 skipped, in 44.1 seconds.",
+    "Executed the real workflow body in a VM shaped like the documented production sandbox without the test-only dynamic-import loader; it failed immediately with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING, confirming C86-18."
+  ],
+  "notes": [
+    {
+      "date": "2026-08-10T10:07:53-07:00",
+      "text": "The green suites do not contradict the findings: several tests inject production-unavailable capabilities or manually perform the integration step under test, and the remaining failures concern interleavings or error paths that have no regression coverage."
+    }
+  ],
+  "issues": [
+    {
+      "number": 18,
+      "title": "C86-18 — Blocker: task.workflow.js uses capabilities forbidden by the production workflow sandbox",
+      "class": "blocker",
+      "cause": "Every selectable stage executes dynamic imports, with 25 await import(...) expressions in the workflow. That violates the repository's established workflow runtime contract: workflow files cannot import, and the production globals do not provide Node APIs. The execution harnesses mask this by installing vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER, a capability production does not have. The parse-only test uses new Function and never executes an import. Completed task 41 (jq '.[] | select(.taskNumber == 41)' .taskTools/completedTasks.json) records the restricted globals and rejected imports; completed task 68 records a prior workflow being reworked after the same failure was caught.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "370-374, 411-414, 483, 625-630, 770-778",
+          "role": "Production workflow performs forbidden dynamic imports in every selectable stage."
+        },
+        {
+          "path": "skills/tackle-tasks/blockers.workflow.js",
+          "lines": "7",
+          "role": "Documents that workflow files cannot import."
+        },
+        {
+          "path": "tests/tackleTasksRetry.test.ts",
+          "lines": "23-25, 65-68, 92-102",
+          "role": "Documents the sandbox restriction, but the parse test never executes an import."
+        },
+        {
+          "path": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "lines": "28-32",
+          "role": "Test harness injects the main-context dynamic-import loader."
+        },
+        {
+          "path": "tests/taskWorkflowMergeStage.test.ts",
+          "lines": "27-31",
+          "role": "Test harness injects the main-context dynamic-import loader."
+        },
+        {
+          "path": "tests/runMergePhase.test.ts",
+          "lines": "279-283",
+          "role": "Test harness injects the main-context dynamic-import loader."
+        },
+        {
+          "path": "tests/tackleTasksBrief.test.ts",
+          "lines": "152-156",
+          "role": "Test harness injects the main-context dynamic-import loader."
+        }
+      ],
+      "provingTest": "Compile the real workflow body with the production globals and no importModuleDynamically callback, then invoke a valid plan+implement envelope. It fails on the first import with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING. Repeat for each selectable stage. The acceptance test must use the actual production workflow hook or sandbox, not Node's main-context loader, and a source guard must reject static and dynamic imports in every *.workflow.js file.",
+      "suggestedFixApproach": [
+        "Apply the proven workflow-only context-injection pattern in /Users/matkatmusicllc/Programming/taskTools/scripts/workflow-only-context-injection.md; do not move command output back into the main orchestrator's context.",
+        "Move each substantial task-agent prompt out of task.workflow.js and into a stage/role-aware scripts/tackleTasks_AgentPromptEmitter.ts, or separate per-role emitters. The ordinary Node emitter may import task-state readers, prompt-building helpers, and dedicated read-only data scripts. Append the large task/repository context last; mutation belongs in separate CLIs invoked by the emitted prompt.",
+        "Have the skill-body emitter resolve the workflow and agent-prompt-emitter paths as absolute constants from import.meta.url and place only those paths plus invocation-varying data in workflow args. The skill-body emitter must not run data scripts or import the agent-prompt emitter. Preserve quoted-heredoc stdin handling for raw $ARGUMENTS.",
+        "Reduce every agent() prompt in the workflow to the proven form: tell the workflow subagent to run Bash(node <absolute-agent-prompt-emitter> <safe-task-number> <fixed-role>) and follow the printed instructions. Use only shell-safe generated values in that command. Recover worktree, source, and task state from the prepared run-arguments snapshot; never pass raw user text as a command-line argument.",
+        "Move deterministic filesystem, Git, and task-state transitions into ordinary Node CLI/data scripts invoked by the workflow subagent's Bash session. Their output then exists only in that workflow agent's context. Keep schemas on agent() calls so the import-free workflow coordinates rounds and returns typed envelopes with ordinary JavaScript only.",
+        "Verify with probes/sandboxProbe.workflow.js and a real skill invocation: task.workflow.js must contain no static or dynamic import, require, process, or direct command execution; the prompt emitter must produce the complete prompt and context; injected repository data must not appear in the main transcript. Do not retain USE_MAIN_CONTEXT_DEFAULT_LOADER in the acceptance harness."
+      ],
+      "existingOpenTask": "No exact open task. Task 83 corroborates the sandbox limitation but is scoped to preparing reviewer-brief data and does not repair the workflow imports or tail stages."
+    },
+    {
+      "number": 19,
+      "title": "C86-19 — High: the implementation worker cannot implement or fence files inside submodules",
+      "class": "high",
+      "cause": "The worker brief permits only root-worktree Git commands and finishes with a root git add and commit. runImplement snapshots, validates, and diffs only the root occurrence. For a task owning vendor/src/x.ts, root Git cannot stage the contents inside vendor; a submodule-only commit leaves root HEAD unchanged and is rejected; manually advancing the root gitlink makes the fence see only vendor, not vendor/src/x.ts. The apparent end-to-end test manually commits inside the submodule through a callback that the generated worker contract does not provide and declares ownership of vendor rather than the actual nested file.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "271-293",
+          "role": "Worker instructions allow only root-worktree Git commands."
+        },
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "483-516",
+          "role": "Implementation commit and fence validation inspect only the root occurrence."
+        },
+        {
+          "path": "tests/runMergePhase.test.ts",
+          "lines": "316-335, 755-778",
+          "role": "Fixture manually performs the forbidden submodule commit and masks nested ownership behind the root gitlink."
+        }
+      ],
+      "provingTest": "Prepare a task whose only owned path is a real file below a submodule. Have the fake worker follow the literal generated instructions, edit that file, and attempt the prescribed commit; the current workflow cannot return done. As a fence negative control, manually commit an unowned file inside the submodule and its root gitlink; a correct implementation reports the normalized nested path, while the current code reports only the gitlink.",
+      "suggestedFixApproach": [
+        "Build an occurrence-aware ownership map. Snapshot, stage, commit, and diff owned paths in each occurrence deepest-first, then commit changed gitlinks in their parents.",
+        "Normalize every occurrence-local changed path back to its root-relative task path before fence comparison. Generate explicit git -C <occurrence-checkout> instructions for the worker instead of forbidding them."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 20,
+      "title": "C86-20 — High: a partial deepest-first merge is misclassified as a zero-progress lap",
+      "class": "high",
+      "cause": "mergeTaskDeepestFirst may successfully move a source submodule and then fail its parent. The workflow returns the task as failed, recordStageOutcome increments mergedThisLap only for a completely merged task, and shouldEndQueue returns stuck when that count is zero. The spec intentionally keeps earlier source-layer merges, so the retry would not run against the same source state; stopping loses a potentially recoverable task.",
+      "locations": [
+        {
+          "path": "scripts/mergeTaskWorktrees.ts",
+          "lines": "683-713, 721-742",
+          "role": "A child source layer can merge before a later parent layer fails."
+        },
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "796-801",
+          "role": "A partially completed deepest-first walk is returned as a failed task."
+        },
+        {
+          "path": "scripts/runMergePhase.ts",
+          "lines": "93-96, 126-140",
+          "role": "Queue progress counts only fully merged tasks and declares the partial lap stuck."
+        }
+      ],
+      "provingTest": "Use a nested fixture in which the child source merge succeeds and the parent merge fails. Consume the real workflow envelope, prove the child source branch moved, and assert that the current queue has mergedThisLap equal to zero and reports stuck. The corrected queue must begin another lap, subject to the normal lap ceiling, because source progress occurred.",
+      "suggestedFixApproach": [
+        "Track source-layer progress separately from fully merged task count, for example sourceProgressThisLap.",
+        "Set it when a failed merge result has a completed layer with status merged, reset it in beginNextLap, and apply the zero-progress exit only when neither a task nor any source layer moved."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 21,
+      "title": "C86-21 — High: unexpected rebase/merge exceptions reject the workflow instead of entering the retry queue",
+      "class": "high",
+      "cause": "runRebaseTest invokes the rebase walkers without a total exception boundary, and runMerge invokes mergeTaskDeepestFirst unguarded. The primitive contains raw Git, discovery, and ref operations that can throw. A rejected workflow promise has no status/lastFailure envelope for consumeTaskWorkflowResult, so the task is neither carried over nor named in the final report, contrary to tasks 149 and 153.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "678-735, 796",
+          "role": "Rebase and merge primitive calls lack a total exception boundary."
+        },
+        {
+          "path": "scripts/mergeTaskWorktrees.ts",
+          "lines": "623-645, 681, 698-745",
+          "role": "Operational Git, discovery, and ref calls may throw."
+        }
+      ],
+      "provingTest": "Create a leaf ref named refs/taskTools/merge-intents so creation of refs/taskTools/merge-intents/task-N throws. Run the real merge stage and assert that it currently rejects. The fixed result must be a blocked envelope with a concrete lastFailure that reaches queue carryover and reporting. A nested variant should merge the child first and trigger the ref failure only in the parent, retaining the partial-progress data needed by C86-20.",
+      "suggestedFixApproach": [
+        "Make the rebase and merge primitives total and return typed failure reports, or wrap every stage-level primitive call in try/catch.",
+        "Normalize operational exceptions to a nonempty stage-specific lastFailure while preserving completedLayers, source-progress information, conflict paths, and merged-but-not-closed semantics once the root merge has landed."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 22,
+      "title": "C86-22 — High: missingFiles from the third/final plan review is ignored",
+      "class": "high",
+      "cause": "runPlan performs the first verification, decrements reviewRounds, and handles rejected output only while reviewRounds is greater than zero. It makes three verifier calls but processes only the first two rejections. A third response containing missingFiles exits the loop and implementation begins with the old file fence and unrepaired plan. Task 136 requires widening and replanning whenever verification returns nonempty missingFiles and defines no final-round exception.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "454-466",
+          "role": "The loop exits before processing the third verifier rejection."
+        }
+      ],
+      "provingTest": "Script verifier responses as rejected with ordinary fixes, rejected with ordinary fixes, then rejected with missingFiles containing b.ts. Assert that the authoritative task record, run-arguments snapshot, rewritten plan and brief, and implementer prompt all include b.ts. They currently do not.",
+      "suggestedFixApproach": [
+        "Model each of the three rounds as verify followed by processing that result.",
+        "On a rejected third review, still widen and replan or apply feedback, but do not invoke a fourth verifier. Preserve the final verifier notes and verdict for the user gate so the unverified final repair remains visible."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 23,
+      "title": "C86-23 — High: accepted proposed tasks bypass the task-state lock and can race with close",
+      "class": "high",
+      "cause": "The gate can invoke create-task while tail workflows are concurrently merging and closing. The generated create-task brief directs its agent to append to tasks.json directly. closeTasks holds the shared lock and publishes a whole-file replacement, but an editor that ignores that lock can overwrite the close or be overwritten by it, resurrecting a closed task or losing the new task.",
+      "locations": [
+        {
+          "path": "scripts/tackleTasksBrief.ts",
+          "lines": "143-147",
+          "role": "Accepted proposals may invoke create-task while tail workflows are active."
+        },
+        {
+          "path": "scripts/createTaskBrief.ts",
+          "lines": "21-37",
+          "role": "The skill tells an agent to edit tasks.json directly without the task-state mutex."
+        },
+        {
+          "path": "scripts/closeTasks.ts",
+          "lines": "59-61, 101-114",
+          "role": "Close uses a locked whole-file replacement that can race with the unlocked editor."
+        }
+      ],
+      "provingTest": "In two real processes, make the append process read tasks.json and pause. Let closeTasks acquire the lock, archive and remove task A, and publish. Resume the stale append of task B and prove A is resurrected. Add the reverse ordering and prove B can be lost under the current direct-editor protocol.",
+      "suggestedFixApproach": [
+        "Add a programmatic task-append command that resolves the authoritative project root, acquires withTaskStateLock, rereads current state, allocates the number, appends, and atomically publishes.",
+        "Make the create-task skill gather fields but call that command; it must never write tasks.json directly. Test both orderings with real processes and an acknowledged inside-lock barrier."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 24,
+      "title": "C86-24 — Medium: the shared six-workflow ceiling can be exceeded by the serial tail",
+      "class": "medium",
+      "cause": "Initial plan/implement launches maintain a six-entry sliding window. When one completes, the instructions refill the freed slot. Approval independently enqueues tail work, and the queue launch path checks only whether another tail is outstanding, not total outstandingEntries size. A valid interleaving is six planners, one completion, a replacement planner, then an approved task's rebase-test: seven workflows. Tests inspect the sliding-window and tail text separately but never model their shared capacity.",
+      "locations": [
+        {
+          "path": "scripts/tackleTasksBrief.ts",
+          "lines": "65-73, 150-155, 175-186",
+          "role": "Plan refill and tail launch use separate capacity decisions."
+        },
+        {
+          "path": "tests/tackleTasksBrief.test.ts",
+          "lines": "55-65, 90-105",
+          "role": "Tests inspect each instruction separately and miss the combined interleaving."
+        }
+      ],
+      "provingTest": "Drive an executable scheduler through six plan launches, one completion, one plan refill, then approval and rebase launch. Record every launch and completion. The current instructions permit seven simultaneous workflows. The corrected scheduler must never exceed TASKS_PER_COMMAND while still enqueueing approvals immediately and preserving one-at-a-time tail execution.",
+      "suggestedFixApproach": [
+        "Put all launches behind one capacity-aware action selector. nextQueueAction, or its caller's executable state, should receive total outstanding count and return wait when it equals the cap.",
+        "Define whether a ready tail or a new plan receives the freed slot and test both plan-completion and tail-completion interleavings."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 25,
+      "title": "C86-25 — High: an implementer can report done with a notes-only commit or without implementation notes",
+      "class": "high",
+      "cause": "A done result is rejected only when root HEAD did not change. The later diff exempts the expected notes path from fence violations but never requires that path or any owned implementation path. A notes-only commit passes as complete, and an owned-file commit with no required implementation-notes file also passes. Existing coverage tests only the zero-commit lie.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "497-516",
+          "role": "Completion validates only a changed root HEAD and never requires both notes and owned implementation changes."
+        },
+        {
+          "path": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "lines": "138-176",
+          "role": "Coverage checks only a worker that makes no commit."
+        }
+      ],
+      "provingTest": "Add two workflow-level cases: a worker commits only plans/task-N-implementation-notes.md, and a worker commits an owned source file but omits the notes file. Both currently return done; both must return blocked with distinct actionable reasons.",
+      "suggestedFixApproach": [
+        "For status done, require the expected notes path in changedPaths and at least one task-owned path in the commit range.",
+        "Verify that the notes path is exactly preparedTask.notesFile and is present in HEAD, not merely untracked. Return a typed blocked result before approval if either requirement fails."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 26,
+      "title": "C86-26 — Medium: a separately launched implement stage reloads stale ownership from its private worktree",
+      "class": "medium",
+      "cause": "loadPreparedTask resolves and reads tasks.json under WORKTREE. Fence widening intentionally updates authoritative task state and run arguments under SOURCE_ROOT, not the private checkout's copy. The combined default stage works only because runPlan mutates preparedTask.files in memory. A separately launched implement stage reloads the old fence and can omit or reject newly owned files.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "370-385, 435-452",
+          "role": "Fresh stage loads private task state; combined stage survives only through in-memory mutation."
+        },
+        {
+          "path": "scripts/addTaskFiles.ts",
+          "lines": "60-90",
+          "role": "Widening correctly updates authoritative source state rather than the private checkout."
+        }
+      ],
+      "provingTest": "Prepare a task owning a.ts, widen the authoritative task to include b.ts, then launch stage implement as a fresh workflow invocation. Assert that the implementer prompt and returned fence include b.ts; current behavior reloads only a.ts.",
+      "suggestedFixApproach": [
+        "Load the current task record using resolveTaskFiles(SOURCE_ROOT), while continuing to place the task brief, plan, notes, Git operations, and edits under WORKTREE.",
+        "Represent authoritative task-state root and task checkout root as separate fields so later code cannot accidentally use one for the other."
+      ],
+      "existingOpenTask": "Task 87 is related to stale relaunch briefs but targets the superseded plan workflow and does not cover standalone implement ownership; no exact open item exists."
+    },
+    {
+      "number": 27,
+      "title": "C86-27 — High: post-approval rebase fence violations are discarded before merge",
+      "class": "high",
+      "cause": "Rebase conflict and fix agents can edit and commit other occurrence layers, and those paths are collected as fenceViolations. A green rebase result may include those violations. consumeTaskWorkflowResult ignores tail-stage fence violations, while the generated orchestrator is forbidden to inspect results[] itself. The task can therefore merge changes outside its approved fence after the approval gate.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "595-605, 738",
+          "role": "Rebase records cross-layer changes and may return them with a green result."
+        },
+        {
+          "path": "scripts/runMergePhase.ts",
+          "lines": "236-257",
+          "role": "Tail result consumption discards fenceViolations."
+        },
+        {
+          "path": "scripts/tackleTasksBrief.ts",
+          "lines": "181-186",
+          "role": "The orchestrator is forbidden to inspect the raw results array, leaving no alternate consumer."
+        }
+      ],
+      "provingTest": "Feed a real green rebase-test envelope containing a cross-occurrence violation into consumeTaskWorkflowResult. The current queue advances the task directly to merge and loses the exact occurrence and path. The corrected result must stop before merge and surface the scope change for an explicit re-gate.",
+      "suggestedFixApproach": [
+        "Add persistent post-approval violation state to the queue and result adapter. A green rebase with violations should produce a requires-regate action instead of a merge step.",
+        "Display normalized occurrence and path details at the gate and require a new approval to advance. A retry alone is insufficient because the committed cross-layer edit remains in branch history."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 28,
+      "title": "C86-28 — Medium: failed final worktree cleanup is silently treated as a clean merge",
+      "class": "medium",
+      "cause": "After close, the workflow deletes merge persistence refs before attempting worktree and branch cleanup. A cleanup failure returns inherited status merged plus cleanupWarning. consumeTaskWorkflowResult treats it as unconditional success and drops the warning, and buildMergeReport has no cleanup-incomplete section. The existing locked-worktree test positively asserts an empty final report, enshrining silent residue.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "832-838",
+          "role": "Persistence is deleted before final cleanup and cleanup failure retains merged status."
+        },
+        {
+          "path": "scripts/runMergePhase.ts",
+          "lines": "156-173, 236-257",
+          "role": "Queue consumption and reporting have no cleanup-incomplete state."
+        },
+        {
+          "path": "tests/taskWorkflowMergeStage.test.ts",
+          "lines": "273-302",
+          "role": "Test observes cleanup residue but expects the final report to be empty."
+        }
+      ],
+      "provingTest": "Force root worktree or branch deletion to fail after a successful merge and close. Consume the real envelope and build the report. The current report is empty although task artifacts remain and recovery refs are gone. The corrected report must name the residue; after unlocking, an idempotent retry must remove all refs and worktrees and clear the warning.",
+      "suggestedFixApproach": [
+        "Retain merge persistence until worktree and branch cleanup succeeds.",
+        "Carry a cleanupIncomplete record through the workflow envelope, queue, and final report, including task number, warning, and retained artifact paths.",
+        "Provide an idempotent cleanup-only retry that deletes persistence last."
+      ],
+      "existingOpenTask": "No matching open task."
+    },
+    {
+      "number": 29,
+      "title": "C86-29 — Medium: two live invocations of the same task can share and reset one clean worktree",
+      "class": "medium",
+      "cause": "createWorktreeForGroup treats a clean worktree whose HEAD equals or precedes source as reusable, then force-resets its task branch. It has no live-run ownership marker. Two sessions that prepare task N before either workflow writes its brief both receive the same directory and branch. The existing test codifies immediate clean reuse instead of simultaneous ownership.",
+      "locations": [
+        {
+          "path": "scripts/prepareTasks.ts",
+          "lines": "138-168",
+          "role": "Clean Git state is treated as proof that the worktree has no live owner."
+        },
+        {
+          "path": "tests/prepareTasks.test.ts",
+          "lines": "78-84",
+          "role": "Test endorses immediate clean reuse and does not model concurrent sessions."
+        }
+      ],
+      "provingTest": "Start two real prepare processes for the same task behind a barrier. Exactly one should acquire ownership and the other should fail without resetting or modifying the first run's checkout. Both currently can succeed if they enter before either produces retained work.",
+      "suggestedFixApproach": [
+        "Acquire an exclusive per-task owner lease atomically during preparation and release it only during final successful cleanup.",
+        "Include run or session identity and define an explicit stale-lease recovery operation that first verifies and preserves retained work. Clean Git state alone must not imply that no live process owns the worktree."
+      ],
+      "existingOpenTask": "Exact match: open task 104 requests a live ownership signal and rejection of concurrent same-task sessions."
+    },
+    {
+      "number": 30,
+      "title": "C86-30 — Medium: preparation writes task briefs into the canonical source checkout and never cleans them",
+      "class": "medium",
+      "cause": "The CLI writes every selected brief under the source checkout before creating task worktrees, and buildWorkflowArguments publishes canonical brief and plan paths. The workflow independently regenerates the brief inside the worktree and cleanup removes only the worktree copy. This produces visible untracked plans/brief-*.md residue after tackle-tasks runs.",
+      "locations": [
+        {
+          "path": "scripts/prepareTasks.ts",
+          "lines": "195-205, 243",
+          "role": "Preparation publishes canonical artifact paths and writes the brief into source."
+        },
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "370-389, 741-753",
+          "role": "Runtime creates and removes only the task-worktree copy."
+        },
+        {
+          "path": "tests/runMergePhase.test.ts",
+          "lines": "406-469",
+          "role": "Production-shaped success test does not assert source artifact absence."
+        }
+      ],
+      "provingTest": "Run the real preparation CLI and a successful task lifecycle. Assert that neither plans/brief-N.md nor a generated empty plan exists in the canonical source checkout before, during, or after the workflow, and that the files exist only in the task worktree when needed. Adding the source-absence assertion to the current production-shaped test fails.",
+      "suggestedFixApproach": [
+        "Remove the source writeTaskBriefFile loop.",
+        "Create each worktree first, generate its brief there or let loadPreparedTask do so, and publish that worktree's absolute briefFile and planFile paths in group arguments instead of paths under repoRoot."
+      ],
+      "existingOpenTask": "Exact match: open task 105 requires transient plan and brief artifacts to stay in task worktrees and be absent from source."
+    },
+    {
+      "number": 31,
+      "title": "C86-31 — Low: plan agents use a phase name that does not match the declared numbered phase",
+      "class": "low",
+      "cause": "meta.phases declares `${N} Plan`, but planner, verifier, replanner, and feedback agents use the literal phase Plan. This defeats the task-number-prefixed phase association required for concurrent workflows and may bind to an undeclared phase depending on runtime validation. Tests do not assert the phase option.",
+      "locations": [
+        {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "18-23, 415, 428, 441, 462",
+          "role": "Declared and supplied plan phase names differ."
+        }
+      ],
+      "provingTest": "Capture the options supplied to all four plan-stage agent calls and assert that each phase exactly equals the declared task-numbered phase. The current calls use the unnumbered literal Plan.",
+      "suggestedFixApproach": [
+        "Replace phase: 'Plan' with phase: `${N} Plan` in the planner, verifier, replanner, and feedback agent options."
+      ],
+      "existingOpenTask": "No matching open task.",
+      "codeChange": {
+        "old": {
+          "path": "skills/tackle-tasks/task.workflow.js",
+          "lines": "415, 428, 441, 462",
+          "code": "{ label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }\n{ label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA }\n{ label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }\n{ label: `applyFeedback:${N}`, phase: 'Plan', schema: APPLY_FEEDBACK_SCHEMA }"
+        },
+        "new": {
+          "code": "{ label: `plan:${N}`, phase: `${N} Plan`, schema: PLAN_SCHEMA }\n{ label: `verify:${N}`, phase: `${N} Plan`, schema: VERIFY_SCHEMA }\n{ label: `plan:${N}`, phase: `${N} Plan`, schema: PLAN_SCHEMA }\n{ label: `applyFeedback:${N}`, phase: `${N} Plan`, schema: APPLY_FEEDBACK_SCHEMA }"
+        }
+      }
+    },
+    {
+      "number": 32,
+      "title": "C86-32 — Low/test gap: task-N recovery was not tested through the advertised discovery path",
+      "class": "low",
+      "cause": "Completed task 176 required end-to-end recovery of a failed task through findUnmergedTaskWorktrees or --discover. The delivered test creates an ordinary task-N worktree and calls only listTaskWorktrees; no test invokes findUnmergedTaskWorktrees. The basename filter is corrected, but the promised recovery path remains unverified.",
+      "locations": [
+        {
+          "path": "tests/mergeTaskWorktrees.test.ts",
+          "lines": "1816-1825",
+          "role": "Test covers only worktree listing, not failed-task recovery."
+        }
+      ],
+      "provingTest": "Create an open task-N with an unmerged commit and a dirty owned path, invoke findUnmergedTaskWorktrees and preferably the --discover CLI, and assert its task number, branch, unmerged commit count, and changed paths. Do not involve legacy group-* artifacts, which task 176 explicitly chose to ignore.",
+      "suggestedFixApproach": [
+        "Replace or extend the current list-only test with the real finder or CLI call and assert the complete recovery record, including matching against authoritative open-task ownership."
+      ],
+      "existingOpenTask": "No open item. Task 176 is completed, but its required test was not delivered."
+    },
+    {
+      "number": 33,
+      "title": "C86-33 — Low/flaky test: the C86-08/09 race tests use real processes but do not force lock order",
+      "class": "low",
+      "cause": "The claim that these tests merely pre-seed widened state is false: they spawn real Node child processes behind a shared start-file barrier and run live widen/close races. However, the desired winner is selected only by a 50 ms sleep. Scheduler starvation can allow the nominally delayed process to acquire the lock first, making the asserted outcome flaky. Task 173's reviewed test direction required the dangerous ordering to be forced rather than hoped for.",
+      "locations": [
+        {
+          "path": "tests/addTaskFiles.test.ts",
+          "lines": "24-50, 202-233",
+          "role": "Real child processes race, but lock acquisition order is only delay-biased."
+        }
+      ],
+      "provingTest": "Remove the artificial delay or run the tests repeatedly under CPU load; either acquisition order is legal after the shared release. The test title assumes an order it has not observed. A deterministic test must receive acknowledgement that process A owns the lock before allowing process B to contend.",
+      "suggestedFixApproach": [
+        "Add a test-only inside-lock acquisition hook or marker, or child IPC acknowledgement.",
+        "Start both real processes, wait until the designated winner confirms lock ownership, then release the loser. Keep both widener-first and closer-first assertions and do not replace the real processes with a pre-seeded fixture."
+      ],
+      "existingOpenTask": "No matching open task."
+    }
+  ]
+}
