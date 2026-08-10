@@ -222,3 +222,42 @@ test('plan+implement rejects a planner that returns an existing plan outside the
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+test('plan+implement rejects missing sourceRoot before source or worktree mutation', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const sourceHead = git(root, 'rev-parse', 'HEAD')
+    const sourceStatus = git(root, 'status', '--porcelain')
+    const worktreeHead = git(group.worktree, 'rev-parse', 'HEAD')
+    const worktreeStatus = git(group.worktree, 'status', '--porcelain')
+    let agentRan = false
+
+    await assert.rejects(
+      runTaskWorkflowAtRealScriptPath({
+        task: task.taskNumber,
+        stage: 'plan+implement',
+        typecheckCommand: prepared.typecheckCommand,
+        worktree: group.worktree,
+        // sourceRoot intentionally omitted
+      }, async () => {
+        agentRan = true
+        throw new Error('agent must not run')
+      }),
+      /no "sourceRoot" in args/,
+    )
+
+    assert.equal(agentRan, false)
+    assert.equal(git(root, 'rev-parse', 'HEAD'), sourceHead)
+    assert.equal(git(root, 'status', '--porcelain'), sourceStatus)
+    assert.equal(git(group.worktree, 'rev-parse', 'HEAD'), worktreeHead)
+    assert.equal(git(group.worktree, 'status', '--porcelain'), worktreeStatus)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})

@@ -1,10 +1,12 @@
 // Behavioral checks for prepareTasks.ts: brief writing, worktree creation, workflow args.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
     buildWorkflowArguments,
     createWorktreeForGroup,
@@ -285,4 +287,111 @@ test("test_buildWorkflowArgumentsGivesEachTaskItsOwnWorktreeAndBranchAsASingleto
     assert.match(group2.worktree, /task-2$/);
     assert.equal(group1.branch, "task-1");
     assert.equal(group2.branch, "task-2");
+});
+
+type PipelineView = {
+    groups: Array<{ tasks: Array<{ number: number; files: string[] }> }>;
+};
+
+function captureSuccessfulChild(child: ChildProcess): Promise<string> {
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr?.on("data", (chunk: string) => { stderr += chunk; });
+    return (async () => {
+        const [code, signal] = await once(child, "exit");
+        if (code !== 0 || signal !== null) {
+            throw new Error(`child failed: code=${String(code)} signal=${String(signal)} stderr=${stderr}`);
+        }
+        return stdout;
+    })();
+}
+
+async function waitForPath(path: string): Promise<void> {
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(path)) {
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for ${path}`);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+}
+
+function filesFor(pipeline: PipelineView, taskNumber: number): string[] {
+    return pipeline.groups
+        .flatMap((group) => group.tasks)
+        .find((task) => task.number === taskNumber)!.files;
+}
+
+test("prepareTasks publishes a widening that lands under the task-state lock", async () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const taskNumber = 1;
+    const taskDirectory = join(repoRoot, ".taskTools");
+    const tasksPath = join(taskDirectory, "tasks.json");
+    const readyFile = join(repoRoot, "widener-ready");
+    const releaseFile = join(repoRoot, "release-widener");
+    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${taskNumber}`);
+    let widener: ChildProcess | undefined;
+    let prepare: ChildProcess | undefined;
+
+    try {
+        writeFileSync(join(repoRoot, "existing.ts"), "existing\n");
+        writeFileSync(join(repoRoot, "widened.ts"), "widened\n");
+        git(repoRoot, "add", "existing.ts", "widened.ts");
+        git(repoRoot, "commit", "-q", "-m", "add task files");
+        mkdirSync(taskDirectory, { recursive: true });
+        writeFileSync(tasksPath, JSON.stringify([
+            { taskNumber, title: "fixture", files: ["existing.ts"], blockedBy: [] },
+        ]));
+        writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+        git(repoRoot, "remote", "add", "origin", repoRoot);
+
+        const lockModuleUrl = pathToFileURL(
+            join(import.meta.dirname, "..", "scripts", "taskStateLock.ts"),
+        ).href;
+        const widenerSource = `
+          import { existsSync, readFileSync, writeFileSync } from "node:fs";
+          import { withTaskStateLock, writeJsonAtomically } from ${JSON.stringify(lockModuleUrl)};
+          const wait = new Int32Array(new SharedArrayBuffer(4));
+          const tasksPath = ${JSON.stringify(tasksPath)};
+          withTaskStateLock(tasksPath, () => {
+            writeFileSync(${JSON.stringify(readyFile)}, "ready\\n");
+            while (!existsSync(${JSON.stringify(releaseFile)})) Atomics.wait(wait, 0, 0, 10);
+            const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+            tasks[0].files.push("widened.ts");
+            writeJsonAtomically(tasksPath, tasks);
+          });
+        `;
+        widener = spawn(process.execPath, ["--input-type=module", "--eval", widenerSource], {
+            cwd: repoRoot,
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        const widenerDone = captureSuccessfulChild(widener);
+        await waitForPath(readyFile);
+
+        prepare = spawn(
+            process.execPath,
+            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), String(taskNumber)],
+            { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const prepareDone = captureSuccessfulChild(prepare);
+
+        // Worktree creation happens before the publication lock; seeing it proves the CLI's original snapshot.
+        await waitForPath(worktreePath);
+        writeFileSync(releaseFile, "go\n");
+
+        await widenerDone;
+        const emitted = JSON.parse(await prepareDone) as PipelineView;
+        const published = JSON.parse(
+            readFileSync(join(taskDirectory, "run-arguments.json"), "utf8"),
+        ) as PipelineView;
+        assert.deepEqual(filesFor(emitted, taskNumber), ["existing.ts", "widened.ts"]);
+        assert.deepEqual(filesFor(published, taskNumber), ["existing.ts", "widened.ts"]);
+    } finally {
+        if (!existsSync(releaseFile)) writeFileSync(releaseFile, "cleanup\n");
+        widener?.kill();
+        prepare?.kill();
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
 });

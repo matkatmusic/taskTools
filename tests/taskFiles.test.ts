@@ -1,9 +1,12 @@
 // Behavioral checks for taskFiles.ts resolution + first-run seeding.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/taskFiles.ts";
 
 function makeEmptyProjectRoot(): string {
@@ -24,7 +27,7 @@ test("test_resolvePrefersTaskToolsFolder", () => {
 });
 
 test("test_resolveFallsBackToRootTasksJson", () => {
-  // Scenario: a pre-plugin project (like RevEng) keeps tasks.json at the root.  Steps: only a root tasks.json exists — no .taskTools/ folder.
+  // Pre-plugin project: only a root tasks.json exists, no .taskTools/ folder.
   const root = makeEmptyProjectRoot();
   writeFileSync(join(root, "tasks.json"), "[]\n");
   // resolving must return the root pair so existing repos keep working untouched.
@@ -45,7 +48,7 @@ test("test_resolveDefaultsToTaskToolsWhenNeitherExists", () => {
 });
 
 test("test_resolveWalksUpToParentWithTaskFiles", () => {
-  // Scenario: the shell cwd was left in a subdirectory (mid-session `cd`), but the project's tasks.json lives at the root — resolution must walk up and find it.
+  // Cwd is a subdirectory, but tasks.json lives at the root; resolution must walk up.
   const root = makeEmptyProjectRoot();
   writeFileSync(join(root, "tasks.json"), "[]\n");
   const sub = join(root, "jfred", "src");
@@ -66,6 +69,48 @@ test("test_seedCreatesBothFilesWithEmptyArrays", () => {
   writeFileSync(pair.tasksPath, JSON.stringify([{ taskNumber: 1, title: "t" }]) + "\n");
   seedTaskFilesIfAbsent(pair);
   assert.equal(JSON.parse(readFileSync(pair.tasksPath, "utf8")).length, 1);
+});
+
+test("concurrent first-run seeders leave both task files as valid JSON", async () => {
+  const root = makeEmptyProjectRoot();
+  const startFile = join(root, "start");
+  const taskFilesModuleUrl = pathToFileURL(
+    join(import.meta.dirname, "..", "scripts", "taskFiles.ts"),
+  ).href;
+  const childSource = `
+    import { existsSync } from "node:fs";
+    import { resolveTaskFiles, seedTaskFilesIfAbsent } from ${JSON.stringify(taskFilesModuleUrl)};
+    const wait = new Int32Array(new SharedArrayBuffer(4));
+    while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(wait, 0, 0, 10);
+    seedTaskFilesIfAbsent(resolveTaskFiles(${JSON.stringify(root)}));
+  `;
+
+  try {
+    const children = Array.from({ length: 16 }, () =>
+      spawn(process.execPath, ["--input-type=module", "--eval", childSource], {
+        cwd: root,
+        stdio: "inherit",
+      }),
+    );
+    const exits = children.map((child) => once(child, "exit"));
+    writeFileSync(startFile, "go\n");
+
+    for (const [code, signal] of await Promise.all(exits)) {
+      assert.equal(signal, null);
+      assert.equal(code, 0);
+    }
+
+    const pair = resolveTaskFiles(root);
+    assert.deepEqual(JSON.parse(readFileSync(pair.tasksPath, "utf8")), []);
+    assert.deepEqual(JSON.parse(readFileSync(pair.completedTasksPath, "utf8")), []);
+    assert.equal(existsSync(join(root, ".taskTools", "task-state.lock")), false);
+    assert.equal(
+      readdirSync(join(root, ".taskTools")).some((name) => name.endsWith(".tmp")),
+      false,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("test_leadingTaskNumbersReadsTheArrayFromAWholeInvocationString", () => {
