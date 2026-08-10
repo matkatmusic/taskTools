@@ -246,6 +246,36 @@ if (argsValue === "") { process.stderr.write("<SKILL_DIR>: no arguments on stdin
 ```
 The `.replace(/\n$/, "")` drops the newline the heredoc adds. Empty stdin must fail loudly, because a brief built from missing arguments points nowhere.
 
+## Clarifications for complex and argument-taking skills
+
+### Transitive context boundary
+- Cause: Checking only that `SkillBodyEmitter` itself runs no subprocess misses an emitted instruction that tells the main agent to run a second emitter with Bash. That second command still executes in the main context, so the extra hop does not isolate its output.
+- Solution: Require the complete chain `SkillBodyEmitter → WORKFLOW → agent(...) → AgentPromptEmitter`. `SkillBodyEmitter` must emit a workflow declaration, and only a prompt passed to `agent(...)` may tell an agent to run `AgentPromptEmitter` with Bash. Reject `SkillBodyEmitter → main-agent Bash → AnotherEmitter`, even when both emitters individually run no subprocess.
+
+### Hybrid main-agent orchestration
+- Cause: Some skills require capabilities that workflow agents do not have, including `AskUserQuestion`, launching additional workflows, approval gates, and deliberate final mutations. Saying to move the whole skill body behind a workflow makes ownership of those steps unclear.
+- Solution: Keep static orchestration for main-only capabilities in `SkillBodyEmitter`. Move only data-dependent reads and their raw output behind `agent(...)`. A main agent may consume a small schema-validated workflow result and use it to ask questions, launch later workflows, or perform an explicitly approved mutation.
+
+### Allowed imports in SkillBodyEmitter
+- Cause: The statement that `node:url` is the only legal import conflicts with the later `readStdin()` example and working argument-taking emitters, which need `readFileSync(0, "utf8")` from `node:fs`.
+- Solution: Allow `node:url` for absolute path resolution and `node:fs` only for reading quoted-heredoc stdin. Continue to forbid subprocess imports and all relative sibling/data imports. Verify with `rg -n 'execFileSync|spawn|from "\.' scripts/<SKILL_DIR>_SkillBodyEmitter.ts`; `node:fs` and `node:url` imports are allowed.
+
+### Raw command output versus structured results
+- Cause: “The data must not appear anywhere in the main transcript” can be read as forbidding even the semantic result that the main orchestrator needs, although workflows such as `create-task` must return fields derived from raw task data.
+- Solution: Keep raw stdout, bulk reports, templates, diffs, and unfiltered task data inside the workflow agent. Return only the smallest schema-validated semantic result required by the main agent, such as normalized blocker pairs, selected file paths, or parsed workflow arguments. Do not repeat the raw report in a result field.
+
+### JSON-safe workflow arguments
+- Cause: Interpolating `"argsValue": "${argsValue}"` directly into JSON breaks when `$ARGUMENTS` contains quotes, backslashes, or newlines, even though the original quoted heredoc safely delivered those bytes to `SkillBodyEmitter`.
+- Solution: Construct the complete workflow object in TypeScript and serialize it with `JSON.stringify({ scriptPath: WORKFLOW_PATH, args: { agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, argsValue } })`. Never build JSON by interpolating an unescaped argument inside quotes.
+
+### Multi-mode bootstrap workflows
+- Cause: A complex skill may need a main-agent decision between two data reads—for example, discover blockers, investigate them, apply disproven verdicts, and only then prepare runnable tasks. A single one-shot example does not show where commands after that decision belong.
+- Solution: Reuse one import-free, meta-first bootstrap workflow with explicit modes such as `discover` and `prepare`. Each mode calls `agent(...)`, and that agent runs the same `AgentPromptEmitter` with the mode plus raw arguments on quoted-heredoc stdin. Return a mode-specific schema. The main agent may act on the first structured result and then invoke the second workflow mode; it still never runs the data scripts itself.
+
+### Boundary tests must follow the complete chain
+- Cause: A test that only rejects `execFileSync` in `SkillBodyEmitter` passes when its output tells the main agent to run another emitter, which is the same context leak one step later.
+- Solution: Test all four layers. Assert that `SkillBodyEmitter` output declares a workflow and contains no data-script or second-brief-emitter command; the workflow source invokes `AgentPromptEmitter` inside `agent(...)`; only `AgentPromptEmitter` imports or executes data scripts; and the workflow returns a schema-limited result. Include a negative fixture for the forbidden `SkillBodyEmitter → main-agent Bash → AnotherEmitter` chain.
+
 ## Verify
 
 - `node scripts/<SKILL_DIR>_SkillBodyEmitter.ts` — prints paths and instructions, no data.
