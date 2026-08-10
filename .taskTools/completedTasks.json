@@ -2580,5 +2580,37 @@
     "commitHashes": [
       "eedbd11d22882e68aa69f4c21aecce53518372f5"
     ]
+  },
+  {
+    "taskNumber": 168,
+    "version": "25097124111d829d9c3a996891c7e8518ba00c3d",
+    "title": "Make the gitlink-conflict rebase continuation non-interactive so it stops hanging (audit C86-03)",
+    "userDescription": "The required parent gitlink-conflict rebase path hangs indefinitely. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by previous task (C86-02).",
+    "goal": [
+      "- test_rebaseParentOntoSourceAndTestResolvesAnAllowedGitlinkConflictAndReportsRebasedAndTested runs on its own, terminates normally, and passes -- it hangs until interrupted today.",
+      "- No git invocation in scripts/mergeTaskWorktrees.ts can block on an editor, including the merge and commit calls, not only `rebase --continue`.",
+      "- `npm test` completes without a stuck or timed-out run.",
+      "- NOT in scope: threading the prepared worktree into the workflows (audit C86-01, task 166) and the manifest branch-identity mismatch (audit C86-02, task 167, the blocker for this task); and the merge-queue terminal state (audit C86-04), owned by the sibling task blocked on this one."
+    ],
+    "description": "This is finding C86-03 (BLOCKER) in plans/task-86-codex-audit.md.\n\nWhen a parent rebase has only permitted gitlink conflicts, rebaseParentOntoSourceAndTest stages them and invokes `git rebase --continue` (scripts/mergeTaskWorktrees.ts, around line 205). That command runs without disabling Git's editor, so in a noninteractive test or workflow Git waits forever for one.\n\nRoot cause: the shared `git(repoRoot, ...args)` helper at scripts/mergeTaskWorktrees.ts:19 calls execFileSync with no env override, so it inherits the parent process's interactive editor config. The same file also runs `git merge`, `git merge --abort`, and `git commit --no-edit` through that helper, so the same hang is latent on those paths too.\n\nThe working reference pattern already exists: continueRebaseChecked in skills/tackle-tasks/task.workflow.js passes `env: { ...process.env, GIT_EDITOR: 'true' }` to execFileSync for the same `git rebase --continue` call. mergeTaskWorktrees.ts's helper lacks it, which confirms the safeguard is simply missing here.\n\nFIX SITE, settled with the user: put the fix in the shared git() helper at scripts/mergeTaskWorktrees.ts:19, not only at the rebase --continue call. The audit's required fix says the continuation must be \"unconditionally noninteractive\"; the helper satisfies that and additionally removes the same latent hang from the merge and commit calls in the file. The user's instruction was to follow codex's recommendation where it makes one and otherwise take this recommendation; codex names only the continuation and does not rule on helper-vs-call-site.\n\nSymptom to reproduce: the isolated test test_rebaseParentOntoSourceAndTestResolvesAnAllowedGitlinkConflictAndReportsRebasedAndTested (tests/mergeTaskWorktrees.test.ts:1071) completes its fixture setup and then stays pending until interrupted. A larger focused run was likewise stuck for more than six minutes.",
+    "files": [
+      "scripts/mergeTaskWorktrees.ts",
+      "tests/mergeTaskWorktrees.test.ts"
+    ],
+    "tests": "The existing hanging test must simply terminate. Run test_rebaseParentOntoSourceAndTestResolvesAnAllowedGitlinkConflictAndReportsRebasedAndTested (tests/mergeTaskWorktrees.test.ts:1071) on its own with a hard timeout, and require it to finish and report rebased + tested.",
+    "difficulty": 3,
+    "blockedBy": [
+      {
+        "taskNum": 167,
+        "reason": "the user placed this after C86-02 in the audit chain; C86-02 reworks the same merge/rebase branch plumbing this continuation runs inside"
+      }
+    ],
+    "handoffFilePaths": [
+      "plans/task-86-codex-audit.md"
+    ],
+    "completionDate": "2026-08-09",
+    "commitHashes": [
+      "6e354e14131665447fb7cf097aa4b31b4af60366"
+    ]
   }
 ]
