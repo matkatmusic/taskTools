@@ -312,7 +312,10 @@ test('merge stage: a cleanup commit blocked by a hook leaves the source branch u
     const headBefore = git(root, 'rev-parse', 'main')
     const worktreeHeadBefore = git(worktreePath, 'rev-parse', 'HEAD')
 
-    await assert.rejects(() => runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest }))
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest })
+    const outcome = result.results[0] as { status: string, lastFailure: string }
+    assert.equal(outcome.status, 'blocked')
+    assert.match(outcome.lastFailure, /cleanup failed/)
 
     assert.equal(git(root, 'rev-parse', 'main'), headBefore)
     assert.equal(git(worktreePath, 'rev-parse', 'HEAD'), worktreeHeadBefore)
