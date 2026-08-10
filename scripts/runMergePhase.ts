@@ -96,6 +96,28 @@ export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean):
     return queue.carryover.length === 0 ? "done" : "continue";
 }
 
+// tail = an outstanding entry at rebase-test or merge; those are serial per task and must not be double-launched.
+export type OutstandingWorkflowState = { any: boolean; tail: boolean };
+
+export type QueueAction =
+    | { kind: "launch"; step: QueueStep }
+    | { kind: "wait" }
+    | { kind: "begin-next-lap" }
+    | { kind: "report"; endState: Exclude<QueueEndState, "continue"> };
+
+export function nextQueueAction(
+    queue: MergeQueue,
+    outstanding: OutstandingWorkflowState,
+): QueueAction {
+    const step = nextQueueStep(queue);
+    if (step) return outstanding.tail ? { kind: "wait" } : { kind: "launch", step };
+
+    const endState = shouldEndQueue(queue, outstanding.any);
+    if (endState !== "continue") return { kind: "report", endState };
+    if (queue.carryover.length > 0 && !outstanding.any) return { kind: "begin-next-lap" };
+    return { kind: "wait" };
+}
+
 // Rotates a finished lap's carryover (failures with a lap remaining) into the next lap's pending list.
 export function beginNextLap(queue: MergeQueue): MergeQueue {
     return { ...queue, pending: queue.carryover, carryover: [], mergedThisLap: 0 };
@@ -149,6 +171,90 @@ export function buildMergeReport(queue: MergeQueue): MergeReport {
         terminalReason: "zero-merge lap ended the queue",
     }));
     return { unmerged: [...ceilingFailures, ...queueExitFailures], mergedNotClosed: queue.mergedNotClosed };
+}
+
+type JsonObject = Record<string, unknown>;
+
+export type TaskWorkflowEnvelope = {
+    task: number;
+    stage: "plan+implement" | "rebase-test" | "merge";
+    results: JsonObject[];
+};
+
+export type ApprovalView = {
+    taskNumber: number;
+    status: string;
+    verifier: JsonObject | null;
+    fenceViolations: unknown[];
+};
+
+export type ConsumedWorkflowResult =
+    | { kind: "approval"; queue: MergeQueue; approval: ApprovalView }
+    | { kind: "queue"; queue: MergeQueue; taskNumber: number; stage: QueueStage; status: string };
+
+function objectAt(results: unknown[], index: number, label: string): JsonObject {
+    const value = results[index];
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`task workflow envelope has no ${label} result at results[${index}]`);
+    }
+    return value as JsonObject;
+}
+
+function nonemptyString(value: unknown, label: string): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+        throw new Error(`${label} must be a non-empty string`);
+    }
+    return value;
+}
+
+// The one place that decodes a task-workflow completion notification. Callers never index results[] themselves.
+export function consumeTaskWorkflowResult(
+    queue: MergeQueue,
+    envelope: TaskWorkflowEnvelope,
+): ConsumedWorkflowResult {
+    if (envelope.stage === "plan+implement") {
+        const plan = objectAt(envelope.results, 0, "plan");
+        const implement = envelope.results.length > 1
+            ? objectAt(envelope.results, 1, "implement")
+            : null;
+        return {
+            kind: "approval",
+            queue,
+            approval: {
+                taskNumber: envelope.task,
+                status: String(implement?.status ?? plan.status),
+                verifier: plan.verify && typeof plan.verify === "object"
+                    ? plan.verify as JsonObject
+                    : null,
+                fenceViolations: Array.isArray(implement?.fenceViolations)
+                    ? implement!.fenceViolations
+                    : [],
+            },
+        };
+    }
+
+    const result = objectAt(envelope.results, 0, envelope.stage);
+    const status = nonemptyString(result.status, `${envelope.stage}.status`);
+    const success = envelope.stage === "rebase-test"
+        ? status === "green"
+        : status === "merged" || status === "merged-but-not-closed";
+    const outcome: StageOutcome = success
+        ? { status: "success" }
+        : {
+            status: "failure",
+            reason: nonemptyString(result.lastFailure, `${envelope.stage}.lastFailure`),
+        };
+
+    let next = recordStageOutcome(queue, envelope.task, envelope.stage, outcome);
+    if (envelope.stage === "merge" && status === "merged-but-not-closed") {
+        next = recordMergedNotClosed(
+            next,
+            envelope.task,
+            nonemptyString(result.mergedCommitHash, "merge.mergedCommitHash"),
+            nonemptyString(result.closeError, "merge.closeError"),
+        );
+    }
+    return { kind: "queue", queue: next, taskNumber: envelope.task, stage: envelope.stage, status };
 }
 
 // RETIRED (task 147): derived run-outcomes.json's aggregate counts from one batch's StepOutputs arrays.

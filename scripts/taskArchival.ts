@@ -1,6 +1,7 @@
 // Archives fully-published tasks from an explicit list; task 31's approvalGate.ts already gates this, so no re-prompt.
 import { readFileSync, writeFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { withTaskStateLock } from "./taskStateLock.ts";
 
 export type RepoPublishStatus = "published" | "conflicted" | "skipped" | "rolled-back";
 
@@ -53,6 +54,7 @@ export function archivePublishedTasks(
 
     let archived: number[] = [];
     if (candidates.length > 0) {
+      archived = withTaskStateLock(projectRoot, (): number[] => {
         const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
         const originalTasksRaw = readFileSync(tasksPath, "utf8");
         const originalCompletedRaw = readFileSync(completedTasksPath, "utf8");
@@ -76,10 +78,10 @@ export function archivePublishedTasks(
 
         for (const { index } of [...toArchive].sort((a, b) => b.index - a.index)) tasks.splice(index, 1);
         for (const { task, commitHashes } of toArchive) completedTasks.push({ ...task, completionDate, commitHashes });
-        archived = toArchive.map(({ task }) => task.taskNumber);
+        const archivedLocal = toArchive.map(({ task }) => task.taskNumber);
 
         // ponytail: unreachable given the loop above always pushes one entry per candidate; kept as the explicit post-write invariant the reviewer asked for, so a future change to the preflight loop that reintroduces a silent skip fails loudly here instead of writing a partial archive.
-        const stillOpen = candidates.filter((taskNumber) => !archived.includes(taskNumber));
+        const stillOpen = candidates.filter((taskNumber) => !archivedLocal.includes(taskNumber));
         if (stillOpen.length > 0) throw new Error(`archivePublishedTasks: candidates left unarchived: ${stillOpen.join(", ")}`);
 
         // Serialize both final versions before touching disk, so a mid-write failure has a known-good pair to restore.
@@ -99,6 +101,8 @@ export function archivePublishedTasks(
             }
             throw new Error(`archivePublishedTasks: write failed and was rolled back to the original files: ${writeMessage}`);
         }
+        return archivedLocal;
+      });
     }
 
     const leftOpen = [...considered].filter((taskNumber) => !archived.includes(taskNumber));

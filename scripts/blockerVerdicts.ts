@@ -1,6 +1,7 @@
 // Single source of truth for blocker verdicts: allowed values, investigation prompt, and the strip-entry CLI.
-import { writeFileSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export const BLOCKER_VERDICTS = { DISPROVEN: "disproven", STILL_BLOCKED: "still-blocked" } as const;
 export const BLOCKER_VERDICT_VALUES = Object.values(BLOCKER_VERDICTS);
@@ -43,10 +44,14 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   }
   const reason = readStdin().replace(/\n$/, "");
 
-  const { tasksPath } = resolveTaskFiles(process.cwd());
-  const tasks = readTaskFile(tasksPath);
-  const removed = stripDisprovenBlocker(tasks, blockedTaskNumber, blockerTaskNumber, reason);
-  if (removed) writeFileSync(tasksPath, JSON.stringify(tasks, null, 2) + "\n");
+  const sourceRoot = process.cwd();
+  const { tasksPath } = resolveTaskFiles(sourceRoot);
+  const removed = withTaskStateLock(sourceRoot, () => {
+    const tasks = readTaskFile(tasksPath);
+    const didRemove = stripDisprovenBlocker(tasks, blockedTaskNumber, blockerTaskNumber, reason);
+    if (didRemove) writeJsonAtomically(tasksPath, tasks);
+    return didRemove;
+  });
   process.stdout.write((removed
     ? `removed blockedBy entry from task ${blockedTaskNumber} for blocker task ${blockerTaskNumber}`
     : `no matching blockedBy entry for task ${blockedTaskNumber} blocked by task ${blockerTaskNumber} with that reason`) + "\n");

@@ -9,6 +9,8 @@ const MAX_FIX_ROUNDS = ARGS.maxRounds ?? 3
 const MAX_REBASE_FIX_ROUNDS = ARGS.maxRebaseFixRounds ?? 3
 const WORKTREE = ARGS.worktree
 if (!WORKTREE) throw new Error('task.workflow.js: no "worktree" in args; every stage must run inside the prepared task worktree')
+const SOURCE_ROOT = ARGS.sourceRoot
+if (!SOURCE_ROOT) throw new Error('task.workflow.js: no "sourceRoot" in args')
 
 export const meta = {
   name: `task-${N}`,
@@ -93,11 +95,26 @@ const testsInstruction = (t) => t.tests && t.tests !== 'skip'
   ? `The task's tests field holds an example test the user wrote — put it into the plan's verification section as the concrete check to run, expanded with a few extra cases covering the individual functions/subparts it touches: ${t.tests}`
   : 'This task has no tests field, or it is the literal string "skip" — do not require TDD; write ordinary verification commands in the plan instead.'
 
+const worktreePath = (t, relativePath) => `${t.repoRoot.replace(/\/+$/, '')}/${relativePath}`
+
+const shellQuote = (value) => `'${String(value).replaceAll("'", "'\"'\"'")}'`
+
+const ownedPathMap = (t) => t.files
+  .map((file) => `  - ${file} => ${worktreePath(t, file)}`)
+  .join('\n')
+
 const plannerBrief = (t, preamble = '') => `${preamble}Invoke /ponytail:ponytail ultra.
-Read this brief file: ${t.briefFile}
-You may also READ these owned files, and nothing else: ${t.files.join(', ')}
-Read them — a plan that guesses at their contents will be rejected by the reviewer.
-Follow ~/.claude/guides/planning.md and write the plan to exactly this path: ${t.planFile}
+taskWorktree = ${t.repoRoot}
+Read this brief file by its absolute path: ${t.briefFile}
+Owned files (repo-relative => absolute in taskWorktree):
+${ownedPathMap(t)}
+
+For every filesystem tool call, use the absolute taskWorktree path shown above.
+Never resolve a repo-relative task path against your ambient working directory,
+and never read or edit the same relative path in another checkout.
+
+Read the owned files — a plan that guesses at their contents will be rejected.
+Follow ~/.claude/guides/planning.md and write the plan to exactly this absolute path: ${t.planFile}
 Do not change any source file — this is planning only, not implementation.
 
 The plan must be exact enough that the implementer makes no discovery of its own:
@@ -111,9 +128,9 @@ The plan must be exact enough that the implementer makes no discovery of its own
 - State the verification that proves the change worked, as commands with expected results.
 - ${testsInstruction(t)}
 
-If the plan would need to edit a file outside the owned list above, set status
+If the plan would need to edit a file outside the absolute owned paths above, set status
 "needs-clarification" and name that file in "question" — do not plan the edit anyway.
-If the blocker is instead that you need to READ a file outside the owned list
+If the blocker is instead that you need to READ a file outside the absolute owned paths
 to write an exact plan, set status "needs-clarification", populate
 missingFiles with the repo-relative path(s) of each file you need, and use
 "question" to explain why each path is needed.
@@ -123,7 +140,7 @@ status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
 Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
 You are forbidden to edit any file other than ${t.planFile}; to read a file outside
-the owned list; to leave a decision for the implementer; or to write a plan step
+the absolute owned paths; to leave a decision for the implementer; or to write a plan step
 whose exact target you did not read.`
 
 const codexPrompt = (t, planFile) => `Review an implementation plan. Read only these two files: the brief ${t.briefFile} and the plan ${planFile}. Do not edit anything.
@@ -194,52 +211,65 @@ const tddInstruction = (t) => t.tests && t.tests !== 'skip'
   ? `This task's tests field holds an example test the user wrote: ${t.tests}\nWrite that test first, then expand it to also cover the individual functions/subparts you build, before writing the implementation.`
   : 'This task has no tests field, or it is the literal string "skip" — skip TDD entirely and just write the code.'
 
-const workerBrief = (t, note) => `You are implementing EXACTLY ONE pre-planned task from
-./.taskTools/tasks.json: #${t.number}.
+const workerBrief = (t, note) => {
+  const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${TYPECHECK_COMMAND})`
+  const gitAddPaths = t.files.length
+    ? [...t.files, t.notesFile].map(shellQuote).join(' ')
+    : `${shellQuote(t.notesFile)} (plus every other path you edited, listed explicitly)`
+
+  return `You are implementing EXACTLY ONE pre-planned task from
+${worktreePath(t, '.taskTools/tasks.json')}: #${t.number}.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`name = value\` means record that value and use it later.
 A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
+taskWorktree = ${t.repoRoot}
 ownedFiles = ${t.files.join(', ')}
+ownedPaths (the only editable source/test paths) =
+${ownedPathMap(t)}
 plan = ${t.planFile}
 notesFile = ${t.notesFile}
 timeBudget = 10 minutes
 ${note ? `note = ${note}\n` : ''}
 ${tddInstruction(t)}
 
+Treat taskWorktree as the project root for jot:implement. Every repo-relative
+path in the plan means its absolute path under taskWorktree. Use absolute paths
+for Read/Edit/Search. Never edit the corresponding path in the ambient checkout.
+
 use jot:implement ${t.planFile}, writing its implementation-notes log to exactly notesFile
 
 if the plan is impossible as written:
     return {task: ${t.number}, status: "blocked", summary: why it cannot be done, remaining: [], notesFile: notesFile}
 
-implement every step of the plan, editing only ownedFiles
+implement every step of the plan, editing only ownedPaths
 
-typecheck = run(${TYPECHECK_COMMAND})
-if typecheck reported errors in ownedFiles:
-    fix them
+typecheck = run(${rootedTypecheck})
+if typecheck reported errors in ownedPaths:
+    fix them using their absolute taskWorktree paths
 
-if scripts/relatedTests.ts exists:
-    tests = run it to discover the tests covering ownedFiles
+if ${worktreePath(t, 'scripts/relatedTests.ts')} exists:
+    tests = run it from taskWorktree to discover the tests covering ownedFiles
 else:
-    tests = the test file belonging to each file in ownedFiles
+    tests = the absolute test paths under taskWorktree belonging to ownedFiles
 // never run the full suite; that is the close-tasks gate, not yours
 
-results = run(tests)
+results = run every test command as (cd -- ${shellQuote(t.repoRoot)} && <test command>)
 fixRound = 0
 while any test failed and fixRound is less than ${MAX_FIX_ROUNDS}:
     fixRound = fixRound + 1
     fix the cause
-    typecheck = run(${TYPECHECK_COMMAND})
-    results = run(tests)
+    typecheck = run(${rootedTypecheck})
+    results = run every test command as (cd -- ${shellQuote(t.repoRoot)} && <test command>)
 
 if any test still failed after ${MAX_FIX_ROUNDS} fix rounds:
     return {task: ${t.number}, status: "blocked", summary: what is still failing after ${MAX_FIX_ROUNDS} fix rounds, remaining: the failing test names, notesFile: notesFile}
 
 if typecheck is clean and every test passed:
-    run: ${t.files.length ? `git add -- ${[...t.files, t.notesFile].map((f) => JSON.stringify(f)).join(' ')}` : `git add -- ${JSON.stringify(t.notesFile)} (plus every other path you edited, listed explicitly)`}
-    run: git commit -m "task ${t.number}: one-line summary"
+    run: git -C ${shellQuote(t.repoRoot)} add -- ${gitAddPaths}
+    run: git -C ${shellQuote(t.repoRoot)} commit -m ${shellQuote(`task ${t.number}: one-line summary`)}
     return {task: ${t.number}, status: "done", summary: one sentence, remaining: [], notesFile: notesFile}
 else if part of the plan is implemented:
     return {task: ${t.number}, status: "partial", summary: one sentence, remaining: the plan steps not yet done, plus any failing test names, notesFile: notesFile}
@@ -249,13 +279,18 @@ else:
 if you reach timeBudget before finishing:
     return status "partial" with the not-yet-done plan steps in remaining, notesFile still set to notesFile
 
-You are forbidden to touch anything outside ownedFiles excluding notesFile; to
+You are forbidden to touch anything outside ownedPaths excluding notesFile; to
 add scope or refactors the plan does not call for; to redecide anything the
 plan already decided; to run the full suite, \`git add -A\`, or \`git add .\`; to
 commit while anything fails; to attempt more than ${MAX_FIX_ROUNDS} fix
 rounds; or to return status "done" with a failing test. Any test file created
 or modified must be listed in ownedFiles; otherwise return status "blocked"
-without editing it.`
+without editing it.
+
+You are forbidden to use an ambient-cwd-relative filesystem path or a bare Git
+command. Every Git command must use git -C taskWorktree, and every other shell
+command must explicitly run inside taskWorktree.`
+}
 
 const mergeConflictBrief = (checkoutPath, conflictedFilePaths) => `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve exactly these conflicted paths — this is the complete list, do not search the repository for more:
 ${conflictedFilePaths.map((p) => `  - ${p}`).join('\n')}
@@ -353,6 +388,18 @@ const loadPreparedTask = async () => {
   }
 }
 
+// A planner that reports "planned" without writing the file at planFile never wrote a plan.
+const rejectPlannedWithoutPlanFile = async (planResult) => {
+  if (planResult.status !== 'planned') return planResult
+  const { existsSync } = await import('node:fs')
+  if (existsSync(planResult.planFile)) return planResult
+  return {
+    ...planResult,
+    status: 'needs-clarification',
+    question: 'planner reported status "planned" but did not write the plan file inside the task worktree',
+  }
+}
+
 const runPlan = async () => {
   log(`task ${N}: plan stage`)
   preparedTask = await loadPreparedTask()
@@ -360,7 +407,6 @@ const runPlan = async () => {
   const { pathToFileURL } = await import('node:url')
   const { addTaskFiles } = await import(pathToFileURL(join(WORKTREE, 'scripts/addTaskFiles.ts')).href)
   const { writeTaskBriefFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/prepareTasks.ts')).href)
-  const mainRepoRoot = ARGS.repositoryManifest.occurrences.find((o) => o.occurrenceId === '').checkoutPath
   const result = await retryAgent(() => agent(plannerBrief(preparedTask), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
   let planResult = {
     stage: 'plan',
@@ -372,6 +418,7 @@ const runPlan = async () => {
     }),
   }
   planResult.files = preparedTask.files
+  planResult = await rejectPlannedWithoutPlanFile(planResult)
   if (planResult.status !== 'planned') return planResult
   const runVerify = async () => await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
     task: N,
@@ -381,7 +428,7 @@ const runPlan = async () => {
     missingFiles: [],
   }
   const widenFilesAndReplan = async (missingFiles) => {
-    const widenedTasks = addTaskFiles([N], missingFiles, mainRepoRoot)
+    const widenedTasks = addTaskFiles([N], missingFiles, SOURCE_ROOT)
     const widenedTask = widenedTasks.find((entry) => entry.taskNumber === N)
     if (!widenedTask) throw new Error(`task.workflow.js: task ${N} disappeared from tasks.json`)
     writeTaskBriefFile(widenedTask, preparedTask.repoRoot)
@@ -397,6 +444,7 @@ const runPlan = async () => {
       }),
     }
     planResult.files = preparedTask.files
+    planResult = await rejectPlannedWithoutPlanFile(planResult)
   }
   let reviewRounds = MAX_REVIEW_ROUNDS
   let verify = await runVerify()
@@ -440,6 +488,17 @@ const runImplement = async () => {
     const note = `A previous worker finished part of this plan; still remaining: ${result.remaining.join('; ')}. Check the file state before redoing anything.`
     result = (await runWorker(preparedTask, note)) ?? result
   }
+
+  const headAfter = execFileSync('git', ['-C', preparedTask.repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  if (result.status === 'done' && headAfter === base) {
+    result = {
+      ...result,
+      status: 'blocked',
+      summary: 'implementer reported done but made no commit in taskWorktree',
+      remaining: ['commit the implementation in the prepared task worktree'],
+    }
+  }
+
   const notesRelative = preparedTask.notesFile.slice(preparedTask.repoRoot.length + 1)
   const changedPaths = execFileSync(
     'git',
@@ -518,13 +577,14 @@ const runRebaseFixAgent = (checkoutPath, occurrenceId, testOutput, forbiddenPath
 // Resolves one conflict, commits cross-layer edits deepest-first, drives continue/abort.
 const advanceLiveConflict = async (execFileSync, uncommittedChangedFiles, occurrencesDeepestFirst, checkoutPaths, activeOccurrenceId, conflictedFilePaths, fenceViolations) => {
   const checkoutPath = checkoutPaths.get(activeOccurrenceId)
+  const conflictSummary = `unresolved merge conflict in ${activeOccurrenceId || 'root'}; unresolved paths: ${conflictedFilePaths.join(', ')}`
   const otherOccurrences = occurrencesDeepestFirst.filter((o) => o.occurrenceId !== activeOccurrenceId)
   const beforeOids = otherOccurrences.map((o) => [o.occurrenceId, readHeadOid(execFileSync, checkoutPaths.get(o.occurrenceId))])
 
   const result = await runMergeConflictAgent(checkoutPath, conflictedFilePaths)
   if (result === null || result === undefined || result.resolved !== true) {
     const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
-    return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? null : `abort failed: ${abortResult.failureReason}` }
+    return { advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? null : `abort failed: ${abortResult.failureReason}` }
   }
 
   for (const path of uncommittedChangedFiles(checkoutPath)) {
@@ -543,7 +603,7 @@ const advanceLiveConflict = async (execFileSync, uncommittedChangedFiles, occurr
     if (!committed || uncommittedChangedFiles(otherPath).length > 0) {
       const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
       const reason = `commit failed for occurrence "${occurrenceId}"`
-      return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
+      return { advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
     }
   }
 
@@ -551,7 +611,7 @@ const advanceLiveConflict = async (execFileSync, uncommittedChangedFiles, occurr
   if (continuation.continued || continuation.freshConflict) return { advanced: true, lastFailure: null, cleanupFailure: null }
   const abortResult = abortRebaseChecked(execFileSync, checkoutPath)
   const reason = `continue failed: ${continuation.failureReason}`
-  return { advanced: false, lastFailure: 'unresolved merge conflict', cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
+  return { advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}` }
 }
 
 const runRebaseTest = async () => {
@@ -624,7 +684,12 @@ const runRebaseTest = async () => {
       let fixSucceeded = false
       while (!fixSucceeded) {
         if (consumeFixRound(occurrenceId) > MAX_REBASE_FIX_ROUNDS) {
-          return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'layer still red after MAX_REBASE_FIX_ROUNDS', occurrenceId, fenceViolations }
+          return {
+            stage: 'rebase-test', task: N, status: 'blocked',
+            lastFailure: `${stopped.failedCheck} still red after MAX_REBASE_FIX_ROUNDS`,
+            failedCheck: stopped.failedCheck,
+            occurrenceId, fenceViolations,
+          }
         }
         fixSucceeded = await attemptRebaseFix(occurrenceId, checkoutPath, testOutput)
       }
@@ -648,7 +713,12 @@ const runRebaseTest = async () => {
       let fixSucceeded = false
       while (!fixSucceeded) {
         if (consumeFixRound('') > MAX_REBASE_FIX_ROUNDS) {
-          return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'layer still red after MAX_REBASE_FIX_ROUNDS', occurrenceId: '', fenceViolations }
+          return {
+            stage: 'rebase-test', task: N, status: 'blocked',
+            lastFailure: `${parentOutcome.failedCheck} still red after MAX_REBASE_FIX_ROUNDS`,
+            failedCheck: parentOutcome.failedCheck,
+            occurrenceId: '', fenceViolations,
+          }
         }
         fixSucceeded = await attemptRebaseFix('', worktreePath, parentOutcome.testOutput)
       }
@@ -677,6 +747,18 @@ const cleanupPlanAndBriefFiles = (execFileSync, existsSync, unlinkSync, join, re
   }
 }
 
+const concreteMergeStageFailure = (report) => {
+  const explicit = typeof report.failureReason === 'string' ? report.failureReason.trim() : ''
+  if (explicit) return explicit
+
+  const occurrence = report.status === 'parent-conflicted' ? 'root' : (report.occurrenceId || 'unknown layer')
+  const conflictSuffix = Array.isArray(report.conflictedFilePaths) && report.conflictedFilePaths.length > 0
+    ? `; unresolved paths: ${report.conflictedFilePaths.join(', ')}`
+    : ''
+  const kind = report.stage === 'merge' ? 'merge failure' : report.stage === 'rebase' ? 'rebase conflict' : 'test failure'
+  return `${kind} in ${occurrence} (${report.status})${conflictSuffix}`
+}
+
 const runMerge = async () => {
   log(`task ${N}: merge stage`)
   const repoRoot = WORKTREE
@@ -684,7 +766,7 @@ const runMerge = async () => {
   const { existsSync, unlinkSync } = await import('node:fs')
   const { join } = await import('node:path')
   const { pathToFileURL } = await import('node:url')
-  const { mergeTaskDeepestFirst, removeWorktreeAndBranch } = await import(pathToFileURL(join(repoRoot, 'scripts/mergeTaskWorktrees.ts')).href)
+  const { mergeTaskDeepestFirst, removeTaskWorktreeAndBranches, deleteTaskMergePersistence } = await import(pathToFileURL(join(repoRoot, 'scripts/mergeTaskWorktrees.ts')).href)
   const { createEmptyResolutionManifest } = await import(pathToFileURL(join(repoRoot, 'scripts/resolutionRequests.ts')).href)
   const { currentBranchName } = await import(pathToFileURL(join(repoRoot, 'scripts/repositoryBranches.ts')).href)
   const { closeTasks } = await import(pathToFileURL(join(repoRoot, 'scripts/closeTasks.ts')).href)
@@ -697,29 +779,57 @@ const runMerge = async () => {
   const manifest = { repositoryManifest: { ...ARGS.repositoryManifest, occurrences: attachOperationBranch(ARGS.repositoryManifest.occurrences, `task-${N}`) }, resolutionManifest: createEmptyResolutionManifest() }
   // mergeTaskDeepestFirst rewrites occurrence.checkoutPath to the worktree; read the root before it runs.
   const rootOccurrence = manifest.repositoryManifest.occurrences.find((o) => o.occurrenceId === '')
-  const mainRepoRoot = rootOccurrence.checkoutPath
+  if (rootOccurrence.checkoutPath !== SOURCE_ROOT) {
+    throw new Error(`task.workflow.js: repositoryManifest root checkoutPath (${rootOccurrence.checkoutPath}) does not match sourceRoot (${SOURCE_ROOT})`)
+  }
+  const mainRepoRoot = SOURCE_ROOT
   const sourceBranch = rootOccurrence.baseBranch
+  // Snapshot canonical source paths before mergeTaskDeepestFirst substitutes task-worktree checkout paths during repository discovery.
+  const sourceSubmodules = manifest.repositoryManifest.occurrences
+    .filter((occurrence) => occurrence.parentOccurrenceId !== null)
+    .map((occurrence) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }))
   const { stage: failedAtStage, ...report } = mergeTaskDeepestFirst(repoRoot, manifest)
   if (report.status !== 'merged') {
-    return { stage: 'merge', task: N, failedAtStage, ...report, lastFailure: report.failureReason }
+    return {
+      stage: 'merge', task: N, failedAtStage, ...report,
+      lastFailure: concreteMergeStageFailure({ ...report, stage: failedAtStage }),
+    }
   }
   const rootLayer = report.completedLayers.find((layer) => layer.occurrenceId === 'root')
-  const mergedCommitHash = rootLayer.oid
+  const mergedCommitHash = rootLayer?.mergedCommitOid
+  if (typeof mergedCommitHash !== 'string' || mergedCommitHash.length === 0) {
+    return {
+      stage: 'merge', task: N, status: 'blocked',
+      lastFailure: 'root merge-time commit record is missing; refusing to archive the current source tip',
+    }
+  }
   const branch = currentBranchName(repoRoot)
   let closeResult
   try {
     closeResult = closeTasks([N], `merged to ${sourceBranch} at ${mergedCommitHash}`, mainRepoRoot, [mergedCommitHash])
   } catch (error) {
-    return { stage: 'merge', task: N, failedAtStage, ...report, status: 'merged-but-not-closed', mergedCommitHash, closeError: String((error && error.message) || error) }
+    const closeError = `close failure: ${String((error && error.message) || error)}`
+    return {
+      stage: 'merge', task: N, failedAtStage, ...report,
+      status: 'merged-but-not-closed', mergedCommitHash,
+      closeError, lastFailure: closeError,
+    }
   }
   if (!closeResult.closed.includes(N)) {
-    const closeError = `closeTasks did not close task ${N}: closed [${closeResult.closed.join(', ')}], skipped [${closeResult.skipped.join(', ')}], unblocked [${closeResult.unblocked.join(', ')}]`
-    return { stage: 'merge', task: N, failedAtStage, ...report, status: 'merged-but-not-closed', mergedCommitHash, closed: closeResult.closed, skipped: closeResult.skipped, unblocked: closeResult.unblocked, closeError }
+    const closeError = `close failure: closeTasks did not close task ${N}: closed [${closeResult.closed.join(', ')}], skipped [${closeResult.skipped.join(', ')}], unblocked [${closeResult.unblocked.join(', ')}]`
+    return {
+      stage: 'merge', task: N, failedAtStage, ...report,
+      status: 'merged-but-not-closed', mergedCommitHash,
+      closed: closeResult.closed, skipped: closeResult.skipped, unblocked: closeResult.unblocked,
+      closeError, lastFailure: closeError,
+    }
   }
   try {
-    removeWorktreeAndBranch(mainRepoRoot, repoRoot, branch)
+    deleteTaskMergePersistence(mainRepoRoot, branch)
+    for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
+    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
   } catch (error) {
-    const cleanupWarning = `failed to remove worktree ${repoRoot} and branch ${branch}: ${String((error && error.message) || error)}`
+    const cleanupWarning = `failed final branch/worktree cleanup: ${String((error && error.message) || error)}`
     return { stage: 'merge', task: N, failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, cleanupWarning }
   }
   return { stage: 'merge', task: N, failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked }

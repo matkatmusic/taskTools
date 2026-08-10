@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readTaskFile, resolveTaskFiles } from "../scripts/taskFiles.ts";
@@ -22,4 +22,19 @@ function driftingPlanFiles(): string[] {
 
 test("every plans/brief-N.md and plans/task-N-plan.md names a task number that exists in tasks.json or completedTasks.json", () => {
   assert.deepEqual(driftingPlanFiles(), []);
+});
+
+test("renumbered closing-chain files contain their current task numbers", () => {
+  const renumbered = [
+    ["brief-162.md", 162],
+    ["task-162-plan.md", 162],
+    ["brief-163.md", 163],
+    ["task-163-plan.md", 163],
+  ] as const;
+
+  for (const [file, taskNumber] of renumbered) {
+    const body = readFileSync(join(repoRoot, "plans", file), "utf8");
+    assert.match(body, new RegExp(`^# Task ${taskNumber}\\b`), file);
+    assert.doesNotMatch(body, /\b[Tt]ask (?:156|157)\b/, file);
+  }
 });
