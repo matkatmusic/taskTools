@@ -11,10 +11,13 @@ import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest }
 import { buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, enqueueApprovedTask, recordStageOutcome, type TaskWorkflowEnvelope } from '../scripts/runMergePhase.ts'
 
 const REPO_ROOT = process.cwd()
-const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), 'utf8')
+const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
+const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
 
-type WorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<{
+type AgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>
+
+type WorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<{
   task: number
   stage: string
   results: Array<Record<string, unknown>>
@@ -22,17 +25,31 @@ type WorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, ag
 
 const throwingAgent = async () => { throw new Error('merge stage must not call an agent') }
 
+// Every agent() prompt from tackle-tasks.workflow.js is one `node <emitter> <task> <role> <<'TT_PAYLOAD'` command.
+const EMITTER_COMMAND_RE = /node (\S+) (\d+) (\S+) <<'TT_PAYLOAD'\n(.*)\nTT_PAYLOAD/
+const DRIVER_RESULT_PREFIX = 'Return exactly this JSON as your structured result, with no other keys added or removed:\n'
+
+// Driver roles resolve via the real emitter; judgment roles use the stand-in.
+const agentThatRunsRealEmitterAndScriptsJudgment = (scriptedJudgment: AgentImpl): AgentImpl => async (prompt, options) => {
+  const match = prompt.match(EMITTER_COMMAND_RE)
+  if (!match) throw new Error(`prompt has no embedded emitter command: ${prompt.slice(0, 200)}`)
+  const [, emitterPath, taskArg, role, payloadJson] = match
+  const output = execFileSync('node', [emitterPath!, taskArg!, role!], { input: payloadJson, encoding: 'utf8' })
+  if (output.startsWith(DRIVER_RESULT_PREFIX)) return JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim())
+  return scriptedJudgment(prompt, options)
+}
+
 // filename is the real script path; imports resolve against args.worktree, not cwd or a relocated filename.
-const runMergeStage = async (worktreePath: string, args: Record<string, unknown>, agentImpl: (...values: unknown[]) => Promise<unknown> = throwingAgent) => {
+const runMergeStage = async (worktreePath: string, args: Record<string, unknown>, judgmentAgent: AgentImpl = throwingAgent) => {
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
   ) as WorkflowRunner
   return await fn(
-    JSON.stringify({ worktree: worktreePath, ...args }),
+    JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: EMITTER_PATH, ...args }),
     () => {},
-    agentImpl,
+    agentThatRunsRealEmitterAndScriptsJudgment(judgmentAgent),
   )
 }
 

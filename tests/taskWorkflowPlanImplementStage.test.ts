@@ -9,8 +9,9 @@ import { buildWorkflowArguments } from '../scripts/prepareTasks.ts'
 import type { TaskRecord } from '../scripts/taskFiles.ts'
 
 const REPO_ROOT = process.cwd()
-const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), 'utf8')
+const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
+const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
 
 type AgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>
 
@@ -28,12 +29,26 @@ const runTaskWorkflowAtRealScriptPath = async (
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/task.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
   ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
-  return await fn(JSON.stringify(args), () => {}, agentImpl)
+  return await fn(JSON.stringify({ agentPromptEmitterPath: EMITTER_PATH, ...args }), () => {}, agentImpl)
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
+
+// Every agent() prompt from tackle-tasks.workflow.js is one `node <emitter> <task> <role> <<'TT_PAYLOAD'` command.
+const EMITTER_COMMAND_RE = /node (\S+) (\d+) (\S+) <<'TT_PAYLOAD'\n(.*)\nTT_PAYLOAD/
+const DRIVER_RESULT_PREFIX = 'Return exactly this JSON as your structured result, with no other keys added or removed:\n'
+
+// Driver roles resolve via the real emitter; judgment roles use the stand-in.
+const agentThatRunsRealEmitterAndScriptsJudgment = (scriptedJudgment: AgentImpl): AgentImpl => async (prompt, options) => {
+  const match = prompt.match(EMITTER_COMMAND_RE)
+  if (!match) throw new Error(`prompt has no embedded emitter command: ${prompt.slice(0, 200)}`)
+  const [, emitterPath, taskArg, role, payloadJson] = match
+  const output = execFileSync('node', [emitterPath!, taskArg!, role!], { input: payloadJson, encoding: 'utf8' })
+  if (output.startsWith(DRIVER_RESULT_PREFIX)) return JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim())
+  return scriptedJudgment(prompt, options)
+}
 
 const makeTwoTaskSourceRepo = (): { root: string; tasks: TaskRecord[] } => {
   const root = mkdtempSync(join(tmpdir(), 'task-workflow-plan-implement-root-'))
@@ -113,7 +128,7 @@ test('plan+implement commits only in each prepared task worktree', async () => {
         typecheckCommand: prepared.typecheckCommand,
         worktree: group.worktree,
         sourceRoot: root,
-      }, scriptedAgent)
+      }, agentThatRunsRealEmitterAndScriptsJudgment(scriptedAgent))
     }))
 
     for (const result of results) {
@@ -171,7 +186,7 @@ test('plan+implement reports blocked when the implementer claims done without co
       typecheckCommand: prepared.typecheckCommand,
       worktree: group.worktree,
       sourceRoot: root,
-    }, dishonestAgent)
+    }, agentThatRunsRealEmitterAndScriptsJudgment(dishonestAgent))
 
     assert.equal(envelope.results[1]!.status, 'blocked')
   } finally {
@@ -199,7 +214,7 @@ test('plan+implement rejects a planner that returns an existing plan outside the
       typecheckCommand: prepared.typecheckCommand,
       worktree: group.worktree,
       sourceRoot: root,
-    }, async (_prompt, options) => {
+    }, agentThatRunsRealEmitterAndScriptsJudgment(async (_prompt, options) => {
       if (options.label.startsWith('plan:')) {
         return {
           task: task.taskNumber,
@@ -211,7 +226,7 @@ test('plan+implement rejects a planner that returns an existing plan outside the
       }
       verifierOrWorkerRan = true
       throw new Error(`unexpected ${options.label}`)
-    })
+    }))
 
     assert.equal(envelope.results.length, 1)
     assert.equal(envelope.results[0]!.status, 'needs-clarification')
