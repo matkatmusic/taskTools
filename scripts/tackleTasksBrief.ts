@@ -186,6 +186,10 @@ Finally, stage the changes made this session — which may span multiple git rep
 };
 
 // RETIRED (task 163): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.
+//
+// Close every task that is not problematic and was completed successfully, rendering its \`tasks.json\` entry stale, with **one** invocation of the \`close-tasks\` skill for all of them. Its first argument must be a JSON array of the task numbers with no spaces — \`[268,270,281]\` — followed by your reasoning for the \`closureNote\`s, naming each task (\`#268 …, #270 …\`) when the reasons differ.
+//
+// During implementation, you (the orchestrator) run typecheck only — no test suites or visual checks. Workers run the tests covering the files they own and fix their own failures before reporting status complete; a worker with failing tests reports blocked or partial, never complete. Full verification (typecheck + full suite + the repo's UI verification where relevant) still runs once inside \`close-tasks\`, after the user approves closing.
 
 function readStdin(): string {
   try {
