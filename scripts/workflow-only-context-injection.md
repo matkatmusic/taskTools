@@ -36,7 +36,7 @@ So the command has exactly two places to run: the main agent's shell, or the wor
 
 Names below use the commit-message skill as the worked example, so `SKILL_DIR = commit-message` and `DATA_SCRIPT = stagedDiffs`. Substitute your own.
 
-1. **Make the data script return instead of print.** 
+### 1. **Make the data script return instead of print.** 
 The output must stay byte-identical to the previously-printed output. 
 Wrap the top-level body of the data script in `export function <DATA_SCRIPT>(): string`, returning the text it previously wrote to stdout directly via `process.stdout.write(...)`. 
 Generically:
@@ -63,7 +63,7 @@ if (process.argv[1]?.endsWith("stagedDiffs.ts"))
    process.stdout.write(stagedDiffs());
 ```
 
-2. **Move the workflow agent's prompt into the agent prompt emitter.** Create `scripts/<SKILL_DIR>_AgentPromptEmitter.ts` next to the `<DATA_SCRIPT>.ts`.  Now that the prompt generator is a script file, you can import objects. 
+### 2. **Move the workflow agent's prompt into the agent prompt emitter.** Create `scripts/<SKILL_DIR>_AgentPromptEmitter.ts` next to the `<DATA_SCRIPT>.ts`.  Now that the prompt generator is a script file, you can import objects. 
 ```ts
 import { <DATA_SCRIPT> } from "./<DATA_SCRIPT>.ts";
 export const agentPrompt = (<args>...): string => 
@@ -97,7 +97,7 @@ if (process.argv[1]?.endsWith("commit-message_AgentPromptEmitter.ts"))
    process.stdout.write(agentPrompt(stagedDiffs()));
 ```
 
-3. **Reduce the workflow's prompt to one instruction.** 
+### 3. **Reduce the workflow's prompt to one instruction.** 
 In `skills/<SKILL_DIR>/<PHASE>.workflow.js`, the whole prompt becomes: 
 ```
 Run `Bash(node ${ARGS.agentPromptEmitterPath})`.
@@ -106,7 +106,7 @@ Follow the printed instructions.
 That one line is the entire prompt.
 Keep the schema on the `agent()` call so the return shape is enforced, and never import anything in a `.workflow.js`.
 
-4. **Move the SKILL.md body into the skill body emitter.** 
+### 4. **Move the SKILL.md body into the skill body emitter.** 
 Create `scripts/<SKILL_DIR>_SkillBodyEmitter.ts`.
 The main goal for this step is to programmatically generate the entire command to run the workflow, and give the agent the least amout of prose possible to run the workflow.
 
@@ -159,25 +159,9 @@ if (process.argv[1]?.endsWith("commit-message_SkillBodyEmitter.ts"))
 
 **Never pass a path.** A path is a fact about where a file lives, so resolve it from `import.meta.url` as a module constant. Passing a path adds a way to hand the emitter wrong paths and buys nothing.
 
-### Generic form for a skill that makes use of $ARGUMENTS 
-discussed further in Section 7, use this snippet to pass $ARGUMENTS to your skillBody():
-`argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");`
-```ts
-export const skillBody = (argsValue: string): string => 
-`WORKFLOW: {"scriptPath": "${WORKFLOW_PATH}", "args": {"agentPromptEmitterPath": "${AGENT_PROMPT_EMITTER_PATH}", "argsValue": "${argsValue}"}}
-...
-`;
+If the skill needs arguments passed in, see **Passing Arguments** below. 
 
-if (process.argv[1]?.endsWith("<SKILL_DIR>_SkillBodyEmitter.ts")) 
-{
-   const argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");
-   process.stdout.write(skillBody(argumentsFromSkillBeingInvoked));
-}
-```
-
-The same rule governs `agentPrompt`: data in, paths never.
-
-5. **Empty the SKILL.md body.** 
+### 5. **Empty the SKILL.md body.** 
 
 Add `allowed-tools: Bash(node *)` to the frontmatter.
 After the frontmatter, the only content is the emitter call, as a triple-backticked dynamic-injection command:
@@ -187,7 +171,7 @@ After the frontmatter, the only content is the emitter call, as a triple-backtic
    ```
 ````
 
-6. **Use the data script in the agent prompt emitter, NOT in the SKILL.md.** 
+### 6. **Use the data script in the agent prompt emitter, NOT in the SKILL.md.** 
 The whole point of this approach is to keep data script output out of the main agent's context window and only in the workflow agent's context window, by putting it all in the workflow agent's prompt, and doing as much work programmatically as possible.  Programmatic execution is deterministic. Prose is interpreted.  Eliminating prose with specific code makes the agent's output more consistent and correct.  
 
 The skill body emitter (step 4) prints paths only — it must never run a subprocess, and it must import neither the data script nor the agent prompt emitter. 
@@ -199,7 +183,7 @@ rg -n 'execFileSync|spawn|from "\.' scripts/<SKILL_DIR>_SkillBodyEmitter.ts
 No hits means clean. Do not match on `<DATA_SCRIPT>` or `AgentPromptEmitter` — the emitter has to name the agent prompt emitter's path in a string, so a name-based pattern flags the one line that is supposed to be there.
 
 
-## 7. Passing $ARGUMENTS
+### 7. Passing $ARGUMENTS
 
 Pass `$ARGUMENTS` on stdin with a quoted heredoc. Never as a command-line argument.
 The loader substitutes the user's text before the shell parses the line, so any ", $, `, *, or ; in it would otherwise be read as shell syntax — corrupting the arguments, or running a command. A single-quoted heredoc tag stops all expansion, so the bytes reach stdin exactly as typed.
@@ -225,6 +209,25 @@ Three rules, all load-bearing:
 - **Both tag lines start at column 0.** An indented closing tag never terminates the heredoc.
 
 Do not wrap `$ARGUMENTS` in backticks or quotes. It is already a whole line by itself.
+
+
+### 8. Generic form for a skill that makes use of $ARGUMENTS 
+discussed further in Section 7, use this snippet to pass $ARGUMENTS to your skillBody():
+`argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");`
+```ts
+export const skillBody = (argsValue: string): string => 
+`WORKFLOW: {"scriptPath": "${WORKFLOW_PATH}", "args": {"agentPromptEmitterPath": "${AGENT_PROMPT_EMITTER_PATH}", "argsValue": "${argsValue}"}}
+...
+`;
+
+if (process.argv[1]?.endsWith("<SKILL_DIR>_SkillBodyEmitter.ts")) 
+{
+   const argumentsFromSkillBeingInvoked = readStdin().replace(/\n$/, "");
+   process.stdout.write(skillBody(argumentsFromSkillBeingInvoked));
+}
+```
+
+The same rule governs `agentPrompt`: data in, paths never.
 
 ### Why the quoted heredoc solves the escaping problem
 
