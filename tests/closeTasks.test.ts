@@ -193,3 +193,34 @@ test("a task record widened by another writer (e.g. addTaskFiles) mid-close is a
   const completed = readCompleted(root).find((t) => t.taskNumber === 65);
   assert.deepEqual(completed.files, ["a.ts", "b.ts"]);
 });
+
+test("if the final correction to completedTasks.json fails, the task stays archived and removed -- nothing is lost", () => {
+  const root = mkdtempSync(join(tmpdir(), "taskTools-close-"));
+  const completedPath = join(root, "completedTasks.json");
+  writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts"] }]));
+  writeFileSync(completedPath, "[]");
+
+  let widened = false;
+  const afterTasksWriteAttempt = () => {
+    if (widened) return;
+    widened = true;
+    writeFileSync(
+      join(root, "tasks.json"),
+      JSON.stringify([{ taskNumber: 65, title: "second", files: ["a.ts", "b.ts"] }]),
+    );
+  };
+  let fakeWriterCount = 0;
+  const afterCorrectionWriteAttempt = () => {
+    fakeWriterCount += 1;
+    const current = JSON.parse(readFileSync(completedPath, "utf8"));
+    writeFileSync(completedPath, JSON.stringify([...current, { taskNumber: 900 + fakeWriterCount }]));
+  };
+
+  assert.throws(() =>
+    closeTasks([65], "fixed by abc123", root, [], afterTasksWriteAttempt, afterCorrectionWriteAttempt),
+  );
+
+  assert.deepEqual(readTasks(root).map((t) => t.taskNumber), []);
+  const completed = readCompleted(root).find((t) => t.taskNumber === 65);
+  assert.ok(completed, "task 65 must still be archived even though the correction write failed");
+});
