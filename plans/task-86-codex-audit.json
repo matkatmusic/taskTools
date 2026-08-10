@@ -419,38 +419,6 @@
       "existingOpenTask": "No matching open task."
     },
     {
-      "number": 34,
-      "title": "C86-34 — Blocker: the functional workflow-only rewrite is not committed",
-      "class": "blocker",
-      "cause": "Committed HEAD f3bceb6 contains only a five-line tackle-tasks.workflow.js with no stage runner or return value and an AgentPromptEmitter whose agentPrompt function returns an empty string. The same commit renames the prior implementation to task.workflow.js.old, while committed tackleTasksBrief.ts still launches the now-missing task.workflow.js. The functional 584-line workflow, 650-line emitter, updated brief wiring, and rewritten tests all exist only as unstaged working-tree changes. Merging or checking out the branch at HEAD therefore produces a nonfunctional skill even though tests pass against the uncommitted files.",
-      "locations": [
-        {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "HEAD:1-5",
-          "revision": "f3bceb6",
-          "role": "Committed workflow is an empty scaffold with no dispatcher or result."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "HEAD:1-4",
-          "revision": "f3bceb6",
-          "role": "Committed prompt emitter prints an empty prompt."
-        },
-        {
-          "path": "scripts/tackleTasksBrief.ts",
-          "lines": "HEAD:13, 65-93, 181-190",
-          "revision": "f3bceb6",
-          "role": "Committed generated brief still points to task.workflow.js, which the same commit renamed away."
-        }
-      ],
-      "provingTest": "Create a clean archive or detached worktree at HEAD, invoke node scripts/tackleTasksBrief.ts with a valid task argument, and inspect the emitted scriptPath. It points to missing skills/tackle-tasks/task.workflow.js. Directly invoking the committed tackle-tasks.workflow.js also cannot produce a task envelope because it has no stage logic or return. Run the focused rewrite tests in that clean HEAD checkout; they use the pre-rewrite paths or fail once updated tests are included.",
-      "suggestedFixApproach": [
-        "Commit the substantive emitter, workflow, brief, and test changes rather than only their scaffolds. Include the currently untracked emitter role-contract file if it is part of the implementation, or remove its references.",
-        "Verify from a clean detached worktree or git archive at the resulting commit, not from the dirty development checkout. Assert the generated brief's scriptPath exists in that commit, the emitter is nonempty, the workflow returns real envelopes, typecheck passes, and the focused tests pass without borrowing working-tree files."
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
       "number": 35,
       "title": "C86-35 — High: the rewrite no longer verifies that a planned result wrote the expected plan file",
       "class": "high",
