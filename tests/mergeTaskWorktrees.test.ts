@@ -1523,8 +1523,11 @@ test("test_mergeTaskDeepestFirstLeavesNoDanglingGitlinkAfterEveryTaskBranchIsDel
     // T is still reachable from M, so nothing the parent previously pointed at was lost.
     assert.doesNotThrow(() => git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", vendorTaskCommitOid, fixture.submoduleSourceBranch));
 
+    // mergeTaskDeepestFirst must have already deleted the fetched submodule task branch itself.
+    const submoduleBranches = git(fixture.mainSubmodulePath, "branch", "--list", submoduleTaskBranch);
+    assert.equal(submoduleBranches.includes(submoduleTaskBranch), false);
+
     removeWorktreeAndBranch(fixture.rootPath, fixture.group.worktree, fixture.group.branch);
-    git(fixture.mainSubmodulePath, "branch", "-D", submoduleTaskBranch);
 
     assert.doesNotThrow(() => git(fixture.rootPath, "rev-parse", fixture.sourceBranch));
     assert.doesNotThrow(() => git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", rootGitlinkOid, fixture.submoduleSourceBranch));

@@ -551,6 +551,7 @@ export function mergeTaskDeepestFirst(
             const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid });
+            if (occurrence.parentOccurrenceId !== null) git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
             continue;
         }
 
@@ -575,6 +576,7 @@ export function mergeTaskDeepestFirst(
             if (!result.merged) {
                 return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
             }
+            git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
             const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
