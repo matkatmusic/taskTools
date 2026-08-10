@@ -1,6 +1,6 @@
 // Moves task numbers from tasks.json to completedTasks.json with a closure note and commit hashes.
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskRecord } from "./taskFiles.ts";
@@ -44,8 +44,9 @@ function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// Random suffix stops two nested same-process calls from colliding on one tmp file.
 function tmpPathFor(targetPath: string): string {
-  return join(dirname(targetPath), `.${basename(targetPath)}.${process.pid}.tmp`);
+  return join(dirname(targetPath), `.${basename(targetPath)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
 }
 
 // Re-hashes before rename; a mismatch means another writer landed, so this retries onto the new bytes.
