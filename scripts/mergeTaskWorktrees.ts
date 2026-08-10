@@ -477,6 +477,23 @@ function displayOccurrenceId(occurrenceId: string): string {
     return occurrenceId === "" ? "root" : occurrenceId;
 }
 
+function mergedCommitRefName(operationBranch: string): string {
+    return `refs/taskTools/merged-commits/${operationBranch}`;
+}
+
+// Records the merge commit at merge time so a later retry's no-op path reuses it instead of guessing.
+function recordMergedCommit(repoRoot: string, operationBranch: string, oid: string): void {
+    git(repoRoot, "update-ref", mergedCommitRefName(operationBranch), oid);
+}
+
+function readRecordedMergedCommit(repoRoot: string, operationBranch: string): string | null {
+    try {
+        return git(repoRoot, "rev-parse", mergedCommitRefName(operationBranch)).trim();
+    } catch {
+        return null;
+    }
+}
+
 export type MergeLayerOutcome =
     | { occurrenceId: string; checkoutPath: string; status: "no-op"; oid: string }
     | { occurrenceId: string; checkoutPath: string; status: "merged"; oid: string };
@@ -566,7 +583,7 @@ export function mergeTaskDeepestFirst(
         const displayId = displayOccurrenceId(occurrence.occurrenceId);
 
         if (skippedOccurrenceIds.has(occurrence.occurrenceId)) {
-            const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+            const oid = readRecordedMergedCommit(sourceCheckoutPath, occurrence.operationBranch) ?? git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid });
             if (occurrence.parentOccurrenceId !== null) git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
@@ -596,6 +613,7 @@ export function mergeTaskDeepestFirst(
             }
             git(sourceCheckoutPath, "branch", "-D", occurrence.operationBranch);
             const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+            recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
             continue;
@@ -625,6 +643,7 @@ export function mergeTaskDeepestFirst(
             return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
         }
         const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+        recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
         sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
         completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid });
     }
