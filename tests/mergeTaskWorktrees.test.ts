@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
 import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
@@ -14,6 +14,7 @@ import type { ArchiveRequest } from "../scripts/taskArchival.ts";
 import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
 import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
 import {
+    listTaskWorktrees,
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
     mergeTaskDeepestFirst,
@@ -1681,4 +1682,15 @@ test("test_mergeTaskDeepestFirstStopsAtASubmoduleConflictWithoutAttemptingThePar
     assert.equal(parentMergeCalled, false);
     assert.equal(report.status, "submodule-conflicted");
     assert.deepEqual(report.completedLayers, []);
+});
+
+test("test_listTaskWorktreesRecognizesATaskNWorktreeCreatedByThePreparer", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const group = makeGroup(repoRoot, 1);
+
+    const worktrees = listTaskWorktrees(repoRoot);
+
+    assert.equal(worktrees.length, 1);
+    assert.equal(worktrees[0].branch, group.branch);
+    assert.equal(basename(worktrees[0].path), basename(group.worktree));
 });
