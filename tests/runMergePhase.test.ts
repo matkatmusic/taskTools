@@ -98,7 +98,7 @@ test("test_shouldEndQueueEndsTheQueueWhenALapMergesZeroTasksAndNoWorkflowIsOutst
     queue = recordStageOutcome(queue, 40, "rebase-test", { status: "failure", reason: "rebase conflicted: c.ts" });
 
     assert.equal(currentLapIsComplete(queue), true);
-    assert.equal(shouldEndQueue(queue, false), true);
+    assert.equal(shouldEndQueue(queue, false), "stuck");
 });
 
 test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergesZeroTasksButAWorkflowIsOutstanding", () => {
@@ -107,17 +107,29 @@ test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergesZeroTasksButAWorkflowIs
     queue = recordStageOutcome(queue, 50, "rebase-test", { status: "failure", reason: "rebase conflicted: d.ts" });
 
     assert.equal(currentLapIsComplete(queue), true);
-    assert.equal(shouldEndQueue(queue, true), false);
+    assert.equal(shouldEndQueue(queue, true), "continue");
 });
 
-test("test_shouldEndQueueDoesNotEndTheQueueWhenALapMergedAtLeastOneTask", () => {
+test("test_shouldEndQueueReportsDoneWhenALapMergedEveryTaskAndLeftNoCarryover", () => {
     let queue = createMergeQueue();
     queue = enqueueApprovedTask(queue, 60);
     queue = recordStageOutcome(queue, 60, "rebase-test", { status: "success" });
     queue = recordStageOutcome(queue, 60, "merge", { status: "success" });
 
     assert.equal(currentLapIsComplete(queue), true);
-    assert.equal(shouldEndQueue(queue, false), false);
+    assert.equal(shouldEndQueue(queue, false), "done");
+});
+
+test("test_shouldEndQueueContinuesWhenALapMergedAtLeastOneTaskButLeftCarryoverToRetry", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 61);
+    queue = enqueueApprovedTask(queue, 62);
+    queue = recordStageOutcome(queue, 61, "rebase-test", { status: "success" });
+    queue = recordStageOutcome(queue, 61, "merge", { status: "success" });
+    queue = recordStageOutcome(queue, 62, "rebase-test", { status: "failure", reason: "rebase conflicted: h.ts" });
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), "continue");
 });
 
 test("test_buildMergeReportOmitsATaskThatFailedItsFirstLapButMergedItsSecondLap", () => {
@@ -153,7 +165,7 @@ test("test_buildMergeReportNamesTheQueueExitNotTheCeilingWhenATaskWasStillRetrya
     queue = enqueueApprovedTask(queue, 90);
     queue = recordStageOutcome(queue, 90, "rebase-test", { status: "failure", reason: "rebase conflicted: g.ts" });
 
-    assert.equal(shouldEndQueue(queue, false), true);
+    assert.equal(shouldEndQueue(queue, false), "stuck");
     const report = buildMergeReport(queue);
 
     assert.deepEqual(report.unmerged, [
@@ -270,8 +282,8 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
 
         assert.deepEqual(queue.merged, [taskNumber]);
         assert.equal(nextQueueStep(queue), null);
-        // shouldEndQueue only fires on a zero-merge lap; a merged lap waits for the next enqueue.
-        assert.equal(shouldEndQueue(queue, false), false);
+        // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
+        assert.equal(shouldEndQueue(queue, false), "done");
         assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
 
         const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
@@ -280,4 +292,24 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         rmSync(worktreePath, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });
     }
+});
+
+test("test_shouldEndQueueReportsDoneOnAnUntouchedQueueWithNothingToDoAndNoFailures", () => {
+    const queue = createMergeQueue();
+
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), "done");
+});
+
+test("test_shouldEndQueueReportsStuckWhenALapMergesNothingAndAPriorLapsFailureIsInUnmerged", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 91);
+    queue = recordStageOutcome(queue, 91, "rebase-test", { status: "failure", reason: "rebase conflicted: i.ts" });
+    queue = beginNextLap(queue);
+    queue = recordStageOutcome(queue, 91, "rebase-test", { status: "failure", reason: "rebase conflicted: i.ts again" });
+
+    assert.deepEqual(queue.unmerged, [{ taskNumber: 91, stage: "rebase-test", lapsAttempted: 2, lastFailure: "rebase conflicted: i.ts again" }]);
+    assert.deepEqual(queue.carryover, []);
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), "stuck");
 });
