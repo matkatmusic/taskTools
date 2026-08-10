@@ -573,38 +573,6 @@
     "difficulty": 6
   },
   {
-    "taskNumber": 179,
-    "version": "adffd2eb55115b28c3cafc377e61c21be84278cb",
-    "title": "Record the real merge commit at merge time so a merged-but-not-closed retry archives the right hash (audit C86-14)",
-    "userDescription": "A merged-but-not-closed retry can archive the wrong commit hash. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-13.",
-    "goal": [
-      "- The merge commit is recorded when the merge actually happens.",
-      "- A retry archives THAT commit, whatever the source tip has become since.",
-      "- The no-op path stops reporting the current source tip as if it were the merge.",
-      "- A test retries a failed close AFTER another task has advanced the source, which existing coverage never does.",
-      "- `npm test` passes.",
-      "- NOT in scope: the rebase-test typecheck (audit C86-13, task 178, the blocker for this task), and the incomplete end-to-end test matrix (audit C86-15), owned by the sibling task blocked on this one."
-    ],
-    "description": "This is finding C86-14 (MEDIUM) in plans/task-86-codex-audit.md.\n\nIn mergeTaskDeepestFirst's skipped/no-op branch (scripts/mergeTaskWorktrees.ts:527-549, taken when unmergedCommitCount(sourceCheckoutPath, baseBranch, operationBranch) is 0), the code records `git rev-parse baseBranch` -- the CURRENT source tip -- as the occurrence's oid, on the assumption that the tip is the merge commit. skills/tackle-tasks/task.workflow.js:691-696 then reads rootLayer.oid as the task's mergedCommitHash and passes it to closeTasks as the archived commit hash.\n\nThe assumption breaks on retry. If task A merges but closeTasks fails (status merged-but-not-closed), task B later merges and advances baseBranch, and A is then retried, A hits the no-op path and is archived with B's LATER tip instead of the commit that actually merged A.\n\nExisting retry coverage retries before any intervening source advance (tests/taskWorkflowMergeStage.test.ts:174-179), which is exactly why the gap is invisible today.\n\nFIX DIRECTION, settled with the user: record the merge commit AT MERGE TIME and persist it with the task, then have the retry reuse that recorded value. Do not recover it by searching history -- a rebase or squash can make the real merge commit ambiguous or unfindable, which would just reintroduce guessing. The no-op path must stop reporting the current tip as though it were the merge.",
-    "files": [
-      "scripts/mergeTaskWorktrees.ts",
-      "skills/tackle-tasks/task.workflow.js",
-      "tests/mergeTaskWorktrees.test.ts",
-      "tests/taskWorkflowMergeStage.test.ts"
-    ],
-    "tests": "Task A merges and its CLOSE fails -- remember A's real merge commit. Task B then merges and advances the source tip. Retry A's close. Assert A is archived with A's OWN merge commit, not B's tip. tests/taskWorkflowMergeStage.test.ts:174-179 retries with no advance in between, which is why it misses this.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 178,
-        "reason": "C86-13 edits the same rebase/merge region of mergeTaskWorktrees.ts and task.workflow.js; serialising them avoids overlapping edits"
-      }
-    ],
-    "handoffFilePaths": [
-      "plans/task-86-codex-audit.md"
-    ]
-  },
-  {
     "taskNumber": 180,
     "version": "3dbb13b4bac01a37a10d39b4c2e7142718dd49db",
     "title": "Complete the production-shaped end-to-end matrix: root success, submodule success, submodule conflict (audit C86-15)",
