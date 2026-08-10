@@ -20,6 +20,17 @@ test("brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder", 
   assert.doesNotMatch(brief, /\$ARGUMENTS/);
 });
 
+test("RETIRED (task 163) marker keeps its commented paragraph body, not a bare tombstone", () => {
+  const source = readFileSync(scriptPath, "utf8");
+  const markerIndex = source.indexOf("// RETIRED (task 163):");
+  assert.notEqual(markerIndex, -1);
+  const afterMarker = source.slice(markerIndex, markerIndex + 1000);
+  const bodyLines = afterMarker.split("\n").slice(1, 5);
+  assert.ok(bodyLines.every((line) => line === "" || line.startsWith("//")));
+  assert.match(afterMarker, /one\*\* invocation of the \\`close-tasks\\` skill/);
+  assert.match(afterMarker, /orchestrator\) run typecheck only/);
+});
+
 test("script reads arguments from stdin and embeds the live checkBlockers.ts output", () => {
   const argsValue = "[75] valid";
   const expectedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8" }).trimEnd();
