@@ -1,7 +1,7 @@
 // Moves task numbers from tasks.json to completedTasks.json with a closure note and commit hashes.
 import { readFileSync } from "node:fs";
 import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
-import type { TaskRecord } from "./taskFiles.ts";
+import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
@@ -56,17 +56,18 @@ export function closeTasks(
   projectRoot: string = process.cwd(),
   commitHashes: string[] | Record<number, string[]> = [],
 ): CloseTasksResult {
-  return withTaskStateLock(projectRoot, () =>
-    closeTasksLocked(taskNumbers, closureNote, projectRoot, commitHashes));
+  const pair = resolveTaskFiles(projectRoot);
+  return withTaskStateLock(pair.tasksPath, () =>
+    closeTasksLocked(taskNumbers, closureNote, pair, commitHashes));
 }
 
 function closeTasksLocked(
   taskNumbers: number[],
   closureNote: string | Record<number, string>,
-  projectRoot: string,
+  pair: TaskFilePair,
   commitHashes: string[] | Record<number, string[]>,
 ): CloseTasksResult {
-  const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
+  const { tasksPath, completedTasksPath } = pair;
   const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as TaskRecord[];
   const completed = JSON.parse(readFileSync(completedTasksPath, "utf8")) as TaskRecord[];
   const completionDate = localDate();

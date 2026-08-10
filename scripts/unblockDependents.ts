@@ -33,9 +33,9 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
 
-  const sourceRoot = process.cwd();
-  const { tasksPath } = resolveTaskFiles(sourceRoot);
-  const unblocked = withTaskStateLock(sourceRoot, () => {
+  const pair = resolveTaskFiles(process.cwd());
+  const unblocked = withTaskStateLock(pair.tasksPath, () => {
+    const { tasksPath } = pair;
     const tasks = readTaskFile(tasksPath);
     const before = JSON.stringify(tasks);
     const result = unblockDependents(tasks, [...closed]);

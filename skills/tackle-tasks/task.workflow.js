@@ -139,9 +139,10 @@ question in "question". If the task no longer applies to the codebase, set
 status "not-relevant" and explain why in "question". Otherwise write the
 plan file and set status "planned".
 Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
-You are forbidden to edit any file other than ${t.planFile}; to read a file outside
-the absolute owned paths; to leave a decision for the implementer; or to write a plan step
-whose exact target you did not read.`
+You are forbidden to edit any file other than ${t.planFile}; to read a task source
+file outside the absolute owned paths; to leave a decision for the implementer; or to
+write a plan step whose exact target you did not read. The absolute brief and plan paths
+above, plus ~/.claude/guides/planning.md, are the only non-source read exceptions.`
 
 const codexPrompt = (t, planFile) => `Review an implementation plan. Read only these two files: the brief ${t.briefFile} and the plan ${planFile}. Do not edit anything.
 
@@ -388,15 +389,19 @@ const loadPreparedTask = async () => {
   }
 }
 
-// A planner that reports "planned" without writing the file at planFile never wrote a plan.
-const rejectPlannedWithoutPlanFile = async (planResult) => {
+// A planner that reports "planned" without writing the expected task-worktree plan file never wrote a plan.
+const rejectPlannedWithoutExpectedPlanFile = async (planResult, expectedPlanFile) => {
   if (planResult.status !== 'planned') return planResult
   const { existsSync } = await import('node:fs')
-  if (existsSync(planResult.planFile)) return planResult
+  if (planResult.planFile === expectedPlanFile && existsSync(expectedPlanFile)) {
+    return planResult
+  }
   return {
     ...planResult,
     status: 'needs-clarification',
-    question: 'planner reported status "planned" but did not write the plan file inside the task worktree',
+    planFile: expectedPlanFile,
+    question:
+      `planner reported status "planned" without writing the expected task-worktree plan: ${expectedPlanFile}`,
   }
 }
 
@@ -418,7 +423,7 @@ const runPlan = async () => {
     }),
   }
   planResult.files = preparedTask.files
-  planResult = await rejectPlannedWithoutPlanFile(planResult)
+  planResult = await rejectPlannedWithoutExpectedPlanFile(planResult, preparedTask.planFile)
   if (planResult.status !== 'planned') return planResult
   const runVerify = async () => await retryAgent(() => agent(verifierBrief(preparedTask, preparedTask.planFile), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
     task: N,
@@ -444,7 +449,7 @@ const runPlan = async () => {
       }),
     }
     planResult.files = preparedTask.files
-    planResult = await rejectPlannedWithoutPlanFile(planResult)
+    planResult = await rejectPlannedWithoutExpectedPlanFile(planResult, preparedTask.planFile)
   }
   let reviewRounds = MAX_REVIEW_ROUNDS
   let verify = await runVerify()

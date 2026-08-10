@@ -600,8 +600,9 @@ function propagateChildGitlinks(
         if (childSourceTip === undefined || child.pathInParent === null || childSourceCheckoutPath === undefined) continue;
         const recordedOid = git(occurrence.checkoutPath, "rev-parse", `HEAD:${child.pathInParent}`).trim();
         if (recordedOid === childSourceTip) continue;
-        git(child.checkoutPath, "fetch", childSourceCheckoutPath, `${child.baseBranch}:refs/heads/${child.baseBranch}`);
-        git(child.checkoutPath, "checkout", child.baseBranch);
+        // Fetch to FETCH_HEAD, not straight into refs/heads/<branch>: a retry's branch may already be checked out here.
+        git(child.checkoutPath, "fetch", childSourceCheckoutPath, child.baseBranch);
+        git(child.checkoutPath, "checkout", "-B", child.baseBranch, "FETCH_HEAD");
         git(occurrence.checkoutPath, "add", child.pathInParent);
         stagedAnyChange = true;
     }

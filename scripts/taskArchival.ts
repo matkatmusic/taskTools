@@ -1,7 +1,6 @@
 // Archives fully-published tasks from an explicit list; task 31's approvalGate.ts already gates this, so no re-prompt.
-import { readFileSync, writeFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
-import { withTaskStateLock } from "./taskStateLock.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export type RepoPublishStatus = "published" | "conflicted" | "skipped" | "rolled-back";
 
@@ -42,8 +41,9 @@ export function archivePublishedTasks(
     publishedTaskNumbers: number[],
     mergeResults: TaskMergeResult[],
     projectRoot: string = process.cwd(),
-    writeFile: (path: string, data: string) => void = writeFileSync,
+    writeJson: (path: string, value: unknown) => void = writeJsonAtomically,
 ): { archived: number[]; leftOpen: number[] } {
+    const pair = resolveTaskFiles(projectRoot);
     const resultsByTask = new Map(mergeResults.map((result) => [result.taskNumber, result]));
     const considered = new Set<number>([...publishedTaskNumbers, ...mergeResults.map((result) => result.taskNumber)]);
 
@@ -54,12 +54,9 @@ export function archivePublishedTasks(
 
     let archived: number[] = [];
     if (candidates.length > 0) {
-      archived = withTaskStateLock(projectRoot, (): number[] => {
-        const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
-        const originalTasksRaw = readFileSync(tasksPath, "utf8");
-        const originalCompletedRaw = readFileSync(completedTasksPath, "utf8");
-        const tasks = readTaskFile(tasksPath);
-        const completedTasks = readTaskFile(completedTasksPath);
+      archived = withTaskStateLock(pair.tasksPath, (): number[] => {
+        const tasks = readTaskFile(pair.tasksPath);
+        const completedTasks = readTaskFile(pair.completedTasksPath);
         const completionDate = new Date().toISOString().slice(0, 10);
 
         // Preflight every candidate before mutating either file: one invalid candidate blocks the whole batch, not just itself.
@@ -76,31 +73,19 @@ export function archivePublishedTasks(
             toArchive.push({ index, task: tasks[index], commitHashes });
         }
 
+        // Archive-first, keyed by taskNumber: a retry after a partial prior write overwrites, not duplicates, the record.
+        for (const { task, commitHashes } of toArchive) {
+            const record = { ...task, completionDate, commitHashes };
+            const existing = completedTasks.findIndex((entry) => entry.taskNumber === task.taskNumber);
+            if (existing === -1) completedTasks.push(record);
+            else completedTasks[existing] = record;
+        }
         for (const { index } of [...toArchive].sort((a, b) => b.index - a.index)) tasks.splice(index, 1);
-        for (const { task, commitHashes } of toArchive) completedTasks.push({ ...task, completionDate, commitHashes });
         const archivedLocal = toArchive.map(({ task }) => task.taskNumber);
 
-        // ponytail: unreachable given the loop above always pushes one entry per candidate; kept as the explicit post-write invariant the reviewer asked for, so a future change to the preflight loop that reintroduces a silent skip fails loudly here instead of writing a partial archive.
-        const stillOpen = candidates.filter((taskNumber) => !archivedLocal.includes(taskNumber));
-        if (stillOpen.length > 0) throw new Error(`archivePublishedTasks: candidates left unarchived: ${stillOpen.join(", ")}`);
-
-        // Serialize both final versions before touching disk, so a mid-write failure has a known-good pair to restore.
-        const serializedTasks = JSON.stringify(tasks, null, 2) + "\n";
-        const serializedCompleted = JSON.stringify(completedTasks, null, 2) + "\n";
-        try {
-            writeFile(tasksPath, serializedTasks);
-            writeFile(completedTasksPath, serializedCompleted);
-        } catch (writeError) {
-            const writeMessage = writeError instanceof Error ? writeError.message : String(writeError);
-            try {
-                writeFile(tasksPath, originalTasksRaw);
-                writeFile(completedTasksPath, originalCompletedRaw);
-            } catch (rollbackError) {
-                const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-                throw new Error(`archivePublishedTasks: write failed (${writeMessage}) and rollback also failed (${rollbackMessage}); tasks.json/completedTasks.json may be inconsistent`);
-            }
-            throw new Error(`archivePublishedTasks: write failed and was rolled back to the original files: ${writeMessage}`);
-        }
+        // Archive-first order: a failed second write leaves a safely retryable partial state.
+        writeJson(pair.completedTasksPath, completedTasks);
+        writeJson(pair.tasksPath, tasks);
         return archivedLocal;
       });
     }

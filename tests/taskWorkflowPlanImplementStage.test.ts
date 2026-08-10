@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { compileFunction, constants as vmConstants } from 'node:vm'
 import { buildWorkflowArguments } from '../scripts/prepareTasks.ts'
@@ -176,6 +176,49 @@ test('plan+implement reports blocked when the implementer claims done without co
     assert.equal(envelope.results[1]!.status, 'blocked')
   } finally {
     for (const group of prepared.groups) rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('plan+implement rejects a planner that returns an existing plan outside the task worktree', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const ambientPlan = join(root, 'plans', `task-${task.taskNumber}-plan.md`)
+    mkdirSync(dirname(ambientPlan), { recursive: true })
+    writeFileSync(ambientPlan, 'ambient plan\n')
+    let verifierOrWorkerRan = false
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        return {
+          task: task.taskNumber,
+          status: 'planned',
+          planFile: ambientPlan,
+          question: '',
+          missingFiles: [],
+        }
+      }
+      verifierOrWorkerRan = true
+      throw new Error(`unexpected ${options.label}`)
+    })
+
+    assert.equal(envelope.results.length, 1)
+    assert.equal(envelope.results[0]!.status, 'needs-clarification')
+    assert.equal(verifierOrWorkerRan, false)
+    assert.equal(existsSync(join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)), false)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
     rmSync(root, { recursive: true, force: true })
   }
 })

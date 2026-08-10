@@ -2,12 +2,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { compileFunction, constants as vmConstants } from "node:vm";
 import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { attachOperationBranch, buildWorkflowArguments, createWorktreeForGroup, loadRepositoryManifest } from "../scripts/prepareTasks.ts";
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 import { beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
@@ -339,9 +339,31 @@ const scriptedPlanImplementAgent = (taskNumber: number, worktreePath: string, ow
         throw new Error(`unexpected agent label: ${options.label}`);
     };
 
-// Production-shaped fixture: real buildWorkflowArguments/loadRepositoryManifest output, discovery-shaped (operationBranch "").
+// A bare origin so prepareTasks.ts's CLI origin-remote gate is satisfied.
+const addBareOrigin = (root: string): string => {
+    const origin = mkdtempSync(join(tmpdir(), "run-merge-phase-origin-"));
+    git(origin, "init", "-q", "--bare");
+    git(root, "remote", "add", "origin", origin);
+    return origin;
+};
+
+// Runs the real prepareTasks.ts CLI, so fixtures exercise the same origin-gated preparation path as production.
+const prepareThroughCli = (root: string, taskNumber: number): any => {
+    const stdout = execFileSync(
+        "node",
+        [join(REPO_ROOT, "scripts", "prepareTasks.ts"), String(taskNumber)],
+        { cwd: root, encoding: "utf8" },
+    );
+    return JSON.parse(stdout);
+};
+
+const readTasks = (root: string): TaskRecord[] => JSON.parse(readFileSync(join(root, ".taskTools", "tasks.json"), "utf8"));
+const readCompleted = (root: string): TaskRecord[] => JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+
+// Production-shaped fixture: real prepareTasks.ts CLI output, discovery-shaped (operationBranch "").
 const makeQueueFixtureRepoV2 = (taskNumber: number, ownedFiles: string[]) => {
-    const root = mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-"));
+    // Resolve symlinks (macOS /var -> /private/var) so this matches the CLI subprocess's own process.cwd().
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-")));
     git(root, "init", "-q", "-b", "main");
     git(root, "config", "user.email", "test@example.com");
     git(root, "config", "user.name", "Test");
@@ -360,20 +382,29 @@ const makeQueueFixtureRepoV2 = (taskNumber: number, ownedFiles: string[]) => {
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
 
-    const prepared = buildWorkflowArguments(root, "true", [task]);
-    const worktreePath = prepared.groups[0]!.worktree;
+    const origin = addBareOrigin(root);
+    const prepared = prepareThroughCli(root, taskNumber);
+    const group = prepared.groups.find((entry: { tasks: { number: number }[] }) => entry.tasks[0]?.number === taskNumber);
+    const worktreePath = group.worktree;
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
 
-    const repositoryManifest = loadRepositoryManifest(root);
-    assert.equal(repositoryManifest.occurrences.every((occurrence) => occurrence.operationBranch === ""), true);
-    return { root, worktreePath, repositoryManifest, prepared };
+    const repositoryManifest = prepared.repositoryManifest;
+    assert.equal(repositoryManifest.occurrences.every((occurrence: { operationBranch: string }) => occurrence.operationBranch === ""), true);
+    return { root, origin, worktreePath, repositoryManifest, prepared };
+};
+
+const cleanupQueueFixture = (fixture: { root: string; origin: string; worktreePath: string }): void => {
+    rmSync(fixture.worktreePath, { recursive: true, force: true });
+    rmSync(fixture.root, { recursive: true, force: true });
+    rmSync(fixture.origin, { recursive: true, force: true });
 };
 
 test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMerged", async () => {
     const taskNumber = 9101;
     const trace: string[] = [];
-    const { root, worktreePath, repositoryManifest, prepared } = makeQueueFixtureRepoV2(taskNumber, ["taskfile.txt"]);
+    const fixture = makeQueueFixtureRepoV2(taskNumber, ["taskfile.txt"]);
+    const { root, worktreePath, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
     try {
         let queue = createMergeQueue();
@@ -418,21 +449,61 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         assert.equal(shouldEndQueue(queue, false), "done");
         assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
 
-        const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
-        assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber]);
+        const archived = readCompleted(root);
+        assert.deepEqual(archived.map((t) => t.taskNumber), [taskNumber]);
         trace.push("close");
 
         // Assert cleanup before teardown, not silently in finally.
-        const openTasks = JSON.parse(readFileSync(join(root, ".taskTools", "tasks.json"), "utf8"));
+        const openTasks = readTasks(root);
         assert.deepEqual(openTasks, []);
+        assert.equal(git(root, "show", "main:taskfile.txt"), "task change");
         assert.equal(existsSync(worktreePath), false);
         assert.throws(() => git(root, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));
         trace.push("cleanup");
 
         assert.deepEqual(trace, ["prepare", "notification:plan+implement", "gate:approve", "notification:rebase-test", "notification:merge", "close", "cleanup"]);
     } finally {
-        rmSync(worktreePath, { recursive: true, force: true });
-        rmSync(root, { recursive: true, force: true });
+        cleanupQueueFixture(fixture);
+    }
+});
+
+test("a do-not-approve gate never enqueues or launches tail stages", async () => {
+    const taskNumber = 9105;
+    const fixture = makeQueueFixtureRepoV2(taskNumber, ["taskfile.txt"]);
+    let tailLaunches = 0;
+
+    try {
+        let queue = createMergeQueue();
+        const notification = await runTaskWorkflowStage(
+            fixture.worktreePath,
+            {
+                task: taskNumber,
+                stage: "plan+implement",
+                typecheckCommand: fixture.prepared.typecheckCommand,
+                sourceRoot: fixture.root,
+                repositoryManifest: fixture.repositoryManifest,
+            },
+            scriptedPlanImplementAgent(
+                taskNumber,
+                fixture.worktreePath,
+                "taskfile.txt",
+                () => writeFileSync(join(fixture.worktreePath, "taskfile.txt"), "task change\n"),
+            ),
+        );
+
+        const consumed = consumeTaskWorkflowResult(queue, notification);
+        assert.equal(consumed.kind, "approval");
+        if (consumed.kind !== "approval") return assert.fail("expected approval notification");
+
+        // gate rejects: queue is never told to enqueue the approved task.
+        const action = nextQueueAction(queue, { any: false, tail: false });
+        if (action.kind === "launch") tailLaunches += 1;
+        assert.deepEqual(action, { kind: "report", endState: "done" });
+        assert.equal(tailLaunches, 0);
+        assert.equal(readCompleted(fixture.root).length, 0);
+        assert.equal(readTasks(fixture.root).some((task) => task.taskNumber === taskNumber), true);
+    } finally {
+        cleanupQueueFixture(fixture);
     }
 });
 
@@ -643,7 +714,8 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
     git(submoduleOrigin, "add", "package.json");
     git(submoduleOrigin, "commit", "-q", "-m", "add test script");
 
-    const root = mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-"));
+    // Resolve symlinks (macOS /var -> /private/var) so this matches the CLI subprocess's own process.cwd().
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-")));
     git(root, "init", "-q", "-b", "main");
     git(root, "config", "user.email", "test@example.com");
     git(root, "config", "user.name", "Test");
@@ -664,20 +736,23 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
 
-    const prepared = buildWorkflowArguments(root, "true", [task]);
-    const worktreePath = prepared.groups[0]!.worktree;
+    const origin = addBareOrigin(root);
+    const prepared = prepareThroughCli(root, taskNumber);
+    const group = prepared.groups.find((entry: { tasks: { number: number }[] }) => entry.tasks[0]?.number === taskNumber);
+    const worktreePath = group.worktree;
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
 
-    const repositoryManifest = loadRepositoryManifest(root);
-    assert.equal(repositoryManifest.occurrences.every((occurrence) => occurrence.operationBranch === ""), true);
-    return { root, worktreePath, submoduleOrigin, repositoryManifest, prepared };
+    const repositoryManifest = prepared.repositoryManifest;
+    assert.equal(repositoryManifest.occurrences.every((occurrence: { operationBranch: string }) => occurrence.operationBranch === ""), true);
+    return { root, origin, worktreePath, submoduleOrigin, repositoryManifest, prepared };
 };
 
 test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndReportsItMerged", async () => {
     const taskNumber = 9103;
     const trace: string[] = [];
-    const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
     try {
         let queue = createMergeQueue();
@@ -744,13 +819,15 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         rmSync(worktreePath, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });
         rmSync(submoduleOrigin, { recursive: true, force: true });
+        rmSync(fixture.origin, { recursive: true, force: true });
     }
 });
 
 test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeAndBuildMergeReport", async () => {
     const taskNumber = 9104;
     const trace: string[] = [];
-    const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
     try {
         const worktreeVendorPath = join(worktreePath, "vendor");
@@ -808,17 +885,19 @@ test("test_endToEndQueueFeedsARealSubmoduleRebaseConflictIntoRecordStageOutcomeA
         assert.match(report.unmerged[0]!.lastFailure, /submodule|vendor/i);
         assert.match(report.unmerged[0]!.lastFailure, /conflict|unresolved/i);
 
-        const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
-        assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), []);
+        const archived = readCompleted(root);
+        assert.deepEqual(archived.map((t) => t.taskNumber), []);
 
         // A conflict must leave every task ref recoverable: no cleanup ran.
-        const openTasks = JSON.parse(readFileSync(join(root, ".taskTools", "tasks.json"), "utf8"));
-        assert.equal(openTasks.some((t: { taskNumber: number }) => t.taskNumber === taskNumber), true);
+        const openTasks = readTasks(root);
+        assert.equal(openTasks.some((t) => t.taskNumber === taskNumber), true);
         assert.equal(existsSync(worktreePath), true);
+        // Source submodule fetches the task branch only on merge; a rebase-test conflict has no such ref yet.
         assert.doesNotThrow(() => git(root, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));
     } finally {
         rmSync(worktreePath, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });
         rmSync(submoduleOrigin, { recursive: true, force: true });
+        rmSync(fixture.origin, { recursive: true, force: true });
     }
 });

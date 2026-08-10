@@ -44,9 +44,9 @@ if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   }
   const reason = readStdin().replace(/\n$/, "");
 
-  const sourceRoot = process.cwd();
-  const { tasksPath } = resolveTaskFiles(sourceRoot);
-  const removed = withTaskStateLock(sourceRoot, () => {
+  const pair = resolveTaskFiles(process.cwd());
+  const removed = withTaskStateLock(pair.tasksPath, () => {
+    const { tasksPath } = pair;
     const tasks = readTaskFile(tasksPath);
     const didRemove = stripDisprovenBlocker(tasks, blockedTaskNumber, blockerTaskNumber, reason);
     if (didRemove) writeJsonAtomically(tasksPath, tasks);

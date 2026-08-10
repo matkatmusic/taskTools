@@ -9,17 +9,18 @@ import { dirname, join } from "node:path";
 const WAIT = new Int32Array(new SharedArrayBuffer(4));
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-export function taskStateLockPath(sourceRoot: string): string {
-    return join(sourceRoot, ".taskTools", "task-state.lock");
+// tasksPath is pre-resolved, so root and subdirectory callers share one lock.
+export function taskStateLockPath(tasksPath: string): string {
+    return join(dirname(tasksPath), "task-state.lock");
 }
 
 // ponytail: no stale-lock age reap, that's its own check-then-act race; fails safe on timeout.
 export function withTaskStateLock<T>(
-    sourceRoot: string,
+    tasksPath: string,
     action: () => T,
     { timeoutMs = DEFAULT_TIMEOUT_MS } = {},
 ): T {
-    const lockPath = taskStateLockPath(sourceRoot);
+    const lockPath = taskStateLockPath(tasksPath);
     mkdirSync(dirname(lockPath), { recursive: true });
     const deadline = Date.now() + timeoutMs;
     let fd: number | null = null;

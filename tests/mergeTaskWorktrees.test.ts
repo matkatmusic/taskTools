@@ -14,6 +14,7 @@ import type { ArchiveRequest } from "../scripts/taskArchival.ts";
 import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
 import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
 import {
+    defaultMergeStepOperations,
     listTaskWorktrees,
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -1701,6 +1702,68 @@ test("test_mergeTaskDeepestFirstLeavesAnAlreadyMergedSubmoduleInPlaceWhenThePare
     const submoduleLayer = report.completedLayers[0];
     const submoduleOidAfterMerge = submoduleLayer.status === "merged" ? submoduleLayer.oid : null;
     assert.equal(git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim(), submoduleOidAfterMerge);
+});
+
+test("retry propagates a later child source tip while retaining the task historical child merge oid", () => {
+    const fixture = buildMergePrimitiveFixture();
+    const branch = fixture.group.branch;
+    // mergeTaskDeepestFirst rewrites occurrence.checkoutPath in place; each call needs its own copy.
+    const originalOccurrences = fixture.discoveryManifest.repositoryManifest.occurrences.map((o) => ({ ...o }));
+    const freshManifest = (): DiscoveryManifest => ({
+        repositoryManifest: { ...fixture.discoveryManifest.repositoryManifest, occurrences: originalOccurrences.map((o) => ({ ...o })) },
+        resolutionManifest: emptyResolutionManifest(),
+    });
+
+    // Task A changes the child and records that gitlink in its parent branch.
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+
+    let failParentOnce = true;
+    const first = mergeTaskDeepestFirst(fixture.group.worktree, freshManifest(), {
+        ...defaultMergeStepOperations,
+        mergeGroup: (repoRoot, group, sourceBranch, submodulePaths) => {
+            if (failParentOnce) {
+                failParentOnce = false;
+                return {
+                    groupId: group.groupId,
+                    merged: false,
+                    conflictedFilePaths: ["parent.txt"],
+                    submoduleConflicts: [],
+                    worktree: group.worktree,
+                    failureReason: "forced parent failure after child merge",
+                };
+            }
+            return defaultMergeStepOperations.mergeGroup(repoRoot, group, sourceBranch, submodulePaths);
+        },
+    });
+
+    assert.equal(first.status, "parent-conflicted");
+    const firstChild = first.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(firstChild.status, "merged");
+    const taskAChildMergeOid = firstChild.status === "merged" ? firstChild.mergedCommitOid : null;
+
+    // Task B advances the canonical child source after A's child already merged.
+    writeFileSync(join(fixture.mainSubmodulePath, "task-b.txt"), "B\n");
+    git(fixture.mainSubmodulePath, "add", "task-b.txt");
+    git(fixture.mainSubmodulePath, "commit", "-q", "-m", "task B advances child");
+    const taskBChildTip = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+    assert.notEqual(taskBChildTip, taskAChildMergeOid);
+
+    const retried = mergeTaskDeepestFirst(fixture.group.worktree, freshManifest());
+    assert.equal(retried.status, "merged");
+    if (retried.status !== "merged") return assert.fail("expected retry to merge");
+
+    const retriedChild = retried.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(retriedChild.status, "no-op");
+    if (retriedChild.status !== "no-op") return assert.fail("expected the child to be a no-op on retry");
+    assert.equal(retriedChild.oid, taskBChildTip);
+    assert.equal(retriedChild.mergedCommitOid, taskAChildMergeOid);
+
+    // Parent records B's current child tip; A's historical merge attribution stays unchanged.
+    assert.equal(git(fixture.rootPath, "rev-parse", `${fixture.sourceBranch}:vendor`).trim(), taskBChildTip);
+    assert.equal(
+        git(fixture.mainSubmodulePath, "rev-parse", `refs/taskTools/merged-commits/${branch}`).trim(),
+        taskAChildMergeOid,
+    );
 });
 
 test("test_mergeTaskDeepestFirstStopsAtASubmoduleConflictWithoutAttemptingTheParentMerge", () => {
