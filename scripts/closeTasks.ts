@@ -81,6 +81,10 @@ export function closeTasks(
   closureNote: string | Record<number, string>,
   projectRoot: string = process.cwd(),
   commitHashes: string[] | Record<number, string[]> = [],
+  // Test-only: fires after the tasksPath tmp write, before the hash-guard rename check.
+  afterTasksWriteAttempt?: () => void,
+  // Test-only: fires after the correction-write tmp write to completedTasksPath (step 3).
+  afterCorrectionWriteAttempt?: () => void,
 ): CloseTasksResult {
   const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
   const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as TaskRecord[];
@@ -101,24 +105,25 @@ export function closeTasks(
     return { closed: [], skipped, unblocked: [] };
   }
 
-  // Resolve every note/hashes/record first, so a missing Record entry throws before any write.
+  // Resolve every note/hashes first, so a missing Record entry throws before any write.
   const resolved = new Map(
     willClose.map((taskNumber) => [
       taskNumber,
       {
-        task: tasks.find((task) => task.taskNumber === taskNumber)!,
         closureNote: noteFor(closureNote, taskNumber),
         commitHashes: hashesFor(commitHashes, taskNumber),
       },
     ]),
   );
 
-  // Written first; upserts, not skips, so a retry overwrites a stale prior-run record.
-  hashGuardedRewrite<TaskRecord[]>(completedTasksPath, (parsedCompleted) => {
-    const appended = [...parsedCompleted];
-    for (const taskNumber of willClose) {
-      const { task, closureNote: note, commitHashes: hashes } = resolved.get(taskNumber)!;
-      const record = { ...task, completionDate, commitHashes: hashes, closureNote: note };
+  function recordFor(taskNumber: number, source: TaskRecord[]): TaskRecord {
+    const { closureNote: note, commitHashes: hashes } = resolved.get(taskNumber)!;
+    return { ...source.find((task) => task.taskNumber === taskNumber)!, completionDate, commitHashes: hashes, closureNote: note };
+  }
+
+  function upsertInto(base: TaskRecord[], records: Map<number, TaskRecord>): TaskRecord[] {
+    const appended = [...base];
+    for (const [taskNumber, record] of records) {
       const existingIndex = appended.findIndex((t) => t.taskNumber === taskNumber);
       if (existingIndex === -1) {
         appended.push(record);
@@ -127,14 +132,39 @@ export function closeTasks(
       }
     }
     return appended;
-  });
+  }
 
+  // Step 1: archive first, so a failure below never removes a task without archiving it.
+  const initialRecords = new Map(willClose.map((taskNumber) => [taskNumber, recordFor(taskNumber, tasks)]));
+  hashGuardedRewrite<TaskRecord[]>(completedTasksPath, (parsedCompleted) => upsertInto(parsedCompleted, initialRecords));
+
+  // Step 2: remove from tasks.json; freshRecords comes from this guarded snapshot, rebuilt on every retry.
+  let freshRecords = new Map<number, TaskRecord>();
   let unblocked: number[] = [];
-  hashGuardedRewrite<TaskRecord[]>(tasksPath, (parsedTasks) => {
-    const remaining = parsedTasks.filter((task) => !willClose.includes(task.taskNumber));
-    unblocked = unblockDependents(remaining, willClose);
-    return remaining;
-  });
+  hashGuardedRewrite<TaskRecord[]>(
+    tasksPath,
+    (parsedTasks) => {
+      freshRecords = new Map(willClose.map((taskNumber) => [taskNumber, recordFor(taskNumber, parsedTasks)]));
+      const remaining = parsedTasks.filter((task) => !willClose.includes(task.taskNumber));
+      unblocked = unblockDependents(remaining, willClose);
+      return remaining;
+    },
+    afterTasksWriteAttempt,
+  );
+
+  // Step 3: correct the archive, but only for records a concurrent writer actually changed.
+  const changedRecords = new Map(
+    willClose
+      .filter((taskNumber) => JSON.stringify(freshRecords.get(taskNumber)) !== JSON.stringify(initialRecords.get(taskNumber)))
+      .map((taskNumber) => [taskNumber, freshRecords.get(taskNumber)!]),
+  );
+  if (changedRecords.size > 0) {
+    hashGuardedRewrite<TaskRecord[]>(
+      completedTasksPath,
+      (parsedCompleted) => upsertInto(parsedCompleted, changedRecords),
+      afterCorrectionWriteAttempt,
+    );
+  }
 
   return { closed: willClose, skipped, unblocked };
 }
