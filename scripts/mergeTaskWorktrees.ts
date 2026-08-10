@@ -56,7 +56,7 @@ export function listTaskWorktrees(repoRoot: string): TaskWorktree[] {
     const output = git(repoRoot, "worktree", "list", "--porcelain");
     return parseWorktreeListPorcelain(output).filter((worktree) => {
         if (!worktree.path.startsWith(`${conventionRoot}/`)) return false;
-        return /^group-\d+$/.test(basename(worktree.path));
+        return /^task-\d+$/.test(basename(worktree.path));
     });
 }
 
