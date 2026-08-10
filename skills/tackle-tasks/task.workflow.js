@@ -354,11 +354,11 @@ const loadPreparedTask = async () => {
 const runPlan = async () => {
   log(`task ${N}: plan stage`)
   preparedTask = await loadPreparedTask()
-  const { execFileSync } = await import('node:child_process')
   const { join } = await import('node:path')
   const { pathToFileURL } = await import('node:url')
-  const { readTaskFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/taskFiles.ts')).href)
+  const { addTaskFiles } = await import(pathToFileURL(join(WORKTREE, 'scripts/addTaskFiles.ts')).href)
   const { writeTaskBriefFile } = await import(pathToFileURL(join(WORKTREE, 'scripts/prepareTasks.ts')).href)
+  const mainRepoRoot = ARGS.repositoryManifest.occurrences.find((o) => o.occurrenceId === '').checkoutPath
   const result = await retryAgent(() => agent(plannerBrief(preparedTask), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
   let planResult = {
     stage: 'plan',
@@ -379,8 +379,8 @@ const runPlan = async () => {
     missingFiles: [],
   }
   const widenFilesAndReplan = async (missingFiles) => {
-    execFileSync('node', ['scripts/addTaskFiles.ts', JSON.stringify([N]), ...missingFiles], { cwd: preparedTask.repoRoot })
-    const widenedTask = readTaskFile(preparedTask.pair.tasksPath).find((entry) => entry.taskNumber === N)
+    const widenedTasks = addTaskFiles([N], missingFiles, mainRepoRoot)
+    const widenedTask = widenedTasks.find((entry) => entry.taskNumber === N)
     if (!widenedTask) throw new Error(`task.workflow.js: task ${N} disappeared from tasks.json`)
     writeTaskBriefFile(widenedTask, preparedTask.repoRoot)
     preparedTask.files = Array.isArray(widenedTask.files) ? widenedTask.files : []

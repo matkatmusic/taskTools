@@ -5,6 +5,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { addTaskFiles } from "../scripts/addTaskFiles.ts";
+import { closeTasks } from "../scripts/closeTasks.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts");
 
@@ -109,4 +111,51 @@ test("when .taskTools/run-arguments.json is absent, addTaskFiles.ts succeeds and
   const root = makeProjectRoot();
   run(root, "[1]", "new.ts");
   assert.equal(existsSync(join(root, ".taskTools", "run-arguments.json")), false);
+});
+
+test("two concurrent widen calls forced to interleave: the second call's write, injected mid-transaction, forces the first to retry so both widenings land", () => {
+  const root = makeProjectRoot();
+  let innerRan = false;
+  addTaskFiles([1], ["from-a.ts"], root, () => {
+    if (innerRan) return;
+    innerRan = true;
+    addTaskFiles([2], ["from-b.ts"], root);
+  });
+  const tasks = readTasks(root);
+  assert.deepEqual(tasks.find((t) => t.taskNumber === 1).files, ["existing.ts", "from-a.ts"]);
+  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).files, ["from-b.ts"]);
+});
+
+test("a task closes mid-transaction while a different task is being widened: the widen retries onto fresh bytes and does not resurrect the closed task", () => {
+  const root = makeProjectRoot();
+  writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
+  let closedInline = false;
+  addTaskFiles([2], ["shared.ts"], root, () => {
+    if (closedInline) return;
+    closedInline = true;
+    closeTasks([1], "closed during race", root);
+  });
+  const tasks = readTasks(root);
+  assert.equal(tasks.some((t) => t.taskNumber === 1), false);
+  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).files, ["shared.ts"]);
+  const completed = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
+  assert.equal(completed.some((t: any) => t.taskNumber === 1), true);
+});
+
+test("two concurrent widen calls forced to interleave inside the run-arguments write: neither widening's run-arguments entry is erased", () => {
+  const root = makeProjectRoot();
+  writeFileSync(
+    join(root, ".taskTools", "run-arguments.json"),
+    JSON.stringify({ groups: [{ tasks: [{ number: 1, files: [] }, { number: 2, files: [] }] }] }),
+  );
+  let innerRan = false;
+  addTaskFiles([1], ["from-a.ts"], root, undefined, () => {
+    if (innerRan) return;
+    innerRan = true;
+    addTaskFiles([2], ["from-b.ts"], root);
+  });
+  const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
+  const allFiles = snapshot.groups.flatMap((g: any) => g.tasks).flatMap((t: any) => t.files);
+  assert.ok(allFiles.includes("from-a.ts"));
+  assert.ok(allFiles.includes("from-b.ts"));
 });
