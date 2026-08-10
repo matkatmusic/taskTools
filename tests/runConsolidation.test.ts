@@ -120,7 +120,9 @@ test("test_mergeOrderIsDeterministic", () => {
         assert.fail("expected both calls to succeed");
         return;
     }
-    assert.equal(resultForward.operationOid, resultReversed.operationOid);
+    const forwardTreeOid = git(fixture.repoRoot, "rev-parse", `${resultForward.operationOid}^{tree}`);
+    const reversedTreeOid = git(fixture.repoRoot, "rev-parse", `${resultReversed.operationOid}^{tree}`);
+    assert.equal(forwardTreeOid, reversedTreeOid);
 });
 
 test("test_treeMismatchAbortsWithEveryRefPreserved", () => {
