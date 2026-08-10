@@ -573,39 +573,6 @@
     "difficulty": 6
   },
   {
-    "taskNumber": 178,
-    "version": "460c5703be3a68b6f3c577f556f8266db5b3cda8",
-    "title": "Run the configured typecheck in rebase-test so the brief's promise holds (audit C86-13)",
-    "userDescription": "Rebase-test does not rerun the claimed typecheck. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-12.",
-    "goal": [
-      "- Rebase-test runs the typecheck AND the complete suite, at every layer.",
-      "- TYPECHECK_COMMAND reaches the tail launches, not only the implementation worker.",
-      "- A type error introduced by the rebase fails the stage before any merge happens.",
-      "- The brief's claim at scripts/tackleTasksBrief.ts:155 is now accurate rather than aspirational.",
-      "- `npm test` passes.",
-      "- NOT in scope: the force-reset of retained failed work during re-preparation (audit C86-12, task 177, the blocker for this task)."
-    ],
-    "description": "This is finding C86-13 (MEDIUM) in plans/task-86-codex-audit.md.\n\nThe generated brief promises that every rebase-test runs \"typecheck + each layer's complete test suite\" (scripts/tackleTasksBrief.ts:155). It does not.\n\nrebaseAndTestSubmoduleLayer (scripts/mergeTaskWorktrees.ts:295-304, around lines 256-304) and rebaseParentOntoSourceAndTest (:370-379, around lines 354-380) execute only testPolicyResult.policy.completeSuiteCommand from discoverTestPolicy() in scripts/testPolicy.ts. In this repository that resolves to `npm run test`, and package.json's test script contains no typecheck.\n\nTYPECHECK_COMMAND (default `npx tsc --noEmit`) is referenced only in skills/tackle-tasks/task.workflow.js (lines 4, 215, 230), where the implementation worker uses it. It is omitted from tail launches entirely, so the rebase-test stage never receives it.\n\nFIX DIRECTION, settled with the user: make the promise true rather than deleting it. Thread the configured typecheck command into the tail launches and run it in BOTH rebase-test functions, alongside completeSuiteCommand, at every layer. A rebase that introduces type breakage must then fail the stage before any merge, instead of merging clean.",
-    "files": [
-      "scripts/mergeTaskWorktrees.ts",
-      "scripts/testPolicy.ts",
-      "scripts/tackleTasksBrief.ts",
-      "skills/tackle-tasks/task.workflow.js",
-      "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "tests": "Plant a TYPE error in the task's code that npm run test still PASSES on. Run the rebase-test stage. Assert it FAILS and that the reported reason names the typecheck. Today it passes, because rebase only runs completeSuiteCommand, which is npm run test, with no typecheck.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 177,
-        "reason": "the user placed this after C86-12 in the audit chain; both change what preparation and rebase-test do to a task's worktree before merge"
-      }
-    ],
-    "handoffFilePaths": [
-      "plans/task-86-codex-audit.md"
-    ]
-  },
-  {
     "taskNumber": 179,
     "version": "adffd2eb55115b28c3cafc377e61c21be84278cb",
     "title": "Record the real merge commit at merge time so a merged-but-not-closed retry archives the right hash (audit C86-14)",
