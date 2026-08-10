@@ -1,0 +1,13 @@
+Apply reviewer feedback to a plan file. The reviewer's PROBLEMS and FIXES are below, verbatim:
+
+PROBLEMS:
+fixture problem text
+
+FIXES:
+fixture fix text
+
+Read /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md, then edit it so it satisfies every fix listed above. The only file you may ever edit is /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md — never touch a source file, the brief, or any other file, and never run any command.
+
+If the text above has no FIXES section to apply (for example a MISSING_FILES section instead), make no edits and return applied false.
+
+Return {task: 999, applied: true} once you have made the edits, or {task: 999, applied: false} if there was nothing to apply.

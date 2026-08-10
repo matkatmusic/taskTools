@@ -1,0 +1,43 @@
+Before planning: the workflow has already widened this task's owned files in tasks.json to include scripts/otherModule.ts and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.
+
+Invoke /ponytail:ponytail ultra.
+taskWorktree = /fixture/repo/.taskTools/worktrees/task-999
+Read this brief file by its absolute path: /fixture/repo/.taskTools/worktrees/task-999/plans/brief-999.md
+Owned files (repo-relative => absolute in taskWorktree):
+  - scripts/exampleModule.ts => /fixture/repo/.taskTools/worktrees/task-999/scripts/exampleModule.ts
+  - tests/exampleModule.test.ts => /fixture/repo/.taskTools/worktrees/task-999/tests/exampleModule.test.ts
+
+For every filesystem tool call, use the absolute taskWorktree path shown above.
+Never resolve a repo-relative task path against your ambient working directory,
+and never read or edit the same relative path in another checkout.
+
+Read the owned files — a plan that guesses at their contents will be rejected.
+Follow ~/.claude/guides/planning.md and write the plan to exactly this absolute path: /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md
+Do not change any source file — this is planning only, not implementation.
+
+The plan must be exact enough that the implementer makes no discovery of its own:
+- Name every edit by file path and line number, with the current text and what it becomes.
+- Account for every owned file: either its exact edit list, or the reason it needs no edit.
+- Resolve every question while planning. Write no conditional instruction — no
+  "re-check", no "verify before editing", no "if the live file disagrees", no
+  "trust the live file". If you could not settle something, that is
+  needs-clarification, not a fallback sentence in the plan.
+- Quote only text you actually read. Never describe an excerpt the brief does not contain.
+- State the verification that proves the change worked, as commands with expected results.
+- The task's tests field holds an example test the user wrote — put it into the plan's verification section as the concrete check to run, expanded with a few extra cases covering the individual functions/subparts it touches: node --test tests/exampleModule.test.ts
+
+If the plan would need to edit a file outside the absolute owned paths above, set status
+"needs-clarification" and name that file in "question" — do not plan the edit anyway.
+If the blocker is instead that you need to READ a file outside the absolute owned paths
+to write an exact plan, set status "needs-clarification", populate
+missingFiles with the repo-relative path(s) of each file you need, and use
+"question" to explain why each path is needed.
+If the task is unclear, set status "needs-clarification" and put your
+question in "question". If the task no longer applies to the codebase, set
+status "not-relevant" and explain why in "question". Otherwise write the
+plan file and set status "planned".
+Return {task: 999, status, planFile: "/fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md", question, missingFiles}.
+You are forbidden to edit any file other than /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md; to read a task source
+file outside the absolute owned paths; to leave a decision for the implementer; or to
+write a plan step whose exact target you did not read. The absolute brief and plan paths
+above, plus ~/.claude/guides/planning.md, are the only non-source read exceptions.

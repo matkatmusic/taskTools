@@ -1,0 +1,36 @@
+Review the plan for task #999 by running exactly this command:
+
+codex exec -s read-only "Review an implementation plan. Read only these two files: the brief /fixture/repo/.taskTools/worktrees/task-999/plans/brief-999.md and the plan /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md. Do not edit anything.\n\nDecide whether the plan is good enough to hand to an implementer: it stays within the task's owned files (scripts/exampleModule.ts, tests/exampleModule.test.ts), it gives concrete steps rather than open design questions, and someone could follow it without having to decide anything the plan should have already decided.\n\nPrint APPROVED or REJECTED alone on the first line.\n\nIf APPROVED, follow it with one short paragraph saying why.\n\nIf REJECTED, follow it with two sections. First \"PROBLEMS:\" — what is wrong and why. Then \"FIXES:\" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, replace the FIXES section with a \"MISSING_FILES:\" section instead: one repo-relative file path per line, the paths the plan would need read access to, and no other text in that section."
+
+If that command exits with an error code, codex is unavailable — not a
+verdict. Unavailability looks like a non-zero exit with no APPROVED or
+REJECTED first line and no PROBLEMS or FIXES block: overloaded api, usage
+exceeded, not logged in, rate limited, or no codex binary on PATH. In that
+case run this command instead, and treat its output exactly as you would
+codex's:
+
+claude -p "Review an implementation plan. Read only these two files: the brief /fixture/repo/.taskTools/worktrees/task-999/plans/brief-999.md and the plan /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md. Do not edit anything.\n\nDecide whether the plan is good enough to hand to an implementer: it stays within the task's owned files (scripts/exampleModule.ts, tests/exampleModule.test.ts), it gives concrete steps rather than open design questions, and someone could follow it without having to decide anything the plan should have already decided.\n\nPrint APPROVED or REJECTED alone on the first line.\n\nIf APPROVED, follow it with one short paragraph saying why.\n\nIf REJECTED, follow it with two sections. First \"PROBLEMS:\" — what is wrong and why. Then \"FIXES:\" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, replace the FIXES section with a \"MISSING_FILES:\" section instead: one repo-relative file path per line, the paths the plan would need read access to, and no other text in that section." --tools "Read" --model fable --effort medium
+if that command also exits with an error code, run this command instead, and treat its output exactly as you would codex's:
+
+claude -p "Review an implementation plan. Read only these two files: the brief /fixture/repo/.taskTools/worktrees/task-999/plans/brief-999.md and the plan /fixture/repo/.taskTools/worktrees/task-999/plans/task-999-plan.md. Do not edit anything.\n\nDecide whether the plan is good enough to hand to an implementer: it stays within the task's owned files (scripts/exampleModule.ts, tests/exampleModule.test.ts), it gives concrete steps rather than open design questions, and someone could follow it without having to decide anything the plan should have already decided.\n\nPrint APPROVED or REJECTED alone on the first line.\n\nIf APPROVED, follow it with one short paragraph saying why.\n\nIf REJECTED, follow it with two sections. First \"PROBLEMS:\" — what is wrong and why. Then \"FIXES:\" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, replace the FIXES section with a \"MISSING_FILES:\" section instead: one repo-relative file path per line, the paths the plan would need read access to, and no other text in that section." --tools "Read" --model claude-opus-4-8 --effort high
+
+Whichever reviewer answers prints its verdict on the first line. Never edit
+any file — this agent only reviews the plan, it never applies fixes to it.
+Never run any command other than the ones above.
+
+Report which reviewer actually produced the verdict you return: reviewer
+"codex" if the codex command answered, reviewer "claude" if you had to fall
+back. Never report a fallback review as codex.
+
+If the run prints APPROVED: return verdict "approved", missingFiles [], and
+the reviewer's reasoning in notes.
+
+If the run prints REJECTED: it also prints a PROBLEMS section, and either a
+FIXES section or a MISSING_FILES section. Copy the PROBLEMS section and
+whichever of FIXES or MISSING_FILES it printed into notes verbatim — that
+text is the only thing anyone sees before deciding what to do about this
+plan. If it printed a MISSING_FILES section, also copy each line of that
+section into missingFiles as an array of repo-relative path strings.
+Otherwise return missingFiles as an empty array.
+
+Return {task: 999, verdict, notes, reviewer, missingFiles}.
