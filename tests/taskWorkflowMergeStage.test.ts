@@ -441,8 +441,6 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   git(root, 'add', 'README.md')
   git(root, 'commit', '-q', '-m', 'init')
   addTestScript(root, 'true')
-  const sourceBranch = 'main'
-  const baseOid = git(root, 'rev-parse', sourceBranch)
   const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' })
   symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
   mkdirSync(join(worktreePath, 'plans'), { recursive: true })
