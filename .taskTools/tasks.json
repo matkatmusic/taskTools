@@ -573,36 +573,6 @@
     "difficulty": 6
   },
   {
-    "taskNumber": 182,
-    "version": "a1fe75d9730c148e9f8ace6876aba8595a31293e",
-    "title": "Restore the two retired instruction paragraphs as commented text beneath the RETIRED marker (audit C86-16)",
-    "userDescription": "Required retired instruction text was deleted instead of retained as comments. taken from /Users/matkatmusicllc/Programming/taskTools-86/plans/task-86-codex-audit.md. blocked by C86-15.",
-    "goal": [
-      "- The RETIRED (task 163) marker in scripts/tackleTasksBrief.ts is followed by the two superseded paragraphs as //-prefixed comments, not by a bare tombstone line.",
-      "- The restored text is byte-for-byte identical to what commit 6948357 removed.",
-      "- The brief the script emits is unchanged; only source comments were added.",
-      "- A test fails loudly if the marker is ever left without its commented body again.",
-      "- `npm test` passes.",
-      "- NOT in scope: amending the task-86 spec's transitional rule, deliberately rejected in favour of restoring the text; and the incomplete end-to-end matrix (audit C86-15, task 180, the blocker for this task)."
-    ],
-    "description": "This is finding C86-16 (LOW) in plans/task-86-codex-audit.md.\n\nThe closing plan's Edit 1.3 requires the two superseded instruction paragraphs to remain verbatim as //-prefixed text beneath a RETIRED marker. scripts/tackleTasksBrief.ts:164 currently contains only a one-line tombstone:\n\n  // RETIRED (task 163): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.\n\nThat does not meet the task-86 spec's transitional rule, which says retired code stays commented out and only wholly superseded FILES are removed.\n\nThe expected pattern already exists in this codebase: scripts/runMergePhase.ts carries several `// RETIRED (task 147): ...` comments that retain the full superseded logic rather than pointing at git history. Follow that shape.\n\nDIRECTION settled with the user: restore the commented text. Do not amend the spec -- the transitional rule stands, and changing it would loosen the rule for every other retirement in the codebase, not just this one spot.\n\nTHE EXACT TEXT TO RESTORE is recoverable from commit 6948357, which removed it from scripts/tackleTasksBrief.ts. The two paragraphs are:\n\n1. \"Close every task that is not problematic and was completed successfully, rendering its `tasks.json` entry stale, with **one** invocation of the `close-tasks` skill for all of them. Its first argument must be a JSON array of the task numbers with no spaces -- `[268,270,281]` -- followed by your reasoning for the `closureNote`s, naming each task (`#268 ...`, `#270 ...`) when the reasons differ.\"\n\n2. \"During implementation, you (the orchestrator) run typecheck only -- no test suites or visual checks. Workers run the tests covering the files they own and fix their own failures before reporting status complete; a worker with failing tests reports blocked or partial, never complete. Full verification (typecheck + full suite + the repo's UI verification where relevant) still runs once inside `close-tasks`, after the user approves closing.\"\n\nRecover them from `git show 6948357 -- scripts/tackleTasksBrief.ts` rather than retyping, so they are byte-for-byte verbatim, and place them beneath the existing RETIRED marker, each line //-prefixed.\n\nWatch out: tests pin the generated brief output byte-for-byte. These are comments in the emitter source, not brief output, so they must NOT change what the brief emits.",
-    "files": [
-      "scripts/tackleTasksBrief.ts",
-      "tests/tackleTasksBrief.test.ts"
-    ],
-    "tests": "Read scripts/tackleTasksBrief.ts, find the RETIRED (task 163) marker, and assert it is followed by the retired paragraphs as // comments rather than a bare tombstone line. It must fail loudly if someone deletes the body again.",
-    "difficulty": 2,
-    "blockedBy": [
-      {
-        "taskNum": 180,
-        "reason": "the user placed this after C86-15 in the audit chain; both touch the brief and its byte-for-byte assertions"
-      }
-    ],
-    "handoffFilePaths": [
-      "plans/task-86-codex-audit.md"
-    ]
-  },
-  {
     "taskNumber": 183,
     "version": "a6368fc1bcac7fc30a16acf1969630d8e5d1a92a",
     "title": "Normalize the closing-task numbering in plans/ and add a drift check (audit C86-17)",
