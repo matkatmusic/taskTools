@@ -1,11 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import { compileFunction, constants as vmConstants } from "node:vm";
 import { tackleTasksBrief } from "../scripts/tackleTasksBrief.ts";
 import { TASKS_PER_COMMAND } from "../scripts/taskStats.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackleTasksBrief.ts", import.meta.url));
 const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
@@ -114,4 +118,126 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
     if (failure.status !== 1) throw error;
   }
   assert.equal(matches.trim(), "");
+});
+
+const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
+const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/task.workflow.js"), "utf8")
+  .replace("export const meta", "const meta");
+
+type TaskWorkflowResult = { task: number; stage: string; results: Array<Record<string, unknown>> };
+type TaskWorkflowRunner = (argsJson: string, log: (...values: unknown[]) => void, agent: (...values: unknown[]) => Promise<unknown>) => Promise<TaskWorkflowResult>;
+
+// ponytail: duplicated from tests/runMergePhase.test.ts rather than importing a .test.ts module,
+// which would re-register that file's own tests under this file's run. Extract to a shared
+// helper module if a third caller needs the same fixture.
+const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, unknown>, agent: (...values: unknown[]) => Promise<unknown>) => {
+  const fn = compileFunction(
+    `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
+    ["args", "log", "agent"],
+    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/task.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+  ) as TaskWorkflowRunner;
+  return await fn(JSON.stringify({ worktree: worktreePath, ...args }), () => {}, agent);
+};
+
+const gitForWorkflowFixture = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+
+const makeWorkflowFixtureRepo = (taskNumber: number) => {
+  const root = mkdtempSync(join(tmpdir(), "tackle-tasks-brief-fixture-root-"));
+  gitForWorkflowFixture(root, "init", "-q", "-b", "main");
+  gitForWorkflowFixture(root, "config", "user.email", "test@example.com");
+  gitForWorkflowFixture(root, "config", "user.name", "Test");
+  gitForWorkflowFixture(root, "config", "commit.gpgsign", "false");
+  writeFileSync(join(root, "README.md"), "root\n");
+  gitForWorkflowFixture(root, "add", "README.md");
+  gitForWorkflowFixture(root, "commit", "-q", "-m", "init");
+  writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+  gitForWorkflowFixture(root, "add", "package.json");
+  gitForWorkflowFixture(root, "commit", "-q", "-m", "add test script");
+  const sourceBranch = "main";
+  const baseOid = gitForWorkflowFixture(root, "rev-parse", sourceBranch);
+  const operationBranch = `task-${taskNumber}`;
+  const worktreePath = join(tmpdir(), `tackle-tasks-brief-fixture-wt-${randomUUID()}`);
+  gitForWorkflowFixture(root, "worktree", "add", "-q", "-b", operationBranch, worktreePath, sourceBranch);
+  mkdirSync(join(worktreePath, "plans"), { recursive: true });
+  symlinkSync(join(REPO_ROOT_FOR_WORKFLOW, "scripts"), join(worktreePath, "scripts"));
+  mkdirSync(join(root, ".taskTools"), { recursive: true });
+  const taskRecord = { taskNumber, title: "fixture", files: [], blockedBy: [] };
+  writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([taskRecord]));
+  writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
+  mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
+  writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([taskRecord]));
+  const repositoryManifest: RepositoryManifest = {
+    version: REPOSITORY_MANIFEST_VERSION,
+    occurrences: [{
+      occurrenceId: "",
+      checkoutPath: root,
+      parentOccurrenceId: null,
+      pathInParent: null,
+      gitlinkOid: null,
+      depth: 0,
+      originUrl: "",
+      baseBranch: sourceBranch,
+      baseOid,
+      operationBranch,
+      childOccurrenceIds: [],
+      testState: "untested",
+    }],
+  };
+  return { root, worktreePath, repositoryManifest };
+};
+
+const throwingAgentForWorkflowFixture = async () => { throw new Error("this stage must not call an agent"); };
+
+test("generated brief's results[] references match a real, non-synthetic task.workflow.js envelope for rebase-test and merge", async () => {
+  const taskNumber = 9171;
+  const { root, worktreePath, repositoryManifest } = makeWorkflowFixtureRepo(taskNumber);
+  try {
+    writeFileSync(join(worktreePath, "taskfile.txt"), "task change\n");
+    gitForWorkflowFixture(worktreePath, "add", "taskfile.txt");
+    gitForWorkflowFixture(worktreePath, "commit", "-q", "-m", "task change");
+
+    const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest }, throwingAgentForWorkflowFixture);
+    const rebaseTestOutcome = rebaseTestResult.results[0] as { status: string };
+    assert.equal((rebaseTestResult as unknown as { status?: string }).status, undefined);
+    assert.equal(typeof rebaseTestOutcome.status, "string");
+
+    const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest }, throwingAgentForWorkflowFixture);
+    const mergeOutcome = mergeResult.results[0] as { status: string; mergedCommitHash?: string };
+    assert.equal((mergeResult as unknown as { status?: string }).status, undefined);
+    assert.equal(typeof mergeOutcome.status, "string");
+    assert.equal(typeof mergeOutcome.mergedCommitHash, "string");
+  } finally {
+    rmSync(worktreePath, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("generated brief's results[0]/results[1] mapping for plan+implement matches a real, non-synthetic workflow envelope, and the brief text names those paths", async () => {
+  const taskNumber = 9172;
+  const { root, worktreePath, repositoryManifest } = makeWorkflowFixtureRepo(taskNumber);
+  const fakeAgent = async (_briefText: unknown, optionsValue: unknown) => {
+    const options = optionsValue as { label: string };
+    if (options.label.startsWith("plan:")) return { task: taskNumber, status: "planned", planFile: join(worktreePath, `plans/task-${taskNumber}-plan.md`), question: "" };
+    if (options.label.startsWith("verify:")) return { task: taskNumber, verdict: "approved", notes: "looks good", reviewer: "codex", missingFiles: [] };
+    if (options.label.startsWith("implement:")) return { task: taskNumber, status: "done", summary: "did it", remaining: [], notesFile: join(worktreePath, `plans/task-${taskNumber}-implementation-notes.md`) };
+    throw new Error(`unexpected agent label ${options.label}`);
+  };
+  try {
+    const result = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "plan+implement", repositoryManifest }, fakeAgent);
+    const planOutcome = result.results[0] as { status: string; verify?: { verdict: string } };
+    const implementOutcome = result.results[1] as { fenceViolations: unknown[] };
+    assert.equal((result as unknown as { status?: string }).status, undefined);
+    assert.equal(planOutcome.status, "planned");
+    assert.equal(planOutcome.verify?.verdict, "approved");
+    assert.ok(Array.isArray(implementOutcome.fenceViolations));
+
+    const brief = tackleTasksBrief("[1]", "task 1: unblocked");
+    assert.match(brief, /results\[0\]\.status/);
+    assert.match(brief, /results\[0\]\.lastFailure/);
+    assert.match(brief, /results\[1\]\.fenceViolations/);
+    assert.match(brief, /results\[0\]\.verify/);
+  } finally {
+    rmSync(worktreePath, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
 });

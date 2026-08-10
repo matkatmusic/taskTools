@@ -90,6 +90,27 @@ files) itself, straight from the worktree's own checkout of tasks.json.
 Each task workflow's completion sends a task-notification back to you. That
 notification — not polling — is how you learn a task is ready.
 
+## Task workflow results
+
+Every task.workflow.js run returns \`{task, stage, results}\`, where
+\`results\` is an array of per-step results for that run's \`stage\`:
+
+- \`rebase-test\`: \`results\` has one entry, the rebase-test result —
+  \`{status, lastFailure, fenceViolations, ...}\`. \`status\` is
+  \`"green"\` on success; anything else is a failure, with \`lastFailure\`
+  naming why.
+- \`merge\`: \`results\` has one entry, the merge result —
+  \`{status, mergedCommitHash, closeError, ...}\`. \`status\` is
+  \`"merged"\` or \`"merged-but-not-closed"\` on success; anything else is
+  a failure.
+- \`plan+implement\`: \`results[0]\` is the plan result —
+  \`{status, verify, reviewRounds, ...}\`. When \`results[0].status\` is
+  \`"planned"\`, \`results[0].verify\` is the verifier result
+  \`{verdict, notes, reviewer, missingFiles}\`, and \`results[1]\` is the
+  implement result \`{status, summary, remaining, notesFile,
+  fenceViolations}\`. When \`results[0].status\` is not \`"planned"\`,
+  \`results[1]\` does not exist.
+
 ## Gate each task
 
 The moment a task's own task-notification says it finished plan+implement,
@@ -102,8 +123,10 @@ notification.
 Call \`AskUserQuestion\` once for that task. Include an explicit decision
 for the task itself — "Approve for merge" or "Do not approve" — alongside
 its status, the fence violations the implement stage recorded for it
-(task 138), and the codex objections that survived that task's
-plan-review rounds (task 135). Present each fence violation and each
+(task 138), read from \`results[1].fenceViolations\` when \`results[1]\`
+exists, and the codex objections that survived that task's
+plan-review rounds (task 135), read from \`results[0].verify.notes\`.
+Present each fence violation and each
 surviving objection as its own proposed task, separate from the approval
 decision, that the user can accept or reject. For every proposed task the
 user accepts, invoke the \`create-task\` skill once, never edit
@@ -144,7 +167,7 @@ Track \`outstandingEntries\`, a map from task number to \`"plan+implement"\`, \`
 \`workflowOutstanding\`, passed to \`shouldEndQueue\`, is \`outstandingEntries.size > 0\`. After every enqueue and every completion notification, repeat:
 
 1. Run \`nextQueueStep(queue)\`. If it prints \`null\`, skip to step 3. If it prints a step \`{taskNumber, stage}\`: if any task's entry in \`outstandingEntries\` is \`"rebase-test"\` or \`"merge"\`, a rebase-test or merge workflow you launched is still outstanding — do not launch anything; wait for that workflow's completion notification, then go back to step 1. Otherwise, launch \`${taskWorkflowPath}\` as a background workflow with args \`{task: taskNumber, stage, repositoryManifest, worktree}\` — \`repositoryManifest\` is the pipeline args value from above and \`worktree\` is the \`worktree\` field of the \`groups\` entry whose \`tasks[0].number\` equals \`taskNumber\` — add \`taskNumber → stage\` to \`outstandingEntries\`, and go back to step 1. Merging stays serial: never launch a second rebase-test or merge workflow while one is still outstanding, because every merge moves the tip the next task rebases onto.
-2. When a launched rebase-test or merge workflow's completion notification arrives, read its result's \`status\` (\`green\` is success for \`rebase-test\`; \`merged\` or \`merged-but-not-closed\` is success for \`merge\`; anything else is a failure, with \`lastFailure\` naming why). Run \`recordStageOutcome(queue, taskNumber, stage, outcome)\` — \`outcome\` is \`{"status":"success"}\` or \`{"status":"failure","reason":lastFailure}\` — and record the printed JSON as the new \`queue\`. If the merge stage reported \`merged-but-not-closed\`, also run \`recordMergedNotClosed(queue, taskNumber, mergedCommitHash, closeError)\` and record that printed JSON as the new \`queue\`. Remove that task's entry from \`outstandingEntries\`. Then go back to step 1.
+2. When a launched rebase-test or merge workflow's completion notification arrives, its result is \`{task, stage, results}\`; read \`results[0].status\` (\`green\` is success for \`rebase-test\`; \`merged\` or \`merged-but-not-closed\` is success for \`merge\`; anything else is a failure, with \`results[0].lastFailure\` naming why). Run \`recordStageOutcome(queue, taskNumber, stage, outcome)\` — \`outcome\` is \`{"status":"success"}\` or \`{"status":"failure","reason":lastFailure}\`, where \`lastFailure\` is \`results[0].lastFailure\` — and record the printed JSON as the new \`queue\`. If the merge stage reported \`merged-but-not-closed\`, also run \`recordMergedNotClosed(queue, taskNumber, mergedCommitHash, closeError)\`, where \`mergedCommitHash\` is \`results[0].mergedCommitHash\` and \`closeError\` is \`results[0].closeError\`, and record that printed JSON as the new \`queue\`. Remove that task's entry from \`outstandingEntries\`. Then go back to step 1.
 3. Run \`shouldEndQueue(queue, workflowOutstanding)\`. If it prints \`"done"\`, no pending or retryable work remains: run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user. If it prints \`"stuck"\`, a lap merged zero tasks and nothing is outstanding: run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user the same way. If it prints \`"continue"\` and \`queue\`'s \`carryover\` is non-empty and \`outstandingEntries.size === 0\`, run \`beginNextLap(queue)\`, record the printed JSON as the new \`queue\`, and go back to step 1. If it prints \`"continue"\` and either \`carryover\` is empty or \`outstandingEntries.size\` is greater than \`0\`, a task is still planning, implementing, or waiting on its own gate, or another task's workflow is still outstanding — wait for the next enqueue or completion notification, then go back to step 1.
 
 ## Closing your tasks
