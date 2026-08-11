@@ -1,7 +1,7 @@
 # Task 86 Codex Audit Finding Schema
 
 This document defines the shape and evidence standard for findings in
-`plans/task-86-codex-audit.json`. Future audit sessions should use it when
+`audit-loop/codex-audit.json`. Future audit sessions should use it when
 adding or revising issues so each entry explains both the remaining defect and
 the working boundaries that a fix must preserve.
 
@@ -126,7 +126,7 @@ preserve or extend. Each item has:
   exemplar.
 - `role`: what is already correct there and why it constrains the remaining fix.
 
-This is not another list of defect locations. Typical references include an
+`resolvedBoundaryReference` is not another list of defect locations. Typical references include an
 existing lock/atomic-write boundary, a normalized result adapter, a sandbox
 boundary, a correct sibling stage, or an occurrence-aware primitive that the
 broken caller should reuse.
@@ -276,14 +276,14 @@ the current-correct versus proposed-remaining distinction explicit.
 8. Validate the JSON and required evolved fields:
 
    ```sh
-   jq empty plans/task-86-codex-audit.json
+   jq empty audit-loop/codex-audit.json
    jq -e 'all(.issues[];
      (.resolvedBoundaryReference | type == "array" and length > 0) and
      (.acceptanceCriteria | type == "array" and length > 0) and
      (.resolvedBoundaryExample | type == "array" and length > 0) and
      (.remainingMinimalExample | type == "array" and length > 0)
-   )' plans/task-86-codex-audit.json
-   git diff --check -- plans/task-86-codex-audit.json plans/task-86-codex-audit-schema.md
+   )' audit-loop/codex-audit.json
+   git diff --check -- audit-loop/codex-audit.json audit-loop/codex-audit-schema.md
    ```
 
 9. Check for duplicate object keys. Many JSON parsers accept duplicates and
