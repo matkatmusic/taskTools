@@ -11,7 +11,8 @@
     "Audited the staged fixes for C86-31, C86-32, C86-33, and C86-37; 138 focused workflow, task-state race, and worktree-recovery tests passed, and an executed dynamic import in the callback-free VM harness failed with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING.",
     "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30.",
     "Reviewed the staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit and 74 focused tests in prepareTasks.test.ts, runMergePhase.test.ts, and taskWorkflowMergeStage.test.ts passed, but the atomic batch was rejected because required scheduler interleavings, production cleanup retry, lease lifecycle/recovery, and source-artifact absence coverage remain incomplete. The eight implementation/test files were left unstaged.",
-    "Reviewed the second staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit passed; prepareTasks.test.ts passed 27 tests, runMergePhase.test.ts passed 39, taskWorkflowMergeStage.test.ts passed 16, tackle-tasks_SkillBodyEmitter.test.ts passed 19, and the full npm test suite passed all 1,319 tests. The atomic batch was rejected because C86-24 still lacks the required executable event-order regression and C86-28 still reports a static partial retained-artifact list."
+    "Reviewed the second staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit passed; prepareTasks.test.ts passed 27 tests, runMergePhase.test.ts passed 39, taskWorkflowMergeStage.test.ts passed 16, tackle-tasks_SkillBodyEmitter.test.ts passed 19, and the full npm test suite passed all 1,319 tests. The atomic batch was rejected because C86-24 still lacks the required executable event-order regression and C86-28 still reports a static partial retained-artifact list.",
+    "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed."
   ],
   "notes": [
     {
@@ -29,6 +30,10 @@
     {
       "date": "2026-08-11T15:12:06-07:00",
       "text": "Second atomic review: C86-24 and C86-28 remain materially incomplete. The unstaged attempt appears to satisfy C86-29 and C86-30, but those findings remain in the audit because an atomically rejected batch cannot accept or hand off only part of its implementation. All ten implementation/test paths are unstaged; only this audit refresh is staged."
+    },
+    {
+      "date": "2026-08-11T16:25:17-07:00",
+      "text": "Third atomic review: C86-24 now has executable approval/completion-order regression coverage with peak shared-concurrency and serial-tail assertions; C86-28 dynamically reports only retained worktree, lease, root/submodule branch, and persistence artifacts and has production-shaped partial-cleanup and retry coverage. With C86-29 and C86-30 already satisfied by the same staged batch, C86-24, C86-28, C86-29, and C86-30 were removed."
     }
   ],
   "issues": [
@@ -325,52 +330,6 @@
       "existingOpenTask": "No matching open task."
     },
     {
-      "number": 24,
-      "title": "C86-24 — Medium test gap: the shared scheduler fix lacks the required event-order regression",
-      "class": "medium",
-      "cause": "The second attempted implementation routes plan/implement and tail launches through nextSchedulerAction and gives a ready tail deterministic priority, which removes the prior split decision in the emitted workflow. Its tests still call the selector with hand-authored total values and inspect one returned action at a time. They never drive the production-shaped sequence of six launches, plan completion, immediate approval enqueue, contested refill, and tail completion while updating outstanding state and recording peak concurrency, so the interleaving that caused the defect is not protected against regression.",
-      "locations": [
-        {
-          "path": "tests/runMergePhase.test.ts",
-          "lines": "598-643",
-          "role": "The new tests probe isolated selector results with supplied counters; they do not execute plan-completion, approval, and tail-completion event orders or assert the observed peak never exceeds capacity."
-        }
-      ],
-      "provingTest": "Drive one executable scheduler harness through six plan launches and a plan completion, immediately enqueue that task's approval, and make both its tail and the next plan ready. After every returned launch or completion, mutate the same remaining-plan and outstanding maps used by the emitted workflow and call the selector again. Exercise approval-before-completion and completion-before-approval, then tail completion with another plan ready. Record every launch and completion; assert peak outstanding never exceeds maxConcurrency, each freed slot is assigned once, approval enqueue is immediate, and no two tails overlap. The current isolated selector tests do not perform this reproduction.",
-      "suggestedFixApproach": [
-        "Keep nextSchedulerAction and the emitted single-decision workflow.",
-        "Add a deterministic executable scheduler harness that owns remaining plans, queue state, and outstanding entries, and use it to test plan-completion, immediate approval, contested refill, and tail-completion event orders while asserting peak concurrency and tail serialization."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/runMergePhase.ts",
-          "role": "nextQueueAction is already the executable selector for serial tail launch, wait, lap rollover, and reporting."
-        },
-        {
-          "file": "scripts/tackle-tasks_SkillBodyEmitter.ts",
-          "role": "The emitted instructions already track outstandingEntries across plan/implement and tail workflows."
-        }
-      ],
-      "acceptanceCriteria": [
-        "One capacity decision covers every plan/implement, rebase-test, and merge launch.",
-        "A freed slot is assigned exactly once when a plan refill and an approved tail are both ready; no event order exceeds maxConcurrency and tail execution remains serial.",
-        "Executable scheduler tests cover plan-completion, approval, and tail-completion slot allocation while approvals remain immediately enqueueable."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/runMergePhase.ts",
-          "code": "const step = nextQueueStep(queue)\nif (step) return (outstanding.tail || outstanding.total >= outstanding.capacity)\n  ? { kind: 'wait' }\n  : { kind: 'launch', step }"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "tests/runMergePhase.test.ts",
-          "code": "const scheduler = makeSchedulerHarness({ tasks: [1,2,3,4,5,6,7], capacity: 6 })\nscheduler.fill()\nscheduler.completePlanAndApprove(1)\nscheduler.dispatchUntilWait()\nassert.equal(scheduler.peakOutstanding, 6)\nassert.equal(scheduler.maxConcurrentTails, 1)\n// Repeat with approval/completion reversed and with a tail completion while a plan remains ready."
-        }
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
       "number": 25,
       "title": "C86-25 — High: an implementer can report done with a notes-only commit or without implementation notes",
       "class": "high",
@@ -550,177 +509,6 @@
         }
       ],
       "existingOpenTask": "No matching open task."
-    },
-    {
-      "number": 28,
-      "title": "C86-28 — Medium: cleanup retry reports only a static partial retained-artifact list",
-      "class": "medium",
-      "cause": "The second attempted implementation adds a production cleanup-only stage, queue clearing, emitted retry instructions, persistence-before-lease ordering, and an idempotent locked-worktree regression. On cleanup failure, both merge and cleanup-only still construct retainedArtifacts as the same static four root strings. The list omits the worktree lease and every source-submodule branch and persistence ref, and it can name refs already removed by a partially successful cleanup. The regression asserts only that the list is nonempty, so the user still does not receive the actual retained artifacts needed for recovery.",
-      "locations": [
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "619-625, 647-653",
-          "role": "Both cleanup failure paths publish a hard-coded root-only list instead of inspecting remaining worktrees, leases, branches, and persistence refs across occurrences."
-        },
-        {
-          "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "309-348",
-          "role": "The locked-worktree regression checks only that retainedArtifacts is nonempty and never verifies the lease, all occurrence artifacts, or exclusion of artifacts already removed."
-        }
-      ],
-      "provingTest": "Prepare a task with at least one source-submodule occurrence, force final worktree removal to fail after merge and close, consume the real envelope, and compare retainedArtifacts to filesystem and ref inspection. The current list omits the .lease file and submodule branch/persistence refs. Also force a later cleanup step to fail after an earlier artifact was removed and assert the report excludes the removed artifact. After unlocking, invoke the production cleanup-only stage, consume its envelope, and assert every occurrence artifact, persistence ref, and lease is gone and cleanupIncomplete is empty; invoke it again to prove idempotence.",
-      "suggestedFixApproach": [
-        "Keep the cleanup-only stage, queue transition, emitted retry flow, and safe deletion ordering.",
-        "Create one occurrence-aware retained-artifact collector used by both failure paths. Include only artifacts that still exist, including the owner lease, root and submodule worktrees/branches, and merge persistence refs.",
-        "Strengthen the production-shaped regression to compare the report with actual remaining artifacts after both an early cleanup failure and a partial cleanup failure."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/runMergePhase.ts",
-          "role": "MergedNotClosedTask and buildMergeReport already preserve merges whose archival step failed."
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "The merge role already separates merge, close, persistence, and final cleanup and returns cleanupWarning."
-        }
-      ],
-      "acceptanceCriteria": [
-        "Merge persistence remains until worktree and branch cleanup succeeds.",
-        "Cleanup failure creates a reported cleanupIncomplete record with warning and retained artifact paths.",
-        "The emitted production workflow can invoke an idempotent cleanup-only retry without re-merging or re-closing the task.",
-        "A successful retry removes all occurrence artifacts, persistence, and the lease in safe order and clears cleanupIncomplete from the next report."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)\ndeleteTaskMergePersistence(mainRepoRoot, branch)\nfor (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "const retainedArtifacts = collectExistingTaskArtifacts({ mainRepoRoot, repoRoot, branch, sourceSubmodules, leasePath: `${repoRoot}.lease` })\nprintResult({ task: N, status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts })"
-        },
-        {
-          "file": "tests/taskWorkflowMergeStage.test.ts",
-          "code": "assert.deepEqual(new Set(outcome.retainedArtifacts), new Set(inspectActualArtifacts(fixture)))\nassert.ok(outcome.retainedArtifacts.includes(`${worktreePath}.lease`))\nassert.ok(outcome.retainedArtifacts.some((path) => path.includes('vendor')))"
-        }
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
-      "number": 29,
-      "title": "C86-29 — Medium: the new worktree lease is not lifecycle-safe or explicitly recoverable",
-      "class": "medium",
-      "cause": "The attempted implementation atomically creates a per-worktree lease before reset or creation, so a sequential second call is rejected. Acquisition is not wrapped around preparation cleanup: checkout, worktree add, submodule initialization, or branch creation failures leave an orphan lease. The stored runId is generated inside the lease rather than using the workflow's runId, and releaseTaskWorktreeLease is an unconditional unlink with no owner check or retained-work verification. Its test calls createWorktreeForGroup twice in one process without a barrier, so it does not prove two live preparation processes cannot race, and there is no safe explicit stale-lease recovery operation.",
-      "locations": [
-        {
-          "path": "scripts/prepareTasks.ts",
-          "lines": "153-214",
-          "role": "Lease acquisition is atomic, but failure cleanup, ownership-checked release, actual run identity, and safe stale recovery are absent."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "609-628",
-          "role": "Only the immediate successful merge path releases the lease; no recovery path safely releases it after failed preparation or cleanup."
-        },
-        {
-          "path": "tests/prepareTasks.test.ts",
-          "lines": "89-99, 131-138",
-          "role": "The ownership test is sequential and same-process, while the existing preparation-failure case does not assert that its acquired lease is released."
-        }
-      ],
-      "provingTest": "Start two real prepare processes for the same task behind a barrier immediately before exclusive acquisition. Exactly one must acquire the lease carrying its real runId, and the loser must fail without resetting or sharing the checkout. Separately force worktree-add and submodule-initialization failures and assert their lease is released. Finally create a stale lease plus retained work: ordinary preparation must refuse it, and the explicit recovery operation must preserve/report the work and require matching ownership or deliberate takeover before releasing the lease.",
-      "suggestedFixApproach": [
-        "Keep atomic wx acquisition, but pass the actual workflow run/session identity into it and return an owner token used by every release.",
-        "Wrap all post-acquisition preparation in try/catch/finally so a failed preparation releases only its own lease, while a successful preparation transfers lease ownership to final cleanup.",
-        "Add an explicit stale-lease recovery operation that reads identity, checks owner liveness as appropriate, inspects retained work, and preserves or reports that work before any deliberate takeover.",
-        "Replace the sequential unit test with deterministic child processes synchronized at an acquisition barrier, and cover preparation-failure cleanup and stale recovery."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/prepareTasks.ts",
-          "role": "worktreeHoldsRetainedWork already prevents automatic reuse from destroying commits or dirty edits left for recovery."
-        },
-        {
-          "file": "scripts/taskStateLock.ts",
-          "role": "The task-state mutex demonstrates the repository's existing atomic exclusive-create lease primitive and fail-safe timeout behavior."
-        }
-      ],
-      "acceptanceCriteria": [
-        "Preparation atomically acquires an exclusive per-task live-run lease before resetting or creating the worktree.",
-        "A concurrent preparation for the same task fails without resetting, modifying, or sharing the first run's checkout.",
-        "The lease records the actual run/session identity, ownership-checked release occurs after successful final cleanup, and failed preparation does not leave an orphan lease.",
-        "Stale-lease recovery is explicit and preserves retained work; barrier-synchronized real-process tests deterministically prove single ownership and recovery behavior."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/prepareTasks.ts",
-          "code": "const fd = openSync(leasePath, 'wx', 0o600)\nwriteFileSync(fd, JSON.stringify({ pid: process.pid, runId: generateRunId(), createdAt: Date.now() }))"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "scripts/prepareTasks.ts",
-          "code": "const lease = acquireTaskWorktreeLease(worktreePath, { runId, pid: process.pid })\ntry {\n  prepareOrRecoverWorktree(repoRoot, worktreePath, branchName)\n  return { worktreePath, lease }\n} catch (error) {\n  releaseTaskWorktreeLease(lease) // verifies owner token\n  throw error\n}\n// Explicit recoverStaleTaskWorktreeLease inspects retained work before takeover."
-        },
-        {
-          "file": "tests/prepareTasks.test.ts",
-          "code": "test('two barrier-synchronized prepare processes have one owner', async () => { /* assert one success, one refusal, unchanged winner checkout */ })\ntest('failed preparation releases only its lease', () => { /* worktree add and submodule init failures */ })\ntest('stale recovery preserves retained work', () => { /* explicit takeover */ })"
-        }
-      ],
-      "existingOpenTask": "Exact match: open task 104 requests a live ownership signal and rejection of concurrent same-task sessions."
-    },
-    {
-      "number": 30,
-      "title": "C86-30 — Low test gap: worktree-local transient artifact changes lack production-shaped source-absence coverage",
-      "class": "low",
-      "cause": "The attempted implementation removes the CLI's canonical writeTaskBriefFile loop and publishes briefFile and planFile beneath each task worktree, which addresses the known production write path. No regression drives the real preparation CLI and lifecycle while asserting that canonical plans/brief-N.md and task-N-plan.md are absent before, during, and after execution. Existing path tests accept any matching suffix, and the production-shaped success test never checks canonical artifact absence, so the fix can regress without detection.",
-      "locations": [
-        {
-          "path": "tests/prepareTasks.test.ts",
-          "lines": "140-150",
-          "role": "Workflow-argument coverage checks only filename suffixes and would accept paths rooted in the canonical source checkout."
-        },
-        {
-          "path": "tests/runMergePhase.test.ts",
-          "lines": "426-490",
-          "role": "The production-shaped success lifecycle does not assert canonical absence or worktree-only presence at any phase."
-        }
-      ],
-      "provingTest": "Run the real preparation CLI and a successful task lifecycle. Assert that canonical plans/brief-N.md and plans/task-N-plan.md are absent immediately after preparation, after plan loading creates worktree-local artifacts, and after merge cleanup. Assert the published absolute paths are under the private worktree, the brief and plan exist there only when needed, and successful cleanup removes them. The attempted implementation has no test making these observations.",
-      "suggestedFixApproach": [
-        "Keep the worktree-rooted production changes and add a production-shaped regression that invokes the real preparation CLI rather than only buildWorkflowArguments.",
-        "Assert canonical absence and worktree-local lifecycle at each phase, and strengthen argument assertions to prove the paths are absolute descendants of the matching group worktree."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "Runtime task loading already creates the brief under WORKTREE and merge cleanup removes the worktree-local plan and brief."
-        },
-        {
-          "file": "scripts/prepareTasks.ts",
-          "role": "buildWorkflowArguments already creates the task worktree before returning each prepared group."
-        }
-      ],
-      "acceptanceCriteria": [
-        "A real preparation invocation publishes absolute brief and plan paths beneath the matching private worktree.",
-        "Production-shaped lifecycle coverage asserts canonical brief and plan absence after preparation, during plan/implement, and after successful cleanup.",
-        "The same coverage proves transient artifacts exist only in the worktree when needed and are removed by successful cleanup."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "const briefFile = writeTaskBriefFile(task, WORKTREE)\nreturn {\n  briefFile,\n  planFile: `${WORKTREE}/plans/task-${N}-plan.md`,\n  notesFile: `${WORKTREE}/plans/task-${N}-implementation-notes.md`,\n}"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "tests/runMergePhase.test.ts",
-          "code": "for (const phase of ['after-prepare', 'during-plan', 'after-cleanup']) {\n  assert.equal(existsSync(join(sourceRoot, 'plans', `brief-${taskNumber}.md`)), false, phase)\n  assert.equal(existsSync(join(sourceRoot, 'plans', `task-${taskNumber}-plan.md`)), false, phase)\n}\nassert.ok(prepared.briefFile.startsWith(`${worktreePath}/`))"
-        }
-      ],
-      "existingOpenTask": "Exact match: open task 105 requires transient plan and brief artifacts to stay in task worktrees and be absent from source."
     },
     {
       "number": 35,
