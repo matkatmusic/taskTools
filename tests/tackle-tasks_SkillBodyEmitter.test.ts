@@ -8,71 +8,98 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compileFunction, constants as vmConstants } from "node:vm";
 import { skillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
-import { TASKS_PER_COMMAND } from "../scripts/taskStats.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_SkillBodyEmitter.ts", import.meta.url));
-const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
+const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks/SKILL.md", import.meta.url));
 
-test("brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
+// ---------------------------------------------------------------------------
+// Conformance: SkillBodyEmitter is a path-only boundary (C86-39).
+// ---------------------------------------------------------------------------
+
+test("skillBody is nonempty and leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder", () => {
+  const brief = skillBody("[1]");
+  assert.ok(brief.trim().length > 0);
   assert.doesNotMatch(brief, /CLAUDE_PLUGIN_ROOT/);
   assert.doesNotMatch(brief, /\$ARGUMENTS/);
 });
 
-test("RETIRED (task 163) marker keeps its commented paragraph body, not a bare tombstone", () => {
+test("emitter runs no subprocess and imports nothing relative — only node:fs and node:url", () => {
   const source = readFileSync(scriptPath, "utf8");
-  const markerIndex = source.indexOf("// RETIRED (task 163):");
-  assert.notEqual(markerIndex, -1);
-  const afterMarker = source.slice(markerIndex, markerIndex + 1000);
-  const bodyLines = afterMarker.split("\n").slice(1, 5);
-  assert.ok(bodyLines.every((line) => line === "" || line.startsWith("//")));
-  assert.match(afterMarker, /one \\`close-tasks\\` skill call/);
-  assert.match(afterMarker, /Orchestrator ran typecheck only/);
+  assert.doesNotMatch(source, /execFileSync|spawn|from "\./);
 });
 
-test("script reads arguments from stdin and embeds the live checkBlockers.ts output", () => {
-  const argsValue = "[75] valid";
-  const expectedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8" }).trimEnd();
-  const output = execFileSync("node", [scriptPath], { input: `${argsValue}\n`, encoding: "utf8" });
-  assert.ok(output.startsWith(`- blocked status: ${expectedStatus}\n`));
+test("SKILL.md invokes tackle-tasks_SkillBodyEmitter.ts", () => {
+  const skillMd = readFileSync(skillMdPath, "utf8");
+  assert.match(skillMd, /tackle-tasks_SkillBodyEmitter\.ts/);
 });
 
-test("series adds the serial-mode section and leaves the brief untouched without it", () => {
-  const parallel = skillBody("[131,132] valid", "task 131: unblocked");
-  const serial = skillBody("[131,132] valid series", "task 131: unblocked");
-  assert.doesNotMatch(parallel, /Serial mode/);
-  assert.match(serial, /## Serial mode/);
-  const withoutSection = serial.replace(/\n## Serial mode[\s\S]*?not per task\.\n/, "");
-  assert.equal(withoutSection.replaceAll(" series", ""), parallel);
+test("output never names checkBlockers.ts, getTaskDetails.ts, or prepareTasks.ts — only the bootstrap agent prompt emitter does", () => {
+  const brief = skillBody("[75] valid");
+  assert.doesNotMatch(brief, /checkBlockers\.ts/);
+  assert.doesNotMatch(brief, /getTaskDetails\.ts/);
+  assert.doesNotMatch(brief, /prepareTasks\.ts/);
+  assert.match(brief, /tackle-tasks_BootstrapAgentPromptEmitter\.ts/);
+});
+
+test("output opens with a discover-mode Workflow declaration, not a live blocked-status report", () => {
+  const brief = skillBody("[75] valid");
+  assert.match(brief, /^Run `Workflow\(\{"scriptPath": ".*bootstrap\.workflow\.js", "args": \{"mode": "discover"/);
+  assert.doesNotMatch(brief, /- blocked status:/);
+});
+
+test("the prepare-mode Workflow declaration runs after the disprove-blockers step", () => {
+  const brief = skillBody("[75] valid");
+  const prepareIndex = brief.indexOf('"mode": "prepare"');
+  const disprovenIndex = brief.indexOf("disproven");
+  assert.ok(prepareIndex > 0 && disprovenIndex > 0);
+  assert.ok(prepareIndex > disprovenIndex);
 });
 
 test("script fails loudly rather than emitting a brief that points nowhere", () => {
   assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });
 
+test("a real invocation returns instantly, without touching tasks.json or running any command", () => {
+  const output = execFileSync("node", [scriptPath], { input: "[999999] valid\n", encoding: "utf8" });
+  assert.match(output, /Workflow\(/);
+});
+
+// ---------------------------------------------------------------------------
+// Orchestration content: static main-agent instructions the emitter still owns.
+// ---------------------------------------------------------------------------
+
+test("series adds the serial-mode section and leaves the brief untouched without it", () => {
+  const parallel = skillBody("[131,132] valid");
+  const serial = skillBody("[131,132] valid series");
+  assert.doesNotMatch(parallel, /Serial mode/);
+  assert.match(serial, /## Serial mode/);
+  const withoutSection = serial.replace(/\n## Serial mode[\s\S]*?not per task\.\n/, "");
+  assert.equal(withoutSection.replaceAll(" series", ""), parallel);
+});
+
 test("running the pipeline launches tackle-tasks.workflow.js once per task in the background, with no phase barriers", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
-  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` once per entry in `groups`, as a \*\*background\*\*/);
+  const brief = skillBody("[1]");
+  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` once per entry in `pipelineArgs\.groups`, as a \*\*background\*\*/);
   assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath\}`/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
   assert.doesNotMatch(brief, /mergeCommand/);
   assert.doesNotMatch(brief, /Step 1 — plan/);
-  assert.match(brief, new RegExp(`Keep up to ${TASKS_PER_COMMAND} tackle-tasks\\.workflow\\.js runs in flight`));
+  assert.match(brief, /Keep up to `maxConcurrency` tackle-tasks\.workflow\.js runs in flight/);
   assert.match(brief, /sliding window, not\s+batches of/);
 });
 
-test("initial and tail launch args both name sourceRoot as the pipeline args repo value", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
-  assert.match(brief, /`sourceRoot` is the top-level pipeline args `repo` value/);
+test("initial and tail launch args both name sourceRoot as pipelineArgs.repo", () => {
+  const brief = skillBody("[1]");
+  assert.match(brief, /`sourceRoot` is `pipelineArgs\.repo`/);
   assert.match(brief, /"sourceRoot": "\/path\/to\/repo"/);
 });
 
 test("gate: each finished task is presented as one AskUserQuestion gate, never batched", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
+  const brief = skillBody("[1]");
   assert.match(brief, /## Gate each task/);
   assert.match(brief, /Call `AskUserQuestion` once for that task/);
   assert.match(brief, /"Approve for merge"/);
@@ -88,7 +115,7 @@ test("gate: each finished task is presented as one AskUserQuestion gate, never b
 });
 
 test("merge queue: an approved task launches rebase-test then merge, and the brief never mentions the close-tasks skill", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
+  const brief = skillBody("[1]");
   assert.match(brief, /## Merge queue/);
   assert.match(brief, /node --input-type=module <<'TASK_TOOLS_QUEUE'/);
   assert.doesNotMatch(brief, /node -e "/);
@@ -107,10 +134,25 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
 });
 
 test("merge queue: the next-lap branch waits for an outstanding workflow instead of starting another lap against the same tip", () => {
-  const brief = skillBody("[1]", "task 1: unblocked");
+  const brief = skillBody("[1]");
   assert.match(brief, /`"begin-next-lap"`: run `beginNextLap\(queue\)`/s);
   assert.match(brief, /`"wait"`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet\./s);
 });
+
+test("RETIRED (task 163) marker keeps its commented paragraph body, not a bare tombstone", () => {
+  const source = readFileSync(scriptPath, "utf8");
+  const markerIndex = source.indexOf("// RETIRED (task 163):");
+  assert.notEqual(markerIndex, -1);
+  const afterMarker = source.slice(markerIndex, markerIndex + 1000);
+  const bodyLines = afterMarker.split("\n").slice(1, 5);
+  assert.ok(bodyLines.every((line) => line === "" || line.startsWith("//")));
+  assert.match(afterMarker, /one \\`close-tasks\\` skill call/);
+  assert.match(afterMarker, /Orchestrator ran typecheck only/);
+});
+
+// ---------------------------------------------------------------------------
+// Repo hygiene: no leftover files from earlier iterations of this refactor.
+// ---------------------------------------------------------------------------
 
 test("the superseded workflow files are deleted and nothing outside plans/ or .taskTools/ imports them", () => {
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -122,6 +164,7 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
     "skills/tackle-tasks/verify.workflow.js",
     "skills/tackle-tasks/task.workflow.js.old",
     "skills/tackle-tasks/task.workflow.js",
+    "scripts/tackle-tasks_OrchestrationBriefEmitter.ts",
   ];
   for (const relativePath of superseded) {
     assert.equal(existsSync(join(repoRoot, relativePath)), false, `${relativePath} should have been deleted`);
@@ -130,7 +173,7 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
   try {
     matches = execFileSync(
       "git",
-      ["grep", "-l", "-e", "merge.workflow.js", "-e", "plan.workflow.js", "-e", "implement.workflow.js", "-e", "test.workflow.js", "-e", "verify.workflow.js", "--", ".", ":!plans", ":!.taskTools", ":!tests/tackleTasksBrief.test.ts", ":!tests/tackle-tasks_SkillBodyEmitter.test.ts"],
+      ["grep", "-l", "-e", "merge.workflow.js", "-e", "plan.workflow.js", "-e", "implement.workflow.js", "-e", "test.workflow.js", "-e", "verify.workflow.js", "-e", "tackle-tasks_OrchestrationBriefEmitter", "--", ".", ":!plans", ":!.taskTools", ":!tests/tackle-tasks_SkillBodyEmitter.test.ts"],
       { encoding: "utf8", cwd: repoRoot },
     );
   } catch (error) {
@@ -144,8 +187,12 @@ test("skills/tackle-tasks holds only the current workflow files — no old conso
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
   const skillDir = join(repoRoot, "skills/tackle-tasks");
   const workflowFiles = readdirSync(skillDir).filter((name) => name.includes("workflow.js")).sort();
-  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "tackle-tasks.workflow.js"]);
+  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "bootstrap.workflow.js", "tackle-tasks.workflow.js"]);
 });
+
+// ---------------------------------------------------------------------------
+// Envelope tests: the brief's results[]/consumeTaskWorkflowResult wiring matches a real, non-synthetic task.workflow.js run.
+// ---------------------------------------------------------------------------
 
 const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
 const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
@@ -289,7 +336,7 @@ test("generated brief's plan+implement handling matches a real, non-synthetic wo
     assert.equal((consumed.approval.verifier as { verdict?: string } | null)?.verdict, "approved");
     assert.ok(Array.isArray(consumed.approval.fenceViolations));
 
-    const brief = skillBody("[1]", "task 1: unblocked");
+    const brief = skillBody("[1]");
     assert.match(brief, /consumeTaskWorkflowResult/);
     assert.match(brief, /consumed\.approval\.status/);
     assert.match(brief, /consumed\.approval\.fenceViolations/);

@@ -1,18 +1,18 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { TASKS_PER_COMMAND } from "./taskStats.ts";
 
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand.
 export const WORKFLOW_PATH = fileURLToPath(new URL("../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 export const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./tackle-tasks_AgentPromptEmitter.ts", import.meta.url));
-const checkBlockersPath = fileURLToPath(new URL("./checkBlockers.ts", import.meta.url));
+const bootstrapWorkflowPath = fileURLToPath(new URL("../skills/tackle-tasks/bootstrap.workflow.js", import.meta.url));
+const bootstrapAgentPromptEmitterPath = fileURLToPath(new URL("./tackle-tasks_BootstrapAgentPromptEmitter.ts", import.meta.url));
 const blockerVerdictsPath = fileURLToPath(new URL("./blockerVerdicts.ts", import.meta.url));
-const getTaskDetailsPath = fileURLToPath(new URL("./getTaskDetails.ts", import.meta.url));
-const prepareTasksPath = fileURLToPath(new URL("./prepareTasks.ts", import.meta.url));
 const skillDir = new URL("../skills/tackle-tasks/", import.meta.url);
 const blockersWorkflowPath = fileURLToPath(new URL("blockers.workflow.js", skillDir));
 const runMergePhaseUrl = new URL("./runMergePhase.ts", import.meta.url).href;
+
+const bootstrapCall = (mode: "discover" | "prepare", argsValue: string) =>
+  `{"scriptPath": ${JSON.stringify(bootstrapWorkflowPath)}, "args": {"mode": "${mode}", "argsValue": ${JSON.stringify(argsValue)}, "bootstrapAgentPromptEmitterPath": ${JSON.stringify(bootstrapAgentPromptEmitterPath)}}}`;
 
 // Opt-in, so a brief without `series` stays byte-identical to the parallel one.
 const seriesSection = (argsValue: string) =>
@@ -22,7 +22,7 @@ const seriesSection = (argsValue: string) =>
 
 \`series\` is in the arguments: treat the task numbers as a chain. Run everything below once per task number, in the order given, and finish one task completely — through **Closing your tasks** — before starting the next. Never prepare or plan two of them together.
 
-The blocked status at the top of this brief was computed once, before any of these tasks closed, so it is stale for every task after the first. Ignore it and re-run \`node "${checkBlockersPath}" '[N]'\` for each task as you reach it. Re-run the \`${getTaskDetailsPath}\` and \`${prepareTasksPath}\` commands above the same way, with a single-element array \`'[N]'\`, so each task gets its own details and its own pipeline args.
+The blocker/task-detail results above were computed once, for the whole array, so they are stale for every task after the first. Re-run \`Workflow(${bootstrapCall("discover", "[N]")})\` and \`Workflow(${bootstrapCall("prepare", "[N]")})\` for each task as you reach it, with a single-element array \`[N]\`, so each task gets its own blocker check and its own pipeline args.
 
 If a task ends with anything unmerged, stop the chain and report. The next task's blocker is still open, and planning it against a base its predecessor never landed on wastes the run.
 
@@ -30,13 +30,12 @@ Do the **Commit message** section once, after the last task, not per task.
 `
     : "";
 
-// ponytail: unlike commit-message's skillBody(argsValue), this one also takes blockedStatus — checkBlockers output the main agent must parse for blocker-disproving, not workflow-hidden data.
-export const skillBody = (argsValue: string, blockedStatus: string): string => {
-  const brief = `- blocked status: ${blockedStatus}
+export const skillBody = (argsValue: string): string => {
+  const brief = `Run \`Workflow(${bootstrapCall("discover", argsValue)})\`. It returns \`{blockerPairs, unblockedNumbers}\` — the blocker check for every task number you were given, computed in an isolated agent so the raw task list never enters this conversation.
 
-Invocation format: the task numbers come first as a JSON array with **no spaces** — \`[268,270,281]\` — followed by \`valid\` and any free text. The scripts above read the whole argument string and stop at the first token that is not part of the array, so anything after it is ignored by them. Avoid apostrophes and backticks in that trailing text; it reaches the shell inside single quotes.
+Invocation format: the task numbers come first as a JSON array with **no spaces** — \`[268,270,281]\` — followed by \`valid\` and any free text. Avoid apostrophes and backticks in that trailing text; it reaches a later shell command inside single quotes.
 
-Every task reported BLOCKED above lists its open blocker(s) as a JSON array — investigate before trusting the report. Parse each BLOCKED line's JSON array into one \`{ blockedTask, blockerTask, reason }\` entry per element (\`blockedTask\` is the task number named in "task N: BLOCKED", \`blockerTask\` is that element's \`taskNum\`, \`reason\` is that element's \`reason\` taken verbatim). Call Workflow with scriptPath \`${blockersWorkflowPath}\`, args \`{ pairs }\` where \`pairs\` is the full list built this way across every BLOCKED task above. It returns \`{ disproven, stillBlocked }\`. For every entry in \`disproven\`, in order, run with Bash:
+If \`blockerPairs\` is non-empty, call \`Workflow\` with scriptPath \`${blockersWorkflowPath}\`, args \`{ pairs: blockerPairs }\`. It returns \`{ disproven, stillBlocked }\`. For every entry in \`disproven\`, in order, run with Bash:
 
 \`\`\`
 node "${blockerVerdictsPath}" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
@@ -44,40 +43,40 @@ node "${blockerVerdictsPath}" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
 BLOCKERREASONEOF
 \`\`\`
 
-The delimiter must stay single-quoted so the shell performs no expansion on the reason text. Do not work on any task with an entry left in \`stillBlocked\` — report those open blockers and move on to the next requested task that is unblocked. If nothing was reported BLOCKED, skip straight to the next paragraph.
+The delimiter must stay single-quoted so the shell performs no expansion on the reason text. Do not work on any task with an entry left in \`stillBlocked\` — report those open blockers and move on to the next requested task that is unblocked. If \`blockerPairs\` was empty, skip straight to the next paragraph.
 
-Now get task details and the pipeline args yourself with Bash, in this order, so both run after any stripping above and see a disproven task as runnable, using only commands that start with \`node\` (the skill's \`allowed-tools\` permits \`Bash(node *)\`, not compound shell commands like \`u=$(...)\`): first run \`node "${checkBlockersPath}" --unblocked '${argsValue}'\` and read its output. If that output is non-empty, run \`node "${getTaskDetailsPath}" <output>\`, substituting the exact output text (the space-separated task numbers) in place of \`<output>\`. If that output is empty, skip that command and report "none of the requested tasks are unblocked" yourself instead. Then, regardless of the previous step, run \`node "${prepareTasksPath}" '${argsValue}'\`.
+Now run \`Workflow(${bootstrapCall("prepare", argsValue)})\`, after any \`disproven\` stripping above so it sees a disproven task as runnable. It returns \`{taskDetails, pipelineArgs, maxConcurrency}\`: \`taskDetails\` is one \`{number, status, task}\` entry per unblocked task number (\`status\` is \`"open"\`, \`"completed"\`, or \`"not-found"\`, and \`task\` is that task's record from \`tasks.json\` or \`completedTasks.json\`, or \`null\`); \`pipelineArgs\` is the pipeline arguments described below; \`maxConcurrency\` is the concurrency ceiling for **Running the pipeline**.
 
 Invoke \`/ponytail:ponytail ultra\`.
 
-When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every unblocked task in the details above as open and relevant.
+When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every entry in \`taskDetails\` as open and relevant.
 ${seriesSection(argsValue)}
 ## Verification
 
-Review the task details above (each object comes from \`tasks.json\` if the task is open, or \`completedTasks.json\` if it was already completed). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
-Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks detailed above.
+Review \`taskDetails\` from the prepare result above (each entry's \`task\` comes from \`tasks.json\` if \`status\` is \`"open"\`, or \`completedTasks.json\` if \`"completed"\`). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
+Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks in \`taskDetails\`.
 
 ## Running the pipeline
 
-The "pipeline args" JSON printed above has these keys: \`repo\`,
+\`pipelineArgs\` has these keys: \`repo\`,
 \`typecheckCommand\`, \`groups\`, \`repositorySources\`, \`repositoryManifest\`,
 \`runId\`, \`startTimestamp\`, \`mergeScript\`. \`groups\` has one entry per task,
 and each entry's task number is at \`tasks[0].number\`.
 
-Launch \`${WORKFLOW_PATH}\` once per entry in \`groups\`, as a **background**
+Launch \`${WORKFLOW_PATH}\` once per entry in \`pipelineArgs.groups\`, as a **background**
 workflow — the call returns immediately, so the orchestrator stays free to
 launch the next task's workflow right away.
 
-Keep up to ${TASKS_PER_COMMAND} tackle-tasks.workflow.js runs in flight, and start
+Keep up to \`maxConcurrency\` tackle-tasks.workflow.js runs in flight, and start
 the next task as soon as any one of them finishes — a sliding window, not
-batches of ${TASKS_PER_COMMAND} with a barrier between them. Fewer tasks
-than ${TASKS_PER_COMMAND} means fewer runs; ${TASKS_PER_COMMAND} is a
+batches of \`maxConcurrency\` with a barrier between them. Fewer tasks
+than \`maxConcurrency\` means fewer runs; \`maxConcurrency\` is a
 ceiling, never a batch size to fill.
 
 Args for each launch: \`{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath}\`,
 where \`task\` is that entry's \`tasks[0].number\`, \`typecheckCommand\` is
-the value from the pipeline args above, \`worktree\` is that same entry's
-\`worktree\`, \`sourceRoot\` is the top-level pipeline args \`repo\` value —
+\`pipelineArgs.typecheckCommand\`, \`worktree\` is that same entry's
+\`worktree\`, \`sourceRoot\` is \`pipelineArgs.repo\` —
 the authoritative checkout that owns \`.taskTools/tasks.json\`, never the
 task worktree — and \`agentPromptEmitterPath\` is always exactly
 \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`. For example, for the group
@@ -184,7 +183,7 @@ Track \`outstandingEntries\`, a map from task number to \`"plan+implement"\`, \`
 
 After every enqueue and every completion notification, compute \`outstanding\` (above) and run \`nextQueueAction(queue, outstanding)\` (the "Action" row). \`nextQueueAction\` is the single source of truth for whether to launch, wait, roll the lap, or stop — never derive that decision from \`pending\`, \`carryover\`, or \`outstandingEntries\` in prose. Handle the printed \`action\` by its \`kind\` and repeat until you hit \`"report"\`:
 
-- \`"launch"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch \`${WORKFLOW_PATH}\` as a background workflow with args \`{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath}\` — \`typecheckCommand\` is the pipeline args value from above (the same value passed to the very first launch), \`repositoryManifest\` is the pipeline args value from above, \`worktree\` is the \`worktree\` field of the \`groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`, \`sourceRoot\` is the top-level pipeline args \`repo\` value (the same value passed to the very first launch), and \`agentPromptEmitterPath\` is always exactly \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\` — add \`taskNumber → stage\` to \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
+- \`"launch"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch \`${WORKFLOW_PATH}\` as a background workflow with args \`{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath}\` — \`typecheckCommand\` is \`pipelineArgs.typecheckCommand\` (the same value passed to the very first launch), \`repositoryManifest\` is \`pipelineArgs.repositoryManifest\`, \`worktree\` is the \`worktree\` field of the \`pipelineArgs.groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`, \`sourceRoot\` is \`pipelineArgs.repo\` (the same value passed to the very first launch), and \`agentPromptEmitterPath\` is always exactly \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\` — add \`taskNumber → stage\` to \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"wait"\`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet. Wait for the next enqueue or completion notification, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"begin-next-lap"\`: run \`beginNextLap(queue)\`, record the printed JSON as the new \`queue\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
 - \`"report"\`: no pending or retryable work remains (\`action.endState\` is \`"done"\` or \`"stuck"\`). Run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user. Stop driving the queue.
@@ -232,6 +231,5 @@ function fail(problem: string): never {
 if (process.argv[1]?.endsWith("tackle-tasks_SkillBodyEmitter.ts")) {
   const argsValue = readStdin().replace(/\n$/, "");
   if (argsValue === "") fail("no arguments on stdin");
-  const blockedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8" }).trimEnd();
-  process.stdout.write(skillBody(argsValue, blockedStatus));
+  process.stdout.write(skillBody(argsValue));
 }
