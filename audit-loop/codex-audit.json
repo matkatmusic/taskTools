@@ -1,5 +1,5 @@
 {
-  "schemaDocumentation": "plans/task-86-codex-audit-schema.md",
+  "schemaDocumentation": "audit-loop/codex-audit-schema.md",
   "verificationPerformed": [
     "Compared 945eb22650d593bdcab2584460c58ef4bad04a3c through committed HEAD f3bceb6 and separately inspected the substantive unstaged workflow-only-context-injection rewrite; did not inspect the new-usage-graph worktree.",
     "Read plans/task-86-spec.md, the task 131-153/closing-chain plans and records, and the relevant later fix-task records.",
