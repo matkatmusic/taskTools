@@ -461,8 +461,9 @@ export function mergeSubmoduleBranchIntoRepo(
 }
 
 export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, branchName: string): void {
-    git(repoRoot, "worktree", "remove", worktreePath, "--force");
-    git(repoRoot, "branch", "-D", branchName);
+    // existsSync guard makes this idempotent after a partially completed prior cleanup (C86-28).
+    if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", worktreePath, "--force");
+    deleteLocalBranchIfPresent(repoRoot, branchName);
 }
 
 function deleteLocalBranchIfPresent(repoRoot: string, branchName: string): void {
@@ -544,6 +545,40 @@ export function deleteTaskMergePersistence(repoRoot: string, operationBranch: st
     if (readOptionalRef(repoRoot, mergeIntentRefName(operationBranch)) !== null) {
         git(repoRoot, "update-ref", "-d", mergeIntentRefName(operationBranch));
     }
+}
+
+function refExists(repoRoot: string, refName: string): boolean {
+    return readOptionalRef(repoRoot, refName) !== null;
+}
+
+export type RetainedArtifactTarget = {
+    worktreePath: string;
+    leasePath: string;
+    mainRepoRoot: string;
+    branch: string;
+    sourceSubmodules: SourceBranchCleanupTarget[];
+};
+
+// Reports only artifacts a failed cleanup actually left behind, across the lease and every repo (C86-28).
+export function collectRetainedTaskArtifacts(target: RetainedArtifactTarget): string[] {
+    const artifacts: string[] = [];
+    if (existsSync(target.worktreePath)) artifacts.push(target.worktreePath);
+    if (existsSync(target.leasePath)) artifacts.push(target.leasePath);
+    if (refExists(target.mainRepoRoot, `refs/heads/${target.branch}`)) artifacts.push(`refs/heads/${target.branch}`);
+    if (refExists(target.mainRepoRoot, mergedCommitRefName(target.branch))) artifacts.push(mergedCommitRefName(target.branch));
+    if (refExists(target.mainRepoRoot, mergeIntentRefName(target.branch))) artifacts.push(mergeIntentRefName(target.branch));
+    for (const submodule of [...target.sourceSubmodules].sort((a, b) => b.depth - a.depth)) {
+        if (refExists(submodule.checkoutPath, `refs/heads/${target.branch}`)) {
+            artifacts.push(`${submodule.checkoutPath}:refs/heads/${target.branch}`);
+        }
+        if (refExists(submodule.checkoutPath, mergedCommitRefName(target.branch))) {
+            artifacts.push(`${submodule.checkoutPath}:${mergedCommitRefName(target.branch)}`);
+        }
+        if (refExists(submodule.checkoutPath, mergeIntentRefName(target.branch))) {
+            artifacts.push(`${submodule.checkoutPath}:${mergeIntentRefName(target.branch)}`);
+        }
+    }
+    return artifacts;
 }
 
 export type MergeLayerOutcome =

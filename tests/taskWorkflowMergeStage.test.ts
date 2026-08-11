@@ -7,8 +7,11 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { compileFunction } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
-import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from '../scripts/prepareTasks.ts'
-import { buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, enqueueApprovedTask, recordStageOutcome, type TaskWorkflowEnvelope } from '../scripts/runMergePhase.ts'
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, taskWorktreeLeasePath } from '../scripts/prepareTasks.ts'
+import {
+  buildMergeReport, consumeCleanupRetryResult, consumeTaskWorkflowResult, createMergeQueue,
+  enqueueApprovedTask, recordStageOutcome, type CleanupRetryEnvelope, type TaskWorkflowEnvelope,
+} from '../scripts/runMergePhase.ts'
 
 const REPO_ROOT = process.cwd()
 const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), 'utf8')
@@ -287,25 +290,47 @@ test('a real root merge conflict produces a concrete final-report reason naming 
   }
 })
 
-// Locking the worktree makes `git worktree remove --force` fail without touching branch deletion.
+// C86-28: a locked worktree with a submodule and a real lease proves retainedArtifacts matches actual state.
 test('merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close', async () => {
   const taskNumber = 9022
-  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  const { root, worktreePath, submoduleSource, submoduleCheckoutPath, operationBranch: branch, repositoryManifest } = makeRootWithSubmoduleWorktree(taskNumber)
   seedTaskFiles(root, taskNumber)
   try {
-    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
-    git(worktreePath, 'add', 'taskfile.txt')
-    git(worktreePath, 'commit', '-q', '-m', 'task change')
+    commitVendorChange(worktreePath)
+
+    const runId = 'locked-worktree-run'
+    const leasePath = taskWorktreeLeasePath(worktreePath)
+    writeFileSync(leasePath, JSON.stringify({ runId, pid: process.pid, createdAt: Date.now() }))
 
     git(root, 'worktree', 'lock', worktreePath)
 
-    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
-    const outcome = result.results[0] as { status: string, cleanupWarning?: string, closed: number[] }
-    assert.equal(outcome.status, 'merged')
+    const mergedCommitRef = `refs/taskTools/merged-commits/${branch}`
+    const mergeIntentRef = `refs/taskTools/merge-intents/${branch}`
+
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root, runId })
+    const outcome = result.results[0] as { status: string, cleanupWarning?: string, retainedArtifacts?: string[], closed: number[] }
+    assert.equal(outcome.status, 'cleanup-incomplete')
     assert.equal(typeof outcome.cleanupWarning, 'string')
     assert.notEqual(outcome.cleanupWarning!.length, 0)
     assert.equal('lastFailure' in outcome, false)
     assert.deepEqual(outcome.closed, [taskNumber])
+    // Persistence is retained, not deleted, while final cleanup is still incomplete.
+    assert.doesNotThrow(() => git(root, 'rev-parse', '--verify', mergedCommitRef))
+
+    // Submodule branch deletes before the locked worktree-remove throws, so it must not be retained.
+    assert.throws(() => git(submoduleCheckoutPath, 'show-ref', '--verify', `refs/heads/${branch}`))
+    const refPresent = (repoRoot: string, refName: string) => {
+      try { git(repoRoot, 'rev-parse', '--verify', refName); return true } catch { return false }
+    }
+    const expectedArtifacts = new Set<string>([worktreePath, leasePath])
+    if (refPresent(root, `refs/heads/${branch}`)) expectedArtifacts.add(`refs/heads/${branch}`)
+    if (refPresent(root, mergedCommitRef)) expectedArtifacts.add(mergedCommitRef)
+    if (refPresent(root, mergeIntentRef)) expectedArtifacts.add(mergeIntentRef)
+    if (refPresent(submoduleCheckoutPath, mergedCommitRef)) expectedArtifacts.add(`${submoduleCheckoutPath}:${mergedCommitRef}`)
+    if (refPresent(submoduleCheckoutPath, mergeIntentRef)) expectedArtifacts.add(`${submoduleCheckoutPath}:${mergeIntentRef}`)
+    assert.deepEqual(new Set(outcome.retainedArtifacts), expectedArtifacts)
+    assert.ok(outcome.retainedArtifacts!.includes(leasePath))
+    assert.ok(outcome.retainedArtifacts!.some((path) => path.includes('vendor')))
 
     let queue = createMergeQueue()
     queue = enqueueApprovedTask(queue, taskNumber)
@@ -317,9 +342,33 @@ test('merge stage: a locked worktree fails final cleanup with a warning-only out
     const report = buildMergeReport(consumed.queue)
     assert.deepEqual(report.unmerged, [])
     assert.deepEqual(report.mergedNotClosed, [])
+    assert.equal(report.cleanupIncomplete.length, 1)
+    assert.equal(report.cleanupIncomplete[0]!.taskNumber, taskNumber)
+    assert.notEqual(report.cleanupIncomplete[0]!.warning.length, 0)
+
+    // Idempotent cleanup-only retry: unlock, invoke the production 'cleanup-only' role — never re-merge or re-close.
+    git(root, 'worktree', 'unlock', worktreePath)
+    const retryResult = await runMergeStage(worktreePath, { task: taskNumber, stage: 'cleanup-only', repositoryManifest, sourceRoot: root, runId })
+    const retryOutcome = retryResult.results[0] as { status: string, cleanupWarning?: string }
+    assert.equal(retryOutcome.status, 'cleaned')
+    assert.equal('cleanupWarning' in retryOutcome, false)
+    const cleanedQueue = consumeCleanupRetryResult(consumed.queue, retryResult as CleanupRetryEnvelope)
+    assert.deepEqual(buildMergeReport(cleanedQueue).cleanupIncomplete, [])
+
+    assert.equal(existsSync(worktreePath), false)
+    assert.equal(existsSync(leasePath), false)
+    for (const sourcePath of [root, submoduleCheckoutPath]) {
+      assert.throws(() => git(sourcePath, 'show-ref', '--verify', `refs/heads/${branch}`))
+      assert.throws(() => git(sourcePath, 'rev-parse', '--verify', mergedCommitRef))
+      assert.throws(() => git(sourcePath, 'rev-parse', '--verify', mergeIntentRef))
+    }
+    // Idempotent: invoking the retry again on the already-clean state still reports success.
+    const secondRetry = await runMergeStage(worktreePath, { task: taskNumber, stage: 'cleanup-only', repositoryManifest, sourceRoot: root, runId })
+    assert.equal((secondRetry.results[0] as { status: string }).status, 'cleaned')
   } finally {
     try { git(root, 'worktree', 'unlock', worktreePath) } catch { /* already gone */ }
     removeFixture(root, worktreePath)
+    rmSync(submoduleSource, { recursive: true, force: true })
   }
 })
 
@@ -785,7 +834,8 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   git(root, 'add', 'README.md')
   git(root, 'commit', '-q', '-m', 'init')
   addTestScript(root, 'true')
-  const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' })
+  const runId = 'production-shaped-run'
+  const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' }, runId)
   symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
   mkdirSync(join(worktreePath, 'plans'), { recursive: true })
   // Real production manifest; its empty operationBranch forces task.workflow.js to supply the branch.
@@ -799,7 +849,7 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
     git(worktreePath, 'commit', '-q', '-m', 'plan and brief')
 
     const cwdBefore = process.cwd()
-    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root, runId })
     assert.equal(process.cwd(), cwdBefore)
 
     const merged = result.results[0] as { status: string, closed: number[] }

@@ -23,14 +23,15 @@ export const meta = {
     { title: `${N} Implement`, detail: 'implement the plan and check the file fence' },
     { title: `${N} Rebase-Test`, detail: 'rebase onto source and run the full suite' },
     { title: `${N} Merge`, detail: 'merge and close the task' },
+    { title: `${N} Cleanup`, detail: 'retry final worktree/branch/persistence cleanup after a cleanup-incomplete merge' },
   ],
 }
 
 // Emitter role contract: plans/task-86-agent-prompt-fixtures/emitter-role-contract.md
 
-// worktree/sourceRoot ride on every call: the emitter has no cwd guarantee and no other way to recover them.
+// worktree/sourceRoot/runId ride on every call: the emitter has no cwd guarantee and no other way to recover them.
 const emitterInstruction = (role, extra = {}) => {
-  const payload = { worktree: WORKTREE, sourceRoot: SOURCE_ROOT, ...extra }
+  const payload = { worktree: WORKTREE, sourceRoot: SOURCE_ROOT, runId: ARGS.runId, ...extra }
   return `Run exactly this command:
 \`\`\`
 node ${EMITTER_PATH} ${N} ${role} <<'TT_PAYLOAD'
@@ -210,6 +211,17 @@ const MERGE_SCHEMA = {
     lastFailure: { type: ['string', 'null'] },
     conflictedFilePaths: { type: 'array', items: { type: 'string' } },
     occurrenceId: { type: ['string', 'null'] },
+    retainedArtifacts: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['status'],
+}
+
+const CLEANUP_ONLY_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string' },
+    cleanupWarning: { type: ['string', 'null'] },
+    retainedArtifacts: { type: 'array', items: { type: 'string' } },
   },
   required: ['status'],
 }
@@ -563,6 +575,19 @@ const runMerge = async () => {
   return { stage: 'merge', task: N, ...report }
 }
 
+// Retries only final cleanup after a 'cleanup-incomplete' merge result; never re-merges or re-closes.
+const runCleanupOnly = async () => {
+  log(`task ${N}: cleanup-only stage`)
+  const report = await retryAgent(() => agent(
+    emitterInstruction('cleanup-only', { repositoryManifest: REPOSITORY_MANIFEST }),
+    { label: `cleanup-only:${N}`, phase: `${N} Cleanup`, schema: CLEANUP_ONLY_SCHEMA },
+  ))
+  if (!report) {
+    return { stage: 'cleanup-only', task: N, status: 'cleanup-incomplete', cleanupWarning: 'cleanup-only driver returned no result after 3 attempts' }
+  }
+  return { stage: 'cleanup-only', task: N, ...report }
+}
+
 // ---------------------------------------------------------------------------
 // Stage dispatch
 // ---------------------------------------------------------------------------
@@ -572,6 +597,7 @@ const STAGE_RUNNERS = {
   implement: async () => [await runImplement()],
   'rebase-test': async () => [await runRebaseTest()],
   merge: async () => [await runMerge()],
+  'cleanup-only': async () => [await runCleanupOnly()],
   'plan+implement': async () => {
     const planResult = await runPlan()
     if (planResult.status !== 'planned') return [planResult]

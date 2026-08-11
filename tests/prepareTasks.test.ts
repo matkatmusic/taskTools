@@ -11,6 +11,8 @@ import {
     buildWorkflowArguments,
     createWorktreeForGroup,
     generateRunId,
+    recoverStaleTaskWorktreeLease,
+    releaseTaskWorktreeLease,
     resolveMergeScriptPath,
     selectRequestedTasks,
     writeTaskBriefFile,
@@ -78,9 +80,63 @@ test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
-    const first = createWorktreeForGroup(repoRoot, group);
-    const second = createWorktreeForGroup(repoRoot, group);
+    const first = createWorktreeForGroup(repoRoot, group, "run-1");
+    // A previous run's lease is released only on its own successful final cleanup; simulate that here.
+    releaseTaskWorktreeLease({ worktreePath: first, runId: "run-1" });
+    const second = createWorktreeForGroup(repoRoot, group, "run-2");
     assert.equal(second, first);
+});
+
+// Real processes, not sequential same-process calls: both block on one "go" file, a genuine race.
+function spawnLeaseRacer(repoRoot: string, groupId: number, runId: string, readyFile: string, goFile: string): ChildProcess {
+    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "prepareTasks.ts")).href;
+    const source = `
+      import { createWorktreeForGroup } from ${JSON.stringify(prepareTasksUrl)};
+      import { existsSync, writeFileSync } from "node:fs";
+      const wait = new Int32Array(new SharedArrayBuffer(4));
+      writeFileSync(${JSON.stringify(readyFile)}, "ready\\n");
+      while (!existsSync(${JSON.stringify(goFile)})) Atomics.wait(wait, 0, 0, 5);
+      try {
+        const worktreePath = createWorktreeForGroup(
+          ${JSON.stringify(repoRoot)},
+          { groupId: ${groupId}, taskNumbers: [${groupId}], filePaths: [], scope: "unknown" },
+          ${JSON.stringify(runId)},
+        );
+        process.stdout.write(JSON.stringify({ ok: true, worktreePath }));
+      } catch (error) {
+        process.stdout.write(JSON.stringify({ ok: false, message: String(error.message) }));
+      }
+    `;
+    return spawn(process.execPath, ["--input-type=module", "--eval", source], { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+test("test_twoBarrierSynchronizedPrepareProcessesHaveExactlyOneOwnerOfTheSameCleanWorktree", async () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const readyA = join(repoRoot, "ready-a");
+    const readyB = join(repoRoot, "ready-b");
+    const goFile = join(repoRoot, "go");
+    const a = spawnLeaseRacer(repoRoot, 1, "run-a", readyA, goFile);
+    const b = spawnLeaseRacer(repoRoot, 1, "run-b", readyB, goFile);
+    try {
+        await waitForPath(readyA);
+        await waitForPath(readyB);
+        writeFileSync(goFile, "go\n");
+        const [outA, outB] = await Promise.all([captureSuccessfulChild(a), captureSuccessfulChild(b)]);
+        const results = [JSON.parse(outA), JSON.parse(outB)] as Array<{ ok: boolean, worktreePath?: string, message?: string }>;
+        const winners = results.filter((r) => r.ok);
+        const losers = results.filter((r) => !r.ok);
+        // Exactly one owner: the other fails outright, never resetting or sharing the checkout.
+        assert.equal(winners.length, 1);
+        assert.equal(losers.length, 1);
+        assert.match(losers[0]!.message!, /already owned by a live run/);
+        const worktreePath = winners[0]!.worktreePath!;
+        const leaseOwner = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8")) as { runId: string };
+        assert.ok(leaseOwner.runId === "run-a" || leaseOwner.runId === "run-b");
+        assert.equal(existsSync(worktreePath), true);
+    } finally {
+        rmSync(join(tmpdir(), "taskTools-wt", basename(repoRoot)), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
 });
 
 test("test_createWorktreeForGroupRefusesToDiscardAStaleWorktreesRetainedWork", () => {
@@ -120,6 +176,37 @@ test("test_createWorktreeForGroupThrowsWhenSubmoduleInitFails", () => {
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     // Verification: the run stops rather than handing a worker a half-populated worktree.
     assert.throws(() => createWorktreeForGroup(repoRoot, group));
+    // Verification: failed preparation released its own lease instead of orphaning it.
+    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+});
+
+test("test_recoverStaleTaskWorktreeLeaseRefusesWhenRetainedWorkExists", () => {
+    // Setup: a crashed run left both a lease and retained work behind.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    writeFileSync(join(worktreePath, "stale.txt"), "from the crashed run\n");
+    git(worktreePath, "add", "stale.txt");
+    git(worktreePath, "commit", "-q", "-m", "crashed run work");
+    // Test action and verification: recovery refuses a deliberate takeover over retained work.
+    assert.throws(() => recoverStaleTaskWorktreeLease(repoRoot, worktreePath), /retained work/);
+    // Verification: both the lease and the retained commit survive the refusal.
+    assert.equal(existsSync(`${worktreePath}.lease`), true);
+    assert.equal(existsSync(join(worktreePath, "stale.txt")), true);
+});
+
+test("test_recoverStaleTaskWorktreeLeaseReleasesACleanStaleLease", () => {
+    // Setup: a crashed run left a lease behind but no retained work.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    // Test action: explicit recovery, the only way to take over a lease this process didn't acquire.
+    recoverStaleTaskWorktreeLease(repoRoot, worktreePath);
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+    // Verification: ordinary preparation can now proceed as normal reuse.
+    const reused = createWorktreeForGroup(repoRoot, group, "new-run");
+    assert.equal(reused, worktreePath);
 });
 
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
@@ -137,8 +224,9 @@ test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
 test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
-    const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
-    const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords, "run-1");
+    releaseTaskWorktreeLease({ worktreePath: first.groups[0]!.worktree, runId: "run-1" });
+    const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords, "run-2");
     assert.equal(JSON.stringify(first), JSON.stringify(second));
 });
 

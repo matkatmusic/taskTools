@@ -1,6 +1,6 @@
 // Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
@@ -150,9 +150,66 @@ function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): bool
     }
 }
 
-export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): string {
+export type TaskWorktreeLease = { worktreePath: string; runId: string };
+
+export function taskWorktreeLeasePath(worktreePath: string): string {
+    return `${worktreePath}.lease`;
+}
+
+function readTaskWorktreeLeaseOwner(leasePath: string): { pid: number; runId: string } | null {
+    try {
+        return JSON.parse(readFileSync(leasePath, "utf8"));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+    }
+}
+
+// Atomic exclusive-create, held until final cleanup. runId is stable across processes; pid isn't.
+function acquireTaskWorktreeLease(worktreePath: string, runId: string): TaskWorktreeLease {
+    const leasePath = taskWorktreeLeasePath(worktreePath);
+    let fd: number;
+    try {
+        fd = openSync(leasePath, "wx", 0o600);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+            throw new Error(
+                `worktree at "${worktreePath}" is already owned by a live run (lease at "${leasePath}"); `
+                + `if that run crashed, call recoverStaleTaskWorktreeLease() after confirming no work is retained`,
+            );
+        }
+        throw error;
+    }
+    writeFileSync(fd, JSON.stringify({ runId, pid: process.pid, createdAt: Date.now() }));
+    closeSync(fd);
+    return { worktreePath, runId };
+}
+
+// Ownership-checked and idempotent: no-op if already released, refuses a lease it didn't acquire.
+export function releaseTaskWorktreeLease(lease: TaskWorktreeLease): void {
+    const leasePath = taskWorktreeLeasePath(lease.worktreePath);
+    const current = readTaskWorktreeLeaseOwner(leasePath);
+    if (current === null) return;
+    if (current.runId !== lease.runId) {
+        throw new Error(`refusing to release worktree lease at "${leasePath}": held by run "${current.runId}", not "${lease.runId}"`);
+    }
+    unlinkSync(leasePath);
+}
+
+// ponytail: no automatic liveness probe on the stored pid; explicit human call only, mirroring taskStateLock's fail-safe stance. Retained work still blocks a takeover, same as ordinary reuse.
+export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: string): void {
+    const leasePath = taskWorktreeLeasePath(worktreePath);
+    if (readTaskWorktreeLeaseOwner(leasePath) === null) return;
+    if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
+        throw new Error(`worktree at "${worktreePath}" holds retained work; resolve or remove it before releasing its stale lease`);
+    }
+    unlinkSync(leasePath);
+}
+
+export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId: string = generateRunId()): string {
     const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
+    let lease: TaskWorktreeLease;
     if (existsSync(worktreePath)) {
         if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
             throw new Error(
@@ -160,22 +217,40 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup): stri
                 + `resolve or remove it before re-preparing task-${group.groupId}`,
             );
         }
-        // No retained work: safe to re-base this worktree onto the source branch tip.
-        execFileSync(
-            "git",
-            ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
-            { stdio: "ignore" },
-        );
+        // No retained work: acquire ownership before resetting so a racing session can't share it.
+        lease = acquireTaskWorktreeLease(worktreePath, runId);
+        try {
+            execFileSync(
+                "git",
+                ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
+                { stdio: "ignore" },
+            );
+        } catch (error) {
+            releaseTaskWorktreeLease(lease);
+            throw error;
+        }
     } else {
         mkdirSync(dirname(worktreePath), { recursive: true });
-        execFileSync(
-            "git",
-            ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "HEAD"],
-            { stdio: "ignore" },
-        );
+        lease = acquireTaskWorktreeLease(worktreePath, runId);
+        try {
+            execFileSync(
+                "git",
+                ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "HEAD"],
+                { stdio: "ignore" },
+            );
+        } catch (error) {
+            releaseTaskWorktreeLease(lease);
+            throw error;
+        }
     }
-    initializeSubmodulesInWorktree(worktreePath);
-    createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchName);
+    // A submodule-init or branch-creation failure gets the same treatment: release, don't orphan.
+    try {
+        initializeSubmodulesInWorktree(worktreePath);
+        createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchName);
+    } catch (error) {
+        releaseTaskWorktreeLease(lease);
+        throw error;
+    }
     return worktreePath;
 }
 
@@ -183,6 +258,7 @@ export function buildWorkflowArguments(
     repoRoot: string,
     typecheckCommand: string,
     tasks: TaskRecord[],
+    runId: string = generateRunId(),
 ): WorkflowArguments {
     const repositorySources = collectRepositorySources(repoRoot);
     const preparedGroups: PreparedGroup[] = tasks.map((task) => {
@@ -192,15 +268,16 @@ export function buildWorkflowArguments(
             filePaths: declaredFiles(task),
             scope: "declared",
         };
+        const worktree = createWorktreeForGroup(repoRoot, group, runId);
         return {
             groupId: group.groupId,
-            worktree: createWorktreeForGroup(repoRoot, group),
+            worktree,
             branch: branchNameForGroup(group.groupId),
             scope: group.scope,
             tasks: [{
                 number: task.taskNumber,
-                briefFile: join(repoRoot, "plans", `brief-${task.taskNumber}.md`),
-                planFile: join(repoRoot, "plans", `task-${task.taskNumber}-plan.md`),
+                briefFile: join(worktree, "plans", `brief-${task.taskNumber}.md`),
+                planFile: join(worktree, "plans", `task-${task.taskNumber}-plan.md`),
                 files: declaredFiles(task),
             }],
         };
@@ -240,10 +317,9 @@ function runAsCli(): void {
         process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
         process.exit(1);
     }
-    for (const task of tasks) writeTaskBriefFile(task, repoRoot);
     const runId = generateRunId();
     const manifest = loadRepositoryManifest(repoRoot);
-    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks);
+    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
     // startTimestamp is stamped here because workflow scripts cannot call Date.now().
     const pipelineArguments = {
         ...workflowArguments,

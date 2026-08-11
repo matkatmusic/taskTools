@@ -54,6 +54,13 @@ export type MergedNotClosedTask = {
     lastFailure: string;
 };
 
+// The merge (and close) succeeded; only the final worktree/branch cleanup step failed.
+export type CleanupIncompleteTask = {
+    taskNumber: number;
+    warning: string;
+    retainedArtifacts: string[];
+};
+
 export type MergeQueue = {
     pending: QueueTask[];
     carryover: QueueTask[];
@@ -61,6 +68,7 @@ export type MergeQueue = {
     mergedThisLap: number;
     unmerged: QueueTask[];
     mergedNotClosed: MergedNotClosedTask[];
+    cleanupIncomplete: CleanupIncompleteTask[];
 };
 
 export type QueueStep = { taskNumber: number; stage: QueueStage };
@@ -68,7 +76,7 @@ export type QueueStep = { taskNumber: number; stage: QueueStage };
 export type StageOutcome = { status: "success" } | { status: "failure"; reason: string };
 
 export function createMergeQueue(): MergeQueue {
-    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [], mergedNotClosed: [] };
+    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] };
 }
 
 // An approved task enters the queue right away, at the back of the current lap's pending list.
@@ -96,8 +104,8 @@ export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean):
     return queue.carryover.length === 0 ? "done" : "continue";
 }
 
-// tail = an outstanding entry at rebase-test or merge; those are serial per task and must not be double-launched.
-export type OutstandingWorkflowState = { any: boolean; tail: boolean };
+// tail = outstanding rebase-test/merge, serial. total/capacity share one ceiling with plan/implement (C86-24).
+export type OutstandingWorkflowState = { any: boolean; tail: boolean; total: number; capacity: number };
 
 export type QueueAction =
     | { kind: "launch"; step: QueueStep }
@@ -110,7 +118,41 @@ export function nextQueueAction(
     outstanding: OutstandingWorkflowState,
 ): QueueAction {
     const step = nextQueueStep(queue);
-    if (step) return outstanding.tail ? { kind: "wait" } : { kind: "launch", step };
+    if (step) return (outstanding.tail || outstanding.total >= outstanding.capacity) ? { kind: "wait" } : { kind: "launch", step };
+
+    const endState = shouldEndQueue(queue, outstanding.any);
+    if (endState !== "continue") return { kind: "report", endState };
+    if (queue.carryover.length > 0 && !outstanding.any) return { kind: "begin-next-lap" };
+    return { kind: "wait" };
+}
+
+// Next not-yet-launched plan/implement task; tracked outside the queue until approved/enqueued.
+export type ReadyLaunches = { nextPlanTask: number | null };
+
+export type SchedulerAction =
+    | { kind: "launch-plan"; taskNumber: number }
+    | { kind: "launch-tail"; step: QueueStep }
+    | { kind: "wait" }
+    | { kind: "begin-next-lap" }
+    | { kind: "report"; endState: Exclude<QueueEndState, "continue"> };
+
+// C86-24: the one capacity decision for every launch kind. Tail wins a contested freed slot.
+export function nextSchedulerAction(
+    queue: MergeQueue,
+    ready: ReadyLaunches,
+    outstanding: OutstandingWorkflowState,
+): SchedulerAction {
+    const tailStep = nextQueueStep(queue);
+    const tailReady = tailStep !== null && !outstanding.tail;
+    const hasCapacity = outstanding.total < outstanding.capacity;
+
+    if (hasCapacity) {
+        if (tailReady) return { kind: "launch-tail", step: tailStep! };
+        if (ready.nextPlanTask !== null) return { kind: "launch-plan", taskNumber: ready.nextPlanTask };
+    }
+
+    // Something is still pending though nothing launched this call: keep waiting, don't report/roll.
+    if (tailStep !== null || ready.nextPlanTask !== null) return { kind: "wait" };
 
     const endState = shouldEndQueue(queue, outstanding.any);
     if (endState !== "continue") return { kind: "report", endState };
@@ -145,6 +187,16 @@ export function recordMergedNotClosed(queue: MergeQueue, taskNumber: number, com
     return { ...queue, mergedNotClosed: [...queue.mergedNotClosed, { taskNumber, commitHash, lastFailure }] };
 }
 
+// Merge (and close) succeeded; only final worktree/branch cleanup failed. Reported apart from unmerged (C86-28).
+export function recordCleanupIncomplete(queue: MergeQueue, taskNumber: number, warning: string, retainedArtifacts: string[]): MergeQueue {
+    return { ...queue, cleanupIncomplete: [...queue.cleanupIncomplete, { taskNumber, warning, retainedArtifacts }] };
+}
+
+// A cleanup-only retry (the 'cleanup-only' role) succeeded: clear the task's standing warning.
+export function recordCleanupRetrySucceeded(queue: MergeQueue, taskNumber: number): MergeQueue {
+    return { ...queue, cleanupIncomplete: queue.cleanupIncomplete.filter((item) => item.taskNumber !== taskNumber) };
+}
+
 export type TerminalReason = "2-lap ceiling reached" | "zero-merge lap ended the queue";
 
 export type UnmergedTaskReport = {
@@ -156,6 +208,7 @@ export type UnmergedTaskReport = {
 export type MergeReport = {
     unmerged: UnmergedTaskReport[];
     mergedNotClosed: MergedNotClosedTask[];
+    cleanupIncomplete: CleanupIncompleteTask[];
 };
 
 // Reports queue.unmerged (hit the ceiling) and queue.carryover (retryable when the queue ended early); both left pending, unmerged.
@@ -170,7 +223,11 @@ export function buildMergeReport(queue: MergeQueue): MergeReport {
         lastFailure: task.lastFailure as string,
         terminalReason: "zero-merge lap ended the queue",
     }));
-    return { unmerged: [...ceilingFailures, ...queueExitFailures], mergedNotClosed: queue.mergedNotClosed };
+    return {
+        unmerged: [...ceilingFailures, ...queueExitFailures],
+        mergedNotClosed: queue.mergedNotClosed,
+        cleanupIncomplete: queue.cleanupIncomplete,
+    };
 }
 
 type JsonObject = Record<string, unknown>;
@@ -237,7 +294,7 @@ export function consumeTaskWorkflowResult(
     const status = nonemptyString(result.status, `${envelope.stage}.status`);
     const success = envelope.stage === "rebase-test"
         ? status === "green"
-        : status === "merged" || status === "merged-but-not-closed";
+        : status === "merged" || status === "merged-but-not-closed" || status === "cleanup-incomplete";
     const outcome: StageOutcome = success
         ? { status: "success" }
         : {
@@ -254,7 +311,28 @@ export function consumeTaskWorkflowResult(
             nonemptyString(result.closeError, "merge.closeError"),
         );
     }
+    if (envelope.stage === "merge" && typeof result.cleanupWarning === "string" && result.cleanupWarning.length > 0) {
+        next = recordCleanupIncomplete(
+            next,
+            envelope.task,
+            result.cleanupWarning,
+            Array.isArray(result.retainedArtifacts) ? result.retainedArtifacts as string[] : [],
+        );
+    }
     return { kind: "queue", queue: next, taskNumber: envelope.task, stage: envelope.stage, status };
+}
+
+export type CleanupRetryEnvelope = {
+    task: number;
+    stage: "cleanup-only";
+    results: JsonObject[];
+};
+
+// Decodes a 'cleanup-only' completion; the task already left pending/merged, so only cleanupIncomplete moves.
+export function consumeCleanupRetryResult(queue: MergeQueue, envelope: CleanupRetryEnvelope): MergeQueue {
+    const result = objectAt(envelope.results, 0, "cleanup-only");
+    const status = nonemptyString(result.status, "cleanup-only.status");
+    return status === "cleaned" ? recordCleanupRetrySucceeded(queue, envelope.task) : queue;
 }
 
 // RETIRED (task 147): derived run-outcomes.json's aggregate counts from one batch's StepOutputs arrays.

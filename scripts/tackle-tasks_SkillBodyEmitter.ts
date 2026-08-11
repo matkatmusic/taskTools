@@ -63,37 +63,75 @@ Use the git history and recent commits (over the last 3 days) to confirm/deny th
 \`runId\`, \`startTimestamp\`, \`mergeScript\`. \`groups\` has one entry per task,
 and each entry's task number is at \`tasks[0].number\`.
 
-Launch \`${WORKFLOW_PATH}\` once per entry in \`pipelineArgs.groups\`, as a **background**
-workflow — the call returns immediately, so the orchestrator stays free to
-launch the next task's workflow right away.
+Before launching anything: run \`FN\` = \`createMergeQueue\`, \`ARGS\` = (empty)
+(the "Start" row in **Merge queue** below) and record the printed JSON as
+\`queue\`. Track \`remainingPlanTasks\`, the list of every \`tasks[0].number\`
+in \`pipelineArgs.groups\` in the order given — every task that still needs
+its plan+implement launch. Track \`outstandingEntries\`, a map from task
+number to \`"plan+implement"\`, \`"rebase-test"\`, or \`"merge"\`, naming the
+workflow you currently have launched for that task and awaiting a result on.
 
-Keep up to \`maxConcurrency\` tackle-tasks.workflow.js runs in flight, and start
-the next task as soon as any one of them finishes — a sliding window, not
-batches of \`maxConcurrency\` with a barrier between them. Fewer tasks
-than \`maxConcurrency\` means fewer runs; \`maxConcurrency\` is a
-ceiling, never a batch size to fill.
+\`maxConcurrency\` is one shared ceiling across every launch kind —
+plan/implement, rebase-test, and merge — never a per-kind budget and never a
+batch size to fill. \`nextSchedulerAction\` (see **Merge queue**'s table) is
+the single capacity-aware decision point for all of them: compute \`ready\`
+= \`{nextPlanTask: remainingPlanTasks[0] ?? null}\` and \`outstanding\` =
+\`{any: outstandingEntries.size > 0, tail: [...outstandingEntries.values()].some(stage => stage === "rebase-test" || stage === "merge"), total: outstandingEntries.size, capacity: maxConcurrency}\`,
+then run \`FN\` = \`nextSchedulerAction\`, \`ARGS\` = \`<QUEUE_JSON>, ready, outstanding\`.
+Never launch anything outside this call, and never derive a launch decision
+from \`remainingPlanTasks\`, \`pending\`, \`carryover\`, or \`outstandingEntries\`
+in prose. Handle the printed \`action\` by its \`kind\` and repeat until you
+hit \`"report"\`:
 
-Args for each launch: \`{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath}\`,
-where \`task\` is that entry's \`tasks[0].number\`, \`typecheckCommand\` is
-\`pipelineArgs.typecheckCommand\`, \`worktree\` is that same entry's
-\`worktree\`, \`sourceRoot\` is \`pipelineArgs.repo\` —
-the authoritative checkout that owns \`.taskTools/tasks.json\`, never the
-task worktree — and \`agentPromptEmitterPath\` is always exactly
-\`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`. For example, for the group
-whose \`tasks[0].number\` is \`268\` and whose \`worktree\` is
-\`/tmp/taskTools-wt/repo/task-268\`:
+- \`"launch-plan"\`: \`action.taskNumber\` names the task. Launch \`${WORKFLOW_PATH}\`
+  as a **background** workflow — the call returns immediately, so the
+  orchestrator stays free to launch the next thing right away — with args
+  \`{task: action.taskNumber, typecheckCommand: pipelineArgs.typecheckCommand, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
+  (\`worktree\` is the \`worktree\` field of the \`pipelineArgs.groups\` entry
+  whose \`tasks[0].number\` equals \`action.taskNumber\`, and
+  \`agentPromptEmitterPath\` is always exactly
+  \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`). Remove \`action.taskNumber\`
+  from \`remainingPlanTasks\`, add \`taskNumber → "plan+implement"\` to
+  \`outstandingEntries\`, then recompute \`ready\`/\`outstanding\` and run
+  \`nextSchedulerAction\` again.
+- \`"launch-tail"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch
+  \`${WORKFLOW_PATH}\` as a background workflow with args
+  \`{task: taskNumber, stage, typecheckCommand: pipelineArgs.typecheckCommand, repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
+  (\`worktree\` is the \`worktree\` field of the \`pipelineArgs.groups\` entry
+  whose \`tasks[0].number\` equals \`taskNumber\`, and \`agentPromptEmitterPath\`
+  is always exactly \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`). Add
+  \`taskNumber → stage\` to \`outstandingEntries\`, then recompute
+  \`ready\`/\`outstanding\` and run \`nextSchedulerAction\` again.
+- \`"wait"\`: nothing may launch this call — capacity is full, the ready
+  tail is serialized behind one already outstanding, or nothing is ready
+  and the lap can't roll yet. Wait for the next completion notification or
+  gate decision, then recompute \`ready\`/\`outstanding\` and run
+  \`nextSchedulerAction\` again.
+- \`"begin-next-lap"\`: run \`beginNextLap(queue)\`, record the printed JSON
+  as the new \`queue\`, then recompute \`ready\`/\`outstanding\` and run
+  \`nextSchedulerAction\` again.
+- \`"report"\`: no pending, retryable, or unlaunched work remains
+  (\`action.endState\` is \`"done"\` or \`"stuck"\`). Run \`buildMergeReport(queue)\`
+  — see **Closing your tasks** for what to do with its result — and stop
+  driving the queue.
+
+For example, a \`"launch-tail"\` for the group whose \`tasks[0].number\` is
+\`268\` and whose \`worktree\` is \`/tmp/taskTools-wt/repo/task-268\`:
 
 \`\`\`json
-{"task": 268, "typecheckCommand": "npx tsc --noEmit", "worktree": "/tmp/taskTools-wt/repo/task-268", "sourceRoot": "/path/to/repo", "agentPromptEmitterPath": ${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}}
+{"task": 268, "stage": "rebase-test", "typecheckCommand": "npx tsc --noEmit", "repositoryManifest": {}, "worktree": "/tmp/taskTools-wt/repo/task-268", "sourceRoot": "/path/to/repo", "runId": "abc123", "agentPromptEmitterPath": ${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}}
 \`\`\`
 
 Pass nothing else. \`tackle-tasks.workflow.js\` reads only \`task\`, \`stage\`,
-\`typecheckCommand\`, \`worktree\`, \`sourceRoot\`, \`agentPromptEmitterPath\`,
-\`workerModel\`, and \`maxRounds\` from its args — it never imports or runs a
-command itself; every git/fs/task-state operation runs through the agent
-prompt emitter at that path. It loads everything else about the task (its
-brief, plan path, owned files) itself, via the emitter, straight from the
-worktree's own checkout of tasks.json.
+\`typecheckCommand\`, \`worktree\`, \`sourceRoot\`, \`repositoryManifest\`,
+\`runId\`, \`agentPromptEmitterPath\`, \`workerModel\`, and \`maxRounds\` from its
+args — it never imports or runs a command itself; every git/fs/task-state
+operation runs through the agent prompt emitter at that path. It loads
+everything else about the task (its brief, plan path, owned files) itself,
+via the emitter, straight from the worktree's own checkout of tasks.json.
+\`runId\` matters beyond logging: the merge and cleanup-only roles use it to
+verify they own the task's worktree lease before releasing it, so it must be
+exactly \`pipelineArgs.runId\` on every launch, never omitted or invented.
 
 Each task workflow's completion sends a task-notification back to you. That
 notification — not polling — is how you learn a task is ready.
@@ -108,9 +146,15 @@ Every tackle-tasks.workflow.js run returns \`{task, stage, results}\`, where
   \`"green"\` on success; anything else is a failure, with \`lastFailure\`
   naming why.
 - \`merge\`: \`results\` has one entry, the merge result —
-  \`{status, mergedCommitHash, closeError, ...}\`. \`status\` is
-  \`"merged"\` or \`"merged-but-not-closed"\` on success; anything else is
-  a failure.
+  \`{status, mergedCommitHash, closeError, cleanupWarning, retainedArtifacts, ...}\`.
+  \`status\` is \`"merged"\`, \`"merged-but-not-closed"\`, or
+  \`"cleanup-incomplete"\` on success (the task merged either way; only
+  \`"cleanup-incomplete"\` still leaves worktree/branch/persistence cleanup
+  to retry — see **Closing your tasks**); anything else is a failure.
+- \`cleanup-only\`: \`results\` has one entry — \`{status, cleanupWarning, retainedArtifacts}\`.
+  \`status\` is \`"cleaned"\` on success; \`"cleanup-incomplete"\` means the
+  retry itself needs retrying. Never a failure in the rebase-test/merge
+  sense — this stage never re-merges or re-closes, so there is nothing to roll back.
 - \`plan+implement\`: the first entry is the plan result —
   \`{status, verify, reviewRounds, ...}\`. When its \`status\` is
   \`"planned"\`, its \`verify\` is the verifier result
@@ -170,29 +214,27 @@ console.log(JSON.stringify(FN(ARGS)));
 TASK_TOOLS_QUEUE
 \`\`\`
 
-- Start (once, before the first gate): \`FN\` = \`createMergeQueue\`, \`ARGS\` = (empty). Record the printed JSON as \`queue\`.
+- Start (once, before the first plan/implement launch — see **Running the pipeline**): \`FN\` = \`createMergeQueue\`, \`ARGS\` = (empty). Record the printed JSON as \`queue\`.
 - On "Approve for merge": \`FN\` = \`enqueueApprovedTask\`, \`ARGS\` = \`<QUEUE_JSON>, taskNumber\`. Record the printed JSON as the new \`queue\`.
-- Action: \`FN\` = \`nextQueueAction\`, \`ARGS\` = \`<QUEUE_JSON>, outstanding\` (\`outstanding\` is \`{any: outstandingEntries.size > 0, tail: [...outstandingEntries.values()].some(stage => stage === "rebase-test" || stage === "merge")}\`, literal JSON). Record the printed JSON as \`action\`.
+- Action: \`FN\` = \`nextSchedulerAction\`, \`ARGS\` = \`<QUEUE_JSON>, ready, outstanding\` (\`ready\` and \`outstanding\` are computed as described in **Running the pipeline**, literal JSON for both). Record the printed JSON as \`action\`.
 - Consume: \`FN\` = \`consumeTaskWorkflowResult\`, \`ARGS\` = \`<QUEUE_JSON>, envelope\` (\`envelope\` is the workflow's complete \`{task, stage, results}\` result, literal JSON). Record the printed JSON as \`consumed\`; \`consumed.queue\` is the new \`queue\`. Never index \`results[]\` or call \`recordStageOutcome\`/\`recordMergedNotClosed\` directly — \`consumeTaskWorkflowResult\` does that internally.
 - Next lap: \`FN\` = \`beginNextLap\`, \`ARGS\` = \`<QUEUE_JSON>\`. Record the printed JSON as the new \`queue\`.
 - Report: \`FN\` = \`buildMergeReport\`, \`ARGS\` = \`<QUEUE_JSON>\`.
+- Cleanup retry (see **Closing your tasks**): \`FN\` = \`consumeCleanupRetryResult\`, \`ARGS\` = \`<QUEUE_JSON>, envelope\` (\`envelope\` is the \`cleanup-only\` workflow's complete \`{task, stage, results}\` result). Record the printed JSON as the new \`queue\`.
 
-Track \`outstandingEntries\`, a map from task number to \`"plan+implement"\`, \`"rebase-test"\`, or \`"merge"\`, naming the workflow you currently have launched for that task and awaiting a result on. Add an entry the moment you launch that task's \`plan+implement\` workflow (before this section — task planning and implementing happens outside the merge queue proper, but its notification still gates when the queue may end). Add an entry when you launch a \`rebase-test\` or \`merge\` workflow, per the "launch" action below. Remove a task's entry only in these two cases:
-- Its \`plan+implement\` completion notification arrives: immediately ask that task's own approval gate (per "## Gate each task" above), before doing anything else in this section. On "Approve for merge", run \`enqueueApprovedTask(queue, taskNumber)\` and record the printed JSON as the new \`queue\`, then remove the entry. On "Do not approve", remove the entry without enqueueing.
-- Its \`rebase-test\` or \`merge\` completion notification arrives and the "consume" step below has recorded the outcome: remove the entry.
+Remove a task's \`outstandingEntries\` entry only in these two cases:
+- Its \`plan+implement\` completion notification arrives: immediately ask that task's own approval gate (per **Gate each task** above), before doing anything else here. On "Approve for merge", run \`enqueueApprovedTask(queue, taskNumber)\` and record the printed JSON as the new \`queue\`, then remove the entry. On "Do not approve", remove the entry without enqueueing.
+- Its \`rebase-test\` or \`merge\` completion notification arrives and the "Consume" row has recorded the outcome: remove the entry.
 
-After every enqueue and every completion notification, compute \`outstanding\` (above) and run \`nextQueueAction(queue, outstanding)\` (the "Action" row). \`nextQueueAction\` is the single source of truth for whether to launch, wait, roll the lap, or stop — never derive that decision from \`pending\`, \`carryover\`, or \`outstandingEntries\` in prose. Handle the printed \`action\` by its \`kind\` and repeat until you hit \`"report"\`:
+After every enqueue and every completion notification, recompute \`ready\`/\`outstanding\` and run \`nextSchedulerAction\` again, handling its result exactly as described in **Running the pipeline** — that section owns every \`action.kind\` (\`"launch-plan"\`, \`"launch-tail"\`, \`"wait"\`, \`"begin-next-lap"\`, \`"report"\`); never derive a launch, wait, or lap-roll decision from \`pending\`, \`carryover\`, or \`outstandingEntries\` in prose here instead.
 
-- \`"launch"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch \`${WORKFLOW_PATH}\` as a background workflow with args \`{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath}\` — \`typecheckCommand\` is \`pipelineArgs.typecheckCommand\` (the same value passed to the very first launch), \`repositoryManifest\` is \`pipelineArgs.repositoryManifest\`, \`worktree\` is the \`worktree\` field of the \`pipelineArgs.groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`, \`sourceRoot\` is \`pipelineArgs.repo\` (the same value passed to the very first launch), and \`agentPromptEmitterPath\` is always exactly \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\` — add \`taskNumber → stage\` to \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
-- \`"wait"\`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet. Wait for the next enqueue or completion notification, then recompute \`outstanding\` and run \`nextQueueAction\` again.
-- \`"begin-next-lap"\`: run \`beginNextLap(queue)\`, record the printed JSON as the new \`queue\`, then recompute \`outstanding\` and run \`nextQueueAction\` again.
-- \`"report"\`: no pending or retryable work remains (\`action.endState\` is \`"done"\` or \`"stuck"\`). Run \`buildMergeReport(queue)\` and report its \`unmerged\` and \`mergedNotClosed\` entries to the user. Stop driving the queue.
-
-When a launched rebase-test or merge workflow's completion notification arrives, its result is the complete \`{task, stage, results}\` envelope. Run \`consumeTaskWorkflowResult(queue, envelope)\` (the "Consume" row above) and replace \`queue\` with the returned \`consumed.queue\`. \`consumed.status\` is \`"green"\` on success for \`rebase-test\`, or \`"merged"\`/\`"merged-but-not-closed"\` on success for \`merge\`; anything else is a failure. Never index \`results[]\` yourself. Remove that task's entry from \`outstandingEntries\`, then recompute \`outstanding\` and run \`nextQueueAction\` again. Merging stays serial: \`nextQueueAction\`'s \`tail\` check refuses to launch a second rebase-test or merge workflow while one is still outstanding, because every merge moves the tip the next task rebases onto.
+When a launched rebase-test or merge workflow's completion notification arrives, its result is the complete \`{task, stage, results}\` envelope. Run \`consumeTaskWorkflowResult(queue, envelope)\` (the "Consume" row) and replace \`queue\` with the returned \`consumed.queue\`. \`consumed.status\` is \`"green"\` on success for \`rebase-test\`, or \`"merged"\`/\`"merged-but-not-closed"\`/\`"cleanup-incomplete"\` on success for \`merge\`; anything else is a failure. Never index \`results[]\` yourself. Remove that task's entry from \`outstandingEntries\`, then recompute \`ready\`/\`outstanding\` and run \`nextSchedulerAction\` again. Merging stays serial: a tail already outstanding is never launched a second time, because every merge moves the tip the next task rebases onto.
 
 ## Closing your tasks
 
 Closing each merged task happens automatically: \`${WORKFLOW_PATH}\`'s merge stage, via the agent prompt emitter's \`merge\` role, calls scripts/closeTasks.ts once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up.
+
+\`buildMergeReport\`'s \`cleanupIncomplete\` entries name every task whose merge (and close) succeeded but whose final worktree/branch/persistence cleanup did not — each is \`{taskNumber, warning, retainedArtifacts}\`. Report these to the user alongside \`unmerged\` and \`mergedNotClosed\`. Once whatever blocked cleanup (for example a locked worktree) is resolved, retry it: launch \`${WORKFLOW_PATH}\` once as a background workflow with args \`{task: taskNumber, stage: "cleanup-only", repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\` (\`worktree\` is that task's \`pipelineArgs.groups\` entry's \`worktree\`) — it only retries cleanup, it never re-merges or re-closes the task. On its completion notification, run \`consumeCleanupRetryResult(queue, envelope)\` (the "Cleanup retry" row), replace \`queue\` with the result, and re-run \`buildMergeReport(queue)\`; a successful retry clears that task from \`cleanupIncomplete\`. It is safe to invoke again if it reports \`"cleanup-incomplete"\` a second time.
 
 If the user requests adding tasks, invoke the \`create-task\` skill once per task — never edit \`tasks.json\` directly.
 
