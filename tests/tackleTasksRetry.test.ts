@@ -6,7 +6,8 @@ import { join } from "node:path";
 
 // Task 157 deleted the five per-stage workflow files; blockers and tackle-tasks are what survive.
 const WORKFLOW_NAMES = ["blockers", "tackle-tasks"];
-const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 15 };
+// C86-24/28: added the cleanup-only role's agent() call.
+const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 16 };
 const HELPER_MARKER = "// ponytail: null/undefined means the harness returned no result";
 
 const readWorkflow = (name: string) =>

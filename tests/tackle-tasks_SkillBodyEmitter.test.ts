@@ -79,22 +79,26 @@ test("series adds the serial-mode section and leaves the brief untouched without
   assert.equal(withoutSection.replaceAll(" series", ""), parallel);
 });
 
-test("running the pipeline launches tackle-tasks.workflow.js once per task in the background, with no phase barriers", () => {
+test("running the pipeline launches tackle-tasks.workflow.js in the background via one capacity-aware scheduler, with no phase barriers", () => {
   const brief = skillBody("[1]");
-  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` once per entry in `pipelineArgs\.groups`, as a \*\*background\*\*/);
-  assert.match(brief, /Args for each launch: `\{task, typecheckCommand, worktree, sourceRoot, agentPromptEmitterPath\}`/);
+  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js`\s+as a \*\*background\*\* workflow/);
+  assert.match(brief, /\{task: action\.taskNumber, typecheckCommand: pipelineArgs\.typecheckCommand, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
   assert.doesNotMatch(brief, /mergeCommand/);
   assert.doesNotMatch(brief, /Step 1 — plan/);
-  assert.match(brief, /Keep up to `maxConcurrency` tackle-tasks\.workflow\.js runs in flight/);
-  assert.match(brief, /sliding window, not\s+batches of/);
+  assert.match(brief, /one shared ceiling across every launch kind/);
+  assert.match(brief, /never a\s+batch size to fill/);
+  assert.match(brief, /nextSchedulerAction.*is\s+the single capacity-aware decision point for all of them/s);
 });
 
-test("initial and tail launch args both name sourceRoot as pipelineArgs.repo", () => {
+test("initial and tail launch args both name sourceRoot as pipelineArgs.repo and carry runId", () => {
   const brief = skillBody("[1]");
-  assert.match(brief, /`sourceRoot` is `pipelineArgs\.repo`/);
+  const sourceRootMatches = brief.match(/sourceRoot: pipelineArgs\.repo/g);
+  assert.ok(sourceRootMatches && sourceRootMatches.length >= 2);
+  const runIdMatches = brief.match(/runId: pipelineArgs\.runId/g);
+  assert.ok(runIdMatches && runIdMatches.length >= 2);
   assert.match(brief, /"sourceRoot": "\/path\/to\/repo"/);
 });
 
@@ -121,22 +125,23 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.doesNotMatch(brief, /node -e "/);
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
-  assert.match(brief, /nextQueueAction\(queue, outstanding\)/);
-  assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js` as a background workflow with args `\{task: taskNumber, stage, typecheckCommand, repositoryManifest, worktree, sourceRoot, agentPromptEmitterPath\}`/);
-  assert.match(brief, /rebase-test or merge workflow is still outstanding/s);
+  assert.match(brief, /`FN` = `nextSchedulerAction`, `ARGS` = `<QUEUE_JSON>, ready, outstanding`/);
+  assert.match(brief, /Launch\s+`.*tackle-tasks\.workflow\.js` as a background workflow with args\s+`\{task: taskNumber, stage, typecheckCommand: pipelineArgs\.typecheckCommand, repositoryManifest: pipelineArgs\.repositoryManifest, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}`/);
+  assert.match(brief, /tail is serialized behind one already outstanding/s);
   assert.match(brief, /`FN` = `consumeTaskWorkflowResult`/);
   assert.doesNotMatch(brief, /results\[[01]\]/);
   assert.match(brief, /buildMergeReport\(queue\)/);
   assert.match(brief, /outstandingEntries/);
   assert.match(brief, /immediately ask that task's own approval gate/);
-  assert.match(brief, /`"launch"`:.*Launch `.*tackle-tasks\.workflow\.js`/s);
+  assert.match(brief, /`"launch-tail"`:.*Launch\s+`.*tackle-tasks\.workflow\.js`/s);
+  assert.match(brief, /`"launch-plan"`:.*Launch `.*tackle-tasks\.workflow\.js`/s);
   assert.doesNotMatch(brief, /close-tasks/);
 });
 
 test("merge queue: the next-lap branch waits for an outstanding workflow instead of starting another lap against the same tip", () => {
   const brief = skillBody("[1]");
   assert.match(brief, /`"begin-next-lap"`: run `beginNextLap\(queue\)`/s);
-  assert.match(brief, /`"wait"`: a rebase-test or merge workflow is still outstanding, or nothing is ready to launch and the lap can't roll yet\./s);
+  assert.match(brief, /`"wait"`: nothing may launch this call.*and the lap can't roll yet\./s);
 });
 
 test("RETIRED (task 163) marker keeps its commented paragraph body, not a bare tombstone", () => {

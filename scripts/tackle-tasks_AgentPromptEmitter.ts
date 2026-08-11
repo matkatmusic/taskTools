@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { resolveTaskFiles, readTaskFile } from "./taskFiles.ts";
-import { writeTaskBriefFile, attachOperationBranch } from "./prepareTasks.ts";
+import { writeTaskBriefFile, attachOperationBranch, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "./prepareTasks.ts";
 import { addTaskFiles } from "./addTaskFiles.ts";
 import {
   rebaseSubmoduleLayersDeepestFirst,
@@ -12,6 +12,7 @@ import {
   mergeTaskDeepestFirst,
   removeTaskWorktreeAndBranches,
   deleteTaskMergePersistence,
+  collectRetainedTaskArtifacts,
 } from "./mergeTaskWorktrees.ts";
 import { createEmptyResolutionManifest } from "./resolutionRequests.ts";
 import { currentBranchName } from "./repositoryBranches.ts";
@@ -39,6 +40,7 @@ const payloadText = readStdin();
 const PAYLOAD: any = payloadText ? JSON.parse(payloadText) : {};
 const WORKTREE: string = PAYLOAD.worktree;
 const SOURCE_ROOT: string = PAYLOAD.sourceRoot;
+const RUN_ID: string = PAYLOAD.runId;
 if (!WORKTREE) fail('payload missing "worktree"');
 
 function printResult(json: unknown) {
@@ -609,15 +611,45 @@ function roleMerge() {
     return
   }
   try {
+    // Cleanup order matters: a failure here leaves persistence refs for an idempotent retry.
+    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
     deleteTaskMergePersistence(mainRepoRoot, branch)
     for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
-    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
   } catch (error) {
     const cleanupWarning = `failed final branch/worktree cleanup: ${String((error as any)?.message ?? error)}`
-    printResult({ failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, cleanupWarning })
+    const retainedArtifacts = collectRetainedTaskArtifacts({
+      worktreePath: repoRoot, leasePath: taskWorktreeLeasePath(repoRoot), mainRepoRoot, branch, sourceSubmodules,
+    })
+    printResult({ failedAtStage, ...report, status: 'cleanup-incomplete', mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, cleanupWarning, retainedArtifacts })
     return
   }
+  releaseTaskWorktreeLease({ worktreePath: repoRoot, runId: RUN_ID })
   printResult({ failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked })
+}
+
+// Retries only final cleanup after a 'cleanup-incomplete' merge result; never re-merges or re-closes.
+function roleCleanupOnly() {
+  const repoRoot = WORKTREE
+  const mainRepoRoot = SOURCE_ROOT
+  const branch = `task-${N}`
+  const manifest = buildManifest()
+  const sourceSubmodules = manifest.repositoryManifest.occurrences
+    .filter((occurrence: any) => occurrence.parentOccurrenceId !== null)
+    .map((occurrence: any) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }))
+  try {
+    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
+    deleteTaskMergePersistence(mainRepoRoot, branch)
+    for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
+  } catch (error) {
+    const cleanupWarning = `failed final branch/worktree cleanup: ${String((error as any)?.message ?? error)}`
+    const retainedArtifacts = collectRetainedTaskArtifacts({
+      worktreePath: repoRoot, leasePath: taskWorktreeLeasePath(repoRoot), mainRepoRoot, branch, sourceSubmodules,
+    })
+    printResult({ task: N, status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts })
+    return
+  }
+  releaseTaskWorktreeLease({ worktreePath: repoRoot, runId: RUN_ID })
+  printResult({ task: N, status: 'cleaned' })
 }
 
 // ---------------------------------------------------------------------------
@@ -641,6 +673,7 @@ const ROLE_HANDLERS: Record<string, () => void> = {
   'rebase-fix': roleRebaseFix,
   'rebase-fix-verify': roleRebaseFixVerify,
   'merge': roleMerge,
+  'cleanup-only': roleCleanupOnly,
 }
 
 if (process.argv[1]?.endsWith('tackle-tasks_AgentPromptEmitter.ts')) {

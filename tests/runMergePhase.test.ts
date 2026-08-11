@@ -10,7 +10,7 @@ import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
-import { beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
+import { beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -367,6 +367,7 @@ const addBareOrigin = (root: string): string => {
 
 type PreparedPipeline = WorkflowArguments & {
     repositoryManifest: RepositoryManifest;
+    runId: string;
 };
 
 // Runs the real prepareTasks.ts CLI, so fixtures exercise the same origin-gated preparation path as production.
@@ -429,6 +430,14 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
     const fixture = makeQueueFixtureRepoV2(taskNumber, ["taskfile.txt"]);
     const { root, worktreePath, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
+    // C86-30: preparation must never write brief/plan artifacts into the source checkout.
+    const sourceBriefFile = join(root, "plans", `brief-${taskNumber}.md`);
+    const sourcePlanFile = join(root, "plans", `task-${taskNumber}-plan.md`);
+    const preparedTask = prepared.groups.find((g) => g.tasks[0]!.number === taskNumber)!.tasks[0]!;
+    assert.equal(existsSync(sourceBriefFile), false, "after-prepare");
+    assert.equal(existsSync(sourcePlanFile), false, "after-prepare");
+    assert.ok(preparedTask.briefFile.startsWith(`${worktreePath}/`), "published briefFile is under the worktree");
+    assert.ok(preparedTask.planFile.startsWith(`${worktreePath}/`), "published planFile is under the worktree");
     try {
         let queue = createMergeQueue();
 
@@ -438,6 +447,10 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
             scriptedPlanImplementAgent(taskNumber, worktreePath, "taskfile.txt", () => writeFileSync(join(worktreePath, "taskfile.txt"), "task change\n")),
         );
         trace.push("notification:plan+implement");
+        // C86-30: plan+implement wrote the brief where it's needed — the worktree, not the source.
+        assert.equal(existsSync(sourceBriefFile), false, "during-plan");
+        assert.equal(existsSync(sourcePlanFile), false, "during-plan");
+        assert.equal(existsSync(join(worktreePath, "plans", `brief-${taskNumber}.md`)), true, "during-plan");
         const consumedPlan = consumeTaskWorkflowResult(queue, planEnvelope);
         assert.equal(consumedPlan.kind, "approval");
         if (consumedPlan.kind !== "approval") return assert.fail("expected approval result");
@@ -446,7 +459,7 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         trace.push("gate:approve");
         queue = enqueueApprovedTask(queue, consumedPlan.approval.taskNumber);
 
-        let action = nextQueueAction(queue, { any: false, tail: false });
+        let action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "rebase-test" } });
         const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest, sourceRoot: root });
         trace.push("notification:rebase-test");
@@ -456,9 +469,9 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         assert.equal(consumedRebaseTest.status, "green");
         queue = consumedRebaseTest.queue;
 
-        action = nextQueueAction(queue, { any: false, tail: false });
+        action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "merge" } });
-        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root });
+        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root, runId: prepared.runId });
         trace.push("notification:merge");
         const consumedMerge = consumeTaskWorkflowResult(queue, mergeResult);
         assert.equal(consumedMerge.kind, "queue");
@@ -467,10 +480,10 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         queue = consumedMerge.queue;
 
         assert.deepEqual(queue.merged, [taskNumber]);
-        assert.equal(nextQueueAction(queue, { any: false, tail: false }).kind, "report");
+        assert.equal(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }).kind, "report");
         // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
         assert.equal(shouldEndQueue(queue, false), "done");
-        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] });
 
         const archived = readCompleted(root);
         assert.deepEqual(archived.map((t) => t.taskNumber), [taskNumber]);
@@ -482,6 +495,9 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         assert.equal(git(root, "show", "main:taskfile.txt"), "task change");
         assert.equal(existsSync(worktreePath), false);
         assert.throws(() => git(root, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));
+        // C86-30: the worktree-local brief/plan never existed in source and are gone with the worktree.
+        assert.equal(existsSync(sourceBriefFile), false, "after-cleanup");
+        assert.equal(existsSync(sourcePlanFile), false, "after-cleanup");
         trace.push("cleanup");
 
         assert.deepEqual(trace, ["prepare", "notification:plan+implement", "gate:approve", "notification:rebase-test", "notification:merge", "close", "cleanup"]);
@@ -519,7 +535,7 @@ test("a do-not-approve gate never enqueues or launches tail stages", async () =>
         if (consumed.kind !== "approval") return assert.fail("expected approval notification");
 
         // gate rejects: queue is never told to enqueue the approved task.
-        const action = nextQueueAction(queue, { any: false, tail: false });
+        const action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         if (action.kind === "launch") tailLaunches += 1;
         assert.deepEqual(action, { kind: "report", endState: "done" });
         assert.equal(tailLaunches, 0);
@@ -541,23 +557,23 @@ test('failed A waits for outstanding B, then retries only after B advances the l
         status: 'failure', reason: 'A conflict',
     });
 
-    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false }), { kind: 'wait' });
+    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false, total: 1, capacity: 6 }), { kind: 'wait' });
     assert.equal(queue.carryover[0]!.lapsAttempted, 1);
     assert.deepEqual(attemptedTips, ['tip-before-b']);
 
     queue = enqueueApprovedTask(queue, 2);
-    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false }), {
+    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }), {
         kind: 'launch', step: { taskNumber: 2, stage: 'rebase-test' },
     });
     queue = recordStageOutcome(queue, 2, 'rebase-test', { status: 'success' });
     queue = recordStageOutcome(queue, 2, 'merge', { status: 'success' });
     sourceTip = 'tip-after-b';
 
-    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false }), {
+    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }), {
         kind: 'begin-next-lap',
     });
     queue = beginNextLap(queue);
-    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false }), {
+    assert.deepEqual(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }), {
         kind: 'launch', step: { taskNumber: 1, stage: 'rebase-test' },
     });
     attemptedTips.push(sourceTip);
@@ -572,11 +588,178 @@ test('failed A waits for outstanding B, then retries only after B advances the l
 test('nextQueueAction refuses to launch a rebase-test or merge while a tail workflow is outstanding, even for an unrelated approved task', () => {
     let queue = createMergeQueue();
     queue = enqueueApprovedTask(queue, 1);
-    assert.deepEqual(nextQueueAction(queue, { any: true, tail: true }), { kind: 'wait' });
+    assert.deepEqual(nextQueueAction(queue, { any: true, tail: true, total: 1, capacity: 6 }), { kind: 'wait' });
     // An outstanding plan+implement (any: true, tail: false) is not a tail workflow and must not block launch.
-    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false }), {
+    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false, total: 1, capacity: 6 }), {
         kind: 'launch', step: { taskNumber: 1, stage: 'rebase-test' },
     });
+});
+
+// C86-24: tail-only nextQueueAction still permits a 7th launch if something else fills the slot.
+test('nextQueueAction alone does not know about a competing plan launch', () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 1);
+    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false, total: 6, capacity: 6 }), { kind: 'wait' });
+    assert.deepEqual(nextQueueAction(queue, { any: true, tail: false, total: 5, capacity: 6 }), {
+        kind: 'launch', step: { taskNumber: 1, stage: 'rebase-test' },
+    });
+});
+
+// C86-24: one selector for every launch kind assigns a freed slot exactly once.
+test('nextSchedulerAction assigns a freed slot once when plan and tail are both ready, tail wins', () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 1);
+    const ready = { nextPlanTask: 2 };
+    // Six plan/implement fill the shared ceiling: neither the tail nor the plan may launch.
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: true, tail: false, total: 6, capacity: 6 }), { kind: 'wait' });
+    // A slot frees: exactly one thing launches, and it's the tail (it moves the shared tip).
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: true, tail: false, total: 5, capacity: 6 }), {
+        kind: 'launch-tail', step: { taskNumber: 1, stage: 'rebase-test' },
+    });
+});
+
+test('nextSchedulerAction launches the ready plan when no tail is ready', () => {
+    const queue = createMergeQueue();
+    const ready = { nextPlanTask: 2 };
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: true, tail: false, total: 5, capacity: 6 }), {
+        kind: 'launch-plan', taskNumber: 2,
+    });
+});
+
+// A tail already outstanding is serialized, but a ready plan may still launch alongside it.
+test('nextSchedulerAction lets a ready plan launch alongside an already-outstanding tail', () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 1);
+    const ready = { nextPlanTask: 2 };
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: true, tail: true, total: 4, capacity: 6 }), {
+        kind: 'launch-plan', taskNumber: 2,
+    });
+});
+
+test('nextSchedulerAction waits when nothing is ready to launch but a plan is still pending capacity', () => {
+    const queue = createMergeQueue();
+    const ready = { nextPlanTask: 2 };
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: true, tail: false, total: 6, capacity: 6 }), { kind: 'wait' });
+});
+
+test('nextSchedulerAction rolls the next lap once nothing is ready and the lap is done', () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 1);
+    queue = enqueueApprovedTask(queue, 2);
+    // Task 1 fails (goes to carryover); task 2 merges, so the lap isn't a zero-merge "stuck" lap.
+    queue = recordStageOutcome(queue, 1, 'rebase-test', { status: 'failure', reason: 'x' });
+    queue = recordStageOutcome(queue, 2, 'rebase-test', { status: 'success' });
+    queue = recordStageOutcome(queue, 2, 'merge', { status: 'success' });
+    const ready = { nextPlanTask: null };
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: false, tail: false, total: 0, capacity: 6 }), {
+        kind: 'begin-next-lap',
+    });
+});
+
+test('nextSchedulerAction reports once nothing is ready and the queue is done', () => {
+    const queue = createMergeQueue();
+    const ready = { nextPlanTask: null };
+    assert.deepEqual(nextSchedulerAction(queue, ready, { any: false, tail: false, total: 0, capacity: 6 }), {
+        kind: 'report', endState: 'done',
+    });
+});
+
+// C86-24: an executable harness driving nextSchedulerAction through a real launch/completion sequence.
+const makeSchedulerHarness = (taskNumbers: number[], capacity: number) => {
+    let queue = createMergeQueue();
+    let remainingPlans = [...taskNumbers];
+    let outstanding = { any: false, tail: false, total: 0, capacity };
+    let peakOutstanding = 0;
+    let maxConcurrentTails = 0;
+    const launches: string[] = [];
+
+    const addTotal = (delta: number, tail: boolean) => {
+        const total = outstanding.total + delta;
+        outstanding = { any: total > 0, tail, total, capacity };
+        peakOutstanding = Math.max(peakOutstanding, total);
+    };
+
+    const dispatchUntilWait = () => {
+        while (true) {
+            const ready = { nextPlanTask: remainingPlans[0] ?? null };
+            const action = nextSchedulerAction(queue, ready, outstanding);
+            if (action.kind === 'launch-plan') {
+                assert.equal(remainingPlans[0], action.taskNumber, 'launched a plan task out of order');
+                remainingPlans = remainingPlans.slice(1);
+                addTotal(1, outstanding.tail);
+                launches.push(`plan:${action.taskNumber}`);
+                continue;
+            }
+            if (action.kind === 'launch-tail') {
+                assert.equal(outstanding.tail, false, 'launched a second tail while one was already outstanding');
+                addTotal(1, true);
+                maxConcurrentTails = Math.max(maxConcurrentTails, 1);
+                launches.push(`tail:${action.step.taskNumber}:${action.step.stage}`);
+                continue;
+            }
+            return action;
+        }
+    };
+
+    return {
+        dispatchUntilWait,
+        approve: (taskNumber: number) => { queue = enqueueApprovedTask(queue, taskNumber); },
+        completePlan: () => addTotal(-1, outstanding.tail),
+        completeTail: (taskNumber: number, stage: 'rebase-test' | 'merge') => {
+            queue = recordStageOutcome(queue, taskNumber, stage, { status: 'success' });
+            addTotal(-1, false);
+        },
+        get peakOutstanding() { return peakOutstanding; },
+        get maxConcurrentTails() { return maxConcurrentTails; },
+        launches,
+    };
+};
+
+test('nextSchedulerAction harness: a tail approved before its plan-completion frees the slot wins the freed slot', () => {
+    const harness = makeSchedulerHarness([1, 2, 3, 4, 5, 6, 7], 6);
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches, [1, 2, 3, 4, 5, 6].map((n) => `plan:${n}`));
+    assert.equal(harness.peakOutstanding, 6);
+
+    // Production order: the approval gate runs before the completion frees task 1's slot.
+    harness.approve(1);
+    harness.completePlan();
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'tail:1:rebase-test');
+    assert.equal(harness.peakOutstanding, 6);
+
+    harness.completeTail(1, 'rebase-test');
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'tail:1:merge');
+    assert.equal(harness.maxConcurrentTails, 1);
+
+    harness.completeTail(1, 'merge');
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'plan:7');
+    assert.equal(harness.peakOutstanding, 6);
+});
+
+test('nextSchedulerAction harness: a plan-completion that frees the slot before approval lets the next plan launch instead, and the late tail then serializes', () => {
+    const harness = makeSchedulerHarness([1, 2, 3, 4, 5, 6, 7], 6);
+    harness.dispatchUntilWait();
+
+    // Reversed order: dispatch sees the freed slot before task 1's approval is enqueued, so plan 7 fills it.
+    harness.completePlan();
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'plan:7');
+    assert.equal(harness.peakOutstanding, 6);
+
+    // Approval now arrives, but capacity is already full again: the tail must wait.
+    harness.approve(1);
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'plan:7');
+
+    // Task 2 completing frees exactly one slot, which the now-ready tail claims.
+    harness.completePlan();
+    assert.deepEqual(harness.dispatchUntilWait(), { kind: 'wait' });
+    assert.deepEqual(harness.launches.at(-1), 'tail:1:rebase-test');
+    assert.equal(harness.maxConcurrentTails, 1);
+    assert.equal(harness.peakOutstanding, 6);
 });
 
 // Two worktrees on one root, so B's real merge advances the tip A rebases onto next.
@@ -600,7 +783,8 @@ const makeQueueFixtureRepoWithTwoTasks = (taskA: number, taskB: number) => {
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
 
     const makeWorktree = (taskNumber: number) => {
-        const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: "unknown" });
+        const runId = `run-${taskNumber}`;
+        const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: "unknown" }, runId);
         const operationBranch = currentBranchName(worktreePath);
         mkdirSync(join(worktreePath, "plans"), { recursive: true });
         symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
@@ -608,7 +792,7 @@ const makeQueueFixtureRepoWithTwoTasks = (taskA: number, taskB: number) => {
         writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
         const manifest = loadRepositoryManifest(root);
         const repositoryManifest: RepositoryManifest = { ...manifest, occurrences: attachOperationBranch(manifest.occurrences, operationBranch) };
-        return { worktreePath, repositoryManifest };
+        return { worktreePath, repositoryManifest, runId };
     };
 
     return { root, taskA: makeWorktree(taskA), taskB: makeWorktree(taskB) };
@@ -634,7 +818,7 @@ test("integration: A's second real rebase-test lands B's merged commit as an anc
         // B runs to completion for real: rebase-test then merge.
         const bRebase = await runTaskWorkflowStage(fixtureB.worktreePath, { task: taskB, stage: "rebase-test", repositoryManifest: fixtureB.repositoryManifest, sourceRoot: root });
         assert.equal((bRebase.results[0] as { status: string }).status, "green");
-        const bMerge = await runTaskWorkflowStage(fixtureB.worktreePath, { task: taskB, stage: "merge", repositoryManifest: fixtureB.repositoryManifest, sourceRoot: root });
+        const bMerge = await runTaskWorkflowStage(fixtureB.worktreePath, { task: taskB, stage: "merge", repositoryManifest: fixtureB.repositoryManifest, sourceRoot: root, runId: fixtureB.runId });
         assert.equal((bMerge.results[0] as { status: string }).status, "merged");
 
         const mainAfterB = git(root, "rev-parse", "main");
@@ -799,7 +983,7 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         trace.push("gate:approve");
         queue = enqueueApprovedTask(queue, consumedPlan.approval.taskNumber);
 
-        let action = nextQueueAction(queue, { any: false, tail: false });
+        let action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "rebase-test" } });
         const rebaseTestResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "rebase-test", repositoryManifest, sourceRoot: root });
         trace.push("notification:rebase-test");
@@ -809,9 +993,9 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         assert.equal(consumedRebaseTest.status, "green");
         queue = consumedRebaseTest.queue;
 
-        action = nextQueueAction(queue, { any: false, tail: false });
+        action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "merge" } });
-        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root });
+        const mergeResult = await runTaskWorkflowStage(worktreePath, { task: taskNumber, stage: "merge", repositoryManifest, sourceRoot: root, runId: prepared.runId });
         trace.push("notification:merge");
         const consumedMerge = consumeTaskWorkflowResult(queue, mergeResult);
         assert.equal(consumedMerge.kind, "queue");
@@ -820,10 +1004,10 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         queue = consumedMerge.queue;
 
         assert.deepEqual(queue.merged, [taskNumber]);
-        assert.equal(nextQueueAction(queue, { any: false, tail: false }).kind, "report");
+        assert.equal(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }).kind, "report");
         // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
         assert.equal(shouldEndQueue(queue, false), "done");
-        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [] });
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] });
 
         const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
         assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber]);
@@ -877,7 +1061,7 @@ test("test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict
         queue = enqueueApprovedTask(queue, consumedPlan.approval.taskNumber);
 
         // Prove the serial tail reached a green rebase-test before the source-side conflict is introduced.
-        let action = nextQueueAction(queue, { any: false, tail: false });
+        let action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "rebase-test" } });
         const rebaseTestResult = await runTaskWorkflowStage(
             worktreePath,
@@ -895,7 +1079,7 @@ test("test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict
         git(mainVendorPath, "add", "seed.txt");
         git(mainVendorPath, "commit", "-q", "-m", "main edit after green rebase-test");
 
-        action = nextQueueAction(queue, { any: false, tail: false });
+        action = nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 });
         assert.deepEqual(action, { kind: "launch", step: { taskNumber, stage: "merge" } });
         const mergeResult = await runTaskWorkflowStage(
             worktreePath,
