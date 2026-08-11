@@ -9,7 +9,8 @@
     "Post-rewrite full npm test ran 1,289 tests: 1,288 passed and the sleep-biased C86-33 widener-wins race failed because the closer acquired the lock first.",
     "Executed the rewritten tackle-tasks.workflow.js in a VM shaped like the documented production sandbox without a dynamic-import callback; it parsed and ran to the expected unknown-stage guard, confirming that C86-18's original import defect is resolved in the working implementation.",
     "Audited the staged fixes for C86-31, C86-32, C86-33, and C86-37; 138 focused workflow, task-state race, and worktree-recovery tests passed, and an executed dynamic import in the callback-free VM harness failed with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING.",
-    "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30."
+    "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30.",
+    "Reviewed the staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit and 74 focused tests in prepareTasks.test.ts, runMergePhase.test.ts, and taskWorkflowMergeStage.test.ts passed, but the atomic batch was rejected because required scheduler interleavings, production cleanup retry, lease lifecycle/recovery, and source-artifact absence coverage remain incomplete. The eight implementation/test files were left unstaged."
   ],
   "notes": [
     {
@@ -19,6 +20,10 @@
     {
       "date": "2026-08-10T12:23:08-07:00",
       "text": "Rewrite re-audit: C86-18's dynamic-import production defect is resolved by the substantive working-tree rewrite, so it was removed. The committed HEAD does not contain that substantive rewrite; C86-34 records the resulting branch-level blocker. Existing findings that the rewrite merely moved into the emitter/workflow split remain in the issue list with updated locations."
+    },
+    {
+      "date": "2026-08-11T13:15:23-07:00",
+      "text": "C86-24, C86-28, C86-29, and C86-30 were reviewed as one atomic batch and rejected. The attempted implementation remains in the working tree but is not staged or committed; the four findings below describe the work still required on top of that attempt."
     }
   ],
   "issues": [
@@ -316,25 +321,30 @@
     },
     {
       "number": 24,
-      "title": "C86-24 — Medium: the shared six-workflow ceiling can be exceeded by the serial tail",
+      "title": "C86-24 — Medium: plan refill can still exceed the shared workflow ceiling after a tail takes the freed slot",
       "class": "medium",
-      "cause": "Initial plan/implement launches maintain a six-entry sliding window. When one completes, the instructions refill the freed slot. Approval independently enqueues tail work, and the queue launch path checks only whether another tail is outstanding, not total outstandingEntries size. A valid interleaving is six planners, one completion, a replacement planner, then an approved task's rebase-test: seven workflows. Tests inspect the sliding-window and tail text separately but never model their shared capacity.",
+      "cause": "The attempted implementation adds total and capacity to nextQueueAction and prevents a tail launch when outstandingEntries is already full. Initial plan/implement launches and refills still happen directly from prose outside that selector. If a plan finishes, an approval's tail takes the freed slot, and the sliding-window instruction then refills the completed plan, the count reaches seven. The new test calls only the tail selector at totals six and five; it never executes the independent plan refill or defines which ready launch owns a freed slot.",
       "locations": [
         {
           "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
-          "lines": "66-74, 142-160, 173-191",
-          "role": "Plan refill and tail launch use separate capacity decisions."
+          "lines": "66-77, 176-194",
+          "role": "Plan launches/refills remain direct sliding-window actions while only tail launches call the capacity-aware selector."
         },
         {
-          "path": "tests/tackle-tasks_SkillBodyEmitter.test.ts",
-          "lines": "82-93, 101-140",
-          "role": "Tests inspect each instruction separately and miss the combined interleaving."
+          "path": "scripts/runMergePhase.ts",
+          "lines": "107-126",
+          "role": "nextQueueAction applies total/capacity only when a tail queue step exists and has no representation of a ready plan launch."
+        },
+        {
+          "path": "tests/runMergePhase.test.ts",
+          "lines": "572-592",
+          "role": "The new test directly probes tail launch at two counts and does not drive the plan-refill/tail-launch race or tail-completion allocation."
         }
       ],
-      "provingTest": "Drive an executable scheduler through six plan launches, one completion, one plan refill, then approval and rebase launch. Record every launch and completion. The current instructions permit seven simultaneous workflows. The corrected scheduler must never exceed TASKS_PER_COMMAND while still enqueueing approvals immediately and preserving one-at-a-time tail execution.",
+      "provingTest": "Drive one executable scheduler through six plan launches and a plan completion, then make both a queued approval tail and the next unlaunched plan ready before dispatch. Exercise both event orders and the corresponding tail-completion order while recording every launch and completion. The attempted implementation can launch the tail at total five and then independently refill the plan to seven. The corrected scheduler must choose one launch for the freed slot, never exceed maxConcurrency, enqueue approvals immediately, and keep tail execution serial.",
       "suggestedFixApproach": [
-        "Put all launches behind one capacity-aware action selector. nextQueueAction, or its caller's executable state, should receive total outstanding count and return wait when it equals the cap.",
-        "Define whether a ready tail or a new plan receives the freed slot and test both plan-completion and tail-completion interleavings."
+        "Represent both the next unlaunched plan and the next tail queue step in one capacity-aware action selector; neither the initial sliding window nor a refill may launch outside it.",
+        "Choose and document deterministic priority when both are ready, then test plan-completion, approval, and tail-completion event orders through the same executable scheduler."
       ],
       "resolvedBoundaryReference": [
         {
@@ -348,23 +358,23 @@
       ],
       "acceptanceCriteria": [
         "One capacity decision covers every plan/implement, rebase-test, and merge launch.",
-        "No enqueue/completion interleaving exceeds maxConcurrency, while tail execution remains serial.",
-        "Executable tests cover plan-completion and tail-completion slot allocation and approvals remain immediately enqueueable."
+        "A freed slot is assigned exactly once when a plan refill and an approved tail are both ready; no event order exceeds maxConcurrency and tail execution remains serial.",
+        "Executable scheduler tests cover plan-completion, approval, and tail-completion slot allocation while approvals remain immediately enqueueable."
       ],
       "resolvedBoundaryExample": [
         {
           "file": "scripts/runMergePhase.ts",
-          "code": "const step = nextQueueStep(queue)\nif (step) return outstanding.tail ? { kind: 'wait' } : { kind: 'launch', step }"
+          "code": "const step = nextQueueStep(queue)\nif (step) return (outstanding.tail || outstanding.total >= outstanding.capacity)\n  ? { kind: 'wait' }\n  : { kind: 'launch', step }"
         }
       ],
       "remainingMinimalExample": [
         {
           "file": "scripts/runMergePhase.ts",
-          "code": "export type OutstandingWorkflowState = { any: boolean; tail: boolean; total: number; capacity: number }\nif (step && (outstanding.tail || outstanding.total >= outstanding.capacity)) return { kind: 'wait' }"
+          "code": "type ReadyLaunches = { nextPlanTask?: number; nextTailStep?: QueueStep }\nfunction nextSchedulerAction(ready: ReadyLaunches, outstanding: OutstandingWorkflowState) {\n  if (outstanding.total >= outstanding.capacity) return { kind: 'wait' }\n  // Apply one documented priority and return exactly one launch.\n}"
         },
         {
           "file": "tests/runMergePhase.test.ts",
-          "code": "test('shared plan and tail launches never exceed capacity', () => { /* six plans, completion/refill, approval */ })"
+          "code": "test('one selector assigns a freed slot once when plan and tail are ready', () => { /* six plans; completion; approval; assert peak === capacity */ })\ntest('tail completion also allocates at most one next launch', () => { /* reverse event order */ })"
         }
       ],
       "existingOpenTask": "No matching open task."
@@ -552,31 +562,36 @@
     },
     {
       "number": 28,
-      "title": "C86-28 — Medium: failed final worktree cleanup is silently treated as a clean merge",
+      "title": "C86-28 — Medium: cleanup failure is reported but has no production cleanup-only retry",
       "class": "medium",
-      "cause": "After close, the workflow deletes merge persistence refs before attempting worktree and branch cleanup. A cleanup failure returns inherited status merged plus cleanupWarning. consumeTaskWorkflowResult treats it as unconditional success and drops the warning, and buildMergeReport has no cleanup-incomplete section. The existing locked-worktree test positively asserts an empty final report, enshrining silent residue.",
+      "cause": "The attempted implementation now retains persistence until cleanup succeeds and carries cleanup-incomplete through queue reporting. It does not provide a production action or workflow role that consumes that record and retries cleanup. The locked-worktree test unlocks and manually calls low-level cleanup functions, never releases the task worktree lease, never clears queue.cleanupIncomplete, and never proves the emitted orchestrator can invoke the retry. The skill text also reports only unmerged and mergedNotClosed outcomes, so the new cleanupIncomplete report is not handed to the user as actionable work.",
       "locations": [
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "611-620",
-          "role": "Persistence is deleted before final cleanup and cleanup failure retains merged status."
+          "lines": "609-628",
+          "role": "The merge role emits cleanup-incomplete and releases the lease only on immediate success, but exposes no cleanup-only retry role."
         },
         {
           "path": "scripts/runMergePhase.ts",
-          "lines": "156-173, 236-257",
-          "role": "Queue consumption and reporting have no cleanup-incomplete state."
+          "lines": "151-190, 255-280",
+          "role": "The queue records cleanupIncomplete permanently but has no retry action or transition that clears a successfully cleaned record."
+        },
+        {
+          "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "lines": "113-116, 187-198",
+          "role": "The emitted driver neither handles cleanup-incomplete nor reports that section to the user."
         },
         {
           "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "290-319",
-          "role": "Test observes cleanup residue but expects the final report to be empty."
+          "lines": "291-340",
+          "role": "The retry is performed manually with low-level primitives and omits lease release and queue/report clearing."
         }
       ],
-      "provingTest": "Force root worktree or branch deletion to fail after a successful merge and close. Consume the real envelope and build the report. The current report is empty although task artifacts remain and recovery refs are gone. The corrected report must name the residue; after unlocking, an idempotent retry must remove all refs and worktrees and clear the warning.",
+      "provingTest": "Force worktree deletion to fail after merge and close, consume the real envelope, and assert the report names the actual retained worktree, branches, persistence refs, and lease. Unlock it and invoke the production cleanup-only entry point advertised by the emitted workflow. The attempted implementation has no such entry point. A correct retry removes every artifact, deletes persistence and the lease last, removes the cleanupIncomplete queue record, produces an empty follow-up warning report, and remains idempotent when invoked again.",
       "suggestedFixApproach": [
-        "Retain merge persistence until worktree and branch cleanup succeeds.",
-        "Carry a cleanupIncomplete record through the workflow envelope, queue, and final report, including task number, warning, and retained artifact paths.",
-        "Provide an idempotent cleanup-only retry that deletes persistence last."
+        "Keep the new persistence ordering and cleanupIncomplete reporting, but add an explicit cleanup-only workflow role/action that receives the retained task context and cannot re-run merge or close.",
+        "Have a successful retry remove worktrees and branches across occurrences, delete persistence and the owner lease last, and transition the queue by removing that task's cleanupIncomplete record.",
+        "Teach the emitted orchestrator to report and invoke this action, and derive retainedArtifacts from actual remaining paths/refs instead of a partial static list."
       ],
       "resolvedBoundaryReference": [
         {
@@ -591,47 +606,59 @@
       "acceptanceCriteria": [
         "Merge persistence remains until worktree and branch cleanup succeeds.",
         "Cleanup failure creates a reported cleanupIncomplete record with warning and retained artifact paths.",
-        "An idempotent cleanup-only retry deletes persistence last, and the locked-worktree test expects a nonempty report."
+        "The emitted production workflow can invoke an idempotent cleanup-only retry without re-merging or re-closing the task.",
+        "A successful retry removes all occurrence artifacts, persistence, and the lease in safe order and clears cleanupIncomplete from the next report."
       ],
       "resolvedBoundaryExample": [
         {
-          "file": "scripts/runMergePhase.ts",
-          "code": "export type MergedNotClosedTask = { taskNumber: number; commitHash: string; lastFailure: string }\nreturn { unmerged: [...ceilingFailures, ...queueExitFailures], mergedNotClosed: queue.mergedNotClosed }"
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)\ndeleteTaskMergePersistence(mainRepoRoot, branch)\nfor (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)"
         }
       ],
       "remainingMinimalExample": [
         {
           "file": "scripts/runMergePhase.ts",
-          "code": "export type CleanupIncompleteTask = { taskNumber: number; warning: string; retainedArtifacts: string[] }\nexport type MergeQueue = { ...; cleanupIncomplete: CleanupIncompleteTask[] }\nexport type MergeReport = { ...; cleanupIncomplete: CleanupIncompleteTask[] }"
+          "code": "export function recordCleanupRetrySucceeded(queue, taskNumber) {\n  return { ...queue, cleanupIncomplete: queue.cleanupIncomplete.filter((item) => item.taskNumber !== taskNumber) }\n}"
         },
         {
           "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "try { removeTaskWorktreeAndBranches(...); deleteAllTaskMergePersistence(...) }\ncatch (error) { printResult({ ...report, status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts }) }"
+          "code": "function roleCleanupOnly() {\n  removeTaskWorktreeAndBranches(...)\n  deleteAllTaskMergePersistence(...)\n  releaseTaskWorktreeLease(repoRoot)\n  printResult({ status: 'cleaned', task: N })\n}"
+        },
+        {
+          "file": "tests/taskWorkflowMergeStage.test.ts",
+          "code": "const retry = await runCleanupOnlyStage(...)\nqueue = consumeCleanupRetry(queue, retry)\nassert.deepEqual(buildMergeReport(queue).cleanupIncomplete, [])"
         }
       ],
       "existingOpenTask": "No matching open task."
     },
     {
       "number": 29,
-      "title": "C86-29 — Medium: two live invocations of the same task can share and reset one clean worktree",
+      "title": "C86-29 — Medium: the new worktree lease is not lifecycle-safe or explicitly recoverable",
       "class": "medium",
-      "cause": "createWorktreeForGroup treats a clean worktree whose HEAD equals or precedes source as reusable, then force-resets its task branch. It has no live-run ownership marker. Two sessions that prepare task N before either workflow writes its brief both receive the same directory and branch. The existing test codifies immediate clean reuse instead of simultaneous ownership.",
+      "cause": "The attempted implementation atomically creates a per-worktree lease before reset or creation, so a sequential second call is rejected. Acquisition is not wrapped around preparation cleanup: checkout, worktree add, submodule initialization, or branch creation failures leave an orphan lease. The stored runId is generated inside the lease rather than using the workflow's runId, and releaseTaskWorktreeLease is an unconditional unlink with no owner check or retained-work verification. Its test calls createWorktreeForGroup twice in one process without a barrier, so it does not prove two live preparation processes cannot race, and there is no safe explicit stale-lease recovery operation.",
       "locations": [
         {
           "path": "scripts/prepareTasks.ts",
-          "lines": "138-168",
-          "role": "Clean Git state is treated as proof that the worktree has no live owner."
+          "lines": "153-214",
+          "role": "Lease acquisition is atomic, but failure cleanup, ownership-checked release, actual run identity, and safe stale recovery are absent."
+        },
+        {
+          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "lines": "609-628",
+          "role": "Only the immediate successful merge path releases the lease; no recovery path safely releases it after failed preparation or cleanup."
         },
         {
           "path": "tests/prepareTasks.test.ts",
-          "lines": "78-84",
-          "role": "Test endorses immediate clean reuse and does not model concurrent sessions."
+          "lines": "89-99, 131-138",
+          "role": "The ownership test is sequential and same-process, while the existing preparation-failure case does not assert that its acquired lease is released."
         }
       ],
-      "provingTest": "Start two real prepare processes for the same task behind a barrier. Exactly one should acquire ownership and the other should fail without resetting or modifying the first run's checkout. Both currently can succeed if they enter before either produces retained work.",
+      "provingTest": "Start two real prepare processes for the same task behind a barrier immediately before exclusive acquisition. Exactly one must acquire the lease carrying its real runId, and the loser must fail without resetting or sharing the checkout. Separately force worktree-add and submodule-initialization failures and assert their lease is released. Finally create a stale lease plus retained work: ordinary preparation must refuse it, and the explicit recovery operation must preserve/report the work and require matching ownership or deliberate takeover before releasing the lease.",
       "suggestedFixApproach": [
-        "Acquire an exclusive per-task owner lease atomically during preparation and release it only during final successful cleanup.",
-        "Include run or session identity and define an explicit stale-lease recovery operation that first verifies and preserves retained work. Clean Git state alone must not imply that no live process owns the worktree."
+        "Keep atomic wx acquisition, but pass the actual workflow run/session identity into it and return an owner token used by every release.",
+        "Wrap all post-acquisition preparation in try/catch/finally so a failed preparation releases only its own lease, while a successful preparation transfers lease ownership to final cleanup.",
+        "Add an explicit stale-lease recovery operation that reads identity, checks owner liveness as appropriate, inspects retained work, and preserves or reports that work before any deliberate takeover.",
+        "Replace the sequential unit test with deterministic child processes synchronized at an acquisition barrier, and cover preparation-failure cleanup and stale recovery."
       ],
       "resolvedBoundaryReference": [
         {
@@ -646,53 +673,48 @@
       "acceptanceCriteria": [
         "Preparation atomically acquires an exclusive per-task live-run lease before resetting or creating the worktree.",
         "A concurrent preparation for the same task fails without resetting, modifying, or sharing the first run's checkout.",
-        "The lease records run/session identity and is released only after successful final cleanup.",
-        "Stale-lease recovery is explicit and preserves retained work; real-process tests deterministically prove single ownership."
+        "The lease records the actual run/session identity, ownership-checked release occurs after successful final cleanup, and failed preparation does not leave an orphan lease.",
+        "Stale-lease recovery is explicit and preserves retained work; barrier-synchronized real-process tests deterministically prove single ownership and recovery behavior."
       ],
       "resolvedBoundaryExample": [
         {
           "file": "scripts/prepareTasks.ts",
-          "code": "if (existsSync(worktreePath)) {\n  if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {\n    throw new Error(`worktree at ${worktreePath} holds retained work from a previous run`)\n  }\n  // only then force-reset the reusable checkout\n}"
+          "code": "const fd = openSync(leasePath, 'wx', 0o600)\nwriteFileSync(fd, JSON.stringify({ pid: process.pid, runId: generateRunId(), createdAt: Date.now() }))"
         }
       ],
       "remainingMinimalExample": [
         {
           "file": "scripts/prepareTasks.ts",
-          "code": "const lease = acquireTaskWorktreeLease(worktreePath, { runId, pid: process.pid }) // open(..., 'wx')\ntry {\n  prepareOrRecoverWorktree(repoRoot, worktreePath, branchName)\n  return { worktreePath, leaseId: lease.id }\n} catch (error) {\n  releaseTaskWorktreeLease(lease)\n  throw error\n}\n// Successful final cleanup releases the lease."
+          "code": "const lease = acquireTaskWorktreeLease(worktreePath, { runId, pid: process.pid })\ntry {\n  prepareOrRecoverWorktree(repoRoot, worktreePath, branchName)\n  return { worktreePath, lease }\n} catch (error) {\n  releaseTaskWorktreeLease(lease) // verifies owner token\n  throw error\n}\n// Explicit recoverStaleTaskWorktreeLease inspects retained work before takeover."
         },
         {
           "file": "tests/prepareTasks.test.ts",
-          "code": "test('two live prepare processes cannot acquire the same task worktree', async () => { /* first acknowledges lease; second fails without reset */ })"
+          "code": "test('two barrier-synchronized prepare processes have one owner', async () => { /* assert one success, one refusal, unchanged winner checkout */ })\ntest('failed preparation releases only its lease', () => { /* worktree add and submodule init failures */ })\ntest('stale recovery preserves retained work', () => { /* explicit takeover */ })"
         }
       ],
       "existingOpenTask": "Exact match: open task 104 requests a live ownership signal and rejection of concurrent same-task sessions."
     },
     {
       "number": 30,
-      "title": "C86-30 — Medium: preparation writes task briefs into the canonical source checkout and never cleans them",
-      "class": "medium",
-      "cause": "The CLI writes every selected brief under the source checkout before creating task worktrees, and buildWorkflowArguments publishes canonical brief and plan paths. The workflow independently regenerates the brief inside the worktree and cleanup removes only the worktree copy. This produces visible untracked plans/brief-*.md residue after tackle-tasks runs.",
+      "title": "C86-30 — Low test gap: worktree-local transient artifact changes lack production-shaped source-absence coverage",
+      "class": "low",
+      "cause": "The attempted implementation removes the CLI's canonical writeTaskBriefFile loop and publishes briefFile and planFile beneath each task worktree, which addresses the known production write path. No regression drives the real preparation CLI and lifecycle while asserting that canonical plans/brief-N.md and task-N-plan.md are absent before, during, and after execution. Existing path tests accept any matching suffix, and the production-shaped success test never checks canonical artifact absence, so the fix can regress without detection.",
       "locations": [
         {
-          "path": "scripts/prepareTasks.ts",
-          "lines": "195-205, 243",
-          "role": "Preparation publishes canonical artifact paths and writes the brief into source."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "62-76, 548-560",
-          "role": "Runtime creates and removes only the task-worktree copy."
+          "path": "tests/prepareTasks.test.ts",
+          "lines": "140-150",
+          "role": "Workflow-argument coverage checks only filename suffixes and would accept paths rooted in the canonical source checkout."
         },
         {
           "path": "tests/runMergePhase.test.ts",
           "lines": "426-490",
-          "role": "Production-shaped success test does not assert source artifact absence."
+          "role": "The production-shaped success lifecycle does not assert canonical absence or worktree-only presence at any phase."
         }
       ],
-      "provingTest": "Run the real preparation CLI and a successful task lifecycle. Assert that neither plans/brief-N.md nor a generated empty plan exists in the canonical source checkout before, during, or after the workflow, and that the files exist only in the task worktree when needed. Adding the source-absence assertion to the current production-shaped test fails.",
+      "provingTest": "Run the real preparation CLI and a successful task lifecycle. Assert that canonical plans/brief-N.md and plans/task-N-plan.md are absent immediately after preparation, after plan loading creates worktree-local artifacts, and after merge cleanup. Assert the published absolute paths are under the private worktree, the brief and plan exist there only when needed, and successful cleanup removes them. The attempted implementation has no test making these observations.",
       "suggestedFixApproach": [
-        "Remove the source writeTaskBriefFile loop.",
-        "Create each worktree first, generate its brief there or let loadPreparedTask do so, and publish that worktree's absolute briefFile and planFile paths in group arguments instead of paths under repoRoot."
+        "Keep the worktree-rooted production changes and add a production-shaped regression that invokes the real preparation CLI rather than only buildWorkflowArguments.",
+        "Assert canonical absence and worktree-local lifecycle at each phase, and strengthen argument assertions to prove the paths are absolute descendants of the matching group worktree."
       ],
       "resolvedBoundaryReference": [
         {
@@ -705,10 +727,9 @@
         }
       ],
       "acceptanceCriteria": [
-        "Preparation never writes brief-N.md or an empty plan into the canonical source checkout.",
-        "Workflow arguments publish absolute brief and plan paths under the task's private worktree.",
-        "Transient artifacts exist only in the worktree when needed and are removed by successful cleanup.",
-        "Production-shaped lifecycle tests assert source artifact absence before, during, and after the workflow."
+        "A real preparation invocation publishes absolute brief and plan paths beneath the matching private worktree.",
+        "Production-shaped lifecycle coverage asserts canonical brief and plan absence after preparation, during plan/implement, and after successful cleanup.",
+        "The same coverage proves transient artifacts exist only in the worktree when needed and are removed by successful cleanup."
       ],
       "resolvedBoundaryExample": [
         {
@@ -718,12 +739,8 @@
       ],
       "remainingMinimalExample": [
         {
-          "file": "scripts/prepareTasks.ts",
-          "code": "const worktree = createWorktreeForGroup(repoRoot, group)\nreturn {\n  worktree,\n  tasks: [{\n    briefFile: writeTaskBriefFile(task, worktree),\n    planFile: join(worktree, 'plans', `task-${task.taskNumber}-plan.md`),\n  }],\n}\n// Remove: for (const task of tasks) writeTaskBriefFile(task, repoRoot)"
-        },
-        {
           "file": "tests/runMergePhase.test.ts",
-          "code": "assert.equal(existsSync(join(sourceRoot, 'plans', `brief-${taskNumber}.md`)), false)"
+          "code": "for (const phase of ['after-prepare', 'during-plan', 'after-cleanup']) {\n  assert.equal(existsSync(join(sourceRoot, 'plans', `brief-${taskNumber}.md`)), false, phase)\n  assert.equal(existsSync(join(sourceRoot, 'plans', `task-${taskNumber}-plan.md`)), false, phase)\n}\nassert.ok(prepared.briefFile.startsWith(`${worktreePath}/`))"
         }
       ],
       "existingOpenTask": "Exact match: open task 105 requires transient plan and brief artifacts to stay in task worktrees and be absent from source."
