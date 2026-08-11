@@ -8,7 +8,8 @@
     "After the rewrite, npx tsc --noEmit and 152 focused preparation, task-state, workflow, queue, and nested-merge tests passed.",
     "Post-rewrite full npm test ran 1,289 tests: 1,288 passed and the sleep-biased C86-33 widener-wins race failed because the closer acquired the lock first.",
     "Executed the rewritten tackle-tasks.workflow.js in a VM shaped like the documented production sandbox without a dynamic-import callback; it parsed and ran to the expected unknown-stage guard, confirming that C86-18's original import defect is resolved in the working implementation.",
-    "Audited the staged fixes for C86-31, C86-32, C86-33, and C86-37; 138 focused workflow, task-state race, and worktree-recovery tests passed, and an executed dynamic import in the callback-free VM harness failed with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING."
+    "Audited the staged fixes for C86-31, C86-32, C86-33, and C86-37; 138 focused workflow, task-state race, and worktree-recovery tests passed, and an executed dynamic import in the callback-free VM harness failed with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING.",
+    "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30."
   ],
   "notes": [
     {
@@ -567,7 +568,7 @@
         },
         {
           "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "273-302",
+          "lines": "290-319",
           "role": "Test observes cleanup residue but expects the final report to be empty."
         }
       ],
@@ -684,7 +685,7 @@
         },
         {
           "path": "tests/runMergePhase.test.ts",
-          "lines": "406-469",
+          "lines": "426-490",
           "role": "Production-shaped success test does not assert source artifact absence."
         }
       ],
