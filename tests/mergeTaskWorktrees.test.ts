@@ -15,6 +15,7 @@ import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
 import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
 import {
     defaultMergeStepOperations,
+    findUnmergedTaskWorktrees,
     listTaskWorktrees,
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
@@ -27,6 +28,7 @@ import {
 } from "../scripts/mergeTaskWorktrees.ts";
 import type { MergeStepOperations } from "../scripts/mergeTaskWorktrees.ts";
 import { REASON_NO_TEST_CONFIGURATION } from "../scripts/testPolicy.ts";
+import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "mergeTaskWorktrees.ts");
 
@@ -1822,4 +1824,24 @@ test("test_listTaskWorktreesRecognizesATaskNWorktreeCreatedByThePreparer", () =>
     assert.equal(worktrees.length, 1);
     assert.equal(worktrees[0].branch, group.branch);
     assert.equal(basename(worktrees[0].path), basename(group.worktree));
+});
+
+test("test_findUnmergedTaskWorktreesRecoversATaskNWorktreeWithACommitAndADirtyOwnedFile", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const group = makeGroup(repoRoot, 1);
+    const sourceBranch = currentBranchName(repoRoot);
+
+    writeFileSync(join(group.worktree, "owned.ts"), "committed\n");
+    git(group.worktree, "add", "owned.ts");
+    git(group.worktree, "commit", "-q", "-m", "add owned.ts");
+    writeFileSync(join(group.worktree, "owned.ts"), "committed\ndirty\n");
+
+    const openTasks: TaskRecord[] = [{ taskNumber: 1, title: "task one", files: ["owned.ts"] }];
+    const [recovery] = findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks);
+
+    assert.equal(recovery.branch, group.branch);
+    assert.equal(recovery.unmergedCommitCount, 1);
+    assert.equal(recovery.hasUncommittedChanges, true);
+    assert.deepEqual(recovery.changedFilePaths, ["owned.ts"]);
+    assert.deepEqual(recovery.matchedTaskNumbers, [1]);
 });

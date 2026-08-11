@@ -55,10 +55,11 @@ export function closeTasks(
   closureNote: string | Record<number, string>,
   projectRoot: string = process.cwd(),
   commitHashes: string[] | Record<number, string[]> = [],
+  { onAcquired }: { onAcquired?: () => void } = {},
 ): CloseTasksResult {
   const pair = resolveTaskFiles(projectRoot);
   return withTaskStateLock(pair.tasksPath, () =>
-    closeTasksLocked(taskNumbers, closureNote, pair, commitHashes));
+    closeTasksLocked(taskNumbers, closureNote, pair, commitHashes), { onAcquired });
 }
 
 function closeTasksLocked(

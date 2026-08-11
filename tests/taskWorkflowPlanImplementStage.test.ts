@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { compileFunction, constants as vmConstants } from 'node:vm'
+import { compileFunction } from 'node:vm'
 import { buildWorkflowArguments } from '../scripts/prepareTasks.ts'
 import type { TaskRecord } from '../scripts/taskFiles.ts'
 
@@ -13,7 +13,7 @@ const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle
   .replace('export const meta', 'const meta')
 const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
 
-type AgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>
+type AgentImpl = (prompt: string, options: { label: string; phase?: string }) => Promise<unknown>
 
 type WorkflowEnvelope = {
   task: number
@@ -29,7 +29,7 @@ const runTaskWorkflowAtRealScriptPath = async (
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
   ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
   return await fn(JSON.stringify({ agentPromptEmitterPath: EMITTER_PATH, ...args }), () => {}, agentImpl)
 }
@@ -232,6 +232,62 @@ test('plan+implement rejects a planner that returns an existing plan outside the
     assert.equal(envelope.results[0]!.status, 'needs-clarification')
     assert.equal(verifierOrWorkerRan, false)
     assert.equal(existsSync(join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)), false)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+  const seenPhases: Record<string, string | undefined> = {}
+  let verifyCalls = 0
+
+  try {
+    const scriptedAgent: AgentImpl = async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        seenPhases[`plan#${Object.keys(seenPhases).filter((k) => k.startsWith('plan#')).length}`] = options.phase
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, 'plan\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        seenPhases[`verify#${verifyCalls}`] = options.phase
+        verifyCalls += 1
+        if (verifyCalls === 1) return { task: task.taskNumber, verdict: 'rejected', notes: '', reviewer: 'claude', missingFiles: ['c.ts'] }
+        if (verifyCalls === 2) return { task: task.taskNumber, verdict: 'rejected', notes: 'fix it', reviewer: 'claude', missingFiles: [] }
+        return { task: task.taskNumber, verdict: 'approved', notes: '', reviewer: 'claude', missingFiles: [] }
+      }
+      if (options.label.startsWith('applyFeedback:')) {
+        seenPhases['applyFeedback'] = options.phase
+        return {}
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    // widen-files is a driver role resolved by the real emitter, so capture its phase here instead.
+    const innerAgent = agentThatRunsRealEmitterAndScriptsJudgment(scriptedAgent)
+    const agentWithWidenFilesPhaseCapture: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('widen-files:')) seenPhases['widen-files'] = options.phase
+      return innerAgent(prompt, options)
+    }
+
+    await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentWithWidenFilesPhaseCapture)
+
+    const expectedPhase = `${task.taskNumber} Plan`
+    assert.deepEqual(Object.keys(seenPhases).sort(), ['applyFeedback', 'plan#0', 'plan#1', 'verify#0', 'verify#1', 'verify#2', 'widen-files'])
+    for (const [label, phase] of Object.entries(seenPhases)) assert.equal(phase, expectedPhase, `label ${label} used phase ${phase}`)
   } finally {
     rmSync(group.worktree, { recursive: true, force: true })
     rmSync(root, { recursive: true, force: true })

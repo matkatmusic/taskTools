@@ -61,6 +61,7 @@ export function addTaskFiles(
     taskNumbers: number[],
     paths: string[],
     sourceRoot: string,
+    { onAcquired }: { onAcquired?: () => void } = {},
 ): TaskRecord[] {
     const rejected = firstRejectedPath(paths);
     if (rejected) throw new Error(`addTaskFiles: rejected ${rejected}`);
@@ -88,7 +89,7 @@ export function addTaskFiles(
         writeJsonAtomically(pair.tasksPath, tasks);
         if (snapshot) writeJsonAtomically(argumentsPath, snapshot);
         return tasks;
-    });
+    }, { onAcquired });
 }
 
 function runAsCli(): void {

@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { compileFunction, constants as vmConstants } from 'node:vm'
+import { compileFunction } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest } from '../scripts/prepareTasks.ts'
 import { buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, enqueueApprovedTask, recordStageOutcome, type TaskWorkflowEnvelope } from '../scripts/runMergePhase.ts'
@@ -44,7 +44,7 @@ const runMergeStage = async (worktreePath: string, args: Record<string, unknown>
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
   ) as WorkflowRunner
   return await fn(
     JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: EMITTER_PATH, ...args }),
