@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { compileFunction, constants as vmConstants } from "node:vm";
+import { compileFunction } from "node:vm";
 import { skillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
@@ -224,7 +224,7 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
     ["args", "log", "agent"],
-    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js") },
   ) as TaskWorkflowRunner;
   return await fn(
     JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),

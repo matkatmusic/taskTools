@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { compileFunction, constants as vmConstants } from "node:vm";
+import { compileFunction } from "node:vm";
 import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
@@ -295,7 +295,7 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
     const fn = compileFunction(
         `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
         ["args", "log", "agent"],
-        { filename: join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js"), importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+        { filename: join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js") },
     ) as TaskWorkflowRunner;
     return await fn(
         JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),

@@ -18,7 +18,7 @@ export function taskStateLockPath(tasksPath: string): string {
 export function withTaskStateLock<T>(
     tasksPath: string,
     action: () => T,
-    { timeoutMs = DEFAULT_TIMEOUT_MS } = {},
+    { timeoutMs = DEFAULT_TIMEOUT_MS, onAcquired }: { timeoutMs?: number; onAcquired?: () => void } = {},
 ): T {
     const lockPath = taskStateLockPath(tasksPath);
     mkdirSync(dirname(lockPath), { recursive: true });
@@ -40,6 +40,7 @@ export function withTaskStateLock<T>(
     }
 
     try {
+        onAcquired?.();
         return action();
     } finally {
         closeSync(fd);

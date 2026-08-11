@@ -283,7 +283,7 @@ const runPlan = async () => {
   let preparedTask = await fetchTaskInfo()
   if (!preparedTask) throw new Error(`tackle-tasks.workflow.js: task-info returned no result for task ${N}`)
 
-  const runPlanAgent = (preamble) => retryAgent(() => agent(emitterInstruction('plan', preamble ? { preamble } : {}), { label: `plan:${N}`, phase: 'Plan', schema: PLAN_SCHEMA }))
+  const runPlanAgent = (preamble) => retryAgent(() => agent(emitterInstruction('plan', preamble ? { preamble } : {}), { label: `plan:${N}`, phase: `${N} Plan`, schema: PLAN_SCHEMA }))
 
   const result = await runPlanAgent()
   let planResult = {
@@ -299,7 +299,7 @@ const runPlan = async () => {
   planResult = await rejectPlannedWithoutExpectedPlanFile(planResult, preparedTask.planFile)
   if (planResult.status !== 'planned') return planResult
 
-  const runVerify = async () => await retryAgent(() => agent(emitterInstruction('verify'), { label: `verify:${N}`, phase: 'Plan', schema: VERIFY_SCHEMA })) ?? {
+  const runVerify = async () => await retryAgent(() => agent(emitterInstruction('verify'), { label: `verify:${N}`, phase: `${N} Plan`, schema: VERIFY_SCHEMA })) ?? {
     task: N,
     verdict: 'rejected',
     notes: 'verifier agent returned no result after 3 attempts (killed, errored, or blocked)',
@@ -308,7 +308,7 @@ const runPlan = async () => {
   }
 
   const widenFilesAndReplan = async (missingFiles) => {
-    const widened = await retryAgent(() => agent(emitterInstruction('widen-files', { missingFiles }), { label: `widen-files:${N}`, phase: 'Plan', schema: WIDEN_FILES_SCHEMA }))
+    const widened = await retryAgent(() => agent(emitterInstruction('widen-files', { missingFiles }), { label: `widen-files:${N}`, phase: `${N} Plan`, schema: WIDEN_FILES_SCHEMA }))
     if (!widened) throw new Error(`tackle-tasks.workflow.js: widen-files returned no result for task ${N}`)
     preparedTask = { ...preparedTask, files: widened.files }
     const fileRetryPreamble = `Before planning: the workflow has already widened this task's owned files in tasks.json to include ${missingFiles.join(', ')} and regenerated the brief file — you do not need to run any command for this. The owned-files list below already includes the paths you previously flagged as missing.\n\n`
@@ -334,7 +334,7 @@ const runPlan = async () => {
       await widenFilesAndReplan(verify.missingFiles)
       if (planResult.status !== 'planned') return planResult
     } else {
-      await retryAgent(() => agent(emitterInstruction('apply-feedback', { notes: verify.notes }), { label: `applyFeedback:${N}`, phase: 'Plan', schema: APPLY_FEEDBACK_SCHEMA }))
+      await retryAgent(() => agent(emitterInstruction('apply-feedback', { notes: verify.notes }), { label: `applyFeedback:${N}`, phase: `${N} Plan`, schema: APPLY_FEEDBACK_SCHEMA }))
     }
     verify = await runVerify()
     reviewRounds -= 1

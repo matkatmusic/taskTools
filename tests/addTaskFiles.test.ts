@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 
 const ADD_TASK_FILES_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts")).href;
 const CLOSE_TASKS_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "closeTasks.ts")).href;
@@ -45,6 +46,40 @@ const WAIT = new Int32Array(new SharedArrayBuffer(4));
 while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
 await setTimeout(${delayMs});
 closeTasks([${taskNumber}], ${JSON.stringify(closureNote)}, ${JSON.stringify(sourceRoot)});
+`;
+  return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+async function waitForFile(path: string): Promise<void> {
+  while (!existsSync(path)) await sleep(5);
+}
+
+// Holds the real lock, writes ackFile, then blocks until releaseFile exists.
+function spawnLockAcknowledgingChild(
+  kind: "widen" | "close",
+  sourceRoot: string,
+  taskNumber: number,
+  arg: string,
+  startFile: string,
+  ackFile: string,
+  releaseFile: string,
+): ChildProcess {
+  const importLine = kind === "widen"
+    ? `import { addTaskFiles } from ${JSON.stringify(ADD_TASK_FILES_URL)};`
+    : `import { closeTasks } from ${JSON.stringify(CLOSE_TASKS_URL)};`;
+  const callLine = kind === "widen"
+    ? `addTaskFiles([${taskNumber}], [${JSON.stringify(arg)}], ${JSON.stringify(sourceRoot)}, { onAcquired });`
+    : `closeTasks([${taskNumber}], ${JSON.stringify(arg)}, ${JSON.stringify(sourceRoot)}, [], { onAcquired });`;
+  const code = `
+import { existsSync, writeFileSync } from "node:fs";
+${importLine}
+const WAIT = new Int32Array(new SharedArrayBuffer(4));
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+function onAcquired() {
+  writeFileSync(${JSON.stringify(ackFile)}, "ack");
+  while (!existsSync(${JSON.stringify(releaseFile)})) Atomics.wait(WAIT, 0, 0, 5);
+}
+${callLine}
 `;
   return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
 }
@@ -207,10 +242,15 @@ test("widener wins the lock, closer follows: the archived task carries the widen
     JSON.stringify({ groups: [{ tasks: [{ number: 1, files: ["existing.ts"] }] }] }),
   );
   const startFile = join(root, "start");
+  const ackFile = join(root, "widen-acquired");
+  const releaseFile = join(root, "widen-release");
 
-  const widen = spawnWidenChild(root, 1, "b.ts", startFile, 0);
-  const close = spawnCloseChild(root, 1, "closed during race", startFile, 50);
+  const widen = spawnLockAcknowledgingChild("widen", root, 1, "b.ts", startFile, ackFile, releaseFile);
   writeFileSync(startFile, "go");
+  await waitForFile(ackFile); // widen provably holds the lock before closer is even started
+
+  const close = spawnCloseChild(root, 1, "closed during race", startFile);
+  writeFileSync(releaseFile, "go");
   await Promise.all([requireExitZero(widen), requireExitZero(close)]);
 
   assert.equal(readTasks(root).some((t) => t.taskNumber === 1), false);
@@ -225,10 +265,15 @@ test("closer wins the lock, widener follows: the widener exits non-zero and the 
   const root = makeProjectRoot();
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
   const startFile = join(root, "start");
+  const ackFile = join(root, "close-acquired");
+  const releaseFile = join(root, "close-release");
 
-  const close = spawnCloseChild(root, 1, "closed during race", startFile, 0);
-  const widen = spawnWidenChild(root, 1, "b.ts", startFile, 50);
+  const close = spawnLockAcknowledgingChild("close", root, 1, "closed during race", startFile, ackFile, releaseFile);
   writeFileSync(startFile, "go");
+  await waitForFile(ackFile); // close provably holds the lock before widener is even started
+
+  const widen = spawnWidenChild(root, 1, "b.ts", startFile);
+  writeFileSync(releaseFile, "go");
   await requireExitZero(close);
   await assert.rejects(requireExitZero(widen), /exited [^0]/);
 

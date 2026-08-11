@@ -106,3 +106,17 @@ test("test_theParseGateFailsOnBrokenSource", () => {
     // Negative control: proves the parse gate is able to fail.
     assert.throws(() => parseInSandboxShape("export const meta = {\nconst broken ==== 1\n"), SyntaxError);
 });
+
+// The parse gate above only checks syntax; it misses a workflow that regains a forbidden capability.
+const FORBIDDEN_CAPABILITY = /(?:^|\W)(?:import\s*(?:\(|[{'"]|[A-Za-z_$])|require\s*\(|process\.|node:)/m;
+
+test("test_noWorkflowFileUsesAForbiddenRuntimeCapability", () => {
+    for (const name of WORKFLOW_NAMES) {
+        assert.doesNotMatch(readWorkflow(name), FORBIDDEN_CAPABILITY, `${name}.workflow.js uses a forbidden capability`);
+    }
+});
+
+test("test_theForbiddenCapabilityGateFailsOnADynamicImport", () => {
+    // Negative control: proves the gate is able to fail.
+    assert.match("await import('node:fs')", FORBIDDEN_CAPABILITY);
+});
