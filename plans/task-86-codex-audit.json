@@ -1,4 +1,5 @@
 {
+  "schemaDocumentation": "plans/task-86-codex-audit-schema.md",
   "verificationPerformed": [
     "Compared 945eb22650d593bdcab2584460c58ef4bad04a3c through committed HEAD f3bceb6 and separately inspected the substantive unstaged workflow-only-context-injection rewrite; did not inspect the new-usage-graph worktree.",
     "Read plans/task-86-spec.md, the task 131-153/closing-chain plans and records, and the relevant later fix-task records.",
@@ -51,6 +52,37 @@
         "Build an occurrence-aware ownership map. Snapshot, stage, commit, and diff owned paths in each occurrence deepest-first, then commit changed gitlinks in their parents.",
         "Normalize every occurrence-local changed path back to its root-relative task path before fence comparison. Generate explicit git -C <occurrence-checkout> instructions for the worker instead of forbidding them."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/repositoryManifest.ts",
+          "role": "The manifest already supplies occurrence IDs, checkout paths, depths, and parent relationships for occurrence-aware ownership."
+        },
+        {
+          "file": "scripts/mergeTaskWorktrees.ts",
+          "role": "Merge already walks occurrences deepest-first and commits changed gitlinks in parents."
+        }
+      ],
+      "acceptanceCriteria": [
+        "The literal worker contract can stage and commit an owned file below a submodule.",
+        "Implementation snapshots and diffs cover every owned occurrence and normalize local paths to root-relative task paths.",
+        "An unowned nested edit is reported as the nested path, and focused nested-worktree tests pass."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function roleOccurrenceOids() {\n  const checkoutPaths = PAYLOAD.checkoutPaths ?? {}\n  const oids = {}\n  for (const [occurrenceId, checkoutPath] of Object.entries(checkoutPaths)) {\n    oids[occurrenceId] = readHeadOid(checkoutPath)\n  }\n  printResult({ oids })\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "for (const occurrence of ownedOccurrencesDeepestFirst) {\n  execFileSync('git', ['-C', occurrence.checkoutPath, 'add', '--', ...occurrence.localPaths])\n  commitOccurrenceChanges(occurrence.checkoutPath, occurrence.occurrenceId)\n}\ncommitChangedGitlinksInParents(ownedOccurrencesDeepestFirst)\nconst changedPaths = diffEveryOccurrence(baseOids).map(normalizeRootRelative)"
+        },
+        {
+          "file": "tests/runMergePhase.test.ts",
+          "code": "test('implement commits and fences a file owned below a submodule', async () => { /* assert vendor/src/x.ts */ })"
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -85,6 +117,33 @@
         "Track source-layer progress separately from fully merged task count, for example sourceProgressThisLap.",
         "Set it when a failed merge result has a completed layer with status merged, reset it in beginNextLap, and apply the zero-progress exit only when neither a task nor any source layer moved."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/mergeTaskWorktrees.ts",
+          "role": "mergeTaskDeepestFirst already retains completedLayers when a later parent layer fails."
+        },
+        {
+          "file": "scripts/runMergePhase.ts",
+          "role": "The queue already tracks per-lap full-task progress, carryover, and the lap ceiling."
+        }
+      ],
+      "acceptanceCriteria": [
+        "A failed merge envelope records whether any source layer merged during the attempt.",
+        "The queue is stuck only when neither a task nor a source layer moved and failures remain.",
+        "beginNextLap resets source progress, and a child-merged/parent-failed regression begins another lap under the existing ceiling."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/mergeTaskWorktrees.ts",
+          "code": "return { stage: 'merge', status, completedLayers, parentResult }\n// completedLayers retains child layers that moved before the parent failed."
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "export type MergeQueue = { ...; mergedThisLap: number; sourceProgressThisLap: boolean }\nexport type StageOutcome = { status: 'success' } | { status: 'failure'; reason: string; sourceProgress?: boolean }\nif (queue.mergedThisLap === 0 && !queue.sourceProgressThisLap && hasFailures(queue)) return 'stuck'\n// derive sourceProgress from completedLayers and reset it in beginNextLap."
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -109,6 +168,37 @@
         "Make the rebase and merge primitives total and return typed failure reports, or wrap every stage-level primitive call in try/catch.",
         "Normalize operational exceptions to a nonempty stage-specific lastFailure while preserving completedLayers, source-progress information, conflict paths, and merged-but-not-closed semantics once the root merge has landed."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "concreteMergeStageFailure already converts structured merge failures into nonempty actionable reasons."
+        },
+        {
+          "file": "scripts/runMergePhase.ts",
+          "role": "Queue consumption already retains ordinary blocked and merged-but-not-closed failures."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Every rebase-walk, parent-rebase, and merge operational exception becomes a typed workflow result.",
+        "lastFailure keeps the concrete operational reason and preserves completed layers, conflicts, source progress, and merged-but-not-closed state.",
+        "Queue reporting accepts all normalized failure shapes, including child progress followed by parent failure."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function concreteMergeStageFailure(report) {\n  const explicit = typeof report.failureReason === 'string' ? report.failureReason.trim() : ''\n  if (explicit) return explicit\n  return `${report.stage} failure in ${report.occurrenceId || 'root'} (${report.status})`\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function roleRebaseWalk() {\n  try { printResult(rebaseSubmoduleLayersDeepestFirst(...)) }\n  catch (error) { printResult({ stoppedAt: { status: 'driver-failed', failureReason: String(error) } }) }\n}\n// Apply the same total-result contract to parent-rebase and merge."
+        },
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "if (!layerWalk) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'rebase-walk driver returned no result' }"
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -128,6 +218,38 @@
         "Model each of the three rounds as verify followed by processing that result.",
         "On a rejected third review, still widen and replan or apply feedback, but do not invoke a fourth verifier. Preserve the final verifier notes and verdict for the user gate so the unverified final repair remains visible."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "role": "widenFilesAndReplan already persists missing files, refreshes the in-memory fence, and replans before another review."
+        },
+        {
+          "file": "scripts/addTaskFiles.ts",
+          "role": "The authoritative widening mutation is already locked and updates the run-arguments snapshot."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Each of the three review rounds is modeled as verify followed by processing that verifier result.",
+        "A final-round missingFiles rejection widens authoritative task state and repairs the plan without invoking a fourth verifier.",
+        "Final verifier notes and verdict remain visible to the approval gate when the repaired plan is not reviewed again.",
+        "The final implementer prompt, brief, plan, and ownership fence all include files introduced by the third review."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "const widenFilesAndReplan = async (missingFiles) => {\n  const widened = await retryAgent(() => agent(emitterInstruction('widen-files', { missingFiles }), ...))\n  preparedTask = { ...preparedTask, files: widened.files }\n  const rePlanned = await runPlanAgent(fileRetryPreamble)\n  planResult = await rejectPlannedWithoutExpectedPlanFile(rePlanned, preparedTask.planFile)\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "let reviewRounds = MAX_REVIEW_ROUNDS\nlet verify\nwhile (reviewRounds > 0) {\n  verify = await runVerify()\n  reviewRounds -= 1\n  if (verify.verdict === 'approved') break\n  await repairRejectedReview(verify) // process the third rejection too\n  if (planResult.status !== 'planned') return planResult\n}\nreturn { ...planResult, verify, reviewRounds }"
+        },
+        {
+          "file": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "code": "test('third rejected review still widens and repairs without a fourth verification', async () => { /* assert b.ts reaches task state, brief, plan, and worker */ })"
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -137,8 +259,8 @@
       "cause": "The gate can invoke create-task while tail workflows are concurrently merging and closing. The generated create-task brief directs its agent to append to tasks.json directly. closeTasks holds the shared lock and publishes a whole-file replacement, but an editor that ignores that lock can overwrite the close or be overwritten by it, resurrecting a closed task or losing the new task.",
       "locations": [
         {
-          "path": "scripts/tackleTasksBrief.ts",
-          "lines": "143-147",
+          "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "lines": "142-160",
           "role": "Accepted proposals may invoke create-task while tail workflows are active."
         },
         {
@@ -157,6 +279,37 @@
         "Add a programmatic task-append command that resolves the authoritative project root, acquires withTaskStateLock, rereads current state, allocates the number, appends, and atomically publishes.",
         "Make the create-task skill gather fields but call that command; it must never write tasks.json directly. Test both orderings with real processes and an acknowledged inside-lock barrier."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/taskStateLock.ts",
+          "role": "withTaskStateLock and writeJsonAtomically are the established transaction boundary for task-state writers."
+        },
+        {
+          "file": "scripts/closeTasks.ts",
+          "role": "Close already rereads and publishes task state while holding that mutex."
+        }
+      ],
+      "acceptanceCriteria": [
+        "create-task calls one programmatic append operation and never directly edits tasks.json.",
+        "Append resolves authoritative state, locks, rereads, allocates, and atomically publishes inside one transaction.",
+        "Deterministic real-process tests cover append-first and close-first without resurrection or loss."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/closeTasks.ts",
+          "code": "const pair = resolveTaskFiles(projectRoot)\nreturn withTaskStateLock(pair.tasksPath, () => closeTasksLocked(taskNumbers, closureNote, pair, commitHashes))"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/appendTask.ts",
+          "code": "export function appendTask(sourceRoot, draft) {\n  const pair = resolveTaskFiles(sourceRoot)\n  return withTaskStateLock(pair.tasksPath, () => {\n    const tasks = readTaskFile(pair.tasksPath)\n    const task = { ...draft, taskNumber: nextTaskNumber(tasks) }\n    writeJsonAtomically(pair.tasksPath, [...tasks, task])\n    return task\n  })\n}"
+        },
+        {
+          "file": "scripts/createTaskBrief.ts",
+          "code": "Send the task draft to appendTask on quoted-heredoc stdin; never edit tasks.json directly."
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -166,13 +319,13 @@
       "cause": "Initial plan/implement launches maintain a six-entry sliding window. When one completes, the instructions refill the freed slot. Approval independently enqueues tail work, and the queue launch path checks only whether another tail is outstanding, not total outstandingEntries size. A valid interleaving is six planners, one completion, a replacement planner, then an approved task's rebase-test: seven workflows. Tests inspect the sliding-window and tail text separately but never model their shared capacity.",
       "locations": [
         {
-          "path": "scripts/tackleTasksBrief.ts",
-          "lines": "65-73, 150-155, 175-186",
+          "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "lines": "66-74, 142-160, 173-191",
           "role": "Plan refill and tail launch use separate capacity decisions."
         },
         {
-          "path": "tests/tackleTasksBrief.test.ts",
-          "lines": "55-65, 90-105",
+          "path": "tests/tackle-tasks_SkillBodyEmitter.test.ts",
+          "lines": "82-93, 101-140",
           "role": "Tests inspect each instruction separately and miss the combined interleaving."
         }
       ],
@@ -180,6 +333,37 @@
       "suggestedFixApproach": [
         "Put all launches behind one capacity-aware action selector. nextQueueAction, or its caller's executable state, should receive total outstanding count and return wait when it equals the cap.",
         "Define whether a ready tail or a new plan receives the freed slot and test both plan-completion and tail-completion interleavings."
+      ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "role": "nextQueueAction is already the executable selector for serial tail launch, wait, lap rollover, and reporting."
+        },
+        {
+          "file": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "role": "The emitted instructions already track outstandingEntries across plan/implement and tail workflows."
+        }
+      ],
+      "acceptanceCriteria": [
+        "One capacity decision covers every plan/implement, rebase-test, and merge launch.",
+        "No enqueue/completion interleaving exceeds maxConcurrency, while tail execution remains serial.",
+        "Executable tests cover plan-completion and tail-completion slot allocation and approvals remain immediately enqueueable."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "const step = nextQueueStep(queue)\nif (step) return outstanding.tail ? { kind: 'wait' } : { kind: 'launch', step }"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "export type OutstandingWorkflowState = { any: boolean; tail: boolean; total: number; capacity: number }\nif (step && (outstanding.tail || outstanding.total >= outstanding.capacity)) return { kind: 'wait' }"
+        },
+        {
+          "file": "tests/runMergePhase.test.ts",
+          "code": "test('shared plan and tail launches never exceed capacity', () => { /* six plans, completion/refill, approval */ })"
+        }
       ],
       "existingOpenTask": "No matching open task."
     },
@@ -210,6 +394,37 @@
         "For status done, require the expected notes path in changedPaths and at least one task-owned path in the commit range.",
         "Verify that the notes path is exactly preparedTask.notesFile and is present in HEAD, not merely untracked. Return a typed blocked result before approval if either requirement fails."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "role": "Implement already snapshots HEAD, blocks a zero-commit done result, and computes ownership violations."
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "The worker contract already names the exact notes path and restricts staging to owned files plus that path."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Done requires the exact committed implementation-notes file and at least one committed task-owned implementation path.",
+        "Notes-only and owned-change-without-notes results are blocked with distinct actionable reasons.",
+        "Existing zero-commit and ownership-fence behavior remains intact, with workflow-level coverage for all three cases."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "if (result.status === 'done' && finalized.headOid === base) {\n  result = { ...result, status: 'blocked', summary: 'implementer reported done but made no commit in taskWorktree' }\n}\nconst fenceViolations = finalized.changedPaths.filter((p) => p !== notesRelative && !preparedTask.files.includes(p))"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "if (result.status === 'done') {\n  const hasNotes = finalized.changedPaths.includes(notesRelative)\n  const hasOwnedChange = finalized.changedPaths.some((p) => preparedTask.files.includes(p))\n  if (!hasNotes) result = blocked(result, `missing committed notes: ${notesRelative}`)\n  else if (!hasOwnedChange) result = blocked(result, 'no owned implementation path changed')\n}"
+        },
+        {
+          "file": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "code": "test('done rejects notes-only commits', async () => { ... })\ntest('done rejects owned commits without notes', async () => { ... })"
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -239,6 +454,38 @@
         "Load the current task record using resolveTaskFiles(SOURCE_ROOT), while continuing to place the task brief, plan, notes, Git operations, and edits under WORKTREE.",
         "Represent authoritative task-state root and task checkout root as separate fields so later code cannot accidentally use one for the other."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/addTaskFiles.ts",
+          "role": "Widening already resolves task files from SOURCE_ROOT and atomically updates authoritative tasks.json plus the run snapshot."
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "Worktree-local brief, plan, notes, Git, and edit paths are already rooted under WORKTREE and should remain there."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Every emitter role reads the current task record from authoritative SOURCE_ROOT task state.",
+        "Brief, plan, notes, Git operations, and source edits remain rooted in the private WORKTREE.",
+        "A widen-files result survives the immediately following replan, verify, and separately launched implement roles.",
+        "Types distinguish taskStateRoot from checkoutRoot so the roots cannot be accidentally interchanged."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function roleWidenFiles() {\n  const widened = addTaskFiles([N], PAYLOAD.missingFiles ?? [], SOURCE_ROOT)\n  const widenedTask = widened.find((entry) => entry.taskNumber === N)\n  writeTaskBriefFile(widenedTask, WORKTREE)\n  printResult({ files: widenedTask.files ?? [] })\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "type PreparedTask = { ...; taskStateRoot: string; checkoutRoot: string }\nfunction loadPreparedTask() {\n  const pair = resolveTaskFiles(SOURCE_ROOT)\n  const task = readTaskFile(pair.tasksPath).find((entry) => entry.taskNumber === N)\n  const briefFile = writeTaskBriefFile(task, WORKTREE)\n  return { ...taskData, taskStateRoot: SOURCE_ROOT, checkoutRoot: WORKTREE }\n}"
+        },
+        {
+          "file": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "code": "test('widened ownership survives replanning, verification, and a fresh implement stage', async () => { /* assert b.ts in every emitted prompt and fence */ })"
+        }
+      ],
       "existingOpenTask": "Task 87 is related to stale relaunch briefs but targets the superseded plan workflow and does not cover standalone implement ownership; no exact open item exists."
     },
     {
@@ -258,8 +505,8 @@
           "role": "Tail result consumption discards fenceViolations."
         },
         {
-          "path": "scripts/tackleTasksBrief.ts",
-          "lines": "181-186",
+          "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "lines": "122-130, 173-191",
           "role": "The orchestrator is forbidden to inspect the raw results array, leaving no alternate consumer."
         }
       ],
@@ -267,6 +514,37 @@
       "suggestedFixApproach": [
         "Add persistent post-approval violation state to the queue and result adapter. A green rebase with violations should produce a requires-regate action instead of a merge step.",
         "Display normalized occurrence and path details at the gate and require a new approval to advance. A retry alone is insufficient because the committed cross-layer edit remains in branch history."
+      ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "role": "Rebase conflict/fix bookkeeping already records cross-occurrence touched paths as fenceViolations."
+        },
+        {
+          "file": "scripts/runMergePhase.ts",
+          "role": "The plan+implement adapter already exposes pre-approval implementation violations in its normalized approval view."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Tail-stage fence violations survive result consumption and persist in queue state.",
+        "A green rebase with violations requires a new explicit gate and cannot advance directly to merge.",
+        "Tests cover clean green, violated green, rejected regate, and approved regate paths."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "for (const touched of advanced.touchedPaths) fenceViolations.push(touched)\nreturn { stage: 'rebase-test', task: N, status: 'green', fenceViolations, sourceBranch }"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "if (envelope.stage === 'rebase-test' && status === 'green' && result.fenceViolations?.length) {\n  return { kind: 'requires-regate', queue: recordPostApprovalViolations(queue, envelope.task, result.fenceViolations), approval: { taskNumber: envelope.task, fenceViolations: result.fenceViolations } }\n}"
+        },
+        {
+          "file": "scripts/tackle-tasks_SkillBodyEmitter.ts",
+          "code": "Handle requires-regate with AskUserQuestion; enqueue merge only after explicit approval."
+        }
       ],
       "existingOpenTask": "No matching open task."
     },
@@ -298,6 +576,37 @@
         "Carry a cleanupIncomplete record through the workflow envelope, queue, and final report, including task number, warning, and retained artifact paths.",
         "Provide an idempotent cleanup-only retry that deletes persistence last."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "role": "MergedNotClosedTask and buildMergeReport already preserve merges whose archival step failed."
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "The merge role already separates merge, close, persistence, and final cleanup and returns cleanupWarning."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Merge persistence remains until worktree and branch cleanup succeeds.",
+        "Cleanup failure creates a reported cleanupIncomplete record with warning and retained artifact paths.",
+        "An idempotent cleanup-only retry deletes persistence last, and the locked-worktree test expects a nonempty report."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "export type MergedNotClosedTask = { taskNumber: number; commitHash: string; lastFailure: string }\nreturn { unmerged: [...ceilingFailures, ...queueExitFailures], mergedNotClosed: queue.mergedNotClosed }"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/runMergePhase.ts",
+          "code": "export type CleanupIncompleteTask = { taskNumber: number; warning: string; retainedArtifacts: string[] }\nexport type MergeQueue = { ...; cleanupIncomplete: CleanupIncompleteTask[] }\nexport type MergeReport = { ...; cleanupIncomplete: CleanupIncompleteTask[] }"
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "try { removeTaskWorktreeAndBranches(...); deleteAllTaskMergePersistence(...) }\ncatch (error) { printResult({ ...report, status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts }) }"
+        }
+      ],
       "existingOpenTask": "No matching open task."
     },
     {
@@ -322,6 +631,38 @@
         "Acquire an exclusive per-task owner lease atomically during preparation and release it only during final successful cleanup.",
         "Include run or session identity and define an explicit stale-lease recovery operation that first verifies and preserves retained work. Clean Git state alone must not imply that no live process owns the worktree."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/prepareTasks.ts",
+          "role": "worktreeHoldsRetainedWork already prevents automatic reuse from destroying commits or dirty edits left for recovery."
+        },
+        {
+          "file": "scripts/taskStateLock.ts",
+          "role": "The task-state mutex demonstrates the repository's existing atomic exclusive-create lease primitive and fail-safe timeout behavior."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Preparation atomically acquires an exclusive per-task live-run lease before resetting or creating the worktree.",
+        "A concurrent preparation for the same task fails without resetting, modifying, or sharing the first run's checkout.",
+        "The lease records run/session identity and is released only after successful final cleanup.",
+        "Stale-lease recovery is explicit and preserves retained work; real-process tests deterministically prove single ownership."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/prepareTasks.ts",
+          "code": "if (existsSync(worktreePath)) {\n  if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {\n    throw new Error(`worktree at ${worktreePath} holds retained work from a previous run`)\n  }\n  // only then force-reset the reusable checkout\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/prepareTasks.ts",
+          "code": "const lease = acquireTaskWorktreeLease(worktreePath, { runId, pid: process.pid }) // open(..., 'wx')\ntry {\n  prepareOrRecoverWorktree(repoRoot, worktreePath, branchName)\n  return { worktreePath, leaseId: lease.id }\n} catch (error) {\n  releaseTaskWorktreeLease(lease)\n  throw error\n}\n// Successful final cleanup releases the lease."
+        },
+        {
+          "file": "tests/prepareTasks.test.ts",
+          "code": "test('two live prepare processes cannot acquire the same task worktree', async () => { /* first acknowledges lease; second fails without reset */ })"
+        }
+      ],
       "existingOpenTask": "Exact match: open task 104 requests a live ownership signal and rejection of concurrent same-task sessions."
     },
     {
@@ -336,8 +677,8 @@
           "role": "Preparation publishes canonical artifact paths and writes the brief into source."
         },
         {
-          "path": "skills/tackle-tasks/task.workflow.js",
-          "lines": "370-389, 741-753",
+          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "lines": "62-76, 548-560",
           "role": "Runtime creates and removes only the task-worktree copy."
         },
         {
@@ -350,6 +691,38 @@
       "suggestedFixApproach": [
         "Remove the source writeTaskBriefFile loop.",
         "Create each worktree first, generate its brief there or let loadPreparedTask do so, and publish that worktree's absolute briefFile and planFile paths in group arguments instead of paths under repoRoot."
+      ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "Runtime task loading already creates the brief under WORKTREE and merge cleanup removes the worktree-local plan and brief."
+        },
+        {
+          "file": "scripts/prepareTasks.ts",
+          "role": "buildWorkflowArguments already creates the task worktree before returning each prepared group."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Preparation never writes brief-N.md or an empty plan into the canonical source checkout.",
+        "Workflow arguments publish absolute brief and plan paths under the task's private worktree.",
+        "Transient artifacts exist only in the worktree when needed and are removed by successful cleanup.",
+        "Production-shaped lifecycle tests assert source artifact absence before, during, and after the workflow."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "const briefFile = writeTaskBriefFile(task, WORKTREE)\nreturn {\n  briefFile,\n  planFile: `${WORKTREE}/plans/task-${N}-plan.md`,\n  notesFile: `${WORKTREE}/plans/task-${N}-implementation-notes.md`,\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/prepareTasks.ts",
+          "code": "const worktree = createWorktreeForGroup(repoRoot, group)\nreturn {\n  worktree,\n  tasks: [{\n    briefFile: writeTaskBriefFile(task, worktree),\n    planFile: join(worktree, 'plans', `task-${task.taskNumber}-plan.md`),\n  }],\n}\n// Remove: for (const task of tasks) writeTaskBriefFile(task, repoRoot)"
+        },
+        {
+          "file": "tests/runMergePhase.test.ts",
+          "code": "assert.equal(existsSync(join(sourceRoot, 'plans', `brief-${taskNumber}.md`)), false)"
+        }
       ],
       "existingOpenTask": "Exact match: open task 105 requires transient plan and brief artifacts to stay in task worktrees and be absent from source."
     },
@@ -537,6 +910,38 @@
         "Add a read-only emitter role such as plan-file-status that receives no arbitrary path, derives the expected plan path from task number and WORKTREE, and returns {exists:boolean}.",
         "After every initial or replanned planned result passes the exact-path comparison, invoke that role and convert a missing file to needs-clarification before verification. Add both the missing-expected-path test and the existing wrong-path negative test."
       ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "role": "rejectPlannedWithoutExpectedPlanFile already rejects a planner-reported path that is not the exact prepared worktree plan path."
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "Emitter roles are the established boundary for delegated read-only filesystem checks because the workflow itself remains import-free."
+        }
+      ],
+      "acceptanceCriteria": [
+        "A planned result is accepted only when it reports the exact expected path and that file exists in the task worktree.",
+        "The existence role derives the expected path from WORKTREE and N and accepts no arbitrary caller-supplied path.",
+        "A missing expected plan returns needs-clarification before verifier or implementer agents run.",
+        "Both missing-expected-path and wrong-existing-path regressions pass while the workflow remains import-free."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "if (planResult.planFile !== expectedPlanFile) {\n  return {\n    ...planResult,\n    status: 'needs-clarification',\n    planFile: expectedPlanFile,\n    question: `planner reported status planned with an unexpected plan path`,\n  }\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function rolePlanFileStatus() {\n  const expectedPlanFile = join(WORKTREE, 'plans', `task-${N}-plan.md`)\n  printResult({ exists: existsSync(expectedPlanFile) })\n}\n// Add plan-file-status to the role dispatch; accept no path in PAYLOAD."
+        },
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "const status = await retryAgent(() => agent(emitterInstruction('plan-file-status'), {\n  label: `plan-file-status:${N}`, schema: PLAN_FILE_STATUS_SCHEMA,\n}))\nif (!status?.exists) return needsClarification(`planner did not write ${expectedPlanFile}`)"
+        }
+      ],
       "existingOpenTask": "No matching open task. This is a regression of the previously fixed task-worktree plan guard."
     },
     {
@@ -566,6 +971,42 @@
         "Do not blindly retry a mutating role. Give each mutation an idempotency key and persist its typed result atomically before printing it, or split mutation from result retrieval so retries call a read-only receipt/status role.",
         "For merge, record a run/task/stage receipt before returning and have repeated invocations return that receipt without re-running merge, close, or cleanup. For conflict continuation, persist or derive a reconciled state that distinguishes already-continued from never-started.",
         "Extend the harness so the real emitter command can complete while the enclosing agent returns null. Assert that retry obtains the original receipt, performs no second mutation, and reports the actual final state."
+      ],
+      "resolvedBoundaryReference": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "role": "retryAgent correctly retries missing results for read-only prompt and status roles and preserves valid falsy results."
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "role": "Mutating roles are already centralized behind named emitter dispatch points, which provides a place to add idempotency keys and durable receipts."
+        }
+      ],
+      "acceptanceCriteria": [
+        "Mutating emitter roles are never blindly executed a second time after their first attempt may have committed side effects.",
+        "Each mutation has an idempotency key and persists its typed result before returning output, or retries use a read-only receipt/status role.",
+        "A lost merge result is recovered as the original merged/closed outcome without a second merge, close, persistence deletion, or cleanup attempt.",
+        "A lost advance-conflict result is reconciled without continuing or aborting the rebase twice, while ordinary read-only retries retain current behavior."
+      ],
+      "resolvedBoundaryExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "const retryAgent = async (spawn, attempts = 3) => {\n  for (let attempt = 0; attempt < attempts; attempt += 1) {\n    const result = await spawn()\n    if (result !== null && result !== undefined) return result\n  }\n  return null\n}"
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "const ROLES = {\n  'advance-conflict': roleAdvanceConflict,\n  'rebase-walk': roleRebaseWalk,\n  merge: roleMerge,\n}"
+        }
+      ],
+      "remainingMinimalExample": [
+        {
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "let result = await agent(emitterInstruction(stage, { ...payload, idempotencyKey }), options)\nif (result == null) {\n  result = await retryAgent(() => agent(\n    emitterInstruction('mutation-receipt', { idempotencyKey }),\n    receiptOptions,\n  ))\n}"
+        },
+        {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "const prior = readMutationReceipt(idempotencyKey)\nif (prior) return printResult(prior)\nconst result = performMutation()\nwriteMutationReceiptAtomically(idempotencyKey, result)\nprintResult(result)"
+        }
       ],
       "existingOpenTask": "No matching open task."
     },
