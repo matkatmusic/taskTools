@@ -13,7 +13,8 @@
     "Reviewed the staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit and 74 focused tests in prepareTasks.test.ts, runMergePhase.test.ts, and taskWorkflowMergeStage.test.ts passed, but the atomic batch was rejected because required scheduler interleavings, production cleanup retry, lease lifecycle/recovery, and source-artifact absence coverage remain incomplete. The eight implementation/test files were left unstaged.",
     "Reviewed the second staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit passed; prepareTasks.test.ts passed 27 tests, runMergePhase.test.ts passed 39, taskWorkflowMergeStage.test.ts passed 16, tackle-tasks_SkillBodyEmitter.test.ts passed 19, and the full npm test suite passed all 1,319 tests. The atomic batch was rejected because C86-24 still lacks the required executable event-order regression and C86-28 still reports a static partial retained-artifact list.",
     "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed.",
-    "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles."
+    "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles.",
+    "Reviewed the second staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 82 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,330 tests. The attempt fixes C86-36's cleanup-incomplete and aborted-rebase status recovery, but source audit rejected the atomic batch because successful advance-conflict result reconstruction still drops active-occurrence touchedPaths and can bypass C86-27's post-approval regate."
   ],
   "notes": [
     {
@@ -39,6 +40,10 @@
     {
       "date": "2026-08-11T17:28:21-07:00",
       "text": "C86-27, C86-35, and C86-36 were reviewed as one atomic batch and rejected. The attempt appears to satisfy C86-27 and C86-35, and it adds useful successful lost-result coverage for C86-36, but C86-36 remains incomplete for lost cleanup-incomplete and failed-continue/aborted outcomes. All nine implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T18:05:45-07:00",
+      "text": "Second atomic review of C86-27, C86-35, and C86-36: only C86-36 required further implementation. Its merge and aborted-rebase recovery gaps are now addressed, but a lost successful advance-conflict result still reconstructs touchedPaths only for other occurrences and drops extra edits in the active occurrence. All nine implementation/test paths are unstaged; only this audit update is staged."
     }
   ],
   "issues": [
@@ -578,31 +583,31 @@
     },
     {
       "number": 36,
-      "title": "C86-36 — High: lost mutation results are only heuristically recovered and can be misreported",
+      "title": "C86-36 — High: lost successful conflict results drop active-occurrence fence violations",
       "class": "high",
-      "cause": "The working-tree attempt recovers two successful lost-result cases, but the workflow still wraps mutating emitter roles directly in retryAgent and neither role has an idempotency key or durable typed receipt. roleMerge reconstructs a result only after full success removed the worktree; if a cleanup-incomplete result is lost, the retained worktree makes the retry re-enter merge and close after the task was already archived, replacing the original cleanup-incomplete outcome with merged-but-not-closed. roleAdvanceConflict treats any missing rebase as a previously successful continue; if the first attempt failed to continue, successfully aborted, and then lost its result, the retry falsely returns advanced. The new tests cover only full merge success and successful conflict continuation, so both remaining failure states are untested.",
+      "cause": "The working-tree attempt now distinguishes completed from aborted rebases and avoids re-merging or re-closing after a lost cleanup-incomplete result. One lost-result defect remains: the first roleAdvanceConflict invocation records non-conflicted edits in the active occurrence as touchedPaths before staging and continuing, but after that successful result is dropped the no-rebase recovery branch reconstructs touchedPaths only from beforeOids for other occurrences. The active occurrence has no baseline in the payload, so an extra path edited by the conflict agent disappears from the retried result. runRebaseTest then returns green without that fence violation, allowing consumeTaskWorkflowResult to advance to merge without C86-27's required post-approval re-gate.",
       "locations": [
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "236-243, 448-457, 582-585",
-          "role": "The common retry wrapper still directly re-invokes advance-conflict and merge after a missing result instead of retrieving a keyed receipt."
+          "lines": "448-463",
+          "role": "The retry supplies baselines only for other occurrences and trusts the reconstructed advance-conflict touchedPaths after a lost result."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "480-537, 594-662",
-          "role": "The recovery branches infer prior success from current filesystem/rebase state, which cannot distinguish cleanup-incomplete from full merge success or successful continue from a failed continue followed by abort."
+          "lines": "503-526",
+          "role": "The no-rebase recovery branch rebuilds touchedPaths from other-occurrence beforeOids but cannot reconstruct active-occurrence paths collected by the first attempt."
         },
         {
           "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "163-253",
-          "role": "The new lost-result harness covers full merge success and successful conflict continuation but not lost cleanup-incomplete or failed-and-aborted continuation results."
+          "lines": "215-248",
+          "role": "The successful-continuation lost-result regression edits only the conflicted file and asserts an empty violation list, so it does not cover an extra active-occurrence edit."
         }
       ],
-      "provingTest": "Use the working-tree lost-result harness with a real merge fixture whose worktree removal is deterministically blocked. Execute the first merge emitter command to completion, discard its cleanup-incomplete stdout, and return null. The retry currently sees the retained worktree, re-enters merge/close, and reports merged-but-not-closed because the task was already archived; the corrected workflow must recover the original cleanup-incomplete receipt and retainedArtifacts without a second mutation. In a real conflict fixture, deterministically make git rebase --continue fail and the driver's abort succeed, discard that advanced:false result, and return null. The retry currently sees no rebase and falsely returns advanced:true; the corrected workflow must recover the original failure without another continue or abort.",
+      "provingTest": "Extend the real successful-continuation lost-result fixture so the conflict agent resolves the conflicted file and also edits a second non-conflicted path in the active occurrence. Let the first advance-conflict emitter invocation stage and continue the rebase, discard its stdout, and return null. The current retry reconstructs advanced:true with no active-occurrence touchedPaths, so the final green envelope has no violation and consumeTaskWorkflowResult advances directly to merge. The corrected retry must preserve the second path with its occurrenceId, and consuming that envelope must return requires-regate before merge.",
       "suggestedFixApproach": [
-        "Replace direct retry of mutating roles with a run/task/stage idempotency protocol: a repeated invocation must return a durable typed receipt or reconcile an explicit persisted operation state before deciding whether any mutation remains.",
-        "For merge, preserve cleanup-incomplete, merged-but-not-closed, and merged receipts outside the removable task worktree. For conflict continuation, preserve enough state to distinguish continued, freshly conflicted, failed-and-aborted, and abort-failed outcomes; absence of rebase metadata alone is not proof of success.",
-        "Extend the working-tree lost-result harness with cleanup-incomplete and failed-continue/aborted cases. Assert the exact first result is recovered and instrument the mutation boundary to prove merge, close, cleanup, continue, and abort are not invoked twice."
+        "Preserve the first advance-conflict typed result durably before agent output can be lost, or include a trustworthy active-occurrence baseline/state record that lets the retry reconstruct exactly the non-conflicted active paths collected before continue.",
+        "Do not infer active touchedPaths from the post-rebase tree without excluding conflict, upstream, and ordinary rebase changes; a keyed receipt is the smallest unambiguous boundary.",
+        "Extend the lost-success regression with an extra active-occurrence edit and feed the resulting green envelope through consumeTaskWorkflowResult to prove the recovered path triggers requires-regate."
       ],
       "resolvedBoundaryReference": [
         {
@@ -615,10 +620,10 @@
         }
       ],
       "acceptanceCriteria": [
-        "Mutating emitter roles use a durable idempotency key/receipt or explicit operation-state reconciliation; retryAgent never blindly repeats a mutation after its result may have been lost.",
-        "A lost cleanup-incomplete merge result is recovered with its original status and retainedArtifacts without a second merge, close, persistence deletion, or cleanup attempt.",
-        "A lost failed-continue result followed by a successful abort remains advanced:false and does not run continue or abort twice.",
-        "The working-tree full-success merge and successful-continue lost-result regressions keep passing, and ordinary read-only retries retain current behavior."
+        "A lost successful advance-conflict result preserves every active- and other-occurrence touchedPath recorded by the first invocation.",
+        "An extra non-conflicted edit in the active occurrence survives retry reconstruction and forces consumeTaskWorkflowResult to return requires-regate before merge.",
+        "Deterministic regression coverage exercises the real conflict, successful continue, dropped result, retry, green envelope, and queue regate path.",
+        "The working-tree full-success merge, cleanup-incomplete merge, successful-continue, and aborted-rebase lost-result regressions keep passing, and ordinary read-only retries retain current behavior."
       ],
       "resolvedBoundaryExample": [
         {
@@ -632,12 +637,12 @@
       ],
       "remainingMinimalExample": [
         {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "let result = await agent(emitterInstruction(stage, { ...payload, idempotencyKey }), options)\nif (result == null) {\n  result = await retryAgent(() => agent(\n    emitterInstruction('mutation-receipt', { idempotencyKey }),\n    receiptOptions,\n  ))\n}"
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "const prior = readMutationReceipt(idempotencyKey)\nif (prior) return printResult(prior)\n// First attempt records the exact active- and other-occurrence touchedPaths."
         },
         {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "const prior = readMutationReceipt(idempotencyKey)\nif (prior) return printResult(prior)\nconst result = performMutation()\nwriteMutationReceiptAtomically(idempotencyKey, result)\nprintResult(result)"
+          "file": "tests/taskWorkflowMergeStage.test.ts",
+          "code": "conflictAgentEdits(conflictedPath, extraActivePath)\nconst envelope = await runWithDroppedFirstAdvanceResult()\nassert.deepEqual(envelope.results[0].fenceViolations, [{ occurrenceId: '', path: extraActivePath }])\nassert.equal(consumeTaskWorkflowResult(queue, envelope).kind, 'requires-regate')"
         }
       ],
       "existingOpenTask": "No matching open task."
