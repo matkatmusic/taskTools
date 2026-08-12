@@ -260,7 +260,7 @@ const makeWorkflowFixtureRepo = (taskNumber: number) => {
   mkdirSync(join(worktreePath, "plans"), { recursive: true });
   symlinkSync(join(REPO_ROOT_FOR_WORKFLOW, "scripts"), join(worktreePath, "scripts"));
   mkdirSync(join(root, ".taskTools"), { recursive: true });
-  const taskRecord = { taskNumber, title: "fixture", files: [], blockedBy: [] };
+  const taskRecord = { taskNumber, title: "fixture", files: ["taskfile.txt"], blockedBy: [] };
   writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([taskRecord]));
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
   mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
@@ -326,7 +326,8 @@ test("generated brief's plan+implement handling matches a real, non-synthetic wo
     if (options.label.startsWith("implement:")) {
       const notesFile = join(worktreePath, `plans/task-${taskNumber}-implementation-notes.md`);
       writeFileSync(notesFile, "notes\n");
-      gitForWorkflowFixture(worktreePath, "add", `plans/task-${taskNumber}-implementation-notes.md`);
+      writeFileSync(join(worktreePath, "taskfile.txt"), "implemented\n");
+      gitForWorkflowFixture(worktreePath, "add", `plans/task-${taskNumber}-implementation-notes.md`, "taskfile.txt");
       gitForWorkflowFixture(worktreePath, "commit", "-q", "-m", `task ${taskNumber}: implement`);
       return { task: taskNumber, status: "done", summary: "did it", remaining: [], notesFile };
     }

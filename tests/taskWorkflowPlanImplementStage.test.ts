@@ -335,6 +335,218 @@ test('plan, verify, widen-files, and apply-feedback calls all use the task-numbe
   }
 })
 
+test('plan+implement blocks a notes-only commit that never touches an owned file', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const notesOnlyAgent: AgentImpl = async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, 'plan\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        return { task: task.taskNumber, verdict: 'approved', notes: '', reviewer: 'claude', missingFiles: [] }
+      }
+      if (options.label.startsWith('implement:')) {
+        const notesRelative = `plans/task-${task.taskNumber}-implementation-notes.md`
+        const notesFile = join(group.worktree, notesRelative)
+        writeFileSync(notesFile, 'implementation notes\n')
+        execFileSync('git', ['-C', group.worktree, 'add', '--', notesRelative])
+        execFileSync('git', ['-C', group.worktree, 'commit', '-m', `task ${task.taskNumber}: notes only`])
+        return { task: task.taskNumber, status: 'done', summary: 'implemented the plan', remaining: [], notesFile }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(notesOnlyAgent))
+
+    assert.equal(envelope.results[1]!.status, 'blocked')
+    assert.match((envelope.results[1] as any).summary, /committed no task-owned implementation path/)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('plan+implement blocks a done result that deletes the previously committed notes file', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const notesRelative = `plans/task-${task.taskNumber}-implementation-notes.md`
+    const notesAbsolute = join(group.worktree, notesRelative)
+    mkdirSync(dirname(notesAbsolute), { recursive: true })
+    writeFileSync(notesAbsolute, 'stale notes from a previous attempt\n')
+    execFileSync('git', ['-C', group.worktree, 'add', '--', notesRelative])
+    execFileSync('git', ['-C', group.worktree, 'commit', '-m', 'seed stale notes'])
+
+    const deletesNotesAgent: AgentImpl = async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, 'plan\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        return { task: task.taskNumber, verdict: 'approved', notes: '', reviewer: 'claude', missingFiles: [] }
+      }
+      if (options.label.startsWith('implement:')) {
+        writeFileSync(join(group.worktree, 'a.ts'), 'export const value = 42\n')
+        execFileSync('git', ['-C', group.worktree, 'add', '--', 'a.ts'])
+        execFileSync('git', ['-C', group.worktree, 'rm', '--', notesRelative])
+        execFileSync('git', ['-C', group.worktree, 'commit', '-m', `task ${task.taskNumber}: implement and delete notes`])
+        return { task: task.taskNumber, status: 'done', summary: 'implemented the plan', remaining: [], notesFile: notesAbsolute }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(deletesNotesAgent))
+
+    assert.equal(envelope.results[1]!.status, 'blocked')
+    assert.match((envelope.results[1] as any).summary, /missing the required notes file/)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('plan+implement blocks an owned commit that omits the required notes file', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const ownedNoNotesAgent: AgentImpl = async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, 'plan\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        return { task: task.taskNumber, verdict: 'approved', notes: '', reviewer: 'claude', missingFiles: [] }
+      }
+      if (options.label.startsWith('implement:')) {
+        writeFileSync(join(group.worktree, 'a.ts'), 'export const value = 99\n')
+        execFileSync('git', ['-C', group.worktree, 'add', '--', 'a.ts'])
+        execFileSync('git', ['-C', group.worktree, 'commit', '-m', `task ${task.taskNumber}: no notes`])
+        return {
+          task: task.taskNumber,
+          status: 'done',
+          summary: 'implemented the plan',
+          remaining: [],
+          notesFile: join(group.worktree, 'plans', `task-${task.taskNumber}-implementation-notes.md`),
+        }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(ownedNoNotesAgent))
+
+    assert.equal(envelope.results[1]!.status, 'blocked')
+    assert.match((envelope.results[1] as any).summary, /missing the required notes file/)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('widened ownership survives replanning, verification, and a separately launched implement stage', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]! // owns only a.ts; b.ts exists on disk but is unowned
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const planPrompts: string[] = []
+    let verifyCalls = 0
+    const planAndVerifyAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        planPrompts.push(prompt as string)
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, 'plan\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        verifyCalls += 1
+        if (verifyCalls === 1) return { task: task.taskNumber, verdict: 'rejected', notes: '', reviewer: 'claude', missingFiles: ['b.ts'] }
+        return { task: task.taskNumber, verdict: 'approved', notes: '', reviewer: 'claude', missingFiles: [] }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const planEnvelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(planAndVerifyAgent))
+
+    assert.equal(planEnvelope.results[0]!.status, 'planned')
+    assert.equal(planPrompts.length, 2)
+    assert.doesNotMatch(planPrompts[0]!, /b\.ts/)
+    assert.match(planPrompts[1]!, /b\.ts/)
+
+    const implementAgent: AgentImpl = async (_prompt, options) => {
+      if (options.label.startsWith('implement:')) {
+        return {
+          task: task.taskNumber,
+          status: 'blocked',
+          summary: 'stub, only checking ownership',
+          remaining: [],
+          notesFile: join(group.worktree, 'plans', `task-${task.taskNumber}-implementation-notes.md`),
+        }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const implementEnvelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(implementAgent))
+
+    assert.deepEqual((implementEnvelope.results[0] as any).files, ['a.ts', 'b.ts'])
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('plan+implement rejects missing sourceRoot before source or worktree mutation', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!

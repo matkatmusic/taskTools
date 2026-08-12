@@ -1,10 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { relative } from "node:path";
-import { fileURLToPath } from "node:url";
 import { readTaskFile, resolveTaskFiles, seedTaskFilesIfAbsent, type TaskRecord } from "./taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
-const nextTaskNumberPath = fileURLToPath(new URL("./nextTaskNumber.ts", import.meta.url));
 
 export type NewTaskPayload = {
     title: string;
@@ -66,18 +65,24 @@ export function commitTasksJson(projectRoot: string, taskNumber: number): void {
     execFileSync("git", ["commit", "--only", tasksPath, "-m", `created task ${taskNumber}`], { cwd: projectRoot });
 }
 
-export function appendTaskToTasksJson(payload: NewTaskPayload, projectRoot: string): TaskRecord {
+// Appends under the shared task-state lock so a concurrent closeTasks cannot overwrite or be overwritten (C86-23).
+export function appendTaskToTasksJson(
+    payload: NewTaskPayload,
+    projectRoot: string,
+    { onAcquired }: { onAcquired?: () => void } = {},
+): TaskRecord {
     const pair = resolveTaskFiles(projectRoot);
     seedTaskFilesIfAbsent(pair);
-    const tasks = readTaskFile(pair.tasksPath);
-    const taskNumber = Number(
-        execFileSync("node", [nextTaskNumberPath], { cwd: projectRoot, encoding: "utf8" }).trimEnd(),
-    );
-    const commitHash = getHeadCommitHash(projectRoot);
-    const entry = buildTaskEntry(payload, taskNumber, commitHash);
-    tasks.push(entry);
-    writeFileSync(pair.tasksPath, JSON.stringify(tasks, null, 2) + "\n");
-    commitTasksJson(projectRoot, taskNumber);
+    const entry = withTaskStateLock(pair.tasksPath, () => {
+        const tasks = readTaskFile(pair.tasksPath);
+        const usedNumbers = [...tasks, ...readTaskFile(pair.completedTasksPath)].map((task) => task.taskNumber);
+        const taskNumber = Math.max(0, ...usedNumbers) + 1;
+        const commitHash = getHeadCommitHash(projectRoot);
+        const entry = buildTaskEntry(payload, taskNumber, commitHash);
+        writeJsonAtomically(pair.tasksPath, [...tasks, entry]);
+        return entry;
+    }, { onAcquired });
+    commitTasksJson(projectRoot, entry.taskNumber);
     return entry;
 }
 

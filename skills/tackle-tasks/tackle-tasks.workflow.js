@@ -121,8 +121,9 @@ const IMPLEMENT_FINALIZE_SCHEMA = {
   properties: {
     headOid: { type: 'string' },
     changedPaths: { type: 'array', items: { type: 'string' } },
+    notesPresent: { type: 'boolean' },
   },
-  required: ['headOid', 'changedPaths'],
+  required: ['headOid', 'changedPaths', 'notesPresent'],
 }
 
 const OCCURRENCE_OIDS_SCHEMA = {
@@ -409,7 +410,9 @@ const runImplement = async () => {
     result = (await runWorker(note)) ?? result
   }
 
-  const finalized = await retryAgent(() => agent(emitterInstruction('implement-finalize', { baseOid: base }), { label: `implement-finalize:${N}`, phase: `${N} Implement`, schema: IMPLEMENT_FINALIZE_SCHEMA })) ?? { headOid: base, changedPaths: [] }
+  const notesRelative = preparedTask.notesFile.slice(WORKTREE.length + 1)
+
+  const finalized = await retryAgent(() => agent(emitterInstruction('implement-finalize', { baseOid: base, notesRelative }), { label: `implement-finalize:${N}`, phase: `${N} Implement`, schema: IMPLEMENT_FINALIZE_SCHEMA })) ?? { headOid: base, changedPaths: [], notesPresent: false }
 
   if (result.status === 'done' && finalized.headOid === base) {
     result = {
@@ -418,9 +421,22 @@ const runImplement = async () => {
       summary: 'implementer reported done but made no commit in taskWorktree',
       remaining: ['commit the implementation in the prepared task worktree'],
     }
+  } else if (result.status === 'done' && (!finalized.changedPaths.includes(notesRelative) || !finalized.notesPresent)) {
+    result = {
+      ...result,
+      status: 'blocked',
+      summary: `implementer reported done but the committed changes are missing the required notes file: ${notesRelative}`,
+      remaining: [`commit ${notesRelative} in the prepared task worktree`],
+    }
+  } else if (result.status === 'done' && !finalized.changedPaths.some((p) => preparedTask.files.includes(p))) {
+    result = {
+      ...result,
+      status: 'blocked',
+      summary: 'implementer reported done but committed no task-owned implementation path',
+      remaining: ['commit at least one owned implementation file in the prepared task worktree'],
+    }
   }
 
-  const notesRelative = preparedTask.notesFile.slice(WORKTREE.length + 1)
   const fenceViolations = finalized.changedPaths.filter(
     (p) => p !== notesRelative && !preparedTask.files.includes(p),
   )

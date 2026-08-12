@@ -17,7 +17,8 @@
     "Reviewed the second staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 82 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,330 tests. The attempt fixes C86-36's cleanup-incomplete and aborted-rebase status recovery, but source audit rejected the atomic batch because successful advance-conflict result reconstruction still drops active-occurrence touchedPaths and can bypass C86-27's post-approval regate.",
     "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt.",
     "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed.",
-    "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged."
+    "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged.",
+    "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed."
   ],
   "notes": [
     {
@@ -59,6 +60,10 @@
     {
       "date": "2026-08-11T20:43:49-07:00",
       "text": "C86-23, C86-25, and C86-26 were reviewed as one atomic batch and rejected. The unstaged attempt appears to satisfy C86-23 and C86-26 and fixes C86-25's notes-only and owned-change-without-notes cases, but it still accepts deletion of a pre-existing tracked notes file as if the required artifact were committed. All eight implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T20:54:55-07:00",
+      "text": "Second atomic review of C86-23, C86-25, and C86-26 accepted the cumulative implementation. The finalizer now distinguishes a deleted notes path from a notes blob present in HEAD, and deterministic regression coverage preserves the zero-commit, notes-only, missing-notes, ownership, task-state-lock, and authoritative-root boundaries. All three findings were removed."
     }
   ],
   "issues": [
@@ -293,191 +298,6 @@
         }
       ],
       "existingOpenTask": "No matching open task."
-    },
-    {
-      "number": 23,
-      "title": "C86-23 — High: accepted proposed tasks bypass the task-state lock and can race with close",
-      "class": "high",
-      "cause": "The gate can invoke create-task while tail workflows are concurrently merging and closing. The generated create-task brief directs its agent to append to tasks.json directly. closeTasks holds the shared lock and publishes a whole-file replacement, but an editor that ignores that lock can overwrite the close or be overwritten by it, resurrecting a closed task or losing the new task.",
-      "locations": [
-        {
-          "path": "scripts/tackle-tasks_SkillBodyEmitter.ts",
-          "lines": "142-160",
-          "role": "Accepted proposals may invoke create-task while tail workflows are active."
-        },
-        {
-          "path": "scripts/createTaskBrief.ts",
-          "lines": "21-37",
-          "role": "The skill tells an agent to edit tasks.json directly without the task-state mutex."
-        },
-        {
-          "path": "scripts/closeTasks.ts",
-          "lines": "59-61, 101-114",
-          "role": "Close uses a locked whole-file replacement that can race with the unlocked editor."
-        }
-      ],
-      "provingTest": "In two real processes, make the append process read tasks.json and pause. Let closeTasks acquire the lock, archive and remove task A, and publish. Resume the stale append of task B and prove A is resurrected. Add the reverse ordering and prove B can be lost under the current direct-editor protocol.",
-      "suggestedFixApproach": [
-        "Add a programmatic task-append command that resolves the authoritative project root, acquires withTaskStateLock, rereads current state, allocates the number, appends, and atomically publishes.",
-        "Make the create-task skill gather fields but call that command; it must never write tasks.json directly. Test both orderings with real processes and an acknowledged inside-lock barrier."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/taskStateLock.ts",
-          "role": "withTaskStateLock and writeJsonAtomically are the established transaction boundary for task-state writers."
-        },
-        {
-          "file": "scripts/closeTasks.ts",
-          "role": "Close already rereads and publishes task state while holding that mutex."
-        }
-      ],
-      "acceptanceCriteria": [
-        "create-task calls one programmatic append operation and never directly edits tasks.json.",
-        "Append resolves authoritative state, locks, rereads, allocates, and atomically publishes inside one transaction.",
-        "Deterministic real-process tests cover append-first and close-first without resurrection or loss."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/closeTasks.ts",
-          "code": "const pair = resolveTaskFiles(projectRoot)\nreturn withTaskStateLock(pair.tasksPath, () => closeTasksLocked(taskNumbers, closureNote, pair, commitHashes))"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "scripts/appendTask.ts",
-          "code": "export function appendTask(sourceRoot, draft) {\n  const pair = resolveTaskFiles(sourceRoot)\n  return withTaskStateLock(pair.tasksPath, () => {\n    const tasks = readTaskFile(pair.tasksPath)\n    const task = { ...draft, taskNumber: nextTaskNumber(tasks) }\n    writeJsonAtomically(pair.tasksPath, [...tasks, task])\n    return task\n  })\n}"
-        },
-        {
-          "file": "scripts/createTaskBrief.ts",
-          "code": "Send the task draft to appendTask on quoted-heredoc stdin; never edit tasks.json directly."
-        }
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
-      "number": 25,
-      "title": "C86-25 — High: deleting tracked implementation notes still satisfies the done guard",
-      "class": "high",
-      "cause": "The unstaged attempt now blocks zero-commit, notes-only, and owned-change-without-notes done results, but it treats the expected notes pathname's presence in git diff --name-only base..HEAD as proof that the notes artifact was committed. A deletion also appears in that path list, so a worker starting from a checkout with tracked implementation notes can delete them, commit an owned-file change, report done, and pass with no required notes file in HEAD.",
-      "locations": [
-        {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "412-437",
-          "role": "Completion checks changedPaths membership but has no signal proving that the notes path exists as a tracked file in finalized HEAD."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "489-494",
-          "role": "The finalizer returns only headOid and name-only changes, which cannot distinguish a notes-file addition/modification from its deletion."
-        },
-        {
-          "path": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "lines": "338-430",
-          "role": "New coverage proves notes-only and never-created-notes rejection but does not exercise deletion of notes already tracked at the implementation-stage base."
-        }
-      ],
-      "provingTest": "Before launching a production-shaped implement stage, commit plans/task-N-implementation-notes.md into the prepared task worktree so it exists at the captured base. Have the worker delete that file, change and commit an owned source path, and return done. The current attempted guard returns done because changedPaths contains both paths; the corrected result is blocked with the missing-notes reason, and git cat-file -e HEAD:plans/task-N-implementation-notes.md fails as the negative control.",
-      "suggestedFixApproach": [
-        "Extend implement-finalize to return a deterministic tracked-at-HEAD boolean for the exact expected notes path, using a Git tree query rather than worktree existence alone.",
-        "Require both changedPaths membership and tracked-at-HEAD presence before accepting done; retain the distinct notes-only, never-created-notes, zero-commit, and ownership-fence guards. Add the pre-existing-notes deletion regression."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "role": "The unstaged attempt correctly snapshots HEAD and blocks zero-commit, notes-only, and never-created-notes done results; preserve those guards while adding artifact presence."
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "The worker contract names the exact notes path, and implement-finalize is the deterministic Git boundary that should verify it in HEAD."
-        }
-      ],
-      "acceptanceCriteria": [
-        "Done requires the exact implementation-notes path to be changed in the commit range and present as a tracked file in finalized HEAD.",
-        "Deleting a notes file that existed at the implementation-stage base is blocked with the missing-notes reason even when an owned implementation path was committed.",
-        "The zero-commit, notes-only, never-created-notes, and ownership-fence behavior remains intact with deterministic workflow-level coverage."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "else if (result.status === 'done' && !finalized.changedPaths.includes(notesRelative)) {\n  result = { ...result, status: 'blocked', summary: `implementer reported done but the committed changes are missing the required notes file: ${notesRelative}` }\n} else if (result.status === 'done' && !finalized.changedPaths.some((p) => preparedTask.files.includes(p))) {\n  result = { ...result, status: 'blocked', summary: 'implementer reported done but committed no task-owned implementation path' }\n}"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "function roleImplementFinalize() {\n  const notesRelative = `plans/task-${N}-implementation-notes.md`\n  const notesTrackedInHead = gitPathExistsInHead(WORKTREE, notesRelative)\n  printResult({ headOid, changedPaths, notesTrackedInHead })\n}"
-        },
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "const hasCommittedNotes = finalized.changedPaths.includes(notesRelative) && finalized.notesTrackedInHead\nif (result.status === 'done' && !hasCommittedNotes) {\n  result = { ...result, status: 'blocked', summary: `implementer reported done but finalized HEAD is missing ${notesRelative}` }\n}"
-        },
-        {
-          "file": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "code": "test('done rejects deletion of notes tracked at the implementation base', async () => {\n  // Commit notes before runImplement captures base; worker deletes notes and commits an owned change.\n  // Assert blocked with the missing-notes reason and that HEAD does not contain notesRelative.\n})"
-        }
-      ],
-      "existingOpenTask": "No matching open task."
-    },
-    {
-      "number": 26,
-      "title": "C86-26 — High: emitter roles reload stale ownership from the private worktree and undo widening",
-      "class": "high",
-      "cause": "The emitter's loadPreparedTask resolves and reads tasks.json under WORKTREE. Widening correctly updates authoritative state under SOURCE_ROOT and briefly writes a widened worktree brief, but the next plan or verify role calls loadPreparedTask again, reloads the stale private task record, overwrites the widened brief, and emits the old ownership list. The workflow's in-memory preparedTask.files update is not passed to the emitter. A separately launched implement stage has the same stale-fence defect.",
-      "locations": [
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "55-76, 395-421, 428-430",
-          "role": "Every role reloads and rewrites task context from the stale worktree task file."
-        },
-        {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "264, 310-326, 360-395",
-          "role": "The workflow updates ownership only in memory, while subsequent emitter calls reload their own stale copy."
-        },
-        {
-          "path": "scripts/addTaskFiles.ts",
-          "lines": "60-90",
-          "role": "Widening correctly updates authoritative source state rather than the private checkout."
-        }
-      ],
-      "provingTest": "Prepare a task owning a.ts. Drive a rejected verifier response with missingFiles containing b.ts. Assert that widen-files updates authoritative tasks.json, then capture the immediately following replanner and verifier prompts: both must include b.ts and the regenerated brief must retain it. The current plan role reloads the private a.ts-only record and overwrites the widened brief. Also launch a fresh implement stage and assert that its prompt and returned fence include b.ts; current behavior reloads only a.ts.",
-      "suggestedFixApproach": [
-        "Load the current task record using resolveTaskFiles(SOURCE_ROOT), while continuing to place the task brief, plan, notes, Git operations, and edits under WORKTREE.",
-        "Represent authoritative task-state root and task checkout root as separate fields so later code cannot accidentally use one for the other."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "scripts/addTaskFiles.ts",
-          "role": "Widening already resolves task files from SOURCE_ROOT and atomically updates authoritative tasks.json plus the run snapshot."
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "Worktree-local brief, plan, notes, Git, and edit paths are already rooted under WORKTREE and should remain there."
-        }
-      ],
-      "acceptanceCriteria": [
-        "Every emitter role reads the current task record from authoritative SOURCE_ROOT task state.",
-        "Brief, plan, notes, Git operations, and source edits remain rooted in the private WORKTREE.",
-        "A widen-files result survives the immediately following replan, verify, and separately launched implement roles.",
-        "Types distinguish taskStateRoot from checkoutRoot so the roots cannot be accidentally interchanged."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "function roleWidenFiles() {\n  const widened = addTaskFiles([N], PAYLOAD.missingFiles ?? [], SOURCE_ROOT)\n  const widenedTask = widened.find((entry) => entry.taskNumber === N)\n  writeTaskBriefFile(widenedTask, WORKTREE)\n  printResult({ files: widenedTask.files ?? [] })\n}"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "type PreparedTask = { ...; taskStateRoot: string; checkoutRoot: string }\nfunction loadPreparedTask() {\n  const pair = resolveTaskFiles(SOURCE_ROOT)\n  const task = readTaskFile(pair.tasksPath).find((entry) => entry.taskNumber === N)\n  const briefFile = writeTaskBriefFile(task, WORKTREE)\n  return { ...taskData, taskStateRoot: SOURCE_ROOT, checkoutRoot: WORKTREE }\n}"
-        },
-        {
-          "file": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "code": "test('widened ownership survives replanning, verification, and a fresh implement stage', async () => { /* assert b.ts in every emitted prompt and fence */ })"
-        }
-      ],
-      "existingOpenTask": "Task 87 is related to stale relaunch briefs but targets the superseded plan workflow and does not cover standalone implement ownership; no exact open item exists."
     }
   ]
 }

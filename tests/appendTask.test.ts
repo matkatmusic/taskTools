@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 import { appendTaskToTasksJson, buildTaskEntry, type NewTaskPayload } from "../scripts/appendTask.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
@@ -128,4 +129,120 @@ test("test_appendTaskScriptFailsWhenStdinIsEmpty", () => {
     assert.throws(() =>
         execFileSync("node", [scriptPath], { cwd: projectRoot, input: "", encoding: "utf8", stdio: "pipe" }),
     );
+});
+
+// --- lock races with closeTasks (C86-23): the append must never resurrect a closed task or be lost.
+
+const APPEND_TASK_URL = pathToFileURL(scriptPath).href;
+const CLOSE_TASKS_URL = pathToFileURL(fileURLToPath(new URL("../scripts/closeTasks.ts", import.meta.url))).href;
+
+function makeRaceRepo(): string {
+    const projectRoot = makeTemporaryTaskRepo([{ taskNumber: 1, title: "first" }]);
+    writeFileSync(join(projectRoot, ".taskTools", "completedTasks.json"), "[]\n");
+    return projectRoot;
+}
+
+function readTaskSummaries(projectRoot: string, file: string): [number, string][] {
+    const tasks = JSON.parse(readFileSync(join(projectRoot, ".taskTools", file), "utf8")) as TaskRecord[];
+    return tasks.map((t) => [t.taskNumber, t.title ?? ""]);
+}
+
+function requireExitZero(child: ChildProcess): Promise<void> {
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    return new Promise((resolve, reject) => {
+        child.on("exit", (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`child exited ${code}: ${stderr}`));
+        });
+    });
+}
+
+async function waitForFile(path: string): Promise<void> {
+    while (!existsSync(path)) await sleep(5);
+}
+
+const WAIT_LOOP = `const WAIT = new Int32Array(new SharedArrayBuffer(4));`;
+
+// Waits on startFile, then appends once.
+function spawnAppendChild(projectRoot: string, startFile: string): ChildProcess {
+    const code = `
+import { existsSync } from "node:fs";
+import { appendTaskToTasksJson } from ${JSON.stringify(APPEND_TASK_URL)};
+${WAIT_LOOP}
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+appendTaskToTasksJson(${JSON.stringify(minimalPayload({ title: "second" }))}, ${JSON.stringify(projectRoot)});
+`;
+    return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+// Waits on startFile, then closes task 1 once.
+function spawnCloseChild(projectRoot: string, startFile: string): ChildProcess {
+    const code = `
+import { existsSync } from "node:fs";
+import { closeTasks } from ${JSON.stringify(CLOSE_TASKS_URL)};
+${WAIT_LOOP}
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+closeTasks([1], "closed during race", ${JSON.stringify(projectRoot)});
+`;
+    return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+// Holds the real lock, writes ackFile, then blocks until releaseFile exists.
+function spawnLockAcknowledgingChild(kind: "append" | "close", projectRoot: string, startFile: string, ackFile: string, releaseFile: string): ChildProcess {
+    const importLine = kind === "append"
+        ? `import { appendTaskToTasksJson } from ${JSON.stringify(APPEND_TASK_URL)};`
+        : `import { closeTasks } from ${JSON.stringify(CLOSE_TASKS_URL)};`;
+    const callLine = kind === "append"
+        ? `appendTaskToTasksJson(${JSON.stringify(minimalPayload({ title: "second" }))}, ${JSON.stringify(projectRoot)}, { onAcquired });`
+        : `closeTasks([1], "closed during race", ${JSON.stringify(projectRoot)}, [], { onAcquired });`;
+    const code = `
+import { existsSync, writeFileSync } from "node:fs";
+${importLine}
+${WAIT_LOOP}
+while (!existsSync(${JSON.stringify(startFile)})) Atomics.wait(WAIT, 0, 0, 5);
+function onAcquired() {
+  writeFileSync(${JSON.stringify(ackFile)}, "ack");
+  while (!existsSync(${JSON.stringify(releaseFile)})) Atomics.wait(WAIT, 0, 0, 5);
+}
+${callLine}
+`;
+    return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
+}
+
+test("test_appendWinsTheLockThenCloseFollows_closedTaskArchivesAndAppendedTaskSurvives", async () => {
+    const projectRoot = makeRaceRepo();
+    const startFile = join(projectRoot, "start");
+    const ackFile = join(projectRoot, "append-acquired");
+    const releaseFile = join(projectRoot, "append-release");
+
+    const append = spawnLockAcknowledgingChild("append", projectRoot, startFile, ackFile, releaseFile);
+    writeFileSync(startFile, "go");
+    await waitForFile(ackFile); // append provably holds the lock before the closer starts
+
+    const close = spawnCloseChild(projectRoot, startFile);
+    writeFileSync(releaseFile, "go");
+    await Promise.all([requireExitZero(append), requireExitZero(close)]);
+
+    assert.deepEqual(readTaskSummaries(projectRoot, "tasks.json"), [[2, "second"]]);
+    assert.deepEqual(readTaskSummaries(projectRoot, "completedTasks.json").map(([n]) => n), [1]);
+});
+
+test("test_closeWinsTheLockThenAppendFollows_task1StaysClosedAndAppendedNumberAccountsForIt", async () => {
+    const projectRoot = makeRaceRepo();
+    const startFile = join(projectRoot, "start");
+    const ackFile = join(projectRoot, "close-acquired");
+    const releaseFile = join(projectRoot, "close-release");
+
+    const close = spawnLockAcknowledgingChild("close", projectRoot, startFile, ackFile, releaseFile);
+    writeFileSync(startFile, "go");
+    await waitForFile(ackFile); // close provably holds the lock before the appender starts
+
+    const append = spawnAppendChild(projectRoot, startFile);
+    writeFileSync(releaseFile, "go");
+    await requireExitZero(close);
+    await requireExitZero(append);
+
+    assert.deepEqual(readTaskSummaries(projectRoot, "tasks.json"), [[2, "second"]]);
+    assert.deepEqual(readTaskSummaries(projectRoot, "completedTasks.json").map(([n]) => n), [1]);
 });
