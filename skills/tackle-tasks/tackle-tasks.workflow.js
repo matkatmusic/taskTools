@@ -14,7 +14,11 @@ if (!SOURCE_ROOT) throw new Error('tackle-tasks.workflow.js: no "sourceRoot" in 
 const EMITTER_PATH = ARGS.agentPromptEmitterPath
 if (!EMITTER_PATH) throw new Error('tackle-tasks.workflow.js: no "agentPromptEmitterPath" in args; the skill-body emitter must supply it')
 const REPOSITORY_MANIFEST = ARGS.repositoryManifest
-// Plan/implement-only runs may carry no manifest; the implement stage still needs at least a root occurrence.
+// C86-40: implement must know the real occurrence graph or it silently routes submodule-owned commits to root.
+if (!REPOSITORY_MANIFEST && (STAGE === 'implement' || STAGE === 'plan+implement')) {
+  throw new Error(`tackle-tasks.workflow.js: no "repositoryManifest" in args for stage "${STAGE}"; implement refuses to fall back to a root-only occurrence`)
+}
+// A plan-only launch never reaches runImplement, so this fallback stays unused but harmless without a manifest.
 const IMPLEMENT_OCCURRENCES = (REPOSITORY_MANIFEST && REPOSITORY_MANIFEST.occurrences)
   || [{ occurrenceId: '', checkoutPath: WORKTREE, parentOccurrenceId: null, pathInParent: null, depth: 0 }]
 
@@ -207,8 +211,17 @@ const REBASE_FIX_VERIFY_SCHEMA = {
         required: ['occurrenceId', 'path'],
       },
     },
+    // C86-41: paths the fix committed in its OWN layer, root-relative, filtered against the approved fence.
+    activeFenceViolations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { occurrenceId: { type: 'string' }, path: { type: 'string' } },
+        required: ['occurrenceId', 'path'],
+      },
+    },
   },
-  required: ['ownCheckoutClean', 'touchedPaths'],
+  required: ['ownCheckoutClean', 'touchedPaths', 'activeFenceViolations'],
 }
 
 const MERGE_LAYER_OUTCOME_SCHEMA = {
@@ -508,16 +521,22 @@ const advanceLiveConflict = async (checkoutPaths, occurrencesDeepestFirst, activ
   return advanced
 }
 
-// Verifies a fix attempt before any rebase/test cycle re-runs: unfixed, dirty, or another layer touched all fail.
+// Unfixed, dirty, or another layer touched all fail. An own-layer out-of-fence commit is flagged, not retried.
 const attemptRebaseFix = async (checkoutPaths, occurrencesDeepestFirst, occurrenceId, checkoutPath, testOutput, forbiddenPaths, fenceViolations) => {
   const otherOccurrenceIds = occurrencesDeepestFirst.map((o) => o.occurrenceId).filter((id) => id !== occurrenceId)
-  const beforeOids = await fetchOccurrenceOids(checkoutPaths, otherOccurrenceIds)
+  const allBeforeOids = await fetchOccurrenceOids(checkoutPaths, [occurrenceId, ...otherOccurrenceIds])
+  const activeBeforeOid = allBeforeOids[occurrenceId]
+  const beforeOids = Object.fromEntries(otherOccurrenceIds.map((id) => [id, allBeforeOids[id]]))
   const fixOutcome = await runRebaseFixAgent(checkoutPath, occurrenceId, testOutput, forbiddenPaths)
   const verify = await retryAgent(() => agent(
-    emitterInstruction('rebase-fix-verify', { checkoutPath, occurrenceId, beforeOids, checkoutPaths: pathsFor(checkoutPaths, otherOccurrenceIds) }),
+    emitterInstruction('rebase-fix-verify', {
+      checkoutPath, occurrenceId, beforeOids, checkoutPaths: pathsFor(checkoutPaths, otherOccurrenceIds),
+      activeBeforeOid, repositoryManifest: REPOSITORY_MANIFEST,
+    }),
     { label: `rebase-fix-verify:${N}`, phase: `${N} Rebase-Test`, schema: REBASE_FIX_VERIFY_SCHEMA },
-  )) ?? { ownCheckoutClean: false, touchedPaths: [] }
+  )) ?? { ownCheckoutClean: false, touchedPaths: [], activeFenceViolations: [] }
   for (const touched of verify.touchedPaths) fenceViolations.push(touched)
+  for (const violation of verify.activeFenceViolations) fenceViolations.push(violation)
   return fixOutcome != null && fixOutcome.fixed === true && verify.ownCheckoutClean && verify.touchedPaths.length === 0
 }
 

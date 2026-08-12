@@ -14,49 +14,10 @@ const runMergePhaseUrl = new URL("./runMergePhase.ts", import.meta.url).href;
 const bootstrapCall = (mode: "discover" | "prepare", argsValue: string) =>
   `{"scriptPath": ${JSON.stringify(bootstrapWorkflowPath)}, "args": {"mode": "${mode}", "argsValue": ${JSON.stringify(argsValue)}, "bootstrapAgentPromptEmitterPath": ${JSON.stringify(bootstrapAgentPromptEmitterPath)}}}`;
 
-// Opt-in, so a brief without `series` stays byte-identical to the parallel one.
-const seriesSection = (argsValue: string) =>
-  /\bseries\b/.test(argsValue)
-    ? `
-## Serial mode
+const isSeriesArgs = (argsValue: string): boolean => /\bseries\b/.test(argsValue);
 
-\`series\` is in the arguments: treat the task numbers as a chain. Run everything below once per task number, in the order given, and finish one task completely — through **Closing your tasks** — before starting the next. Never prepare or plan two of them together.
-
-The blocker/task-detail results above were computed once, for the whole array, so they are stale for every task after the first. Re-run \`Workflow(${bootstrapCall("discover", "[N]")})\` and \`Workflow(${bootstrapCall("prepare", "[N]")})\` for each task as you reach it, with a single-element array \`[N]\`, so each task gets its own blocker check and its own pipeline args.
-
-If a task ends with anything unmerged, stop the chain and report. The next task's blocker is still open, and planning it against a base its predecessor never landed on wastes the run.
-
-Do the **Commit message** section once, after the last task, not per task.
-`
-    : "";
-
-export const skillBody = (argsValue: string): string => {
-  const brief = `Run \`Workflow(${bootstrapCall("discover", argsValue)})\`. It returns \`{blockerPairs, unblockedNumbers}\` — the blocker check for every task number you were given, computed in an isolated agent so the raw task list never enters this conversation.
-
-Invocation format: the task numbers come first as a JSON array with **no spaces** — \`[268,270,281]\` — followed by \`valid\` and any free text. Avoid apostrophes and backticks in that trailing text; it reaches a later shell command inside single quotes.
-
-If \`blockerPairs\` is non-empty, call \`Workflow\` with scriptPath \`${blockersWorkflowPath}\`, args \`{ pairs: blockerPairs }\`. It returns \`{ disproven, stillBlocked }\`. For every entry in \`disproven\`, in order, run with Bash:
-
-\`\`\`
-node "${blockerVerdictsPath}" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
-<the entry's reason, verbatim>
-BLOCKERREASONEOF
-\`\`\`
-
-The delimiter must stay single-quoted so the shell performs no expansion on the reason text. Do not work on any task with an entry left in \`stillBlocked\` — report those open blockers and move on to the next requested task that is unblocked. If \`blockerPairs\` was empty, skip straight to the next paragraph.
-
-Now run \`Workflow(${bootstrapCall("prepare", argsValue)})\`, after any \`disproven\` stripping above so it sees a disproven task as runnable. It returns \`{taskDetails, pipelineArgs, maxConcurrency}\`: \`taskDetails\` is one \`{number, status, task}\` entry per unblocked task number (\`status\` is \`"open"\`, \`"completed"\`, or \`"not-found"\`, and \`task\` is that task's record from \`tasks.json\` or \`completedTasks.json\`, or \`null\`); \`pipelineArgs\` is the pipeline arguments described below; \`maxConcurrency\` is the concurrency ceiling for **Running the pipeline**.
-
-Invoke \`/ponytail:ponytail ultra\`.
-
-When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every entry in \`taskDetails\` as open and relevant.
-${seriesSection(argsValue)}
-## Verification
-
-Review \`taskDetails\` from the prepare result above (each entry's \`task\` comes from \`tasks.json\` if \`status\` is \`"open"\`, or \`completedTasks.json\` if \`"completed"\`). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
-Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks in \`taskDetails\`.
-
-## Running the pipeline
+// Shared by both modes: works unchanged whether one task or several are in scope.
+const pipelineAndGateSections = `## Running the pipeline
 
 \`pipelineArgs\` has these keys: \`repo\`,
 \`typecheckCommand\`, \`groups\`, \`repositorySources\`, \`repositoryManifest\`,
@@ -86,7 +47,7 @@ hit \`"report"\`:
 - \`"launch-plan"\`: \`action.taskNumber\` names the task. Launch \`${WORKFLOW_PATH}\`
   as a **background** workflow — the call returns immediately, so the
   orchestrator stays free to launch the next thing right away — with args
-  \`{task: action.taskNumber, typecheckCommand: pipelineArgs.typecheckCommand, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
+  \`{task: action.taskNumber, typecheckCommand: pipelineArgs.typecheckCommand, repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
   (\`worktree\` is the \`worktree\` field of the \`pipelineArgs.groups\` entry
   whose \`tasks[0].number\` equals \`action.taskNumber\`, and
   \`agentPromptEmitterPath\` is always exactly
@@ -259,11 +220,84 @@ Closing each merged task happens automatically: \`${WORKFLOW_PATH}\`'s merge sta
 If the user requests adding tasks, invoke the \`create-task\` skill once per task — never edit \`tasks.json\` directly.
 
 During implementation, you (the orchestrator) run typecheck only — no test suites or visual checks. Workers run the tests covering the files they own and fix their own failures before reporting status complete; a worker with failing tests reports blocked or partial, never complete. Full verification (typecheck + each layer's complete test suite) runs once per task, inside that task's own rebase-test stage, before it can reach the merge queue's merge stage.
+`;
 
-## Commit message
+const commitMessageSection = `## Commit message
 
 Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them. Then invoke the \`commit-message\` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.
 `;
+
+export const skillBody = (argsValue: string): string =>
+  isSeriesArgs(argsValue) ? seriesSkillBody(argsValue) : parallelSkillBody(argsValue);
+
+const parallelSkillBody = (argsValue: string): string => {
+  const brief = `Run \`Workflow(${bootstrapCall("discover", argsValue)})\`. It returns \`{blockerPairs, unblockedNumbers}\` — the blocker check for every task number you were given, computed in an isolated agent so the raw task list never enters this conversation.
+
+Invocation format: the task numbers come first as a JSON array with **no spaces** — \`[268,270,281]\` — followed by \`valid\` and any free text. Avoid apostrophes and backticks in that trailing text; it reaches a later shell command inside single quotes.
+
+If \`blockerPairs\` is non-empty, call \`Workflow\` with scriptPath \`${blockersWorkflowPath}\`, args \`{ pairs: blockerPairs }\`. It returns \`{ disproven, stillBlocked }\`. For every entry in \`disproven\`, in order, run with Bash:
+
+\`\`\`
+node "${blockerVerdictsPath}" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
+<the entry's reason, verbatim>
+BLOCKERREASONEOF
+\`\`\`
+
+The delimiter must stay single-quoted so the shell performs no expansion on the reason text. Do not work on any task with an entry left in \`stillBlocked\` — report those open blockers and move on to the next requested task that is unblocked. If \`blockerPairs\` was empty, skip straight to the next paragraph.
+
+Now run \`Workflow(${bootstrapCall("prepare", argsValue)})\`, after any \`disproven\` stripping above so it sees a disproven task as runnable. It returns \`{taskDetails, pipelineArgs, maxConcurrency}\`: \`taskDetails\` is one \`{number, status, task}\` entry per unblocked task number (\`status\` is \`"open"\`, \`"completed"\`, or \`"not-found"\`, and \`task\` is that task's record from \`tasks.json\` or \`completedTasks.json\`, or \`null\`); \`pipelineArgs\` is the pipeline arguments described below; \`maxConcurrency\` is the concurrency ceiling for **Running the pipeline**.
+
+Invoke \`/ponytail:ponytail ultra\`.
+
+When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat every entry in \`taskDetails\` as open and relevant.
+
+## Verification
+
+Review \`taskDetails\` from the prepare result above (each entry's \`task\` comes from \`tasks.json\` if \`status\` is \`"open"\`, or \`completedTasks.json\` if \`"completed"\`). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
+Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of the unblocked tasks in \`taskDetails\`.
+
+${pipelineAndGateSections}
+${commitMessageSection}`;
+  return brief;
+};
+
+// No whole-array discover/prepare ever runs, so only one worktree lease is live at a time (C86-43).
+const seriesSkillBody = (argsValue: string): string => {
+  const brief = `\`series\` is in the arguments: treat the task numbers as a chain. For each task number, in the order given, run everything below once — through **Closing your tasks** — and finish that task completely before starting the next. Never discover, prepare, plan, or implement two of them together.
+
+Invocation format: the task numbers come first as a JSON array with **no spaces** — \`[268,270,281]\` — followed by \`series\`, \`valid\`, and any free text. Avoid apostrophes and backticks in that trailing text; it reaches a later shell command inside single quotes.
+
+For the current task number \`N\` in the chain, replace every \`argsValue\` reference below with a single-element array \`[N]\` plus the same trailing words (for example \`[270] valid series\`), so each task gets its own blocker check, its own pipeline args, and its own worktree lease — never the whole chain's array. Do not run any discover or prepare call against the whole chain at once.
+
+Run \`Workflow(${bootstrapCall("discover", "[N]")})\`. It returns \`{blockerPairs, unblockedNumbers}\` — the blocker check for this one task number, computed in an isolated agent so the raw task list never enters this conversation.
+
+If \`blockerPairs\` is non-empty, call \`Workflow\` with scriptPath \`${blockersWorkflowPath}\`, args \`{ pairs: blockerPairs }\`. It returns \`{ disproven, stillBlocked }\`. For every entry in \`disproven\`, in order, run with Bash:
+
+\`\`\`
+node "${blockerVerdictsPath}" <blockedTask> <blockerTask> <<'BLOCKERREASONEOF'
+<the entry's reason, verbatim>
+BLOCKERREASONEOF
+\`\`\`
+
+The delimiter must stay single-quoted so the shell performs no expansion on the reason text. If this task's own entry is left in \`stillBlocked\`, report the open blocker and stop the chain — do not prepare or start the next task number. If \`blockerPairs\` was empty, skip straight to the next paragraph.
+
+Now run \`Workflow(${bootstrapCall("prepare", "[N]")})\`, after any \`disproven\` stripping above so it sees a disproven task as runnable. It returns \`{taskDetails, pipelineArgs, maxConcurrency}\` scoped to this one task: \`taskDetails\` has at most one \`{number, status, task}\` entry (\`status\` is \`"open"\`, \`"completed"\`, or \`"not-found"\`, and \`task\` is that task's record from \`tasks.json\` or \`completedTasks.json\`, or \`null\`); \`pipelineArgs\` is the pipeline arguments described below; \`maxConcurrency\` is the concurrency ceiling for **Running the pipeline**. If \`status\` is not \`"open"\`, report it and stop the chain instead of preparing the next task number.
+
+Invoke \`/ponytail:ponytail ultra\`.
+
+When \`${argsValue}\` contains the word \`valid\`, the user has confirmed the tasks are still relevant — skip the **Verification** section below and treat this task's \`taskDetails\` entry as open and relevant.
+
+## Verification
+
+Review \`taskDetails\` from the prepare result above (its entry's \`task\` comes from \`tasks.json\` if \`status\` is \`"open"\`, or \`completedTasks.json\` if \`"completed"\`). Cross-reference the task with the codebase to determine if the task is still relevant or if it has been resolved.
+Use the git history and recent commits (over the last 3 days) to confirm/deny the existence of this task.
+
+${pipelineAndGateSections}
+If this task ends with anything unmerged — not approved, rejected at regate, or still in \`unmerged\`/\`cleanupIncomplete\` on \`buildMergeReport\` — stop the chain and report. The next task's blocker is still open, and preparing it against a base this task never landed on wastes the run. Only once this task is fully closed (or explicitly skipped as not-found/completed) do you discover and prepare the next task number in the chain, repeating everything above.
+
+Do the **Commit message** section once, after the last task in the chain, not per task.
+
+${commitMessageSection}`;
   return brief;
 };
 

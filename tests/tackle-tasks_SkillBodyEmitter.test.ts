@@ -3,13 +3,15 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compileFunction } from "node:vm";
 import { skillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
+import { buildWorkflowArguments } from "../scripts/prepareTasks.ts";
+import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks/SKILL.md", import.meta.url));
@@ -70,19 +72,69 @@ test("a real invocation returns instantly, without touching tasks.json or runnin
 // Orchestration content: static main-agent instructions the emitter still owns.
 // ---------------------------------------------------------------------------
 
-test("series adds the serial-mode section and leaves the brief untouched without it", () => {
-  const parallel = skillBody("[131,132] valid");
+// C86-43: series mode must never emit a whole-array discover/prepare call before its per-task loop.
+test("series brief contains no whole-array discover or prepare call, only a per-task [N] loop", () => {
   const serial = skillBody("[131,132] valid series");
-  assert.doesNotMatch(parallel, /Serial mode/);
-  assert.match(serial, /## Serial mode/);
-  const withoutSection = serial.replace(/\n## Serial mode[\s\S]*?not per task\.\n/, "");
-  assert.equal(withoutSection.replaceAll(" series", ""), parallel);
+  assert.doesNotMatch(serial, /"argsValue":\s*"\[131,132\][^"]*"/);
+  const discoverCalls = [...serial.matchAll(/"mode":\s*"discover",\s*"argsValue":\s*"([^"]*)"/g)].map((m) => m[1]);
+  const prepareCalls = [...serial.matchAll(/"mode":\s*"prepare",\s*"argsValue":\s*"([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(discoverCalls, ["[N]"]);
+  assert.deepEqual(prepareCalls, ["[N]"]);
+  assert.match(serial, /single-element array `\[N\]`/);
+  assert.match(serial, /finish that task completely before starting the next/);
+});
+
+test("series brief stops the chain on an unmerged task and does the commit-message step once, at the end", () => {
+  const serial = skillBody("[131,132] valid series");
+  assert.match(serial, /stop the chain and report/);
+  assert.match(serial, /Do the \*\*Commit message\*\* section once, after the last task in the chain, not per task\./);
+  const commitSectionIndex = serial.lastIndexOf("## Commit message");
+  assert.equal(serial.indexOf("## Commit message"), commitSectionIndex, "only one Commit message section");
+});
+
+test("parallel skillBody stays byte-identical whether or not the word series appears unrelated to it, so long as it does not match \\bseries\\b", () => {
+  const withoutSeries = skillBody("[131,132] valid");
+  assert.doesNotMatch(withoutSeries, /Serial mode|series/);
+});
+
+// C86-43: exercises the real lease code the old whole-array-then-per-task order collided against.
+test("real lease mechanism: a whole-array prepare followed by a per-task re-prepare collides, but a lone per-task prepare (what the series brief now emits) does not", () => {
+  const root = mkdtempSync(join(tmpdir(), "tackle-tasks-series-lease-"));
+  execFileSync("git", ["-C", root, "init", "-q", "-b", "main"]);
+  execFileSync("git", ["-C", root, "config", "user.email", "test@example.com"]);
+  execFileSync("git", ["-C", root, "config", "user.name", "Test"]);
+  execFileSync("git", ["-C", root, "config", "commit.gpgsign", "false"]);
+  writeFileSync(join(root, "README.md"), "root\n");
+  execFileSync("git", ["-C", root, "add", "README.md"]);
+  execFileSync("git", ["-C", root, "commit", "-q", "-m", "init"]);
+  execFileSync("git", ["-C", root, "remote", "add", "origin", "https://example.com/root.git"]);
+
+  const tasks: TaskRecord[] = [
+    { taskNumber: 1, files: ["README.md"] } as TaskRecord,
+    { taskNumber: 2, files: ["README.md"] } as TaskRecord,
+  ];
+  try {
+    // The old order: a whole-array prepare (what used to run unconditionally before the series loop)...
+    buildWorkflowArguments(root, "true", tasks, "run-whole-array");
+    // ...then the per-task re-prepare the series section instructed, under a different run.
+    assert.throws(
+      () => buildWorkflowArguments(root, "true", [tasks[0]!], "run-per-task-retry"),
+      /already owned by a live run/,
+    );
+
+    // Fixed order: a lone per-task prepare on a fresh worktree, no prior lease to collide with.
+    const solo: TaskRecord[] = [{ taskNumber: 3, files: ["README.md"] } as TaskRecord];
+    assert.doesNotThrow(() => buildWorkflowArguments(root, "true", solo, "run-series-task-3"));
+  } finally {
+    rmSync(join(tmpdir(), "taskTools-wt", basename(root)), { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("running the pipeline launches tackle-tasks.workflow.js in the background via one capacity-aware scheduler, with no phase barriers", () => {
   const brief = skillBody("[1]");
   assert.match(brief, /Launch `.*tackle-tasks\.workflow\.js`\s+as a \*\*background\*\* workflow/);
-  assert.match(brief, /\{task: action\.taskNumber, typecheckCommand: pipelineArgs\.typecheckCommand, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}/);
+  assert.match(brief, /\{task: action\.taskNumber, typecheckCommand: pipelineArgs\.typecheckCommand, repositoryManifest: pipelineArgs\.repositoryManifest, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
   assert.doesNotMatch(brief, /stepOutputsFile/);
@@ -100,6 +152,16 @@ test("initial and tail launch args both name sourceRoot as pipelineArgs.repo and
   const runIdMatches = brief.match(/runId: pipelineArgs\.runId/g);
   assert.ok(runIdMatches && runIdMatches.length >= 2);
   assert.match(brief, /"sourceRoot": "\/path\/to\/repo"/);
+});
+
+// C86-40: launch-plan omitted repositoryManifest even though launch-tail already carried it.
+test("launch-plan and launch-tail args both carry pipelineArgs.repositoryManifest", () => {
+  const brief = skillBody("[1]");
+  const manifestMatches = brief.match(/repositoryManifest: pipelineArgs\.repositoryManifest/g);
+  assert.ok(manifestMatches && manifestMatches.length >= 2);
+  const launchPlanArgs = brief.match(/"launch-plan"`:[\s\S]*?with args\s+`(\{[^`]*\})`/);
+  assert.ok(launchPlanArgs, "launch-plan args pattern not found");
+  assert.match(launchPlanArgs![1]!, /repositoryManifest: pipelineArgs\.repositoryManifest/);
 });
 
 test("gate: each finished task is presented as one AskUserQuestion gate, never batched", () => {

@@ -765,10 +765,14 @@ export function mergeTaskDeepestFirst(
                 }
                 // Do not delete occurrence.operationBranch here: parent merge and close can still fail.
                 const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
-                recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
-                // The merge already landed: record it before any further bookkeeping, which is best-effort from here on.
+                // The merge already landed: record progress before the record write, which is best-effort (C86-42).
                 sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
                 completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
+                try {
+                    recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
+                } catch {
+                    // Landed layer already tracked above; retry takes the no-op skip path instead of guessing.
+                }
                 clearMergeIntentBestEffort(sourceCheckoutPath, occurrence.operationBranch);
                 continue;
             }

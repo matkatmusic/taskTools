@@ -21,7 +21,7 @@ type WorkflowEnvelope = {
   results: Array<Record<string, unknown>>
 }
 
-// filename is the real script path; imports resolve against args.worktree, not cwd or a relocated filename.
+// Real script path; args.worktree resolves imports. Defaults a root-only manifest, matching a real launch.
 const runTaskWorkflowAtRealScriptPath = async (
   args: Record<string, unknown>,
   agentImpl: AgentImpl,
@@ -31,7 +31,10 @@ const runTaskWorkflowAtRealScriptPath = async (
     ['args', 'log', 'agent'],
     { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
   ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
-  return await fn(JSON.stringify({ agentPromptEmitterPath: EMITTER_PATH, ...args }), () => {}, agentImpl)
+  const repositoryManifest = {
+    occurrences: [{ occurrenceId: '', checkoutPath: args.worktree, parentOccurrenceId: null, pathInParent: null, depth: 0 }],
+  }
+  return await fn(JSON.stringify({ agentPromptEmitterPath: EMITTER_PATH, repositoryManifest, ...args }), () => {}, agentImpl)
 }
 
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim()
@@ -109,6 +112,40 @@ const agentThatUsesOnlyAbsolutePathsAndCommitsWithGitC = (worktree: string): Age
 }
 
 const commitMessagesFor = (checkoutPath: string) => git(checkoutPath, 'log', '--format=%s').split('\n')
+
+// C86-40: implement/plan+implement must fail loud, never silently claim root-only submodule support.
+const runRawWorkflow = (argsJson: string, agentImpl: AgentImpl) => {
+  const fn = compileFunction(
+    `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
+    ['args', 'log', 'agent'],
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+  ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
+  return fn(argsJson, () => {}, agentImpl)
+}
+
+const throwingAgentForManifestGuard: AgentImpl = async () => { throw new Error('must not reach an agent call') }
+
+for (const stage of ['implement', 'plan+implement']) {
+  test(`${stage} refuses to run without a repositoryManifest instead of silently falling back to root-only`, async () => {
+    await assert.rejects(
+      () => runRawWorkflow(
+        JSON.stringify({ task: 1, stage, worktree: '/tmp/tackle-tasks-manifest-guard-does-not-exist', sourceRoot: '/tmp/tackle-tasks-manifest-guard-does-not-exist', agentPromptEmitterPath: EMITTER_PATH }),
+        throwingAgentForManifestGuard,
+      ),
+      /no "repositoryManifest" in args for stage "plan\+implement|implement"/,
+    )
+  })
+}
+
+test('plan alone tolerates a missing repositoryManifest', async () => {
+  await assert.rejects(
+    () => runRawWorkflow(
+      JSON.stringify({ task: 1, stage: 'plan', worktree: '/tmp/tackle-tasks-manifest-guard-does-not-exist', sourceRoot: '/tmp/tackle-tasks-manifest-guard-does-not-exist', agentPromptEmitterPath: EMITTER_PATH }),
+      throwingAgentForManifestGuard,
+    ),
+    (error: Error) => !/repositoryManifest/.test(error.message),
+  )
+})
 
 test('plan+implement commits only in each prepared task worktree', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
