@@ -1,0 +1,10 @@
+flowchart TB
+  QV{"is task number valid?"} -- yes --> Q0{"is task open?"}
+  Q0 -- yes --> QB{"is task blocked?"}
+  QB -- no --> Q1{"does a worktree exist?"}
+  Q1 -- yes --> A["implement task in a worktree"]
+  A --> Q3{"does the work resolve the task?"}
+  Q3 -- yes --> Q2{"can we merge this worktree?"}
+  Q2 -- yes --> B["merge worktree"]
+  B --> C["close the task"]
+  C --> D["update tasks blocked by this task"]
