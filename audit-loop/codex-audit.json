@@ -12,7 +12,8 @@
     "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30.",
     "Reviewed the staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit and 74 focused tests in prepareTasks.test.ts, runMergePhase.test.ts, and taskWorkflowMergeStage.test.ts passed, but the atomic batch was rejected because required scheduler interleavings, production cleanup retry, lease lifecycle/recovery, and source-artifact absence coverage remain incomplete. The eight implementation/test files were left unstaged.",
     "Reviewed the second staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit passed; prepareTasks.test.ts passed 27 tests, runMergePhase.test.ts passed 39, taskWorkflowMergeStage.test.ts passed 16, tackle-tasks_SkillBodyEmitter.test.ts passed 19, and the full npm test suite passed all 1,319 tests. The atomic batch was rejected because C86-24 still lacks the required executable event-order regression and C86-28 still reports a static partial retained-artifact list.",
-    "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed."
+    "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed.",
+    "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles."
   ],
   "notes": [
     {
@@ -34,6 +35,10 @@
     {
       "date": "2026-08-11T16:25:17-07:00",
       "text": "Third atomic review: C86-24 now has executable approval/completion-order regression coverage with peak shared-concurrency and serial-tail assertions; C86-28 dynamically reports only retained worktree, lease, root/submodule branch, and persistence artifacts and has production-shaped partial-cleanup and retry coverage. With C86-29 and C86-30 already satisfied by the same staged batch, C86-24, C86-28, C86-29, and C86-30 were removed."
+    },
+    {
+      "date": "2026-08-11T17:28:21-07:00",
+      "text": "C86-27, C86-35, and C86-36 were reviewed as one atomic batch and rejected. The attempt appears to satisfy C86-27 and C86-35, and it adds useful successful lost-result coverage for C86-36, but C86-36 remains incomplete for lost cleanup-incomplete and failed-continue/aborted outcomes. All nine implementation/test paths are unstaged; only this audit update is staged."
     }
   ],
   "issues": [
@@ -573,31 +578,31 @@
     },
     {
       "number": 36,
-      "title": "C86-36 — High: retryAgent re-executes mutating emitter roles after their side effects have already landed",
+      "title": "C86-36 — High: lost mutation results are only heuristically recovered and can be misreported",
       "class": "high",
-      "cause": "The rewrite routes deterministic mutations through agent calls and wraps every call in retryAgent. retryAgent cannot distinguish a command that failed before mutation from an agent that successfully ran the command but was killed or returned null before relaying its structured result. It therefore executes the same mutation again. The merge role can merge, close the task, delete persistence, and remove the worktree on its first attempt; a lost agent result then reruns against a deleted worktree and finally reports the task blocked even though it was already merged and closed. advance-conflict can similarly continue a rebase once and then retry against a no-longer-active rebase. Tests immediately parse and return emitter output, so none model result loss after command completion.",
+      "cause": "The working-tree attempt recovers two successful lost-result cases, but the workflow still wraps mutating emitter roles directly in retryAgent and neither role has an idempotency key or durable typed receipt. roleMerge reconstructs a result only after full success removed the worktree; if a cleanup-incomplete result is lost, the retained worktree makes the retry re-enter merge and close after the task was already archived, replacing the original cleanup-incomplete outcome with merged-but-not-closed. roleAdvanceConflict treats any missing rebase as a previously successful continue; if the first attempt failed to continue, successfully aborted, and then lost its result, the retry falsely returns advanced. The new tests cover only full merge success and successful conflict continuation, so both remaining failure states are untested.",
       "locations": [
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "217-224, 422-431, 472-475, 556-559",
-          "role": "The common retry wrapper is applied to mutating conflict, rebase, and merge driver roles."
+          "lines": "236-243, 448-457, 582-585",
+          "role": "The common retry wrapper still directly re-invokes advance-conflict and merge after a missing result instead of retrieving a keyed receipt."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "470-516, 563-620",
-          "role": "These roles commit, continue or abort rebases, merge, close, delete refs, and remove worktrees before printing their result."
+          "lines": "480-537, 594-662",
+          "role": "The recovery branches infer prior success from current filesystem/rebase state, which cannot distinguish cleanup-incomplete from full merge success or successful continue from a failed continue followed by abort."
         },
         {
           "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "28-39",
-          "role": "Harness always converts successful emitter stdout directly into the agent result and cannot simulate a lost result after mutation."
+          "lines": "163-253",
+          "role": "The new lost-result harness covers full merge success and successful conflict continuation but not lost cleanup-incomplete or failed-and-aborted continuation results."
         }
       ],
-      "provingTest": "Drive a real merge-stage fixture with an agent wrapper that executes the merge emitter command on attempt one but discards its stdout and returns null. Let retryAgent launch attempt two. The current first attempt merges and closes the task; later attempts fail because cleanup removed the worktree, and the workflow reports blocked or no result despite completed state. Add the analogous advance-conflict case where the first command successfully continues the rebase but its agent result is lost.",
+      "provingTest": "Use the working-tree lost-result harness with a real merge fixture whose worktree removal is deterministically blocked. Execute the first merge emitter command to completion, discard its cleanup-incomplete stdout, and return null. The retry currently sees the retained worktree, re-enters merge/close, and reports merged-but-not-closed because the task was already archived; the corrected workflow must recover the original cleanup-incomplete receipt and retainedArtifacts without a second mutation. In a real conflict fixture, deterministically make git rebase --continue fail and the driver's abort succeed, discard that advanced:false result, and return null. The retry currently sees no rebase and falsely returns advanced:true; the corrected workflow must recover the original failure without another continue or abort.",
       "suggestedFixApproach": [
-        "Do not blindly retry a mutating role. Give each mutation an idempotency key and persist its typed result atomically before printing it, or split mutation from result retrieval so retries call a read-only receipt/status role.",
-        "For merge, record a run/task/stage receipt before returning and have repeated invocations return that receipt without re-running merge, close, or cleanup. For conflict continuation, persist or derive a reconciled state that distinguishes already-continued from never-started.",
-        "Extend the harness so the real emitter command can complete while the enclosing agent returns null. Assert that retry obtains the original receipt, performs no second mutation, and reports the actual final state."
+        "Replace direct retry of mutating roles with a run/task/stage idempotency protocol: a repeated invocation must return a durable typed receipt or reconcile an explicit persisted operation state before deciding whether any mutation remains.",
+        "For merge, preserve cleanup-incomplete, merged-but-not-closed, and merged receipts outside the removable task worktree. For conflict continuation, preserve enough state to distinguish continued, freshly conflicted, failed-and-aborted, and abort-failed outcomes; absence of rebase metadata alone is not proof of success.",
+        "Extend the working-tree lost-result harness with cleanup-incomplete and failed-continue/aborted cases. Assert the exact first result is recovered and instrument the mutation boundary to prove merge, close, cleanup, continue, and abort are not invoked twice."
       ],
       "resolvedBoundaryReference": [
         {
@@ -610,10 +615,10 @@
         }
       ],
       "acceptanceCriteria": [
-        "Mutating emitter roles are never blindly executed a second time after their first attempt may have committed side effects.",
-        "Each mutation has an idempotency key and persists its typed result before returning output, or retries use a read-only receipt/status role.",
-        "A lost merge result is recovered as the original merged/closed outcome without a second merge, close, persistence deletion, or cleanup attempt.",
-        "A lost advance-conflict result is reconciled without continuing or aborting the rebase twice, while ordinary read-only retries retain current behavior."
+        "Mutating emitter roles use a durable idempotency key/receipt or explicit operation-state reconciliation; retryAgent never blindly repeats a mutation after its result may have been lost.",
+        "A lost cleanup-incomplete merge result is recovered with its original status and retainedArtifacts without a second merge, close, persistence deletion, or cleanup attempt.",
+        "A lost failed-continue result followed by a successful abort remains advanced:false and does not run continue or abort twice.",
+        "The working-tree full-success merge and successful-continue lost-result regressions keep passing, and ordinary read-only retries retain current behavior."
       ],
       "resolvedBoundaryExample": [
         {
