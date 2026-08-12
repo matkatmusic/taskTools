@@ -238,6 +238,47 @@ test('plan+implement rejects a planner that returns an existing plan outside the
   }
 })
 
+test('plan+implement rejects a planner that reports planned at the expected path without writing it', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const prepared = buildWorkflowArguments(root, 'true', [task])
+  const group = prepared.groups[0]!
+  linkScripts(group.worktree)
+
+  try {
+    const expectedPlanFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+    let verifierOrWorkerRan = false
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(async (_prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        return {
+          task: task.taskNumber,
+          status: 'planned',
+          planFile: expectedPlanFile,
+          question: '',
+          missingFiles: [],
+        }
+      }
+      verifierOrWorkerRan = true
+      throw new Error(`unexpected ${options.label}`)
+    }))
+
+    assert.equal(envelope.results.length, 1)
+    assert.equal(envelope.results[0]!.status, 'needs-clarification')
+    assert.equal(verifierOrWorkerRan, false)
+    assert.equal(existsSync(expectedPlanFile), false)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase', async () => {
   const { root, tasks } = makeTwoTaskSourceRepo()
   const task = tasks[0]!

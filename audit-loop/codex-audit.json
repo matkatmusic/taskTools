@@ -15,7 +15,8 @@
     "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed.",
     "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles.",
     "Reviewed the second staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 82 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,330 tests. The attempt fixes C86-36's cleanup-incomplete and aborted-rebase status recovery, but source audit rejected the atomic batch because successful advance-conflict result reconstruction still drops active-occurrence touchedPaths and can bypass C86-27's post-approval regate.",
-    "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt."
+    "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt.",
+    "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-36 is accepted and removed."
   ],
   "notes": [
     {
@@ -49,6 +50,10 @@
     {
       "date": "2026-08-11T18:28:02-07:00",
       "text": "Third atomic review of C86-27, C86-35, and C86-36: only C86-36 requires further implementation. Active-occurrence recovery is now correct, but the receipt is stored under the root worktree and is visible to git status; a subsequent root conflict can stage and commit it as an apparent touched path. All nine implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T19:05:00-07:00",
+      "text": "C86-36-only review accepted the stable conflict-identity and exact-result receipt implementation. A lost first advance-conflict result is recovered without consuming the second conflict, external receipts remain Git-invisible, and focused, typecheck, and full-suite verification passed. C86-27 and C86-35 were outside this review because they were already approved."
     }
   ],
   "issues": [
@@ -585,83 +590,6 @@
         }
       ],
       "existingOpenTask": "No matching open task. This is a regression of the previously fixed task-worktree plan guard."
-    },
-    {
-      "number": 36,
-      "title": "C86-36 — High: a lost first conflict result can consume the next conflict as its retry",
-      "class": "high",
-      "cause": "The staged change correctly moves advance-conflict receipts outside the checkout, so the original Git-pollution defect is removed. The remaining retry defect is that writeActiveTouchedPathsReceipt persists only activeTouchedPaths before `git rebase --continue`, and roleAdvanceConflict consults that receipt only when no rebase is in progress. If the first continue succeeds by advancing directly into a second real conflict and the first structured result is lost, the retry sees that a rebase is still in progress and re-enters the mutation path using the first conflict's stale conflictedFilePaths. It can stage or attempt to continue the second unresolved conflict without a second conflict-resolution agent call, causing the workflow to block or corrupt conflict handling instead of returning the first invocation's exact completed result.",
-      "locations": [
-        {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "448-466",
-          "role": "retryAgent invokes the same advance-conflict payload again after a lost result, but the payload has no stable identity for the particular rebased commit/conflict whose result must be recovered."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "361-389, 521-587",
-          "role": "The receipt contains only activeTouchedPaths, is keyed only by occurrence and conflicted path names, and is not returned before current rebase-state inspection; a retry that finds the next conflict active therefore executes the mutation path again."
-        },
-        {
-          "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "305-370",
-          "role": "The staged two-conflict regression proves receipt isolation only when both advance-conflict results are delivered; it does not drop the first result while the first continue lands on the second conflict."
-        }
-      ],
-      "provingTest": "Use the staged production-shaped two-commit/two-conflict fixture, but have the raw agent execute the first advance-conflict emitter completely and return null for that first structured result. The first `git rebase --continue` must stop at the second real conflict. On retry, assert that advance-conflict returns the exact stored result for the first conflict without staging, continuing, or aborting the second conflict. Then require a second rebase-conflict agent call to resolve the second file and finish green. The staged implementation instead returns blocked in this scenario. Also assert that fenceViolations is empty, Git status is clean after completion, and no advance-conflict receipt path appears in status, commits, or the final tree.",
-      "suggestedFixApproach": [
-        "Before invoking the conflict-resolution agent, obtain a stable conflict identity for the active occurrence from `git rev-parse --verify REBASE_HEAD` through a read-only emitter role, and pass that identity unchanged in every retry of the corresponding advance-conflict call.",
-        "Key the external receipt by RUN_ID, task number, occurrenceId, and that stable conflict identity rather than by conflicted path names alone. Store the complete AdvanceConflictResult, not only activeTouchedPaths.",
-        "At the very start of roleAdvanceConflict, read and return a completed receipt before inspecting rebaseInProgress or touching the checkout. Route every terminal result through one finish helper that atomically writes the exact result to a temporary sibling and renames it into place before printResult.",
-        "Change the existing two-conflict regression to drop the first completed advance-conflict result and prove the retry returns its receipt while leaving the second conflict for a second conflict-resolution call. Preserve the existing external receipt directory and final-cleanup removal."
-      ],
-      "resolvedBoundaryReference": [
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "role": "retryAgent correctly retries missing results for read-only prompt and status roles and preserves valid falsy results."
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "advanceConflictReceiptsDir now places retry state beside the task worktree rather than inside it, keeping receipts invisible to Git status and staging."
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "runFinalCleanup removes the external receipt directory only after successful final cleanup, preserving retry state for the lifetime of the task worktree."
-        }
-      ],
-      "acceptanceCriteria": [
-        "Durable advance-conflict recovery state is not Git-visible in any root or nested occurrence checkout.",
-        "A retry after the first continue reaches a second conflict returns the first invocation's exact completed result before inspecting or mutating the second conflict.",
-        "The second conflict remains unresolved until a second conflict-resolution agent call handles it; no stale conflictedFilePaths are used to stage, continue, or abort it.",
-        "The recovered exact result preserves every active- and other-occurrence touchedPath from the first invocation and still triggers requires-regate for real extra edits.",
-        "A deterministic two-conflict regression drops the first advance-conflict result, finishes green with two conflict-resolution calls, and proves no receipt path enters status, fenceViolations, commits, or the final tree.",
-        "The existing merge, cleanup-incomplete, successful/aborted rebase, active-path, receipt-isolation, and read-only retry regressions keep passing."
-      ],
-      "resolvedBoundaryExample": [
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "const retryAgent = async (spawn, attempts = 3) => {\n  for (let attempt = 0; attempt < attempts; attempt += 1) {\n    const result = await spawn()\n    if (result !== null && result !== undefined) return result\n  }\n  return null\n}"
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "function advanceConflictReceiptsDir(worktreePath: string): string {\n  return `${worktreePath}.advance-conflict-receipts`\n}\n\n// successful final cleanup only\nrmSync(advanceConflictReceiptsDir(repoRoot), { recursive: true, force: true })"
-        }
-      ],
-      "remainingMinimalExample": [
-        {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "const identity = await retryAgent(() => agent(\n  emitterInstruction('conflict-identity', { checkoutPath }),\n  { label: `conflict-identity:${N}`, schema: CONFLICT_IDENTITY_SCHEMA },\n))\nif (!identity?.rebaseHead) return { advanced: false, lastFailure: conflictSummary, cleanupFailure: 'could not identify active conflict' }\n\nconst advanced = await retryAgent(() => agent(\n  emitterInstruction('advance-conflict', {\n    occurrenceId: activeOccurrenceId,\n    conflictIdentity: identity.rebaseHead,\n    conflictedFilePaths, resolved, beforeOids,\n    checkoutPaths: pathsFor(checkoutPaths, [activeOccurrenceId, ...otherOccurrenceIds]),\n  }),\n  { label: `advance-conflict:${N}`, phase: `${N} Rebase-Test`, schema: ADVANCE_CONFLICT_SCHEMA },\n))"
-        },
-        {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "type AdvanceConflictResult = {\n  advanced: boolean\n  lastFailure: string | null\n  cleanupFailure: string | null\n  touchedPaths: { occurrenceId: string; path: string }[]\n}\n\nfunction advanceConflictReceiptPath(occurrenceId: string, conflictIdentity: string): string {\n  const key = createHash('sha256').update(JSON.stringify({\n    runId: RUN_ID, task: N, occurrenceId, conflictIdentity,\n  })).digest('hex')\n  return join(advanceConflictReceiptsDir(WORKTREE), `${key}.json`)\n}\n\nfunction writeAdvanceConflictReceipt(path: string, result: AdvanceConflictResult) {\n  mkdirSync(dirname(path), { recursive: true })\n  const temporary = `${path}.${process.pid}.tmp`\n  writeFileSync(temporary, JSON.stringify({ result }))\n  renameSync(temporary, path)\n}\n\nfunction roleAdvanceConflict() {\n  const receiptPath = advanceConflictReceiptPath(PAYLOAD.occurrenceId, PAYLOAD.conflictIdentity)\n  const prior = readAdvanceConflictReceipt(receiptPath)\n  if (prior) { printResult(prior); return }\n\n  const finish = (result: AdvanceConflictResult) => {\n    writeAdvanceConflictReceipt(receiptPath, result)\n    printResult(result)\n  }\n\n  // Replace every terminal printResult({...}) in this role with finish({...}),\n  // including resolved:false, continued/freshConflict, and failed+aborted results.\n}"
-        },
-        {
-          "file": "tests/taskWorkflowMergeStage.test.ts",
-          "code": "let advanceCalls = 0\nconst rawAgent = agentThatExecutesEmitterButReturnsNullWhen((role) =>\n  role === 'advance-conflict' && ++advanceCalls === 1\n)\nconst result = await runTwoConflictWorkflow(rawAgent)\nassert.equal(result.results[0].status, 'green')\nassert.equal(conflictAgentCalls, 2)\nassert.deepEqual(result.results[0].fenceViolations, [])\nassert.equal(git(worktree, 'status', '--porcelain'), '')\nassert.ok(!historyPaths.some((path) => path.includes('advance-conflict-receipt')))"
-        }
-      ],
-      "existingOpenTask": "No matching open task."
     }
   ]
 }

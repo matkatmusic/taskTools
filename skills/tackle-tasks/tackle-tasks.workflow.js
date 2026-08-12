@@ -53,6 +53,12 @@ const TASK_INFO_SCHEMA = {
   required: ['planFile', 'notesFile', 'briefFile', 'files'],
 }
 
+const PLAN_FILE_STATUS_SCHEMA = {
+  type: 'object',
+  properties: { exists: { type: 'boolean' } },
+  required: ['exists'],
+}
+
 const PLAN_SCHEMA = {
   type: 'object',
   properties: {
@@ -143,6 +149,12 @@ const REBASE_WALK_SCHEMA = {
     },
   },
   required: ['stoppedAt'],
+}
+
+const CONFLICT_IDENTITY_SCHEMA = {
+  type: 'object',
+  properties: { rebaseHead: { type: ['string', 'null'] } },
+  required: ['rebaseHead'],
 }
 
 const MERGE_CONFLICT_SCHEMA = {
@@ -287,6 +299,14 @@ const rejectPlannedWithoutExpectedPlanFile = async (planResult, expectedPlanFile
         `planner reported status "planned" with an unexpected plan path: ${planResult.planFile}, expected ${expectedPlanFile}`,
     }
   }
+  const fileStatus = await retryAgent(() => agent(emitterInstruction('plan-file-status'), { label: `plan-file-status:${N}`, schema: PLAN_FILE_STATUS_SCHEMA }))
+  if (!fileStatus?.exists) {
+    return {
+      ...planResult,
+      status: 'needs-clarification',
+      question: `planner reported status "planned" but did not write the expected plan file: ${expectedPlanFile}`,
+    }
+  }
   return planResult
 }
 
@@ -428,12 +448,21 @@ const advanceLiveConflict = async (checkoutPaths, occurrencesDeepestFirst, activ
   const beforeOids = await fetchOccurrenceOids(checkoutPaths, otherOccurrenceIds)
 
   const checkoutPath = checkoutPaths.get(activeOccurrenceId)
+
+  // Stable per-conflict identity so a lost-result retry recovers its receipt, not the next conflict.
+  const identity = await retryAgent(() => agent(
+    emitterInstruction('conflict-identity', { checkoutPath }),
+    { label: `conflict-identity:${N}`, phase: `${N} Rebase-Test`, schema: CONFLICT_IDENTITY_SCHEMA },
+  ))
+  if (!identity?.rebaseHead) return { advanced: false, lastFailure: conflictSummary, cleanupFailure: 'could not identify active conflict' }
+
   const result = await runMergeConflictAgent(checkoutPath, conflictedFilePaths)
   const resolved = result != null && result.resolved === true
 
   const advanced = await retryAgent(() => agent(
     emitterInstruction('advance-conflict', {
       occurrenceId: activeOccurrenceId,
+      conflictIdentity: identity.rebaseHead,
       conflictedFilePaths,
       resolved,
       beforeOids,

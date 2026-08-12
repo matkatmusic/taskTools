@@ -170,8 +170,12 @@ task workflow completion notification arrives, pass its complete
 \`plan+implement\` notification, this returns \`{kind: "approval", queue,
 approval}\`; \`approval\` — \`{taskNumber, status, verifier,
 fenceViolations}\` — is what the gate below reads. For a \`rebase-test\` or
-\`merge\` notification, it returns \`{kind: "queue", queue, taskNumber,
-stage, status}\`; replace \`queue\` with the returned \`queue\` either way.
+\`merge\` notification, it usually returns \`{kind: "queue", queue,
+taskNumber, stage, status}\`; replace \`queue\` with the returned \`queue\`
+either way. A green \`rebase-test\` that also committed edits outside the
+task's approved fence instead returns \`{kind: "requires-regate", queue,
+approval: {taskNumber, fenceViolations}}\` — see **Gate each task** for how
+to handle it. Never let that task's stage advance to merge without it.
 
 ## Gate each task
 
@@ -203,6 +207,20 @@ are still planning or implementing. Never hold an approved task back to
 gate or merge it alongside the rest, and never let this gate become a
 barrier that waits for the whole batch.
 
+When a \`rebase-test\` notification's \`consumeTaskWorkflowResult\` call
+returns \`{kind: "requires-regate", queue, approval}\`, that task already
+committed edits outside its originally approved fence while resolving a
+rebase conflict — replace \`queue\` with the returned \`queue\`, then call
+\`AskUserQuestion\` once more for that task, showing
+\`approval.fenceViolations\` and asking the same "Approve for merge" /
+"Do not approve" question. On approval, run \`FN\` =
+\`approveRegatedTask\`, \`ARGS\` = \`<QUEUE_JSON>, taskNumber\` (see
+**Merge queue**) and the task proceeds straight to the merge stage. On
+rejection, run \`FN\` = \`rejectRegatedTask\`, \`ARGS\` =
+\`<QUEUE_JSON>, taskNumber, reason\` — the task never merges; a retry is
+not offered, since the cross-layer edit is already committed in branch
+history.
+
 ## Merge queue
 
 Entering the merge queue does not merge a task by itself — you drive the queue forward with a quoted heredoc passed to \`node --input-type=module\` that imports \`${JSON.stringify(runMergePhaseUrl)}\` and carries the printed queue JSON forward yourself, in this conversation, between commands; nothing persists it to disk. The heredoc's quoted delimiter (\`<<'TASK_TOOLS_QUEUE'\`) stops the shell from interpolating anything inside it, so the queue JSON and any string arguments pass through to Node untouched. Every command below has this exact shape, with \`FN\` and \`ARGS\` filled in per the table that follows it, and \`<QUEUE_JSON>\` replaced with the queue object's literal JSON text as printed by the most recent command that returned a queue (always inserted as the first argument when the table lists it):
@@ -218,13 +236,15 @@ TASK_TOOLS_QUEUE
 - On "Approve for merge": \`FN\` = \`enqueueApprovedTask\`, \`ARGS\` = \`<QUEUE_JSON>, taskNumber\`. Record the printed JSON as the new \`queue\`.
 - Action: \`FN\` = \`nextSchedulerAction\`, \`ARGS\` = \`<QUEUE_JSON>, ready, outstanding\` (\`ready\` and \`outstanding\` are computed as described in **Running the pipeline**, literal JSON for both). Record the printed JSON as \`action\`.
 - Consume: \`FN\` = \`consumeTaskWorkflowResult\`, \`ARGS\` = \`<QUEUE_JSON>, envelope\` (\`envelope\` is the workflow's complete \`{task, stage, results}\` result, literal JSON). Record the printed JSON as \`consumed\`; \`consumed.queue\` is the new \`queue\`. Never index \`results[]\` or call \`recordStageOutcome\`/\`recordMergedNotClosed\` directly — \`consumeTaskWorkflowResult\` does that internally.
+- Regate approved (see **Gate each task**): \`FN\` = \`approveRegatedTask\`, \`ARGS\` = \`<QUEUE_JSON>, taskNumber\`. Record the printed JSON as the new \`queue\`.
+- Regate rejected (see **Gate each task**): \`FN\` = \`rejectRegatedTask\`, \`ARGS\` = \`<QUEUE_JSON>, taskNumber, reason\`. Record the printed JSON as the new \`queue\`.
 - Next lap: \`FN\` = \`beginNextLap\`, \`ARGS\` = \`<QUEUE_JSON>\`. Record the printed JSON as the new \`queue\`.
 - Report: \`FN\` = \`buildMergeReport\`, \`ARGS\` = \`<QUEUE_JSON>\`.
 - Cleanup retry (see **Closing your tasks**): \`FN\` = \`consumeCleanupRetryResult\`, \`ARGS\` = \`<QUEUE_JSON>, envelope\` (\`envelope\` is the \`cleanup-only\` workflow's complete \`{task, stage, results}\` result). Record the printed JSON as the new \`queue\`.
 
 Remove a task's \`outstandingEntries\` entry only in these two cases:
 - Its \`plan+implement\` completion notification arrives: immediately ask that task's own approval gate (per **Gate each task** above), before doing anything else here. On "Approve for merge", run \`enqueueApprovedTask(queue, taskNumber)\` and record the printed JSON as the new \`queue\`, then remove the entry. On "Do not approve", remove the entry without enqueueing.
-- Its \`rebase-test\` or \`merge\` completion notification arrives and the "Consume" row has recorded the outcome: remove the entry.
+- Its \`rebase-test\` or \`merge\` completion notification arrives: if "Consume" returned \`kind: "requires-regate"\`, gate it per **Gate each task** first, then remove the entry once approved or rejected. Otherwise remove the entry once "Consume" has recorded the outcome.
 
 After every enqueue and every completion notification, recompute \`ready\`/\`outstanding\` and run \`nextSchedulerAction\` again, handling its result exactly as described in **Running the pipeline** — that section owns every \`action.kind\` (\`"launch-plan"\`, \`"launch-tail"\`, \`"wait"\`, \`"begin-next-lap"\`, \`"report"\`); never derive a launch, wait, or lap-roll decision from \`pending\`, \`carryover\`, or \`outstandingEntries\` in prose here instead.
 
@@ -232,7 +252,7 @@ When a launched rebase-test or merge workflow's completion notification arrives,
 
 ## Closing your tasks
 
-Closing each merged task happens automatically: \`${WORKFLOW_PATH}\`'s merge stage, via the agent prompt emitter's \`merge\` role, calls scripts/closeTasks.ts once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up.
+Closing each merged task happens automatically: \`${WORKFLOW_PATH}\`'s merge stage, via the agent prompt emitter's \`merge\` role, calls scripts/closeTasks.ts once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up. \`buildMergeReport\`'s \`regateRejected\` entries name every task whose post-approval fence violation was rejected at the regate gate — report these to the user too; they never merged.
 
 \`buildMergeReport\`'s \`cleanupIncomplete\` entries name every task whose merge (and close) succeeded but whose final worktree/branch/persistence cleanup did not — each is \`{taskNumber, warning, retainedArtifacts}\`. Report these to the user alongside \`unmerged\` and \`mergedNotClosed\`. Once whatever blocked cleanup (for example a locked worktree) is resolved, retry it: launch \`${WORKFLOW_PATH}\` once as a background workflow with args \`{task: taskNumber, stage: "cleanup-only", repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\` (\`worktree\` is that task's \`pipelineArgs.groups\` entry's \`worktree\`) — it only retries cleanup, it never re-merges or re-closes the task. On its completion notification, run \`consumeCleanupRetryResult(queue, envelope)\` (the "Cleanup retry" row), replace \`queue\` with the result, and re-run \`buildMergeReport(queue)\`; a successful retry clears that task from \`cleanupIncomplete\`. It is safe to invoke again if it reports \`"cleanup-incomplete"\` a second time.
 
