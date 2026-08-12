@@ -631,5 +631,35 @@
       "audit-loop/sonnet-implementation-prompt.md",
       "audit-loop/codex-audit-schema.md"
     ]
+  },
+  {
+    "taskNumber": 186,
+    "version": "a27c0c3104d75d389f947175f87152f850003d30",
+    "title": "Skip plan verification for low-difficulty tasks and let the code-audit loop catch the fallout",
+    "userDescription": "if a task is simple enough, skip the planning verification stage, let the code-audit loop catch failures. this task relies on 185 being built.",
+    "goal": [
+      "- A difficulty-3 task with a clean plan runs no verify agent and proceeds straight to implement.",
+      "- A difficulty-6 task still runs the verify agent exactly as today.",
+      "- A difficulty-3 task whose planner reported missingFiles is verified anyway: the skip is overridden.",
+      "- A plan that strays outside the task's file fence is verified anyway, whatever the difficulty.",
+      "- A task record with no difficulty value is treated as not simple and is verified.",
+      "- The run output shows which tasks skipped plan verification.",
+      "- `npm test` passes.",
+      "- NOT in scope: building the code-audit loop this relies on, which is task 185 and the blocker for this task; and changing MAX_REVIEW_ROUNDS or the review loop's behaviour for tasks that are still verified."
+    ],
+    "description": "Plan verification currently runs for every task: skills/tackle-tasks/tackle-tasks.workflow.js:390-403 loops runVerify (line 363) up to MAX_REVIEW_ROUNDS (line 279) regardless of how small the task is. For a trivial task that review costs a codex round trip and buys little, because task 185 adds an audit-loop code review of the staged diff that catches a bad implementation directly.\n\nThis task makes plan verification conditional. It is blocked by 185 on purpose: skipping plan review is only safe once the code-audit loop exists to catch what the skipped review would have caught.\n\nTRIGGER, settled with the user: skip plan verification when ALL of these hold:\n1. the task's `difficulty` is 3 or lower;\n2. the planner reported no missingFiles;\n3. the plan stays inside the task's file fence.\nOtherwise verify exactly as today. Conditions 2 and 3 are escape hatches -- a cheap-looking task whose plan already smells wrong still gets reviewed.\n\nPLUMBING REQUIRED: `difficulty` does not reach the workflow today. describeTask in scripts/getTaskDetails.ts dumps the whole task record as JSON, so the value is visible to the agent, but TASK_INFO_SCHEMA (workflow line 51-61) captures only planFile, notesFile, briefFile, files and tests. Add `difficulty` to that schema so the workflow code can branch on it, and make the emitted task-info prompt in scripts/tackle-tasks_AgentPromptEmitter.ts ask for it.\n\nDecide deliberately what happens when a task record carries no `difficulty` at all -- older records exist. Treat a missing value as NOT simple (verify as today), so the absence of data never silently disables review.\n\nCalibration against the open tasks at the time of writing: difficulty 3 or lower covers tasks 120, 121, 161 and 184; tasks 118 (4), 165 (5), 164 (6) and 185 (8) would still be verified.\n\nThe run should record which tasks skipped verification, so the effect is visible rather than invisible.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "scripts/tackle-tasks_AgentPromptEmitter.ts",
+      "tests/taskWorkflowPlanImplementStage.test.ts"
+    ],
+    "tests": "Difficulty 3 task with a clean plan: assert NO verify agent runs and that it proceeds to implement. Difficulty 6 task: assert the verify agent DOES run. Difficulty 3 task whose planner reports missingFiles: assert the verify agent runs anyway -- the skip is overridden.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNum": 185,
+        "reason": "skipping plan review is only safe once 185's audit-loop code review exists to catch a bad implementation that the skipped plan review would have caught"
+      }
+    ]
   }
 ]
