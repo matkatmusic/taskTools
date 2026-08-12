@@ -20,7 +20,8 @@
     "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged.",
     "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed.",
     "At committed HEAD 9c209d10ed8e35e15b6d1b10300f6df5c087604a, source-audited C86-19 through C86-22 against current source, tests, and authoritative open tasks. The index was empty; unstaged changes were limited to package.json, package-lock.json, and plans/task-163-plan.md; untracked changes were plans/review/brief/reproduction artifacts with no source or test implementation for these findings. All four findings remain open; current anchors were refreshed and C86-21 was narrowed to the still-uncaught rebase/merge driver paths. No tests were rerun for this metadata-only refresh; the committed implementation had already passed the recorded 40 focused tests, typecheck, and 1,344-test full suite.",
-    "Reviewed the staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11 at committed HEAD 312a5fbf3bbca7e0b95a38eae661ddc0470c6bb6. git diff --cached --check and npx tsc --noEmit passed; 95 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,350 tests. The atomic batch was rejected because nested implementation commits skip untouched intermediate occurrences, workflow schemas omit completedLayers and driver failureReason, outer driver catches discard already-completed layers, and the final-review regression does not prove the widened brief/implementer/fence path. The seven implementation/test files were left unstaged."
+    "Reviewed the staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11 at committed HEAD 312a5fbf3bbca7e0b95a38eae661ddc0470c6bb6. git diff --cached --check and npx tsc --noEmit passed; 95 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,350 tests. The atomic batch was rejected because nested implementation commits skip untouched intermediate occurrences, workflow schemas omit completedLayers and driver failureReason, outer driver catches discard already-completed layers, and the final-review regression does not prove the widened brief/implementer/fence path. The seven implementation/test files were left unstaged.",
+    "Reviewed the second staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 130 focused tests in mergeTaskWorktrees.test.ts, runMergePhase.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,352 tests. C86-19, C86-20, and C86-22 appear fully resolved, and C86-21 now preserves child-layer progress and ordinary driver reasons, but the atomic batch was rejected because a root merge that lands before merge-record persistence fails is still returned as parent-conflicted instead of merged-but-not-closed. The seven implementation/test files were left unstaged."
   ],
   "notes": [
     {
@@ -74,6 +75,10 @@
     {
       "date": "2026-08-11T21:43:21-07:00",
       "text": "C86-19, C86-20, C86-21, and C86-22 were reviewed as one atomic batch and rejected. The attempt adds useful one-level submodule fencing, queue source-progress state, exception normalization, and final-review processing, but the remaining nested propagation, structured-result schema, completed-layer preservation, and final-round end-to-end coverage gaps keep all four findings open. All seven implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T22:39:26-07:00",
+      "text": "Second atomic review of C86-19, C86-20, C86-21, and C86-22: C86-19's nested commit/fence contract, C86-20's real envelope-to-queue progress path, and C86-22's final-review downstream widening path now satisfy their criteria. C86-21 still misclassifies a root merge that lands before merge-record persistence throws; its pre-merge ref-collision test does not exercise that boundary. All seven implementation/test paths are unstaged; only this audit update is staged."
     }
   ],
   "issues": [
@@ -194,30 +199,35 @@
     },
     {
       "number": 21,
-      "title": "C86-21 — High: unexpected rebase/merge exceptions reject the workflow instead of entering the retry queue",
+      "title": "C86-21 — High: a post-landing root merge exception is misreported as an ordinary conflict",
       "class": "high",
-      "cause": "The staged emitter catches top-level rebase and merge exceptions and the workflow no longer throws on a missing result, but the catches sit outside the multi-layer drivers. If a child layer completes before a parent operation throws, the local completedLayers array is discarded and the merge catch returns only status and lastFailure, so C86-20 source progress is lost. REBASE_WALK_SCHEMA also omits failureReason and completedLayers, and MERGE_SCHEMA omits completedLayers, so the concrete typed data emitted by the new catches is not preserved by the declared production result contracts. An exception after the root merge can likewise be reported as merely blocked instead of merged-but-not-closed.",
+      "cause": "The second staged attempt now normalizes rebase and merge driver exceptions inside their walks, preserves completed child layers, exposes completedLayers through both structured-result schemas, and converts missing driver results into blocked outcomes. The remaining root boundary is still wrong: after mergeGroup lands the root merge, recordMergedCommit can throw before the root layer is appended; the enclosing catch then returns parent-conflicted with no root merge hash. roleMerge treats that typed report as an ordinary blocked failure, even though the source branch already moved, so retry/reporting loses the required merged-but-not-closed state.",
       "locations": [
         {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "656-677, 861-866",
-          "role": "Outer catches normalize the exception text but cannot recover completed layers or distinguish a root merge that already landed."
+          "path": "scripts/mergeTaskWorktrees.ts",
+          "lines": "796-811",
+          "role": "The root merge can land at mergeGroup before recordMergedCommit throws, but the catch reports parent-conflicted without the landed root OID."
         },
         {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "132-151, 210-229",
-          "role": "The rebase schema omits failureReason/completedLayers and the merge schema omits completedLayers, so normalized driver evidence is outside the declared agent contract."
+          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "lines": "861-883",
+          "role": "roleMerge maps the driver's parent-conflicted report to ordinary blocked and invokes merged-but-not-closed recovery only when the whole driver throws."
         },
         {
           "path": "tests/taskWorkflowMergeStage.test.ts",
-          "lines": "937-984",
-          "role": "The new exception tests cover no-result and pre-progress failure only; neither triggers an exception after a child layer has completed or after the root merge lands."
+          "lines": "961-985",
+          "role": "The root exception regression collides with merge-intent persistence before mergeGroup runs, so it proves only a pre-merge failure and cannot detect the landed-root misclassification."
+        },
+        {
+          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "lines": "226-243",
+          "role": "MERGE_SCHEMA preserves completedLayers and lastFailure but still omits the driver's failureReason, leaving the declared result contract incomplete for normalized failures."
         }
       ],
-      "provingTest": "Keep the staged no-result and pre-walk exception cases. Add a nested driver fixture that lands the child source merge and deterministically throws during the parent operation; the schema-constrained result must retain the concrete reason and completed child layer, and queue consumption must retain source progress and carryover. Add a root variant that throws after the root merge commit lands but before close completes; it must report merged-but-not-closed with the recorded merge hash rather than ordinary blocked.",
+      "provingTest": "Keep the staged no-result, rebase, and child-progress exception cases. In the production-shaped root workflow fixture, create refs/taskTools/merged-commits as a leaf ref so merge-intent persistence succeeds, mergeGroup lands the root operation branch, and recordMergedCommit then deterministically fails while trying to create refs/taskTools/merged-commits/task-N. Assert the source branch moved, the task remains open, and the schema-constrained result is merged-but-not-closed with mergedCommitHash equal to the landed source tip and a concrete closeError/lastFailure naming the ref failure; it must not return parent-conflicted or blocked.",
       "suggestedFixApproach": [
-        "Move exception normalization inside the layer walks or throw a typed error carrying completedLayers and merge persistence state; the stage-level catch must not reconstruct a fresh data-less failure.",
-        "Extend REBASE_WALK_SCHEMA and MERGE_SCHEMA to declare every retained failure field, including failureReason and completedLayers, and normalize post-root-merge exceptions through the existing merged-but-not-closed/recovery boundary."
+        "Split the root integration boundary into pre-landing and post-landing handling. Once mergeGroup reports merged, capture the source tip immediately; if merge-record persistence or later bookkeeping throws, return a distinct typed report carrying that landed hash instead of parent-conflicted.",
+        "Map the distinct landed-root report through roleMerge to merged-but-not-closed with mergedCommitHash, closeError, lastFailure, and completedLayers. Add failureReason to MERGE_SCHEMA so the declared production result retains the full normalized driver report."
       ],
       "resolvedBoundaryReference": [
         {
@@ -243,11 +253,15 @@
       "remainingMinimalExample": [
         {
           "file": "scripts/mergeTaskWorktrees.ts",
-          "code": "for (const occurrence of orderedOccurrences) {\n  try { /* rebase/test/merge one layer; push completed result */ }\n  catch (error) {\n    return { status: failureStatusFor(occurrence), completedLayers, occurrenceId: displayOccurrenceId(occurrence.occurrenceId), checkoutPath: occurrence.checkoutPath, stage: 'merge', conflictedFilePaths: [], failureReason: String(error) }\n  }\n}"
+          "code": "const result = mergeStepOperations.mergeGroup(sourceCheckoutPath, group, occurrence.baseBranch, directChildPathsInParent)\nif (!result.merged) return parentConflict(result)\nconst landedOid = git(sourceCheckoutPath, 'rev-parse', occurrence.baseBranch).trim()\ntry {\n  recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, landedOid)\n} catch (error) {\n  return { status: 'root-merged-but-not-closed', completedLayers, mergedCommitHash: landedOid, failureReason: gitErrorText(error) }\n}\n// continue ordinary completed-layer bookkeeping"
         },
         {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "// Declare stoppedAt.failureReason and top-level completedLayers in REBASE_WALK_SCHEMA,\n// and completedLayers in MERGE_SCHEMA, so the production structured result preserves them."
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "if (report.status === 'root-merged-but-not-closed') {\n  const lastFailure = `merge record failure after root landed: ${report.failureReason}`\n  printResult({ ...report, status: 'merged-but-not-closed', closeError: lastFailure, lastFailure })\n  return\n}"
+        },
+        {
+          "file": "tests/taskWorkflowMergeStage.test.ts",
+          "code": "test('a merge-record failure after the root lands reports merged-but-not-closed', async () => {\n  git(root, 'update-ref', 'refs/taskTools/merged-commits', git(root, 'rev-parse', 'HEAD'))\n  const before = git(root, 'rev-parse', 'main')\n  const outcome = (await runMergeStage(worktree, args)).results[0]\n  assert.notEqual(git(root, 'rev-parse', 'main'), before)\n  assert.equal(outcome.status, 'merged-but-not-closed')\n  assert.equal(outcome.mergedCommitHash, git(root, 'rev-parse', 'main'))\n  assert.match(outcome.lastFailure, /merged-commits/)\n  assertTaskStillOpen(root, taskNumber)\n})"
         }
       ],
       "existingOpenTask": "No matching open task."
