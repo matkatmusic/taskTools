@@ -14,6 +14,7 @@ import {
   removeTaskWorktreeAndBranches,
   deleteTaskMergePersistence,
   collectRetainedTaskArtifacts,
+  findRecordedMergedCommit,
 } from "./mergeTaskWorktrees.ts";
 import { createEmptyResolutionManifest } from "./resolutionRequests.ts";
 import { currentBranchName } from "./repositoryBranches.ts";
@@ -205,11 +206,126 @@ const tddInstruction = (t: PreparedTask) => t.tests && t.tests !== 'skip'
   ? `This task's tests field holds an example test the user wrote: ${t.tests}\nWrite that test first, then expand it to also cover the individual functions/subparts you build, before writing the implementation.`
   : 'This task has no tests field, or it is the literal string "skip" — skip TDD entirely and just write the code.'
 
-const workerBrief = (t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number) => {
+// ---------------------------------------------------------------------------
+// Occurrence-aware ownership (C86-19): route an owned file below a submodule to its own checkout, not root's.
+// ---------------------------------------------------------------------------
+
+function occurrenceCheckoutPathsInWorktree(occurrences: any[], worktreePath: string): Map<string, string> {
+  const byId = new Map(occurrences.map((o: any) => [o.occurrenceId, o]))
+  const resolved = new Map<string, string>()
+  const resolve = (occurrenceId: string): string => {
+    if (resolved.has(occurrenceId)) return resolved.get(occurrenceId)!
+    const occurrence = byId.get(occurrenceId)
+    const checkoutPath = occurrence.parentOccurrenceId === null
+      ? worktreePath
+      : join(resolve(occurrence.parentOccurrenceId), occurrence.pathInParent)
+    resolved.set(occurrenceId, checkoutPath)
+    return checkoutPath
+  }
+  for (const occurrence of occurrences) resolve(occurrence.occurrenceId)
+  return resolved
+}
+
+function occurrenceRootRelativePaths(occurrences: any[]): Map<string, string> {
+  const byId = new Map(occurrences.map((o: any) => [o.occurrenceId, o]))
+  const resolved = new Map<string, string>()
+  const resolve = (occurrenceId: string): string => {
+    if (resolved.has(occurrenceId)) return resolved.get(occurrenceId)!
+    const occurrence = byId.get(occurrenceId)
+    const parentRelative = occurrence.parentOccurrenceId === null ? null : resolve(occurrence.parentOccurrenceId)
+    const rootRelative = parentRelative === null ? '' : parentRelative === '' ? occurrence.pathInParent : `${parentRelative}/${occurrence.pathInParent}`
+    resolved.set(occurrenceId, rootRelative)
+    return rootRelative
+  }
+  for (const occurrence of occurrences) resolve(occurrence.occurrenceId)
+  return resolved
+}
+
+type OwnedOccurrence = { occurrenceId: string; checkoutPath: string; absolutePaths: string[] }
+
+// Maps each owned (root-relative) file to the deepest occurrence containing it; unmatched files stay with root ('').
+function ownedOccurrencesDeepestFirst(occurrences: any[], worktreePath: string, files: string[]): OwnedOccurrence[] {
+  const checkoutPaths = occurrenceCheckoutPathsInWorktree(occurrences, worktreePath)
+  const rootRelativePaths = occurrenceRootRelativePaths(occurrences)
+  const deepestFirst = [...occurrences].sort((a: any, b: any) => b.depth - a.depth)
+
+  const absolutePathsByOccurrence = new Map<string, string[]>()
+  for (const file of files) {
+    let ownerId = ''
+    for (const occurrence of deepestFirst) {
+      const prefix = rootRelativePaths.get(occurrence.occurrenceId)!
+      if (prefix !== '' && (file === prefix || file.startsWith(`${prefix}/`))) {
+        ownerId = occurrence.occurrenceId
+        break
+      }
+    }
+    const list = absolutePathsByOccurrence.get(ownerId) ?? []
+    list.push(join(worktreePath, file))
+    absolutePathsByOccurrence.set(ownerId, list)
+  }
+
+  return deepestFirst
+    .filter((occurrence: any) => absolutePathsByOccurrence.has(occurrence.occurrenceId))
+    .map((occurrence: any) => ({
+      occurrenceId: occurrence.occurrenceId,
+      checkoutPath: checkoutPaths.get(occurrence.occurrenceId)!,
+      absolutePaths: absolutePathsByOccurrence.get(occurrence.occurrenceId)!,
+    }))
+}
+
+// A submodule commit never updates its parent's tracked OID; every ancestor up to root needs a gitlink bump.
+function ancestorGitlinkBumps(occurrences: any[], worktreePath: string, ownedOccurrenceIds: string[]): Map<string, string[]> {
+  const byId = new Map(occurrences.map((o: any) => [o.occurrenceId, o]))
+  const checkoutPaths = occurrenceCheckoutPathsInWorktree(occurrences, worktreePath)
+  const bumps = new Map<string, string[]>()
+  for (const occurrenceId of ownedOccurrenceIds) {
+    let current = byId.get(occurrenceId)
+    while (current && current.parentOccurrenceId !== null) {
+      const parentId = current.parentOccurrenceId
+      const list = bumps.get(parentId) ?? []
+      const childAbsolutePath = checkoutPaths.get(current.occurrenceId)!
+      if (!list.includes(childAbsolutePath)) list.push(childAbsolutePath)
+      bumps.set(parentId, list)
+      current = byId.get(parentId)
+    }
+  }
+  return bumps
+}
+
+// One commit per touched occurrence, deepest-first, including intermediates whose only change is a child gitlink bump.
+function implementCommitSteps(t: PreparedTask, occurrences: any[]): string {
+  if (t.files.length === 0) {
+    const addPaths = `${shellQuote(t.notesFile)} (plus every other path you edited, listed explicitly)`
+    return `run: git -C ${shellQuote(t.repoRoot)} add -- ${addPaths}\nrun: git -C ${shellQuote(t.repoRoot)} commit -m ${shellQuote(`task ${t.number}: one-line summary`)}`
+  }
+
+  const owned = ownedOccurrencesDeepestFirst(occurrences, t.repoRoot, t.files)
+  const ownedByOccurrenceId = new Map(owned.map((o) => [o.occurrenceId, o]))
+  const gitlinkBumps = ancestorGitlinkBumps(occurrences, t.repoRoot, owned.map((o) => o.occurrenceId))
+  const checkoutPaths = occurrenceCheckoutPathsInWorktree(occurrences, t.repoRoot)
+  const byId = new Map(occurrences.map((o: any) => [o.occurrenceId, o]))
+
+  const commitOccurrenceIds = new Set<string>([...ownedByOccurrenceId.keys(), ...gitlinkBumps.keys(), ''])
+  const deepestFirstIds = [...commitOccurrenceIds].sort((a, b) => (byId.get(b)?.depth ?? 0) - (byId.get(a)?.depth ?? 0))
+
+  const steps: string[] = []
+  const commitStep = (occurrenceId: string, checkoutPath: string, addPaths: string[]) => {
+    const label = occurrenceId === '' ? '' : ` (${occurrenceId})`
+    steps.push(`run: git -C ${shellQuote(checkoutPath)} add -- ${addPaths.map(shellQuote).join(' ')}`)
+    steps.push(`run: git -C ${shellQuote(checkoutPath)} commit -m ${shellQuote(`task ${t.number}: one-line summary${label}`)}`)
+  }
+
+  for (const occurrenceId of deepestFirstIds) {
+    const ownedFiles = ownedByOccurrenceId.get(occurrenceId)?.absolutePaths ?? []
+    const bumps = gitlinkBumps.get(occurrenceId) ?? []
+    const notes = occurrenceId === '' ? [t.notesFile] : []
+    commitStep(occurrenceId, checkoutPaths.get(occurrenceId)!, [...ownedFiles, ...bumps, ...notes])
+  }
+  return steps.join('\n')
+}
+
+const workerBrief = (t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number, occurrences: any[]) => {
   const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`
-  const gitAddPaths = t.files.length
-    ? [...t.files, t.notesFile].map(shellQuote).join(' ')
-    : `${shellQuote(t.notesFile)} (plus every other path you edited, listed explicitly)`
 
   return `You are implementing EXACTLY ONE pre-planned task from
 ${worktreePath(t, '.taskTools/tasks.json')}: #${t.number}.
@@ -262,8 +378,7 @@ if any test still failed after ${maxFixRounds} fix rounds:
     return {task: ${t.number}, status: "blocked", summary: what is still failing after ${maxFixRounds} fix rounds, remaining: the failing test names, notesFile: notesFile}
 
 if typecheck is clean and every test passed:
-    run: git -C ${shellQuote(t.repoRoot)} add -- ${gitAddPaths}
-    run: git -C ${shellQuote(t.repoRoot)} commit -m ${shellQuote(`task ${t.number}: one-line summary`)}
+${implementCommitSteps(t, occurrences)}
     return {task: ${t.number}, status: "done", summary: one sentence, remaining: [], notesFile: notesFile}
 else if part of the plan is implemented:
     return {task: ${t.number}, status: "partial", summary: one sentence, remaining: the plan steps not yet done, plus any failing test names, notesFile: notesFile}
@@ -282,8 +397,10 @@ or modified must be listed in ownedFiles; otherwise return status "blocked"
 without editing it.
 
 You are forbidden to use an ambient-cwd-relative filesystem path or a bare Git
-command. Every Git command must use git -C taskWorktree, and every other shell
-command must explicitly run inside taskWorktree.`
+command. Every Git command must use git -C <checkout>, where <checkout> is
+taskWorktree or one of the checkout paths shown in the commit steps above —
+never a different checkout. Every other shell command must explicitly run
+inside taskWorktree.`
 }
 
 const mergeConflictBrief = (checkoutPath: string, conflictedFilePaths: string[]) => `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve exactly these conflicted paths — this is the complete list, do not search the repository for more:
@@ -493,14 +610,39 @@ function roleGitHead() {
 
 function roleImplement() {
   const t = loadPreparedTask()
-  process.stdout.write(workerBrief(t, PAYLOAD.note ?? '', PAYLOAD.typecheckCommand ?? 'npx tsc --noEmit', PAYLOAD.maxFixRounds ?? 3))
+  const occurrences = PAYLOAD.repositoryManifest?.occurrences ?? []
+  process.stdout.write(workerBrief(t, PAYLOAD.note ?? '', PAYLOAD.typecheckCommand ?? 'npx tsc --noEmit', PAYLOAD.maxFixRounds ?? 3, occurrences))
 }
 
 function roleImplementFinalize() {
-  const baseOid: string = PAYLOAD.baseOid
+  const baseOids: Record<string, string> = PAYLOAD.baseOids ?? {}
   const notesRelative: string = PAYLOAD.notesRelative
+  const occurrences: any[] = PAYLOAD.repositoryManifest?.occurrences ?? []
+  const checkoutPaths = occurrenceCheckoutPathsInWorktree(occurrences, WORKTREE)
+  const rootRelativePaths = occurrenceRootRelativePaths(occurrences)
   const headOid = readHeadOid(WORKTREE)
-  const changedPaths = execFileSync('git', ['-C', WORKTREE, 'diff', '--name-only', '-z', `${baseOid}..HEAD`], { encoding: 'utf8' }).split('\0').filter(Boolean)
+
+  const directChildLocalNames = new Map<string, Set<string>>()
+  for (const occurrence of occurrences) {
+    if (occurrence.parentOccurrenceId === null) continue
+    const set = directChildLocalNames.get(occurrence.parentOccurrenceId) ?? new Set<string>()
+    set.add(occurrence.pathInParent)
+    directChildLocalNames.set(occurrence.parentOccurrenceId, set)
+  }
+
+  const changedPaths: string[] = []
+  for (const occurrence of occurrences) {
+    const checkoutPath = checkoutPaths.get(occurrence.occurrenceId)
+    const occurrenceBaseOid = baseOids[occurrence.occurrenceId]
+    if (!checkoutPath || !occurrenceBaseOid) continue
+    const childNames = directChildLocalNames.get(occurrence.occurrenceId) ?? new Set<string>()
+    const prefix = rootRelativePaths.get(occurrence.occurrenceId) ?? ''
+    for (const localPath of changedPathsSinceOid(checkoutPath, occurrenceBaseOid)) {
+      if (childNames.has(localPath)) continue // that gitlink bump is reported by the child occurrence's own diff instead
+      changedPaths.push(prefix === '' ? localPath : `${prefix}/${localPath}`)
+    }
+  }
+
   const notesPresent = pathTrackedAtHead(WORKTREE, notesRelative)
   printResult({ headOid, changedPaths, notesPresent })
 }
@@ -517,8 +659,11 @@ function roleOccurrenceOids() {
 function roleRebaseWalk() {
   const manifest = buildManifest()
   const typecheckCommand = PAYLOAD.typecheckCommand ?? null
-  const report = rebaseSubmoduleLayersDeepestFirst(WORKTREE, manifest, true, typecheckCommand)
-  printResult(report)
+  try {
+    printResult(rebaseSubmoduleLayersDeepestFirst(WORKTREE, manifest, true, typecheckCommand))
+  } catch (error) {
+    printResult({ completedLayers: [], stoppedAt: { occurrenceId: '', checkoutPath: WORKTREE, status: 'driver-failed', failureReason: String((error as any)?.message ?? error) } })
+  }
 }
 
 function roleParentRebase() {
@@ -527,8 +672,12 @@ function roleParentRebase() {
   const rootOccurrence = occurrences.find((o: any) => o.occurrenceId === '')
   const submodulePaths = occurrences.filter((o: any) => o.parentOccurrenceId === '').map((o: any) => o.pathInParent).filter((p: any) => p !== null)
   const typecheckCommand = PAYLOAD.typecheckCommand ?? null
-  const outcome: any = rebaseParentOntoSourceAndTest('', WORKTREE, rootOccurrence.baseBranch, submodulePaths, manifest.resolutionManifest, true, typecheckCommand)
-  printResult({ stoppedAt: outcome.status === 'rebased-and-tested' ? null : outcome })
+  try {
+    const outcome: any = rebaseParentOntoSourceAndTest('', WORKTREE, rootOccurrence.baseBranch, submodulePaths, manifest.resolutionManifest, true, typecheckCommand)
+    printResult({ stoppedAt: outcome.status === 'rebased-and-tested' ? null : outcome })
+  } catch (error) {
+    printResult({ stoppedAt: { status: 'driver-failed', failureReason: String((error as any)?.message ?? error) } })
+  }
 }
 
 function roleMergeConflict() {
@@ -712,7 +861,27 @@ function roleMerge() {
   const mainRepoRoot = SOURCE_ROOT
   const sourceBranch = rootOccurrence.baseBranch
   const sourceSubmodules = sourceSubmodulesFrom(manifest)
-  const { stage: failedAtStage, ...report }: any = mergeTaskDeepestFirst(repoRoot, manifest)
+  let walkReport: any
+  try {
+    walkReport = mergeTaskDeepestFirst(repoRoot, manifest)
+  } catch (error) {
+    const failureReason = `merge driver failed: ${String((error as any)?.message ?? error)}`
+    // The merge may have landed already; a persisted record beats reporting an ordinary blocked failure.
+    const branch = currentBranchName(repoRoot)
+    const mergedCommitHash = findRecordedMergedCommit(mainRepoRoot, branch)
+    if (mergedCommitHash) {
+      printResult({ status: 'merged-but-not-closed', mergedCommitHash, closeError: failureReason, lastFailure: failureReason })
+    } else {
+      printResult({ status: 'blocked', lastFailure: failureReason })
+    }
+    return
+  }
+  const { stage: failedAtStage, ...report }: any = walkReport
+  if (report.status === 'root-merged-but-not-closed') {
+    const lastFailure = `merge record failure after root landed: ${report.failureReason}`
+    printResult({ ...report, status: 'merged-but-not-closed', closeError: lastFailure, lastFailure })
+    return
+  }
   if (report.status !== 'merged') {
     printResult({ failedAtStage, ...report, lastFailure: concreteMergeStageFailure({ ...report, stage: failedAtStage }) })
     return

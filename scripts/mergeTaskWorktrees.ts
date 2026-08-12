@@ -349,7 +349,13 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
     const completedLayers: SubmoduleLayerOutcome[] = [];
     for (const occurrence of submoduleLayersDeepestFirst) {
         const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId) ?? "";
-        const outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive, typecheckCommand);
+        let outcome: SubmoduleLayerOutcome;
+        try {
+            outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive, typecheckCommand);
+        } catch (error) {
+            // An unexpected operational failure (e.g. a rejected commit hook) must not discard already-completed layers.
+            return { completedLayers, stoppedAt: { occurrenceId: occurrence.occurrenceId, checkoutPath: occurrence.checkoutPath, status: "cleanup-failed", failureReason: gitErrorText(error) } };
+        }
         if (outcome.status !== "no-op" && outcome.status !== "rebased-and-tested") {
             return { completedLayers, stoppedAt: outcome };
         }
@@ -524,6 +530,15 @@ function clearMergeIntent(repoRoot: string, operationBranch: string): void {
     git(repoRoot, "update-ref", "-d", mergeIntentRefName(operationBranch));
 }
 
+// Called only after landing: a surviving intent ref just makes a future retry more cautious.
+function clearMergeIntentBestEffort(repoRoot: string, operationBranch: string): void {
+    try {
+        clearMergeIntent(repoRoot, operationBranch);
+    } catch {
+        // intentionally ignored
+    }
+}
+
 // Records the merge commit at merge time so a later retry's no-op path reuses it instead of guessing.
 function recordMergedCommit(repoRoot: string, operationBranch: string, mergedOid: string): void {
     git(repoRoot, "update-ref", mergedCommitRefName(operationBranch), mergedOid);
@@ -535,6 +550,11 @@ function readOptionalRef(repoRoot: string, refName: string): string | null {
     } catch {
         return null;
     }
+}
+
+// A recorded merge-commit ref proves a merge landed even if the driver that recorded it never returned (C86-21).
+export function findRecordedMergedCommit(repoRoot: string, operationBranch: string): string | null {
+    return readOptionalRef(repoRoot, mergedCommitRefName(operationBranch));
 }
 
 // Deletes both persistence refs; safe to call on refs that are already absent.
@@ -619,7 +639,9 @@ export type MergeTaskWalkReport =
           checkoutPath: string;
           stage: "merge";
           failureReason: string;
-      };
+      }
+    // The root merge already landed at mergedCommitHash; only persisting that record afterward failed (C86-21).
+    | { status: "root-merged-but-not-closed"; completedLayers: MergeLayerOutcome[]; mergedCommitHash: string; failureReason: string };
 
 // Checks out each child's merged tip for real, so `git add` records a gitlink matching the checkout.
 function propagateChildGitlinks(
@@ -713,74 +735,87 @@ export function mergeTaskDeepestFirst(
             continue;
         }
 
-        propagateChildGitlinks(occurrence, childrenByParentId, sourceTipByOccurrenceId, sourceCheckoutPathByOccurrenceId);
+        try {
+            propagateChildGitlinks(occurrence, childrenByParentId, sourceTipByOccurrenceId, sourceCheckoutPathByOccurrenceId);
 
-        if (occurrence.parentOccurrenceId !== null) {
-            const rebaseOutcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId);
-            if (rebaseOutcome.status === "conflicted") {
-                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: rebaseOutcome.conflictedFilePaths, failureReason: null };
-            }
-            if (rebaseOutcome.status === "cleanup-failed" || rebaseOutcome.status === "source-sync-failed") {
-                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: rebaseOutcome.failureReason };
-            }
-            if (rebaseOutcome.status === "tests-failed") {
-                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: rebaseOutcome.testOutput };
-            }
-            if (rebaseOutcome.status === "untested") {
-                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
+            if (occurrence.parentOccurrenceId !== null) {
+                const rebaseOutcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId);
+                if (rebaseOutcome.status === "conflicted") {
+                    return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: rebaseOutcome.conflictedFilePaths, failureReason: null };
+                }
+                if (rebaseOutcome.status === "cleanup-failed" || rebaseOutcome.status === "source-sync-failed") {
+                    return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: rebaseOutcome.failureReason };
+                }
+                if (rebaseOutcome.status === "tests-failed") {
+                    return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: rebaseOutcome.testOutput };
+                }
+                if (rebaseOutcome.status === "untested") {
+                    return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
+                }
+
+                // A gitlink-bump commit since the initial fetch may not be in sourceCheckoutPath yet.
+                git(sourceCheckoutPath, "fetch", occurrence.checkoutPath, `${occurrence.operationBranch}:refs/heads/${occurrence.operationBranch}`);
+                const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
+                recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
+
+                const result = mergeStepOperations.mergeSubmodule(sourceCheckoutPath, occurrence.checkoutPath, occurrence.baseBranch);
+                if (!result.merged) {
+                    clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
+                    return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
+                }
+                // Do not delete occurrence.operationBranch here: parent merge and close can still fail.
+                const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
+                recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
+                // The merge already landed: record it before any further bookkeeping, which is best-effort from here on.
+                sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
+                completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
+                clearMergeIntentBestEffort(sourceCheckoutPath, occurrence.operationBranch);
+                continue;
             }
 
-            // A gitlink-bump commit since the initial fetch may not be in sourceCheckoutPath yet.
-            git(sourceCheckoutPath, "fetch", occurrence.checkoutPath, `${occurrence.operationBranch}:refs/heads/${occurrence.operationBranch}`);
+            const directChildPathsInParent = (childrenByParentId.get(occurrence.occurrenceId) ?? [])
+                .map((child) => child.pathInParent)
+                .filter((pathInParent): pathInParent is string => pathInParent !== null);
+
+            const parentOutcome = rebaseParentOntoSourceAndTest(occurrence.occurrenceId, occurrence.checkoutPath, occurrence.baseBranch, directChildPathsInParent, manifest.resolutionManifest);
+            if (parentOutcome.status === "conflicted") {
+                return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: parentOutcome.conflictedFilePaths, failureReason: null };
+            }
+            if (parentOutcome.status === "cleanup-failed") {
+                return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: parentOutcome.failureReason };
+            }
+            if (parentOutcome.status === "tests-failed") {
+                return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: parentOutcome.testOutput };
+            }
+            if (parentOutcome.status === "untested") {
+                return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
+            }
+
+            const group: PreparedGroup = { groupId: 0, worktree: occurrence.checkoutPath, branch: occurrence.operationBranch, scope: "unknown", tasks: [] };
             const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
             recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
 
-            const result = mergeStepOperations.mergeSubmodule(sourceCheckoutPath, occurrence.checkoutPath, occurrence.baseBranch);
+            const result = mergeStepOperations.mergeGroup(sourceCheckoutPath, group, occurrence.baseBranch, directChildPathsInParent);
             if (!result.merged) {
                 clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
-                return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
+                return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
             }
-            // Do not delete occurrence.operationBranch here: parent merge and close can still fail.
+            // The root merge already landed at this OID: a failure from here on is merged-but-not-closed, never an ordinary conflict.
             const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
-            recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
-            clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
+            try {
+                recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
+            } catch (error) {
+                return { status: "root-merged-but-not-closed", completedLayers, mergedCommitHash: oid, failureReason: gitErrorText(error) };
+            }
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
-            continue;
+            clearMergeIntentBestEffort(sourceCheckoutPath, occurrence.operationBranch);
+        } catch (error) {
+            // An unexpected operational failure (e.g. a rejected commit hook) must not discard already-completed layers.
+            return occurrence.parentOccurrenceId !== null
+                ? { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: [], failureReason: gitErrorText(error) }
+                : { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: [], failureReason: gitErrorText(error) };
         }
-
-        const directChildPathsInParent = (childrenByParentId.get(occurrence.occurrenceId) ?? [])
-            .map((child) => child.pathInParent)
-            .filter((pathInParent): pathInParent is string => pathInParent !== null);
-
-        const parentOutcome = rebaseParentOntoSourceAndTest(occurrence.occurrenceId, occurrence.checkoutPath, occurrence.baseBranch, directChildPathsInParent, manifest.resolutionManifest);
-        if (parentOutcome.status === "conflicted") {
-            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: parentOutcome.conflictedFilePaths, failureReason: null };
-        }
-        if (parentOutcome.status === "cleanup-failed") {
-            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: [], failureReason: parentOutcome.failureReason };
-        }
-        if (parentOutcome.status === "tests-failed") {
-            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: parentOutcome.testOutput };
-        }
-        if (parentOutcome.status === "untested") {
-            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "test", conflictedFilePaths: [], failureReason: "test policy needs resolution" };
-        }
-
-        const group: PreparedGroup = { groupId: 0, worktree: occurrence.checkoutPath, branch: occurrence.operationBranch, scope: "unknown", tasks: [] };
-        const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
-        recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
-
-        const result = mergeStepOperations.mergeGroup(sourceCheckoutPath, group, occurrence.baseBranch, directChildPathsInParent);
-        if (!result.merged) {
-            clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
-            return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "merge", conflictedFilePaths: result.conflictedFilePaths, failureReason: result.failureReason };
-        }
-        const oid = git(sourceCheckoutPath, "rev-parse", occurrence.baseBranch).trim();
-        recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, oid);
-        clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
-        sourceTipByOccurrenceId.set(occurrence.occurrenceId, oid);
-        completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "merged", oid, mergedCommitOid: oid });
     }
 
     return { status: "merged", completedLayers };

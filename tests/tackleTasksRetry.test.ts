@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 // Task 157 deleted the five per-stage workflow files; blockers and tackle-tasks are what survive.
 const WORKFLOW_NAMES = ["blockers", "tackle-tasks"];
-// C86-36: added the conflict-identity role's agent() call.
-const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 18 };
+// C86-19: removed the standalone git-head call, folded into the occurrence-oids call the implement stage now needs anyway.
+const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 17 };
 const HELPER_MARKER = "// ponytail: null/undefined means the harness returned no result";
 
 const readWorkflow = (name: string) =>

@@ -585,3 +585,91 @@ test('plan+implement rejects missing sourceRoot before source or worktree mutati
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+// C86-22: the third round's widening must reach every downstream boundary, not just tasks.json and the plan.
+test('a third rejected review with missingFiles widens every downstream implementation boundary', async () => {
+  const { root, tasks } = makeTwoTaskSourceRepo()
+  const task = tasks[0]!
+  const origin = mkdtempSync(join(tmpdir(), 'task-workflow-plan-implement-origin-'))
+  git(origin, 'init', '-q', '--bare')
+  git(root, 'remote', 'add', 'origin', origin)
+
+  const prepared = JSON.parse(
+    execFileSync('node', [join(REPO_ROOT, 'scripts', 'prepareTasks.ts'), String(task.taskNumber)], { cwd: root, encoding: 'utf8' }),
+  )
+  const group = prepared.groups.find((g: { tasks: { number: number }[] }) => g.tasks[0]?.number === task.taskNumber)
+  linkScripts(group.worktree)
+  let verifyCalls = 0
+  let planCalls = 0
+  let capturedImplementBrief = ''
+
+  try {
+    const scriptedAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('plan:')) {
+        planCalls += 1
+        const planFile = join(group.worktree, 'plans', `task-${task.taskNumber}-plan.md`)
+        mkdirSync(dirname(planFile), { recursive: true })
+        writeFileSync(planFile, planCalls === 1 ? 'plan v1\n' : 'plan v2, now edits b.ts\n')
+        return { task: task.taskNumber, status: 'planned', planFile, question: '', missingFiles: [] }
+      }
+      if (options.label.startsWith('verify:')) {
+        verifyCalls += 1
+        if (verifyCalls === 1) return { task: task.taskNumber, verdict: 'rejected', notes: 'fix 1', reviewer: 'claude', missingFiles: [] }
+        if (verifyCalls === 2) return { task: task.taskNumber, verdict: 'rejected', notes: 'fix 2', reviewer: 'claude', missingFiles: [] }
+        return { task: task.taskNumber, verdict: 'rejected', notes: 'needs b.ts', reviewer: 'claude', missingFiles: ['b.ts'] }
+      }
+      if (options.label.startsWith('applyFeedback:')) return {}
+      if (options.label.startsWith('implement:')) {
+        // Run the real emitter command itself, exactly as a live agent would, to capture the actual worker brief text.
+        const match = prompt.match(EMITTER_COMMAND_RE)
+        if (!match) throw new Error(`implement prompt has no embedded emitter command: ${prompt.slice(0, 200)}`)
+        const [, emitterPath, taskArg, role, payloadJson] = match
+        capturedImplementBrief = execFileSync('node', [emitterPath!, taskArg!, role!], { input: payloadJson, encoding: 'utf8' })
+
+        writeFileSync(join(group.worktree, 'b.ts'), 'export const b = 2\n')
+        const notesRelative = `plans/task-${task.taskNumber}-implementation-notes.md`
+        writeFileSync(join(group.worktree, notesRelative), 'implementation notes\n')
+        git(group.worktree, 'add', '--', 'b.ts', notesRelative)
+        git(group.worktree, 'commit', '-q', '-m', `task ${task.taskNumber}: implement`)
+        return { task: task.taskNumber, status: 'done', summary: 'implemented the plan', remaining: [], notesFile: join(group.worktree, notesRelative) }
+      }
+      throw new Error(`unexpected agent label: ${options.label}`)
+    }
+
+    const envelope = await runTaskWorkflowAtRealScriptPath({
+      task: task.taskNumber,
+      stage: 'plan+implement',
+      typecheckCommand: prepared.typecheckCommand,
+      worktree: group.worktree,
+      sourceRoot: root,
+      runId: prepared.runId,
+    }, agentThatRunsRealEmitterAndScriptsJudgment(scriptedAgent))
+
+    assert.equal(verifyCalls, 3)
+    assert.equal(planCalls, 2)
+    const planResult = envelope.results[0]!
+    assert.equal(planResult.status, 'planned')
+    assert.equal(planResult.reviewRounds, 0)
+    assert.deepEqual(planResult.verify, { task: task.taskNumber, verdict: 'rejected', notes: 'needs b.ts', reviewer: 'claude', missingFiles: ['b.ts'] })
+    assert.deepEqual(planResult.files, ['a.ts', 'b.ts'])
+
+    const implementResult = envelope.results[1] as { status: string; fenceViolations: string[] }
+    assert.equal(implementResult.status, 'done')
+    assert.deepEqual(implementResult.fenceViolations, [])
+
+    const authoritativeTasks = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8')) as TaskRecord[]
+    assert.deepEqual(authoritativeTasks.find((t) => t.taskNumber === task.taskNumber)!.files, ['a.ts', 'b.ts'])
+    assert.equal(readFileSync(planResult.planFile as string, 'utf8'), 'plan v2, now edits b.ts\n')
+
+    const runArguments = JSON.parse(readFileSync(join(root, '.taskTools', 'run-arguments.json'), 'utf8'))
+    const runArgumentsTask = runArguments.groups.flatMap((g: { tasks: { number: number; files: string[] }[] }) => g.tasks)
+      .find((t: { number: number }) => t.number === task.taskNumber)
+    assert.deepEqual(runArgumentsTask.files, ['a.ts', 'b.ts'])
+    assert.match(readFileSync(join(group.worktree, 'plans', `brief-${task.taskNumber}.md`), 'utf8'), /b\.ts/)
+    assert.match(capturedImplementBrief, /b\.ts/)
+  } finally {
+    rmSync(group.worktree, { recursive: true, force: true })
+    rmSync(root, { recursive: true, force: true })
+    rmSync(origin, { recursive: true, force: true })
+  }
+})

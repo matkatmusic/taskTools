@@ -9,8 +9,8 @@ import { compileFunction } from 'node:vm'
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, taskWorktreeLeasePath } from '../scripts/prepareTasks.ts'
 import {
-  buildMergeReport, consumeCleanupRetryResult, consumeTaskWorkflowResult, createMergeQueue,
-  enqueueApprovedTask, recordStageOutcome, type CleanupRetryEnvelope, type TaskWorkflowEnvelope,
+  beginNextLap, buildMergeReport, consumeCleanupRetryResult, consumeTaskWorkflowResult, createMergeQueue,
+  enqueueApprovedTask, nextQueueStep, recordStageOutcome, shouldEndQueue, type CleanupRetryEnvelope, type TaskWorkflowEnvelope,
 } from '../scripts/runMergePhase.ts'
 
 const REPO_ROOT = process.cwd()
@@ -935,6 +935,86 @@ test('merge stage: a cleanup commit blocked by a hook leaves the source branch u
   }
 })
 
+test('rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing', async () => {
+  const taskNumber = 9044
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    const rawAgent: AgentImpl = async (prompt) => {
+      const match = prompt.match(EMITTER_COMMAND_RE)
+      if (!match) throw new Error(`prompt has no embedded emitter command: ${prompt.slice(0, 200)}`)
+      const [, , , role] = match
+      if (role === 'rebase-walk') return null
+      throw new Error(`unexpected role reached: ${role}`)
+    }
+
+    const result = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root }, rawAgent)
+    const outcome = result.results[0] as { status: string, lastFailure: string }
+    assert.equal(outcome.status, 'blocked')
+    assert.equal(outcome.lastFailure, 'rebase-walk driver returned no result')
+    assert.equal(existsSync(worktreePath), true)
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-21: the driver itself normalizes an unexpected exception into a typed result, preserving completedLayers.
+test('merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing', async () => {
+  const taskNumber = 9045
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    // A leaf ref here collides with the nested ref the driver writes next, so update-ref throws mid-merge.
+    git(root, 'update-ref', 'refs/taskTools/merge-intents', git(root, 'rev-parse', 'HEAD'))
+
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
+    const outcome = result.results[0] as { status: string, lastFailure: string, completedLayers: unknown[] }
+    assert.equal(outcome.status, 'parent-conflicted')
+    assert.match(outcome.lastFailure, /merge-intents/)
+    assert.deepEqual(outcome.completedLayers, [])
+    assert.equal(existsSync(worktreePath), true)
+    const stillOpen = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8'))
+    assert.deepEqual(stillOpen.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-21: a merge-record failure AFTER the root merge lands must report merged-but-not-closed, never a conflict.
+test('merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict', async () => {
+  const taskNumber = 9046
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    // A leaf ref here collides with the nested ref recordMergedCommit writes only after mergeGroup lands the root merge.
+    git(root, 'update-ref', 'refs/taskTools/merged-commits', git(root, 'rev-parse', 'HEAD'))
+
+    const beforeMain = git(root, 'rev-parse', 'main')
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
+    const outcome = result.results[0] as { status: string, mergedCommitHash: string, lastFailure: string, closeError: string }
+    const afterMain = git(root, 'rev-parse', 'main')
+
+    assert.notEqual(afterMain, beforeMain)
+    assert.equal(outcome.status, 'merged-but-not-closed')
+    assert.equal(outcome.mergedCommitHash, afterMain)
+    assert.match(outcome.lastFailure, /merged-commits/)
+    assert.match(outcome.closeError, /merged-commits/)
+    assert.equal(existsSync(worktreePath), true)
+    const stillOpen = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8'))
+    assert.deepEqual(stillOpen.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
 test('merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged', async () => {
   const taskNumber = 9006
   process.env.GIT_ALLOW_PROTOCOL = 'file'
@@ -1029,6 +1109,20 @@ test('merge stage: after a submodule layer merges, an untested parent layer bloc
     const archived = JSON.parse(readFileSync(join(root, '.taskTools', 'completedTasks.json'), 'utf8'))
     assert.deepEqual(stillOpen.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
     assert.deepEqual(archived, [])
+
+    // C86-20: the child (submodule) merge that landed before the parent failed must count as lap progress.
+    let queue = createMergeQueue()
+    queue = enqueueApprovedTask(queue, taskNumber)
+    queue = recordStageOutcome(queue, taskNumber, 'rebase-test', { status: 'success' })
+    const consumed = consumeTaskWorkflowResult(queue, result as TaskWorkflowEnvelope)
+    assert.equal(consumed.kind, 'queue')
+    if (consumed.kind !== 'queue') return assert.fail('expected queue result')
+    assert.equal(consumed.queue.mergedThisLap, 0)
+    assert.equal(consumed.queue.sourceProgressThisLap, true)
+    assert.equal(shouldEndQueue(consumed.queue, false), 'continue')
+    const nextLap = beginNextLap(consumed.queue)
+    assert.equal(nextLap.sourceProgressThisLap, false)
+    assert.deepEqual(nextQueueStep(nextLap), { taskNumber, stage: 'rebase-test' })
   } finally {
     removeFixture(root, worktreePath)
     rmSync(submoduleSource, { recursive: true, force: true })
