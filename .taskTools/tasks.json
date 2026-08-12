@@ -598,5 +598,38 @@
         "reason": "tasks 169, 170, 171 and 182 all edit scripts/tackleTasksBrief.ts; 182 is the last of them, so waiting for it keeps this port from conflicting with the audit chain"
       }
     ]
+  },
+  {
+    "taskNumber": 185,
+    "version": "78fe0c815c794dd09097e3bf29c942ec3ed77b78",
+    "title": "Rebuild the plan review loop on the audit-loop pattern and add a subagent code review of the staged diff",
+    "userDescription": "the @audit-loop/ approach should be used for the codex review -> subagent fix sequence of the tackle-tasks workflow.",
+    "goal": [
+      "- A rejected plan review leaves a numbered finding carrying acceptance criteria and a required fix, not a free-text notes string.",
+      "- The fixer agent is given only the selected findings and does no work beyond them.",
+      "- A finding is removed only when it is actually resolved; an unresolved finding is never silently dropped.",
+      "- After the implement stage, a subagent -- not codex -- reviews the staged diff against numbered findings.",
+      "- On rejection the implementation paths are unstaged without discarding their working-tree changes, and only the findings update stays staged.",
+      "- On acceptance the resolved findings are removed and the findings update is staged alongside the implementation.",
+      "- The reviewer prompts state that optional improvements are not grounds for rejection, and that a green suite does not make a partial fix acceptable.",
+      "- The workflow still reaches a terminal state without a human, despite audit-loop's human-in-the-loop commit steps.",
+      "- `npm test` passes.",
+      "- NOT in scope: changing the rebase-test or merge stages' own review agents, and the serial-mode brief port owned by task 184."
+    ],
+    "description": "The audit-loop/ directory in this repository documents a review-and-repair pattern that proved itself on the task-86 audit. Read audit-loop/audit-loop-workflow.md, audit-loop/codex-review-prompt.md, audit-loop/sonnet-implementation-prompt.md and audit-loop/codex-audit-schema.md before planning; they are the specification for this task.\n\nWHAT MAKES AUDIT-LOOP DIFFERENT from the loop tackle-tasks runs today:\n- Rejections are DURABLE NUMBERED FINDINGS in a JSON file governed by a schema, not a free-text notes blob. Each finding carries .acceptanceCriteria, .provingTest, .suggestedFixApproach (containing actual code, so the fixer does not guess), and .resolvedBoundaryReference / .resolvedBoundaryExample which must be preserved.\n- The fixer is told to implement ONLY the selected findings and to do no work beyond them.\n- On ACCEPT the reviewer removes exactly those findings and stages the audit update alongside the implementation.\n- On REJECT the reviewer UNSTAGES the implementation paths (without discarding the working tree), rewrites the unresolved findings to describe only what remains, and stages only the audit file. A rejected implementation is never committed.\n- The reviewer is explicitly told NOT TO NITPICK, not to reject for optional improvements, and not to accept a partial fix merely because the suite is green.\n\nTWO PARTS, both requested by the user.\n\nPART 1 -- restructure the existing PLAN review loop. skills/tackle-tasks/tackle-tasks.workflow.js:390-403 runs runVerify (line 363, VERIFY_SCHEMA at :87) up to MAX_REVIEW_ROUNDS (:279), and on rejection passes verify.notes as a prose string to an apply-feedback agent (:400, APPLY_FEEDBACK_SCHEMA at :99). Replace that notes-passing with audit-loop-shaped findings: numbered, schema-governed, carrying acceptance criteria and required-fix code, cleared only when actually resolved. This half keeps its existing reviewer (codex, with the current fallback).\n\nPART 2 -- add a NEW code review after the implement stage. Today the implement stage (:422-473) produces staged changes and nothing reviews them; only fence violations are checked. Add an audit-loop-shaped review of the staged diff, following the accept/reject/unstage protocol above.\n\nREVIEWER CHOICE, settled with the user: the new code review in Part 2 uses ANOTHER SUBAGENT, not codex. Part 1 keeps codex.\n\nThe reviewer and fixer prompts are emitted by scripts/tackle-tasks_AgentPromptEmitter.ts via the emitterInstruction helper (workflow line 40, roles 'verify' and 'apply-feedback'); the new role(s) belong there too.\n\nADAPTATION NOTE: audit-loop as written stops for a human to review and commit each staged handoff. tackle-tasks runs unattended. Keep the accept/reject/unstage discipline and the durable findings, but the workflow must reach a terminal state on its own rather than waiting for a human.\n\nOVERLAP: open task 120 (\"Tell the codex plan reviewer which classes of issue are not...\") covers similar ground to audit-loop's do-not-nitpick rule. Check it before planning and fold it in or close it out rather than duplicating.",
+    "files": [
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      "scripts/tackle-tasks_AgentPromptEmitter.ts",
+      "tests/taskWorkflowPlanImplementStage.test.ts",
+      "tests/tackleTasksRetry.test.ts"
+    ],
+    "tests": "Run the loop with a reviewer that REJECTS round 1 and ACCEPTS round 2. Assert that after round 1 a numbered finding exists with acceptanceCriteria and a required fix; that the fixer is given ONLY that finding; that after round 2 the finding is GONE from the file; and that an unresolved finding is never silently dropped.",
+    "difficulty": 8,
+    "handoffFilePaths": [
+      "audit-loop/audit-loop-workflow.md",
+      "audit-loop/codex-review-prompt.md",
+      "audit-loop/sonnet-implementation-prompt.md",
+      "audit-loop/codex-audit-schema.md"
+    ]
   }
 ]
