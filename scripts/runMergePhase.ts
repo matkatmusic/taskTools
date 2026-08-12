@@ -72,6 +72,8 @@ export type MergeQueue = {
     carryover: QueueTask[];
     merged: number[];
     mergedThisLap: number;
+    // A source-layer (submodule) merge that landed even though its parent later failed (C86-20).
+    sourceProgressThisLap: boolean;
     unmerged: QueueTask[];
     mergedNotClosed: MergedNotClosedTask[];
     cleanupIncomplete: CleanupIncompleteTask[];
@@ -81,11 +83,11 @@ export type MergeQueue = {
 
 export type QueueStep = { taskNumber: number; stage: QueueStage };
 
-export type StageOutcome = { status: "success" } | { status: "failure"; reason: string };
+export type StageOutcome = { status: "success" } | { status: "failure"; reason: string; sourceProgress?: boolean };
 
 export function createMergeQueue(): MergeQueue {
     return {
-        pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [],
+        pending: [], carryover: [], merged: [], mergedThisLap: 0, sourceProgressThisLap: false, unmerged: [],
         mergedNotClosed: [], cleanupIncomplete: [], postApprovalViolations: [], regateRejected: [],
     };
 }
@@ -113,7 +115,7 @@ export type QueueEndState = "continue" | "done" | "stuck";
 
 export function shouldEndQueue(queue: MergeQueue, workflowOutstanding: boolean): QueueEndState {
     if (workflowOutstanding || !currentLapIsComplete(queue)) return "continue";
-    if (queue.mergedThisLap === 0 && (queue.carryover.length > 0 || queue.unmerged.length > 0)) return "stuck";
+    if (queue.mergedThisLap === 0 && !queue.sourceProgressThisLap && (queue.carryover.length > 0 || queue.unmerged.length > 0)) return "stuck";
     return queue.carryover.length === 0 ? "done" : "continue";
 }
 
@@ -175,7 +177,7 @@ export function nextSchedulerAction(
 
 // Rotates a finished lap's carryover (failures with a lap remaining) into the next lap's pending list.
 export function beginNextLap(queue: MergeQueue): MergeQueue {
-    return { ...queue, pending: queue.carryover, carryover: [], mergedThisLap: 0 };
+    return { ...queue, pending: queue.carryover, carryover: [], mergedThisLap: 0, sourceProgressThisLap: false };
 }
 
 export function recordStageOutcome(queue: MergeQueue, taskNumber: number, stage: QueueStage, outcome: StageOutcome): MergeQueue {
@@ -190,9 +192,10 @@ export function recordStageOutcome(queue: MergeQueue, taskNumber: number, stage:
     }
     const lapsAttempted = head.lapsAttempted + 1;
     const failed: QueueTask = { taskNumber, stage: "rebase-test", lapsAttempted, lastFailure: outcome.reason };
+    const sourceProgressThisLap = queue.sourceProgressThisLap || outcome.sourceProgress === true;
     return hasLapRemaining(lapsAttempted)
-        ? { ...queue, pending: rest, carryover: [...queue.carryover, failed] }
-        : { ...queue, pending: rest, unmerged: [...queue.unmerged, failed] };
+        ? { ...queue, pending: rest, carryover: [...queue.carryover, failed], sourceProgressThisLap }
+        : { ...queue, pending: rest, unmerged: [...queue.unmerged, failed], sourceProgressThisLap };
 }
 
 // Task 152 calls this when merge succeeds but archival fails; the merge stays, reported separately from unmerged.
@@ -355,11 +358,15 @@ export function consumeTaskWorkflowResult(
     const success = envelope.stage === "rebase-test"
         ? status === "green"
         : status === "merged" || status === "merged-but-not-closed" || status === "cleanup-incomplete";
+    // C86-20: a failed deepest-first merge may still have landed a source (submodule) layer before its parent failed.
+    const sourceProgress = envelope.stage === "merge" && Array.isArray(result.completedLayers)
+        && result.completedLayers.some((layer) => !!layer && typeof layer === "object" && (layer as JsonObject).status === "merged");
     const outcome: StageOutcome = success
         ? { status: "success" }
         : {
             status: "failure",
             reason: nonemptyString(result.lastFailure, `${envelope.stage}.lastFailure`),
+            sourceProgress,
         };
 
     let next = recordStageOutcome(queue, envelope.task, envelope.stage, outcome);

@@ -14,6 +14,9 @@ if (!SOURCE_ROOT) throw new Error('tackle-tasks.workflow.js: no "sourceRoot" in 
 const EMITTER_PATH = ARGS.agentPromptEmitterPath
 if (!EMITTER_PATH) throw new Error('tackle-tasks.workflow.js: no "agentPromptEmitterPath" in args; the skill-body emitter must supply it')
 const REPOSITORY_MANIFEST = ARGS.repositoryManifest
+// Plan/implement-only runs may carry no manifest; the implement stage still needs at least a root occurrence.
+const IMPLEMENT_OCCURRENCES = (REPOSITORY_MANIFEST && REPOSITORY_MANIFEST.occurrences)
+  || [{ occurrenceId: '', checkoutPath: WORKTREE, parentOccurrenceId: null, pathInParent: null, depth: 0 }]
 
 export const meta = {
   name: `task-${N}`,
@@ -98,12 +101,6 @@ const APPLY_FEEDBACK_SCHEMA = {
   required: ['task', 'applied'],
 }
 
-const GIT_HEAD_SCHEMA = {
-  type: 'object',
-  properties: { oid: { type: 'string' } },
-  required: ['oid'],
-}
-
 const WORKER_SCHEMA = {
   type: 'object',
   properties: {
@@ -134,20 +131,24 @@ const OCCURRENCE_OIDS_SCHEMA = {
   required: ['oids'],
 }
 
+const SUBMODULE_LAYER_OUTCOME_SCHEMA = {
+  type: 'object',
+  properties: {
+    status: { type: 'string' },
+    occurrenceId: { type: 'string' },
+    checkoutPath: { type: 'string' },
+    conflictedFilePaths: { type: 'array', items: { type: 'string' } },
+    testOutput: { type: 'string' },
+    failedCheck: { type: 'string' },
+    failureReason: { type: 'string' },
+  },
+}
+
 const REBASE_WALK_SCHEMA = {
   type: 'object',
   properties: {
-    stoppedAt: {
-      type: ['object', 'null'],
-      properties: {
-        status: { type: 'string' },
-        occurrenceId: { type: 'string' },
-        checkoutPath: { type: 'string' },
-        conflictedFilePaths: { type: 'array', items: { type: 'string' } },
-        testOutput: { type: 'string' },
-        failedCheck: { type: 'string' },
-      },
-    },
+    completedLayers: { type: 'array', items: SUBMODULE_LAYER_OUTCOME_SCHEMA },
+    stoppedAt: { ...SUBMODULE_LAYER_OUTCOME_SCHEMA, type: ['object', 'null'] },
   },
   required: ['stoppedAt'],
 }
@@ -210,18 +211,32 @@ const REBASE_FIX_VERIFY_SCHEMA = {
   required: ['ownCheckoutClean', 'touchedPaths'],
 }
 
+const MERGE_LAYER_OUTCOME_SCHEMA = {
+  type: 'object',
+  properties: {
+    occurrenceId: { type: 'string' },
+    checkoutPath: { type: 'string' },
+    status: { type: 'string' },
+    oid: { type: 'string' },
+    mergedCommitOid: { type: ['string', 'null'] },
+  },
+  required: ['occurrenceId', 'checkoutPath', 'status'],
+}
+
 const MERGE_SCHEMA = {
   type: 'object',
   properties: {
     status: { type: 'string' },
     failedAtStage: { type: ['string', 'null'] },
     mergedCommitHash: { type: ['string', 'null'] },
+    completedLayers: { type: 'array', items: MERGE_LAYER_OUTCOME_SCHEMA },
     closed: { type: 'array', items: { type: 'integer' } },
     skipped: { type: 'array', items: { type: 'integer' } },
     unblocked: { type: 'array', items: { type: 'integer' } },
     closeError: { type: ['string', 'null'] },
     cleanupWarning: { type: ['string', 'null'] },
     lastFailure: { type: ['string', 'null'] },
+    failureReason: { type: ['string', 'null'] },
     conflictedFilePaths: { type: 'array', items: { type: 'string' } },
     occurrenceId: { type: ['string', 'null'] },
     retainedArtifacts: { type: 'array', items: { type: 'string' } },
@@ -360,17 +375,17 @@ const runPlan = async () => {
   }
 
   let reviewRounds = MAX_REVIEW_ROUNDS
-  let verify = await runVerify()
-  reviewRounds -= 1
-  while (verify.verdict !== 'approved' && reviewRounds > 0) {
+  let verify
+  while (reviewRounds > 0) {
+    verify = await runVerify()
+    reviewRounds -= 1
+    if (verify.verdict === 'approved') break
     if (Array.isArray(verify.missingFiles) && verify.missingFiles.length > 0) {
       await widenFilesAndReplan(verify.missingFiles)
       if (planResult.status !== 'planned') return planResult
     } else {
       await retryAgent(() => agent(emitterInstruction('apply-feedback', { notes: verify.notes }), { label: `applyFeedback:${N}`, phase: `${N} Plan`, schema: APPLY_FEEDBACK_SCHEMA }))
     }
-    verify = await runVerify()
-    reviewRounds -= 1
   }
   return { ...planResult, verify, reviewRounds }
 }
@@ -386,7 +401,7 @@ const runWorker = (note) => {
     schema: WORKER_SCHEMA,
   }
   if (WORKER_MODEL) options.model = WORKER_MODEL
-  const payload = { typecheckCommand: TYPECHECK_COMMAND, maxFixRounds: MAX_FIX_ROUNDS, ...(note ? { note } : {}) }
+  const payload = { typecheckCommand: TYPECHECK_COMMAND, maxFixRounds: MAX_FIX_ROUNDS, repositoryManifest: { occurrences: IMPLEMENT_OCCURRENCES }, ...(note ? { note } : {}) }
   return retryAgent(() => agent(emitterInstruction('implement', payload), options))
 }
 
@@ -395,8 +410,10 @@ const runImplement = async () => {
   const preparedTask = await fetchTaskInfo()
   if (!preparedTask) throw new Error(`tackle-tasks.workflow.js: task-info returned no result for task ${N}`)
 
-  const baseHead = await retryAgent(() => agent(emitterInstruction('git-head'), { label: `git-head:${N}`, phase: `${N} Implement`, schema: GIT_HEAD_SCHEMA }))
-  const base = baseHead?.oid ?? ''
+  // Snapshot every occurrence's OID before the worker runs (C86-19): an owned file below a submodule commits there, not root.
+  const checkoutPaths = taskWorktreeCheckoutPaths(IMPLEMENT_OCCURRENCES, WORKTREE)
+  const baseOids = await fetchOccurrenceOids(checkoutPaths, IMPLEMENT_OCCURRENCES.map((o) => o.occurrenceId))
+  const base = baseOids[''] ?? ''
 
   let result = await runWorker('') ?? {
     task: N,
@@ -412,7 +429,7 @@ const runImplement = async () => {
 
   const notesRelative = preparedTask.notesFile.slice(WORKTREE.length + 1)
 
-  const finalized = await retryAgent(() => agent(emitterInstruction('implement-finalize', { baseOid: base, notesRelative }), { label: `implement-finalize:${N}`, phase: `${N} Implement`, schema: IMPLEMENT_FINALIZE_SCHEMA })) ?? { headOid: base, changedPaths: [], notesPresent: false }
+  const finalized = await retryAgent(() => agent(emitterInstruction('implement-finalize', { baseOids, notesRelative, repositoryManifest: { occurrences: IMPLEMENT_OCCURRENCES } }), { label: `implement-finalize:${N}`, phase: `${N} Implement`, schema: IMPLEMENT_FINALIZE_SCHEMA })) ?? { headOid: base, changedPaths: [], notesPresent: false }
 
   if (result.status === 'done' && finalized.headOid === base) {
     result = {
@@ -532,7 +549,7 @@ const runRebaseTest = async () => {
   ))
 
   let layerWalk = await walk('rebase-walk')
-  if (!layerWalk) throw new Error(`tackle-tasks.workflow.js: rebase-walk returned no result for task ${N}`)
+  if (!layerWalk) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'rebase-walk driver returned no result', fenceViolations }
   while (layerWalk.stoppedAt !== null && (layerWalk.stoppedAt.status === 'conflicted' || layerWalk.stoppedAt.status === 'tests-failed')) {
     const stopped = layerWalk.stoppedAt
     if (stopped.status === 'conflicted') {
@@ -557,16 +574,18 @@ const runRebaseTest = async () => {
       }
     }
     layerWalk = await walk('rebase-walk')
-    if (!layerWalk) throw new Error(`tackle-tasks.workflow.js: rebase-walk returned no result for task ${N}`)
+    if (!layerWalk) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'rebase-walk driver returned no result', fenceViolations }
   }
   if (layerWalk.stoppedAt !== null) {
     const stopped = layerWalk.stoppedAt
-    const lastFailure = stopped.status === 'untested' ? 'untested layer' : stopped.status
+    const lastFailure = stopped.status === 'untested' ? 'untested layer'
+      : stopped.status === 'driver-failed' ? stopped.failureReason
+      : stopped.status
     return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: stopped.occurrenceId, layerOutcome: stopped, fenceViolations }
   }
 
   let parentOutcome = await walk('parent-rebase')
-  if (!parentOutcome) throw new Error(`tackle-tasks.workflow.js: parent-rebase returned no result for task ${N}`)
+  if (!parentOutcome) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'parent-rebase driver returned no result', fenceViolations }
   let parentStopped = parentOutcome.stoppedAt
   while (parentStopped !== null && (parentStopped.status === 'conflicted' || parentStopped.status === 'tests-failed')) {
     if (parentStopped.status === 'conflicted') {
@@ -589,11 +608,13 @@ const runRebaseTest = async () => {
       }
     }
     parentOutcome = await walk('parent-rebase')
-    if (!parentOutcome) throw new Error(`tackle-tasks.workflow.js: parent-rebase returned no result for task ${N}`)
+    if (!parentOutcome) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'parent-rebase driver returned no result', fenceViolations }
     parentStopped = parentOutcome.stoppedAt
   }
   if (parentStopped !== null) {
-    const lastFailure = parentStopped.status === 'untested' ? 'untested layer' : parentStopped.status
+    const lastFailure = parentStopped.status === 'untested' ? 'untested layer'
+      : parentStopped.status === 'driver-failed' ? parentStopped.failureReason
+      : parentStopped.status
     return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure, occurrenceId: '', parentOutcome: parentStopped, fenceViolations }
   }
 

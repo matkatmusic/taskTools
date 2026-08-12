@@ -1768,6 +1768,37 @@ test("retry propagates a later child source tip while retaining the task histori
     );
 });
 
+// C86-21: an unexpected exception during the parent merge must not discard the child's already-completed layer.
+test("an unexpected exception during the parent merge preserves the child's completed layer and a concrete failure reason", () => {
+    const fixture = buildMergePrimitiveFixture();
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const throwingMergeGroup: MergeStepOperations["mergeGroup"] = () => {
+        throw new Error("simulated operational failure during parent merge");
+    };
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest, {
+        ...defaultMergeStepOperations,
+        mergeGroup: throwingMergeGroup,
+    });
+
+    assert.equal(report.status, "parent-conflicted");
+    if (report.status !== "parent-conflicted") return assert.fail("expected parent-conflicted");
+    assert.match(report.failureReason ?? "", /simulated operational failure/);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["merged"]);
+    const childLayer = report.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(childLayer.status, "merged");
+
+    // The child's merge already landed for real, even though the parent step threw.
+    assert.equal(
+        git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim(),
+        childLayer.status === "merged" ? childLayer.oid : null,
+    );
+});
+
 test("test_mergeTaskDeepestFirstStopsAtASubmoduleConflictWithoutAttemptingTheParentMerge", () => {
     const rootPath = makeTempRepoWithLocalSubmodule();
     const mainSubmodulePath = join(rootPath, "vendor");

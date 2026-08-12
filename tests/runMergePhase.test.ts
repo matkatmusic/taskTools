@@ -94,6 +94,58 @@ test("test_recordStageOutcomeLeavesATaskUnmergedAfterItsSecondLapFails", () => {
     assert.deepEqual(queue.unmerged, [{ taskNumber: 30, stage: "rebase-test", lapsAttempted: 2, lastFailure: "rebase conflicted: b.ts again" }]);
 });
 
+test("test_recordStageOutcomeTracksSourceProgressSoAChildMergedParentFailedLapDoesNotEndStuck", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 50);
+    queue = recordStageOutcome(queue, 50, "rebase-test", { status: "success" });
+    queue = recordStageOutcome(queue, 50, "merge", {
+        status: "failure",
+        reason: "rebase conflict in root (parent-conflicted); unresolved paths: x.ts",
+        sourceProgress: true,
+    });
+
+    assert.equal(queue.mergedThisLap, 0);
+    assert.equal(queue.sourceProgressThisLap, true);
+    assert.equal(currentLapIsComplete(queue), true);
+    assert.equal(shouldEndQueue(queue, false), "continue");
+
+    queue = beginNextLap(queue);
+    assert.equal(queue.sourceProgressThisLap, false);
+    assert.deepEqual(nextQueueStep(queue), { taskNumber: 50, stage: "rebase-test" });
+});
+
+test("test_consumeTaskWorkflowResultDerivesSourceProgressFromAFailedMergeEnvelopesCompletedLayers", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 60);
+    queue = recordStageOutcome(queue, 60, "rebase-test", { status: "success" });
+
+    const envelope = {
+        task: 60,
+        stage: "merge" as const,
+        results: [{
+            status: "parent-conflicted",
+            failedAtStage: "merge",
+            completedLayers: [
+                { occurrenceId: "vendor", checkoutPath: "/repo/vendor", status: "merged", oid: "abc123", mergedCommitOid: "abc123" },
+            ],
+            checkoutPath: "/repo",
+            stage: "merge",
+            conflictedFilePaths: ["gateway.ts"],
+            failureReason: null,
+            lastFailure: "merge failure in root (parent-conflicted); unresolved paths: gateway.ts",
+        }],
+    };
+
+    const consumed = consumeTaskWorkflowResult(queue, envelope);
+    assert.equal(consumed.kind, "queue");
+    if (consumed.kind !== "queue") return assert.fail("expected queue result");
+    assert.equal(consumed.queue.mergedThisLap, 0);
+    assert.equal(consumed.queue.sourceProgressThisLap, true);
+    assert.equal(shouldEndQueue(consumed.queue, false), "continue");
+    assert.equal(consumed.queue.carryover.length, 1);
+    assert.equal(consumed.queue.carryover[0]!.taskNumber, 60);
+});
+
 test("test_shouldEndQueueEndsTheQueueWhenALapMergesZeroTasksAndNoWorkflowIsOutstanding", () => {
     let queue = createMergeQueue();
     queue = enqueueApprovedTask(queue, 40);
@@ -1033,7 +1085,7 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
 test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndReportsItMerged", async () => {
     const taskNumber = 9103;
     const trace: string[] = [];
-    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor/vendor-new.txt"]);
     const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
     try {
@@ -1108,7 +1160,7 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
 test("test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict", async () => {
     const taskNumber = 9104;
     const trace: string[] = [];
-    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor"]);
+    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor/seed.txt"]);
     const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = fixture;
     trace.push("prepare");
     try {
@@ -1203,5 +1255,179 @@ test("test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict
         rmSync(root, { recursive: true, force: true });
         rmSync(submoduleOrigin, { recursive: true, force: true });
         rmSync(fixture.origin, { recursive: true, force: true });
+    }
+});
+
+// C86-19 negative control: an unowned nested edit must be fenced by its normalized path, not the bare gitlink.
+test("plan+implement fences an unowned nested submodule edit by its normalized path, not the bare gitlink", async () => {
+    const taskNumber = 9107;
+    const fixture = makeQueueFixtureRepoWithSubmoduleV2(taskNumber, ["vendor/seed.txt"]);
+    const { root, worktreePath, submoduleOrigin, repositoryManifest, prepared } = fixture;
+    try {
+        const scriptedAgent = async (...values: unknown[]) => {
+            const options = values[1] as { label: string };
+            if (options.label.startsWith("plan:")) {
+                const planFile = join(worktreePath, "plans", `task-${taskNumber}-plan.md`);
+                mkdirSync(dirname(planFile), { recursive: true });
+                writeFileSync(planFile, `# plan for task ${taskNumber}\n`);
+                return { task: taskNumber, status: "planned", planFile, question: "", missingFiles: [] };
+            }
+            if (options.label.startsWith("verify:")) {
+                return { task: taskNumber, verdict: "approved", notes: "", reviewer: "claude", missingFiles: [] };
+            }
+            if (options.label.startsWith("implement:")) {
+                const vendorPath = join(worktreePath, "vendor");
+                writeFileSync(join(vendorPath, "seed.txt"), "owned edit\n");
+                git(vendorPath, "add", "seed.txt");
+                git(vendorPath, "commit", "-q", "-m", "owned edit");
+                // An unowned nested file, committed alongside the owned edit in the same submodule checkout.
+                writeFileSync(join(vendorPath, "other.txt"), "unowned\n");
+                git(vendorPath, "add", "other.txt");
+                git(vendorPath, "commit", "-q", "-m", "unowned edit");
+
+                const notesRelative = `plans/task-${taskNumber}-implementation-notes.md`;
+                writeFileSync(join(worktreePath, notesRelative), "implementation notes\n");
+                git(worktreePath, "add", "--", "vendor", notesRelative);
+                git(worktreePath, "commit", "-q", "-m", `task ${taskNumber}: implement`);
+                return { task: taskNumber, status: "done", summary: "implemented the plan", remaining: [], notesFile: join(worktreePath, notesRelative) };
+            }
+            throw new Error(`unexpected agent label: ${options.label}`);
+        };
+
+        const envelope = await runTaskWorkflowStage(
+            worktreePath,
+            { task: taskNumber, stage: "plan+implement", typecheckCommand: prepared.typecheckCommand, sourceRoot: root, repositoryManifest },
+            scriptedAgent,
+        );
+
+        const implementResult = envelope.results[1] as { status: string; fenceViolations: string[] };
+        assert.equal(implementResult.status, "done");
+        assert.deepEqual(implementResult.fenceViolations, ["vendor/other.txt"]);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+        rmSync(submoduleOrigin, { recursive: true, force: true });
+        rmSync(fixture.origin, { recursive: true, force: true });
+    }
+});
+
+// C86-19: the literal worker commit sequence must commit a grandchild-owned file through every ancestor occurrence.
+test("literal worker commit steps commit a grandchild-owned file through every ancestor occurrence, deepest-first", () => {
+    const taskNumber = 9108;
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const nestedOrigin = mkdtempSync(join(tmpdir(), "run-merge-phase-nested-origin-"));
+    git(nestedOrigin, "init", "-q", "-b", "main");
+    git(nestedOrigin, "config", "user.email", "test@example.com");
+    git(nestedOrigin, "config", "user.name", "Test");
+    git(nestedOrigin, "config", "commit.gpgsign", "false");
+    writeFileSync(join(nestedOrigin, "seed.txt"), "seed\n");
+    git(nestedOrigin, "add", "seed.txt");
+    git(nestedOrigin, "commit", "-q", "-m", "seed");
+
+    const vendorOrigin = mkdtempSync(join(tmpdir(), "run-merge-phase-vendor-origin-"));
+    git(vendorOrigin, "init", "-q", "-b", "main");
+    git(vendorOrigin, "config", "user.email", "test@example.com");
+    git(vendorOrigin, "config", "user.name", "Test");
+    git(vendorOrigin, "config", "commit.gpgsign", "false");
+    writeFileSync(join(vendorOrigin, "seed.txt"), "seed\n");
+    git(vendorOrigin, "add", "seed.txt");
+    git(vendorOrigin, "commit", "-q", "-m", "seed");
+    git(vendorOrigin, "submodule", "add", "-q", nestedOrigin, "nested");
+    git(vendorOrigin, "commit", "-q", "-m", "add nested submodule");
+    writeFileSync(join(vendorOrigin, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "run-merge-phase-e2e-root-")));
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test");
+    git(root, "config", "commit.gpgsign", "false");
+    writeFileSync(join(root, "README.md"), "root\n");
+    git(root, "add", "README.md");
+    git(root, "commit", "-q", "-m", "init");
+    git(root, "submodule", "add", "-q", vendorOrigin, "vendor");
+    // `submodule add` never recurses: the source checkout's own "vendor/nested" needs its own init too.
+    git(join(root, "vendor"), "submodule", "update", "--init");
+    git(join(root, "vendor", "nested"), "checkout", "-q", "main");
+    git(root, "commit", "-q", "-m", "add vendor submodule");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(root, "add", "package.json");
+    git(root, "commit", "-q", "-m", "add test script");
+
+    const task: TaskRecord = { taskNumber, title: "fixture", files: ["vendor/nested/x.ts"], blockedBy: [] };
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
+    git(root, "add", ".taskTools");
+    git(root, "commit", "-q", "-m", "seed task state");
+
+    const origin = addBareOrigin(root);
+    const prepared = prepareThroughCli(root, taskNumber);
+    const group = prepared.groups.find((entry) => entry.tasks[0]?.number === taskNumber);
+    if (!group) throw new Error(`prepareTasks did not return task ${taskNumber}`);
+    const worktreePath = group.worktree;
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
+
+    const repositoryManifest = prepared.repositoryManifest;
+    const vendorPath = join(worktreePath, "vendor");
+    const nestedPath = join(vendorPath, "nested");
+
+    try {
+        const beforeRootOid = git(worktreePath, "rev-parse", "HEAD");
+        const beforeVendorOid = git(vendorPath, "rev-parse", "HEAD");
+        const beforeNestedOid = git(nestedPath, "rev-parse", "HEAD");
+
+        // An unowned grandchild edit, committed the same way a real agent would before running the generated steps.
+        writeFileSync(join(nestedPath, "other.txt"), "unowned\n");
+        git(nestedPath, "add", "other.txt");
+        git(nestedPath, "commit", "-q", "-m", "unowned edit");
+
+        // Owned edit at grandchild depth.
+        writeFileSync(join(nestedPath, "x.ts"), "owned\n");
+        const notesRelative = `plans/task-${taskNumber}-implementation-notes.md`;
+        writeFileSync(join(worktreePath, notesRelative), "implementation notes\n");
+
+        const brief = execFileSync(
+            "node", [AGENT_PROMPT_EMITTER_PATH, String(taskNumber), "implement"],
+            { input: JSON.stringify({ worktree: worktreePath, sourceRoot: root, runId: prepared.runId, repositoryManifest }), encoding: "utf8" },
+        );
+        const runLines = [...brief.matchAll(/^run: (.+)$/gm)].map((match) => match[1]!);
+        assert.ok(runLines.length >= 6, `expected at least 3 commit steps (6 lines), got: ${runLines.length}`);
+        for (const line of runLines) execFileSync("sh", ["-c", line]);
+
+        // Every ancestor now records the grandchild's new OID as its child gitlink, deepest-first.
+        const nestedHeadOid = git(nestedPath, "rev-parse", "HEAD");
+        assert.notEqual(nestedHeadOid, beforeNestedOid);
+        assert.equal(git(vendorPath, "rev-parse", "HEAD:nested"), nestedHeadOid);
+        const vendorHeadOid = git(vendorPath, "rev-parse", "HEAD");
+        assert.notEqual(vendorHeadOid, beforeVendorOid);
+        assert.equal(git(worktreePath, "rev-parse", "HEAD:vendor"), vendorHeadOid);
+        assert.notEqual(git(worktreePath, "rev-parse", "HEAD"), beforeRootOid);
+        // A gitlink is opaque to its parent's object store; read the owned file from its own occurrence.
+        assert.equal(git(nestedPath, "show", "HEAD:x.ts"), "owned");
+
+        // The unowned grandchild edit is reported at its fully normalized nested path, not the bare gitlink.
+        const finalize = execFileSync(
+            "node", [AGENT_PROMPT_EMITTER_PATH, String(taskNumber), "implement-finalize"],
+            {
+                input: JSON.stringify({
+                    worktree: worktreePath, sourceRoot: root, repositoryManifest, notesRelative,
+                    baseOids: { "": beforeRootOid, vendor: beforeVendorOid, "vendor/nested": beforeNestedOid },
+                }),
+                encoding: "utf8",
+            },
+        );
+        const finalizeResult = JSON.parse(finalize.slice(finalize.indexOf("{")));
+        assert.deepEqual(new Set(finalizeResult.changedPaths), new Set([notesRelative, "vendor/nested/x.ts", "vendor/nested/other.txt"]));
+        assert.equal(finalizeResult.notesPresent, true);
+    } finally {
+        rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+        rmSync(vendorOrigin, { recursive: true, force: true });
+        rmSync(nestedOrigin, { recursive: true, force: true });
+        rmSync(origin, { recursive: true, force: true });
     }
 });
