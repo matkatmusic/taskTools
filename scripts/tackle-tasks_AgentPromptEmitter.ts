@@ -60,10 +60,12 @@ type PreparedTask = {
   files: string[];
   tests: string | null;
   repoRoot: string;
+  taskStateRoot: string;
 };
 
+// Task state (ownership, widening) is authoritative under SOURCE_ROOT; only the brief/plan/notes/edits live under WORKTREE.
 function loadPreparedTask(): PreparedTask {
-  const pair = resolveTaskFiles(WORKTREE);
+  const pair = resolveTaskFiles(SOURCE_ROOT);
   const task = readTaskFile(pair.tasksPath).find((entry: any) => entry.taskNumber === N);
   if (!task) fail(`task ${N} not found in tasks.json`);
   const briefFile = writeTaskBriefFile(task, WORKTREE);
@@ -75,6 +77,7 @@ function loadPreparedTask(): PreparedTask {
     files: Array.isArray(task.files) ? task.files : [],
     tests: typeof task.tests === 'string' ? task.tests : null,
     repoRoot: WORKTREE,
+    taskStateRoot: SOURCE_ROOT,
   };
 }
 
@@ -358,6 +361,16 @@ const readOptionalRef = (checkoutPath: string, ref: string): string | null => {
   }
 }
 
+// changedPaths from a name-only diff also lists deletions; this checks the blob still exists at HEAD.
+const pathTrackedAtHead = (checkoutPath: string, relativePath: string): boolean => {
+  try {
+    execFileSync('git', ['-C', checkoutPath, 'cat-file', '-e', `HEAD:${relativePath}`], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
 const changedPathsSinceOid = (checkoutPath: string, beforeOid: string) => execFileSync('git', ['-C', checkoutPath, 'diff', '--name-only', `${beforeOid}..HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean)
 
 // A sibling of WORKTREE, like taskWorktreeLeasePath: outside every checkout, never seen by its git status.
@@ -485,9 +498,11 @@ function roleImplement() {
 
 function roleImplementFinalize() {
   const baseOid: string = PAYLOAD.baseOid
+  const notesRelative: string = PAYLOAD.notesRelative
   const headOid = readHeadOid(WORKTREE)
   const changedPaths = execFileSync('git', ['-C', WORKTREE, 'diff', '--name-only', '-z', `${baseOid}..HEAD`], { encoding: 'utf8' }).split('\0').filter(Boolean)
-  printResult({ headOid, changedPaths })
+  const notesPresent = pathTrackedAtHead(WORKTREE, notesRelative)
+  printResult({ headOid, changedPaths, notesPresent })
 }
 
 function roleOccurrenceOids() {

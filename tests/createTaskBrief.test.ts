@@ -12,6 +12,7 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, ""
 const scriptPath = fileURLToPath(new URL("../scripts/createTaskBrief.ts", import.meta.url));
 const nextTaskNumberPath = fileURLToPath(new URL("../scripts/nextTaskNumber.ts", import.meta.url));
 const taskTemplatePath = fileURLToPath(new URL("../skills/create-task/template/taskTemplate.json", import.meta.url));
+const appendTaskPath = fileURLToPath(new URL("../scripts/appendTask.ts", import.meta.url));
 
 function preRefactorBody(): string {
   const skill = execFileSync("git", ["show", `${preRefactorCommit}:skills/create-task/SKILL.md`], {
@@ -34,7 +35,18 @@ test("brief reproduces the pre-refactor skill body byte-for-byte once its substi
     .replace('- version to use: !`git rev-parse HEAD`', `- version to use: ${version}`)
     .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot)
     .replaceAll("$ARGUMENTS", argsValue)
-    .replace(`!\`cat "${repoRoot}/skills/create-task/template/taskTemplate.json"\``, taskTemplate);
+    .replace(`!\`cat "${repoRoot}/skills/create-task/template/taskTemplate.json"\``, taskTemplate)
+    // C86-23: create-task no longer edits tasks.json directly; it hands the object to appendTask.ts under a lock.
+    .replace(
+      "Append ONE object to the `tasks.json` array as its LAST element — at the very end of the array, after every existing entry. Never insert it in the middle and never reorder or renumber the existing entries. Use this template:",
+      "Gather every field below for ONE task object — do not write it into `tasks.json` yourself; a script appends it under a lock later in this brief. Use this template:",
+    )
+    .replace(
+      "Finally, confirm to the user: the task number and title that were added.",
+      "Once every field above is populated, append the task by sending the completed object as JSON on stdin to this script — it is the only permitted way to add the object to `tasks.json`, it appends under a lock, and it prints back the appended task including its authoritative `taskNumber`; never edit `tasks.json` yourself:\n\n" +
+        `\`\`\`\nnode ${appendTaskPath}\n\`\`\`\n\n` +
+        "Finally, confirm to the user: the `taskNumber` the script returned, and the title that was added.",
+    );
   assert.equal(createTaskBrief(argsValue, taskNumber, version, taskTemplate), expected);
 });
 

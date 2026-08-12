@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand
 const nextTaskNumberPath = fileURLToPath(new URL("./nextTaskNumber.ts", import.meta.url));
 const taskTemplatePath = fileURLToPath(new URL("../skills/create-task/template/taskTemplate.json", import.meta.url));
+const appendTaskPath = fileURLToPath(new URL("./appendTask.ts", import.meta.url));
 
 export const createTaskBrief = (argsValue: string, taskNumber: string, version: string, taskTemplate: string) => {
   const brief = `- taskNumber to use: ${taskNumber}
@@ -18,7 +19,7 @@ Invoke AskUserQuestion to ask for an example test (most likely an e2e test) that
 
 Skip this oversized-task assessment entirely when this invocation of \`/create-task\` carries the marker \`[split-task-child]\` (see \`skills/split-task/SKILL.md\`) — that marker means \`/split-task\` is creating one of an already-requested set of children, and offering another split here would stop \`/split-task\` from collecting exactly \`numSplits\` child task numbers. Otherwise, assess whether this task is oversized: would its difficulty (on the template's 1–10 scale) be 7 or higher, or does its description read as a list of many enumerated steps rather than one piece of work? If so, invoke AskUserQuestion offering two choices: create this task as a single task, or create it and immediately split it into smaller tasks. If the user chooses to split, invoke AskUserQuestion once more to get an integer number of children, at least 2. Continue with the steps below to create this task as normal (it becomes the parent) — once it has been appended and its task number is known, invoke \`/split-task <thisTaskNumber> <numSplits>\` immediately, and let its own closing confirmation replace the "Finally, confirm" step below.
 
-Append ONE object to the \`tasks.json\` array as its LAST element — at the very end of the array, after every existing entry. Never insert it in the middle and never reorder or renumber the existing entries. Use this template:
+Gather every field below for ONE task object — do not write it into \`tasks.json\` yourself; a script appends it under a lock later in this brief. Use this template:
 
 \`\`\`json
 ${taskTemplate}
@@ -36,7 +37,13 @@ If \`specs/SPEC.md\` exists and this task belongs to one of its spec items, appe
 
 Omit completion-related fields (\`completionDate\`, \`commitHashes\`, \`closureNote\`) — those belong to \`completedTasks.json\`, which this skill never touches.
 
-Finally, confirm to the user: the task number and title that were added.
+Once every field above is populated, append the task by sending the completed object as JSON on stdin to this script — it is the only permitted way to add the object to \`tasks.json\`, it appends under a lock, and it prints back the appended task including its authoritative \`taskNumber\`; never edit \`tasks.json\` yourself:
+
+\`\`\`
+node ${appendTaskPath}
+\`\`\`
+
+Finally, confirm to the user: the \`taskNumber\` the script returned, and the title that was added.
 `;
   return brief;
 };
