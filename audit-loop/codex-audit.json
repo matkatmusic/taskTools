@@ -16,7 +16,8 @@
     "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles.",
     "Reviewed the second staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 82 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,330 tests. The attempt fixes C86-36's cleanup-incomplete and aborted-rebase status recovery, but source audit rejected the atomic batch because successful advance-conflict result reconstruction still drops active-occurrence touchedPaths and can bypass C86-27's post-approval regate.",
     "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt.",
-    "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed."
+    "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed.",
+    "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged."
   ],
   "notes": [
     {
@@ -54,6 +55,10 @@
     {
       "date": "2026-08-11T19:05:00-07:00",
       "text": "C86-36-only review accepted the stable conflict-identity and exact-result receipt implementation. A lost first advance-conflict result is recovered without consuming the second conflict, external receipts remain Git-invisible, and focused, typecheck, and full-suite verification passed. C86-27 and C86-35 were already approved; all three accepted findings were removed from the active audit."
+    },
+    {
+      "date": "2026-08-11T20:43:49-07:00",
+      "text": "C86-23, C86-25, and C86-26 were reviewed as one atomic batch and rejected. The unstaged attempt appears to satisfy C86-23 and C86-26 and fixes C86-25's notes-only and owned-change-without-notes cases, but it still accepts deletion of a pre-existing tracked notes file as if the required artifact were committed. All eight implementation/test paths are unstaged; only this audit update is staged."
     }
   ],
   "issues": [
@@ -351,60 +356,64 @@
     },
     {
       "number": 25,
-      "title": "C86-25 — High: an implementer can report done with a notes-only commit or without implementation notes",
+      "title": "C86-25 — High: deleting tracked implementation notes still satisfies the done guard",
       "class": "high",
-      "cause": "A done result is rejected only when root HEAD did not change. The later diff exempts the expected notes path from fence violations but never requires that path or any owned implementation path. A notes-only commit passes as complete, and an owned-file commit with no required implementation-notes file also passes. Existing coverage tests only the zero-commit lie.",
+      "cause": "The unstaged attempt now blocks zero-commit, notes-only, and owned-change-without-notes done results, but it treats the expected notes pathname's presence in git diff --name-only base..HEAD as proof that the notes artifact was committed. A deletion also appears in that path list, so a worker starting from a checkout with tracked implementation notes can delete them, commit an owned-file change, report done, and pass with no required notes file in HEAD.",
       "locations": [
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "380-395",
-          "role": "Completion validates only a changed root HEAD and never requires both notes and owned implementation changes."
+          "lines": "412-437",
+          "role": "Completion checks changedPaths membership but has no signal proving that the notes path exists as a tracked file in finalized HEAD."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "433-437",
-          "role": "The emitter finalizer reports only root HEAD and changed paths; it does not verify required artifacts."
+          "lines": "489-494",
+          "role": "The finalizer returns only headOid and name-only changes, which cannot distinguish a notes-file addition/modification from its deletion."
         },
         {
           "path": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "lines": "138-176",
-          "role": "Coverage checks only a worker that makes no commit."
+          "lines": "338-430",
+          "role": "New coverage proves notes-only and never-created-notes rejection but does not exercise deletion of notes already tracked at the implementation-stage base."
         }
       ],
-      "provingTest": "Add two workflow-level cases: a worker commits only plans/task-N-implementation-notes.md, and a worker commits an owned source file but omits the notes file. Both currently return done; both must return blocked with distinct actionable reasons.",
+      "provingTest": "Before launching a production-shaped implement stage, commit plans/task-N-implementation-notes.md into the prepared task worktree so it exists at the captured base. Have the worker delete that file, change and commit an owned source path, and return done. The current attempted guard returns done because changedPaths contains both paths; the corrected result is blocked with the missing-notes reason, and git cat-file -e HEAD:plans/task-N-implementation-notes.md fails as the negative control.",
       "suggestedFixApproach": [
-        "For status done, require the expected notes path in changedPaths and at least one task-owned path in the commit range.",
-        "Verify that the notes path is exactly preparedTask.notesFile and is present in HEAD, not merely untracked. Return a typed blocked result before approval if either requirement fails."
+        "Extend implement-finalize to return a deterministic tracked-at-HEAD boolean for the exact expected notes path, using a Git tree query rather than worktree existence alone.",
+        "Require both changedPaths membership and tracked-at-HEAD presence before accepting done; retain the distinct notes-only, never-created-notes, zero-commit, and ownership-fence guards. Add the pre-existing-notes deletion regression."
       ],
       "resolvedBoundaryReference": [
         {
           "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "role": "Implement already snapshots HEAD, blocks a zero-commit done result, and computes ownership violations."
+          "role": "The unstaged attempt correctly snapshots HEAD and blocks zero-commit, notes-only, and never-created-notes done results; preserve those guards while adding artifact presence."
         },
         {
           "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "role": "The worker contract already names the exact notes path and restricts staging to owned files plus that path."
+          "role": "The worker contract names the exact notes path, and implement-finalize is the deterministic Git boundary that should verify it in HEAD."
         }
       ],
       "acceptanceCriteria": [
-        "Done requires the exact committed implementation-notes file and at least one committed task-owned implementation path.",
-        "Notes-only and owned-change-without-notes results are blocked with distinct actionable reasons.",
-        "Existing zero-commit and ownership-fence behavior remains intact, with workflow-level coverage for all three cases."
+        "Done requires the exact implementation-notes path to be changed in the commit range and present as a tracked file in finalized HEAD.",
+        "Deleting a notes file that existed at the implementation-stage base is blocked with the missing-notes reason even when an owned implementation path was committed.",
+        "The zero-commit, notes-only, never-created-notes, and ownership-fence behavior remains intact with deterministic workflow-level coverage."
       ],
       "resolvedBoundaryExample": [
         {
           "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "if (result.status === 'done' && finalized.headOid === base) {\n  result = { ...result, status: 'blocked', summary: 'implementer reported done but made no commit in taskWorktree' }\n}\nconst fenceViolations = finalized.changedPaths.filter((p) => p !== notesRelative && !preparedTask.files.includes(p))"
+          "code": "else if (result.status === 'done' && !finalized.changedPaths.includes(notesRelative)) {\n  result = { ...result, status: 'blocked', summary: `implementer reported done but the committed changes are missing the required notes file: ${notesRelative}` }\n} else if (result.status === 'done' && !finalized.changedPaths.some((p) => preparedTask.files.includes(p))) {\n  result = { ...result, status: 'blocked', summary: 'implementer reported done but committed no task-owned implementation path' }\n}"
         }
       ],
       "remainingMinimalExample": [
         {
+          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "code": "function roleImplementFinalize() {\n  const notesRelative = `plans/task-${N}-implementation-notes.md`\n  const notesTrackedInHead = gitPathExistsInHead(WORKTREE, notesRelative)\n  printResult({ headOid, changedPaths, notesTrackedInHead })\n}"
+        },
+        {
           "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "if (result.status === 'done') {\n  const hasNotes = finalized.changedPaths.includes(notesRelative)\n  const hasOwnedChange = finalized.changedPaths.some((p) => preparedTask.files.includes(p))\n  if (!hasNotes) result = blocked(result, `missing committed notes: ${notesRelative}`)\n  else if (!hasOwnedChange) result = blocked(result, 'no owned implementation path changed')\n}"
+          "code": "const hasCommittedNotes = finalized.changedPaths.includes(notesRelative) && finalized.notesTrackedInHead\nif (result.status === 'done' && !hasCommittedNotes) {\n  result = { ...result, status: 'blocked', summary: `implementer reported done but finalized HEAD is missing ${notesRelative}` }\n}"
         },
         {
           "file": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "code": "test('done rejects notes-only commits', async () => { ... })\ntest('done rejects owned commits without notes', async () => { ... })"
+          "code": "test('done rejects deletion of notes tracked at the implementation base', async () => {\n  // Commit notes before runImplement captures base; worker deletes notes and commits an owned change.\n  // Assert blocked with the missing-notes reason and that HEAD does not contain notesRelative.\n})"
         }
       ],
       "existingOpenTask": "No matching open task."
