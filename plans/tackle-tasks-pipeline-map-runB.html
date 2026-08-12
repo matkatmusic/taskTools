@@ -287,17 +287,17 @@ flowchart LR
     <div class="figure">
 <pre class="mermaid">
 flowchart TB
-  TI["task-info<br/>read brief, owned files"] --> PL["plan agent<br/>writes plans/task-N-plan.md"]
-  PL --> PFS{"plan file<br/>on disk?"}
-  PFS -- no --> NC["needs-clarification<br/>stop"]
-  PFS -- yes --> V["verify agent<br/>codex reviews plan"]
+  TI["task-info (reads brief + owned files)"] --> PL["plan agent writes plans/task-N-plan.md"]
+  PL --> PFS{"plan file on disk?"}
+  PFS -- no --> NC["needs-clarification stop"]
+  PFS -- yes --> V["verify agent codex reviews plan"]
   V -- approved --> DONE["plan accepted"]
-  V -- "rejected + missingFiles" --> W["widen-files<br/>then re-plan"]
+  V -- "rejected + missingFiles" --> W["widen-files then re-plan"]
   W --> V
-  V -- "rejected, no missingFiles" --> AF["applyFeedback<br/>rewrite the plan"]
+  V -- "rejected, no missingFiles" --> AF["applyFeedback rewrite the plan"]
   AF --> RC{"rounds left?"}
   RC -- yes --> V
-  RC -- "no (cap hit)" --> LEAK["falls through<br/>returns planned<br/>WITH a rejected verdict"]
+  RC -- "no (cap hit)" --> LEAK["falls through returns planned WITH a rejected verdict"]
   LEAK --> IMP[Implement]
   DONE --> IMP
 
@@ -320,18 +320,18 @@ flowchart TB
     <div class="figure">
 <pre class="mermaid">
 flowchart TB
-  START([tackle-tasks invoked]) --> DISC["bootstrap: discover<br/>blocker pairs, unblocked numbers"]
-  DISC --> BLK{"blockers<br/>found?"}
-  BLK -- yes --> BW["blockers.workflow.js<br/>disprove or stop"]
+  START([tackle-tasks invoked]) --> DISC["bootstrap: discover blocker pairs, unblocked numbers"]
+  DISC --> BLK{"blockers found?"}
+  BLK -- yes --> BW["blockers.workflow.js disprove or stop"]
   BW --> PREP
-  BLK -- no --> PREP["bootstrap: prepare<br/>briefs + worktree per task<br/>+ lease + workflow copy"]
-  PREP --> DUP["prepare ran a 2nd time<br/>4x slower, result discarded"]
-  DUP --> LAUNCH["launch task-N workflow<br/>one per task, background"]
+  BLK -- no --> PREP["bootstrap: prepare briefs + worktree per task + lease + workflow copy"]
+  PREP --> DUP["prepare ran a 2nd time 4x slower, result discarded"]
+  DUP --> LAUNCH["launch task-N workflow one per task, background"]
   LAUNCH --> L2["Level 2: plan -> verify loop"]
-  L2 --> IMPL["implement agent<br/>edits inside the worktree"]
-  IMPL --> FIN["implement-finalize<br/>commit + compare OIDs"]
-  FIN --> OWN{"a committed path<br/>in the owned list?"}
-  OWN -- no --> BLOCKED["blocked:<br/>no task-owned path<br/>(fired on a commit that HAD one)"]
+  L2 --> IMPL["implement agent edits inside the worktree"]
+  IMPL --> FIN["implement-finalize (commit + compare OIDs)"]
+  FIN --> OWN{"a committed path in the owned list?"}
+  OWN -- no --> BLOCKED["blocked: no task-owned path (fired on a commit that HAD one)"]
   OWN -- yes --> M[Merge]
 
   classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
@@ -367,19 +367,19 @@ flowchart TB
     LAP --> NSA
   end
 
-  PI["plan+implement finishes"] --> GATE["AskUserQuestion gate<br/>approve / do not approve<br/>+ file each objection as a task"]
+  PI["plan+implement finishes"] --> GATE["AskUserQuestion gate approve / do not approve + file each objection as a task"]
   GATE -- approved --> ENQ["enqueueApprovedTask"] --> NSA
 
   LT --> RT["rebase-test stage"]
-  RT --> RW["rebase-walk<br/>submodule layers first"]
-  RW --> PR["parent-rebase<br/>root layer + full suite"]
-  PR -- conflicted --> CONF["conflict-identity<br/>merge-conflict<br/>advance-conflict"]
+  RT --> RW["rebase-walk (submodule layers first)"]
+  RW --> PR["parent-rebase (root layer + full suite)"]
+  PR -- conflicted --> CONF["conflict-identity merge-conflict advance-conflict"]
   CONF --> RW
-  PR -- tests-failed --> TC["typecheck default<br/>npx tsc --noEmit<br/>in a repo with no tsconfig"]
-  TC --> RFIX["rebase-fix agent<br/>invented tsconfig.json<br/>and tools/index.ts"]
-  RFIX --> RFV["rebase-fix-verify<br/>fence violations found"]
-  RFV --> STUCK["blocked: untested layer<br/>merge + cleanup never run"]
-  PR -- green --> MG["merge stage<br/>merge, closeTasks, unblock"]
+  PR -- tests-failed --> TC["typecheck default npx tsc --noEmit in a repo with no tsconfig"]
+  TC --> RFIX["rebase-fix agent invented tsconfig.json and tools/index.ts"]
+  RFIX --> RFV["rebase-fix-verify fence violations found"]
+  RFV --> STUCK["blocked: untested layer merge + cleanup never run"]
+  PR -- green --> MG["merge stage: merge, closeTasks, unblock"]
 
   classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
   classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
@@ -402,23 +402,23 @@ flowchart TB
     <div class="figure">
 <pre class="mermaid">
 flowchart TB
-  A["discover"] --> B["prepare<br/>worktree + lease per task"]
+  A["discover"] --> B["prepare worktree + lease per task"]
   B --> C["plan -> verify loop"]
   C --> D["implement + finalize"]
-  D --> E["approval gate<br/>human"]
-  E --> F["rebase-test<br/>all layers + full suite"]
-  F --> G{"regate needed?<br/>fence violations"}
+  D --> E["approval gate (human)"]
+  E --> F["rebase-test (all layers + full suite)"]
+  F --> G{"regate needed? fence violations"}
   G -- yes --> E
-  G -- no --> H["merge queue<br/>serial, one tip at a time"]
-  H --> I["merge stage<br/>+ closeTasks.ts"]
+  G -- no --> H["merge queue (serial, one tip at a time)"]
+  H --> I["merge stage + closeTasks.ts"]
   I --> J{"merge status"}
-  J -- merged --> K["worktree removed<br/>branch deleted<br/>lease released"]
+  J -- merged --> K["worktree removed branch deleted lease released"]
   J -- merged-but-not-closed --> L["report: mergedNotClosed"]
-  J -- cleanup-incomplete --> M["cleanup-only stage<br/>retry cleanup"]
+  J -- cleanup-incomplete --> M["cleanup-only stage (retry cleanup)"]
   M --> K
-  K --> N["buildMergeReport<br/>+ commit-message skill"]
+  K --> N["buildMergeReport + commit-message skill"]
   L --> N
-  F -- blocked --> X["run B stopped here<br/>worktree, branch, lease retained"]
+  F -- blocked --> X["run B stopped here worktree, branch, lease retained"]
 
   classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
   classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
