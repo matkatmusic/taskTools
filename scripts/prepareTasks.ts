@@ -206,6 +206,10 @@ export function releaseTaskWorktreeLease(lease: TaskWorktreeLease): void {
 export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: string): void {
     const leasePath = taskWorktreeLeasePath(worktreePath);
     if (readTaskWorktreeLeaseOwner(leasePath) === null) return;
+    if (!existsSync(worktreePath)) {
+        unlinkSync(leasePath);
+        return;
+    }
     if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
         throw new Error(`worktree at "${worktreePath}" holds retained work; resolve or remove it before releasing its stale lease`);
     }
@@ -260,6 +264,27 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     return worktreePath;
 }
 
+// A later task's setup failure must not strand leases acquired for earlier tasks in the same batch.
+function rollbackPreparedGroupLeases(preparedGroups: PreparedGroup[], runId: string): Error[] {
+    const rollbackErrors: Error[] = [];
+    for (const group of [...preparedGroups].reverse()) {
+        try {
+            releaseTaskWorktreeLease({ worktreePath: group.worktree, runId });
+        } catch (error) {
+            rollbackErrors.push(error instanceof Error ? error : new Error(String(error)));
+        }
+    }
+    return rollbackErrors;
+}
+
+function rethrowAfterPreparedLeaseRollback(error: unknown, preparedGroups: PreparedGroup[], runId: string): never {
+    const rollbackErrors = rollbackPreparedGroupLeases(preparedGroups, runId);
+    if (rollbackErrors.length > 0) {
+        throw new AggregateError([error, ...rollbackErrors], "task preparation failed and one or more acquired leases could not be released");
+    }
+    throw error;
+}
+
 export function buildWorkflowArguments(
     repoRoot: string,
     typecheckCommand: string,
@@ -267,28 +292,33 @@ export function buildWorkflowArguments(
     runId: string = generateRunId(),
 ): WorkflowArguments {
     const repositorySources = collectRepositorySources(repoRoot);
-    const preparedGroups: PreparedGroup[] = tasks.map((task) => {
-        const group: TaskGroup = {
-            groupId: task.taskNumber,
-            taskNumbers: [task.taskNumber],
-            filePaths: declaredFiles(task),
-            scope: "declared",
-        };
-        const worktree = createWorktreeForGroup(repoRoot, group, runId);
-        return {
-            groupId: group.groupId,
-            worktree,
-            branch: branchNameForGroup(group.groupId),
-            scope: group.scope,
-            tasks: [{
-                number: task.taskNumber,
-                briefFile: join(worktree, "plans", `brief-${task.taskNumber}.md`),
-                planFile: join(worktree, "plans", `task-${task.taskNumber}-plan.md`),
-                files: declaredFiles(task),
-            }],
-        };
-    });
-    return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
+    const preparedGroups: PreparedGroup[] = [];
+    try {
+        for (const task of tasks) {
+            const group: TaskGroup = {
+                groupId: task.taskNumber,
+                taskNumbers: [task.taskNumber],
+                filePaths: declaredFiles(task),
+                scope: "declared",
+            };
+            const worktree = createWorktreeForGroup(repoRoot, group, runId);
+            preparedGroups.push({
+                groupId: group.groupId,
+                worktree,
+                branch: branchNameForGroup(group.groupId),
+                scope: group.scope,
+                tasks: [{
+                    number: task.taskNumber,
+                    briefFile: join(worktree, "plans", `brief-${task.taskNumber}.md`),
+                    planFile: join(worktree, "plans", `task-${task.taskNumber}-plan.md`),
+                    files: declaredFiles(task),
+                }],
+            });
+        }
+        return { repo: repoRoot, typecheckCommand, groups: preparedGroups, repositorySources };
+    } catch (error) {
+        rethrowAfterPreparedLeaseRollback(error, preparedGroups, runId);
+    }
 }
 
 export function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
@@ -324,36 +354,47 @@ function runAsCli(): void {
         process.exit(1);
     }
     const runId = generateRunId();
-    const manifest = loadRepositoryManifest(repoRoot);
-    const workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
-    // startTimestamp is stamped here because workflow scripts cannot call Date.now().
-    const pipelineArguments = {
-        ...workflowArguments,
-        runId,
-        startTimestamp: new Date().toISOString(),
-        mergeScript: resolveMergeScriptPath(),
-        repositoryManifest: manifest,
-    };
-    const argumentsFile = resolveRunArgumentsPath(taskFilesProjectRoot(pair));
-    mkdirSync(dirname(argumentsFile), { recursive: true });
-    withTaskStateLock(pair.tasksPath, () => {
-        const latestByNumber = new Map(readTaskFile(pair.tasksPath).map((task) => [task.taskNumber, task]));
-        for (const group of pipelineArguments.groups) {
-            for (const preparedTask of group.tasks) {
-                const latest = latestByNumber.get(preparedTask.number);
-                if (!latest) {
-                    throw new Error(`prepareTasks: task ${preparedTask.number} changed or closed during preparation`);
+    let workflowArguments: WorkflowArguments | null = null;
+    let ownershipTransferred = false;
+    try {
+        const manifest = loadRepositoryManifest(repoRoot);
+        workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
+        // startTimestamp is stamped here because workflow scripts cannot call Date.now().
+        const pipelineArguments = {
+            ...workflowArguments,
+            runId,
+            startTimestamp: new Date().toISOString(),
+            mergeScript: resolveMergeScriptPath(),
+            repositoryManifest: manifest,
+        };
+        const argumentsFile = resolveRunArgumentsPath(taskFilesProjectRoot(pair));
+        mkdirSync(dirname(argumentsFile), { recursive: true });
+        withTaskStateLock(pair.tasksPath, () => {
+            const latestByNumber = new Map(readTaskFile(pair.tasksPath).map((task) => [task.taskNumber, task]));
+            for (const group of pipelineArguments.groups) {
+                for (const preparedTask of group.tasks) {
+                    const latest = latestByNumber.get(preparedTask.number);
+                    if (!latest) {
+                        throw new Error(`prepareTasks: task ${preparedTask.number} changed or closed during preparation`);
+                    }
+                    preparedTask.files = declaredFiles(latest);
                 }
-                preparedTask.files = declaredFiles(latest);
             }
+            writeJsonAtomically(argumentsFile, pipelineArguments);
+        });
+        process.stdout.write(JSON.stringify({
+            ...pipelineArguments,
+            stepOutputsFile: resolveStepOutputsPath(repoRoot),
+            mergeCommand: `node "${resolveMergePhaseScriptPath()}"`,
+        }));
+        ownershipTransferred = true;
+    } catch (error) {
+        // buildWorkflowArguments already unwinds its own partial batch when it throws.
+        if (workflowArguments !== null && !ownershipTransferred) {
+            rethrowAfterPreparedLeaseRollback(error, workflowArguments.groups, runId);
         }
-        writeJsonAtomically(argumentsFile, pipelineArguments);
-    });
-    process.stdout.write(JSON.stringify({
-        ...pipelineArguments,
-        stepOutputsFile: resolveStepOutputsPath(repoRoot),
-        mergeCommand: `node "${resolveMergePhaseScriptPath()}"`,
-    }));
+        throw error;
+    }
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) runAsCli();

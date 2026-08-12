@@ -651,7 +651,7 @@ const runMerge = async () => {
     throw new Error(`tackle-tasks.workflow.js: repositoryManifest root checkoutPath (${rootOccurrence.checkoutPath}) does not match sourceRoot (${SOURCE_ROOT})`)
   }
   const report = await retryAgent(() => agent(
-    emitterInstruction('merge', { repositoryManifest: REPOSITORY_MANIFEST }),
+    emitterInstruction('merge', { repositoryManifest: REPOSITORY_MANIFEST, typecheckCommand: REBASE_TYPECHECK_COMMAND }),
     { label: `merge:${N}`, phase: `${N} Merge`, schema: MERGE_SCHEMA },
   ))
   if (!report) {

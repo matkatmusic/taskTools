@@ -1007,6 +1007,143 @@ test('rebase-test blocks on a real type error even when the complete suite passe
   }
 })
 
+// C86-44: merge-time revalidation must reuse rebase-test's typecheck, or a post-green type break can still land.
+test('merge revalidates root source drift with the configured typecheck', async () => {
+  const taskNumber = 9026
+  const typecheckCommand = 'npx tsc --noEmit'
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber, { testScript: 'true' })
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  try {
+    writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, skipLibCheck: true },
+      include: ['api.ts', 'use.ts'],
+    }))
+    writeFileSync(join(root, 'api.ts'), 'export const value: string = "ok"\n')
+    writeFileSync(join(root, 'use.ts'), 'import { value } from "./api"\nconst expected: string = value\n')
+    git(root, 'add', 'tsconfig.json', 'api.ts', 'use.ts')
+    git(root, 'commit', '-q', '-m', 'add passing typed base')
+
+    writeFileSync(join(worktreePath, 'task-only.txt'), 'task change\n')
+    git(worktreePath, 'add', 'task-only.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    const rebaseTestResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    assert.equal((rebaseTestResult.results[0] as { status: string }).status, 'green')
+
+    // The source advances after the green rebase-test notification with a typecheck-only failure.
+    writeFileSync(join(root, 'api.ts'), 'export const value: number = 1\n')
+    git(root, 'commit', '-am', 'incompatible source API')
+    const sourceHeadAfterDrift = git(root, 'rev-parse', 'main')
+
+    const mergeResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    const report = mergeResult.results[0] as { status: string, failedAtStage: string, completedLayers: unknown[] }
+    assert.equal(report.status, 'parent-conflicted')
+    assert.equal(report.failedAtStage, 'test')
+    assert.deepEqual(report.completedLayers, [])
+    assert.equal(git(root, 'rev-parse', 'main'), sourceHeadAfterDrift)
+    const stillOpen = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8'))
+    assert.deepEqual(stillOpen.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+test('merge revalidates source-submodule drift with the configured typecheck', async () => {
+  const taskNumber = 9027
+  const typecheckCommand = 'npx tsc --noEmit'
+  const { root, worktreePath, submoduleSource, submoduleCheckoutPath, repositoryManifest } = makeRootWithSubmoduleWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  try {
+    // The root layer's own typecheck also runs, so it needs a passing tsconfig too, distinct from the submodule's.
+    writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, skipLibCheck: true },
+      include: ['root-api.ts'],
+    }))
+    writeFileSync(join(root, 'root-api.ts'), 'export const value: string = "ok"\n')
+    git(root, 'add', 'tsconfig.json', 'root-api.ts')
+    git(root, 'commit', '-q', '-m', 'add passing root typed base')
+
+    writeFileSync(join(submoduleCheckoutPath, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, skipLibCheck: true },
+      include: ['api.ts', 'use.ts'],
+    }))
+    writeFileSync(join(submoduleCheckoutPath, 'api.ts'), 'export const value: string = "ok"\n')
+    writeFileSync(join(submoduleCheckoutPath, 'use.ts'), 'import { value } from "./api"\nconst expected: string = value\n')
+    git(submoduleCheckoutPath, 'add', 'tsconfig.json', 'api.ts', 'use.ts')
+    git(submoduleCheckoutPath, 'commit', '-q', '-m', 'add passing typed base')
+
+    commitVendorChange(worktreePath)
+
+    const rebaseTestResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    assert.equal((rebaseTestResult.results[0] as { status: string }).status, 'green')
+
+    // The submodule source advances after the green rebase-test notification with a typecheck-only failure.
+    writeFileSync(join(submoduleCheckoutPath, 'api.ts'), 'export const value: number = 1\n')
+    git(submoduleCheckoutPath, 'commit', '-am', 'incompatible source API')
+    const submoduleHeadAfterDrift = git(submoduleCheckoutPath, 'rev-parse', 'main')
+    const rootHeadBeforeMerge = git(root, 'rev-parse', 'main')
+
+    const mergeResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    const report = mergeResult.results[0] as { status: string, occurrenceId: string, failedAtStage: string, completedLayers: unknown[] }
+    assert.equal(report.status, 'submodule-conflicted')
+    assert.equal(report.occurrenceId, 'vendor')
+    assert.equal(report.failedAtStage, 'test')
+    assert.deepEqual(report.completedLayers, [])
+    assert.equal(git(submoduleCheckoutPath, 'rev-parse', 'main'), submoduleHeadAfterDrift)
+    assert.equal(git(root, 'rev-parse', 'main'), rootHeadBeforeMerge)
+    const stillOpen = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8'))
+    assert.deepEqual(stillOpen.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+  } finally {
+    rmSync(submoduleSource, { recursive: true, force: true })
+    removeFixture(root, worktreePath)
+  }
+})
+
+test('merge still closes when merge-time typecheck and complete suites are green', async () => {
+  const taskNumber = 9028
+  const typecheckCommand = 'npx tsc --noEmit'
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber, { testScript: 'true' })
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  try {
+    writeFileSync(join(root, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, skipLibCheck: true },
+      include: ['api.ts'],
+    }))
+    writeFileSync(join(root, 'api.ts'), 'export const value: string = "ok"\n')
+    git(root, 'add', 'tsconfig.json', 'api.ts')
+    git(root, 'commit', '-q', '-m', 'add passing typed base')
+
+    writeFileSync(join(worktreePath, 'task-only.txt'), 'task change\n')
+    git(worktreePath, 'add', 'task-only.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    const rebaseTestResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    assert.equal((rebaseTestResult.results[0] as { status: string }).status, 'green')
+
+    const mergeResult = await runMergeStage(worktreePath, {
+      task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root, typecheckCommand,
+    })
+    const merged = mergeResult.results[0] as { status: string, closed: number[] }
+    assert.equal(merged.status, 'merged')
+    assert.deepEqual(merged.closed, [taskNumber])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
 test('merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact', async () => {
   const taskNumber = 9005
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
