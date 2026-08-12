@@ -92,6 +92,17 @@ test("series brief stops the chain on an unmerged task and does the commit-messa
   assert.equal(serial.indexOf("## Commit message"), commitSectionIndex, "only one Commit message section");
 });
 
+// C86-47: prepare paragraph and closing rule used to give opposite non-open-status instructions.
+test("series skips completed or missing tasks but stops after an open task fails to merge", () => {
+  const serial = skillBody("[131,132] valid series");
+  assert.match(
+    serial,
+    /If `status` is `"completed"` or `"not-found"`, report and explicitly skip this task, then continue with the next task number without launching this task's pipeline\./,
+  );
+  assert.doesNotMatch(serial, /If `status` is not `"open"`, report it and stop the chain instead of preparing the next task number\./);
+  assert.match(serial, /If this task ends with anything unmerged/);
+});
+
 test("parallel skillBody stays byte-identical whether or not the word series appears unrelated to it, so long as it does not match \\bseries\\b", () => {
   const withoutSeries = skillBody("[131,132] valid");
   assert.doesNotMatch(withoutSeries, /Serial mode|series/);

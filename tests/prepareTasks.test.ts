@@ -5,7 +5,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
     buildWorkflowArguments,
@@ -209,6 +209,22 @@ test("test_recoverStaleTaskWorktreeLeaseReleasesACleanStaleLease", () => {
     assert.equal(reused, worktreePath);
 });
 
+test("test_recoverStaleTaskWorktreeLeaseRemovesALeaseWhoseWorktreeIsAlreadyGone", () => {
+    // Setup: a crashed run's cleanup removed the worktree but not its sibling lease file.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    mkdirSync(dirname(worktreePath), { recursive: true });
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "stale-run", pid: 1, createdAt: Date.now() }));
+    assert.equal(existsSync(worktreePath), false);
+    // Test action: recovery must not run git status against an absent worktree.
+    recoverStaleTaskWorktreeLease(repoRoot, worktreePath);
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+    // Verification: the freed path is acquirable by a normal prepare.
+    const reused = createWorktreeForGroup(repoRoot, group, "new-run");
+    assert.equal(reused, worktreePath);
+});
+
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [
@@ -228,6 +244,28 @@ test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () =
     releaseTaskWorktreeLease({ worktreePath: first.groups[0]!.worktree, runId: "run-1" });
     const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords, "run-2");
     assert.equal(JSON.stringify(first), JSON.stringify(second));
+});
+
+test("test_buildWorkflowArgumentsRollsBackEarlierCandidateLeasesWhenALaterTaskHasAForeignLease", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const taskRecords: TaskRecord[] = [
+        { taskNumber: 1, files: ["a.ts"] },
+        { taskNumber: 2, files: ["b.ts"] },
+    ];
+    const worktree1 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    const worktree2 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-2");
+    mkdirSync(dirname(worktree2), { recursive: true });
+    const foreignLeaseContents = JSON.stringify({ runId: "foreign-run", pid: 1, createdAt: 1 });
+    writeFileSync(`${worktree2}.lease`, foreignLeaseContents);
+
+    assert.throws(() => buildWorkflowArguments(repoRoot, "true", taskRecords, "candidate-run"));
+    // Task 1's candidate lease was rolled back; task 2's foreign lease is untouched.
+    assert.equal(existsSync(`${worktree1}.lease`), false);
+    assert.equal(readFileSync(`${worktree2}.lease`, "utf8"), foreignLeaseContents);
+
+    rmSync(`${worktree2}.lease`);
+    const retried = buildWorkflowArguments(repoRoot, "true", taskRecords, "retry-run");
+    assert.equal(retried.groups.length, 2);
 });
 
 test("test_generateRunIdProducesDifferentValuesOnEachCall", () => {
@@ -460,6 +498,62 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
         widener?.kill();
         prepare?.kill();
         rmSync(worktreePath, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+function waitForExitCode(child: ChildProcess): Promise<number | null> {
+    return (async () => {
+        const [code] = await once(child, "exit");
+        return code as number | null;
+    })();
+}
+
+// C86-45: a failure publishing run-arguments.json must not strand the leases acquired for this batch.
+test("prepareTasks CLI rolls back every candidate lease when run-arguments publication fails, then a retry succeeds", async () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    const argumentsFile = join(taskDirectory, "run-arguments.json");
+    const worktree1 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    const worktree2 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-2");
+
+    try {
+        writeFileSync(join(repoRoot, "a.ts"), "a\n");
+        writeFileSync(join(repoRoot, "b.ts"), "b\n");
+        git(repoRoot, "add", "a.ts", "b.ts");
+        git(repoRoot, "commit", "-q", "-m", "add task files");
+        mkdirSync(taskDirectory, { recursive: true });
+        writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([
+            { taskNumber: 1, title: "one", files: ["a.ts"], blockedBy: [] },
+            { taskNumber: 2, title: "two", files: ["b.ts"], blockedBy: [] },
+        ]));
+        writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+        git(repoRoot, "remote", "add", "origin", repoRoot);
+        // A directory in place of the target file makes writeJsonAtomically's final rename fail.
+        mkdirSync(argumentsFile, { recursive: true });
+
+        const failing = spawn(
+            process.execPath,
+            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), "[1,2]"],
+            { cwd: repoRoot, stdio: ["ignore", "ignore", "ignore"] },
+        );
+        const failingCode = await waitForExitCode(failing);
+        assert.notEqual(failingCode, 0);
+        assert.equal(existsSync(`${worktree1}.lease`), false);
+        assert.equal(existsSync(`${worktree2}.lease`), false);
+
+        rmSync(argumentsFile, { recursive: true, force: true });
+        const retry = spawn(
+            process.execPath,
+            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), "[1,2]"],
+            { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const retryDone = captureSuccessfulChild(retry);
+        const emitted = JSON.parse(await retryDone) as PipelineView;
+        assert.equal(emitted.groups.length, 2);
+    } finally {
+        rmSync(worktree1, { recursive: true, force: true });
+        rmSync(worktree2, { recursive: true, force: true });
         rmSync(repoRoot, { recursive: true, force: true });
     }
 });

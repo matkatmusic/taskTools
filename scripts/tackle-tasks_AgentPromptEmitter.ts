@@ -11,6 +11,7 @@ import {
   rebaseParentOntoSourceAndTest,
   uncommittedChangedFiles,
   mergeTaskDeepestFirst,
+  defaultMergeStepOperations,
   removeTaskWorktreeAndBranches,
   deleteTaskMergePersistence,
   collectRetainedTaskArtifacts,
@@ -885,7 +886,7 @@ function roleMerge() {
   const sourceSubmodules = sourceSubmodulesFrom(manifest)
   let walkReport: any
   try {
-    walkReport = mergeTaskDeepestFirst(repoRoot, manifest)
+    walkReport = mergeTaskDeepestFirst(repoRoot, manifest, defaultMergeStepOperations, PAYLOAD.typecheckCommand ?? null)
   } catch (error) {
     const failureReason = `merge driver failed: ${String((error as any)?.message ?? error)}`
     // The merge may have landed already; a persisted record beats reporting an ordinary blocked failure.
