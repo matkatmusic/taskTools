@@ -109,16 +109,16 @@ const removeFixture = (root: string, worktreePath: string) => {
 }
 
 // A real merge lap closes the task, so the main repo needs both task files or closeTasks throws.
-const seedTaskFiles = (root: string, taskNumber: number) => {
+const seedTaskFiles = (root: string, taskNumber: number, files: string[] = []) => {
   mkdirSync(join(root, '.taskTools'), { recursive: true })
-  writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files: [], blockedBy: [] }]))
+  writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files, blockedBy: [] }]))
   writeFileSync(join(root, '.taskTools', 'completedTasks.json'), '[]')
 }
 
 // A real task worktree already has its own checked-out .taskTools/tasks.json; loadPreparedTask reads it from cwd.
-const seedWorktreeTaskFile = (worktreePath: string, taskNumber: number) => {
+const seedWorktreeTaskFile = (worktreePath: string, taskNumber: number, files: string[] = []) => {
   mkdirSync(join(worktreePath, '.taskTools'), { recursive: true })
-  writeFileSync(join(worktreePath, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files: [], blockedBy: [] }]))
+  writeFileSync(join(worktreePath, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files, blockedBy: [] }]))
 }
 
 // A real worktree tracks these; commit the fixture's untracked stand-ins so they don't read as touched.
@@ -804,6 +804,123 @@ test('rebase stage: a layer still red after the fix-round ceiling blocks the lap
   }
 })
 
+// C86-41: an out-of-fence commit in the fix's own layer must surface as a violation, not slip through green.
+test('rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate', async () => {
+  const taskNumber = 9048
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber, [])
+  seedWorktreeTaskFile(worktreePath, taskNumber, [])
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    const outsideFencePath = join(worktreePath, 'outside-fence.txt')
+    const fixAgent = async (...values: unknown[]) => {
+      const options = values[1] as { label: string }
+      if (options.label.startsWith('rebase-fix:')) {
+        if (!existsSync(outsideFencePath)) {
+          writeFileSync(outsideFencePath, 'not approved\n')
+          git(worktreePath, 'add', 'outside-fence.txt')
+          git(worktreePath, 'commit', '-q', '-m', 'add outside-fence.txt')
+        }
+        return { fixed: true, summary: 'added outside-fence.txt' }
+      }
+      throw new Error(`unexpected agent call: ${options.label}`)
+    }
+
+    const result = await runMergeStage(
+      worktreePath,
+      { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root, typecheckCommand: `test -f ${JSON.stringify(outsideFencePath)}` },
+      fixAgent,
+    )
+    const outcome = result.results[0] as { status: string, fenceViolations: Array<{ occurrenceId: string, path: string }> }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [{ occurrenceId: '', path: 'outside-fence.txt' }])
+
+    let queue = createMergeQueue()
+    queue = enqueueApprovedTask(queue, taskNumber)
+    const consumed = consumeTaskWorkflowResult(queue, result as TaskWorkflowEnvelope)
+    assert.equal(consumed.kind, 'requires-regate')
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+test('rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation', async () => {
+  const taskNumber = 9050
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber, ['taskfile.txt', 'approved-fix.txt'])
+  seedWorktreeTaskFile(worktreePath, taskNumber, ['taskfile.txt', 'approved-fix.txt'])
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    const approvedFixPath = join(worktreePath, 'approved-fix.txt')
+    const fixAgent = async (...values: unknown[]) => {
+      const options = values[1] as { label: string }
+      if (options.label.startsWith('rebase-fix:')) {
+        if (!existsSync(approvedFixPath)) {
+          writeFileSync(approvedFixPath, 'approved\n')
+          git(worktreePath, 'add', 'approved-fix.txt')
+          git(worktreePath, 'commit', '-q', '-m', 'add approved-fix.txt')
+        }
+        return { fixed: true, summary: 'added approved-fix.txt' }
+      }
+      throw new Error(`unexpected agent call: ${options.label}`)
+    }
+
+    const result = await runMergeStage(
+      worktreePath,
+      { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root, typecheckCommand: `test -f ${JSON.stringify(approvedFixPath)}` },
+      fixAgent,
+    )
+    const outcome = result.results[0] as { status: string, fenceViolations: Array<{ occurrenceId: string, path: string }> }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [])
+
+    let queue = createMergeQueue()
+    queue = enqueueApprovedTask(queue, taskNumber)
+    const consumed = consumeTaskWorkflowResult(queue, result as TaskWorkflowEnvelope)
+    assert.equal(consumed.kind, 'queue')
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// Isolates roleRebaseFixVerify: the full retry loop also flags a submodule HEAD advance as root-touched.
+test('rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation', () => {
+  const taskNumber = 9049
+  const { root, worktreePath, submoduleSource, repositoryManifest } = makeRootWithSubmoduleWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber, ['vendor/vendor-new.txt'])
+  try {
+    commitVendorChange(worktreePath)
+
+    const vendorCheckoutPath = join(worktreePath, 'vendor')
+    const activeBeforeOid = git(vendorCheckoutPath, 'rev-parse', 'HEAD')
+    writeFileSync(join(vendorCheckoutPath, 'vendor-outside-fence.txt'), 'not approved\n')
+    git(vendorCheckoutPath, 'add', 'vendor-outside-fence.txt')
+    git(vendorCheckoutPath, 'commit', '-q', '-m', 'add vendor-outside-fence.txt')
+
+    const payload = {
+      worktree: worktreePath, sourceRoot: root,
+      checkoutPath: vendorCheckoutPath, occurrenceId: 'vendor',
+      beforeOids: {}, checkoutPaths: {}, activeBeforeOid, repositoryManifest,
+    }
+    const output = execFileSync('node', [EMITTER_PATH, String(taskNumber), 'rebase-fix-verify'], { input: JSON.stringify(payload), encoding: 'utf8' })
+    assert.ok(output.startsWith(DRIVER_RESULT_PREFIX))
+    const verify = JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim())
+    assert.deepEqual(verify.touchedPaths, [])
+    assert.deepEqual(verify.activeFenceViolations, [{ occurrenceId: 'vendor', path: 'vendor/vendor-outside-fence.txt' }])
+  } finally {
+    removeFixture(root, worktreePath)
+    rmSync(submoduleSource, { recursive: true, force: true })
+  }
+})
+
 test('merge stage refuses to guess when a merge intent exists but the merge record is missing', async () => {
   const taskNumber = 9026
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
@@ -1123,6 +1240,99 @@ test('merge stage: after a submodule layer merges, an untested parent layer bloc
     const nextLap = beginNextLap(consumed.queue)
     assert.equal(nextLap.sourceProgressThisLap, false)
     assert.deepEqual(nextQueueStep(nextLap), { taskNumber, stage: 'rebase-test' })
+  } finally {
+    removeFixture(root, worktreePath)
+    rmSync(submoduleSource, { recursive: true, force: true })
+  }
+})
+
+// C86-42: a submodule merge that lands but whose record write fails must still count as progress and be resumable.
+test('merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly', async () => {
+  const taskNumber = 9047
+  process.env.GIT_ALLOW_PROTOCOL = 'file'
+
+  const submoduleSource = mkdtempSync(join(tmpdir(), 'task-workflow-merge-submodule-'))
+  git(submoduleSource, 'init', '-q', '-b', 'main')
+  git(submoduleSource, 'config', 'user.email', 'test@example.com')
+  git(submoduleSource, 'config', 'user.name', 'Test')
+  git(submoduleSource, 'config', 'commit.gpgsign', 'false')
+  writeFileSync(join(submoduleSource, 'vendor.txt'), 'vendor\n')
+  git(submoduleSource, 'add', 'vendor.txt')
+  git(submoduleSource, 'commit', '-q', '-m', 'init')
+  addTestScript(submoduleSource, 'true')
+
+  const root = mkdtempSync(join(tmpdir(), 'task-workflow-merge-root-'))
+  git(root, 'init', '-q', '-b', 'main')
+  git(root, 'config', 'user.email', 'test@example.com')
+  git(root, 'config', 'user.name', 'Test')
+  git(root, 'config', 'commit.gpgsign', 'false')
+  writeFileSync(join(root, 'README.md'), 'root\n')
+  git(root, 'add', 'README.md')
+  git(root, 'commit', '-q', '-m', 'init')
+  git(root, 'submodule', 'add', '-q', submoduleSource, 'vendor')
+  git(root, 'commit', '-q', '-m', 'add submodule')
+  // root itself gets no package.json test script, so its own layer stays untested after the submodule merges.
+
+  const sourceBranch = 'main'
+  const submoduleCheckoutPath = join(root, 'vendor')
+  const baseOid = git(root, 'rev-parse', sourceBranch)
+  const submoduleBaseOid = git(submoduleCheckoutPath, 'rev-parse', sourceBranch)
+  const operationBranch = `task-${taskNumber}`
+  const worktreePath = join(tmpdir(), `task-workflow-merge-wt-${randomUUID()}`)
+  git(root, 'worktree', 'add', '-q', '-b', operationBranch, worktreePath, sourceBranch)
+  git(worktreePath, 'submodule', 'update', '--init', '--recursive', '-q')
+  git(join(worktreePath, 'vendor'), 'checkout', '-q', '-b', operationBranch)
+  mkdirSync(join(worktreePath, 'plans'), { recursive: true })
+  symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
+
+  const repositoryManifest: RepositoryManifest = {
+    version: REPOSITORY_MANIFEST_VERSION,
+    occurrences: [
+      { occurrenceId: '', checkoutPath: root, parentOccurrenceId: null, pathInParent: null, gitlinkOid: null, depth: 0, originUrl: '', baseBranch: sourceBranch, baseOid, operationBranch, childOccurrenceIds: ['vendor'], testState: 'untested' },
+      { occurrenceId: 'vendor', checkoutPath: submoduleCheckoutPath, parentOccurrenceId: '', pathInParent: 'vendor', gitlinkOid: null, depth: 1, originUrl: '', baseBranch: sourceBranch, baseOid: submoduleBaseOid, operationBranch, childOccurrenceIds: [], testState: 'untested' },
+    ],
+  }
+
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'vendor', 'vendor-new.txt'), 'vendor change\n')
+    git(join(worktreePath, 'vendor'), 'add', 'vendor-new.txt')
+    git(join(worktreePath, 'vendor'), 'commit', '-q', '-m', 'vendor change')
+    git(worktreePath, 'add', 'vendor')
+    git(worktreePath, 'commit', '-q', '-m', 'point at vendor task commit')
+
+    // A leaf ref here collides with the nested ref recordMergedCommit writes only after the submodule merge lands.
+    git(submoduleCheckoutPath, 'update-ref', 'refs/taskTools/merged-commits', git(submoduleCheckoutPath, 'rev-parse', sourceBranch))
+
+    const submoduleHeadBefore = git(submoduleCheckoutPath, 'rev-parse', sourceBranch)
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
+    const outcome = result.results[0] as { status: string, failedAtStage: string, completedLayers: Array<{ occurrenceId: string, status: string }> }
+
+    assert.notEqual(git(submoduleCheckoutPath, 'rev-parse', sourceBranch), submoduleHeadBefore)
+    assert.equal(outcome.status, 'parent-conflicted')
+    assert.equal(outcome.failedAtStage, 'test')
+    assert.deepEqual(
+      outcome.completedLayers.map((layer) => ({ occurrenceId: layer.occurrenceId, status: layer.status })),
+      [{ occurrenceId: 'vendor', status: 'merged' }],
+    )
+
+    let queue = createMergeQueue()
+    queue = enqueueApprovedTask(queue, taskNumber)
+    queue = recordStageOutcome(queue, taskNumber, 'rebase-test', { status: 'success' })
+    const consumed = consumeTaskWorkflowResult(queue, result as TaskWorkflowEnvelope)
+    assert.equal(consumed.kind, 'queue')
+    if (consumed.kind !== 'queue') return assert.fail('expected queue result')
+    assert.equal(consumed.queue.sourceProgressThisLap, true)
+    assert.equal(shouldEndQueue(consumed.queue, false), 'continue')
+
+    // A retry lap must recognize the already-landed submodule and resume, not report merge-record-missing.
+    const retryResult = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
+    const retryOutcome = retryResult.results[0] as { status: string, completedLayers: Array<{ occurrenceId: string, status: string }> }
+    assert.notEqual(retryOutcome.status, 'merge-record-missing')
+    assert.deepEqual(
+      retryOutcome.completedLayers.map((layer) => ({ occurrenceId: layer.occurrenceId, status: layer.status })),
+      [{ occurrenceId: 'vendor', status: 'no-op' }],
+    )
   } finally {
     removeFixture(root, worktreePath)
     rmSync(submoduleSource, { recursive: true, force: true })

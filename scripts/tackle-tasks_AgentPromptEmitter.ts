@@ -64,6 +64,13 @@ type PreparedTask = {
   taskStateRoot: string;
 };
 
+// Read-only, unlike loadPreparedTask: no brief-file write, safe to call from a role that only needs the fence.
+function readTaskApprovedFiles(): string[] {
+  const pair = resolveTaskFiles(SOURCE_ROOT);
+  const task = readTaskFile(pair.tasksPath).find((entry: any) => entry.taskNumber === N);
+  return task && Array.isArray(task.files) ? task.files : [];
+}
+
 // Task state (ownership, widening) is authoritative under SOURCE_ROOT; only the brief/plan/notes/edits live under WORKTREE.
 function loadPreparedTask(): PreparedTask {
   const pair = resolveTaskFiles(SOURCE_ROOT);
@@ -753,6 +760,7 @@ function roleRebaseFix() {
 // Mirrors attemptRebaseFix's post-agent bookkeeping from the pre-C86-18 task.workflow.js.
 function roleRebaseFixVerify() {
   const checkoutPath: string = PAYLOAD.checkoutPath
+  const occurrenceId: string = PAYLOAD.occurrenceId
   const beforeOids: Record<string, string> = PAYLOAD.beforeOids ?? {}
   const checkoutPaths: Record<string, string> = PAYLOAD.checkoutPaths ?? {}
   const touchedPaths: { occurrenceId: string; path: string }[] = []
@@ -762,7 +770,21 @@ function roleRebaseFixVerify() {
     for (const path of touched) touchedPaths.push({ occurrenceId: otherId, path })
   }
   const ownCheckoutClean = uncommittedChangedFiles(checkoutPath).length === 0
-  printResult({ ownCheckoutClean, touchedPaths })
+
+  // C86-41: the fix may commit anything inside its own layer; flag whatever lands outside the approved fence.
+  const activeBeforeOid: string | undefined = PAYLOAD.activeBeforeOid
+  const approvedFiles = readTaskApprovedFiles()
+  const occurrences: any[] = PAYLOAD.repositoryManifest?.occurrences ?? []
+  const activeFenceViolations: { occurrenceId: string; path: string }[] = []
+  if (activeBeforeOid) {
+    const prefix = occurrenceRootRelativePaths(occurrences).get(occurrenceId) ?? ''
+    const touched = new Set([...changedPathsSinceOid(checkoutPath, activeBeforeOid), ...uncommittedChangedFiles(checkoutPath)])
+    for (const localPath of touched) {
+      const rootRelativePath = prefix === '' ? localPath : `${prefix}/${localPath}`
+      if (!approvedFiles.includes(rootRelativePath)) activeFenceViolations.push({ occurrenceId, path: rootRelativePath })
+    }
+  }
+  printResult({ ownCheckoutClean, touchedPaths, activeFenceViolations })
 }
 
 function concreteMergeStageFailure(report: any): string {
