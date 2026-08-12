@@ -18,7 +18,8 @@
     "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt.",
     "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed.",
     "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged.",
-    "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed."
+    "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed.",
+    "At committed HEAD 9c209d10ed8e35e15b6d1b10300f6df5c087604a, source-audited C86-19 through C86-22 against current source, tests, and authoritative open tasks. The index was empty; unstaged changes were limited to package.json, package-lock.json, and plans/task-163-plan.md; untracked changes were plans/review/brief/reproduction artifacts with no source or test implementation for these findings. All four findings remain open; current anchors were refreshed and C86-21 was narrowed to the still-uncaught rebase/merge driver paths. No tests were rerun for this metadata-only refresh; the committed implementation had already passed the recorded 40 focused tests, typecheck, and 1,344-test full suite."
   ],
   "notes": [
     {
@@ -64,6 +65,10 @@
     {
       "date": "2026-08-11T20:54:55-07:00",
       "text": "Second atomic review of C86-23, C86-25, and C86-26 accepted the cumulative implementation. The finalizer now distinguishes a deleted notes path from a notes blob present in HEAD, and deterministic regression coverage preserves the zero-commit, notes-only, missing-notes, ownership, task-state-lock, and authoritative-root boundaries. All three findings were removed."
+    },
+    {
+      "date": "2026-08-11T21:00:14-07:00",
+      "text": "Post-commit audit refresh at 9c209d1: C86-19, C86-20, C86-21, and C86-22 remain accurate. The accepted C86-23/25/26 commit shifted their source and test anchors but did not close their causal chains. C86-21 now describes only uncaught rebase/merge driver exceptions; close and final-cleanup failures are already normalized boundaries."
     }
   ],
   "issues": [
@@ -71,26 +76,26 @@
       "number": 19,
       "title": "C86-19 — High: the implementation worker cannot implement or fence files inside submodules",
       "class": "high",
-      "cause": "The rewritten prompt emitter still permits only root-worktree Git commands and finishes with a root git add and commit. The workflow's implement-finalize role still snapshots, validates, and diffs only the root occurrence. For a task owning vendor/src/x.ts, root Git cannot stage the contents inside vendor; a submodule-only commit leaves root HEAD unchanged and is rejected; manually advancing the root gitlink makes the fence see only vendor, not vendor/src/x.ts. The apparent end-to-end test manually commits inside the submodule through a callback that the generated worker contract does not provide and declares ownership of vendor rather than the actual nested file.",
+      "cause": "The rewritten prompt emitter still permits only root-worktree Git commands and finishes with a root git add and commit. The emitter finalizer and workflow guard still snapshot, validate, and diff only the root occurrence. For a task owning vendor/src/x.ts, root Git cannot stage the contents inside vendor; a submodule-only commit leaves root HEAD unchanged and is rejected; manually advancing the root gitlink makes the fence see only vendor, not vendor/src/x.ts. The apparent end-to-end test manually commits inside the submodule through a callback that the generated worker contract does not provide and declares ownership of vendor rather than the actual nested file.",
       "locations": [
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "202-280",
+          "lines": "208-286",
           "role": "Worker instructions allow only root-worktree Git commands."
         },
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "360-395",
+          "lines": "393-443",
           "role": "Implementation commit and fence validation inspect only the root occurrence."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "433-437",
+          "lines": "499-505",
           "role": "The deterministic finalizer diffs only the root checkout."
         },
         {
           "path": "tests/runMergePhase.test.ts",
-          "lines": "316-335, 755-778",
+          "lines": "983-1056",
           "role": "Fixture manually performs the forbidden submodule commit and masks nested ownership behind the root gitlink."
         }
       ],
@@ -140,22 +145,22 @@
       "locations": [
         {
           "path": "scripts/mergeTaskWorktrees.ts",
-          "lines": "683-713, 721-742",
+          "lines": "738-748, 756-783",
           "role": "A child source layer can merge before a later parent layer fails."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "581-584",
+          "lines": "715-718",
           "role": "A partially completed deepest-first walk is returned as a failed task."
         },
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "550-563",
+          "lines": "607-620",
           "role": "The rewritten workflow forwards the failed merge result without recording source-layer progress."
         },
         {
           "path": "scripts/runMergePhase.ts",
-          "lines": "93-96, 126-140",
+          "lines": "70-84, 111-118, 177-195, 355-365",
           "role": "Queue progress counts only fully merged tasks and declares the partial lap stuck."
         }
       ],
@@ -182,7 +187,7 @@
       "resolvedBoundaryExample": [
         {
           "file": "scripts/mergeTaskWorktrees.ts",
-          "code": "return { stage: 'merge', status, completedLayers, parentResult }\n// completedLayers retains child layers that moved before the parent failed."
+          "code": "if (parentOutcome.status === \"conflicted\") {\n  return { status: \"parent-conflicted\", completedLayers, checkoutPath: occurrence.checkoutPath, stage: \"rebase\", conflictedFilePaths: parentOutcome.conflictedFilePaths, failureReason: null };\n}"
         }
       ],
       "remainingMinimalExample": [
@@ -197,17 +202,17 @@
       "number": 21,
       "title": "C86-21 — High: unexpected rebase/merge exceptions reject the workflow instead of entering the retry queue",
       "class": "high",
-      "cause": "The rewrite moved Git and filesystem operations into emitter roles but did not make their failure contract total. A failed merge emitter is retried and eventually becomes the generic merge-driver-no-result envelope, losing the concrete operational reason. A failed rebase-walk or parent-rebase emitter returns no agent result and the workflow explicitly throws, so that stage still rejects with no status/lastFailure envelope for consumeTaskWorkflowResult. The task can therefore remain unqueued and unreported, contrary to tasks 149 and 153.",
+      "cause": "The rewrite moved rebase and merge operations into emitter roles but did not make those driver boundaries total. roleRebaseWalk and roleParentRebase call throwing primitives without normalization; after retries produce no agent result, runRebaseTest explicitly throws instead of returning status and lastFailure. roleMerge likewise calls mergeTaskDeepestFirst outside a catch, and runMerge reduces the lost result to a generic merge-driver-no-result envelope, discarding the concrete operational reason and any completedLayers. Close and final-cleanup failures are already normalized, but these remaining driver exceptions can still leave a task unqueued or strip the information needed for retry and reporting, contrary to tasks 149 and 153.",
       "locations": [
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "472-478, 502-503, 511-512, 534-535, 550-563",
+          "lines": "529-535, 559-560, 568-569, 591-592, 607-620",
           "role": "Missing emitter results throw from rebase or degrade to a generic merge failure."
         },
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "449-463, 563-620",
-          "role": "Emitter roles execute throwing rebase, merge, close, ref, and cleanup operations."
+          "lines": "517-531, 682-725",
+          "role": "Rebase-walk, parent-rebase, and merge call throwing driver primitives without converting exceptions to typed results."
         }
       ],
       "provingTest": "Make the rebase-walk emitter exit nonzero after a deterministic Git or ref failure and have the workflow agent return no result, as it does when the command produces no valid result instructions. The current workflow retries and then throws instead of returning a blocked envelope. Separately create a leaf ref named refs/taskTools/merge-intents so merge persistence creation fails; the merge path returns only a generic driver-no-result reason. The fixed results must carry the concrete operational reason through queue carryover and reporting. A nested variant should merge the child first and trigger the failure only in the parent, retaining C86-20 progress data.",
@@ -233,7 +238,7 @@
       "resolvedBoundaryExample": [
         {
           "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "function concreteMergeStageFailure(report) {\n  const explicit = typeof report.failureReason === 'string' ? report.failureReason.trim() : ''\n  if (explicit) return explicit\n  return `${report.stage} failure in ${report.occurrenceId || 'root'} (${report.status})`\n}"
+          "code": "function concreteMergeStageFailure(report: any): string {\n  const explicit = typeof report.failureReason === 'string' ? report.failureReason.trim() : ''\n  if (explicit) return explicit\n  const occurrence = report.status === 'parent-conflicted' ? 'root' : (report.occurrenceId || 'unknown layer')\n  const conflictSuffix = Array.isArray(report.conflictedFilePaths) && report.conflictedFilePaths.length > 0\n    ? `; unresolved paths: ${report.conflictedFilePaths.join(', ')}`\n    : ''\n  const kind = report.stage === 'merge' ? 'merge failure' : report.stage === 'rebase' ? 'rebase conflict' : 'test failure'\n  return `${kind} in ${occurrence} (${report.status})${conflictSuffix}`\n}"
         }
       ],
       "remainingMinimalExample": [
@@ -256,7 +261,7 @@
       "locations": [
         {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "329-341",
+          "lines": "362-375",
           "role": "The loop exits before processing the third verifier rejection."
         }
       ],
