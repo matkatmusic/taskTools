@@ -19,7 +19,8 @@
     "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed.",
     "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged.",
     "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed.",
-    "At committed HEAD 9c209d10ed8e35e15b6d1b10300f6df5c087604a, source-audited C86-19 through C86-22 against current source, tests, and authoritative open tasks. The index was empty; unstaged changes were limited to package.json, package-lock.json, and plans/task-163-plan.md; untracked changes were plans/review/brief/reproduction artifacts with no source or test implementation for these findings. All four findings remain open; current anchors were refreshed and C86-21 was narrowed to the still-uncaught rebase/merge driver paths. No tests were rerun for this metadata-only refresh; the committed implementation had already passed the recorded 40 focused tests, typecheck, and 1,344-test full suite."
+    "At committed HEAD 9c209d10ed8e35e15b6d1b10300f6df5c087604a, source-audited C86-19 through C86-22 against current source, tests, and authoritative open tasks. The index was empty; unstaged changes were limited to package.json, package-lock.json, and plans/task-163-plan.md; untracked changes were plans/review/brief/reproduction artifacts with no source or test implementation for these findings. All four findings remain open; current anchors were refreshed and C86-21 was narrowed to the still-uncaught rebase/merge driver paths. No tests were rerun for this metadata-only refresh; the committed implementation had already passed the recorded 40 focused tests, typecheck, and 1,344-test full suite.",
+    "Reviewed the staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11 at committed HEAD 312a5fbf3bbca7e0b95a38eae661ddc0470c6bb6. git diff --cached --check and npx tsc --noEmit passed; 95 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,350 tests. The atomic batch was rejected because nested implementation commits skip untouched intermediate occurrences, workflow schemas omit completedLayers and driver failureReason, outer driver catches discard already-completed layers, and the final-review regression does not prove the widened brief/implementer/fence path. The seven implementation/test files were left unstaged."
   ],
   "notes": [
     {
@@ -69,6 +70,10 @@
     {
       "date": "2026-08-11T21:00:14-07:00",
       "text": "Post-commit audit refresh at 9c209d1: C86-19, C86-20, C86-21, and C86-22 remain accurate. The accepted C86-23/25/26 commit shifted their source and test anchors but did not close their causal chains. C86-21 now describes only uncaught rebase/merge driver exceptions; close and final-cleanup failures are already normalized boundaries."
+    },
+    {
+      "date": "2026-08-11T21:43:21-07:00",
+      "text": "C86-19, C86-20, C86-21, and C86-22 were reviewed as one atomic batch and rejected. The attempt adds useful one-level submodule fencing, queue source-progress state, exception normalization, and final-review processing, but the remaining nested propagation, structured-result schema, completed-layer preservation, and final-round end-to-end coverage gaps keep all four findings open. All seven implementation/test paths are unstaged; only this audit update is staged."
     }
   ],
   "issues": [
@@ -76,33 +81,23 @@
       "number": 19,
       "title": "C86-19 — High: the implementation worker cannot implement or fence files inside submodules",
       "class": "high",
-      "cause": "The rewritten prompt emitter still permits only root-worktree Git commands and finishes with a root git add and commit. The emitter finalizer and workflow guard still snapshot, validate, and diff only the root occurrence. For a task owning vendor/src/x.ts, root Git cannot stage the contents inside vendor; a submodule-only commit leaves root HEAD unchanged and is rejected; manually advancing the root gitlink makes the fence see only vendor, not vendor/src/x.ts. The apparent end-to-end test manually commits inside the submodule through a callback that the generated worker contract does not provide and declares ownership of vendor rather than the actual nested file.",
+      "cause": "The staged attempt snapshots and diffs every occurrence and generates usable git -C instructions for a directly owned submodule, but implementCommitSteps iterates only occurrences that directly own a task path. For a file in a grandchild occurrence, it commits the grandchild and then jumps to the root; the untouched intermediate occurrence never commits its changed child gitlink, so the root cannot record the grandchild commit. The positive tests still perform the submodule commit manually and cover only one submodule level, so this broken nested worker contract is not exercised.",
       "locations": [
         {
           "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "208-286",
-          "role": "Worker instructions allow only root-worktree Git commands."
-        },
-        {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "393-443",
-          "role": "Implementation commit and fence validation inspect only the root occurrence."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "499-505",
-          "role": "The deterministic finalizer diffs only the root checkout."
+          "lines": "275-321",
+          "role": "ancestorGitlinkBumps finds every ancestor, but implementCommitSteps emits commits only for directly owned occurrences plus root and therefore skips an untouched intermediate occurrence."
         },
         {
           "path": "tests/runMergePhase.test.ts",
-          "lines": "983-1056",
-          "role": "Fixture manually performs the forbidden submodule commit and masks nested ownership behind the root gitlink."
+          "lines": "1085-1132, 1258-1312",
+          "role": "The staged fixtures manually commit inside a single-level submodule; none executes the literal worker commit sequence for a grandchild-owned file."
         }
       ],
-      "provingTest": "Prepare a task whose only owned path is a real file below a submodule. Have the fake worker follow the literal generated instructions, edit that file, and attempt the prescribed commit; the current workflow cannot return done. As a fence negative control, manually commit an unowned file inside the submodule and its root gitlink; a correct implementation reports the normalized nested path, while the current code reports only the gitlink.",
+      "provingTest": "Prepare root -> vendor -> nested with the task owning only vendor/nested/src/x.ts. Execute the literal generated commit sequence after editing that file and writing notes. The current staged sequence commits nested and root but not vendor, so vendor HEAD still records nested's old OID and the root branch cannot reach the implementation commit. The corrected sequence commits nested, then vendor's nested gitlink, then root's vendor gitlink and notes; finalization reports vendor/nested/src/x.ts. Include an unowned grandchild edit and assert its fully normalized nested path is fenced.",
       "suggestedFixApproach": [
-        "Build an occurrence-aware ownership map. Snapshot, stage, commit, and diff owned paths in each occurrence deepest-first, then commit changed gitlinks in their parents.",
-        "Normalize every occurrence-local changed path back to its root-relative task path before fence comparison. Generate explicit git -C <occurrence-checkout> instructions for the worker instead of forbidding them."
+        "Expand the touched occurrence set to the transitive parent closure of every directly owned occurrence, then emit one deepest-first commit step for each member. Intermediate occurrences stage and commit their changed direct-child gitlinks even when they own no task file.",
+        "Retain the staged all-occurrence OID snapshot and normalized finalizer, and add a worker-contract regression with at least two nested submodule levels instead of manually performing the missing commits in the fixture."
       ],
       "resolvedBoundaryReference": [
         {
@@ -115,9 +110,9 @@
         }
       ],
       "acceptanceCriteria": [
-        "The literal worker contract can stage and commit an owned file below a submodule.",
+        "The literal worker contract commits an owned file at arbitrary submodule depth and commits every changed ancestor gitlink deepest-first.",
         "Implementation snapshots and diffs cover every owned occurrence and normalize local paths to root-relative task paths.",
-        "An unowned nested edit is reported as the nested path, and focused nested-worktree tests pass."
+        "An unowned grandchild edit is reported as the fully nested path, and the production-shaped worker-contract regression passes."
       ],
       "resolvedBoundaryExample": [
         {
@@ -128,11 +123,11 @@
       "remainingMinimalExample": [
         {
           "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "for (const occurrence of ownedOccurrencesDeepestFirst) {\n  execFileSync('git', ['-C', occurrence.checkoutPath, 'add', '--', ...occurrence.localPaths])\n  commitOccurrenceChanges(occurrence.checkoutPath, occurrence.occurrenceId)\n}\ncommitChangedGitlinksInParents(ownedOccurrencesDeepestFirst)\nconst changedPaths = diffEveryOccurrence(baseOids).map(normalizeRootRelative)"
+          "code": "const commitOccurrences = parentClosureOfOwnedOccurrences(ownedOccurrences)\nfor (const occurrence of commitOccurrences.sort(deepestFirst)) {\n  const addPaths = [...ownedLocalPaths(occurrence), ...changedDirectChildGitlinks(occurrence)]\n  emitGitAddAndCommit(occurrence.checkoutPath, addPaths)\n}\n// root receives its owned files, changed child gitlinks, and notes in the same deepest-first walk"
         },
         {
           "file": "tests/runMergePhase.test.ts",
-          "code": "test('implement commits and fences a file owned below a submodule', async () => { /* assert vendor/src/x.ts */ })"
+          "code": "test('literal worker steps commit a grandchild-owned file through every ancestor', async () => {\n  // root -> vendor -> nested; assert each parent HEAD records its child's new OID\n  // and final changedPaths contains vendor/nested/src/x.ts\n})"
         }
       ],
       "existingOpenTask": "No matching open task."
@@ -141,33 +136,28 @@
       "number": 20,
       "title": "C86-20 — High: a partial deepest-first merge is misclassified as a zero-progress lap",
       "class": "high",
-      "cause": "mergeTaskDeepestFirst may successfully move a source submodule and then fail its parent. The workflow returns the task as failed, recordStageOutcome increments mergedThisLap only for a completely merged task, and shouldEndQueue returns stuck when that count is zero. The spec intentionally keeps earlier source-layer merges, so the retry would not run against the same source state; stopping loses a potentially recoverable task.",
+      "cause": "The staged queue correctly tracks sourceProgressThisLap when a consumed result contains completedLayers, but MERGE_SCHEMA does not declare completedLayers, so the production structured-result boundary does not guarantee that the emitter's progress evidence reaches consumeTaskWorkflowResult. The new queue test constructs that field by hand, while the real nested merge test stops before consuming its envelope into the queue. The implementation therefore has no production-shaped proof that a child-merged/parent-failed lap avoids the stuck exit.",
       "locations": [
         {
-          "path": "scripts/mergeTaskWorktrees.ts",
-          "lines": "738-748, 756-783",
-          "role": "A child source layer can merge before a later parent layer fails."
-        },
-        {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "715-718",
-          "role": "A partially completed deepest-first walk is returned as a failed task."
-        },
-        {
           "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "607-620",
-          "role": "The rewritten workflow forwards the failed merge result without recording source-layer progress."
+          "lines": "210-229",
+          "role": "MERGE_SCHEMA omits completedLayers even though queue progress now depends on that field crossing the agent result boundary."
         },
         {
-          "path": "scripts/runMergePhase.ts",
-          "lines": "70-84, 111-118, 177-195, 355-365",
-          "role": "Queue progress counts only fully merged tasks and declares the partial lap stuck."
+          "path": "tests/runMergePhase.test.ts",
+          "lines": "117-147",
+          "role": "The queue regression uses a hand-built envelope and cannot prove that the production workflow schema preserves completedLayers."
+        },
+        {
+          "path": "tests/taskWorkflowMergeStage.test.ts",
+          "lines": "985-1084",
+          "role": "The real child-merged/parent-failed fixture proves source movement but does not consume the returned envelope or assert next-lap scheduling."
         }
       ],
-      "provingTest": "Use a nested fixture in which the child source merge succeeds and the parent merge fails. Consume the real workflow envelope, prove the child source branch moved, and assert that the current queue has mergedThisLap equal to zero and reports stuck. The corrected queue must begin another lap, subject to the normal lap ceiling, because source progress occurred.",
+      "provingTest": "Use the existing real nested fixture in which the child source merge succeeds and the untested parent fails. Pass its actual schema-constrained workflow envelope to consumeTaskWorkflowResult, prove the child source branch moved, and assert mergedThisLap is zero, sourceProgressThisLap is true, shouldEndQueue returns continue, and beginNextLap schedules rebase-test under the existing ceiling.",
       "suggestedFixApproach": [
-        "Track source-layer progress separately from fully merged task count, for example sourceProgressThisLap.",
-        "Set it when a failed merge result has a completed layer with status merged, reset it in beginNextLap, and apply the zero-progress exit only when neither a task nor any source layer moved."
+        "Add the complete completedLayers item shape to MERGE_SCHEMA and require/preserve it for ordinary deepest-first reports; normalized pre-walk failures may explicitly return an empty array.",
+        "Join the real nested merge fixture to queue consumption so the structured-result boundary, source movement, progress derivation, stuck decision, reset, and next-lap scheduling are covered in one deterministic regression."
       ],
       "resolvedBoundaryReference": [
         {
@@ -192,8 +182,12 @@
       ],
       "remainingMinimalExample": [
         {
-          "file": "scripts/runMergePhase.ts",
-          "code": "export type MergeQueue = { ...; mergedThisLap: number; sourceProgressThisLap: boolean }\nexport type StageOutcome = { status: 'success' } | { status: 'failure'; reason: string; sourceProgress?: boolean }\nif (queue.mergedThisLap === 0 && !queue.sourceProgressThisLap && hasFailures(queue)) return 'stuck'\n// derive sourceProgress from completedLayers and reset it in beginNextLap."
+          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "code": "const MERGE_LAYER_SCHEMA = { type: 'object', properties: { occurrenceId: { type: 'string' }, checkoutPath: { type: 'string' }, status: { type: 'string' }, oid: { type: 'string' }, mergedCommitOid: { type: ['string', 'null'] } }, required: ['occurrenceId', 'checkoutPath', 'status'] }\n// MERGE_SCHEMA.properties.completedLayers = { type: 'array', items: MERGE_LAYER_SCHEMA }"
+        },
+        {
+          "file": "tests/taskWorkflowMergeStage.test.ts",
+          "code": "const envelope = await runMergeStage(realNestedFixture)\nconst consumed = consumeTaskWorkflowResult(queueAfterGreen, envelope)\nassert.equal(consumed.queue.sourceProgressThisLap, true)\nassert.equal(shouldEndQueue(consumed.queue, false), 'continue')"
         }
       ],
       "existingOpenTask": "No matching open task."
@@ -202,23 +196,28 @@
       "number": 21,
       "title": "C86-21 — High: unexpected rebase/merge exceptions reject the workflow instead of entering the retry queue",
       "class": "high",
-      "cause": "The rewrite moved rebase and merge operations into emitter roles but did not make those driver boundaries total. roleRebaseWalk and roleParentRebase call throwing primitives without normalization; after retries produce no agent result, runRebaseTest explicitly throws instead of returning status and lastFailure. roleMerge likewise calls mergeTaskDeepestFirst outside a catch, and runMerge reduces the lost result to a generic merge-driver-no-result envelope, discarding the concrete operational reason and any completedLayers. Close and final-cleanup failures are already normalized, but these remaining driver exceptions can still leave a task unqueued or strip the information needed for retry and reporting, contrary to tasks 149 and 153.",
+      "cause": "The staged emitter catches top-level rebase and merge exceptions and the workflow no longer throws on a missing result, but the catches sit outside the multi-layer drivers. If a child layer completes before a parent operation throws, the local completedLayers array is discarded and the merge catch returns only status and lastFailure, so C86-20 source progress is lost. REBASE_WALK_SCHEMA also omits failureReason and completedLayers, and MERGE_SCHEMA omits completedLayers, so the concrete typed data emitted by the new catches is not preserved by the declared production result contracts. An exception after the root merge can likewise be reported as merely blocked instead of merged-but-not-closed.",
       "locations": [
         {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "529-535, 559-560, 568-569, 591-592, 607-620",
-          "role": "Missing emitter results throw from rebase or degrade to a generic merge failure."
+          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
+          "lines": "656-677, 861-866",
+          "role": "Outer catches normalize the exception text but cannot recover completed layers or distinguish a root merge that already landed."
         },
         {
-          "path": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "lines": "517-531, 682-725",
-          "role": "Rebase-walk, parent-rebase, and merge call throwing driver primitives without converting exceptions to typed results."
+          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
+          "lines": "132-151, 210-229",
+          "role": "The rebase schema omits failureReason/completedLayers and the merge schema omits completedLayers, so normalized driver evidence is outside the declared agent contract."
+        },
+        {
+          "path": "tests/taskWorkflowMergeStage.test.ts",
+          "lines": "937-984",
+          "role": "The new exception tests cover no-result and pre-progress failure only; neither triggers an exception after a child layer has completed or after the root merge lands."
         }
       ],
-      "provingTest": "Make the rebase-walk emitter exit nonzero after a deterministic Git or ref failure and have the workflow agent return no result, as it does when the command produces no valid result instructions. The current workflow retries and then throws instead of returning a blocked envelope. Separately create a leaf ref named refs/taskTools/merge-intents so merge persistence creation fails; the merge path returns only a generic driver-no-result reason. The fixed results must carry the concrete operational reason through queue carryover and reporting. A nested variant should merge the child first and trigger the failure only in the parent, retaining C86-20 progress data.",
+      "provingTest": "Keep the staged no-result and pre-walk exception cases. Add a nested driver fixture that lands the child source merge and deterministically throws during the parent operation; the schema-constrained result must retain the concrete reason and completed child layer, and queue consumption must retain source progress and carryover. Add a root variant that throws after the root merge commit lands but before close completes; it must report merged-but-not-closed with the recorded merge hash rather than ordinary blocked.",
       "suggestedFixApproach": [
-        "Make the rebase and merge primitives total and return typed failure reports, or wrap every stage-level primitive call in try/catch.",
-        "Normalize operational exceptions to a nonempty stage-specific lastFailure while preserving completedLayers, source-progress information, conflict paths, and merged-but-not-closed semantics once the root merge has landed."
+        "Move exception normalization inside the layer walks or throw a typed error carrying completedLayers and merge persistence state; the stage-level catch must not reconstruct a fresh data-less failure.",
+        "Extend REBASE_WALK_SCHEMA and MERGE_SCHEMA to declare every retained failure field, including failureReason and completedLayers, and normalize post-root-merge exceptions through the existing merged-but-not-closed/recovery boundary."
       ],
       "resolvedBoundaryReference": [
         {
@@ -243,12 +242,12 @@
       ],
       "remainingMinimalExample": [
         {
-          "file": "scripts/tackle-tasks_AgentPromptEmitter.ts",
-          "code": "function roleRebaseWalk() {\n  try { printResult(rebaseSubmoduleLayersDeepestFirst(...)) }\n  catch (error) { printResult({ stoppedAt: { status: 'driver-failed', failureReason: String(error) } }) }\n}\n// Apply the same total-result contract to parent-rebase and merge."
+          "file": "scripts/mergeTaskWorktrees.ts",
+          "code": "for (const occurrence of orderedOccurrences) {\n  try { /* rebase/test/merge one layer; push completed result */ }\n  catch (error) {\n    return { status: failureStatusFor(occurrence), completedLayers, occurrenceId: displayOccurrenceId(occurrence.occurrenceId), checkoutPath: occurrence.checkoutPath, stage: 'merge', conflictedFilePaths: [], failureReason: String(error) }\n  }\n}"
         },
         {
           "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "if (!layerWalk) return { stage: 'rebase-test', task: N, status: 'blocked', lastFailure: 'rebase-walk driver returned no result' }"
+          "code": "// Declare stoppedAt.failureReason and top-level completedLayers in REBASE_WALK_SCHEMA,\n// and completedLayers in MERGE_SCHEMA, so the production structured result preserves them."
         }
       ],
       "existingOpenTask": "No matching open task."
@@ -257,18 +256,18 @@
       "number": 22,
       "title": "C86-22 — High: missingFiles from the third/final plan review is ignored",
       "class": "high",
-      "cause": "runPlan performs the first verification, decrements reviewRounds, and handles rejected output only while reviewRounds is greater than zero. It makes three verifier calls but processes only the first two rejections. A third response containing missingFiles exits the loop and implementation begins with the old file fence and unrepaired plan. Task 136 requires widening and replanning whenever verification returns nonempty missingFiles and defines no final-round exception.",
+      "cause": "The staged runPlan loop now processes the third rejection, widens authoritative tasks.json, replans without a fourth verification, and returns the final verifier result. The new regression, however, invokes only the plan stage and asserts only tasks.json, plan text, and the returned files array. It does not assert the required run-arguments snapshot, regenerated brief, same-run implementer prompt, or finalized ownership fence, so the proving test does not cover the downstream contract that originally made the final-round omission dangerous.",
       "locations": [
         {
-          "path": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "lines": "362-375",
-          "role": "The loop exits before processing the third verifier rejection."
+          "path": "tests/taskWorkflowPlanImplementStage.test.ts",
+          "lines": "589-639",
+          "role": "The final-round regression ends after plan and leaves four explicit downstream acceptance observations untested."
         }
       ],
-      "provingTest": "Script verifier responses as rejected with ordinary fixes, rejected with ordinary fixes, then rejected with missingFiles containing b.ts. Assert that the authoritative task record, run-arguments snapshot, rewritten plan and brief, and implementer prompt all include b.ts. They currently do not.",
+      "provingTest": "Run plan+implement with verifier responses rejected, rejected, then rejected with missingFiles containing b.ts. Capture the fourth plan/implement transition without making a fourth verifier call. Assert tasks.json and run-arguments.json contain b.ts, the regenerated brief and rewritten plan name b.ts, the implementer prompt's ownedFiles/ownedPaths include b.ts, and a committed b.ts edit produces no fence violation while the returned verify object still contains the third rejection.",
       "suggestedFixApproach": [
-        "Model each of the three rounds as verify followed by processing that result.",
-        "On a rejected third review, still widen and replan or apply feedback, but do not invoke a fourth verifier. Preserve the final verifier notes and verdict for the user gate so the unverified final repair remains visible."
+        "Keep the staged verify-then-process loop; extend the regression to run plan+implement through the real emitter after the third-round widening.",
+        "Capture and assert the regenerated brief, run-arguments snapshot, literal implementer prompt, committed b.ts change, final fence result, and preserved third verifier result, while asserting exactly three verify calls."
       ],
       "resolvedBoundaryReference": [
         {
@@ -294,12 +293,8 @@
       ],
       "remainingMinimalExample": [
         {
-          "file": "skills/tackle-tasks/tackle-tasks.workflow.js",
-          "code": "let reviewRounds = MAX_REVIEW_ROUNDS\nlet verify\nwhile (reviewRounds > 0) {\n  verify = await runVerify()\n  reviewRounds -= 1\n  if (verify.verdict === 'approved') break\n  await repairRejectedReview(verify) // process the third rejection too\n  if (planResult.status !== 'planned') return planResult\n}\nreturn { ...planResult, verify, reviewRounds }"
-        },
-        {
           "file": "tests/taskWorkflowPlanImplementStage.test.ts",
-          "code": "test('third rejected review still widens and repairs without a fourth verification', async () => { /* assert b.ts reaches task state, brief, plan, and worker */ })"
+          "code": "test('third rejected review widens every downstream implementation boundary', async () => {\n  const envelope = await runPlanImplementWithThirdRoundMissingFile('b.ts', captureImplementPrompt)\n  assert.equal(verifyCalls, 3)\n  assert.match(readFileSync(runArgumentsFile), /b\\.ts/)\n  assert.match(readFileSync(briefFile), /b\\.ts/)\n  assert.match(capturedImplementPrompt, /b\\.ts/)\n  assert.deepEqual(envelope.results[1].fenceViolations, [])\n  assert.equal(envelope.results[0].verify.verdict, 'rejected')\n})"
         }
       ],
       "existingOpenTask": "No matching open task."
