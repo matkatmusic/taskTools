@@ -120,7 +120,7 @@ function rebaseGitPath(worktreePath: string, relativePath: string): string {
     return isAbsolute(output) ? output : join(worktreePath, output);
 }
 
-function rebaseInProgress(worktreePath: string): boolean {
+export function rebaseInProgress(worktreePath: string): boolean {
     return existsSync(rebaseGitPath(worktreePath, "rebase-merge")) || existsSync(rebaseGitPath(worktreePath, "rebase-apply"));
 }
 

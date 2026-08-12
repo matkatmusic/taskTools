@@ -1,5 +1,7 @@
 Review `audit-loop/codex-audit.json` items X, Y, ... against the staged changes.
-Never commit in the active worktree. Do not nitpick.
+Never commit in the active worktree. 
+
+DO NOT NITPICK the staged changes against the items in the audit.  The goal is to resolve the item so they don't block the project from progressing.
 
 Read `audit-loop/codex-audit-schema.md`, the selected issues, and `git diff --cached`.
 Confirm the audit file is not staged, the staged files belong only to these issues, and no staged file also has unstaged changes. Stop and report any mismatch without changing files or the index.
@@ -30,7 +32,7 @@ If every selected issue is completely resolved:
 If any selected issue is not completely resolved, reject the batch:
 
 1. Record the staged implementation paths, then unstage only those paths with `git restore --staged -- <paths>`. Do not discard their working-tree changes.
-2. Update unresolved issues to describe only the remaining problem and required fix, following the schema. Keep all selected issue entries when an atomic multi-issue batch is rejected.
+2. Update unresolved issues to describe only the remaining problem and required fix, following the schema. Keep all selected issue entries when an atomic multi-issue batch is rejected.  Provide code in your 'required fix' so the implementing agent doesn't write more code that fails to resolve the issue.
 3. Validate the JSON and stage only `audit-loop/codex-audit.json`.
 4. Verify no implementation file remains staged.
 5. Stop and report the failed criteria, required fixes, staged audit file, and implementation files left unstaged. Do not commit.

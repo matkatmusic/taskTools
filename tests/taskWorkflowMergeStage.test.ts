@@ -121,6 +121,12 @@ const seedWorktreeTaskFile = (worktreePath: string, taskNumber: number) => {
   writeFileSync(join(worktreePath, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files: [], blockedBy: [] }]))
 }
 
+// A real worktree tracks these; commit the fixture's untracked stand-ins so they don't read as touched.
+const commitWorktreeFixtureArtifacts = (worktreePath: string) => {
+  git(worktreePath, 'add', '-A')
+  git(worktreePath, 'commit', '-q', '-m', 'fixture: track test-only worktree artifacts')
+}
+
 test('merge stage deletes plan and brief, keeps notes, closes the task against the merged hash, and removes the worktree last', async () => {
   const taskNumber = 9001
   const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
@@ -157,6 +163,315 @@ test('merge stage deletes plan and brief, keeps notes, closes the task against t
     // removeWorktreeAndBranch runs last, after the verified close.
     assert.equal(existsSync(worktreePath), false)
   } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-36: an agent host that loses a structured result after the underlying command already completed.
+const agentThatDropsTheFirstResultForRole = (targetRole: string): AgentImpl => {
+  let seenForRole = 0
+  return async (prompt) => {
+    const match = prompt.match(EMITTER_COMMAND_RE)
+    if (!match) throw new Error(`prompt has no embedded emitter command: ${prompt.slice(0, 200)}`)
+    const [, emitterPath, taskArg, role, payloadJson] = match
+    const output = execFileSync('node', [emitterPath!, taskArg!, role!], { input: payloadJson, encoding: 'utf8' })
+    if (role === targetRole) {
+      seenForRole += 1
+      if (seenForRole === 1) return null
+    }
+    if (!output.startsWith(DRIVER_RESULT_PREFIX)) throw new Error(`unexpected non-driver output for role ${role}`)
+    return JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim())
+  }
+}
+
+const runWorkflowWithRawAgent = async (worktreePath: string, args: Record<string, unknown>, rawAgent: AgentImpl) => {
+  const fn = compileFunction(
+    `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
+    ['args', 'log', 'agent'],
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+  ) as WorkflowRunner
+  return await fn(JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: EMITTER_PATH, ...args }), () => {}, rawAgent)
+}
+
+test('a lost merge result after full success recovers the original merged and closed receipt instead of re-merging', async () => {
+  const taskNumber = 9041
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    const rawAgent = agentThatDropsTheFirstResultForRole('merge')
+    const result = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root }, rawAgent)
+
+    const merged = result.results[0] as { status: string, mergedCommitHash: string, closed: number[] }
+    assert.equal(merged.status, 'merged')
+    assert.deepEqual(merged.closed, [taskNumber])
+    assert.equal(existsSync(worktreePath), false)
+
+    const archived = JSON.parse(readFileSync(join(root, '.taskTools', 'completedTasks.json'), 'utf8'))
+    assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+    assert.equal(merged.mergedCommitHash, archived[0].commitHashes[0])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+test('a lost advance-conflict result after the rebase already continued is reconciled without a second continue or abort', async () => {
+  const taskNumber = 9042
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    writeFileSync(join(worktreePath, 'README.md'), 'task change\n')
+    git(worktreePath, 'add', 'README.md')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    writeFileSync(join(root, 'README.md'), 'main change\n')
+    git(root, 'add', 'README.md')
+    git(root, 'commit', '-q', '-m', 'main change')
+
+    const rawAgent = agentThatDropsTheFirstResultForRole('advance-conflict')
+    const resolveConflictAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('rebase-conflict:')) {
+        writeFileSync(join(worktreePath, 'README.md'), 'resolved change\n')
+        return { resolved: true, summary: 'kept both changes' }
+      }
+      return rawAgent(prompt, options)
+    }
+
+    const result = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root }, resolveConflictAgent)
+
+    const outcome = result.results[0] as { status: string, fenceViolations: unknown[] }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [])
+    assert.doesNotThrow(() => git(worktreePath, 'show', 'HEAD:README.md'))
+    assert.equal(git(worktreePath, 'show', 'HEAD:README.md'), 'resolved change')
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-27/C86-36: a lost result must not silently drop the active occurrence's own fence violations.
+test('a lost advance-conflict result recovers an extra active-occurrence touched path and still requires a re-gate', async () => {
+  const taskNumber = 9048
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    writeFileSync(join(worktreePath, 'README.md'), 'task change\n')
+    git(worktreePath, 'add', 'README.md')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    writeFileSync(join(root, 'README.md'), 'main change\n')
+    git(root, 'add', 'README.md')
+    git(root, 'commit', '-q', '-m', 'main change')
+
+    const rawAgent = agentThatDropsTheFirstResultForRole('advance-conflict')
+    // Resolving the conflict also requires fixing a call site in a sibling file — a real fence violation.
+    const resolveConflictAndTouchSiblingAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('rebase-conflict:')) {
+        writeFileSync(join(worktreePath, 'README.md'), 'resolved change\n')
+        writeFileSync(join(worktreePath, 'sibling.ts'), 'export const fixed = true\n')
+        return { resolved: true, summary: 'kept both changes and fixed a call site' }
+      }
+      return rawAgent(prompt, options)
+    }
+
+    const envelope = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root }, resolveConflictAndTouchSiblingAgent)
+
+    const outcome = envelope.results[0] as { status: string, fenceViolations: { occurrenceId: string, path: string }[] }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [{ occurrenceId: '', path: 'sibling.ts' }])
+    assert.equal(git(worktreePath, 'show', 'HEAD:sibling.ts'), 'export const fixed = true')
+
+    const consumed = consumeTaskWorkflowResult(createMergeQueue(), envelope as TaskWorkflowEnvelope)
+    assert.equal(consumed.kind, 'requires-regate')
+    if (consumed.kind !== 'requires-regate') return assert.fail('expected requires-regate result')
+    assert.equal(consumed.approval.taskNumber, taskNumber)
+    assert.deepEqual(consumed.approval.fenceViolations, [{ occurrenceId: '', path: 'sibling.ts' }])
+    assert.deepEqual(consumed.queue.postApprovalViolations, [
+      { taskNumber, fenceViolations: [{ occurrenceId: '', path: 'sibling.ts' }] },
+    ])
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-36: an earlier conflict's receipt must never surface in a later conflict on the same checkout.
+test('advance-conflict receipts from an earlier conflict never appear in status, violations, or history of a later one', async () => {
+  const taskNumber = 9050
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    // Two independent conflicts, replayed one at a time by the same `git rebase main`.
+    writeFileSync(join(worktreePath, 'README.md'), 'task change to readme\n')
+    git(worktreePath, 'add', 'README.md')
+    git(worktreePath, 'commit', '-q', '-m', 'task change to readme')
+
+    writeFileSync(join(worktreePath, 'package.json'), JSON.stringify({ scripts: { test: 'task-test-command' } }))
+    git(worktreePath, 'add', 'package.json')
+    git(worktreePath, 'commit', '-q', '-m', 'task change to package.json')
+
+    writeFileSync(join(root, 'README.md'), 'main change to readme\n')
+    git(root, 'add', 'README.md')
+    git(root, 'commit', '-q', '-m', 'main change to readme')
+
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'main-test-command' } }))
+    git(root, 'add', 'package.json')
+    git(root, 'commit', '-q', '-m', 'main change to package.json')
+
+    let conflictAgentCalls = 0
+    const resolveEitherConflictAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('rebase-conflict:')) {
+        conflictAgentCalls += 1
+        // The brief names only the paths actually conflicted on this round — never guess the other file.
+        if (prompt.includes('README.md')) writeFileSync(join(worktreePath, 'README.md'), 'resolved readme\n')
+        if (prompt.includes('package.json')) writeFileSync(join(worktreePath, 'package.json'), JSON.stringify({ scripts: { test: 'true' } }))
+        return { resolved: true, summary: 'resolved' }
+      }
+      throw new Error(`unexpected agent call: ${options.label}`)
+    }
+
+    const result = await runMergeStage(worktreePath, { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root }, resolveEitherConflictAgent)
+
+    const outcome = result.results[0] as { status: string, fenceViolations: unknown[] }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [])
+    assert.equal(conflictAgentCalls, 2)
+
+    // The receipts directory must never enter the checkout at all: not as status, not staged, not committed.
+    assert.equal(git(worktreePath, 'status', '--porcelain'), '')
+    const historyPaths = git(worktreePath, 'log', '--name-only', '--format=').split('\n').filter(Boolean)
+    assert.ok(!historyPaths.some((path) => path.includes('advance-conflict-receipt')))
+    assert.equal(existsSync(join(worktreePath, '.taskTools', 'advance-conflict-receipts')), false)
+    assert.equal(existsSync(`${worktreePath}.advance-conflict-receipts`), true)
+  } finally {
+    rmSync(`${worktreePath}.advance-conflict-receipts`, { recursive: true, force: true })
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-36: a lost first advance-conflict result must recover its own receipt, not consume the next real conflict.
+test('a lost first advance-conflict result recovers via receipt while a genuinely different second conflict still gets its own agent call', async () => {
+  const taskNumber = 9051
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  commitWorktreeFixtureArtifacts(worktreePath)
+  try {
+    // Two independent conflicts, replayed one at a time by the same `git rebase main`.
+    writeFileSync(join(worktreePath, 'README.md'), 'task change to readme\n')
+    git(worktreePath, 'add', 'README.md')
+    git(worktreePath, 'commit', '-q', '-m', 'task change to readme')
+
+    writeFileSync(join(worktreePath, 'package.json'), JSON.stringify({ scripts: { test: 'task-test-command' } }))
+    git(worktreePath, 'add', 'package.json')
+    git(worktreePath, 'commit', '-q', '-m', 'task change to package.json')
+
+    writeFileSync(join(root, 'README.md'), 'main change to readme\n')
+    git(root, 'add', 'README.md')
+    git(root, 'commit', '-q', '-m', 'main change to readme')
+
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'main-test-command' } }))
+    git(root, 'add', 'package.json')
+    git(root, 'commit', '-q', '-m', 'main change to package.json')
+
+    let conflictAgentCalls = 0
+    const dropFirstAdvanceConflictResult = agentThatDropsTheFirstResultForRole('advance-conflict')
+    const rawAgent: AgentImpl = async (prompt, options) => {
+      if (options.label.startsWith('rebase-conflict:')) {
+        conflictAgentCalls += 1
+        // The brief names only the paths actually conflicted on this round — never guess the other file.
+        if (prompt.includes('README.md')) writeFileSync(join(worktreePath, 'README.md'), 'resolved readme\n')
+        if (prompt.includes('package.json')) writeFileSync(join(worktreePath, 'package.json'), JSON.stringify({ scripts: { test: 'true' } }))
+        return { resolved: true, summary: 'resolved' }
+      }
+      return dropFirstAdvanceConflictResult(prompt, options)
+    }
+
+    const envelope = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'rebase-test', repositoryManifest, sourceRoot: root }, rawAgent)
+
+    const outcome = envelope.results[0] as { status: string, fenceViolations: unknown[] }
+    assert.equal(outcome.status, 'green')
+    assert.deepEqual(outcome.fenceViolations, [])
+    // Exactly one resolution call per real conflict: the dropped first result must recover from its receipt, not re-invoke resolution.
+    assert.equal(conflictAgentCalls, 2)
+    assert.equal(git(worktreePath, 'status', '--porcelain'), '')
+    const historyPaths = git(worktreePath, 'log', '--name-only', '--format=').split('\n').filter(Boolean)
+    assert.ok(!historyPaths.some((path) => path.includes('advance-conflict-receipt')))
+  } finally {
+    rmSync(`${worktreePath}.advance-conflict-receipts`, { recursive: true, force: true })
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-36: no rebase in progress can mean aborted, not completed — the two must not be conflated.
+test('the advance-conflict role reports advanced false, not true, against a checkout whose rebase already aborted', () => {
+  const taskNumber = 9045
+  const { root, worktreePath } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  seedWorktreeTaskFile(worktreePath, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'README.md'), 'task change\n')
+    git(worktreePath, 'add', 'README.md')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    writeFileSync(join(root, 'README.md'), 'main change\n')
+    git(root, 'add', 'README.md')
+    git(root, 'commit', '-q', '-m', 'main change')
+
+    // Already aborted: HEAD equals ORIG_HEAD, the same state a failed-continue-then-abort leaves.
+    try { git(worktreePath, 'rebase', 'main') } catch { /* expected: conflicted */ }
+    git(worktreePath, 'rebase', '--abort')
+
+    const payload = {
+      worktree: worktreePath, sourceRoot: root, runId: 'test-run',
+      occurrenceId: '', conflictedFilePaths: ['README.md'], resolved: true,
+      beforeOids: {}, checkoutPaths: { '': worktreePath },
+    }
+    const output = execFileSync('node', [EMITTER_PATH, String(taskNumber), 'advance-conflict'], { input: JSON.stringify(payload), encoding: 'utf8' })
+    assert.ok(output.startsWith(DRIVER_RESULT_PREFIX))
+    const result = JSON.parse(output.slice(DRIVER_RESULT_PREFIX.length).trim())
+
+    assert.equal(result.advanced, false)
+    assert.match(result.lastFailure, /unresolved merge conflict in root/)
+    assert.notEqual(result.cleanupFailure, null)
+  } finally {
+    removeFixture(root, worktreePath)
+  }
+})
+
+// C86-36: losing a cleanup-incomplete result must not re-enter merge/close and misreport merged-but-not-closed.
+test('a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed', async () => {
+  const taskNumber = 9046
+  const { root, worktreePath, repositoryManifest } = makeRootWithWorktree(taskNumber)
+  seedTaskFiles(root, taskNumber)
+  try {
+    writeFileSync(join(worktreePath, 'taskfile.txt'), 'task change\n')
+    git(worktreePath, 'add', 'taskfile.txt')
+    git(worktreePath, 'commit', '-q', '-m', 'task change')
+
+    git(root, 'worktree', 'lock', worktreePath)
+
+    const rawAgent = agentThatDropsTheFirstResultForRole('merge')
+    const result = await runWorkflowWithRawAgent(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root }, rawAgent)
+
+    const outcome = result.results[0] as { status: string, mergedCommitHash?: string, closed?: number[], closeError?: string }
+    assert.equal(outcome.status, 'cleanup-incomplete')
+    assert.equal('closeError' in outcome, false)
+    assert.equal(existsSync(worktreePath), true)
+
+    const archived = JSON.parse(readFileSync(join(root, '.taskTools', 'completedTasks.json'), 'utf8'))
+    assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber])
+    assert.equal(outcome.mergedCommitHash, archived[0].commitHashes[0])
+  } finally {
+    try { git(root, 'worktree', 'unlock', worktreePath) } catch { /* already gone */ }
     removeFixture(root, worktreePath)
   }
 })

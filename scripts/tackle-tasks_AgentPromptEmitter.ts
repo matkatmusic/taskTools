@@ -1,6 +1,7 @@
-import { readFileSync, existsSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, rmSync, renameSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { createHash } from "node:crypto";
 
 import { resolveTaskFiles, readTaskFile } from "./taskFiles.ts";
 import { writeTaskBriefFile, attachOperationBranch, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "./prepareTasks.ts";
@@ -349,7 +350,51 @@ anything you did not create; or to leave your edit uncommitted.`
 
 const readHeadOid = (checkoutPath: string) => execFileSync('git', ['-C', checkoutPath, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 
+const readOptionalRef = (checkoutPath: string, ref: string): string | null => {
+  try {
+    return execFileSync('git', ['-C', checkoutPath, 'rev-parse', '--verify', ref], { encoding: 'utf8' }).trim()
+  } catch {
+    return null
+  }
+}
+
 const changedPathsSinceOid = (checkoutPath: string, beforeOid: string) => execFileSync('git', ['-C', checkoutPath, 'diff', '--name-only', `${beforeOid}..HEAD`], { encoding: 'utf8' }).split('\n').filter(Boolean)
+
+// A sibling of WORKTREE, like taskWorktreeLeasePath: outside every checkout, never seen by its git status.
+function advanceConflictReceiptsDir(worktreePath: string): string {
+  return `${worktreePath}.advance-conflict-receipts`
+}
+
+type AdvanceConflictResult = {
+  advanced: boolean;
+  lastFailure: string | null;
+  cleanupFailure: string | null;
+  touchedPaths: { occurrenceId: string; path: string }[];
+};
+
+// Keyed by the conflicted commit's identity so a stale retry can't collide with the next conflict.
+function advanceConflictReceiptPath(occurrenceId: string, conflictIdentity: string): string {
+  const key = createHash('sha256').update(JSON.stringify({ runId: RUN_ID, task: N, occurrenceId, conflictIdentity })).digest('hex')
+  return join(advanceConflictReceiptsDir(WORKTREE), `${key}.json`)
+}
+
+function readAdvanceConflictReceipt(receiptPath: string): AdvanceConflictResult | null {
+  if (!existsSync(receiptPath)) return null
+  try {
+    const parsed = JSON.parse(readFileSync(receiptPath, 'utf8'))
+    return parsed.result ?? null
+  } catch {
+    return null
+  }
+}
+
+// Written before printResult so a lost-result retry can recover the exact prior outcome without redoing the mutation.
+function writeAdvanceConflictReceipt(receiptPath: string, result: AdvanceConflictResult) {
+  mkdirSync(dirname(receiptPath), { recursive: true })
+  const temporaryPath = `${receiptPath}.${process.pid}.tmp`
+  writeFileSync(temporaryPath, JSON.stringify({ result }))
+  renameSync(temporaryPath, receiptPath)
+}
 
 const commitOccurrenceChanges = (checkoutPath: string, occurrenceId: string) => {
   try {
@@ -413,6 +458,12 @@ function roleWidenFiles() {
   printResult({ files: Array.isArray(widenedTask.files) ? widenedTask.files : [] })
 }
 
+// Accepts no PAYLOAD path; the expected plan file is always the same one loadPreparedTask computes.
+function rolePlanFileStatus() {
+  const expectedPlanFile = `${WORKTREE}/plans/task-${N}-plan.md`
+  printResult({ exists: existsSync(expectedPlanFile) })
+}
+
 function roleVerify() {
   const t = loadPreparedTask()
   process.stdout.write(verifierBrief(t, t.planFile))
@@ -469,9 +520,14 @@ function roleMergeConflict() {
   process.stdout.write(mergeConflictBrief(PAYLOAD.checkoutPath, PAYLOAD.conflictedFilePaths ?? []))
 }
 
+function roleConflictIdentity() {
+  printResult({ rebaseHead: readOptionalRef(PAYLOAD.checkoutPath, 'REBASE_HEAD') })
+}
+
 // Mirrors advanceLiveConflict's post-agent bookkeeping from the pre-C86-18 task.workflow.js.
 function roleAdvanceConflict() {
   const occurrenceId: string = PAYLOAD.occurrenceId
+  const conflictIdentity: string = PAYLOAD.conflictIdentity
   const conflictedFilePaths: string[] = PAYLOAD.conflictedFilePaths ?? []
   const resolved: boolean = PAYLOAD.resolved === true
   const beforeOids: Record<string, string> = PAYLOAD.beforeOids ?? {}
@@ -479,9 +535,18 @@ function roleAdvanceConflict() {
   const checkoutPath = checkoutPaths[occurrenceId]
   const conflictSummary = `unresolved merge conflict in ${occurrenceId || 'root'}; unresolved paths: ${conflictedFilePaths.join(', ')}`
 
+  const receiptPath = advanceConflictReceiptPath(occurrenceId, conflictIdentity)
+  const priorResult = readAdvanceConflictReceipt(receiptPath)
+  if (priorResult) { printResult(priorResult); return }
+
+  const finish = (result: AdvanceConflictResult) => {
+    writeAdvanceConflictReceipt(receiptPath, result)
+    printResult(result)
+  }
+
   if (!resolved) {
     const abortResult = abortRebaseChecked(checkoutPath)
-    printResult({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? null : `abort failed: ${abortResult.failureReason}`, touchedPaths: [] })
+    finish({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? null : `abort failed: ${abortResult.failureReason}`, touchedPaths: [] })
     return
   }
 
@@ -502,19 +567,19 @@ function roleAdvanceConflict() {
     if (!committed || uncommittedChangedFiles(otherPath).length > 0) {
       const abortResult = abortRebaseChecked(checkoutPath)
       const reason = `commit failed for occurrence "${otherId}"`
-      printResult({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}`, touchedPaths })
+      finish({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}`, touchedPaths })
       return
     }
   }
 
   const continuation = continueRebaseChecked(checkoutPath)
   if (continuation.continued || continuation.freshConflict) {
-    printResult({ advanced: true, lastFailure: null, cleanupFailure: null, touchedPaths })
+    finish({ advanced: true, lastFailure: null, cleanupFailure: null, touchedPaths })
     return
   }
   const abortResult = abortRebaseChecked(checkoutPath)
   const reason = `continue failed: ${continuation.failureReason}`
-  printResult({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}`, touchedPaths })
+  finish({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}`, touchedPaths })
 }
 
 function roleRebaseFix() {
@@ -561,9 +626,63 @@ function cleanupPlanAndBriefFiles(repoRoot: string) {
   }
 }
 
+// A lost result after full success leaves no worktree to retry; reconstruct from the archive instead.
+function findMergedTaskReceipt(sourceRoot: string, taskNumber: number): { status: 'merged'; mergedCommitHash: string; closed: number[] } | null {
+  const pair = resolveTaskFiles(sourceRoot)
+  const completed = readTaskFile(pair.completedTasksPath).find((entry: any) => entry.taskNumber === taskNumber)
+  const commitHashes = completed?.commitHashes
+  if (!Array.isArray(commitHashes) || commitHashes.length === 0) return null
+  return { status: 'merged', mergedCommitHash: commitHashes[commitHashes.length - 1], closed: [taskNumber] }
+}
+
+type SourceSubmodule = { checkoutPath: string; depth: number }
+
+// Shared by roleMerge's success tail, its already-closed recovery path, and roleCleanupOnly: never re-merges or re-closes.
+function runFinalCleanup(repoRoot: string, mainRepoRoot: string, branch: string, sourceSubmodules: SourceSubmodule[]):
+  { status: 'cleaned' } | { status: 'cleanup-incomplete'; cleanupWarning: string; retainedArtifacts: string[] } {
+  try {
+    // Cleanup order matters: a failure here leaves persistence refs for an idempotent retry.
+    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
+    deleteTaskMergePersistence(mainRepoRoot, branch)
+    for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
+  } catch (error) {
+    const cleanupWarning = `failed final branch/worktree cleanup: ${String((error as any)?.message ?? error)}`
+    const retainedArtifacts = collectRetainedTaskArtifacts({
+      worktreePath: repoRoot, leasePath: taskWorktreeLeasePath(repoRoot), mainRepoRoot, branch, sourceSubmodules,
+    })
+    return { status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts }
+  }
+  releaseTaskWorktreeLease({ worktreePath: repoRoot, runId: RUN_ID })
+  rmSync(advanceConflictReceiptsDir(repoRoot), { recursive: true, force: true })
+  return { status: 'cleaned' }
+}
+
+function sourceSubmodulesFrom(manifest: ReturnType<typeof buildManifest>): SourceSubmodule[] {
+  return manifest.repositoryManifest.occurrences
+    .filter((occurrence: any) => occurrence.parentOccurrenceId !== null)
+    .map((occurrence: any) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }))
+}
+
 // Mirrors runMerge from the pre-C86-18 task.workflow.js.
 function roleMerge() {
   const repoRoot = WORKTREE
+  const priorReceipt = findMergedTaskReceipt(SOURCE_ROOT, N)
+  if (!existsSync(repoRoot)) {
+    if (priorReceipt) { printResult(priorReceipt); return }
+    fail(`task worktree ${repoRoot} no longer exists and task ${N} is not in completedTasks.json; cannot recover a merge receipt`)
+  }
+  if (priorReceipt) {
+    // Already merged and closed by a prior attempt; only cleanup is outstanding.
+    const manifest = buildManifest()
+    const branch = currentBranchName(repoRoot)
+    const cleanupOutcome = runFinalCleanup(repoRoot, SOURCE_ROOT, branch, sourceSubmodulesFrom(manifest))
+    if (cleanupOutcome.status === 'cleanup-incomplete') {
+      printResult({ ...priorReceipt, ...cleanupOutcome })
+      return
+    }
+    printResult(priorReceipt)
+    return
+  }
   try {
     cleanupPlanAndBriefFiles(repoRoot)
   } catch (error) {
@@ -577,9 +696,7 @@ function roleMerge() {
   }
   const mainRepoRoot = SOURCE_ROOT
   const sourceBranch = rootOccurrence.baseBranch
-  const sourceSubmodules = manifest.repositoryManifest.occurrences
-    .filter((occurrence: any) => occurrence.parentOccurrenceId !== null)
-    .map((occurrence: any) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }))
+  const sourceSubmodules = sourceSubmodulesFrom(manifest)
   const { stage: failedAtStage, ...report }: any = mergeTaskDeepestFirst(repoRoot, manifest)
   if (report.status !== 'merged') {
     printResult({ failedAtStage, ...report, lastFailure: concreteMergeStageFailure({ ...report, stage: failedAtStage }) })
@@ -610,20 +727,11 @@ function roleMerge() {
     })
     return
   }
-  try {
-    // Cleanup order matters: a failure here leaves persistence refs for an idempotent retry.
-    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
-    deleteTaskMergePersistence(mainRepoRoot, branch)
-    for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
-  } catch (error) {
-    const cleanupWarning = `failed final branch/worktree cleanup: ${String((error as any)?.message ?? error)}`
-    const retainedArtifacts = collectRetainedTaskArtifacts({
-      worktreePath: repoRoot, leasePath: taskWorktreeLeasePath(repoRoot), mainRepoRoot, branch, sourceSubmodules,
-    })
-    printResult({ failedAtStage, ...report, status: 'cleanup-incomplete', mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, cleanupWarning, retainedArtifacts })
+  const cleanupOutcome = runFinalCleanup(repoRoot, mainRepoRoot, branch, sourceSubmodules)
+  if (cleanupOutcome.status === 'cleanup-incomplete') {
+    printResult({ failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked, ...cleanupOutcome })
     return
   }
-  releaseTaskWorktreeLease({ worktreePath: repoRoot, runId: RUN_ID })
   printResult({ failedAtStage, ...report, mergedCommitHash, closed: closeResult.closed, unblocked: closeResult.unblocked })
 }
 
@@ -633,23 +741,8 @@ function roleCleanupOnly() {
   const mainRepoRoot = SOURCE_ROOT
   const branch = `task-${N}`
   const manifest = buildManifest()
-  const sourceSubmodules = manifest.repositoryManifest.occurrences
-    .filter((occurrence: any) => occurrence.parentOccurrenceId !== null)
-    .map((occurrence: any) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }))
-  try {
-    removeTaskWorktreeAndBranches(mainRepoRoot, repoRoot, branch, sourceSubmodules)
-    deleteTaskMergePersistence(mainRepoRoot, branch)
-    for (const target of sourceSubmodules) deleteTaskMergePersistence(target.checkoutPath, branch)
-  } catch (error) {
-    const cleanupWarning = `failed final branch/worktree cleanup: ${String((error as any)?.message ?? error)}`
-    const retainedArtifacts = collectRetainedTaskArtifacts({
-      worktreePath: repoRoot, leasePath: taskWorktreeLeasePath(repoRoot), mainRepoRoot, branch, sourceSubmodules,
-    })
-    printResult({ task: N, status: 'cleanup-incomplete', cleanupWarning, retainedArtifacts })
-    return
-  }
-  releaseTaskWorktreeLease({ worktreePath: repoRoot, runId: RUN_ID })
-  printResult({ task: N, status: 'cleaned' })
+  const cleanupOutcome = runFinalCleanup(repoRoot, mainRepoRoot, branch, sourceSubmodulesFrom(manifest))
+  printResult({ task: N, ...cleanupOutcome })
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +752,7 @@ function roleCleanupOnly() {
 const ROLE_HANDLERS: Record<string, () => void> = {
   'task-info': roleTaskInfo,
   'plan': rolePlan,
+  'plan-file-status': rolePlanFileStatus,
   'widen-files': roleWidenFiles,
   'verify': roleVerify,
   'apply-feedback': roleApplyFeedback,
@@ -669,6 +763,7 @@ const ROLE_HANDLERS: Record<string, () => void> = {
   'rebase-walk': roleRebaseWalk,
   'parent-rebase': roleParentRebase,
   'merge-conflict': roleMergeConflict,
+  'conflict-identity': roleConflictIdentity,
   'advance-conflict': roleAdvanceConflict,
   'rebase-fix': roleRebaseFix,
   'rebase-fix-verify': roleRebaseFixVerify,

@@ -10,7 +10,7 @@ import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/prepareTasks.ts";
 import { currentBranchName } from "../scripts/repositoryBranches.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
-import { beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, shouldEndQueue } from "../scripts/runMergePhase.ts";
+import { approveRegatedTask, beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, rejectRegatedTask, shouldEndQueue } from "../scripts/runMergePhase.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -265,6 +265,80 @@ test("test_consumeTaskWorkflowResultRecordsMergedNotClosedFromARealEnvelope", ()
     ]);
 });
 
+// C86-27: a clean green rebase-test (no fence violations) advances straight to merge, same as before.
+test("test_consumeTaskWorkflowResultAdvancesACleanGreenRebaseTestToMergeWithoutRequiringARegate", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 300);
+    const consumed = consumeTaskWorkflowResult(queue, {
+        task: 300,
+        stage: "rebase-test",
+        results: [{ status: "green", fenceViolations: [] }],
+    });
+    assert.equal(consumed.kind, "queue");
+    if (consumed.kind !== "queue") return assert.fail("expected queue result");
+    assert.deepEqual(nextQueueStep(consumed.queue), { taskNumber: 300, stage: "merge" });
+    assert.deepEqual(consumed.queue.postApprovalViolations, []);
+});
+
+// C86-27: a green rebase-test that also committed cross-layer edits must stop for an explicit re-gate, not merge.
+test("test_consumeTaskWorkflowResultHoldsAViolatedGreenRebaseTestForRegateInsteadOfAdvancingToMerge", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 301);
+    const violations = [{ occurrenceId: "vendor", path: "vendor/other.ts" }];
+    const consumed = consumeTaskWorkflowResult(queue, {
+        task: 301,
+        stage: "rebase-test",
+        results: [{ status: "green", fenceViolations: violations }],
+    });
+    assert.equal(consumed.kind, "requires-regate");
+    if (consumed.kind !== "requires-regate") return assert.fail("expected requires-regate result");
+    assert.deepEqual(consumed.approval, { taskNumber: 301, fenceViolations: violations });
+    assert.deepEqual(consumed.queue.postApprovalViolations, [{ taskNumber: 301, fenceViolations: violations }]);
+    // The task is still pending at rebase-test, but the scheduler must refuse to relaunch it while unresolved.
+    assert.deepEqual(consumed.queue.pending[0], { taskNumber: 301, stage: "rebase-test", lapsAttempted: 0, lastFailure: null });
+    assert.equal(nextQueueStep(consumed.queue), null);
+});
+
+// C86-27: an approved regate clears the hold and advances straight to merge, without re-running rebase-test.
+test("test_approveRegatedTaskClearsTheHoldAndAdvancesToMergeWithoutARebaseTestRelaunch", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 302);
+    const violations = [{ occurrenceId: "vendor", path: "vendor/other.ts" }];
+    const consumed = consumeTaskWorkflowResult(queue, {
+        task: 302,
+        stage: "rebase-test",
+        results: [{ status: "green", fenceViolations: violations }],
+    });
+    if (consumed.kind !== "requires-regate") return assert.fail("expected requires-regate result");
+
+    const approved = approveRegatedTask(consumed.queue, 302);
+    assert.deepEqual(approved.postApprovalViolations, []);
+    assert.deepEqual(nextQueueStep(approved), { taskNumber: 302, stage: "merge" });
+});
+
+// C86-27: a rejected regate is terminal — the cross-layer edit is already committed, so it never merges or retries.
+test("test_rejectRegatedTaskRemovesTheTaskFromTheQueueAndReportsItSeparatelyFromUnmerged", () => {
+    let queue = createMergeQueue();
+    queue = enqueueApprovedTask(queue, 303);
+    const violations = [{ occurrenceId: "vendor", path: "vendor/other.ts" }];
+    const consumed = consumeTaskWorkflowResult(queue, {
+        task: 303,
+        stage: "rebase-test",
+        results: [{ status: "green", fenceViolations: violations }],
+    });
+    if (consumed.kind !== "requires-regate") return assert.fail("expected requires-regate result");
+
+    const rejected = rejectRegatedTask(consumed.queue, 303, "user rejected the widened fence");
+    assert.deepEqual(rejected.pending, []);
+    assert.deepEqual(rejected.postApprovalViolations, []);
+    assert.deepEqual(rejected.unmerged, []);
+    assert.deepEqual(rejected.regateRejected, [{ taskNumber: 303, lastFailure: "user rejected the widened fence" }]);
+
+    const report = buildMergeReport(rejected);
+    assert.deepEqual(report.regateRejected, [{ taskNumber: 303, lastFailure: "user rejected the widened fence" }]);
+    assert.deepEqual(report.unmerged, []);
+});
+
 const REPO_ROOT = process.cwd();
 const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
     .replace("export const meta", "const meta");
@@ -483,7 +557,7 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         assert.equal(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }).kind, "report");
         // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
         assert.equal(shouldEndQueue(queue, false), "done");
-        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] });
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [], regateRejected: [] });
 
         const archived = readCompleted(root);
         assert.deepEqual(archived.map((t) => t.taskNumber), [taskNumber]);
@@ -1007,7 +1081,7 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         assert.equal(nextQueueAction(queue, { any: false, tail: false, total: 0, capacity: 6 }).kind, "report");
         // All work landed and nothing is outstanding: the terminal state is "done", not "stuck".
         assert.equal(shouldEndQueue(queue, false), "done");
-        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] });
+        assert.deepEqual(buildMergeReport(queue), { unmerged: [], mergedNotClosed: [], cleanupIncomplete: [], regateRejected: [] });
 
         const archived = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
         assert.deepEqual(archived.map((t: { taskNumber: number }) => t.taskNumber), [taskNumber]);

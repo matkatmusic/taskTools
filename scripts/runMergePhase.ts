@@ -61,6 +61,12 @@ export type CleanupIncompleteTask = {
     retainedArtifacts: string[];
 };
 
+// A green rebase-test committed edits outside the task's approved fence (C86-27); merge is held for re-gate.
+export type PostApprovalViolation = { taskNumber: number; fenceViolations: unknown[] };
+
+// The user rejected a post-approval regate; the cross-layer edit is already committed, so this is terminal.
+export type RegateRejectedTask = { taskNumber: number; lastFailure: string };
+
 export type MergeQueue = {
     pending: QueueTask[];
     carryover: QueueTask[];
@@ -69,6 +75,8 @@ export type MergeQueue = {
     unmerged: QueueTask[];
     mergedNotClosed: MergedNotClosedTask[];
     cleanupIncomplete: CleanupIncompleteTask[];
+    postApprovalViolations: PostApprovalViolation[];
+    regateRejected: RegateRejectedTask[];
 };
 
 export type QueueStep = { taskNumber: number; stage: QueueStage };
@@ -76,7 +84,10 @@ export type QueueStep = { taskNumber: number; stage: QueueStage };
 export type StageOutcome = { status: "success" } | { status: "failure"; reason: string };
 
 export function createMergeQueue(): MergeQueue {
-    return { pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [], mergedNotClosed: [], cleanupIncomplete: [] };
+    return {
+        pending: [], carryover: [], merged: [], mergedThisLap: 0, unmerged: [],
+        mergedNotClosed: [], cleanupIncomplete: [], postApprovalViolations: [], regateRejected: [],
+    };
 }
 
 // An approved task enters the queue right away, at the back of the current lap's pending list.
@@ -85,10 +96,12 @@ export function enqueueApprovedTask(queue: MergeQueue, taskNumber: number): Merg
     return { ...queue, pending: [...queue.pending, task] };
 }
 
-// The queue only picks the stage; the orchestrator launches it and reports the outcome back here.
+// Picks the pending stage; a task awaiting an explicit post-approval regate is never re-launched.
 export function nextQueueStep(queue: MergeQueue): QueueStep | null {
     const head = queue.pending[0];
-    return head ? { taskNumber: head.taskNumber, stage: head.stage } : null;
+    if (!head) return null;
+    if (queue.postApprovalViolations.some((violation) => violation.taskNumber === head.taskNumber)) return null;
+    return { taskNumber: head.taskNumber, stage: head.stage };
 }
 
 export function currentLapIsComplete(queue: MergeQueue): boolean {
@@ -197,6 +210,38 @@ export function recordCleanupRetrySucceeded(queue: MergeQueue, taskNumber: numbe
     return { ...queue, cleanupIncomplete: queue.cleanupIncomplete.filter((item) => item.taskNumber !== taskNumber) };
 }
 
+// A green rebase-test carried cross-layer edits outside the fence (C86-27); holds the task at rebase-test until re-gated.
+export function recordPostApprovalViolations(queue: MergeQueue, taskNumber: number, fenceViolations: unknown[]): MergeQueue {
+    return {
+        ...queue,
+        postApprovalViolations: [...queue.postApprovalViolations.filter((v) => v.taskNumber !== taskNumber), { taskNumber, fenceViolations }],
+    };
+}
+
+// A new explicit approval of the widened scope: advances the held task from rebase-test straight to merge.
+export function approveRegatedTask(queue: MergeQueue, taskNumber: number): MergeQueue {
+    const head = queue.pending[0];
+    if (!head || head.taskNumber !== taskNumber || head.stage !== "rebase-test") {
+        throw new Error(`approveRegatedTask expected the queue's head to be task ${taskNumber} at stage "rebase-test"`);
+    }
+    const cleared = { ...queue, postApprovalViolations: queue.postApprovalViolations.filter((v) => v.taskNumber !== taskNumber) };
+    return recordStageOutcome(cleared, taskNumber, "rebase-test", { status: "success" });
+}
+
+// The widened scope was rejected: the cross-layer edit is already committed in branch history, so this is terminal.
+export function rejectRegatedTask(queue: MergeQueue, taskNumber: number, reason: string): MergeQueue {
+    const head = queue.pending[0];
+    if (!head || head.taskNumber !== taskNumber || head.stage !== "rebase-test") {
+        throw new Error(`rejectRegatedTask expected the queue's head to be task ${taskNumber} at stage "rebase-test"`);
+    }
+    return {
+        ...queue,
+        pending: queue.pending.slice(1),
+        postApprovalViolations: queue.postApprovalViolations.filter((v) => v.taskNumber !== taskNumber),
+        regateRejected: [...queue.regateRejected, { taskNumber, lastFailure: reason }],
+    };
+}
+
 export type TerminalReason = "2-lap ceiling reached" | "zero-merge lap ended the queue";
 
 export type UnmergedTaskReport = {
@@ -209,6 +254,7 @@ export type MergeReport = {
     unmerged: UnmergedTaskReport[];
     mergedNotClosed: MergedNotClosedTask[];
     cleanupIncomplete: CleanupIncompleteTask[];
+    regateRejected: RegateRejectedTask[];
 };
 
 // Reports queue.unmerged (hit the ceiling) and queue.carryover (retryable when the queue ended early); both left pending, unmerged.
@@ -227,6 +273,7 @@ export function buildMergeReport(queue: MergeQueue): MergeReport {
         unmerged: [...ceilingFailures, ...queueExitFailures],
         mergedNotClosed: queue.mergedNotClosed,
         cleanupIncomplete: queue.cleanupIncomplete,
+        regateRejected: queue.regateRejected,
     };
 }
 
@@ -245,9 +292,12 @@ export type ApprovalView = {
     fenceViolations: unknown[];
 };
 
+export type RegateView = { taskNumber: number; fenceViolations: unknown[] };
+
 export type ConsumedWorkflowResult =
     | { kind: "approval"; queue: MergeQueue; approval: ApprovalView }
-    | { kind: "queue"; queue: MergeQueue; taskNumber: number; stage: QueueStage; status: string };
+    | { kind: "queue"; queue: MergeQueue; taskNumber: number; stage: QueueStage; status: string }
+    | { kind: "requires-regate"; queue: MergeQueue; approval: RegateView };
 
 function objectAt(results: unknown[], index: number, label: string): JsonObject {
     const value = results[index];
@@ -292,6 +342,16 @@ export function consumeTaskWorkflowResult(
 
     const result = objectAt(envelope.results, 0, envelope.stage);
     const status = nonemptyString(result.status, `${envelope.stage}.status`);
+
+    // C86-27: a green rebase-test that also carried cross-layer edits must not advance to merge un-gated.
+    if (envelope.stage === "rebase-test" && status === "green" && Array.isArray(result.fenceViolations) && result.fenceViolations.length > 0) {
+        return {
+            kind: "requires-regate",
+            queue: recordPostApprovalViolations(queue, envelope.task, result.fenceViolations),
+            approval: { taskNumber: envelope.task, fenceViolations: result.fenceViolations },
+        };
+    }
+
     const success = envelope.stage === "rebase-test"
         ? status === "green"
         : status === "merged" || status === "merged-but-not-closed" || status === "cleanup-incomplete";
