@@ -132,15 +132,66 @@ function restoreOrRemoveLease(leasePath: string, previousLeaseBytes: string | nu
     writeFileAtomically(leasePath, previousLeaseBytes);
 }
 
+function readLeaseBytesOrNull(leasePath: string): string | null {
+    try {
+        return readFileSync(leasePath, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+    }
+}
+
+function describeLeaseOwner(bytes: string | null): string {
+    if (bytes === null) return "no lease";
+    try {
+        const parsed = JSON.parse(bytes) as { runId?: string };
+        return parsed?.runId ?? "an unparseable lease";
+    } catch {
+        return "an unparseable lease";
+    }
+}
+
+// The only question a retained intent's reconciliation is allowed to answer from the
+// physical lease: is it still exactly where the intent left the world (or found it), or
+// does it already show the new owner's partially-completed write? Anything else names a
+// third run that must never be overwritten, so it is a hard mismatch, not a data point to
+// weigh against tasks.json.
+function isPhysicalLeaseCompatibleWithIntent(
+    physicalBytes: string | null,
+    intent: WorktreeLeaseTransitionIntent,
+): boolean {
+    if (physicalBytes === intent.previousLeaseBytes) return true;
+    if (physicalBytes === null) return false;
+    try {
+        return (JSON.parse(physicalBytes) as { runId?: string }).runId === intent.newOwnerRunId;
+    } catch {
+        return false;
+    }
+}
+
 // Runs under both guards, at the top of every lease mutation. A retained intent means a
-// prior adoption or acquisition died between writing the journal and deleting it: finish it
-// if the new run is still the active claimant and the previous owner (if any) has ended,
-// otherwise restore the exact prior physical state. Either way the intent is gone by the
-// time this returns, and a different owner already reflected in tasks.json is never
-// overwritten.
+// prior adoption or acquisition died between writing the journal and deleting it. Before
+// changing either authority, read the physical lease that exists right now and classify it
+// against the intent: only the exact recorded prior state (including absence) or the
+// intent's own new owner are safe to act on. Anything else is a different run that acquired
+// or was assigned the lease during the recovery window — refuse outright rather than finish
+// or roll back over it. Otherwise finish if the new run is still the active claimant and the
+// previous owner (if any) has ended, or roll back to the prior physical state. Either way the
+// intent is gone by the time this returns.
 function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: string): void {
     const intent = readTransitionIntent(worktreePath);
     if (intent === null) return;
+
+    const leasePath = taskWorktreeLeasePath(worktreePath);
+    const physicalBytes = readLeaseBytesOrNull(leasePath);
+    if (!isPhysicalLeaseCompatibleWithIntent(physicalBytes, intent)) {
+        throw new Error(
+            `worktree lease for task ${intent.taskNumber} at "${leasePath}" is held by `
+            + `${describeLeaseOwner(physicalBytes)}, not the recorded prior owner or the `
+            + `intended new owner "${intent.newOwnerRunId}"; recover the stale intent at `
+            + `"${taskWorktreeLeaseAdoptIntentPath(worktreePath)}" explicitly before retrying`,
+        );
+    }
 
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
@@ -154,7 +205,6 @@ function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: stri
         || (previousOwnerRun !== undefined && previousOwnerRun.endedAt !== null);
     const shouldFinish = activeNewest?.runId === intent.newOwnerRunId && previousOwnerClear;
 
-    const leasePath = taskWorktreeLeasePath(worktreePath);
     if (shouldFinish) {
         writeJsonAtomically(leasePath, { runId: intent.newOwnerRunId, pid: process.pid, createdAt: Date.now() });
         if (task !== undefined && state !== undefined && state.leaseRunId !== intent.newOwnerRunId) {
