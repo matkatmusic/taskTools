@@ -37,7 +37,7 @@ test("test_buildClosureNote_namesEveryCommitIncludingSubmoduleOnes", () => {
                 ],
                 modifiedFiles: ["scripts/foo.ts", "sub/a::tests/bar.test.ts"],
                 taskTests: {
-                    stepId: "s1", testFiles: ["tests/bar.test.ts"], createdTestFiles: [],
+                    stepId: "s1", testFiles: ["tests/bar.test.ts"], createdTestFiles: [], deletedTestFiles: [],
                     missingTests: false, passed: true, output: "", checkedAt: "2026-08-01T00:05:00-07:00",
                 },
                 fullSuite: {
@@ -49,7 +49,7 @@ test("test_buildClosureNote_namesEveryCommitIncludingSubmoduleOnes", () => {
     }]);
 
     // Test action: build the closure note.
-    const output = buildClosureNote({ taskNumber: 169, projectRoot: root });
+    const output = buildClosureNote({ taskNumber: 169, runId: "run-a", projectRoot: root });
 
     // Verification: every commit is named, the submodule one labeled by its occurrence,
     // the root ones labeled "(root)".
@@ -74,7 +74,7 @@ test("test_buildClosureNote_rendersNotRecordedWhenATestResultIsMissing", () => {
     }]);
 
     // Test action: build the closure note.
-    const output = buildClosureNote({ taskNumber: 1, projectRoot: root });
+    const output = buildClosureNote({ taskNumber: 1, runId: "run-a", projectRoot: root });
 
     // Verification: both render "(not recorded)" instead of failing.
     assert.match(output.closureNote, /Task tests: \(not recorded\)/);
@@ -96,6 +96,16 @@ test("test_buildClosureNote_runsWithoutAWorktree", () => {
     }]);
 
     // Test action + verification: building the closure note does not throw.
-    const output = buildClosureNote({ taskNumber: 1, projectRoot: root });
+    const output = buildClosureNote({ taskNumber: 1, runId: "run-a", projectRoot: root });
     assert.match(output.closureNote, /Task 1 completed\./);
+});
+
+test("test_buildClosureNote_throwsWithASiblingRunId", () => {
+    // F6: a late call must describe the run it names, never silently fall back to "the newest".
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-b" })] },
+    }]);
+
+    assert.throws(() => buildClosureNote({ taskNumber: 1, runId: "run-a", projectRoot: root }));
 });

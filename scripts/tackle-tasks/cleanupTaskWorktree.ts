@@ -2,22 +2,33 @@
 // this is the fix for a stranding bug - ownership (lease, then lock) is released LAST, only
 // after the destructive removal has actually succeeded. A failed removal keeps both, so no
 // other process can take a worktree that still holds retained work.
+//
+// F5: removal failure is an operational failure, not a verdict - it throws (never returns
+// removed:false) so the CLI exits non-zero and rule 10's exit chain runs. Lease policy: the
+// worktree lease is retained for as long as any retained artifact (worktree or task branch)
+// still exists; the source lock is always released so unrelated tasks can proceed. This is
+// derived from an ownership-checked retained-artifact query, not a caller-supplied flag - the
+// query is authoritative and cannot be defeated by a wrong caller input.
 import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { buildLockOwner, refreshSourceRepoLock, releaseSourceRepoLock } from "./sourceRepoLock.ts";
+import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow, releaseSourceRepoLock } from "./sourceRepoLock.ts";
+import { taskBranchName } from "./createTaskWorktree.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 import { GENERATED_ARTIFACT_PATTERNS } from "./writeTaskBrief.ts";
 import { loadRepositoryManifest, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../prepareTasks.ts";
 import {
     collectRetainedTaskArtifacts, deleteTaskMergePersistence, removeTaskWorktreeAndBranches,
-    type SourceBranchCleanupTarget,
+    type RetainedArtifactTarget, type SourceBranchCleanupTarget,
 } from "../mergeTaskWorktrees.ts";
 
+// M3: branchName is derived from taskNumber inside this script, never accepted independently on
+// stdin - a malformed payload can no longer point cleanup's destructive branch/ref deletions at
+// another task.
 export type CleanupTaskWorktreeInput = {
     projectRoot: string;
     worktreePath: string;
     taskNumber: number;
     runId: string;
-    branchName: string;
 };
 
 export type CleanupTaskWorktreeOutput = { removed: boolean; retainedArtifacts: string[] };
@@ -37,33 +48,61 @@ function deleteGeneratedDocs(worktreePath: string): void {
     }
 }
 
-// Step 2: deleteTaskMergePersistence for every source occurrence, not just the root.
-function deleteMergePersistenceEverywhere(projectRoot: string, branchName: string): SourceBranchCleanupTarget[] {
-    const manifest = loadRepositoryManifest(projectRoot);
-    const deepestFirst = [...manifest.occurrences].sort((a, b) => b.depth - a.depth);
-    for (const occurrence of deepestFirst) deleteTaskMergePersistence(occurrence.checkoutPath, branchName);
-    return manifest.occurrences
-        .filter((occurrence) => occurrence.occurrenceId !== "")
-        .map((occurrence) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }));
+function buildRetainedArtifactTarget(
+    input: CleanupTaskWorktreeInput,
+    branchName: string,
+    sourceSubmodules: SourceBranchCleanupTarget[],
+): RetainedArtifactTarget {
+    return {
+        worktreePath: input.worktreePath,
+        leasePath: taskWorktreeLeasePath(input.worktreePath),
+        mainRepoRoot: input.projectRoot,
+        branch: branchName,
+        sourceSubmodules,
+    };
 }
 
 export function cleanupTaskWorktree(input: CleanupTaskWorktreeInput): CleanupTaskWorktreeOutput {
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    requireAbsolutePath("worktreePath", input.worktreePath);
+
+    const branchName = taskBranchName(input.taskNumber);
     const owner = buildLockOwner(input.runId, input.taskNumber);
-    refreshSourceRepoLock(input.projectRoot, owner);
 
-    deleteGeneratedDocs(input.worktreePath);
-    const sourceSubmodules = deleteMergePersistenceEverywhere(input.projectRoot, input.branchName);
+    const manifest = loadRepositoryManifest(input.projectRoot);
+    const sourceSubmodules: SourceBranchCleanupTarget[] = manifest.occurrences
+        .filter((occurrence) => occurrence.occurrenceId !== "")
+        .map((occurrence) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }));
+    const retainedArtifactTarget = buildRetainedArtifactTarget(input, branchName, sourceSubmodules);
 
-    const leasePath = taskWorktreeLeasePath(input.worktreePath);
-    const retainedArtifactTarget = {
-        worktreePath: input.worktreePath, leasePath, mainRepoRoot: input.projectRoot, branch: input.branchName, sourceSubmodules,
-    };
+    // F2 exception: an idempotent reconciliation may return success without the lock, but only
+    // after proving the worktree, task branches, persistence refs and owned lease are ALL
+    // absent. A missing lock alone is not proof of completion; a still-existing artifact means
+    // real work remains, so we fall through and require the lock like any other mutation.
+    if (collectRetainedTaskArtifacts(retainedArtifactTarget).length === 0) {
+        return { removed: true, retainedArtifacts: [] };
+    }
 
-    // Step 3: remove the worktree and its branches. A failure here must not release ownership.
+    refreshOwnedSourceRepoLockOrThrow(input.projectRoot, owner);
+
     try {
-        removeTaskWorktreeAndBranches(input.projectRoot, input.worktreePath, input.branchName, sourceSubmodules);
-    } catch {
-        return { removed: false, retainedArtifacts: collectRetainedTaskArtifacts(retainedArtifactTarget) };
+        deleteGeneratedDocs(input.worktreePath);
+        // Step 2: deleteTaskMergePersistence for every source occurrence, not just the root.
+        const deepestFirst = [...manifest.occurrences].sort((a, b) => b.depth - a.depth);
+        for (const occurrence of deepestFirst) deleteTaskMergePersistence(occurrence.checkoutPath, branchName);
+        // Step 3: remove the worktree and its branches.
+        removeTaskWorktreeAndBranches(input.projectRoot, input.worktreePath, branchName, sourceSubmodules);
+    } catch (cleanupError) {
+        const retainedArtifacts = collectRetainedTaskArtifacts(retainedArtifactTarget);
+        // Always release the source lock so unrelated tasks can still run. Never release the
+        // worktree lease here: retainedArtifacts is non-empty by construction (removal failed),
+        // so it still needs a live ownership marker for the next claimed run to adopt.
+        releaseSourceRepoLock(input.projectRoot, owner);
+        throw new Error(
+            `cleanup failed to remove task ${input.taskNumber}'s worktree/branches: `
+            + `${(cleanupError as Error).message}. retained artifacts: `
+            + `${retainedArtifacts.length > 0 ? retainedArtifacts.join(", ") : "(none)"}`,
+        );
     }
 
     // Step 4: release the worktree lease.

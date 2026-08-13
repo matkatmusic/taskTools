@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runTaskTests } from "../../scripts/tackle-tasks/runTaskTests.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { claimTask, endTaskRun, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -60,6 +60,8 @@ function seedOpenTaskAndClaim(root: string, taskNumber: number, taskOverrides: R
     assert.equal(outcome.status, "claimed");
 }
 
+const RUN_ID = "run-1";
+
 test("test_runTaskTests_selectsTestFilesTheBranchAddedSinceTheSourceBranch", () => {
     // Setup: a plain repo, a linked task worktree, and a new committed test file on the branch.
     const rootOrigin = makeTempRepoWithCommit("main");
@@ -71,7 +73,7 @@ test("test_runTaskTests_selectsTestFilesTheBranchAddedSinceTheSourceBranch", () 
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the newly added test file is selected and the run passes.
     assert.deepEqual(result.testFiles, ["tests/foo.test.ts"]);
@@ -91,7 +93,7 @@ test("test_runTaskTests_ignoresATestFileThatIsOnTheSourceBranch", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests without adding anything new.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the pre-existing test is not picked up.
     assert.deepEqual(result.testFiles, []);
@@ -111,7 +113,7 @@ test("test_runTaskTests_stillSelectsTheTestsWhenTheWorktreeIsClean", () => {
     assert.equal(git(worktreePath, "status", "--porcelain"), "");
 
     // Test action: run the task's tests against a clean worktree.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: discovery reads the branch, so a clean working tree still finds the test.
     assert.deepEqual(result.testFiles, ["tests/foo.test.ts"]);
@@ -136,7 +138,7 @@ test("test_runTaskTests_separatesCreatedTestsFromModifiedExistingTests", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: both are testFiles, only the new one is createdTestFiles.
     assert.deepEqual(result.testFiles.sort(), ["tests/existing.test.ts", "tests/new.test.ts"]);
@@ -156,7 +158,7 @@ test("test_runTaskTests_findsATestFileInsideASubmodule", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the submodule's test file is tagged with its occurrence id.
     assert.deepEqual(result.testFiles, ["child::tests/child.test.ts"]);
@@ -179,7 +181,7 @@ test("test_runTaskTests_runsASubmodulesTestsInsideThatSubmodule", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the test ran with the submodule as its cwd, so it passed.
     assert.equal(result.passed, true);
@@ -192,7 +194,7 @@ test("test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchA
     seedOpenTaskAndClaim(rootOrigin, 1, { tests: "add a test for the widget" });
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the empty set is a red result, not an automatic pass.
     assert.equal(result.missingTests, true);
@@ -211,7 +213,7 @@ test("test_runTaskTests_recordsItsWholeDecisionBeforePrinting", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, worktreePath, "main", "step-9", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-9", rootOrigin);
 
     // Verification: the stored run record's taskTests matches the returned decision.
     const stored = getCurrentTaskRun(1, rootOrigin)?.taskTests;
@@ -223,4 +225,80 @@ test("test_runTaskTests_recordsItsWholeDecisionBeforePrinting", () => {
     assert.equal(stored?.missingTests, result.missingTests);
     assert.equal(stored?.output, result.output);
     assert.ok(stored?.checkedAt);
+});
+
+test("test_runTaskTests_runsTheDestinationOfARenamedTestAndDoesNotCallItCreated", () => {
+    // Setup: an existing test on the source branch, renamed (not modified) on the task branch.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    mkdirSync(join(rootOrigin, "tests"), { recursive: true });
+    writePassingTest(join(rootOrigin, "tests", "old.test.ts"));
+    git(rootOrigin, "add", "tests/old.test.ts");
+    git(rootOrigin, "commit", "-q", "-m", "existing test");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    git(worktreePath, "mv", "tests/old.test.ts", "tests/renamed.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "rename test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    // Test action: run the task's tests.
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+
+    // Verification: the destination path ran and is not treated as a task-created test.
+    assert.deepEqual(result.testFiles, ["tests/renamed.test.ts"]);
+    assert.deepEqual(result.createdTestFiles, []);
+    assert.equal(result.passed, true);
+});
+
+test("test_runTaskTests_reportsADeletedTestAsAnExplicitRedInsteadOfAFileNotFoundError", () => {
+    // Setup: an existing test on the source branch, deleted on the task branch.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    mkdirSync(join(rootOrigin, "tests"), { recursive: true });
+    writePassingTest(join(rootOrigin, "tests", "doomed.test.ts"));
+    git(rootOrigin, "add", "tests/doomed.test.ts");
+    git(rootOrigin, "commit", "-q", "-m", "existing test");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    git(worktreePath, "rm", "-q", "tests/doomed.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "delete test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    // Test action: run the task's tests.
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+
+    // Verification: a deterministic, named red decision — never node's missing-file error.
+    assert.deepEqual(result.deletedTestFiles, ["tests/doomed.test.ts"]);
+    assert.equal(result.passed, false);
+    assert.match(result.output, /deleted test file\(s\).*tests\/doomed\.test\.ts/);
+});
+
+test("test_runTaskTests_parsesATestFilenameContainingSpaces", () => {
+    // Setup: a new committed test file whose name contains spaces, pinning the `-z` parser.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    mkdirSync(join(worktreePath, "tests"), { recursive: true });
+    writePassingTest(join(worktreePath, "tests", "has spaces.test.ts"));
+    git(worktreePath, "add", "tests/has spaces.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "add spaced test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    // Test action: run the task's tests.
+    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+
+    // Verification: the spaced filename is parsed and run correctly.
+    assert.deepEqual(result.testFiles, ["tests/has spaces.test.ts"]);
+    assert.deepEqual(result.createdTestFiles, ["tests/has spaces.test.ts"]);
+    assert.equal(result.passed, true);
+});
+
+test("test_runTaskTests_throwsWhenTheExpectedRunIdIsStale", () => {
+    // Setup: a claimed run that then ends and is replaced by a newer claim, simulating a
+    // timed-out process that is still holding the original run's id.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1);
+    endTaskRun(1, RUN_ID, rootOrigin);
+    const outcome = claimTask(1, "run-2", rootOrigin);
+    assert.equal(outcome.status, "claimed");
+
+    // Test action + verification: the stale run's write is rejected, and the new run is untouched.
+    assert.throws(() => runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /run-2/);
+    assert.equal(getCurrentTaskRun(1, rootOrigin)?.taskTests, null);
 });

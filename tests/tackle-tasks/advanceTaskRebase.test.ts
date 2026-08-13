@@ -2,13 +2,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
 import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { rebaseInProgress } from "../../scripts/mergeTaskWorktrees.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -34,39 +38,47 @@ function makeTempRepoWithTestScript(branchName: string): string {
     return repoPath;
 }
 
-function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: string } {
+// F1: rootOriginChildPath is the real source child checkout - the local, possibly-unpushed
+// authority the rebase now fetches from. It is distinct from the worktree's own child checkout.
+function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: string; rootOriginChildPath: string } {
     const childOrigin = makeTempRepoWithTestScript("child-main");
     const rootOrigin = makeTempRepoWithTestScript("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
     git(rootOrigin, "commit", "-q", "-m", "add submodule child");
-    return { rootOrigin, childOrigin };
+    return { rootOrigin, childOrigin, rootOriginChildPath: join(rootOrigin, "child") };
 }
 
 let nextGroupId = 1;
 // operationBranch is attached as "task-<taskNumber>" by the scripts under test, so taskNumber
 // here must equal the worktree's real groupId - matching production's one-task-per-group.
-function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskBranch: string; taskNumber: number } {
+function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
-    const taskBranch = `task-${groupId}`;
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
-    return { worktreePath, taskBranch, taskNumber: groupId };
+    return { worktreePath, taskNumber: groupId };
 }
 
-// rebaseSubmoduleLayersDeepestFirst fetches "from source" using the manifest's own checkoutPath,
-// which buildDiscoveryManifest deliberately remaps into the worktree (occurrences.ts) - so the
-// submodule's own local base-branch ref, inside its worktree clone, is the thing that must move
-// to simulate the source repository having advanced. Moving the true upstream origin is invisible.
-function advanceChildBaseBranch(childCheckoutPath: string, baseBranch: string, taskBranch: string, content: string): void {
-    git(childCheckoutPath, "checkout", "-q", baseBranch);
-    writeFileSync(join(childCheckoutPath, "shared.txt"), content);
-    git(childCheckoutPath, "add", "shared.txt");
-    git(childCheckoutPath, "commit", "-q", "-m", `advance ${baseBranch}`);
-    git(childCheckoutPath, "checkout", "-q", taskBranch);
+function seedTaskAndClaim(projectRoot: string, taskNumber: number, runId: string): void {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    mkdirSync(join(tasksPath, ".."), { recursive: true });
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", files: [] }]);
+    const outcome = claimTask(taskNumber, runId, projectRoot);
+    assert.equal(outcome.status, "claimed");
+}
+
+// Independently commits in the source's child checkout, never in the worktree's own child
+// clone - simulating the source repository advancing while the task worktree exists.
+function advanceSourceChildBranch(rootOrigin: string, rootOriginChildPath: string, content: string): void {
+    writeFileSync(join(rootOriginChildPath, "shared.txt"), content);
+    git(rootOriginChildPath, "add", "shared.txt");
+    git(rootOriginChildPath, "commit", "-q", "-m", "advance source child");
+    git(rootOrigin, "add", "child");
+    git(rootOrigin, "commit", "-q", "-m", "bump child gitlink");
 }
 
 test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflictPath", async () => {
-    const { rootOrigin } = makeSourceRepoWithSubmodule();
-    const { worktreePath, taskBranch, taskNumber } = createLinkedWorktree(rootOrigin);
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-10");
     const childCheckoutPath = join(worktreePath, "child");
 
     // Worktree edits both layers' shared.txt.
@@ -80,7 +92,7 @@ test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflic
     git(worktreePath, "commit", "-q", "-m", "root worktree edit");
 
     // Source moves both layers' shared.txt too, guaranteeing a conflict in each.
-    advanceChildBaseBranch(childCheckoutPath, "child-main", taskBranch, "child-source\n");
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
     writeFileSync(join(rootOrigin, "shared.txt"), "root-source\n");
     git(rootOrigin, "add", "shared.txt");
     git(rootOrigin, "commit", "-q", "-m", "root source edit");
@@ -104,8 +116,9 @@ test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflic
 });
 
 test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", async () => {
-    const { rootOrigin } = makeSourceRepoWithSubmodule();
-    const { worktreePath, taskBranch, taskNumber } = createLinkedWorktree(rootOrigin);
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-11");
     const childCheckoutPath = join(worktreePath, "child");
 
     writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree\n");
@@ -114,7 +127,7 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
     git(worktreePath, "add", "child");
     git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
 
-    advanceChildBaseBranch(childCheckoutPath, "child-main", taskBranch, "child-source\n");
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
     const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", rootSourceBranch: "main" };
     const first = await rebaseTaskWorktree(rebaseInput);
@@ -131,4 +144,26 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
     assert.equal(second.stoppedAt, null);
     assert.equal(rebaseInProgress(childCheckoutPath), false);
     assert.equal(rebaseInProgress(worktreePath), false);
+
+    // F3: the finished rebase persisted its source-tip receipt.
+    const run = getCurrentTaskRun(taskNumber, rootOrigin) as { sourceTipsAtRebase?: { occurrenceId: string; baseBranch: string; sourceTip: string }[] } | null;
+    assert.deepEqual(run?.sourceTipsAtRebase?.map((receipt) => receipt.occurrenceId).sort(), ["", "child"]);
+});
+
+test("test_advanceTaskRebase_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", () => {
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-20");
+    acquireSourceRepoLock(rootOrigin, buildLockOwner("other-run", taskNumber));
+    const beforeHead = git(worktreePath, "rev-parse", "HEAD");
+
+    assert.throws(() => advanceTaskRebase({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-20", rootSourceBranch: "main",
+        stoppedAt: { occurrenceId: "", checkoutPath: worktreePath },
+    }));
+
+    assert.equal(git(worktreePath, "rev-parse", "HEAD"), beforeHead);
+    assert.equal(rebaseInProgress(worktreePath), false);
+    const run = getCurrentTaskRun(taskNumber, rootOrigin) as { sourceTipsAtRebase?: unknown } | null;
+    assert.equal(run?.sourceTipsAtRebase, undefined);
 });

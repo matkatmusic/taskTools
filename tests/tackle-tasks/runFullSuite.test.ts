@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { claimTask, endTaskRun, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -49,6 +49,8 @@ function seedOpenTaskAndClaim(root: string, taskNumber: number): void {
     assert.equal(outcome.status, "claimed");
 }
 
+const RUN_ID = "run-1";
+
 test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
     // Setup: a source repo whose root suite is green and whose submodule suite is red.
     const childOrigin = makeTempRepoWithCommit("child-main");
@@ -61,7 +63,7 @@ test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the full suite.
-    const result = runFullSuite(1, worktreePath, "main", "step-1", rootOrigin);
+    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the whole run is red because the submodule layer is red, even though root is green.
     assert.equal(result.passed, false);
@@ -79,7 +81,7 @@ test("test_runFullSuite_reportsRunFailedWhenALayerHasNoDiscoverableSuite", () =>
 
     // Test action + verification: the box treats a layer with no discoverable suite as an
     // operational failure, the same rule the rebase box uses, rather than guessing a command.
-    assert.throws(() => runFullSuite(1, worktreePath, "main", "step-1", rootOrigin), /no discoverable test suite/);
+    assert.throws(() => runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /no discoverable test suite/);
 });
 
 test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
@@ -90,7 +92,7 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the full suite.
-    const result = runFullSuite(1, worktreePath, "main", "step-9", rootOrigin);
+    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-9", rootOrigin);
 
     // Verification: the stored run record's fullSuite matches the returned decision.
     const stored = getCurrentTaskRun(1, rootOrigin)?.fullSuite;
@@ -100,4 +102,20 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
     assert.deepEqual(stored?.layers, result.layers);
     assert.equal(stored?.output, result.output);
     assert.ok(stored?.checkedAt);
+});
+
+test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", () => {
+    // Setup: a claimed run that then ends and is replaced by a newer claim, simulating a
+    // timed-out process that is still holding the original run's id.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    writePackageJsonWithTestExitCode(rootOrigin, 0);
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1);
+    endTaskRun(1, RUN_ID, rootOrigin);
+    const outcome = claimTask(1, "run-2", rootOrigin);
+    assert.equal(outcome.status, "claimed");
+
+    // Test action + verification: the stale run's write is rejected, and the new run is untouched.
+    assert.throws(() => runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /run-2/);
+    assert.equal(getCurrentTaskRun(1, rootOrigin)?.fullSuite, null);
 });

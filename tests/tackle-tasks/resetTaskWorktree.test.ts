@@ -2,11 +2,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.ts";
 import { claimTask, readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { createTaskWorktree } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -60,4 +61,35 @@ test("test_resetTaskWorktree_succeedsWhenRunTwice", () => {
     assert.equal(currentBranch, "task-1");
     const state = readTaskRunState(1, root);
     assert.equal(state.worktree, second.worktree);
+});
+
+test("test_resetTaskWorktree_refusesAndLeavesEverythingUnchangedWhenTheSiblingLeaseNamesAnotherOwner", () => {
+    // Setup: task state names run-a as the worktree's owner, but a sibling run "run-b" holds
+    // the actual physical lease (e.g. a racing recovery already reassigned it out-of-band).
+    const root = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const created = createTaskWorktree(1, "run-a", root);
+    const mergedCommitRef = "refs/taskTools/merged-commits/task-1";
+    const mergedCommitOid = git(root, "rev-parse", "HEAD").trim();
+    git(root, "update-ref", mergedCommitRef, mergedCommitOid);
+    writeFileSync(`${created.worktree}.lease`, JSON.stringify({ runId: "run-b", pid: 1, createdAt: 1 }));
+
+    // Snapshot everything the refusal must leave untouched.
+    const worktreeHeadBefore = git(created.worktree, "rev-parse", "HEAD").trim();
+    const leaseBefore = readFileSync(`${created.worktree}.lease`, "utf8");
+    const tasksJsonBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    const mergedRefBefore = git(root, "rev-parse", "--verify", mergedCommitRef).trim();
+
+    // Test action + verification: reset as run-a refuses instead of destroying run-b's worktree.
+    assert.throws(() => resetTaskWorktree(1, "run-a", root), /run-b/);
+
+    // Verification: worktree, branch, persistence ref, task state and run-b's lease are all
+    // byte-for-byte unchanged.
+    assert.ok(existsSync(created.worktree));
+    assert.equal(git(created.worktree, "rev-parse", "HEAD").trim(), worktreeHeadBefore);
+    assert.equal(git(created.worktree, "branch", "--show-current").trim(), "task-1");
+    assert.equal(readFileSync(`${created.worktree}.lease`, "utf8"), leaseBefore);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksJsonBefore);
+    assert.equal(git(root, "rev-parse", "--verify", mergedCommitRef).trim(), mergedRefBefore);
 });

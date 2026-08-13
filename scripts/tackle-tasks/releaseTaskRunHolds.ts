@@ -1,33 +1,63 @@
 // "release the worktree lease and the source lock if held" — pipeline.mmd, exit chain only.
 // Clean-up already releases both on the success path, which is why that chain has no such box.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../prepareTasks.ts";
 import { buildLockOwner, releaseSourceRepoLock } from "./sourceRepoLock.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ReleaseTaskRunHoldsInput = {
     taskNumber: number;
     runId: string;
     projectRoot: string;
     worktree: string | null;
+    branchName: string | null;
 };
 
-export type ReleaseTaskRunHoldsOutput = { leaseReleased: boolean; lockReleased: boolean };
+export type ReleaseTaskRunHoldsOutput = { leaseReleased: boolean; leaseRetained: boolean; lockReleased: boolean };
 
-// Releases only what runId/taskNumber owns; a hold belonging to another owner is left alone.
-export function releaseTaskRunHolds(input: ReleaseTaskRunHoldsInput): ReleaseTaskRunHoldsOutput {
-    let leaseReleased = false;
-    if (input.worktree !== null) {
-        const owner = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(input.worktree));
-        if (owner !== null && owner.runId === input.runId) {
-            releaseTaskWorktreeLease({ worktreePath: input.worktree, runId: input.runId });
-            leaseReleased = true;
-        }
+function taskBranchRemains(projectRoot: string, branchName: string): boolean {
+    try {
+        execFileSync("git", ["-C", projectRoot, "rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`], {
+            stdio: ["ignore", "ignore", "ignore"],
+        });
+        return true;
+    } catch {
+        return false;
     }
+}
+
+// F5: releasing a lease that cleanup deliberately retained strands the very work the ordering
+// was designed to protect. Lease policy — retain the ended run's lease while its worktree or a
+// retained task branch still exists, always release the source lock, let the next claimed run
+// atomically adopt the lease via adoptWorktreeLease. Only what runId/taskNumber owns is ever
+// touched; a hold belonging to another owner is left alone in every case.
+export function releaseTaskRunHolds(input: ReleaseTaskRunHoldsInput): ReleaseTaskRunHoldsOutput {
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    if (input.worktree !== null) requireAbsolutePath("worktree", input.worktree);
+
     const { released: lockReleased } = releaseSourceRepoLock(
         input.projectRoot,
         buildLockOwner(input.runId, input.taskNumber),
     );
-    return { leaseReleased, lockReleased };
+
+    if (input.worktree === null) {
+        return { leaseReleased: false, leaseRetained: false, lockReleased };
+    }
+
+    const owner = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(input.worktree));
+    if (owner === null || owner.runId !== input.runId) {
+        return { leaseReleased: false, leaseRetained: false, lockReleased };
+    }
+
+    const worktreeRemains = existsSync(input.worktree);
+    const branchRemains = input.branchName !== null && taskBranchRemains(input.projectRoot, input.branchName);
+    if (worktreeRemains || branchRemains) {
+        return { leaseReleased: false, leaseRetained: true, lockReleased };
+    }
+
+    releaseTaskWorktreeLease({ worktreePath: input.worktree, runId: input.runId });
+    return { leaseReleased: true, leaseRetained: false, lockReleased };
 }
 
 if (process.argv[1]?.endsWith("releaseTaskRunHolds.ts")) {

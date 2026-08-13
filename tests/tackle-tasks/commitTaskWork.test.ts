@@ -64,7 +64,7 @@ test("test_commitTaskWork_commitsDeepestFirstAndBumpsTheParentGitlink", () => {
     writeFileSync(join(worktreePath, "child", "widget.txt"), "widget\n");
     writeFileSync(join(worktreePath, "root-widget.txt"), "root widget\n");
 
-    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, rootSourceBranch: "main" });
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", rootSourceBranch: "main" });
 
     assert.equal(result.commits.length, 2);
     assert.equal(result.commits[0].occurrenceId, "child");
@@ -81,7 +81,7 @@ test("test_commitTaskWork_returnsNoCommitsWhenEveryLayerIsClean", () => {
     const taskNumber = 9002;
     seedTaskAndClaim(rootOrigin, taskNumber, "no-op task", "run-1");
 
-    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, rootSourceBranch: "main" });
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", rootSourceBranch: "main" });
 
     assert.deepEqual(result.commits, []);
 });
@@ -93,13 +93,13 @@ test("test_commitTaskWork_usesTheWorkKindForTheFirstCommitAndRepairForEveryLater
     seedTaskAndClaim(rootOrigin, taskNumber, "fix the thing", "run-1");
 
     writeFileSync(join(worktreePath, "first.txt"), "first\n");
-    const first = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, rootSourceBranch: "main" });
+    const first = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", rootSourceBranch: "main" });
     assert.equal(first.commits.length, 1);
     assert.equal(first.commits[0].kind, "work");
     assert.match(git(worktreePath, "log", "-1", "--format=%s"), /fix the thing/);
 
     writeFileSync(join(worktreePath, "second.txt"), "second\n");
-    const second = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, rootSourceBranch: "main" });
+    const second = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", rootSourceBranch: "main" });
     assert.equal(second.commits.length, 1);
     assert.equal(second.commits[0].kind, "repair");
     assert.match(git(worktreePath, "log", "-1", "--format=%s"), /fixed code making tests fail/);

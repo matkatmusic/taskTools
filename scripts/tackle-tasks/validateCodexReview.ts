@@ -2,6 +2,7 @@
 // Reads stdin JSON, writes one line of JSON to stdout. See plans/tackle-tasks-v1_5-plan.md §4.
 import { readFileSync } from "node:fs";
 import { isReviewProblem, readAndValidateReview } from "./planArtifacts.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ValidateCodexReviewInput = { projectRoot: string; reviewFilePath: string };
 export type ValidateCodexReviewOutput = {
@@ -12,7 +13,9 @@ export type ValidateCodexReviewOutput = {
 };
 
 export function validateCodexReview(input: ValidateCodexReviewInput): ValidateCodexReviewOutput {
-    const result = readAndValidateReview(input.reviewFilePath);
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    const reviewFilePath = requireAbsolutePath("reviewFilePath", input.reviewFilePath);
+    const result = readAndValidateReview(reviewFilePath);
     if (isReviewProblem(result)) return { valid: false, problem: result.problem, verdict: null, scrapNotes: null };
     return {
         valid: true,

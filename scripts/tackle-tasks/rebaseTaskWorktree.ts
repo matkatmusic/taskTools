@@ -1,14 +1,18 @@
 // "lock the source repo, then rebase onto the target branch" + "did the rebase report
 // conflicts?" (pipeline.mmd). Acquires the source-repo lock (re-entrant for the same owner,
 // bounded wait per rule 9), then rebases every layer deepest-first with live conflict markers.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
-    acquireSourceRepoLock, buildLockOwner, refreshSourceRepoLock,
+    acquireSourceRepoLock, buildLockOwner, refreshOwnedSourceRepoLockOrThrow,
 } from "./sourceRepoLock.ts";
-import { buildDiscoveryManifest } from "./occurrences.ts";
-import { attachOperationBranch } from "../prepareTasks.ts";
+import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
+import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
+import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
+import { updateCurrentTaskRun, type SourceTipReceipt } from "./taskRunState.ts";
 import {
-    rebaseParentOntoSourceAndTest, rebaseSubmoduleLayersDeepestFirst,
+    rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
 } from "../mergeTaskWorktrees.ts";
 
@@ -20,8 +24,15 @@ export type RebaseTaskWorktreeInput = {
     rootSourceBranch: string;
 };
 
+// F3: the merge box's proof that it merges the exact tip rebase left. Persisted onto the
+// current run record (see mergeTaskWorktree.ts's verification) so a lost-stdout reconciliation
+// can still recover it.
+export type { SourceTipReceipt } from "./taskRunState.ts";
+
 export type RebaseTaskWorktreeOutput = {
     lock: "acquired" | "held" | "recoverable";
+    heldByOwner: string | null;
+    recoveryCommand: string | null;
     conflicted: boolean;
     stoppedAt: { occurrenceId: string; checkoutPath: string } | null;
     conflictedFilePaths: string[];
@@ -77,7 +88,29 @@ function directChildPathsInParent(manifest: ReturnType<typeof buildDiscoveryMani
         .filter((path): path is string => path !== null);
 }
 
-function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWorktreeOutput, "lock"> {
+// F3: reads the live source manifest via buildWorktreeOccurrences, so it must run after the
+// source lock is held/refreshed. Captures root plus every source occurrence's {baseBranch,
+// sourceTip} exactly as the rebase left it, for mergeTaskWorktree.ts to verify unchanged.
+export function captureSourceTipReceipts(worktreePath: string, projectRoot: string, rootSourceBranch: string): SourceTipReceipt[] {
+    const rootTip = execFileSync("git", ["-C", projectRoot, "rev-parse", rootSourceBranch], { encoding: "utf8" }).trim();
+    const receipts: SourceTipReceipt[] = [{ occurrenceId: "", baseBranch: rootSourceBranch, sourceTip: rootTip }];
+    for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot)) {
+        if (occurrence.occurrenceId === "") continue;
+        const sourceTip = execFileSync(
+            "git", ["-C", occurrence.sourceCheckoutPath, "rev-parse", occurrence.baseBranch], { encoding: "utf8" },
+        ).trim();
+        receipts.push({ occurrenceId: occurrence.occurrenceId, baseBranch: occurrence.baseBranch, sourceTip });
+    }
+    return receipts;
+}
+
+export function persistSourceTipReceipts(
+    taskNumber: number, runId: string, receipts: SourceTipReceipt[], projectRoot: string,
+): void {
+    updateCurrentTaskRun(taskNumber, runId, { sourceTipsAtRebase: receipts }, projectRoot);
+}
+
+function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWorktreeOutput, "lock" | "heldByOwner" | "recoveryCommand"> {
     const stoppedAtField = { occurrenceId: stoppedAt.occurrenceId, checkoutPath: stoppedAt.checkoutPath };
     if (stoppedAt.status === "conflicted") {
         return { conflicted: true, stoppedAt: stoppedAtField, conflictedFilePaths: stoppedAt.conflictedFilePaths, failureReason: null };
@@ -92,7 +125,7 @@ function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWork
     throw new Error(`rebase of occurrence "${stoppedAt.occurrenceId}" failed operationally: ${reason}`);
 }
 
-function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): Omit<RebaseTaskWorktreeOutput, "lock"> {
+function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): Omit<RebaseTaskWorktreeOutput, "lock" | "heldByOwner" | "recoveryCommand"> {
     const stoppedAtField = { occurrenceId: "", checkoutPath: worktreePath };
     if (outcome.status === "conflicted") {
         return { conflicted: true, stoppedAt: stoppedAtField, conflictedFilePaths: outcome.conflictedFilePaths, failureReason: null };
@@ -111,30 +144,43 @@ export async function rebaseTaskWorktree(
     input: RebaseTaskWorktreeInput,
     lockOptions: BoundedLockWaitOptions = {},
 ): Promise<RebaseTaskWorktreeOutput> {
+    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+    const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
     const owner = buildLockOwner(input.runId, input.taskNumber);
-    const acquireResult = await acquireSourceRepoLockBounded(input.projectRoot, owner, lockOptions);
+    const acquireResult = await acquireSourceRepoLockBounded(projectRoot, owner, lockOptions);
     if (acquireResult.lock !== "acquired") {
-        return { lock: acquireResult.lock, conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
+        return {
+            lock: acquireResult.lock,
+            heldByOwner: acquireResult.heldByOwner,
+            recoveryCommand: acquireResult.lock === "recoverable"
+                ? formatSourceRepoLockRecoveryCommand(projectRoot, acquireResult.heldByOwner!)
+                : null,
+            conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null,
+        };
     }
-    refreshSourceRepoLock(input.projectRoot, owner);
+    refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
-    const manifest = buildDiscoveryManifest(input.worktreePath, input.projectRoot);
-    manifest.repositoryManifest.occurrences = attachOperationBranch(manifest.repositoryManifest.occurrences, `task-${input.taskNumber}`);
-    const submoduleReport = rebaseSubmoduleLayersDeepestFirst(input.worktreePath, manifest, true, null);
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
     if (submoduleReport.stoppedAt !== null) {
-        return { lock: "acquired", ...mapSubmoduleStop(submoduleReport.stoppedAt) };
+        return { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt) };
     }
 
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
     const parentOutcome = rebaseParentOntoSourceAndTest(
         "",
-        input.worktreePath,
+        worktreePath,
         input.rootSourceBranch,
         directChildPathsInParent(manifest),
-        manifest.resolutionManifest,
+        createEmptyResolutionManifest(),
         true,
         null,
     );
-    return { lock: "acquired", ...mapParentOutcome(input.worktreePath, parentOutcome) };
+    const mapped = mapParentOutcome(worktreePath, parentOutcome);
+    if (mapped.stoppedAt === null && mapped.failureReason === null) {
+        const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
+        persistSourceTipReceipts(input.taskNumber, input.runId, receipts, projectRoot);
+    }
+    return { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
 }
 
 if (process.argv[1]?.endsWith("rebaseTaskWorktree.ts")) {

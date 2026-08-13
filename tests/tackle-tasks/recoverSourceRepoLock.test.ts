@@ -12,7 +12,10 @@ import {
     buildLockOwner,
     readSourceRepoLock,
 } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { runRecoverSourceRepoLockCli } from "../../scripts/tackle-tasks/recoverSourceRepoLock.ts";
+import {
+    formatSourceRepoLockRecoveryCommand,
+    runRecoverSourceRepoLockCli,
+} from "../../scripts/tackle-tasks/recoverSourceRepoLock.ts";
 
 const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/recoverSourceRepoLock.ts", import.meta.url));
 
@@ -116,4 +119,22 @@ test("test_recoverSourceRepoLockCli_refusesAMalformedOwnerToken", () => {
     // Step: the CLI must refuse before it ever reads the lock file.
     assert.equal(output.status, "refused");
     assert.equal(output.reason, "malformed owner token");
+});
+
+test("test_formatSourceRepoLockRecoveryCommand_producesTheExactStdinTheCliAccepts", () => {
+    // F2: rebaseTaskWorktree must be able to print byte-identical recovery command text.
+    // Prove the formatter's output actually round-trips through this CLI's own JSON contract.
+    const root = makeProjectRoot();
+    const staleOwner = buildLockOwner("run-206", 206);
+    acquireSourceRepoLock(root, staleOwner, { nowMs: Date.parse("2026-01-01T00:00:00.000Z") });
+    const command = formatSourceRepoLockRecoveryCommand(root, staleOwner);
+    // The command embeds a single JSON object matching {projectRoot, expectedStaleOwner, confirmation}.
+    const embedded = command.match(/^echo '(.+)' \| node scripts\/tackle-tasks\/recoverSourceRepoLock\.ts$/);
+    assert.ok(embedded, `expected the formatted command to embed one JSON stdin payload, got: ${command}`);
+    const input = JSON.parse(embedded![1]);
+    assert.deepEqual(input, { projectRoot: root, expectedStaleOwner: staleOwner, confirmation: `abandon ${staleOwner}` });
+    // Feeding that exact payload to the CLI recovers the lock.
+    const output = runRecoverSourceRepoLockCli(input);
+    assert.equal(output.status, "recovered");
+    assert.equal(readSourceRepoLock(root), null);
 });

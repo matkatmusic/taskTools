@@ -2,12 +2,15 @@
 // one line of JSON to stdout. See plans/tackle-tasks-v1_5-plan.md §4.
 import { readFileSync } from "node:fs";
 import { isPlanProblem, readAndValidatePlan } from "./planArtifacts.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ValidatePlanFileInput = { projectRoot: string; planFilePath: string; taskNumber: number };
 export type ValidatePlanFileOutput = { valid: boolean; problem: string | null; sectionIds: string[] };
 
 export function validatePlanFile(input: ValidatePlanFileInput): ValidatePlanFileOutput {
-    const result = readAndValidatePlan(input.planFilePath, input.taskNumber);
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    const planFilePath = requireAbsolutePath("planFilePath", input.planFilePath);
+    const result = readAndValidatePlan(planFilePath, input.taskNumber);
     if (isPlanProblem(result)) return { valid: false, problem: result.problem, sectionIds: [] };
     return { valid: true, problem: null, sectionIds: result.sections.map((section) => section.id) };
 }

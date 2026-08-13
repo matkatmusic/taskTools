@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
@@ -15,6 +16,7 @@ export type RunTaskTestsOutput = {
     passed: boolean;
     testFiles: string[];
     createdTestFiles: string[];
+    deletedTestFiles: string[];
     missingTests: boolean;
     output: string;
 };
@@ -23,16 +25,44 @@ function truncateOutput(output: string): string {
     return output.length <= MAX_OUTPUT_LENGTH ? output : output.slice(-MAX_OUTPUT_LENGTH);
 }
 
-function diffNameStatus(checkoutPath: string, baseRef: string): { status: string; relativePath: string }[] {
-    const raw = execFileSync("git", ["-C", checkoutPath, "diff", "--name-status", `${baseRef}...HEAD`], {
+type DiffChange = {
+    kind: "A" | "M" | "D" | "R" | "C" | string;
+    oldPath?: string;
+    newPath?: string;
+    runnablePath?: string;
+};
+
+// `-z` NUL-delimits every field, so a path containing whitespace and a rename/copy's three
+// fields (status, old path, new path) are never ambiguous with a naive whitespace split.
+function diffNameStatus(checkoutPath: string, baseRef: string): DiffChange[] {
+    const raw = execFileSync("git", ["-C", checkoutPath, "diff", "--name-status", "-z", `${baseRef}...HEAD`], {
         encoding: "utf8",
     });
-    return raw.split("\n")
-        .filter((line) => line.trim() !== "")
-        .map((line) => {
-            const [status, relativePath] = line.split("\t");
-            return { status, relativePath };
-        });
+    const tokens = raw.split("\0").filter((token) => token !== "");
+    const changes: DiffChange[] = [];
+    for (let i = 0; i < tokens.length; ) {
+        const statusToken = tokens[i];
+        const kind = statusToken[0];
+        if (kind === "R" || kind === "C") {
+            const oldPath = tokens[i + 1];
+            const newPath = tokens[i + 2];
+            changes.push({ kind, oldPath, newPath, runnablePath: newPath });
+            i += 3;
+        } else if (kind === "D") {
+            const oldPath = tokens[i + 1];
+            changes.push({ kind, oldPath });
+            i += 2;
+        } else {
+            const path = tokens[i + 1];
+            changes.push({ kind, newPath: path, runnablePath: path });
+            i += 2;
+        }
+    }
+    return changes;
+}
+
+function isTestPath(path: string | undefined): path is string {
+    return path !== undefined && TEST_FILE_PATTERN.test(path);
 }
 
 function runNodeTest(checkoutPath: string, relativeTestFiles: string[]): { passed: boolean; output: string } {
@@ -50,26 +80,35 @@ function runNodeTest(checkoutPath: string, relativeTestFiles: string[]): { passe
 
 export function runTaskTests(
     taskNumber: number,
+    expectedRunId: string,
     worktreePath: string,
     sourceBranch: string,
     stepId: string,
     projectRoot: string,
 ): RunTaskTestsOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
+    requireAbsolutePath("worktreePath", worktreePath);
     const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, sourceBranch);
 
     const testFiles: string[] = [];
     const createdTestFiles: string[] = [];
+    const deletedTestFiles: string[] = [];
     const relativeTestFilesByOccurrenceId = new Map<string, string[]>();
 
     for (const occurrence of occurrences) {
-        const changes = diffNameStatus(occurrence.checkoutPath, occurrence.baseRef)
-            .filter((change) => TEST_FILE_PATTERN.test(change.relativePath));
-        if (changes.length === 0) continue;
-        relativeTestFilesByOccurrenceId.set(occurrence.occurrenceId, changes.map((change) => change.relativePath));
-        for (const change of changes) {
-            const taggedPath = buildOccurrencePath(occurrence.occurrenceId, change.relativePath);
+        const changes = diffNameStatus(occurrence.checkoutPath, occurrence.baseRef);
+        const runnable = changes.filter((change) => isTestPath(change.runnablePath));
+        const deleted = changes.filter((change) => change.kind === "D" && isTestPath(change.oldPath));
+        if (runnable.length > 0) {
+            relativeTestFilesByOccurrenceId.set(occurrence.occurrenceId, runnable.map((change) => change.runnablePath!));
+        }
+        for (const change of runnable) {
+            const taggedPath = buildOccurrencePath(occurrence.occurrenceId, change.runnablePath!);
             testFiles.push(taggedPath);
-            if (change.status === "A") createdTestFiles.push(taggedPath);
+            if (change.kind === "A") createdTestFiles.push(taggedPath);
+        }
+        for (const change of deleted) {
+            deletedTestFiles.push(buildOccurrencePath(occurrence.occurrenceId, change.oldPath!));
         }
     }
 
@@ -80,28 +119,37 @@ export function runTaskTests(
 
     let passed: boolean;
     let missingTests: boolean;
-    let output: string;
+    const outputParts: string[] = [];
     if (testFiles.length === 0) {
         missingTests = taskDeclaresTests;
         passed = !missingTests;
-        output = missingTests ? "the task declares tests but the branch added none" : "";
+        if (missingTests) outputParts.push("the task declares tests but the branch added none");
     } else {
         missingTests = false;
         const runs = occurrences
             .filter((occurrence) => relativeTestFilesByOccurrenceId.has(occurrence.occurrenceId))
             .map((occurrence) => runNodeTest(occurrence.checkoutPath, relativeTestFilesByOccurrenceId.get(occurrence.occurrenceId)!));
         passed = runs.every((run) => run.passed);
-        output = runs.map((run) => run.output).join("\n");
+        outputParts.push(...runs.map((run) => run.output));
     }
-    output = truncateOutput(output);
 
-    const result: RunTaskTestsOutput = { stepId, passed, testFiles, createdTestFiles, missingTests, output };
-    updateCurrentTaskRun(taskNumber, { taskTests: { ...result, checkedAt: getLocalIsoTimestamp() } }, projectRoot);
+    // A deleted test is an explicit deterministic red, never an accidental
+    // "node --test" file-not-found on a path that no longer exists.
+    if (deletedTestFiles.length > 0) {
+        passed = false;
+        outputParts.push(`the branch deleted test file(s): ${deletedTestFiles.join(", ")}`);
+    }
+
+    const output = truncateOutput(outputParts.join("\n"));
+
+    const result: RunTaskTestsOutput = { stepId, passed, testFiles, createdTestFiles, deletedTestFiles, missingTests, output };
+    updateCurrentTaskRun(taskNumber, expectedRunId, { taskTests: { ...result, checkedAt: getLocalIsoTimestamp() } }, projectRoot);
     return result;
 }
 
 export type RunTaskTestsCliInput = {
     taskNumber: number;
+    expectedRunId: string;
     worktreePath: string;
     sourceBranch: string;
     stepId: string;
@@ -110,6 +158,8 @@ export type RunTaskTestsCliInput = {
 
 if (process.argv[1]?.endsWith("runTaskTests.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as RunTaskTestsCliInput;
-    const output = runTaskTests(input.taskNumber, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot);
+    const output = runTaskTests(
+        input.taskNumber, input.expectedRunId, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot,
+    );
     process.stdout.write(`${JSON.stringify(output)}\n`);
 }

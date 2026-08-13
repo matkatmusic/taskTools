@@ -3,9 +3,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { buildOccurrencePath, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { updateCurrentTaskRun } from "./taskRunState.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type RecordTaskModifiedFilesInput = {
     taskNumber: number;
+    runId: string;
     projectRoot: string;
     worktree: string | null;
     sourceBranch: string;
@@ -23,14 +25,19 @@ function diffChangedPaths(checkoutPath: string, baseRef: string): string[] {
 // recovery chain can run after clean-up already deleted one): report [] and leave any
 // existing non-empty record untouched, never overwrite it with an empty one.
 export function recordTaskModifiedFiles(input: RecordTaskModifiedFilesInput): RecordTaskModifiedFilesOutput {
-    if (input.worktree === null || !existsSync(input.worktree)) {
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    if (input.worktree === null) {
+        return { modifiedFiles: [] };
+    }
+    requireAbsolutePath("worktree", input.worktree);
+    if (!existsSync(input.worktree)) {
         return { modifiedFiles: [] };
     }
     const occurrences = getOccurrencesDeepestFirst(input.worktree, input.projectRoot, input.sourceBranch);
     const modifiedFiles = occurrences.flatMap((occurrence) =>
         diffChangedPaths(occurrence.checkoutPath, occurrence.baseRef)
             .map((relativePath) => buildOccurrencePath(occurrence.occurrenceId, relativePath)));
-    updateCurrentTaskRun(input.taskNumber, { modifiedFiles }, input.projectRoot);
+    updateCurrentTaskRun(input.taskNumber, input.runId, { modifiedFiles }, input.projectRoot);
     return { modifiedFiles };
 }
 

@@ -1,6 +1,7 @@
 // "write exit type and exit notes to tasks.json" / "write exit type completed to tasks.json" — pipeline.mmd.
 import { readFileSync } from "node:fs";
 import { replaceEndedRunOutcome, updateCurrentTaskRun, type TaskExitType } from "./taskRunState.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 const EXIT_TYPES: readonly TaskExitType[] = [
     "completed", "invalid-number", "not-open", "already-active", "blocked",
@@ -10,6 +11,7 @@ const EXIT_TYPES: readonly TaskExitType[] = [
 
 export type WriteTaskExitNotesInput = {
     taskNumber: number;
+    runId: string;
     projectRoot: string;
     exitType: string;
     exitNote: string;
@@ -20,15 +22,17 @@ export type WriteTaskExitNotesOutput = { exitType: TaskExitType; exitNote: strin
 
 // rule 10: reopening overwrites exit type completed with run-failed on the already-ended
 // success tail, via replaceEndedRunOutcome, which owns that whole transition under one lock.
+// F6: runId fences the write to the run that requested it, never "whichever run is newest".
 export function writeTaskExitNotes(input: WriteTaskExitNotesInput): WriteTaskExitNotesOutput {
+    requireAbsolutePath("projectRoot", input.projectRoot);
     if (!EXIT_TYPES.includes(input.exitType as TaskExitType)) {
         throw new Error(`writeTaskExitNotes: unknown exit type "${input.exitType}"`);
     }
     const exitType = input.exitType as TaskExitType;
     if (input.reopen) {
-        replaceEndedRunOutcome(input.taskNumber, exitType, input.exitNote, input.projectRoot);
+        replaceEndedRunOutcome(input.taskNumber, input.runId, exitType, input.exitNote, input.projectRoot);
     } else {
-        updateCurrentTaskRun(input.taskNumber, { exitType, exitNote: input.exitNote }, input.projectRoot);
+        updateCurrentTaskRun(input.taskNumber, input.runId, { exitType, exitNote: input.exitNote }, input.projectRoot);
     }
     return { exitType, exitNote: input.exitNote };
 }

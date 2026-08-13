@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { taskBranchName } from "./createTaskWorktree.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 function git(worktreePath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", worktreePath, ...args], { encoding: "utf8" }).trim();
@@ -25,8 +26,15 @@ export function checkTaskWorktreeSafe(taskNumber: number, worktreePath: string):
         problems.push(`HEAD is on "${currentBranch || "(detached)"}", expected "${expectedBranch}"`);
     }
 
+    // F9: --recursive so a populated direct child with an uninitialized grandchild is caught.
+    // git already reports each nested submodule's path root-relative to worktreePath here.
     if (existsSync(join(worktreePath, ".gitmodules"))) {
-        const status = git(worktreePath, "submodule", "status");
+        let status: string;
+        try {
+            status = git(worktreePath, "submodule", "status", "--recursive");
+        } catch (error) {
+            return { safe: false, problems: [`submodule status check failed: ${(error as Error).message}`] };
+        }
         for (const line of status.split("\n").filter((line) => line.length > 0)) {
             if (line.startsWith("-")) {
                 const submodulePath = line.trim().split(/\s+/)[1] ?? "(unknown)";
@@ -42,6 +50,7 @@ export type CheckTaskWorktreeSafeCliInput = { taskNumber: number; worktreePath: 
 
 if (process.argv[1]?.endsWith("checkTaskWorktreeSafe.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as CheckTaskWorktreeSafeCliInput;
-    const output = checkTaskWorktreeSafe(input.taskNumber, input.worktreePath);
+    const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
+    const output = checkTaskWorktreeSafe(input.taskNumber, worktreePath);
     process.stdout.write(`${JSON.stringify(output)}\n`);
 }

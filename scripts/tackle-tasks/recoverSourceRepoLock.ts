@@ -18,6 +18,18 @@ export type RecoverSourceRepoLockCliOutput = {
 
 const OWNER_TOKEN_PATTERN = /^.+:\d+$/;
 
+// F2: the single source of the exact operator command a "recoverable" lock result prints
+// (diagram rule 9). rebaseTaskWorktree builds its output from this, not an inline copy, so
+// the two can never drift apart.
+export function formatSourceRepoLockRecoveryCommand(projectRoot: string, expectedStaleOwner: string): string {
+    const input: RecoverSourceRepoLockCliInput = {
+        projectRoot,
+        expectedStaleOwner,
+        confirmation: `abandon ${expectedStaleOwner}`,
+    };
+    return `echo '${JSON.stringify(input)}' | node scripts/tackle-tasks/recoverSourceRepoLock.ts`;
+}
+
 export function runRecoverSourceRepoLockCli(
     input: RecoverSourceRepoLockCliInput,
 ): RecoverSourceRepoLockCliOutput {

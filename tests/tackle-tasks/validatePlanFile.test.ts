@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validatePlanFile } from "../../scripts/tackle-tasks/validatePlanFile.ts";
 
@@ -18,8 +18,8 @@ function writeJsonFile(value: unknown): string {
     return filePath;
 }
 
-function runCli(input: unknown): unknown {
-    const output = execFileSync("node", [cliPath], { input: JSON.stringify(input), encoding: "utf8" });
+function runCli(input: unknown, cwd?: string): unknown {
+    const output = execFileSync("node", [cliPath], { input: JSON.stringify(input), encoding: "utf8", cwd });
     assert.equal(output.split("\n").filter((line) => line.length > 0).length, 1);
     return JSON.parse(output.trim());
 }
@@ -50,4 +50,32 @@ test("test_validatePlanFileCli_printsOneLineOfJsonOnStdout", () => {
     });
     const output = runCli({ projectRoot: "/repo", planFilePath, taskNumber: 7 });
     assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"] });
+});
+
+test("test_validatePlanFileCli_behavesIdenticallyFromAnUnrelatedCwd", () => {
+    const planFilePath = writeJsonFile({
+        task: 7,
+        revision: 1,
+        sections: [{ id: "problem", title: "Problem", body: "b" }],
+    });
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
+    const output = runCli({ projectRoot: "/repo", planFilePath, taskNumber: 7 }, unrelatedCwd);
+    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"] });
+});
+
+test("test_validatePlanFileCli_rejectsARelativePlanFilePath", () => {
+    const planFilePath = writeJsonFile({
+        task: 7,
+        revision: 1,
+        sections: [{ id: "problem", title: "Problem", body: "b" }],
+    });
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
+    const relativePlanFilePath = relative(unrelatedCwd, planFilePath);
+    assert.throws(() =>
+        execFileSync("node", [cliPath], {
+            input: JSON.stringify({ projectRoot: "/repo", planFilePath: relativePlanFilePath, taskNumber: 7 }),
+            encoding: "utf8",
+            cwd: unrelatedCwd,
+        }),
+    );
 });

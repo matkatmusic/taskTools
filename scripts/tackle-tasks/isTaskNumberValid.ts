@@ -1,12 +1,14 @@
 // "is task number valid?" — pipeline.mmd. Presence in tasks.json and/or completedTasks.json.
 import { readFileSync } from "node:fs";
 import { readTaskLists } from "../getTaskDetails.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type TaskNumberLocation = "open" | "completed" | "both" | null;
 
 export type IsTaskNumberValidOutput = { valid: boolean; location: TaskNumberLocation };
 
 export function isTaskNumberValid(taskNumber: number, projectRoot: string): IsTaskNumberValidOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
     const { openTasks, completedTasks } = readTaskLists(projectRoot);
     const inOpen = openTasks.some((task) => task.taskNumber === taskNumber);
     const inCompleted = completedTasks.some((task) => task.taskNumber === taskNumber);

@@ -3,11 +3,15 @@
 // already-finished layers are no-ops, so this naturally reaches remaining, untouched layers.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { buildLockOwner, refreshSourceRepoLock } from "./sourceRepoLock.ts";
-import { buildDiscoveryManifest } from "./occurrences.ts";
-import { attachOperationBranch } from "../prepareTasks.ts";
+import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
+import { buildDiscoveryManifest, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
+import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
 import {
-    rebaseInProgress, rebaseParentOntoSourceAndTest, rebaseSubmoduleLayersDeepestFirst,
+    captureSourceTipReceipts, persistSourceTipReceipts,
+} from "./rebaseTaskWorktree.ts";
+import {
+    rebaseInProgress, rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
 } from "../mergeTaskWorktrees.ts";
 
@@ -114,7 +118,8 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): A
 }
 
 // Verifies "finished" by reading the world, not by trusting an exit code: no layer may still
-// have a rebase in progress.
+// have a rebase in progress. Worktree-only check (F1): buildDiscoveryManifest's remapped paths
+// are correct here since this never reads a source-only OID.
 function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: string): void {
     const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
     for (const occurrence of manifest.repositoryManifest.occurrences) {
@@ -125,28 +130,33 @@ function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: str
 }
 
 export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskRebaseOutput {
+    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+    const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
     const owner = buildLockOwner(input.runId, input.taskNumber);
-    refreshSourceRepoLock(input.projectRoot, owner);
+    refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
     const freshConflict = advanceStoppedLayer(input.stoppedAt);
     if (freshConflict !== null) return freshConflict;
 
-    const manifest = buildDiscoveryManifest(input.worktreePath, input.projectRoot);
-    manifest.repositoryManifest.occurrences = attachOperationBranch(manifest.repositoryManifest.occurrences, `task-${input.taskNumber}`);
-    const submoduleReport = rebaseSubmoduleLayersDeepestFirst(input.worktreePath, manifest, true, null);
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
     if (submoduleReport.stoppedAt !== null) return mapSubmoduleStop(submoduleReport.stoppedAt);
 
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
     const parentOutcome = rebaseParentOntoSourceAndTest(
         "",
-        input.worktreePath,
+        worktreePath,
         input.rootSourceBranch,
         directChildPathsInParent(manifest),
-        manifest.resolutionManifest,
+        createEmptyResolutionManifest(),
         true,
         null,
     );
-    const result = mapParentOutcome(input.worktreePath, parentOutcome);
-    if (result.finished) verifyNoRebaseInProgressAnywhere(input.worktreePath, input.projectRoot);
+    const result = mapParentOutcome(worktreePath, parentOutcome);
+    if (result.finished) {
+        verifyNoRebaseInProgressAnywhere(worktreePath, projectRoot);
+        const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
+        persistSourceTipReceipts(input.taskNumber, input.runId, receipts, projectRoot);
+    }
     return result;
 }
 
