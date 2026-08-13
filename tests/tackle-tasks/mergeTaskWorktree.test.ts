@@ -163,6 +163,44 @@ test("test_mergeTaskWorktree_refusesWhenACommittedSourceSubmoduleChangeLandedAft
     }));
 });
 
+test("test_mergeTaskWorktree_refusesBeforeMovingAnySourceRefWhenUnrelatedFileSitsBesideTaskStateFiles", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-40");
+    const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
+
+    // An unrelated untracked file lands beside tasks.json/completedTasks.json in the same
+    // ignored .taskTools/ directory - the exemption must be exact-path, not directory-wide.
+    writeFileSync(join(rootOrigin, ".taskTools", "rogue.txt"), "rogue\n");
+
+    assert.throws(() => mergeTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-40", rootSourceBranch: sourceBranch,
+    }), /dirty/);
+
+    assert.equal(git(rootOrigin, "rev-parse", "HEAD"), beforeHead);
+    const run = getCurrentTaskRun(taskNumber, rootOrigin);
+    assert.deepEqual(run?.commits, []);
+});
+
+test("test_mergeTaskWorktree_refusesOnAWhitespacePathRenameViaTheNulSafeParser", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-41");
+    const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
+
+    // A staged rename to a path containing whitespace, still at the recorded tip - only a
+    // NUL-safe parser reports this as one exact dirty path rather than mangling it.
+    git(rootOrigin, "mv", "package.json", "package renamed.json");
+
+    assert.throws(() => mergeTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-41", rootSourceBranch: sourceBranch,
+    }), /dirty/);
+
+    assert.equal(git(rootOrigin, "rev-parse", "HEAD"), beforeHead);
+    const run = getCurrentTaskRun(taskNumber, rootOrigin);
+    assert.deepEqual(run?.commits, []);
+});
+
 test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);

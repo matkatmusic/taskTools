@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { checkTaskFileFence } from "../../scripts/tackle-tasks/checkTaskFileFence.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
@@ -136,6 +136,52 @@ test("test_checkTaskFileFence_refusesAndMutatesNothingWhenTheSourceLockIsOwnedBy
     assert.throws(() => checkTaskFileFence({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-24", rootSourceBranch: "main",
     }));
+
+    assert.equal(git(rootOrigin, "rev-parse", "HEAD"), headBefore);
+    assert.equal(git(rootOrigin, "status", "--porcelain"), statusBefore);
+});
+
+// M1/F2: a relative projectRoot must be rejected before any git command or lock access runs.
+test("test_checkTaskFileFence_rejectsARelativeProjectRootBeforeGitOrLockAccess", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 25;
+    seedTask(rootOrigin, taskNumber, ["child/widget.txt"]);
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-25", taskNumber)).status, "acquired");
+
+    const headBefore = git(rootOrigin, "rev-parse", "HEAD");
+    const statusBefore = git(rootOrigin, "status", "--porcelain");
+    const relativeProjectRoot = relative(process.cwd(), rootOrigin);
+
+    assert.throws(
+        () => checkTaskFileFence({
+            projectRoot: relativeProjectRoot, worktreePath, taskNumber, runId: "run-25", rootSourceBranch: "main",
+        }),
+        /must be an absolute path/,
+    );
+
+    assert.equal(git(rootOrigin, "rev-parse", "HEAD"), headBefore);
+    assert.equal(git(rootOrigin, "status", "--porcelain"), statusBefore);
+});
+
+// M1/F2: a relative worktreePath must be rejected before any git command or lock access runs.
+test("test_checkTaskFileFence_rejectsARelativeWorktreePathBeforeGitOrLockAccess", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 26;
+    seedTask(rootOrigin, taskNumber, ["child/widget.txt"]);
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-26", taskNumber)).status, "acquired");
+
+    const headBefore = git(rootOrigin, "rev-parse", "HEAD");
+    const statusBefore = git(rootOrigin, "status", "--porcelain");
+    const relativeWorktreePath = relative(process.cwd(), worktreePath);
+
+    assert.throws(
+        () => checkTaskFileFence({
+            projectRoot: rootOrigin, worktreePath: relativeWorktreePath, taskNumber, runId: "run-26", rootSourceBranch: "main",
+        }),
+        /must be an absolute path/,
+    );
 
     assert.equal(git(rootOrigin, "rev-parse", "HEAD"), headBefore);
     assert.equal(git(rootOrigin, "status", "--porcelain"), statusBefore);

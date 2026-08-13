@@ -4,13 +4,25 @@ import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
-import type { TaskRunState } from "./tackle-tasks/taskRunState.ts";
+import type { TaskRunRecord, TaskRunState } from "./tackle-tasks/taskRunState.ts";
 
 export interface CloseTasksResult {
   closed: number[];
   skipped: number[];
   unblocked: number[];
 }
+
+// F12: closeTaskRun's reconciled output. `ambiguous` is a separate array from `skipped` so a
+// completed-only mismatch (evidence exists but disagrees) is never mistaken for a task absent
+// from both files (no evidence at all).
+export interface CloseTaskRunOutput {
+  closed: number[];
+  skipped: number[];
+  ambiguous: number[];
+  unblocked: number[];
+}
+
+type ArchivedTaskRecord = TaskRecord & { run?: TaskRunState; closureNote?: unknown; commitHashes?: unknown };
 
 const EMPTY_TASK_RUN_STATE: TaskRunState = { active: false, worktree: null, leaseRunId: null, history: [] };
 
@@ -90,6 +102,100 @@ export function closeTaskRunChecked(
     }
     const commitHashes = newest.commits.map((commit) => commit.hash);
     return closeTasksLocked([taskNumber], closureNote, pair, commitHashes);
+  });
+}
+
+// The ended, completed history entry for runId, if the record has one at all.
+function findEndedRunEntry(record: ArchivedTaskRecord, runId: string): TaskRunRecord | undefined {
+  return record.run?.history.find(
+    (candidate) => candidate.runId === runId && candidate.endedAt !== null && candidate.exitType === "completed",
+  );
+}
+
+function chronologicalHashes(record: TaskRunRecord): string[] {
+  return record.commits.map((commit) => commit.hash);
+}
+
+function requireEndedCompletedRun(state: TaskRunState, runId: string, taskNumber: number): TaskRunRecord {
+  const newest = state.history[state.history.length - 1];
+  if (
+    state.active || newest === undefined || newest.runId !== runId
+    || newest.endedAt === null || newest.exitType !== "completed"
+  ) {
+    throw new Error(`closeTaskRun: task ${taskNumber} has no ended, completed run "${runId}" to archive`);
+  }
+  return newest;
+}
+
+function archiveIsWellFormed(archived: ArchivedTaskRecord): boolean {
+  return typeof archived.closureNote === "string"
+    && Array.isArray(archived.commitHashes)
+    && (archived.commitHashes as unknown[]).every((hash) => typeof hash === "string");
+}
+
+// Only-completed: reconciled success requires an EXACT match of run identity, note, and
+// derived hashes. Anything else is ambiguity, distinct from "not found" — evidence exists,
+// it just disagrees — and never a write.
+function reconcileArchivedOnly(
+  archived: ArchivedTaskRecord, taskNumber: number, runId: string, closureNote: string,
+): CloseTaskRunOutput {
+  const ended = findEndedRunEntry(archived, runId);
+  const hashesMatch = ended !== undefined && archiveIsWellFormed(archived)
+    && JSON.stringify(archived.commitHashes) === JSON.stringify(chronologicalHashes(ended));
+  const noteMatches = archived.closureNote === closureNote;
+  if (ended !== undefined && noteMatches && hashesMatch) {
+    return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked: [] };
+  }
+  return { closed: [], skipped: [], ambiguous: [taskNumber], unblocked: [] };
+}
+
+// Both files, same run: the archived record is immutable durable evidence. Only the open
+// record's removal/unblocking is completed here — completedTasks.json is never written.
+function archiveOpenTaskRemovalOnly(
+  tasks: TaskRecord[], archived: ArchivedTaskRecord, taskNumber: number, runId: string, pair: TaskFilePair,
+): CloseTaskRunOutput {
+  const ended = findEndedRunEntry(archived, runId);
+  if (ended === undefined) {
+    throw new Error(`closeTaskRun: task ${taskNumber} is archived under a different run than "${runId}"`);
+  }
+  if (!archiveIsWellFormed(archived)) {
+    throw new Error(`closeTaskRun: task ${taskNumber}'s archived record is malformed and cannot be trusted`);
+  }
+  const remaining = tasks.filter((task) => task.taskNumber !== taskNumber);
+  const unblocked = unblockDependents(remaining, [taskNumber]);
+  writeJsonAtomically(pair.tasksPath, remaining);
+  return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked };
+}
+
+// F12: the single locked transaction behind closeTaskRun.ts, covering all four presence
+// cases from one read of both task files.
+export function closeTaskRunReconciled(
+  taskNumber: number,
+  runId: string,
+  closureNote: string,
+  projectRoot: string,
+): CloseTaskRunOutput {
+  const pair = resolveTaskFiles(projectRoot);
+  return withTaskStateLock(pair.tasksPath, () => {
+    const tasks = JSON.parse(readFileSync(pair.tasksPath, "utf8")) as (TaskRecord & { run?: TaskRunState })[];
+    const completed = JSON.parse(readFileSync(pair.completedTasksPath, "utf8")) as ArchivedTaskRecord[];
+    const openTask = tasks.find((task) => task.taskNumber === taskNumber);
+    const archived = completed.find((task) => task.taskNumber === taskNumber);
+
+    if (openTask === undefined && archived === undefined) {
+      return { closed: [], skipped: [taskNumber], ambiguous: [], unblocked: [] };
+    }
+    if (openTask === undefined) {
+      return reconcileArchivedOnly(archived!, taskNumber, runId, closureNote);
+    }
+    if (archived !== undefined) {
+      return archiveOpenTaskRemovalOnly(tasks, archived, taskNumber, runId, pair);
+    }
+
+    const state = (openTask as ArchivedTaskRecord).run ?? EMPTY_TASK_RUN_STATE;
+    const newest = requireEndedCompletedRun(state, runId, taskNumber);
+    const result = closeTasksLocked([taskNumber], closureNote, pair, chronologicalHashes(newest));
+    return { ...result, ambiguous: [] };
   });
 }
 

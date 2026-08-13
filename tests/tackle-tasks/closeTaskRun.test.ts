@@ -54,7 +54,7 @@ test("test_closeTaskRun_archivesAndUnblocksInOneCall", () => {
 
     // Verification: closed/skipped/unblocked all come back from the one call, task 1 is
     // archived with hashes derived from its own run, and task 2 no longer lists it as a blocker.
-    assert.deepEqual(output, { closed: [1], skipped: [], unblocked: [2] });
+    assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [2] });
     const remaining = readTasksJson(root);
     const completed = readCompletedJson(root);
     assert.deepEqual(remaining.map((t: any) => t.taskNumber), [2]);
@@ -118,16 +118,23 @@ test("test_closeTaskRun_rejectsAStaleRunId", () => {
 
 test("test_closeTaskRun_archiveFirstRetryReusesTheStoredNoteAndHashesInsteadOfOverwriting", () => {
     // Setup: simulates a failure after the completed-file write but before the tasks.json
-    // removal — task 1 is present in BOTH files with the same run's real note/hashes archived.
-    const runState = completedRunState();
+    // removal — task 1 is present in BOTH files. The open copy's run carries a DIFFERENT
+    // commit hash than what's archived, and the archived record carries extra durable
+    // fields a re-derivation would never reproduce — proving the archive isn't re-derived.
+    const openRunState = completedRunState(
+        endedRunRecord({ commits: [{ occurrenceId: "", hash: "different-open-hash", kind: "work" }] }),
+    );
+    const archivedRunState = completedRunState();
     const archivedRecord = {
-        taskNumber: 1, title: "finished", run: runState,
+        taskNumber: 1, title: "finished", run: archivedRunState,
         completionDate: "2026-08-01", closureNote: "original archived note", commitHashes: ["abc123"],
+        durableAuditField: "evidence a re-derivation would drop",
     };
     const root = makeProjectRoot(
-        [{ taskNumber: 1, title: "finished", run: runState }],
+        [{ taskNumber: 1, title: "finished", run: openRunState }],
         [archivedRecord],
     );
+    const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
     // Test action: retry the close with a deliberately different note (and no way to even
     // supply different hashes now — the contract no longer accepts them).
@@ -135,12 +142,39 @@ test("test_closeTaskRun_archiveFirstRetryReusesTheStoredNoteAndHashesInsteadOfOv
         taskNumber: 1, runId: "run-a", closureNote: "a completely different, wrong note", projectRoot: root,
     });
 
-    // Verification: the open record is removed, but the archive keeps its ORIGINAL bytes.
-    assert.deepEqual(output, { closed: [1], skipped: [], unblocked: [] });
+    // Verification: the open record is removed and dependents unblocked, but completedTasks.json
+    // is untouched byte-for-byte — not merely field-equal.
+    assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [] });
     assert.deepEqual(readTasksJson(root).map((t: any) => t.taskNumber), []);
-    const completed = readCompletedJson(root);
-    assert.equal(completed[0].closureNote, "original archived note");
-    assert.deepEqual(completed[0].commitHashes, ["abc123"]);
+    assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
+});
+
+test("test_closeTaskRun_archiveFirstRetryUnblocksDependentsWhileLeavingTheArchiveByteIdentical", () => {
+    // Setup: same archive-first-retry shape, but with a dependent task blocked on task 1 —
+    // proving unblocking still runs even though the archive write is skipped.
+    const runState = completedRunState();
+    const archivedRecord = {
+        taskNumber: 1, title: "finished", run: runState,
+        completionDate: "2026-08-01", closureNote: "original archived note", commitHashes: ["abc123"],
+    };
+    const root = makeProjectRoot(
+        [
+            { taskNumber: 1, title: "finished", run: runState },
+            { taskNumber: 2, title: "waiting", blockedBy: [{ taskNum: 1, reason: "needs 1 first" }] },
+        ],
+        [archivedRecord],
+    );
+    const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
+
+    const output = closeTaskRun({
+        taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root,
+    });
+
+    assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [2] });
+    const remaining = readTasksJson(root);
+    assert.deepEqual(remaining.map((t: any) => t.taskNumber), [2]);
+    assert.equal(remaining[0].blockedBy, undefined);
+    assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
 });
 
 test("test_closeTaskRun_reconcilesSuccessAfterACompleteSuccessWithoutRewrite", () => {
@@ -156,14 +190,15 @@ test("test_closeTaskRun_reconcilesSuccessAfterACompleteSuccessWithoutRewrite", (
 
     const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "the real note", projectRoot: root });
 
-    assert.deepEqual(output, { closed: [1], skipped: [], unblocked: [] });
+    assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [] });
     // Reconciliation never writes.
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
 });
 
 test("test_closeTaskRun_reportsAmbiguityWhenTheOnlyArchivedRecordDoesNotMatchThisCall", () => {
     // Setup: task 1 is archived, but this call's note disagrees with what is stored — never
-    // report success, never overwrite.
+    // report success, never overwrite. Ambiguity must be named distinctly from "not found":
+    // evidence exists here, it just disagrees, unlike a task absent from both files.
     const runState = completedRunState();
     const archivedRecord = {
         taskNumber: 1, title: "finished", run: runState,
@@ -174,7 +209,7 @@ test("test_closeTaskRun_reportsAmbiguityWhenTheOnlyArchivedRecordDoesNotMatchThi
 
     const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root });
 
-    assert.deepEqual(output, { closed: [], skipped: [1], unblocked: [] });
+    assert.deepEqual(output, { closed: [], skipped: [], ambiguous: [1], unblocked: [] });
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
 });
 
@@ -183,5 +218,6 @@ test("test_closeTaskRun_reportsNotFoundWhenTheTaskIsInNeitherFile", () => {
 
     const output = closeTaskRun({ taskNumber: 99, runId: "run-a", closureNote: "note", projectRoot: root });
 
-    assert.deepEqual(output, { closed: [], skipped: [99], unblocked: [] });
+    // Not-found uses `skipped`, never `ambiguous` — distinguishable from a real mismatch above.
+    assert.deepEqual(output, { closed: [], skipped: [99], ambiguous: [], unblocked: [] });
 });
