@@ -1,10 +1,93 @@
 flowchart TB
-  QV{"is task number valid?"} -- yes --> Q0{"is task open?"}
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Every read and write of tasks.json is atomic.
+%%   3. Never update a test that was not created in this task's worktree,
+%%      unless that test is broken or asserts nothing.
+%%   4. "fix the codebase" edits source, not tests.
+%%   5. Never progress past a suite run until every test passes.
+%% Diamond definitions where the name alone is not enough:
+%%   is the worktree safe to use?      - structural: it opens, it is on the task's
+%%                                       branch, its submodules are intact
+%%   is the previous run's work resumable?
+%%                                     - did the previous implementor record where
+%%                                       in the plan it stopped?
+%%   do the task tests pass?           - the test run alone decides this; codex
+%%                                       judges the tests, the tests judge the work
+%% Exit types, one per path that reaches [stop]:
+%%   completed          - archived to completedTasks.json
+%%   invalid-number     - not in tasks.json or completedTasks.json
+%%   not-open           - already completed
+%%   blocked            - an open blocker remains
+%%   already-active     - a previous run left the active flag set
+%%   plan-scrapped      - codex scrapped the plan twice
+%%   tests-red          - task tests still failing after 2 fix attempts
+%%   tests-flagged      - codex flagged the tests twice
+%%   suite-red          - full suite still failing after 2 fix attempts
+%%   merge-failed       - the merge did not land twice
+
+  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> EXIT
+  QV -- yes --> Q0{"is task open?"}
+  Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> EXIT
   Q0 -- yes --> QB{"is task blocked?"}
-  QB -- no --> Q1{"does a worktree exist?"}
-  Q1 -- yes --> A["implement task in a worktree"]
-  A --> Q3{"does the work resolve the task?"}
-  Q3 -- yes --> Q2{"can we merge this worktree?"}
-  Q2 -- yes --> B["merge worktree"]
-  B --> C["close the task"]
-  C --> D["update tasks blocked by this task"]
+  QB -- "yes<br/>exit type: blocked<br/>exit note: an open blocker remains" --> EXIT
+  QB -- no --> QA{"is the task already active?"}
+  QA -- "yes<br/>exit type: already-active<br/>exit note: a previous run left the active flag set" --> EXIT
+  QA -- no --> MARK["mark task active in tasks.json"]
+  MARK --> Q1{"does a worktree exist?"}
+  Q1 -- no --> NEW["create a worktree"]
+  NEW --> GEN["auto generate docs"]
+  GEN --> AMD["amend last exit notes"]
+  AMD --> INIT
+  Q1 -- yes --> QS{"is the worktree safe to use?"}
+  QS -- no --> QRS{"is the previous run's work resumable?"}
+  QRS -- no --> RESET["reset the worktree"]
+  RESET --> GEN
+  QRS -- yes --> UPD
+  QS -- yes --> UPD["update auto generated docs"]
+  UPD --> INIT["init submodules recursively"]
+  INIT --> P["plan the task"]
+  P --> R["codex reviews the plan"]
+  R --> QR{"amend or scrap?"}
+  QR -- "scrap, 1st time: replan with codex notes" --> P
+  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXIT
+  QR -- amend --> AM["script applies codex amendments to the plan"]
+  AM --> A["implement task"]
+  A --> TT["run task tests"]
+  TT --> QTF{"do the tests fail?"}
+  QTF -- "yes, under 2 attempts" --> FIXT["fix the codebase"]
+  FIXT --> TT
+  QTF -- "yes, after 2 attempts<br/>exit type: tests-red<br/>exit note: task tests failed after 2 codebase fixes" --> EXIT
+  QTF -- no --> RT["codex reviews tests against task details and plan file"]
+  RT --> QCX{"are the tests flagged?"}
+  QCX -- "yes, under 2 attempts" --> AMT["amend the tests"]
+  AMT --> TT
+  QCX -- "yes, after 2 attempts<br/>exit type: tests-flagged<br/>exit note: codex flagged the tests twice" --> EXIT
+  QCX -- no --> RB["rebase onto the target branch"]
+  RB --> QC{"did the rebase report conflicts?"}
+  QC -- "yes: pass the conflicted files to the agent" --> FIX["fix conflicts"]
+  FIX --> FULL
+  QC -- no --> FULL["run the full suite"]
+  FULL --> QF{"do all tests pass?"}
+  QF -- "no, under 2 attempts" --> FIXC["fix the codebase"]
+  FIXC --> FULL
+  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still failing after 2 codebase fixes" --> EXIT
+  QF -- yes --> B["merge worktree, no fast-forward"]
+  B --> Q4{"did the merge land?"}
+  Q4 -- "no, 1st time: rebase and retry" --> RB
+  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not land twice" --> EXIT
+  Q4 -- yes --> HASH["record merge commit hashes to tasks.json"]
+  HASH --> CLEAN["clean up worktree and auto-generated docs"]
+  CLEAN --> VNOTES["write verification notes (invoke close-task)"]
+  VNOTES --> ARCH["move task to completedTasks.json with closure note and commit hashes"]
+  ARCH --> D["update tasks blocked by this task"]
+  D --> STOP["stop"]
+
+  EXIT["write exit type and exit notes to tasks.json"] --> REC["record modified files to tasks.json"]
+  REC --> OFF["mark task inactive in tasks.json"]
+  OFF --> STOP
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  class QV,Q0,QB,QA,MARK,Q1,NEW,GEN,AMD,QS,QRS,RESET,UPD,INIT,QR,AM,TT,QTF,QCX,RB,QC,FULL,QF,B,Q4,HASH,CLEAN,VNOTES,ARCH,D,OFF,EXIT,REC,STOP script
+  class P,R,A,RT,FIX,FIXC,FIXT,AMT prose

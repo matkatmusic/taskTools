@@ -1,10 +1,12 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta http-equiv="cache-control" content="no-store">
 <title>pipeline.mmd</title>
 <style>
-  body { margin: 0; display: grid; place-items: center; min-height: 100vh; background: #fff; }
+  body { margin: 0; min-height: 100vh; background: #fff; }
   @media (prefers-color-scheme: dark) { body { background: #16181b; } }
-  #d { max-width: 100%; overflow: auto; padding: 2rem; }
+  #d { padding: 2rem; overflow: auto; }
+  #d foreignObject { overflow: visible; }
   #err { position: fixed; top: 0; left: 0; right: 0; background: #a52a1e; color: #fff;
          font: 13px/1.5 ui-monospace, monospace; padding: .5rem 1rem; white-space: pre-wrap; }
   #err:empty { display: none; }
@@ -14,7 +16,13 @@
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
   const dark = matchMedia('(prefers-color-scheme: dark)').matches
-  mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default' })
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: dark ? 'dark' : 'default',
+    fontFamily: 'system-ui, sans-serif',
+    // wrappingWidth keeps long labels inside their shape instead of running past it
+    flowchart: { htmlLabels: true, useMaxWidth: false, padding: 12, wrappingWidth: 220 },
+  })
   let last = null
   setInterval(async () => {
     const src = await (await fetch('pipeline.mmd?t=' + Date.now())).text()
