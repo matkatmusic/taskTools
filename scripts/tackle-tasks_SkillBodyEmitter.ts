@@ -77,7 +77,7 @@ hit \`"report"\`:
 
 For example, a \`"launch-tail"\` for the group whose \`tasks[0].number\` is
 \`268\`, whose \`worktree\` is \`/tmp/taskTools-wt/repo/task-268\`, and whose
-\`workflowPath\` is \`/tmp/taskTools-wt/repo/task-268.workflow.js\` — launch
+\`workflowPath\` is \`/tmp/taskTools-wt/repo/task-268.tackle-tasks.workflow.js\` — launch
 that \`workflowPath\` with these args:
 
 \`\`\`json

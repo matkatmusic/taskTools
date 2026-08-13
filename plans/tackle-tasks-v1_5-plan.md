@@ -81,7 +81,7 @@ One green box, one script, with these exceptions and no others `[a1 22]`:
 | Phase | Existing files it edits |
 |---|---|
 | 0 | creates copies only |
-| 1 | `scripts/prepareTasks.ts` — exports and the worktree-path change (§1e); `.gitignore` at the repo root (§1f) |
+| 1 | `scripts/prepareTasks.ts` — exports and the worktree-path change (§1e); `scripts/mergeTaskWorktrees.ts` — the second consumer of the worktree convention directory (§1e); `.gitignore` at the repo root (§1f) |
 | 2–8 | **none** |
 | 9 | reads `scripts/tackle-tasks_AgentPromptEmitter.ts`, never writes it |
 | 10 | `skills/tackle-tasks/tackle-tasks.workflow.js` — rewritten |
@@ -472,6 +472,10 @@ need. Extract and export pure `renderTaskBriefContent(task, repoRoot)` from
 `writeTaskBriefFile`; the existing writer calls it, so output stays byte-identical. **Change
 no existing behavior** — the v1_1 archive calls this file. Confirm every existing
 `prepareTasks` test still passes.
+
+The worktree convention directory has a second consumer, `scripts/mergeTaskWorktrees.ts`,
+which derived it independently. Both now call one exported helper; leaving the merge helper on
+the old basename-only directory would hide every worktree from recovery and listing.
 
 One behavioral change is required, and it is additive `[a3 18]`: worktree paths are derived
 as `/tmp/taskTools-wt/<basename>/task-N`, which collides between two different repositories

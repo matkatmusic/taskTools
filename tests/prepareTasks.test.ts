@@ -8,16 +8,24 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+    acquireTaskWorktreeLease,
     buildWorkflowArguments,
     createWorktreeForGroup,
+    currentWorkflowOutputPath,
     generateRunId,
+    materializeTaskWorkflow,
     recoverStaleTaskWorktreeLease,
     releaseTaskWorktreeLease,
     resolveMergeScriptPath,
     resolveTaskWorktreeConventionDirectory,
     selectRequestedTasks,
+    taskWorktreeLeaseGuardPath,
+    v1_1WorkflowOutputPath,
+    withTaskWorktreeLeaseGuard,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
+import { skillBody as currentSkillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
+import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
@@ -575,6 +583,165 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
     } finally {
         rmSync(worktree1, { recursive: true, force: true });
         rmSync(worktree2, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Finding 4: current and archived workflow materialization must never converge.
+// ---------------------------------------------------------------------------
+
+// The test that actually catches the defect: materializeTaskWorkflow's output depends only
+// on the templatePath it was given, and each emitter's brief references only its own field.
+test("current and archived materialized files each carry their own marker, and each emitter names only its own field", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tt-workflow-markers-"));
+    const currentTemplate = join(dir, "current.workflow.js");
+    const v1_1Template = join(dir, "v1_1.workflow.js");
+    writeFileSync(currentTemplate, 'export const meta = {\n  name: "task-__TT_TASK__",\n};\n// MARKER_CURRENT\n');
+    writeFileSync(v1_1Template, 'export const meta = {\n  name: "task-__TT_TASK__",\n};\n// MARKER_V1_1\n');
+    const worktree = join(dir, "task-42");
+
+    const workflowPath = materializeTaskWorkflow(42, currentTemplate, currentWorkflowOutputPath(worktree));
+    const v1_1WorkflowPath = materializeTaskWorkflow(42, v1_1Template, v1_1WorkflowOutputPath(worktree));
+
+    assert.notEqual(workflowPath, v1_1WorkflowPath);
+    assert.match(readFileSync(workflowPath, "utf8"), /MARKER_CURRENT/);
+    assert.doesNotMatch(readFileSync(workflowPath, "utf8"), /MARKER_V1_1/);
+    assert.match(readFileSync(v1_1WorkflowPath, "utf8"), /MARKER_V1_1/);
+    assert.doesNotMatch(readFileSync(v1_1WorkflowPath, "utf8"), /MARKER_CURRENT/);
+
+    const currentBrief = currentSkillBody("[1]");
+    assert.match(currentBrief, /`workflowPath`/);
+    assert.doesNotMatch(currentBrief, /`v1_1WorkflowPath`/);
+
+    const archivedBrief = v1_1SkillBody("[1]");
+    assert.match(archivedBrief, /`v1_1WorkflowPath`/);
+    assert.doesNotMatch(archivedBrief, /\bworkflowPath\b/);
+});
+
+// Proves the archived output's bytes never move when only the current template changes.
+test("materializeTaskWorkflow's archived output is unaffected by a change to the current template", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tt-workflow-independence-"));
+    const v1_1Template = join(dir, "v1_1.workflow.js");
+    writeFileSync(v1_1Template, 'export const meta = {\n  name: "task-__TT_TASK__",\n};\n// ARCHIVED\n');
+    const worktreeA = join(dir, "task-1");
+    const worktreeB = join(dir, "task-2");
+
+    const currentTemplateV1 = join(dir, "current-v1.workflow.js");
+    writeFileSync(currentTemplateV1, 'export const meta = {\n  name: "task-__TT_TASK__",\n};\n// CURRENT_V1\n');
+    const archivedOutputA = materializeTaskWorkflow(1, v1_1Template, v1_1WorkflowOutputPath(worktreeA));
+    materializeTaskWorkflow(1, currentTemplateV1, currentWorkflowOutputPath(worktreeA));
+
+    // The current template "changes" — a distinct template stands in for that edit.
+    const currentTemplateV2 = join(dir, "current-v2.workflow.js");
+    writeFileSync(currentTemplateV2, 'export const meta = {\n  name: "task-__TT_TASK__",\n};\n// CURRENT_V2_EDITED\n');
+    const archivedOutputB = materializeTaskWorkflow(1, v1_1Template, v1_1WorkflowOutputPath(worktreeB));
+    materializeTaskWorkflow(1, currentTemplateV2, currentWorkflowOutputPath(worktreeB));
+
+    assert.equal(readFileSync(archivedOutputA, "utf8"), readFileSync(archivedOutputB, "utf8"));
+
+    // The archived brief text has no file dependency at all, so it stays byte-identical too.
+    assert.equal(v1_1SkillBody("[1]"), v1_1SkillBody("[1]"));
+});
+
+test("buildWorkflowArguments releases the worktree lease and leaves no sibling file when the first materialization call fails", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const worktree = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
+    const currentOutput = currentWorkflowOutputPath(worktree);
+    const v1_1Output = v1_1WorkflowOutputPath(worktree);
+    mkdirSync(dirname(currentOutput), { recursive: true });
+    // Pre-existing read-only file at the current output path forces writeFileSync to fail there.
+    writeFileSync(currentOutput, "blocked\n", { mode: 0o444 });
+
+    try {
+        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, files: ["seed.txt"] }]));
+        assert.equal(existsSync(`${worktree}.lease`), false);
+        assert.equal(existsSync(currentOutput), false);
+        assert.equal(existsSync(v1_1Output), false);
+    } finally {
+        rmSync(worktree, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("buildWorkflowArguments releases the worktree lease and leaves no sibling file when the second materialization call fails", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const worktree = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
+    const currentOutput = currentWorkflowOutputPath(worktree);
+    const v1_1Output = v1_1WorkflowOutputPath(worktree);
+    mkdirSync(dirname(v1_1Output), { recursive: true });
+    // Pre-existing read-only file at the archived output path forces the second call to fail
+    // after the first call already wrote the current output successfully.
+    writeFileSync(v1_1Output, "blocked\n", { mode: 0o444 });
+
+    try {
+        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, files: ["seed.txt"] }]));
+        assert.equal(existsSync(`${worktree}.lease`), false);
+        assert.equal(existsSync(currentOutput), false, "the first call's successfully-written file must not survive");
+        assert.equal(existsSync(v1_1Output), false);
+    } finally {
+        rmSync(worktree, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// withTaskWorktreeLeaseGuard: the short-lived per-lease mutation guard.
+// ---------------------------------------------------------------------------
+
+test("withTaskWorktreeLeaseGuard makes one lease transition indivisible across two real processes", async () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const worktreePath = join(repoRoot, "task-guarded");
+    const logPath = join(repoRoot, "guard-log.txt");
+    writeFileSync(logPath, "");
+    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "prepareTasks.ts")).href;
+    const workerSource = `
+      import { withTaskWorktreeLeaseGuard } from ${JSON.stringify(prepareTasksUrl)};
+      import { appendFileSync } from "node:fs";
+      withTaskWorktreeLeaseGuard(${JSON.stringify(worktreePath)}, () => {
+        appendFileSync(${JSON.stringify(logPath)}, \`start:\${Date.now()}\\n\`);
+        const wait = new Int32Array(new SharedArrayBuffer(4));
+        Atomics.wait(wait, 0, 0, 150);
+        appendFileSync(${JSON.stringify(logPath)}, \`end:\${Date.now()}\\n\`);
+      });
+    `;
+    const spawnWorker = () => spawn(process.execPath, ["--input-type=module", "--eval", workerSource], { stdio: ["ignore", "ignore", "ignore"] });
+    const a = spawnWorker();
+    const b = spawnWorker();
+    try {
+        await Promise.all([once(a, "exit"), once(b, "exit")]);
+        const lines = readFileSync(logPath, "utf8").trim().split("\n");
+        assert.equal(lines.length, 4);
+        const events = lines.map((line) => {
+            const [kind, time] = line.split(":");
+            return { kind, time: Number(time) };
+        });
+        const [first, second, third, fourth] = events;
+        assert.equal(first!.kind, "start");
+        assert.equal(second!.kind, "end");
+        assert.equal(third!.kind, "start");
+        assert.equal(fourth!.kind, "end");
+        // The second worker's guarded section never starts before the first worker's ends.
+        assert.ok(third!.time >= second!.time);
+        assert.equal(existsSync(taskWorktreeLeaseGuardPath(worktreePath)), false);
+    } finally {
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("acquireTaskWorktreeLease and releaseTaskWorktreeLease stay behaviorally identical to callers", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const worktreePath = join(repoRoot, "task-lease-behavior");
+    mkdirSync(worktreePath, { recursive: true });
+    try {
+        const lease = acquireTaskWorktreeLease(worktreePath, "run-1");
+        assert.deepEqual(lease, { worktreePath, runId: "run-1" });
+        assert.throws(() => acquireTaskWorktreeLease(worktreePath, "run-2"), /already owned by a live run/);
+        releaseTaskWorktreeLease(lease);
+        assert.equal(existsSync(`${worktreePath}.lease`), false);
+        // Idempotent: releasing an already-released lease is a no-op, not a throw.
+        releaseTaskWorktreeLease(lease);
+    } finally {
         rmSync(repoRoot, { recursive: true, force: true });
     }
 });

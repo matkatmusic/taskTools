@@ -10,7 +10,7 @@ import { compileFunction } from "node:vm";
 import { skillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
-import { buildWorkflowArguments, materializeTaskWorkflow } from "../scripts/prepareTasks.ts";
+import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWorkflow, v1_1WorkflowOutputPath } from "../scripts/prepareTasks.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts", import.meta.url));
@@ -144,7 +144,7 @@ test("real lease mechanism: a whole-array prepare followed by a per-task re-prep
 
 test("running the pipeline launches the task's materialized workflowPath in the background via one capacity-aware scheduler, with no phase barriers", () => {
   const brief = skillBody("[1]");
-  assert.match(brief, /Launch that task's\s+`workflowPath` as a \*\*background\*\* workflow/);
+  assert.match(brief, /Launch that task's\s+`v1_1WorkflowPath` as a \*\*background\*\* workflow/);
   assert.match(brief, /\{task: action\.taskNumber, typecheckCommand: pipelineArgs\.typecheckCommand, repositoryManifest: pipelineArgs\.repositoryManifest, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}/);
   assert.match(brief, /task-notification back to you/);
   assert.doesNotMatch(brief, /wait for each to finish before starting/);
@@ -199,15 +199,15 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /createMergeQueue/);
   assert.match(brief, /enqueueApprovedTask\(queue, taskNumber\)/);
   assert.match(brief, /`FN` = `nextSchedulerAction`, `ARGS` = `<QUEUE_JSON>, ready, outstanding`/);
-  assert.match(brief, /Launch that\s+task's `workflowPath` as a background workflow with args\s+`\{task: taskNumber, stage, typecheckCommand: pipelineArgs\.typecheckCommand, repositoryManifest: pipelineArgs\.repositoryManifest, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}`/);
+  assert.match(brief, /Launch that\s+task's `v1_1WorkflowPath` as a background workflow with args\s+`\{task: taskNumber, stage, typecheckCommand: pipelineArgs\.typecheckCommand, repositoryManifest: pipelineArgs\.repositoryManifest, worktree, sourceRoot: pipelineArgs\.repo, runId: pipelineArgs\.runId, agentPromptEmitterPath\}`/);
   assert.match(brief, /tail is serialized behind one already outstanding/s);
   assert.match(brief, /`FN` = `consumeTaskWorkflowResult`/);
   assert.doesNotMatch(brief, /results\[[01]\]/);
   assert.match(brief, /buildMergeReport\(queue\)/);
   assert.match(brief, /outstandingEntries/);
   assert.match(brief, /immediately ask that task's own approval gate/);
-  assert.match(brief, /`"launch-tail"`:.*Launch that\s+task's `workflowPath`/s);
-  assert.match(brief, /`"launch-plan"`:.*Launch that task's\s+`workflowPath`/s);
+  assert.match(brief, /`"launch-tail"`:.*Launch that\s+task's `v1_1WorkflowPath`/s);
+  assert.match(brief, /`"launch-plan"`:.*Launch that task's\s+`v1_1WorkflowPath`/s);
   assert.doesNotMatch(brief, /close-tasks/);
 });
 
@@ -283,12 +283,27 @@ test("every tackle-tasks workflow script opens with a pure-literal meta and noth
 
 test("materializeTaskWorkflow bakes the task number in and leaves no placeholder behind", () => {
   const worktree = join(mkdtempSync(join(tmpdir(), "tt-workflow-")), "task-7");
-  const workflowPath = materializeTaskWorkflow(7, worktree);
+  const workflowPath = materializeTaskWorkflow(7, V1_1_WORKFLOW_TEMPLATE_PATH, v1_1WorkflowOutputPath(worktree));
   const source = readFileSync(workflowPath, "utf8");
-  assert.equal(workflowPath, `${worktree}.workflow.js`);
+  assert.equal(workflowPath, `${worktree}.tackle-tasks-v1_1.workflow.js`);
   assert.ok(source.startsWith('export const meta = {\n  name: "task-7",'), source.slice(0, 80));
   assert.doesNotMatch(source, /__TT_TASK__/);
   assert.match(source, /\{ title: "7 Plan", detail: "write and refine the task plan" \}/);
+});
+
+// Finding 4: the archived emitter must only ever tell the agent to launch v1_1WorkflowPath.
+test("archived emitter's brief names v1_1WorkflowPath, never bare workflowPath", () => {
+  const brief = skillBody("[1]");
+  assert.match(brief, /v1_1WorkflowPath/);
+  assert.doesNotMatch(brief, /\bworkflowPath\b/);
+});
+
+// Phase 0's rollback purpose only holds if the archived brief never points back at the
+// current pipeline files.
+test("archived emitter's brief has zero references to the current skill dir or current scripts", () => {
+  const output = execFileSync("node", [scriptPath], { input: "[1] valid\n", encoding: "utf8" });
+  assert.doesNotMatch(output, /skills\/tackle-tasks\//);
+  assert.doesNotMatch(output, /scripts\/tackle-tasks_/);
 });
 
 // ---------------------------------------------------------------------------
@@ -296,7 +311,9 @@ test("materializeTaskWorkflow bakes the task number in and leaves no placeholder
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
-const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
+// The archived skill runs the archived materialized file, never the current workflow (finding 4).
+const V1_1_WORKFLOW_PATH = join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js");
+const TASK_WORKFLOW_SOURCE = readFileSync(V1_1_WORKFLOW_PATH, "utf8")
   .replace("export const meta", "const meta");
 const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts");
 
@@ -325,7 +342,7 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
     ["args", "log", "agent"],
-    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js") },
+    { filename: V1_1_WORKFLOW_PATH },
   ) as TaskWorkflowRunner;
   return await fn(
     JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),

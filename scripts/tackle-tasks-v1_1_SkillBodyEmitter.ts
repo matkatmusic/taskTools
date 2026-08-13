@@ -44,10 +44,10 @@ in prose. Handle the printed \`action\` by its \`kind\` and repeat until you
 hit \`"report"\`:
 
 - \`"launch-plan"\`: \`action.taskNumber\` names the task. Launch that task's
-  \`workflowPath\` as a **background** workflow — the call returns immediately, so the
+  \`v1_1WorkflowPath\` as a **background** workflow — the call returns immediately, so the
   orchestrator stays free to launch the next thing right away — with args
   \`{task: action.taskNumber, typecheckCommand: pipelineArgs.typecheckCommand, repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
-  (\`workflowPath\` and \`worktree\` are the fields of that name on the
+  (\`v1_1WorkflowPath\` and \`worktree\` are the fields of that name on the
   \`pipelineArgs.groups\` entry whose \`tasks[0].number\` equals
   \`action.taskNumber\`, and \`agentPromptEmitterPath\` is always exactly
   \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`). Remove \`action.taskNumber\`
@@ -55,9 +55,9 @@ hit \`"report"\`:
   \`outstandingEntries\`, then recompute \`ready\`/\`outstanding\` and run
   \`nextSchedulerAction\` again.
 - \`"launch-tail"\`: \`action.step\` is \`{taskNumber, stage}\`. Launch that
-  task's \`workflowPath\` as a background workflow with args
+  task's \`v1_1WorkflowPath\` as a background workflow with args
   \`{task: taskNumber, stage, typecheckCommand: pipelineArgs.typecheckCommand, repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\`
-  (\`workflowPath\` and \`worktree\` are the fields of that name on the
+  (\`v1_1WorkflowPath\` and \`worktree\` are the fields of that name on the
   \`pipelineArgs.groups\` entry whose \`tasks[0].number\` equals \`taskNumber\`,
   and \`agentPromptEmitterPath\` is always exactly \`${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}\`). Add
   \`taskNumber → stage\` to \`outstandingEntries\`, then recompute
@@ -77,8 +77,8 @@ hit \`"report"\`:
 
 For example, a \`"launch-tail"\` for the group whose \`tasks[0].number\` is
 \`268\`, whose \`worktree\` is \`/tmp/taskTools-wt/repo/task-268\`, and whose
-\`workflowPath\` is \`/tmp/taskTools-wt/repo/task-268.workflow.js\` — launch
-that \`workflowPath\` with these args:
+\`v1_1WorkflowPath\` is \`/tmp/taskTools-wt/repo/task-268.tackle-tasks-v1_1.workflow.js\` — launch
+that \`v1_1WorkflowPath\` with these args:
 
 \`\`\`json
 {"task": 268, "stage": "rebase-test", "typecheckCommand": "npx tsc --noEmit", "repositoryManifest": {}, "worktree": "/tmp/taskTools-wt/repo/task-268", "sourceRoot": "/path/to/repo", "runId": "abc123", "agentPromptEmitterPath": ${JSON.stringify(AGENT_PROMPT_EMITTER_PATH)}}
@@ -216,7 +216,7 @@ When a launched rebase-test or merge workflow's completion notification arrives,
 
 Closing each merged task happens automatically: the task workflow's merge stage, via the agent prompt emitter's \`merge\` role, calls scripts/closeTasks.ts once that task's own merge has succeeded, hash-gated so a task is archived only against the commit it actually merged into. You never invoke a skill to close a task, and \`buildMergeReport\`'s \`mergedNotClosed\` entries name every task that merged but failed to archive, so you can follow up. \`buildMergeReport\`'s \`regateRejected\` entries name every task whose post-approval fence violation was rejected at the regate gate — report these to the user too; they never merged.
 
-\`buildMergeReport\`'s \`cleanupIncomplete\` entries name every task whose merge (and close) succeeded but whose final worktree/branch/persistence cleanup did not — each is \`{taskNumber, warning, retainedArtifacts}\`. Report these to the user alongside \`unmerged\` and \`mergedNotClosed\`. Once whatever blocked cleanup (for example a locked worktree) is resolved, retry it: launch that task's \`workflowPath\` once as a background workflow with args \`{task: taskNumber, stage: "cleanup-only", repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\` (\`workflowPath\` and \`worktree\` are that task's \`pipelineArgs.groups\` entry's fields of the same name) — it only retries cleanup, it never re-merges or re-closes the task. On its completion notification, run \`consumeCleanupRetryResult(queue, envelope)\` (the "Cleanup retry" row), replace \`queue\` with the result, and re-run \`buildMergeReport(queue)\`; a successful retry clears that task from \`cleanupIncomplete\`. It is safe to invoke again if it reports \`"cleanup-incomplete"\` a second time.
+\`buildMergeReport\`'s \`cleanupIncomplete\` entries name every task whose merge (and close) succeeded but whose final worktree/branch/persistence cleanup did not — each is \`{taskNumber, warning, retainedArtifacts}\`. Report these to the user alongside \`unmerged\` and \`mergedNotClosed\`. Once whatever blocked cleanup (for example a locked worktree) is resolved, retry it: launch that task's \`v1_1WorkflowPath\` once as a background workflow with args \`{task: taskNumber, stage: "cleanup-only", repositoryManifest: pipelineArgs.repositoryManifest, worktree, sourceRoot: pipelineArgs.repo, runId: pipelineArgs.runId, agentPromptEmitterPath}\` (\`v1_1WorkflowPath\` and \`worktree\` are that task's \`pipelineArgs.groups\` entry's fields of the same name) — it only retries cleanup, it never re-merges or re-closes the task. On its completion notification, run \`consumeCleanupRetryResult(queue, envelope)\` (the "Cleanup retry" row), replace \`queue\` with the result, and re-run \`buildMergeReport(queue)\`; a successful retry clears that task from \`cleanupIncomplete\`. It is safe to invoke again if it reports \`"cleanup-incomplete"\` a second time.
 
 If the user requests adding tasks, invoke the \`create-task\` skill once per task — never edit \`tasks.json\` directly.
 

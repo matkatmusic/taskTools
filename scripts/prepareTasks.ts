@@ -24,6 +24,8 @@ export type PreparedGroup = {
     worktree: string;
     // Absent on merge-recovery groups synthesized outside prepare; those never launch a workflow.
     workflowPath?: string;
+    // The archived v1.1 skill launches this one instead; never workflowPath.
+    v1_1WorkflowPath?: string;
     branch: string;
     scope: TaskGroupScope;
     tasks: PreparedTask[];
@@ -178,35 +180,78 @@ export function readTaskWorktreeLeaseOwner(leasePath: string): { pid: number; ru
     }
 }
 
+const LEASE_GUARD_WAIT = new Int32Array(new SharedArrayBuffer(4));
+const LEASE_GUARD_TIMEOUT_MS = 10_000;
+
+export function taskWorktreeLeaseGuardPath(worktreePath: string): string {
+    return `${worktreePath}.lease.guard`;
+}
+
+// Makes one read/validate/write transition on the lease indivisible. Not the lease itself —
+// acquire/release/adopt all pass through this so only one of them touches the lease at a time.
+export function withTaskWorktreeLeaseGuard<T>(worktreePath: string, action: () => T): T {
+    const guardPath = taskWorktreeLeaseGuardPath(worktreePath);
+    const deadline = Date.now() + LEASE_GUARD_TIMEOUT_MS;
+    let fd: number | null = null;
+
+    while (fd === null) {
+        try {
+            fd = openSync(guardPath, "wx", 0o600);
+            writeFileSync(fd, JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+            if (Date.now() >= deadline) {
+                const holder = readTaskWorktreeLeaseOwner(guardPath);
+                throw new Error(
+                    `worktree lease guard timed out at "${guardPath}"`
+                    + (holder ? `; held by pid ${holder.pid}` : ""),
+                );
+            }
+            Atomics.wait(LEASE_GUARD_WAIT, 0, 0, 10);
+        }
+    }
+
+    try {
+        return action();
+    } finally {
+        closeSync(fd);
+        unlinkSync(guardPath);
+    }
+}
+
 // Atomic exclusive-create, held until final cleanup. runId is stable across processes; pid isn't.
 export function acquireTaskWorktreeLease(worktreePath: string, runId: string): TaskWorktreeLease {
-    const leasePath = taskWorktreeLeasePath(worktreePath);
-    let fd: number;
-    try {
-        fd = openSync(leasePath, "wx", 0o600);
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-            throw new Error(
-                `worktree at "${worktreePath}" is already owned by a live run (lease at "${leasePath}"); `
-                + `if that run crashed, call recoverStaleTaskWorktreeLease() after confirming no work is retained`,
-            );
+    return withTaskWorktreeLeaseGuard(worktreePath, () => {
+        const leasePath = taskWorktreeLeasePath(worktreePath);
+        let fd: number;
+        try {
+            fd = openSync(leasePath, "wx", 0o600);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+                throw new Error(
+                    `worktree at "${worktreePath}" is already owned by a live run (lease at "${leasePath}"); `
+                    + `if that run crashed, call recoverStaleTaskWorktreeLease() after confirming no work is retained`,
+                );
+            }
+            throw error;
         }
-        throw error;
-    }
-    writeFileSync(fd, JSON.stringify({ runId, pid: process.pid, createdAt: Date.now() }));
-    closeSync(fd);
-    return { worktreePath, runId };
+        writeFileSync(fd, JSON.stringify({ runId, pid: process.pid, createdAt: Date.now() }));
+        closeSync(fd);
+        return { worktreePath, runId };
+    });
 }
 
 // Ownership-checked and idempotent: no-op if already released, refuses a lease it didn't acquire.
 export function releaseTaskWorktreeLease(lease: TaskWorktreeLease): void {
-    const leasePath = taskWorktreeLeasePath(lease.worktreePath);
-    const current = readTaskWorktreeLeaseOwner(leasePath);
-    if (current === null) return;
-    if (current.runId !== lease.runId) {
-        throw new Error(`refusing to release worktree lease at "${leasePath}": held by run "${current.runId}", not "${lease.runId}"`);
-    }
-    unlinkSync(leasePath);
+    withTaskWorktreeLeaseGuard(lease.worktreePath, () => {
+        const leasePath = taskWorktreeLeasePath(lease.worktreePath);
+        const current = readTaskWorktreeLeaseOwner(leasePath);
+        if (current === null) return;
+        if (current.runId !== lease.runId) {
+            throw new Error(`refusing to release worktree lease at "${leasePath}": held by run "${current.runId}", not "${lease.runId}"`);
+        }
+        unlinkSync(leasePath);
+    });
 }
 
 // ponytail: no automatic liveness probe on the stored pid; explicit human call only, mirroring taskStateLock's fail-safe stance. Retained work still blocks a takeover, same as ordinary reuse.
@@ -300,13 +345,23 @@ function rethrowAfterPreparedLeaseRollback(error: unknown, preparedGroups: Prepa
     throw error;
 }
 
-const WORKFLOW_TEMPLATE_PATH = fileURLToPath(new URL("../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+export const CURRENT_WORKFLOW_TEMPLATE_PATH = fileURLToPath(new URL("../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+export const V1_1_WORKFLOW_TEMPLATE_PATH = fileURLToPath(new URL("../skills/tackle-tasks-v1_1/tackle-tasks.workflow.js", import.meta.url));
+
+export function currentWorkflowOutputPath(worktreePath: string): string {
+    return `${worktreePath}.tackle-tasks.workflow.js`;
+}
+
+export function v1_1WorkflowOutputPath(worktreePath: string): string {
+    return `${worktreePath}.tackle-tasks-v1_1.workflow.js`;
+}
 
 // The harness needs a literal `meta` first statement, so bake the task number in.
-export function materializeTaskWorkflow(taskNumber: number, worktreePath: string): string {
-    const workflowPath = `${worktreePath}.workflow.js`;
-    writeFileSync(workflowPath, readFileSync(WORKFLOW_TEMPLATE_PATH, "utf8").replaceAll("__TT_TASK__", String(taskNumber)));
-    return workflowPath;
+// templatePath is always explicit — no hidden default, so archived and current callers can never
+// silently converge on the same file.
+export function materializeTaskWorkflow(taskNumber: number, templatePath: string, outputPath: string): string {
+    writeFileSync(outputPath, readFileSync(templatePath, "utf8").replaceAll("__TT_TASK__", String(taskNumber)));
+    return outputPath;
 }
 
 export function buildWorkflowArguments(
@@ -326,10 +381,23 @@ export function buildWorkflowArguments(
                 scope: "declared",
             };
             const worktree = createWorktreeForGroup(repoRoot, group, runId);
+            const workflowPath = currentWorkflowOutputPath(worktree);
+            const v1_1WorkflowPath = v1_1WorkflowOutputPath(worktree);
+            try {
+                materializeTaskWorkflow(task.taskNumber, CURRENT_WORKFLOW_TEMPLATE_PATH, workflowPath);
+                materializeTaskWorkflow(task.taskNumber, V1_1_WORKFLOW_TEMPLATE_PATH, v1_1WorkflowPath);
+            } catch (error) {
+                for (const path of [workflowPath, v1_1WorkflowPath]) {
+                    if (existsSync(path)) unlinkSync(path);
+                }
+                releaseTaskWorktreeLease({ worktreePath: worktree, runId });
+                throw error;
+            }
             preparedGroups.push({
                 groupId: group.groupId,
                 worktree,
-                workflowPath: materializeTaskWorkflow(task.taskNumber, worktree),
+                workflowPath,
+                v1_1WorkflowPath,
                 branch: branchNameForGroup(group.groupId),
                 scope: group.scope,
                 tasks: [{

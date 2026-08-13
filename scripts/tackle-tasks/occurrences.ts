@@ -1,9 +1,10 @@
 // Walks a worktree's occurrence tree deepest submodule first, root last (pipeline.mmd rule 8),
 // and bridges the two path namespaces: plain task-declared paths and occurrence-tagged changed paths.
 import { execFileSync } from "node:child_process";
-import { REPOSITORY_MANIFEST_VERSION } from "../repositoryManifest.ts";
-import { discoverRepositoryTree } from "../repositoryDiscovery.ts";
+import { join } from "node:path";
+import { loadRepositoryManifest } from "../prepareTasks.ts";
 import type { DiscoveryManifest } from "../repositoryDiscovery.ts";
+import type { RepositoryOccurrence } from "../repositoryManifest.ts";
 import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
 
 export type Occurrence = {
@@ -15,16 +16,23 @@ export type Occurrence = {
 
 const OCCURRENCE_PATH_SEPARATOR = "::";
 
-// projectRoot is accepted for signature parity with the rest of the pipeline's (worktreePath,
-// projectRoot) boxes; discovery itself only ever needs the worktree's own git state.
+// The source repository, never the task worktree, is the authority for each layer's base
+// branch: createWorktreeForGroup checks out task-N in every submodule, so discovering the
+// worktree itself would make every layer's own branch invisible.
 export function buildDiscoveryManifest(worktreePath: string, projectRoot: string): DiscoveryManifest {
-    void projectRoot;
-    const manifest: DiscoveryManifest = {
-        repositoryManifest: { version: REPOSITORY_MANIFEST_VERSION, occurrences: [] },
+    const sourceManifest = loadRepositoryManifest(projectRoot);
+    return {
+        repositoryManifest: {
+            ...sourceManifest,
+            occurrences: sourceManifest.occurrences.map((occurrence) => ({
+                ...occurrence,
+                checkoutPath: occurrence.occurrenceId === ""
+                    ? worktreePath
+                    : join(worktreePath, occurrence.occurrenceId),
+            })),
+        },
         resolutionManifest: createEmptyResolutionManifest(),
     };
-    discoverRepositoryTree(worktreePath, manifest);
-    return manifest;
 }
 
 function resolveRecordedUpstreamBranch(checkoutPath: string): string {
@@ -50,10 +58,20 @@ export function getOccurrencesDeepestFirst(
             occurrenceId: occurrence.occurrenceId,
             checkoutPath: occurrence.checkoutPath,
             depth: occurrence.depth,
-            baseRef: occurrence.occurrenceId === ""
-                ? rootSourceBranch
-                : occurrence.baseBranch || resolveRecordedUpstreamBranch(occurrence.checkoutPath),
+            baseRef: resolveOccurrenceBaseRef(occurrence, rootSourceBranch),
         }));
+}
+
+export function resolveOccurrenceBaseRef(
+    occurrence: RepositoryOccurrence,
+    rootSourceBranch: string,
+): string {
+    if (occurrence.occurrenceId === "") return rootSourceBranch;
+    const baseRef = occurrence.baseBranch || resolveRecordedUpstreamBranch(occurrence.checkoutPath);
+    if (baseRef === "") {
+        throw new Error(`occurrence "${occurrence.occurrenceId}" has no resolvable base ref`);
+    }
+    return baseRef;
 }
 
 export function buildOccurrencePath(occurrenceId: string, relativePath: string): string {
