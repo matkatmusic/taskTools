@@ -16,8 +16,8 @@ Do not modify or stage implementation code. Do not disturb changes that are not 
 
 Run `node phase-loop/done-monitor.ts --root <repo-root>`. It emits one of two events:
 
-- `done`: the implementor has finished staging one implementation attempt. The monitor consumes `.done` from both the index and working tree before it emits this event.
-- `complete`: the implementor acknowledged `.resolved`; the loop is finished. The monitor consumes `.complete` before it emits this event.
+- `done`: the implementor has finished staging one implementation attempt. The monitor reads and consumes `.done` from both the index and working tree before it emits this event with the marker's `contents`.
+- `complete`: the implementor acknowledged `.resolved`; the loop is finished. The monitor reads and consumes `.complete` before it emits this event with the marker's `contents`.
 
 Do not begin a review until a `done` event arrives. Review the staged snapshot only. Record or otherwise freeze the staged diff at the start of the review so later working-tree edits cannot silently change the review target.
 
@@ -45,8 +45,9 @@ an untracked root `.reviewed` file in one write with exactly:
 ```
 
 Creating `.reviewed` is the final publication action. Do not create it when the review file is
-first opened, and do not revise a review file after publishing it. The implementor's monitor
-validates the three referenced files, consumes `.reviewed`, and emits `reviewed`.
+first opened, and do not revise a review file after publishing it. On detection, the implementor's
+monitor reads and consumes `.reviewed`, validates the three referenced files, and emits `reviewed`.
+If validation fails, the auditor must correct the metadata and publish a fresh marker.
 
 After publishing `<audit>`, wait for the next `done` or `complete` event. The user may commit the initial implementation and audit before remediation begins; do not alter that commit or its staging state.
 

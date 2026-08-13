@@ -26,6 +26,7 @@ The auditor's done monitor removes `.done`; do not recreate it until you have co
 For a `reviewed` event, verify that its `planPath` and `auditPath` are the supplied `<plan>` and
 `<audit>`, then read `reviewPath`. The monitor emits only after the auditor has finished that file
 and published it through `.reviewed`; do not infer new work from audit or feedback-file creation.
+The monitor consumes the marker and includes its exact bytes in the event's `contents` field.
 
 ## Initial audit remediation
 
@@ -44,10 +45,9 @@ After the fixes and relevant validation are complete, stage only your changes, c
 
 ## Resolution
 
-When the monitor reports `.resolved`:
+When the monitor consumes `.resolved` and reports `resolved` (including the marker's `contents`):
 
-1. Delete the untracked `.resolved` marker.
-2. Create an empty, untracked `.complete` marker in the repository root. Do not stage `.complete`.
-3. End the loop. The auditor's monitor consumes `.complete` and exits.
+1. Create an empty, untracked `.complete` marker in the repository root. Do not stage `.complete`.
+2. End the loop. The auditor's monitor consumes `.complete` and exits.
 
 Never create `<audit>`, `<feedback-phaseN-M.md>`, `.reviewed`, or `.resolved`; those belong to the auditor.

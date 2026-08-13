@@ -11,6 +11,7 @@ export type FeedbackMonitorOptions = {
 export type ReviewedMonitorEvent = {
     event: "reviewed";
     markerPath: string;
+    contents: string;
     planPath: string;
     auditPath: string;
     reviewPath: string;
@@ -22,6 +23,7 @@ export type ReviewedMonitorEvent = {
 export type ResolvedMonitorEvent = {
     event: "resolved";
     markerPath: string;
+    contents: string;
 };
 
 export type ImplementorMonitorEvent = ReviewedMonitorEvent | ResolvedMonitorEvent;
@@ -57,10 +59,10 @@ function statPathIsFile(path: string): boolean {
     }
 }
 
-function refuseTrackedMarker(root: string): void {
-    const markerPath = join(root, ".reviewed");
+function refuseTrackedMarker(root: string, markerName: ".reviewed" | ".resolved"): void {
+    const markerPath = join(root, markerName);
     try {
-        execFileSync("git", ["-C", root, "cat-file", "-e", "HEAD:.reviewed"], { stdio: "ignore" });
+        execFileSync("git", ["-C", root, "cat-file", "-e", `HEAD:${markerName}`], { stdio: "ignore" });
         throw new Error(`refusing to consume tracked repository file as a marker: ${markerPath}`);
     } catch (error) {
         if (error instanceof Error && error.message.startsWith("refusing to consume")) throw error;
@@ -95,14 +97,19 @@ function resolvePublishedPath(root: string, path: string): string {
     return isAbsolute(path) ? resolve(path) : resolve(root, path);
 }
 
-/** Read, validate, and consume one complete auditor review publication. */
+/** Read and consume one auditor publication marker, then validate the published review. */
 export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorEvent {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".reviewed");
     if (!statPathIsFile(markerPath)) throw new Error(`the root review marker does not exist: ${markerPath}`);
-    refuseTrackedMarker(root);
+    refuseTrackedMarker(root, ".reviewed");
 
-    const marker = parseReviewedMarker(readFileSync(markerPath, "utf8"));
+    const markerContents = readFileSync(markerPath, "utf8");
+    // Detection consumes the transient signal even when its contents are invalid. This prevents
+    // one bad publication from retriggering every restarted monitor; the auditor must correct the
+    // review metadata and publish a fresh marker.
+    unlinkSync(markerPath);
+    const marker = parseReviewedMarker(markerContents);
     const planPath = resolvePublishedPath(root, marker.plan);
     const auditPath = resolvePublishedPath(root, marker.audit);
     const reviewPath = resolvePublishedPath(root, marker.review);
@@ -110,10 +117,10 @@ export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorE
         if (!statPathIsFile(path)) throw new Error(`.reviewed ${label} path is not a file: ${path}`);
     }
 
-    unlinkSync(markerPath);
     return {
         event: "reviewed",
         markerPath,
+        contents: markerContents,
         planPath,
         auditPath,
         reviewPath,
@@ -121,6 +128,17 @@ export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorE
         relativeAuditPath: relative(root, auditPath),
         relativeReviewPath: relative(root, reviewPath),
     };
+}
+
+/** Consume the auditor's terminal decision and preserve its bytes in the emitted event. */
+export function consumeRootResolvedMarker(projectRoot: string): ResolvedMonitorEvent {
+    const root = repositoryRoot(projectRoot);
+    const markerPath = join(root, ".resolved");
+    if (!statPathIsFile(markerPath)) throw new Error(`the root resolution marker does not exist: ${markerPath}`);
+    refuseTrackedMarker(root, ".resolved");
+    const contents = readFileSync(markerPath, "utf8");
+    unlinkSync(markerPath);
+    return { event: "resolved", markerPath, contents };
 }
 
 /** Wait for a fully published auditor review or the terminal resolution marker. */
@@ -142,7 +160,7 @@ export async function waitForImplementorSignal(
         if (hasReviewed && hasResolved) {
             throw new Error(`conflicting root protocol markers: ${reviewedPath} and ${resolvedPath}`);
         }
-        if (hasResolved) return { event: "resolved", markerPath: resolvedPath };
+        if (hasResolved) return consumeRootResolvedMarker(root);
         if (hasReviewed) return consumeRootReviewedMarker(root);
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for root .reviewed or .resolved in ${root}`);
