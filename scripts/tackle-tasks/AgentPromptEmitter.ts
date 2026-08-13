@@ -4,9 +4,13 @@
 // table at plans/tackle-tasks-v1_5-plan.md lines 1405-1414; only the edits that table names
 // were made. No CLI role here ever tells the agent to run a git command — the commit box
 // owns committing (rule 1).
-import { readFileSync } from "node:fs";
+//
+// This emitter is classified read-only (greenBoxPolicy.ts): it must never write to the
+// worktree. Every builder below puts its static instructions and return contract first and
+// appends all runtime/bulk data in one final "---- DATA ----" section, referenced by label
+// from the instructions (§6: interpolate data last).
+import { existsSync, readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
-import { writeTaskBrief } from "./writeTaskBrief.ts";
 
 function readStdin(): string {
     try {
@@ -43,16 +47,18 @@ export type PreparedTask = {
 };
 
 // ---------------------------------------------------------------------------
-// Shared prompt-building helpers, verbatim from tackle-tasks-v1_1_AgentPromptEmitter.ts.
+// Shared prompt-building helpers.
 // ---------------------------------------------------------------------------
 
-const testsInstruction = (t: PreparedTask) => t.tests && t.tests !== "skip"
-    ? `The task's tests field holds an example test the user wrote — put it into the plan's verification section as the concrete check to run, expanded with a few extra cases covering the individual functions/subparts it touches: ${t.tests}`
-    : 'This task has no tests field, or it is the literal string "skip" — do not require TDD; write ordinary verification commands in the plan instead.';
+const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
+example test the user wrote: put it into the plan's verification section as the concrete
+check to run, expanded with a few extra cases covering the individual functions/subparts
+it touches. Otherwise do not require TDD; write ordinary verification commands instead.`;
 
-const tddInstruction = (t: PreparedTask) => t.tests && t.tests !== "skip"
-    ? `This task's tests field holds an example test the user wrote: ${t.tests}\nWrite that test first, then expand it to also cover the individual functions/subparts you build, before writing the implementation.`
-    : 'This task has no tests field, or it is the literal string "skip" — skip TDD entirely and just write the code.';
+const TDD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
+example test the user wrote: write that test first, then expand it to also cover the
+individual functions/subparts you build, before writing the implementation. Otherwise
+skip TDD entirely and just write the code.`;
 
 const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
 
@@ -63,14 +69,19 @@ const ownedPathMap = (t: PreparedTask) => t.files
     .join("\n");
 
 // ---------------------------------------------------------------------------
-// loadPreparedTask — paths updated per plans/tackle-tasks-v1_5-plan.md Phase 9.
+// loadPreparedTask — read-only. Derives and validates the expected brief path but never
+// writes it; the generate/update-docs boxes own brief writes. Fails explicitly (never
+// silently creates one) when the brief does not exist yet.
 // ---------------------------------------------------------------------------
 
 export function loadPreparedTask(taskNumber: number, worktree: string, projectRoot: string): PreparedTask {
     const pair = resolveTaskFiles(projectRoot);
     const task = readTaskFile(pair.tasksPath).find((entry: any) => entry.taskNumber === taskNumber);
     if (!task) fail(`task ${taskNumber} not found in tasks.json`);
-    const briefFile = writeTaskBrief(taskNumber, worktree, projectRoot);
+    const briefFile = `${worktree.replace(/\/+$/, "")}/plans/brief-${taskNumber}.md`;
+    if (!existsSync(briefFile)) {
+        fail(`brief not found at ${briefFile} — the docs box must write it before this role runs; this emitter is read-only and never creates it`);
+    }
     return {
         number: taskNumber,
         briefFile,
@@ -123,29 +134,30 @@ back. Never report a fallback review as codex.`;
 // ---------------------------------------------------------------------------
 
 export function planPrompt(t: PreparedTask, preamble = ""): string {
-    return `${preamble}Invoke /ponytail:ponytail ultra.
-taskWorktree = ${t.repoRoot}
-Read this brief file by its absolute path: ${t.briefFile}
-Owned files (repo-relative => absolute in taskWorktree):
-${ownedPathMap(t)}
+    return `Invoke /ponytail:ponytail ultra.
+Read the brief file at BRIEF_FILE (see DATA below) by its absolute path.
+Owned files are listed in OWNED_FILES below, as repo-relative path => absolute path in TASK_WORKTREE.
 
-For every filesystem tool call, use the absolute taskWorktree path shown above.
+For every filesystem tool call, use the absolute TASK_WORKTREE path shown below.
 Never resolve a repo-relative task path against your ambient working directory,
 and never read or edit the same relative path in another checkout.
 
 Read the owned files — a plan that guesses at their contents will be rejected.
-Follow ~/.claude/guides/planning.md and write the plan as JSON to exactly this
-absolute path: ${t.planFile}
+Follow ~/.claude/guides/planning.md and write the plan as JSON to exactly PLAN_FILE
+(see DATA below).
 Do not change any source file — this is planning only, not implementation.
 
 Write the plan per plans/plan-format.md:
-{"task": ${t.number}, "revision": 1, "sections": [{"id": "...", "title": "...", "body": "markdown"}]}
+{"task": TASK_NUMBER, "revision": 1, "sections": [{"id": "...", "title": "...", "body": "markdown"}]}
 Each section id is stable, lowercase, kebab-case, and unique within the plan — codex
 addresses feedback by id, and a renamed id orphans that feedback. "sections" order is
 the plan order; nothing else encodes sequence. Each body is markdown, following
 ~/.claude/guides/planning.md — how and in what order, not why. Test-first per
 ~/.claude/guides/tdd.md.
-${preamble ? "\nThe text above this brief is codex's reason for scrapping the previous plan — address it in the sections you write.\n" : ""}
+
+If PREAMBLE below is non-empty, it is codex's reason for scrapping the previous plan —
+address it in the sections you write.
+
 The plan must be exact enough that the implementer makes no discovery of its own:
 - Name every edit by file path and line number, with the current text and what it becomes.
 - Account for every owned file: either its exact edit list, or the reason it needs no edit.
@@ -155,23 +167,30 @@ The plan must be exact enough that the implementer makes no discovery of its own
   needs-clarification, not a fallback sentence in the plan.
 - Quote only text you actually read. Never describe an excerpt the brief does not contain.
 - State the verification that proves the change worked, as commands with expected results.
-- ${testsInstruction(t)}
+- ${TESTS_FIELD_INSTRUCTION}
 
-If the plan would need to edit a file outside the absolute owned paths above, set status
-"needs-clarification" and name that file in "question" — do not plan the edit anyway.
-If the blocker is instead that you need to READ a file outside the absolute owned paths
-to write an exact plan, set status "needs-clarification", populate
-missingFiles with the repo-relative path(s) of each file you need, and use
-"question" to explain why each path is needed.
-If the task is unclear, set status "needs-clarification" and put your
-question in "question". If the task no longer applies to the codebase, set
-status "not-relevant" and explain why in "question". Otherwise write the
-plan file and set status "planned".
-Return {task: ${t.number}, status, planFile: "${t.planFile}", question, missingFiles}.
-You are forbidden to edit any file other than ${t.planFile}; to read a task source
+If the plan would need to edit a file outside the absolute owned paths above, or to READ
+a file outside them to write an exact plan, or if the task is unclear or no longer
+applies to the codebase, do not write PLAN_FILE — return planWritten: false. Otherwise
+write the plan file exactly at PLAN_FILE and return planWritten: true.
+
+Return {planWritten}.
+You are forbidden to edit any file other than PLAN_FILE; to read a task source
 file outside the absolute owned paths; to leave a decision for the implementer; or to
-write a plan step whose exact target you did not read. The absolute brief and plan paths
-above, plus ~/.claude/guides/planning.md, are the only non-source read exceptions.`;
+write a plan step whose exact target you did not read. BRIEF_FILE and PLAN_FILE below,
+plus ~/.claude/guides/planning.md, are the only non-source read exceptions.
+
+---- DATA ----
+TASK_WORKTREE = ${t.repoRoot}
+TASK_NUMBER = ${t.number}
+BRIEF_FILE = ${t.briefFile}
+PLAN_FILE = ${t.planFile}
+OWNED_FILES (repo-relative => absolute in TASK_WORKTREE) =
+${ownedPathMap(t)}
+TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) =
+${t.tests ?? "(none)"}
+PREAMBLE (codex's reason for scrapping the previous plan, empty if none) =
+${preamble || "(none)"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -180,9 +199,13 @@ above, plus ~/.claude/guides/planning.md, are the only non-source read exception
 // ---------------------------------------------------------------------------
 
 function reviewPlanQuestion(t: PreparedTask): string {
-    return `Review an implementation plan. Read only these two files: the brief ${t.briefFile} and the plan ${t.planFile}. Do not edit anything.
+    return `Review an implementation plan. Read only BRIEF_FILE and PLAN_FILE, listed in DATA
+below. Do not edit anything.
 
-Decide whether the plan is good enough to hand to an implementer: it stays within the task's owned files (${t.files.join(", ")}), it gives concrete steps rather than open design questions, and someone could follow it without having to decide anything the plan should have already decided.
+Decide whether the plan is good enough to hand to an implementer: it stays within the
+task's owned files, listed in OWNED_FILES below, it gives concrete steps rather than open
+design questions, and someone could follow it without having to decide anything the plan
+should have already decided.
 
 Return your verdict as JSON matching plans/plan-format.md's codex-review.json:
 {"verdict": "amend"|"scrap", "notes": "...", "amendments": [...]}
@@ -191,7 +214,12 @@ sections in place. Use "amend" (with at least one amendment) otherwise. Every
 amendment names an existing section id — {"op": "replace", "id": "...", "body": "..."}
 rewrites a section, {"op": "insert", "after": "...", "id": "...", "title": "...", "body": "..."}
 adds one after an existing id, {"op": "remove", "id": "..."} drops one. Never invent an
-id an "amend" verdict cannot point back to a real section it is amending.`;
+id an "amend" verdict cannot point back to a real section it is amending.
+
+---- DATA ----
+BRIEF_FILE = ${t.briefFile}
+PLAN_FILE = ${t.planFile}
+OWNED_FILES = ${t.files.join(", ")}`;
 }
 
 export function reviewPlanPrompt(t: PreparedTask): string {
@@ -201,7 +229,7 @@ Never edit any file — this agent only reviews the plan, it never applies fixes
 
 Write the reviewer's JSON verdict to exactly this absolute path: ${t.reviewFile}
 
-Return {task: ${t.number}, reviewWritten: true, reviewer}.`;
+Return {reviewWritten: true, reviewer}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,11 +238,20 @@ Return {task: ${t.number}, reviewWritten: true, reviewer}.`;
 // ---------------------------------------------------------------------------
 
 function reviewTestsQuestion(t: PreparedTask): string {
-    return `Review the tests for task #${t.number} against what the task asked for. Read only the brief ${t.briefFile}, the plan ${t.planFile}, and the task's own test files. Do not edit anything, and never run the tests — you are judging what they assert, not whether they pass.
+    return `Review the tests for this task against what the task asked for. Read only BRIEF_FILE,
+PLAN_FILE, and the task's own test files, listed in DATA below. Do not edit anything, and
+never run the tests — you are judging what they assert, not whether they pass.
 
-Flag a test only when it is wrong about what the task asked for: it asserts something the brief or plan does not call for, or it asserts nothing. Do not flag a test merely because you would have written it differently.
+Flag a test only when it is wrong about what the task asked for: it asserts something the
+brief or plan does not call for, or it asserts nothing. Do not flag a test merely because
+you would have written it differently.
 
-Return your verdict as JSON: {"flagged": true|false, "notes": "..."}`;
+Return your verdict as JSON: {"flagged": true|false, "notes": "..."}
+
+---- DATA ----
+TASK_NUMBER = ${t.number}
+BRIEF_FILE = ${t.briefFile}
+PLAN_FILE = ${t.planFile}`;
 }
 
 export function reviewTestsPrompt(t: PreparedTask): string {
@@ -224,7 +261,7 @@ Never edit any file, and never run the tests — this agent only reviews what th
 
 Write the reviewer's JSON verdict to exactly this absolute path: ${t.testReviewFile}
 
-Return {task: ${t.number}, flagged, reviewer}.`;
+Return {flagged, reviewer}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,32 +271,31 @@ Return {task: ${t.number}, flagged, reviewer}.`;
 
 export function implementPrompt(t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number): string {
     const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`;
-    return `You are implementing EXACTLY ONE pre-planned task from
-${worktreePath(t, ".taskTools/tasks.json")}: #${t.number}.
+    return `You are implementing EXACTLY ONE pre-planned task, task #TASK_NUMBER (see DATA below).
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`name = value\` means record that value and use it later.
 A line reading \`run(...)\` means actually execute that command now.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
-taskWorktree = ${t.repoRoot}
-ownedFiles = ${t.files.join(", ")}
-ownedPaths (the only editable source/test paths) =
-${ownedPathMap(t)}
-plan = ${t.planFile}
-notesFile = ${t.notesFile}
+taskWorktree = TASK_WORKTREE (see DATA below)
+ownedFiles = OWNED_FILES (see DATA below)
+ownedPaths (the only editable source/test paths) = OWNED_PATHS (see DATA below)
+plan = PLAN_FILE (see DATA below)
+notesFile = NOTES_FILE (see DATA below)
 timeBudget = 10 minutes
-${note ? `note = ${note}\n` : ""}
-${tddInstruction(t)}
+note = NOTE (see DATA below; "(none)" means no note)
+
+${TDD_INSTRUCTION}
 
 Treat taskWorktree as the project root for jot:implement. Every repo-relative
 path in the plan means its absolute path under taskWorktree. Use absolute paths
 for Read/Edit/Search. Never edit the corresponding path in the ambient checkout.
 
-use jot:implement ${t.planFile}, writing its implementation-notes log to exactly notesFile
+use jot:implement plan, writing its implementation-notes log to exactly notesFile
 
 if the plan is impossible as written:
-    return {task: ${t.number}, implemented: false, implementationNotesFile: notesFile, remaining: [], summary: why it cannot be done}
+    return {implemented: false, implementationNotesFile: notesFile, remaining: []}
 
 implement every step of the plan, editing only ownedPaths
 
@@ -267,7 +303,7 @@ typecheck = run(${rootedTypecheck})
 if typecheck reported errors in ownedPaths:
     fix them using their absolute taskWorktree paths
 
-if ${worktreePath(t, "scripts/relatedTests.ts")} exists:
+if the file scripts/relatedTests.ts exists under taskWorktree:
     tests = run it from taskWorktree to discover the tests covering ownedFiles
 else:
     tests = the absolute test paths under taskWorktree belonging to ownedFiles
@@ -282,17 +318,17 @@ while any test failed and fixRound is less than ${maxFixRounds}:
     results = run every test command as (cd -- ${shellQuote(t.repoRoot)} && <test command>)
 
 if any test still failed after ${maxFixRounds} fix rounds:
-    return {task: ${t.number}, implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
+    return {implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
 
 if typecheck is clean and every test passed:
-    return {task: ${t.number}, implemented: true, implementationNotesFile: notesFile, remaining: []}
+    return {implemented: true, implementationNotesFile: notesFile, remaining: []}
 else if part of the plan is implemented:
-    return {task: ${t.number}, implemented: false, implementationNotesFile: notesFile, remaining: the plan steps not yet done, plus any failing test names}
+    return {implemented: false, implementationNotesFile: notesFile, remaining: the plan steps not yet done, plus any failing test names}
 else:
-    return {task: ${t.number}, implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
+    return {implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
 
 if you reach timeBudget before finishing:
-    return {task: ${t.number}, implemented: false, implementationNotesFile: notesFile, remaining: the not-yet-done plan steps}
+    return {implemented: false, implementationNotesFile: notesFile, remaining: the not-yet-done plan steps}
 
 You are forbidden to touch anything outside ownedPaths excluding notesFile; to
 add scope or refactors the plan does not call for; to redecide anything the
@@ -304,7 +340,20 @@ without editing it.
 
 You are forbidden to use an ambient-cwd-relative filesystem path or run any git
 command yourself. Every shell command other than a filesystem tool call must
-explicitly run inside taskWorktree.`;
+explicitly run inside taskWorktree.
+
+---- DATA ----
+TASK_NUMBER = ${t.number}
+TASK_WORKTREE = ${t.repoRoot}
+OWNED_FILES = ${t.files.join(", ")}
+OWNED_PATHS (repo-relative => absolute in TASK_WORKTREE) =
+${ownedPathMap(t)}
+PLAN_FILE = ${t.planFile}
+NOTES_FILE = ${t.notesFile}
+NOTE (context passed in for this run) =
+${note || "(none)"}
+TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) =
+${t.tests ?? "(none)"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,8 +363,9 @@ explicitly run inside taskWorktree.`;
 // ---------------------------------------------------------------------------
 
 export function fixConflictsPrompt(checkoutPath: string, conflictedFilePaths: string[]): string {
-    return `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve exactly these conflicted paths — this is the complete list, do not search the repository for more:
-${conflictedFilePaths.map((p) => `  - ${p}`).join("\n")}
+    return `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve
+exactly the conflicted paths listed in CONFLICTED_PATHS below — that is the complete
+list, do not search the repository for more.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`return {...}\` means stop and report exactly those fields.
@@ -324,7 +374,7 @@ You may READ anything, anywhere in the tree — callers, callees, tests, other l
 You may EDIT any file in any layer — resolving a conflict often means updating a call
 site, and a call site can live in a different repository.
 
-for each path in the list above:
+for each path in CONFLICTED_PATHS below:
     open ${checkoutPath}/path
     resolve every <<<<<<< / ======= / >>>>>>> block, keeping BOTH sides' intent
     remove the conflict markers
@@ -345,55 +395,72 @@ disappear; to force-push or hard-reset anything you did not create; to run
 \`git rebase --continue\` or \`git rebase --abort\` yourself; to stage or commit
 anything yourself; or to leave a required edit in a different repository unmade.
 Returning resolved false is a correct outcome when a conflict genuinely cannot
-be resolved, not a failure.`;
+be resolved, not a failure.
+
+---- DATA ----
+CHECKOUT_PATH = ${checkoutPath}
+CONFLICTED_PATHS =
+${conflictedFilePaths.length === 0 ? "  (none)" : conflictedFilePaths.map((p) => `  - ${p}`).join("\n")}`;
 }
 
 // ---------------------------------------------------------------------------
 // fix-suite / fix-tests — copied from rebaseFixBrief, with the permission to edit
 // the failing test removed and the self-commit removed. "fix the codebase" edits
-// source, never tests (diagram rule 4).
+// source, never tests (diagram rule 4). The edit allowlist is exactly the
+// occurrence-appropriate owned source paths — never the whole checkout.
 // ---------------------------------------------------------------------------
 
-function fixCodebasePrompt(subject: string, checkoutPath: string, testOutput: string, forbiddenPaths: string[]): string {
+function fixCodebasePrompt(subject: string, checkoutPath: string, testOutput: string, forbiddenPaths: string[], ownedSourcePaths: string[]): string {
     return `${subject} is RED, in ${checkoutPath}. Fix the cause.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
-Failure output from the test run:
-${testOutput}
+You may READ anything, anywhere in the tree. You may EDIT ONLY the paths listed in
+OWNED_SOURCE_PATHS below, relative to ${checkoutPath} — never the test itself, and never
+any other path, even source code that looks related. The paths listed in FORBIDDEN_PATHS
+below sit on disk under ${checkoutPath} but belong to OTHER layers (separate occurrences)
+and are out of scope even though they sit under ${checkoutPath} — do not edit anything
+inside them.
 
-You may READ anything, anywhere in the tree. You may EDIT the source code inside
-${checkoutPath} that the failing test covers — never the test itself. Do not edit any
-file outside ${checkoutPath}. These paths inside ${checkoutPath} are OTHER layers
-(separate occurrences) and are out of scope even though they sit on disk under
-${checkoutPath} — do not edit anything inside them: ${forbiddenPaths.length === 0 ? "(none)" : forbiddenPaths.join(", ")}
+fix the cause of the failure described in FAILURE_OUTPUT below, editing only the paths
+in OWNED_SOURCE_PATHS
 
-fix the cause of the failure
+if fixing the cause requires editing anything outside OWNED_SOURCE_PATHS:
+    make no edit and return {fixed: false}
 
 leave your fix uncommitted — "commit if needed" stages and commits every touched
 layer next; do not stage or commit anything yourself
 
-if the fix addresses every failure listed above:
+if the fix addresses every failure in FAILURE_OUTPUT:
     return {fixed: true}
 else:
     return {fixed: false}
 
 You are forbidden to weaken, delete, or stub out a test or the code it covers
-to make the failure disappear; to edit a test file at all; to edit any file
-outside ${checkoutPath}, or inside a layer listed above as out of scope; to
+to make the failure disappear; to edit a test file at all; to edit any path
+outside OWNED_SOURCE_PATHS, or inside a layer listed in FORBIDDEN_PATHS; to
 force-push or hard-reset anything you did not create; or to stage or commit
-anything yourself.`;
+anything yourself.
+
+---- DATA ----
+CHECKOUT_PATH = ${checkoutPath}
+OWNED_SOURCE_PATHS (the complete edit allowlist, relative to CHECKOUT_PATH) =
+${ownedSourcePaths.length === 0 ? "  (none)" : ownedSourcePaths.map((p) => `  - ${p}`).join("\n")}
+FORBIDDEN_PATHS (other layers, out of scope even though on disk under CHECKOUT_PATH) =
+${forbiddenPaths.length === 0 ? "(none)" : forbiddenPaths.join(", ")}
+FAILURE_OUTPUT (from the test run) =
+${testOutput}`;
 }
 
-export function fixSuitePrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[]): string {
+export function fixSuitePrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[], ownedSourcePaths: string[] = []): string {
     const layer = occurrenceId === "" ? "root" : occurrenceId;
-    return fixCodebasePrompt(`The full suite for layer "${layer}"`, checkoutPath, testOutput, forbiddenPaths);
+    return fixCodebasePrompt(`The full suite for layer "${layer}"`, checkoutPath, testOutput, forbiddenPaths, ownedSourcePaths);
 }
 
-export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[], taskNumber: number): string {
+export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[], taskNumber: number, ownedSourcePaths: string[] = []): string {
     const layer = occurrenceId === "" ? "root" : occurrenceId;
-    return fixCodebasePrompt(`The tests for task #${taskNumber} in layer "${layer}"`, checkoutPath, testOutput, forbiddenPaths);
+    return fixCodebasePrompt(`The tests for task #${taskNumber} in layer "${layer}"`, checkoutPath, testOutput, forbiddenPaths, ownedSourcePaths);
 }
 
 // ---------------------------------------------------------------------------
@@ -403,32 +470,39 @@ export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testO
 // ---------------------------------------------------------------------------
 
 export function amendTestsPrompt(t: PreparedTask, notes: string, createdTestFiles: string[], testFiles: string[]): string {
-    return `Apply test-review feedback. The reviewer's notes are below, verbatim:
+    return `Apply test-review feedback, given in REVIEWER_NOTES below.
 
-${notes}
+Files you created in this task's own worktree are listed in CREATED_TEST_FILES below,
+and you may freely edit them.
 
-Files you created in this task's own worktree, and may freely edit:
-${createdTestFiles.length === 0 ? "  (none)" : createdTestFiles.map((f) => `  - ${f}`).join("\n")}
+Pre-existing test files this task modified, but did not create, are listed in TEST_FILES
+below — the diagram's rule that a test not created in this task's worktree may only be
+changed when it is broken or asserts nothing applies to every one of these, and to no
+other file.
 
-Pre-existing test files this task modified, but did not create — the diagram's rule
-that a test not created in this task's worktree may only be changed when it is broken
-or asserts nothing applies to every one of these, and to no other file:
-${testFiles.length === 0 ? "  (none)" : testFiles.map((f) => `  - ${f}`).join("\n")}
-
-Read ${t.testReviewFile}, then edit only the files listed above, changing exactly what
-the feedback calls for. Never edit a source file, the brief, or the plan, and never edit
-a pre-existing test file for any reason other than it being broken or asserting nothing.
+Read ${t.testReviewFile}, then edit only the files listed in CREATED_TEST_FILES and
+TEST_FILES below, changing exactly what REVIEWER_NOTES calls for. Never edit a source
+file, the brief, or the plan, and never edit a pre-existing test file for any reason
+other than it being broken or asserting nothing.
 
 Leave your edits uncommitted — "commit if needed" stages and commits every touched
 layer next; do not stage or commit anything yourself.
 
 If there is nothing to apply, make no edits and return amended false.
 
-Return {task: ${t.number}, amended: true} once you have made the edits, or {task: ${t.number}, amended: false} if there was nothing to apply.
+Return {amended: true} once you have made the edits, or {amended: false} if there was nothing to apply.
 
-You are forbidden to edit any file other than the ones listed above; to change a
-pre-existing test file except to fix it when it is broken or asserts nothing; or to
-stage or commit anything yourself.`;
+You are forbidden to edit any file other than the ones listed in CREATED_TEST_FILES and
+TEST_FILES; to change a pre-existing test file except to fix it when it is broken or
+asserts nothing; or to stage or commit anything yourself.
+
+---- DATA ----
+CREATED_TEST_FILES (freely editable) =
+${createdTestFiles.length === 0 ? "  (none)" : createdTestFiles.map((f) => `  - ${f}`).join("\n")}
+TEST_FILES (pre-existing, broken-or-empty exception only) =
+${testFiles.length === 0 ? "  (none)" : testFiles.map((f) => `  - ${f}`).join("\n")}
+REVIEWER_NOTES =
+${notes}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +532,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
                 typeof payload.occurrenceId === "string" ? payload.occurrenceId : "",
                 typeof payload.testOutput === "string" ? payload.testOutput : "",
                 Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
+                Array.isArray(payload.ownedPaths) ? payload.ownedPaths as string[] : [],
             );
         case "fix-tests":
             return fixTestsPrompt(
@@ -466,6 +541,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
                 typeof payload.testOutput === "string" ? payload.testOutput : "",
                 Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
                 taskNumber,
+                Array.isArray(payload.ownedPaths) ? payload.ownedPaths as string[] : [],
             );
         case "review-tests":
             return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));

@@ -8,6 +8,9 @@ import { join } from "node:path";
 import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../../scripts/taskGroups.ts";
+import {
+    SUBMODULES_INITIALIZED, SUBMODULES_NOT_INITIALIZED, SUBMODULE_INITIALIZATION_UNKNOWN,
+} from "../../scripts/tackle-tasks/reconciliationOutcomes.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -45,7 +48,7 @@ test("test_initTaskSubmodules_isANoOpAfterCreateTaskWorktree", () => {
     const result = initTaskSubmodules(worktreePath);
 
     // Verification: the second run is a no-op.
-    assert.deepEqual(result, { initialized: false });
+    assert.deepEqual(result, { initialized: SUBMODULES_NOT_INITIALIZED });
 });
 
 test("test_initTaskSubmodules_reportsInitializedTrueWhenASubmoduleWasUninitialized", () => {
@@ -59,7 +62,7 @@ test("test_initTaskSubmodules_reportsInitializedTrueWhenASubmoduleWasUninitializ
     const result = initTaskSubmodules(worktreePath);
 
     // Verification: it reports the work it actually did, and the submodule is populated again.
-    assert.deepEqual(result, { initialized: true });
+    assert.deepEqual(result, { initialized: SUBMODULES_INITIALIZED });
     const status = git(worktreePath, "submodule", "status");
     assert.ok(!status.trim().startsWith("-"));
 });
@@ -75,5 +78,29 @@ test("test_initTaskSubmodules_isANoOpWhenThereIsNoGitmodulesFile", () => {
     git(repoRoot, "commit", "-q", "-m", "seed");
 
     // Test action + verification.
-    assert.deepEqual(initTaskSubmodules(repoRoot), { initialized: false });
+    assert.deepEqual(initTaskSubmodules(repoRoot), { initialized: SUBMODULES_NOT_INITIALIZED });
+});
+
+test("test_initTaskSubmodules_neverReturnsTheUnknownInitializationStateForAnyReachableInput", () => {
+    // The real script always checks submodule status before initializing, so it can always tell
+    // whether it did work - unlike reconciliation, it must never report the unknown value.
+    const noGitmodulesRoot = mkdtempSync(join(tmpdir(), "initTaskSubmodules-plain2-"));
+    git(noGitmodulesRoot, "init", "-q");
+    git(noGitmodulesRoot, "config", "user.email", "test@example.com");
+    git(noGitmodulesRoot, "config", "user.name", "Test");
+    writeFileSync(join(noGitmodulesRoot, "seed.txt"), "seed\n");
+    git(noGitmodulesRoot, "add", "seed.txt");
+    git(noGitmodulesRoot, "commit", "-q", "-m", "seed");
+
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    const alreadyPopulatedWorktree = createWorktreeForGroup(repoRoot, group);
+    const deinitializedWorktree = createWorktreeForGroup(
+        repoRoot, { groupId: 2, taskNumbers: [2], filePaths: [], scope: "declared" },
+    );
+    git(deinitializedWorktree, "submodule", "deinit", "-f", "vendor");
+
+    for (const worktreePath of [noGitmodulesRoot, alreadyPopulatedWorktree, deinitializedWorktree]) {
+        assert.notEqual(initTaskSubmodules(worktreePath).initialized, SUBMODULE_INITIALIZATION_UNKNOWN);
+    }
 });

@@ -18,7 +18,10 @@ const NOT_RESUMABLE: IsTaskRunResumableOutput = {
     resumable: false, implementationNotesFile: null, leaseEstablished: false,
 };
 
-function isNotesFileContained(worktreePath: string, notesFile: string): boolean {
+// F5/F7: the one read-only realpath + regular-file containment predicate. Shared with
+// recordImplementationNotes.ts (the mutating write side) and reconcileStep.ts's resumability and
+// notes-recording handlers, so all four cannot drift on what "inside the worktree" means.
+export function isNotesFileContained(worktreePath: string, notesFile: string): boolean {
     const notesPath = isAbsolute(notesFile) ? notesFile : join(worktreePath, notesFile);
     if (!existsSync(notesPath)) return false;
     let realWorktree: string;

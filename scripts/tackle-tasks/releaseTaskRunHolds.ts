@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../prepareTasks.ts";
 import { buildLockOwner, releaseSourceRepoLock } from "./sourceRepoLock.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { HOLD_NOT_RELEASED, HOLD_RELEASED, type HoldReleaseState } from "./reconciliationOutcomes.ts";
 
 export type ReleaseTaskRunHoldsInput = {
     taskNumber: number;
@@ -14,7 +15,11 @@ export type ReleaseTaskRunHoldsInput = {
     branchName: string | null;
 };
 
-export type ReleaseTaskRunHoldsOutput = { leaseReleased: boolean; leaseRetained: boolean; lockReleased: boolean };
+export type ReleaseTaskRunHoldsOutput = {
+    leaseReleased: HoldReleaseState;
+    leaseRetained: boolean;
+    lockReleased: HoldReleaseState;
+};
 
 function taskBranchRemains(projectRoot: string, branchName: string): boolean {
     try {
@@ -36,28 +41,29 @@ export function releaseTaskRunHolds(input: ReleaseTaskRunHoldsInput): ReleaseTas
     requireAbsolutePath("projectRoot", input.projectRoot);
     if (input.worktree !== null) requireAbsolutePath("worktree", input.worktree);
 
-    const { released: lockReleased } = releaseSourceRepoLock(
+    const { released } = releaseSourceRepoLock(
         input.projectRoot,
         buildLockOwner(input.runId, input.taskNumber),
     );
+    const lockReleased: HoldReleaseState = released ? HOLD_RELEASED : HOLD_NOT_RELEASED;
 
     if (input.worktree === null) {
-        return { leaseReleased: false, leaseRetained: false, lockReleased };
+        return { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased };
     }
 
     const owner = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(input.worktree));
     if (owner === null || owner.runId !== input.runId) {
-        return { leaseReleased: false, leaseRetained: false, lockReleased };
+        return { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased };
     }
 
     const worktreeRemains = existsSync(input.worktree);
     const branchRemains = input.branchName !== null && taskBranchRemains(input.projectRoot, input.branchName);
     if (worktreeRemains || branchRemains) {
-        return { leaseReleased: false, leaseRetained: true, lockReleased };
+        return { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: true, lockReleased };
     }
 
     releaseTaskWorktreeLease({ worktreePath: input.worktree, runId: input.runId });
-    return { leaseReleased: true, leaseRetained: false, lockReleased };
+    return { leaseReleased: HOLD_RELEASED, leaseRetained: false, lockReleased };
 }
 
 if (process.argv[1]?.endsWith("releaseTaskRunHolds.ts")) {

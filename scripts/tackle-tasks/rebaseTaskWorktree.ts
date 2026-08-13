@@ -10,7 +10,7 @@ import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts"
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
-import { updateCurrentTaskRun, type SourceTipReceipt } from "./taskRunState.ts";
+import { updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt } from "./taskRunState.ts";
 import {
     rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
@@ -21,13 +21,14 @@ export type RebaseTaskWorktreeInput = {
     worktreePath: string;
     taskNumber: number;
     runId: string;
+    stepId: string;
     rootSourceBranch: string;
 };
 
 // F3: the merge box's proof that it merges the exact tip rebase left. Persisted onto the
 // current run record (see mergeTaskWorktree.ts's verification) so a lost-stdout reconciliation
 // can still recover it.
-export type { SourceTipReceipt } from "./taskRunState.ts";
+export type { RebaseStepReceipt, SourceTipReceipt } from "./taskRunState.ts";
 
 export type RebaseTaskWorktreeOutput = {
     lock: "acquired" | "held" | "recoverable";
@@ -104,10 +105,27 @@ export function captureSourceTipReceipts(worktreePath: string, projectRoot: stri
     return receipts;
 }
 
+// F3: every worktree layer's HEAD right after the step finished. Paired with the exact
+// occurrence set it walked, this is what lets reconciliation tell "this step's own evidence"
+// from a stale receipt a prior visit left behind.
+function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string): { occurrenceId: string; head: string }[] {
+    return buildWorktreeOccurrences(worktreePath, projectRoot).map((occurrence) => ({
+        occurrenceId: occurrence.occurrenceId,
+        head: execFileSync("git", ["-C", occurrence.worktreeCheckoutPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+    }));
+}
+
 export function persistSourceTipReceipts(
-    taskNumber: number, runId: string, receipts: SourceTipReceipt[], projectRoot: string,
+    taskNumber: number, runId: string, stepId: string, worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[],
 ): void {
-    updateCurrentTaskRun(taskNumber, runId, { sourceTipsAtRebase: receipts }, projectRoot);
+    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot);
+    const rebaseStepReceipt: RebaseStepReceipt = {
+        stepId,
+        occurrenceIds: worktreeHeads.map((entry) => entry.occurrenceId).sort(),
+        worktreeHeads,
+        sourceTips: receipts,
+    };
+    updateCurrentTaskRun(taskNumber, runId, { sourceTipsAtRebase: receipts, rebaseStepReceipt }, projectRoot);
 }
 
 function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWorktreeOutput, "lock" | "heldByOwner" | "recoveryCommand"> {
@@ -178,7 +196,7 @@ export async function rebaseTaskWorktree(
     const mapped = mapParentOutcome(worktreePath, parentOutcome);
     if (mapped.stoppedAt === null && mapped.failureReason === null) {
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
-        persistSourceTipReceipts(input.taskNumber, input.runId, receipts, projectRoot);
+        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
     }
     return { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
 }

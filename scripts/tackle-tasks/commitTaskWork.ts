@@ -13,10 +13,14 @@ export type CommitTaskWorkInput = {
     worktreePath: string;
     taskNumber: number;
     runId: string;
+    stepId: string;
     rootSourceBranch: string;
 };
 
 export type CommitTaskWorkOutput = { commits: TaskCommit[] };
+
+const STEP_TRAILER = "Task-Step";
+const STEP_TRAILER_PATTERN = new RegExp(`^${STEP_TRAILER}: (.+)$`, "m");
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -24,6 +28,17 @@ function git(repoRoot: string, ...args: string[]): string {
 
 function isDirty(checkoutPath: string): boolean {
     return git(checkoutPath, "status", "--porcelain").trim() !== "";
+}
+
+// F2: embeds the logical step in the commit itself, so a commit that landed but whose result
+// never reached the run record is still recognizable as "made by this step" on a safe rerun.
+function commitMessageWithStepTrailer(message: string, stepId: string): string {
+    return `${message}\n\n${STEP_TRAILER}: ${stepId}`;
+}
+
+function readHeadStepId(checkoutPath: string): string | null {
+    const body = git(checkoutPath, "log", "-1", "--format=%B");
+    return STEP_TRAILER_PATTERN.exec(body)?.[1]?.trim() ?? null;
 }
 
 function readTaskTitle(taskNumber: number, projectRoot: string): string {
@@ -36,11 +51,12 @@ function readTaskTitle(taskNumber: number, projectRoot: string): string {
 export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput {
     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
     const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
-    const { taskNumber, runId, rootSourceBranch } = input;
+    const { taskNumber, runId, stepId, rootSourceBranch } = input;
     configureGeneratedArtifactIsolation(taskNumber, worktreePath);
 
     const currentRun = getCurrentTaskRun(taskNumber, projectRoot);
-    const hasEarlierCommit = (currentRun?.commits.length ?? 0) > 0;
+    const priorCommits = currentRun?.commits ?? [];
+    const hasEarlierCommit = priorCommits.length > 0;
     const message = hasEarlierCommit
         ? `task ${taskNumber}: fixed code making tests fail`
         : `task ${taskNumber}: ${readTaskTitle(taskNumber, projectRoot)}`;
@@ -49,11 +65,27 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
     const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, rootSourceBranch);
     const commits: TaskCommit[] = [];
     for (const occurrence of occurrences) {
-        if (!isDirty(occurrence.checkoutPath)) continue;
-        git(occurrence.checkoutPath, "add", "-A");
-        git(occurrence.checkoutPath, "commit", "-q", "-m", message);
-        const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
-        commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind });
+        // Idempotent rerun: this step already has a durable record entry for this layer.
+        const alreadyRecorded = priorCommits.some(
+            (commit) => commit.occurrenceId === occurrence.occurrenceId && commit.stepId === stepId,
+        );
+        if (alreadyRecorded) continue;
+
+        if (isDirty(occurrence.checkoutPath)) {
+            git(occurrence.checkoutPath, "add", "-A");
+            git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId));
+            const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
+            commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind, stepId });
+            continue;
+        }
+
+        // F2: the layer is clean, but its HEAD was made by this exact step and was never
+        // recorded (the process died between `git commit` and `appendTaskCommits`). Append the
+        // hash that already landed instead of silently skipping it or making a second commit.
+        if (readHeadStepId(occurrence.checkoutPath) === stepId) {
+            const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
+            commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind, stepId });
+        }
     }
 
     if (commits.length > 0) appendTaskCommits(taskNumber, runId, commits, projectRoot);

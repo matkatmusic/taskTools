@@ -6,8 +6,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { claimTask, readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
+import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../../scripts/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -177,4 +178,114 @@ test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfter
     const state = readTaskRunState(1, root);
     assert.equal(state.worktree, null);
     assert.equal(state.leaseRunId, null);
+});
+
+// F1: fault injection for a journal retained by an earlier call that died AFTER task state was
+// written but BEFORE it deleted its own journal - the creation genuinely finished.
+test("test_createTaskWorktree_recoversALateCompletedJournalWithoutTouchingTheGoodWorktree", () => {
+    // Setup: a real worktree/lease created and task state recorded for real (the creation truly
+    // finished), then a journal is hand-written back to simulate death right before its unlink.
+    // Before the fix, createTaskWorktree never looked for a retained journal at all: it would
+    // overwrite this one, collide with the existing lease (EEXIST), and its own rollback would
+    // then DESTROY this already-good worktree/branch before rethrowing - real data loss.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    const worktree = createWorktreeForGroup(root, group, "run-a");
+    updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
+    const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: expectedWorktree, branch: "task-1",
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action: rerun createTaskWorktree exactly as a resumed workflow would - must not throw.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: the already-created worktree is returned untouched, not rebuilt.
+    assert.equal(output.worktree, worktree);
+    assert.equal(output.branch, "task-1");
+    assert.ok(existsSync(worktree));
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(worktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-a");
+    assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
+
+    // Verification: the stale journal is gone, exactly once, and task state still matches.
+    assert.ok(!existsSync(journalPath));
+    const state = readTaskRunState(1, root);
+    assert.equal(state.worktree, worktree);
+    assert.equal(state.leaseRunId, "run-a");
+});
+
+// F1: fault injection for a journal retained by an earlier call that died with a real
+// worktree/branch/lease created, but BEFORE task state was ever written.
+test("test_createTaskWorktree_recoversARetainedJournalWithNoTaskStateRecordedYet", () => {
+    // Setup: a real worktree/lease exist and a journal is hand-written to match, but
+    // updateCurrentTaskRun never ran - task.run.worktree is still null. Before the fix this call
+    // would overwrite the journal, collide with the existing lease (EEXIST), trigger rollback,
+    // and throw instead of transparently recovering in one call.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    createWorktreeForGroup(root, group, "run-a");
+    const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: expectedWorktree, branch: "task-1",
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action: rerun createTaskWorktree exactly as a resumed workflow would - one call, no throw.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: exactly one fresh worktree/branch/lease exists, recorded on task state.
+    assert.equal(output.branch, "task-1");
+    assert.ok(existsSync(output.worktree));
+    assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(output.worktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-a");
+    assert.ok(!existsSync(journalPath));
+    const state = readTaskRunState(1, root);
+    assert.equal(state.worktree, output.worktree);
+    assert.equal(state.leaseRunId, "run-a");
+});
+
+// F1: fault injection for a retained journal whose named run is no longer the physical lease
+// owner - a live third owner now legitimately holds it and must never be touched.
+test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhysicalLease", () => {
+    // Setup: a completed creation under run-a, then a journal is hand-written back naming run-a
+    // (simulating a retained journal), and the physical lease is separately overwritten to name
+    // run-c (a live third owner). Before the fix, createTaskWorktree would blindly overwrite the
+    // retained journal with a new one naming the CALLING run before it ever inspected the lease -
+    // corrupting the exact ownership record Phase 8 reconciliation depends on - even though its
+    // own EEXIST-triggered rollback happens to also refuse to touch run-c's worktree here.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    createTaskWorktree(1, "run-a", root);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: expectedWorktree, branch: "task-1",
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+    writeFileSync(taskWorktreeLeasePath(expectedWorktree), JSON.stringify({ runId: "run-c", pid: 1, createdAt: 1 }));
+
+    // Test action + verification: a call under a different run refuses rather than touching run-c's worktree.
+    assert.throws(() => createTaskWorktree(1, "run-b", root));
+
+    // Verification: run-c's lease, the worktree, and the branch are all untouched.
+    assert.ok(existsSync(expectedWorktree));
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(expectedWorktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-c");
+    assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
+
+    // Verification: the journal is retained UNCHANGED - still naming its original run-a, never
+    // overwritten with the new caller's identity before the conflict was discovered.
+    assert.ok(existsSync(journalPath));
+    const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+    assert.equal(journal.runId, "run-a");
 });
