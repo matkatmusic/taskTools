@@ -1,8 +1,31 @@
-# tackle-tasks v1.5 plan audit — third pass
+# tackle-tasks v1.5 plan audit — final pre-implementation check
 
-Re-audited against the current `plans/diagram/pipeline.mmd`, treating the diagram as the
-source of truth. This pass verifies the previous eight blockers and lists only remaining
-implementation blockers.
+Re-read the current `plans/tackle-tasks-v1_5-plan.md` against
+`plans/diagram/pipeline.mmd`, with the diagram treated as the source of truth. The four
+material gaps from the final check have now been resolved in the plan and, where they affect
+global pipeline semantics, in the diagram. Cosmetic wording and speculative low-probability
+cases remain intentionally out of scope.
+
+## Verdict
+
+The plan is ready for implementation with respect to every material issue identified by
+this audit.
+
+| Final issue | Status | Resolution |
+|---|---|---|
+| stale source-lock recovery | Resolved | Adds the explicit `recoverSourceRepoLock.ts` maintenance CLI; cold locks stop rather than loop, and recovery requires the exact owner plus typed operator confirmation. |
+| incomplete lost-mutation reconciliation | Resolved | The policy now classifies state-writing test boxes as mutating, gives logical calls stable `stepId`s, and requires a reconciliation handler for every mutating workflow script. |
+| archive-first partial close | Resolved | Close is complete only when the matching archive exists **and** the open record is absent; presence in both files reruns the idempotent close. |
+| tracked generated documents | Resolved | `.gitignore` handles untracked artifacts while per-worktree `skip-worktree` flags isolate already tracked matches before generation and before commits. |
+
+## Resolution scope check
+
+All substantive changes in the current plan trace to a numbered audit item. I found no
+unrelated intentional behavior change.
+
+---
+
+## Prior third-pass audit (historical)
 
 ## Previous eight blockers: status
 
