@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
@@ -216,6 +216,43 @@ test("test_rebaseTaskWorktree_reconciliationReproducesARootConflictOutcomeFromTh
     });
     assert.equal(reconciled.status, "completed");
     assert.deepEqual(reconciled.result, output);
+});
+
+// A live conflict with no matching receipt (process died before persistRebaseStepResult ran)
+// is undecidable: reconciliation must return ambiguous, never replay/rerun as not-completed.
+test("test_rebaseTaskWorktree_reportsAmbiguousForALiveConflictWhoseReceiptWasNeverAppended", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-16b");
+    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ x: "worktree" }));
+    git(worktreePath, "add", "package.json");
+    git(worktreePath, "commit", "-q", "-m", "worktree edit");
+    writeFileSync(join(rootOrigin, "package.json"), JSON.stringify({ x: "source" }));
+    git(rootOrigin, "add", "package.json");
+    git(rootOrigin, "commit", "-q", "-m", "source edit");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-16b", stepId: "rebase-16b", rootSourceBranch: "main",
+    });
+    assert.equal(output.conflicted, true);
+
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    const task = tasks.find((t: { taskNumber: number }) => t.taskNumber === taskNumber);
+    const latestRun = task.run.history[task.run.history.length - 1];
+    latestRun.stepResults = (latestRun.stepResults ?? []).filter(
+        (entry: { stepId: string }) => entry.stepId !== "rebase-16b",
+    );
+    writeJsonAtomically(tasksPath, tasks);
+
+    // The conflict was never resolved or aborted, so the rebase is still live in the worktree.
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-16b", taskNumber, runId: "run-16b", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "ambiguous");
+    assert.equal(typeof reconciled.note, "string");
+    assert.ok((reconciled.note as string).length > 0);
 });
 
 // F3: same branch, but the conflict - and the still-live rebase - sits at the nested submodule
