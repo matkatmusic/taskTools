@@ -54,9 +54,23 @@ function taskStateIgnorablePaths(checkoutPath: string, projectRoot: string): str
     return [relative(checkoutPath, tasksPath), relative(checkoutPath, completedTasksPath)];
 }
 
-function isIgnorableStatusLine(line: string, ignorablePaths: string[]): boolean {
-    const path = line.slice(3).replace(/\/$/, "");
-    return ignorablePaths.some((ignorable) => path === ignorable || ignorable.startsWith(`${path}/`));
+function isIgnorableStatusPath(path: string, ignorablePaths: string[]): boolean {
+    return ignorablePaths.includes(path);
+}
+
+// NUL-safe: `-z` never quotes or escapes a path, so whitespace and non-ASCII paths parse intact.
+// A rename/copy entry (`R`/`C`) carries a second NUL-terminated "from" path that must be consumed
+// as part of the same entry, not read as an unrelated status line.
+function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
+    const output = git(checkoutPath, "status", "--porcelain=v1", "--untracked-files=all", "-z");
+    const tokens = output.split("\0").filter((token) => token.length > 0);
+    const paths: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+        const entry = tokens[i];
+        paths.push(entry.slice(3));
+        if (entry[0] === "R" || entry[0] === "C") i++;
+    }
+    return paths;
 }
 
 // F3: rev-parses every receipt's baseBranch in its live source checkout and compares against
@@ -86,10 +100,9 @@ function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot:
             );
         }
         const ignorablePaths = taskStateIgnorablePaths(checkoutPath, projectRoot);
-        const statusLines = git(checkoutPath, "status", "--porcelain").trim().split("\n").filter(Boolean);
-        const relevantLines = statusLines.filter((line) => !isIgnorableStatusLine(line, ignorablePaths));
-        if (relevantLines.length > 0) {
-            throw new Error(`source checkout at "${checkoutPath}" is dirty, refusing to merge over unrelated changes:\n${relevantLines.join("\n")}`);
+        const relevantPaths = sourceCheckoutStatusPaths(checkoutPath).filter((path) => !isIgnorableStatusPath(path, ignorablePaths));
+        if (relevantPaths.length > 0) {
+            throw new Error(`source checkout at "${checkoutPath}" is dirty, refusing to merge over unrelated changes:\n${relevantPaths.join("\n")}`);
         }
     }
 }

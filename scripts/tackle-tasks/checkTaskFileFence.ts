@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
 import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type CheckTaskFileFenceInput = {
     projectRoot: string;
@@ -78,6 +79,8 @@ function computeExemptGitlinkPaths(
 }
 
 export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFileFenceOutput {
+    requireAbsolutePath("projectRoot", input.projectRoot);
+    requireAbsolutePath("worktreePath", input.worktreePath);
     const owner = buildLockOwner(input.runId, input.taskNumber);
     refreshOwnedSourceRepoLockOrThrow(input.projectRoot, owner);
 

@@ -1211,12 +1211,31 @@ the stranding bug the release-ownership-last ordering was written to prevent.
    inferred from the conventional path**, then delete the journal.
 2. **Source tips at rebase** `[F3]` — `run.sourceTipsAtRebase`, described above.
 
-### Still open
+### Resolved by `plans/feedback-phase7-1.md`
 
-- `mergeTaskWorktree`'s source-clean check ignores `.taskTools/tasks.json` and
-  `completedTasks.json`, because the run itself mutates them with no intervening commit and a
-  literal `--porcelain` clean check would fail every real merge. Neither the plan nor the audit
-  called this out. **Confirm this is the intended production semantics.**
+- **The task-state dirty exemption is exact** `[F3]`. Ignoring `tasks.json` and
+  `completedTasks.json` in the **root** checkout is correct and confirmed — the active run
+  necessarily changes them. But the exemption is now **exact-path equality only**, read with
+  `--porcelain=v1 --untracked-files=all -z`. No parent directory, no descendant, no lookalike, and
+  never in a submodule occurrence. A single collapsed `?? .taskTools/` line used to exempt a whole
+  directory of unrelated dirt.
+- **Absent-lease acquisition is recoverable** `[F7]`. A durable transition intent at
+  `<worktreePath>.lease.adopt-intent` is written before the first authority changes, and
+  reconciled at the top of every lease-mutating call. `acquired:true` is returned only once the
+  physical lease and `leaseRunId` both name the run **and** the intent is gone.
+- **Creation rollback holds ownership throughout** `[F11]`. `createWorktreeForGroup` and the
+  state write share one journal lifecycle. Rollback re-reads the physical owner under the lease
+  guard, removes the worktree and branch **first**, releases the lease **last**, then deletes the
+  journal. A different owner means nothing is touched and the journal is retained.
+- **The archive is immutable on retry** `[F12]`. All four presence cases run in one
+  `withTaskStateLock` transaction. The both-files case writes **only `tasks.json`**. A
+  completed-only mismatch returns `ambiguous`, which is a distinct output array from `skipped`.
+- **The recovery command works from anywhere** `[M1/F2]`. Its script path is absolute, derived
+  from `import.meta.url`, and both the path and the JSON payload are POSIX single-quote escaped.
+  `checkTaskFileFence` and `recoverSourceRepoLock` reject relative paths before any git or lock
+  access.
+
+`CloseTaskRunOutput` is now `{closed, skipped, ambiguous, unblocked}` — note the added array.
 
 ---
 

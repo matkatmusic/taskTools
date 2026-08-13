@@ -6,34 +6,18 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkTaskWorktreeSafe } from "../../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
 import { makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
-function git(repoRoot: string, ...args: string[]): string {
-    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
-}
-
-function makeTempRepoWithCommit(): string {
-    const repoRoot = mkdtempSync(join(tmpdir(), "checkTaskWorktreeSafe-"));
-    git(repoRoot, "init", "-q");
-    git(repoRoot, "config", "user.email", "test@example.com");
-    git(repoRoot, "config", "user.name", "Test");
-    writeFileSync(join(repoRoot, "seed.txt"), "seed\n");
-    git(repoRoot, "add", "seed.txt");
-    git(repoRoot, "commit", "-q", "-m", "seed");
-    return repoRoot;
-}
-
 test("test_checkTaskWorktreeSafe_reportsUnsafeWhenHeadIsOnTheWrongBranch", () => {
-    // Setup: a real linked worktree created for task 1, then switched onto a different branch.
-    const repoRoot = makeTempRepoWithCommit();
-    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
-    const worktreePath = createWorktreeForGroup(repoRoot, group);
-    git(worktreePath, "checkout", "-b", "some-other-branch");
+    // Setup: a real layered-submodule linked worktree created for a task, then switched onto a
+    // different branch.
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    const groupId = 900_101;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
+    execFileSync("git", ["-C", worktreePath, "checkout", "-b", "some-other-branch"], { stdio: "ignore" });
 
     // Test action: check safety.
-    const result = checkTaskWorktreeSafe(1, worktreePath);
+    const result = checkTaskWorktreeSafe(groupId, worktreePath);
 
     // Verification: unsafe, and the problem names the wrong branch.
     assert.equal(result.safe, false);
@@ -41,14 +25,15 @@ test("test_checkTaskWorktreeSafe_reportsUnsafeWhenHeadIsOnTheWrongBranch", () =>
 });
 
 test("test_checkTaskWorktreeSafe_reportsSafeWhenTheWorktreeHasUncommittedChanges", () => {
-    // Setup: a real linked worktree on its correct task branch, with dirty uncommitted edits.
-    const repoRoot = makeTempRepoWithCommit();
-    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
-    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    // Setup: a real layered-submodule linked worktree on its correct task branch, with dirty
+    // uncommitted edits.
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    const groupId = 900_102;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
     writeFileSync(join(worktreePath, "seed.txt"), "dirty edit\n");
 
     // Test action: check safety.
-    const result = checkTaskWorktreeSafe(1, worktreePath);
+    const result = checkTaskWorktreeSafe(groupId, worktreePath);
 
     // Verification: dirty alone is never unsafe (rule 6 — the tree is committed where it matters).
     assert.deepEqual(result, { safe: true, problems: [] });

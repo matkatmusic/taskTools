@@ -86,11 +86,14 @@ function writeFileAtomically(path: string, contents: string): void {
     renameSync(tmp, path);
 }
 
-type WorktreeLeaseAdoptionIntent = {
+// Generalized across both ways ownership changes hands: adopting an ended run's lease
+// (previousLeaseBytes set) and acquiring a wholly absent one (previousLeaseBytes null,
+// meaning "no physical lease existed before this transition").
+type WorktreeLeaseTransitionIntent = {
     taskNumber: number;
     worktreePath: string;
-    oldLeaseBytes: string;
-    oldLeaseOwner: string;
+    previousLeaseBytes: string | null;
+    previousStateOwner: string | null;
     newOwnerRunId: string;
 };
 
@@ -106,7 +109,7 @@ function failForTest(step: "lease" | "state"): void {
     if (process.env[ADOPT_FAIL_AT_ENV] === step) throw new Error(`injected ${step} write failure`);
 }
 
-function readAdoptionIntent(worktreePath: string): WorktreeLeaseAdoptionIntent | null {
+function readTransitionIntent(worktreePath: string): WorktreeLeaseTransitionIntent | null {
     try {
         return JSON.parse(readFileSync(taskWorktreeLeaseAdoptIntentPath(worktreePath), "utf8"));
     } catch (error) {
@@ -115,12 +118,28 @@ function readAdoptionIntent(worktreePath: string): WorktreeLeaseAdoptionIntent |
     }
 }
 
+// Writes back exactly the physical state the intent recorded as "before": the prior lease
+// bytes if one existed, or removes the file if the lease was absent beforehand.
+function restoreOrRemoveLease(leasePath: string, previousLeaseBytes: string | null): void {
+    if (previousLeaseBytes === null) {
+        try {
+            unlinkSync(leasePath);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        return;
+    }
+    writeFileAtomically(leasePath, previousLeaseBytes);
+}
+
 // Runs under both guards, at the top of every lease mutation. A retained intent means a
-// prior adoption died between writing the journal and deleting it: finish it if the new
-// run is still the active claimant and the old run has ended, otherwise restore the old
-// lease. Either way the intent is gone by the time this returns.
+// prior adoption or acquisition died between writing the journal and deleting it: finish it
+// if the new run is still the active claimant and the previous owner (if any) has ended,
+// otherwise restore the exact prior physical state. Either way the intent is gone by the
+// time this returns, and a different owner already reflected in tasks.json is never
+// overwritten.
 function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: string): void {
-    const intent = readAdoptionIntent(worktreePath);
+    const intent = readTransitionIntent(worktreePath);
     if (intent === null) return;
 
     const { tasksPath } = resolveTaskFiles(projectRoot);
@@ -128,21 +147,22 @@ function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: stri
     const task = findTask(tasks, intent.taskNumber);
     const state = task === undefined ? undefined : getRunState(task);
     const activeNewest = state?.active ? state.history[state.history.length - 1] : undefined;
-    const oldRun = state?.history.find((candidate) => candidate.runId === intent.oldLeaseOwner);
-    const shouldFinish = activeNewest?.runId === intent.newOwnerRunId
-        && oldRun !== undefined && oldRun.endedAt !== null;
+    const previousOwnerRun = intent.previousStateOwner === null
+        ? undefined
+        : state?.history.find((candidate) => candidate.runId === intent.previousStateOwner);
+    const previousOwnerClear = intent.previousStateOwner === null
+        || (previousOwnerRun !== undefined && previousOwnerRun.endedAt !== null);
+    const shouldFinish = activeNewest?.runId === intent.newOwnerRunId && previousOwnerClear;
 
+    const leasePath = taskWorktreeLeasePath(worktreePath);
     if (shouldFinish) {
-        writeJsonAtomically(
-            taskWorktreeLeasePath(worktreePath),
-            { runId: intent.newOwnerRunId, pid: process.pid, createdAt: Date.now() },
-        );
+        writeJsonAtomically(leasePath, { runId: intent.newOwnerRunId, pid: process.pid, createdAt: Date.now() });
         if (task !== undefined && state !== undefined && state.leaseRunId !== intent.newOwnerRunId) {
             task.run = { ...state, leaseRunId: intent.newOwnerRunId };
             writeJsonAtomically(tasksPath, tasks);
         }
     } else {
-        writeFileAtomically(taskWorktreeLeasePath(worktreePath), intent.oldLeaseBytes);
+        restoreOrRemoveLease(leasePath, intent.previousLeaseBytes);
     }
     unlinkSync(taskWorktreeLeaseAdoptIntentPath(worktreePath));
 }
@@ -250,8 +270,10 @@ export function adoptWorktreeLease(taskNumber: number, runId: string, projectRoo
             }
             if (oldLeaseOwner === null || oldLeaseOwner.runId !== state.leaseRunId) return { adopted: false };
 
-            const intent: WorktreeLeaseAdoptionIntent = {
-                taskNumber, worktreePath, oldLeaseBytes, oldLeaseOwner: state.leaseRunId, newOwnerRunId: runId,
+            const intent: WorktreeLeaseTransitionIntent = {
+                taskNumber, worktreePath,
+                previousLeaseBytes: oldLeaseBytes, previousStateOwner: state.leaseRunId,
+                newOwnerRunId: runId,
             };
 
             try {
@@ -273,7 +295,7 @@ export function adoptWorktreeLease(taskNumber: number, runId: string, projectRoo
                 return { adopted: true };
             } catch (writeError) {
                 try {
-                    writeFileAtomically(leasePath, oldLeaseBytes);
+                    restoreOrRemoveLease(leasePath, intent.previousLeaseBytes);
                     unlinkSync(taskWorktreeLeaseAdoptIntentPath(worktreePath));
                 } catch (restoreError) {
                     throw new AggregateError(
@@ -348,8 +370,11 @@ export function transitionWorktreeLease(
 
 // F7: the other half of establishing lease ownership — a fresh acquisition rather than an
 // adoption. Only succeeds when the caller's run is the newest active claimant, the task
-// carries a worktree, and no lease currently exists for it. Journals tasks.json and the
-// physical lease in the same guarded transition so they can never disagree.
+// carries a worktree, and no lease currently exists for it. Journals the transition intent
+// before either authority changes, then the physical lease, then tasks.json — the same
+// order and the same reconciliation as adoptWorktreeLease, so a death between the two
+// durable writes is always recoverable instead of stranding the worktree as
+// permanently non-resumable.
 export function acquireAbsentWorktreeLease(
     taskNumber: number,
     expectedRunId: string,
@@ -374,13 +399,44 @@ export function acquireAbsentWorktreeLease(
             if (state.worktree === null) return { acquired: false };
 
             const leasePath = taskWorktreeLeasePath(state.worktree);
-            if (readTaskWorktreeLeaseOwner(leasePath) !== null) return { acquired: false };
+            const existingOwner = readTaskWorktreeLeaseOwner(leasePath);
+            if (existingOwner !== null) {
+                // Idempotent retry: reconciliation above may have just finished this exact
+                // acquisition. Only report acquired when both authorities already agree.
+                return { acquired: existingOwner.runId === expectedRunId && state.leaseRunId === expectedRunId };
+            }
 
-            writeJsonAtomically(leasePath, { runId: expectedRunId, pid: process.pid, createdAt: Date.now() });
-            const nextState: TaskRunState = { ...state, leaseRunId: expectedRunId };
-            task.run = nextState;
-            writeJsonAtomically(tasksPath, tasks);
-            return { acquired: true };
+            const intent: WorktreeLeaseTransitionIntent = {
+                taskNumber, worktreePath: state.worktree,
+                previousLeaseBytes: null, previousStateOwner: state.leaseRunId,
+                newOwnerRunId: expectedRunId,
+            };
+
+            try {
+                writeJsonAtomically(taskWorktreeLeaseAdoptIntentPath(state.worktree), intent);
+                killSelfForTest("intent");
+                failForTest("lease");
+                writeJsonAtomically(leasePath, { runId: expectedRunId, pid: process.pid, createdAt: Date.now() });
+                killSelfForTest("lease");
+                failForTest("state");
+                const nextState: TaskRunState = { ...state, leaseRunId: expectedRunId };
+                task.run = nextState;
+                writeJsonAtomically(tasksPath, tasks);
+                killSelfForTest("state");
+                unlinkSync(taskWorktreeLeaseAdoptIntentPath(state.worktree));
+                return { acquired: true };
+            } catch (writeError) {
+                try {
+                    restoreOrRemoveLease(leasePath, intent.previousLeaseBytes);
+                    unlinkSync(taskWorktreeLeaseAdoptIntentPath(state.worktree));
+                } catch (restoreError) {
+                    throw new AggregateError(
+                        [writeError, restoreError],
+                        `worktree lease acquisition failed for task ${taskNumber} and restoring the prior lease also failed`,
+                    );
+                }
+                throw writeError;
+            }
         });
     });
 }

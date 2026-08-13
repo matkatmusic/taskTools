@@ -731,3 +731,115 @@ test("test_acquireAbsentWorktreeLease_refusesWhenALeaseAlreadyExists", () => {
     assert.deepEqual(result, { acquired: false });
     assert.equal(readFileSync(`${worktreePath}.lease`, "utf8"), before);
 });
+
+// --- F7: acquisition must be recoverable across its two durable writes — no split
+// lease/state ownership, even across process death, ever survives past the next call. ---
+
+function makeAcquisitionFixture(): { root: string; worktreePath: string; leasePath: string } {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: worktreePath, leaseRunId: null,
+            history: [{
+                runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null,
+                exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null,
+                taskTests: null, fullSuite: null,
+            }],
+        },
+    }], null, 2));
+    return { root, worktreePath, leasePath: `${worktreePath}.lease` };
+}
+
+test("test_acquireAbsentWorktreeLease_injectedTaskStateWriteFailureLeavesNoSplitLeaseAndStateOwnership", () => {
+    // Scenario: the physical lease write lands, but the tasks.json write that must follow throws.
+    const { root, worktreePath, leasePath } = makeAcquisitionFixture();
+    process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT = "state";
+    try {
+        assert.throws(() => acquireAbsentWorktreeLease(1, "run-a", root));
+    } finally {
+        delete process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT;
+    }
+    // The just-created physical lease was rolled back to absent, matching tasks.json's still-absent leaseRunId.
+    assert.equal(existsSync(leasePath), false);
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, null);
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+test("test_acquireAbsentWorktreeLease_injectedLeaseWriteFailureLeavesNoIntentOrPhysicalLease", () => {
+    // Scenario: the failure lands before the physical lease itself is written.
+    const { root, worktreePath, leasePath } = makeAcquisitionFixture();
+    process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT = "lease";
+    try {
+        assert.throws(() => acquireAbsentWorktreeLease(1, "run-a", root));
+    } finally {
+        delete process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT;
+    }
+    assert.equal(existsSync(leasePath), false);
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, null);
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+async function runAcquisitionInChildAndKillAfter(
+    root: string,
+    step: "intent" | "lease" | "state",
+): Promise<void> {
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
+    const childSource = `
+        import { acquireAbsentWorktreeLease } from ${JSON.stringify(moduleUrl)};
+        acquireAbsentWorktreeLease(1, "run-a", ${JSON.stringify(root)});
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], {
+        stdio: "inherit",
+        env: { ...process.env, TASKRUNSTATE_TEST_ADOPT_KILL_AFTER: step },
+    });
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
+    // ponytail: same already-documented stale-lock cleanup as the adoption kill tests (rule 9's
+    // explicit-recovery stance) — not part of this finding's split-brain being proven here.
+    for (const staleLock of [join(root, "task-state.lock"), `${join(root, "worktree")}.lease.guard`]) {
+        if (existsSync(staleLock)) unlinkSync(staleLock);
+    }
+}
+
+test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerWithoutLosingTheWorktreeAfterAChildIsKilledRightAfterWritingThePhysicalLease", async () => {
+    // Scenario: the process dies after the physical lease already names the new run, before tasks.json does.
+    const { root, worktreePath, leasePath } = makeAcquisitionFixture();
+    await runAcquisitionInChildAndKillAfter(root, "lease");
+    // A retry, in this separate process, must reach one consistent ownership state.
+    const result = acquireAbsentWorktreeLease(1, "run-a", root);
+    assert.deepEqual(result, { acquired: true });
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-a");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-a");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+    // The worktree record itself survived reconciliation untouched — the retained work is not lost.
+    assert.equal(onDisk.worktree, worktreePath);
+});
+
+test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterWritingTheIntent", async () => {
+    // Scenario: the process dies right after journaling the intent, before any physical mutation.
+    const { root, worktreePath, leasePath } = makeAcquisitionFixture();
+    await runAcquisitionInChildAndKillAfter(root, "intent");
+    const result = acquireAbsentWorktreeLease(1, "run-a", root);
+    assert.deepEqual(result, { acquired: true });
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-a");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-a");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterUpdatingTaskState", async () => {
+    // Scenario: the process dies after both authorities already agree, but before the intent is deleted.
+    const { root, worktreePath, leasePath } = makeAcquisitionFixture();
+    await runAcquisitionInChildAndKillAfter(root, "state");
+    const result = acquireAbsentWorktreeLease(1, "run-a", root);
+    assert.deepEqual(result, { acquired: true });
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-a");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-a");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});

@@ -4,8 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { join, isAbsolute, relative } from "node:path";
+import { execSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
     acquireSourceRepoLock,
@@ -128,13 +128,69 @@ test("test_formatSourceRepoLockRecoveryCommand_producesTheExactStdinTheCliAccept
     const staleOwner = buildLockOwner("run-206", 206);
     acquireSourceRepoLock(root, staleOwner, { nowMs: Date.parse("2026-01-01T00:00:00.000Z") });
     const command = formatSourceRepoLockRecoveryCommand(root, staleOwner);
-    // The command embeds a single JSON object matching {projectRoot, expectedStaleOwner, confirmation}.
-    const embedded = command.match(/^echo '(.+)' \| node scripts\/tackle-tasks\/recoverSourceRepoLock\.ts$/);
+    // The command embeds a single-quoted JSON stdin payload and a single-quoted absolute script path.
+    const embedded = command.match(/^echo '(.+)' \| node '(.+)'$/);
     assert.ok(embedded, `expected the formatted command to embed one JSON stdin payload, got: ${command}`);
+    assert.ok(isAbsolute(embedded![2]), `expected the script path to be absolute, got: ${embedded![2]}`);
     const input = JSON.parse(embedded![1]);
     assert.deepEqual(input, { projectRoot: root, expectedStaleOwner: staleOwner, confirmation: `abandon ${staleOwner}` });
     // Feeding that exact payload to the CLI recovers the lock.
     const output = runRecoverSourceRepoLockCli(input);
     assert.equal(output.status, "recovered");
     assert.equal(readSourceRepoLock(root), null);
+});
+
+// M1/F2: a relative projectRoot must be rejected before the CLI ever reads or mutates a lock.
+test("test_runRecoverSourceRepoLockCli_rejectsARelativeProjectRootBeforeLockAccess", () => {
+    const root = makeProjectRoot();
+    const staleOwner = buildLockOwner("run-207", 207);
+    acquireSourceRepoLock(root, staleOwner, { nowMs: Date.now() - 16 * 60 * 1000 });
+    const relativeRoot = relative(process.cwd(), root);
+
+    assert.throws(
+        () => runRecoverSourceRepoLockCli({
+            projectRoot: relativeRoot,
+            expectedStaleOwner: staleOwner,
+            confirmation: `abandon ${staleOwner}`,
+        }),
+        /must be an absolute path/,
+    );
+    assert.equal(readSourceRepoLock(root)?.owner, staleOwner);
+});
+
+// M1/F2: the printed recovery command must actually work when run from an unrelated cwd —
+// this is the test that would have caught the relative script path.
+test("test_formatSourceRepoLockRecoveryCommand_executesFromAnUnrelatedCwd", () => {
+    const root = makeProjectRoot();
+    const staleOwner = buildLockOwner("run-208", 208);
+    acquireSourceRepoLock(root, staleOwner, { nowMs: Date.now() - 16 * 60 * 1000 });
+
+    const command = formatSourceRepoLockRecoveryCommand(root, staleOwner);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "taskTools-recoverLock-unrelated-cwd-"));
+    const output = execSync(command, { cwd: unrelatedCwd, encoding: "utf8" });
+
+    assert.deepEqual(JSON.parse(output.trim()), { status: "recovered", owner: staleOwner, reason: null });
+    assert.equal(readSourceRepoLock(root), null);
+});
+
+// M1/F2: a project path with whitespace and an apostrophe must round-trip through the
+// shell-quoted command, recovering the intended lock and leaving an unrelated lock untouched.
+test("test_formatSourceRepoLockRecoveryCommand_handlesWhitespaceAndApostropheInProjectPath", () => {
+    const parent = mkdtempSync(join(tmpdir(), "taskTools-recoverLock-"));
+    const root = join(parent, "o'brien's repo");
+    mkdirSync(join(root, ".git"), { recursive: true });
+    const staleOwner = buildLockOwner("run-209", 209);
+    acquireSourceRepoLock(root, staleOwner, { nowMs: Date.now() - 16 * 60 * 1000 });
+
+    const otherRoot = makeProjectRoot();
+    const otherOwner = buildLockOwner("run-210", 210);
+    acquireSourceRepoLock(otherRoot, otherOwner, { nowMs: Date.now() - 16 * 60 * 1000 });
+
+    const command = formatSourceRepoLockRecoveryCommand(root, staleOwner);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "taskTools-recoverLock-unrelated-cwd-"));
+    const output = execSync(command, { cwd: unrelatedCwd, encoding: "utf8" });
+
+    assert.deepEqual(JSON.parse(output.trim()), { status: "recovered", owner: staleOwner, reason: null });
+    assert.equal(readSourceRepoLock(root), null);
+    assert.equal(readSourceRepoLock(otherRoot)?.owner, otherOwner);
 });
