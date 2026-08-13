@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 export type DoneMonitorOptions = {
@@ -11,11 +11,13 @@ export type DoneMonitorOptions = {
 export type DoneMonitorEvent = {
     event: "done";
     markerPath: string;
+    contents: string;
 };
 
 export type CompleteMonitorEvent = {
     event: "complete";
     markerPath: string;
+    contents: string;
 };
 
 export type AuditorMonitorEvent = DoneMonitorEvent | CompleteMonitorEvent;
@@ -71,7 +73,7 @@ function refuseTrackedMarker(root: string, markerName: ".done" | ".complete"): v
 }
 
 /** Remove the transient marker from both the index and the working tree before firing. */
-export function consumeRootDoneMarker(projectRoot: string): string {
+export function consumeRootDoneMarker(projectRoot: string): Omit<DoneMonitorEvent, "event"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".done");
     if (!isRootDoneMarkerStaged(root)) {
@@ -81,6 +83,9 @@ export function consumeRootDoneMarker(projectRoot: string): string {
     // A marker is protocol state, never repository content. Refuse to reinterpret a tracked file
     // as the transient marker because consuming it would stage an unrelated deletion.
     refuseTrackedMarker(root, ".done");
+    // `.done` is a staged publication, so report the exact bytes that triggered the monitor from
+    // the index rather than a possibly modified working-tree copy.
+    const contents = execFileSync("git", ["-C", root, "show", ":.done"], { encoding: "utf8" });
 
     // The producer may still be completing a larger `git add` when the marker becomes visible.
     // Retry index-lock contention, but never emit the event until the marker is actually unstaged.
@@ -103,20 +108,21 @@ export function consumeRootDoneMarker(projectRoot: string): string {
     }
     if (lastError !== null && isRootDoneMarkerStaged(root)) throw lastError;
     if (existsSync(markerPath)) unlinkSync(markerPath);
-    return markerPath;
+    return { markerPath, contents };
 }
 
 
 /** Consume the implementor's terminal acknowledgement before ending the auditor loop. */
-export function consumeRootCompleteMarker(projectRoot: string): string {
+export function consumeRootCompleteMarker(projectRoot: string): Omit<CompleteMonitorEvent, "event"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".complete");
     if (!existsSync(markerPath)) {
         throw new Error(`the root completion marker does not exist: ${markerPath}`);
     }
     refuseTrackedMarker(root, ".complete");
+    const contents = readFileSync(markerPath, "utf8");
     unlinkSync(markerPath);
-    return markerPath;
+    return { markerPath, contents };
 }
 
 export async function waitForStagedDone(options: DoneMonitorOptions): Promise<DoneMonitorEvent> {
@@ -129,7 +135,7 @@ export async function waitForStagedDone(options: DoneMonitorOptions): Promise<Do
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
         if (isRootDoneMarkerStaged(root)) {
-            return { event: "done", markerPath: consumeRootDoneMarker(root) };
+            return { event: "done", ...consumeRootDoneMarker(root) };
         }
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for a staged root .done marker in ${root}`);
@@ -154,10 +160,10 @@ export async function waitForAuditorSignal(options: DoneMonitorOptions): Promise
             throw new Error(`conflicting root protocol markers: ${join(root, ".done")} and ${join(root, ".complete")}`);
         }
         if (hasComplete) {
-            return { event: "complete", markerPath: consumeRootCompleteMarker(root) };
+            return { event: "complete", ...consumeRootCompleteMarker(root) };
         }
         if (hasDone) {
-            return { event: "done", markerPath: consumeRootDoneMarker(root) };
+            return { event: "done", ...consumeRootDoneMarker(root) };
         }
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for staged .done or root .complete in ${root}`);
