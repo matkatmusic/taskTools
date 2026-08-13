@@ -661,5 +661,25 @@
         "reason": "skipping plan review is only safe once 185's audit-loop code review exists to catch a bad implementation that the skipped plan review would have caught"
       }
     ]
+  },
+  {
+    "taskNumber": 187,
+    "version": "29940cdfb844f7c06c08289fcdfb605fb3a36ec4",
+    "title": "Add a .done file watcher so a waiting agent starts on its own",
+    "userDescription": "use a '.done' file to signal when work is done, have another agent that is depending on that work monitor for that file, so that when the file lands, the waiting agent can begin their work without being instructed.  use a monitoring script that triggers when the file lands, and deletes the file after signaling that it landed.",
+    "goal": [
+      "- Running the watcher against a path exits 0 within its timeout once a '.done' file appears at that path",
+      "- After the watcher signals, the '.done' file no longer exists on disk",
+      "- The dependent agent starts its work from the watcher's signal alone, with no human instruction",
+      "- If no '.done' file lands within the 24 hour timeout, the watcher exits non-zero and prints a clear message naming the path it watched, instead of hanging",
+      "- NOT in scope: wiring this handshake into skills/tackle-tasks/tackle-tasks.workflow.js or the blockedBy chain — a later follow-up task owns that"
+    ],
+    "description": "Build a standalone done-file handshake as reusable scripts. Nothing in the repo does this today: a search of scripts/, skills/tackle-tasks/*.workflow.js, and tests/ for \"monitor\"/\".done\"/\"waitFor\"/\"poll\" returns no matches. Agent handoffs today are driven explicitly by the orchestrating workflow script, never by a watched filesystem event.\n\nAdd scripts/doneFileMonitor.ts: it watches for a sentinel '.done' file at a given path, signals the moment the file appears, then deletes the file so the next run starts clean. The waiting agent runs the watcher and begins its work when the watcher signals, with no human telling it to start.\n\nThe watcher takes a timeout of 24 hours. If the '.done' file never lands inside that window, the watcher exits non-zero with a clear message instead of hanging forever.\n\nOut of scope for this task: wiring the handshake into skills/tackle-tasks/tackle-tasks.workflow.js or into the existing blockedBy chain. This task ships the standalone scripts only; a later task does the pipeline wiring.\n\nFollows the repo scripts/ naming convention (mergePipeline.ts, occurrenceSync.ts). No existing file needs to change.",
+    "files": [
+      "scripts/doneFileMonitor.ts",
+      "tests/doneFileMonitor.test.ts"
+    ],
+    "tests": "An end-to-end test: spawn the watcher as a child process against a temp path, have a separate process write the '.done' file to that path, then assert the watcher fired exactly once, exited 0, and that the '.done' file is gone afterward. A second case asserts a short timeout produces a non-zero exit and a clear message.",
+    "difficulty": 5
   }
 ]
