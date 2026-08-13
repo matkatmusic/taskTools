@@ -1,3 +1,8 @@
 .plate/
 node_modules/
 **/.DS_Store
+plans/brief-*.md
+plans/plan.json
+plans/codex-review.json
+plans/test-review.json
+plans/implementation-notes-*.md

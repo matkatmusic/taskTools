@@ -7,14 +7,14 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compileFunction } from "node:vm";
-import { skillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
+import { skillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
 import { buildWorkflowArguments, materializeTaskWorkflow } from "../scripts/prepareTasks.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_SkillBodyEmitter.ts", import.meta.url));
-const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks/SKILL.md", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts", import.meta.url));
+const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks-v1_1/SKILL.md", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Conformance: SkillBodyEmitter is a path-only boundary (C86-39).
@@ -32,9 +32,9 @@ test("emitter runs no subprocess and imports nothing relative — only node:fs a
   assert.doesNotMatch(source, /execFileSync|spawn|from "\./);
 });
 
-test("SKILL.md invokes tackle-tasks_SkillBodyEmitter.ts", () => {
+test("SKILL.md invokes tackle-tasks-v1_1_SkillBodyEmitter.ts", () => {
   const skillMd = readFileSync(skillMdPath, "utf8");
-  assert.match(skillMd, /tackle-tasks_SkillBodyEmitter\.ts/);
+  assert.match(skillMd, /tackle-tasks-v1_1_SkillBodyEmitter\.ts/);
 });
 
 test("output never names checkBlockers.ts, getTaskDetails.ts, or prepareTasks.ts — only the bootstrap agent prompt emitter does", () => {
@@ -42,7 +42,7 @@ test("output never names checkBlockers.ts, getTaskDetails.ts, or prepareTasks.ts
   assert.doesNotMatch(brief, /checkBlockers\.ts/);
   assert.doesNotMatch(brief, /getTaskDetails\.ts/);
   assert.doesNotMatch(brief, /prepareTasks\.ts/);
-  assert.match(brief, /tackle-tasks_BootstrapAgentPromptEmitter\.ts/);
+  assert.match(brief, /tackle-tasks-v1_1_BootstrapAgentPromptEmitter\.ts/);
 });
 
 test("output opens with a discover-mode Workflow declaration, not a live blocked-status report", () => {
@@ -242,7 +242,7 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
     "skills/tackle-tasks/verify.workflow.js",
     "skills/tackle-tasks/task.workflow.js.old",
     "skills/tackle-tasks/task.workflow.js",
-    "scripts/tackle-tasks_OrchestrationBriefEmitter.ts",
+    "scripts/tackle-tasks-v1_1_OrchestrationBriefEmitter.ts",
   ];
   for (const relativePath of superseded) {
     assert.equal(existsSync(join(repoRoot, relativePath)), false, `${relativePath} should have been deleted`);
@@ -251,7 +251,7 @@ test("the superseded workflow files are deleted and nothing outside plans/ or .t
   try {
     matches = execFileSync(
       "git",
-      ["grep", "-l", "-e", "merge.workflow.js", "-e", "plan.workflow.js", "-e", "implement.workflow.js", "-e", "test.workflow.js", "-e", "verify.workflow.js", "-e", "tackle-tasks_OrchestrationBriefEmitter", "--", ".", ":!plans", ":!.taskTools", ":!tests/tackle-tasks_SkillBodyEmitter.test.ts", ":!tests/tackle-tasks-v1_1_SkillBodyEmitter.test.ts"],
+      ["grep", "-l", "-e", "merge.workflow.js", "-e", "plan.workflow.js", "-e", "implement.workflow.js", "-e", "test.workflow.js", "-e", "verify.workflow.js", "-e", "tackle-tasks-v1_1_OrchestrationBriefEmitter", "--", ".", ":!plans", ":!.taskTools", ":!tests/tackle-tasks-v1_1_SkillBodyEmitter.test.ts", ":!tests/tackle-tasks_SkillBodyEmitter.test.ts"],
       { encoding: "utf8", cwd: repoRoot },
     );
   } catch (error) {
@@ -298,7 +298,7 @@ test("materializeTaskWorkflow bakes the task number in and leaves no placeholder
 const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
 const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
   .replace("export const meta", "const meta");
-const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks_AgentPromptEmitter.ts");
+const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts");
 
 type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test" | "merge"; results: Array<Record<string, unknown>> };
 type WorkflowAgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>;

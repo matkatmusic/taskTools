@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
 import { getOwningOccurrence } from "../scripts/repositoryGraph.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
 const prepareTasksModulePath = new URL("../scripts/prepareTasks.ts", import.meta.url).href;
@@ -51,7 +52,7 @@ const occurrenceGraph: RepositoryOccurrence[] = bootstrapResult.refused ? [] : b
 const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
 
 after(() => {
-    rmSync(join(tmpdir(), "taskTools-wt", basename(rootPath)), { recursive: true, force: true });
+    rmSync(resolveTaskWorktreeConventionDirectory(rootPath), { recursive: true, force: true });
     rmSync(rootPath, { recursive: true, force: true });
     rmSync(submoduleSourcePath, { recursive: true, force: true });
 });

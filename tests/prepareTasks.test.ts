@@ -14,6 +14,7 @@ import {
     recoverStaleTaskWorktreeLease,
     releaseTaskWorktreeLease,
     resolveMergeScriptPath,
+    resolveTaskWorktreeConventionDirectory,
     selectRequestedTasks,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
@@ -134,7 +135,7 @@ test("test_twoBarrierSynchronizedPrepareProcessesHaveExactlyOneOwnerOfTheSameCle
         assert.ok(leaseOwner.runId === "run-a" || leaseOwner.runId === "run-b");
         assert.equal(existsSync(worktreePath), true);
     } finally {
-        rmSync(join(tmpdir(), "taskTools-wt", basename(repoRoot)), { recursive: true, force: true });
+        rmSync(resolveTaskWorktreeConventionDirectory(repoRoot), { recursive: true, force: true });
         rmSync(repoRoot, { recursive: true, force: true });
     }
 });
@@ -177,7 +178,7 @@ test("test_createWorktreeForGroupThrowsWhenSubmoduleInitFails", () => {
     // Verification: the run stops rather than handing a worker a half-populated worktree.
     assert.throws(() => createWorktreeForGroup(repoRoot, group));
     // Verification: failed preparation released its own lease instead of orphaning it.
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
     assert.equal(existsSync(`${worktreePath}.lease`), false);
 });
 
@@ -213,7 +214,7 @@ test("test_recoverStaleTaskWorktreeLeaseRemovesALeaseWhoseWorktreeIsAlreadyGone"
     // Setup: a crashed run's cleanup removed the worktree but not its sibling lease file.
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
     mkdirSync(dirname(worktreePath), { recursive: true });
     writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "stale-run", pid: 1, createdAt: Date.now() }));
     assert.equal(existsSync(worktreePath), false);
@@ -252,8 +253,8 @@ test("test_buildWorkflowArgumentsRollsBackEarlierCandidateLeasesWhenALaterTaskHa
         { taskNumber: 1, files: ["a.ts"] },
         { taskNumber: 2, files: ["b.ts"] },
     ];
-    const worktree1 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
-    const worktree2 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-2");
+    const worktree1 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
+    const worktree2 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-2");
     mkdirSync(dirname(worktree2), { recursive: true });
     const foreignLeaseContents = JSON.stringify({ runId: "foreign-run", pid: 1, createdAt: 1 });
     writeFileSync(`${worktree2}.lease`, foreignLeaseContents);
@@ -352,7 +353,7 @@ test("test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktr
     git(join(repoRoot, "vendor"), "checkout", "--detach", "HEAD");
     const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
     assert.throws(() => buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords));
-    assert.equal(existsSync(join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1")), false);
+    assert.equal(existsSync(join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1")), false);
 });
 
 test("test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch", () => {
@@ -436,7 +437,7 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
     const tasksPath = join(taskDirectory, "tasks.json");
     const readyFile = join(repoRoot, "widener-ready");
     const releaseFile = join(repoRoot, "release-widener");
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${taskNumber}`);
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${taskNumber}`);
     let widener: ChildProcess | undefined;
     let prepare: ChildProcess | undefined;
 
@@ -514,8 +515,8 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
     const repoRoot = makeTempRepoWithCommit();
     const taskDirectory = join(repoRoot, ".taskTools");
     const argumentsFile = join(taskDirectory, "run-arguments.json");
-    const worktree1 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-1");
-    const worktree2 = join(tmpdir(), "taskTools-wt", basename(repoRoot), "task-2");
+    const worktree1 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
+    const worktree2 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-2");
 
     try {
         writeFileSync(join(repoRoot, "a.ts"), "a\n");

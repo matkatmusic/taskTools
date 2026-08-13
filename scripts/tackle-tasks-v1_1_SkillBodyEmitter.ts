@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand.
-export const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./tackle-tasks_AgentPromptEmitter.ts", import.meta.url));
-const bootstrapWorkflowPath = fileURLToPath(new URL("../skills/tackle-tasks/bootstrap.workflow.js", import.meta.url));
-const bootstrapAgentPromptEmitterPath = fileURLToPath(new URL("./tackle-tasks_BootstrapAgentPromptEmitter.ts", import.meta.url));
+export const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./tackle-tasks-v1_1_AgentPromptEmitter.ts", import.meta.url));
+const bootstrapWorkflowPath = fileURLToPath(new URL("../skills/tackle-tasks-v1_1/bootstrap.workflow.js", import.meta.url));
+const bootstrapAgentPromptEmitterPath = fileURLToPath(new URL("./tackle-tasks-v1_1_BootstrapAgentPromptEmitter.ts", import.meta.url));
 const blockerVerdictsPath = fileURLToPath(new URL("./blockerVerdicts.ts", import.meta.url));
-const skillDir = new URL("../skills/tackle-tasks/", import.meta.url);
+const skillDir = new URL("../skills/tackle-tasks-v1_1/", import.meta.url);
 const blockersWorkflowPath = fileURLToPath(new URL("blockers.workflow.js", skillDir));
 const runMergePhaseUrl = new URL("./runMergePhase.ts", import.meta.url).href;
 
@@ -325,7 +325,7 @@ function fail(problem: string): never {
   process.exit(1);
 }
 
-if (process.argv[1]?.endsWith("tackle-tasks_SkillBodyEmitter.ts")) {
+if (process.argv[1]?.endsWith("tackle-tasks-v1_1_SkillBodyEmitter.ts")) {
   const argsValue = readStdin().replace(/\n$/, "");
   if (argsValue === "") fail("no arguments on stdin");
   process.stdout.write(skillBody(argsValue));

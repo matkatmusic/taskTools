@@ -1,8 +1,10 @@
 // Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
 import { execFileSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { bootstrapRepositoryManifest } from "./manifestBootstrap.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
 import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
@@ -20,6 +22,8 @@ export type PreparedTask = {
 export type PreparedGroup = {
     groupId: number;
     worktree: string;
+    // Absent on merge-recovery groups synthesized outside prepare; those never launch a workflow.
+    workflowPath?: string;
     branch: string;
     scope: TaskGroupScope;
     tasks: PreparedTask[];
@@ -104,16 +108,14 @@ function declaredFiles(task: TaskRecord): string[] {
     return Array.isArray(task.files) ? (task.files as string[]) : [];
 }
 
-export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
-    const briefFile = join(repoRoot, "plans", `brief-${task.taskNumber}.md`);
-    mkdirSync(dirname(briefFile), { recursive: true });
+export function renderTaskBriefContent(task: TaskRecord, repoRoot: string): string {
     const fileSections = declaredFiles(task).map((file) => {
         const fullPath = join(repoRoot, file);
         if (!existsSync(fullPath)) return `### ${file}\n\n(missing: file not found on disk)\n`;
         if (statSync(fullPath).isDirectory()) return `### ${file}\n\n(directory, likely a submodule: see its own history)\n`;
         return `### ${file}\n\n\`\`\`\n${readFileSync(fullPath, "utf8")}\n\`\`\`\n`;
     });
-    const content = [
+    return [
         `# Task ${task.taskNumber}: ${task.title ?? ""}`,
         "",
         ...(task.userDescription ? [`## User request\n\n${task.userDescription}`, ""] : []),
@@ -121,12 +123,17 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
         "",
         ...fileSections,
     ].join("\n");
-    writeFileSync(briefFile, content);
+}
+
+export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
+    const briefFile = join(repoRoot, "plans", `brief-${task.taskNumber}.md`);
+    mkdirSync(dirname(briefFile), { recursive: true });
+    writeFileSync(briefFile, renderTaskBriefContent(task, repoRoot));
     return briefFile;
 }
 
 // `git worktree add` leaves submodule directories empty; a worker needs them populated.
-function initializeSubmodulesInWorktree(worktreePath: string): void {
+export function initializeSubmodulesInWorktree(worktreePath: string): void {
     if (!existsSync(join(worktreePath, ".gitmodules"))) return;
     execFileSync(
         "git",
@@ -156,7 +163,7 @@ export function taskWorktreeLeasePath(worktreePath: string): string {
     return `${worktreePath}.lease`;
 }
 
-function readTaskWorktreeLeaseOwner(leasePath: string): { pid: number; runId: string } | null {
+export function readTaskWorktreeLeaseOwner(leasePath: string): { pid: number; runId: string } | null {
     try {
         return JSON.parse(readFileSync(leasePath, "utf8"));
     } catch (error) {
@@ -166,7 +173,7 @@ function readTaskWorktreeLeaseOwner(leasePath: string): { pid: number; runId: st
 }
 
 // Atomic exclusive-create, held until final cleanup. runId is stable across processes; pid isn't.
-function acquireTaskWorktreeLease(worktreePath: string, runId: string): TaskWorktreeLease {
+export function acquireTaskWorktreeLease(worktreePath: string, runId: string): TaskWorktreeLease {
     const leasePath = taskWorktreeLeasePath(worktreePath);
     let fd: number;
     try {
@@ -210,8 +217,16 @@ export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: st
     unlinkSync(leasePath);
 }
 
+// Two repos sharing a basename (or two clones of one repo) would otherwise collide here.
+export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string {
+    // realpathSync, not resolve: a spawned child's process.cwd() reports the symlink-resolved
+    // form (macOS /var -> /private/var), so the raw string would hash differently per caller.
+    const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
+    return join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
+}
+
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId: string = generateRunId()): string {
-    const worktreePath = join(tmpdir(), "taskTools-wt", basename(repoRoot), `task-${group.groupId}`);
+    const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
     let lease: TaskWorktreeLease;
     if (existsSync(worktreePath)) {
@@ -279,6 +294,15 @@ function rethrowAfterPreparedLeaseRollback(error: unknown, preparedGroups: Prepa
     throw error;
 }
 
+const WORKFLOW_TEMPLATE_PATH = fileURLToPath(new URL("../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+
+// The harness needs a literal `meta` first statement, so bake the task number in.
+export function materializeTaskWorkflow(taskNumber: number, worktreePath: string): string {
+    const workflowPath = `${worktreePath}.workflow.js`;
+    writeFileSync(workflowPath, readFileSync(WORKFLOW_TEMPLATE_PATH, "utf8").replaceAll("__TT_TASK__", String(taskNumber)));
+    return workflowPath;
+}
+
 export function buildWorkflowArguments(
     repoRoot: string,
     typecheckCommand: string,
@@ -299,6 +323,7 @@ export function buildWorkflowArguments(
             preparedGroups.push({
                 groupId: group.groupId,
                 worktree,
+                workflowPath: materializeTaskWorkflow(task.taskNumber, worktree),
                 branch: branchNameForGroup(group.groupId),
                 scope: group.scope,
                 tasks: [{
