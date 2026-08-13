@@ -1,8 +1,9 @@
 # tackle-tasks v1.5 — implementation plan
 
-Revised against `plans/tackle-tasks-v1_5-plan-audit.md`, third pass. Findings from that
-document are cited inline as `[a3 N]`. Earlier passes are cited `[a1 N]` and `[a2 N]`. A
-citation marks where a finding was answered; it is not a claim that the audit is finished.
+Revised against `plans/tackle-tasks-v1_5-plan-audit.md`, fourth pass. Final
+pre-implementation findings are cited inline as `[a4 N]`; earlier passes use `[a1 N]`,
+`[a2 N]`, and `[a3 N]`. A citation marks where a finding was answered; it is not a claim
+that the audit is finished.
 
 The spec is `plans/diagram/pipeline.mmd`. Read it before starting any phase. It is the
 authority. If this plan and the diagram disagree, the diagram wins and this plan is wrong.
@@ -35,7 +36,7 @@ One green box, one script, with these exceptions and no others `[a1 22]`:
 | archive and unblock are one call | `move task to completedTasks.json and update tasks blocked by it` | `closeTaskRun.ts` — `closeTasks` calls `unblockDependents` internally |
 | `stop` | `stop` | no file; it is the end of the workflow function |
 | four libraries have no CLI | — | `taskRunState.ts`, `occurrences.ts`, `sourceRepoLock.ts`, `writeTaskBrief.ts` `[a3 10]` |
-| two scripts serve no box | — | `greenBoxPolicy.ts`, `reconcileStep.ts` — the retry and loss-recovery machinery of rules 10 and 11 |
+| three scripts serve no box | — | `greenBoxPolicy.ts`, `reconcileStep.ts`, `recoverSourceRepoLock.ts` — retry/loss policy plus the explicit operator recovery command for rule 9 |
 
 ---
 
@@ -103,8 +104,20 @@ export type TaskExitType =
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge" };
 
 export type TaskTestResult = {
+    stepId: string;             // identity of this logical test-box invocation
     testFiles: string[];        // occurrence-prefixed
+    createdTestFiles: string[];
+    missingTests: boolean;
     passed: boolean;
+    output: string;             // last 8000 characters
+    checkedAt: string;
+};
+
+export type FullSuiteResult = {
+    stepId: string;             // identity of this logical suite-box invocation
+    layers: { occurrenceId: string; passed: boolean }[];
+    passed: boolean;
+    output: string;             // last 8000 characters
     checkedAt: string;
 };
 
@@ -118,7 +131,7 @@ export type TaskRunRecord = {
     commits: TaskCommit[];          // chronological: work and repair, then merge
     implementationNotesFile: string | null;
     taskTests: TaskTestResult | null;   // written by run task tests   [a3 6]
-    fullSuite: TaskTestResult | null;   // written by run the full suite [a3 6]
+    fullSuite: FullSuiteResult | null;  // written by run the full suite [a3 6]
 };
 
 export type TaskRunState = {
@@ -132,8 +145,9 @@ export type TaskRunState = {
 `runId` is a run's identity `[a1 20]`. `startedAt` is for humans; nothing keys on it.
 
 `taskTests` and `fullSuite` exist because `build the closure note` runs **after** the
-worktree is deleted and cannot re-derive them `[a3 6]`. The test boxes record them while the
-worktree still exists.
+worktree is deleted and cannot re-derive them `[a3 6]`. The test boxes record their entire
+decision before printing stdout. `stepId` lets reconciliation return the exact stored result
+after an agent loses that stdout `[a4 2]`.
 
 `commits` is **chronological, not grouped** `[a3 27]`. `closeTaskRun` passes the whole
 ordered list to `closeTasks` as `commitHashes`, merge entries last, because that is the
@@ -212,8 +226,8 @@ zero hits for `skills/tackle-tasks/` or `scripts/tackle-tasks_`. Suite green.
 
 ## Phase 1 — foundations
 
-Depends on: Phase 0. Blocks: Phases 2–8. One agent. Four libraries `[a3 10]`, plus every
-shared-file edit later phases need.
+Depends on: Phase 0. Blocks: Phases 2–8. One agent. Four libraries `[a3 10]`, one explicit
+source-lock recovery CLI `[a4 1]`, plus every shared-file edit later phases need.
 
 ### 1a. `scripts/tackle-tasks/taskRunState.ts`
 
@@ -366,7 +380,7 @@ export type AcquireOutcome =
 export function buildLockOwner(runId: string, taskNumber: number): LockOwner
 export function acquireSourceRepoLock(projectRoot: string, owner: LockOwner): AcquireOutcome
 export function refreshSourceRepoLock(projectRoot: string, owner: LockOwner): { refreshed: boolean }
-export function recoverSourceRepoLock(projectRoot: string, owner: LockOwner, expectedStaleOwner: LockOwner): AcquireOutcome
+export function recoverSourceRepoLock(projectRoot: string, expectedStaleOwner: LockOwner, confirmation: string): { recovered: boolean; reason: string | null }
 export function releaseSourceRepoLock(projectRoot: string, owner: LockOwner): { released: boolean }
 export function readSourceRepoLock(projectRoot: string): LockFile | null
 ```
@@ -383,11 +397,13 @@ still holds the lock; its PID proves nothing. Instead, **every green box in the 
 `STALE_HEARTBEAT_MS` (default 15 minutes — comfortably longer than the slowest single box,
 far shorter than a whole tail) is reported `recoverable`.
 
-**`recoverable` is a report, never an action** `[a3 1, a3 19]`. `acquireSourceRepoLock` never
-takes over. Recovery requires an explicit `recoverSourceRepoLock` call naming the exact stale
-owner it expects to displace, and it re-checks the heartbeat under the same atomic write. A
-long-running conflict agent keeps its lock because the boxes around it keep the heartbeat
-warm; elapsed time alone never authorizes takeover.
+**`recoverable` is a report, never an automatic action** `[a3 1, a3 19, a4 1]`.
+`acquireSourceRepoLock` never takes over. The workflow stops its wait, exits `run-failed`
+through the normal chain, and reports the exact owner token plus the maintenance command
+below. Recovery re-reads both owner and heartbeat under the same exclusive recovery guard;
+it refuses a warm lock or a changed owner and removes only the exact cold lock. A later run
+then acquires normally. Elapsed time reports eligibility, but the separate exact operator
+confirmation is what authorizes recovery.
 
 `acquireSourceRepoLock` writes with `wx` so creation is atomic. `releaseSourceRepoLock`
 deletes only when the recorded owner matches.
@@ -403,23 +419,59 @@ taken over,
 `test_sourceRepoLock_survivesAcquireAndReleaseInSeparateProcesses` — spawn two `node`
 processes; this is the property `withTaskStateLock` cannot provide.
 
+#### `scripts/tackle-tasks/recoverSourceRepoLock.ts` — maintenance CLI, no diagram box
+
+This is the executable recovery path; the workflow **never calls it**. JSON stdin:
+
+```json
+{"projectRoot":"/abs/repo","expectedStaleOwner":"run-id:169","confirmation":"abandon run-id:169"}
+```
+
+It requires `confirmation` to equal `abandon ${expectedStaleOwner}` byte-for-byte, then calls
+`recoverSourceRepoLock`, which independently validates the same confirmation so importing the
+library cannot bypass the operator gate. It prints
+`{"status":"recovered"|"refused","owner":"…","reason":str|null}`. A warm heartbeat, owner
+change, malformed owner token, or wrong confirmation is `refused` and changes nothing. It
+does not acquire the lock for a replacement owner; that keeps manual recovery separate from
+normal workflow acquisition.
+
+Tests: `test_recoverSourceRepoLockCli_requiresTheExactConfirmation`,
+`test_recoverSourceRepoLockCli_refusesAWarmLock`,
+`test_recoverSourceRepoLockCli_refusesWhenTheOwnerChanged`, and
+`test_recoverSourceRepoLockCli_allowsTheNextRunToAcquireAfterConfirmedRecovery`.
+
 ### 1d. `scripts/tackle-tasks/writeTaskBrief.ts`
 
 ```ts
+export function renderTaskBrief(taskNumber: number, projectRoot: string): string
 export function writeTaskBrief(taskNumber: number, worktreePath: string, projectRoot: string): string
+export function configureGeneratedArtifactIsolation(taskNumber: number, worktreePath: string): string[]
 ```
 
-Wraps `writeTaskBriefFile` from `scripts/prepareTasks.ts`. Idempotent.
+`renderTaskBrief` is pure and returns the expected bytes by calling the extracted
+`renderTaskBriefContent` from `scripts/prepareTasks.ts`. `writeTaskBrief` writes those bytes
+and remains the idempotent wrapper around `writeTaskBriefFile`. The pure renderer is what
+lets `reconcileStep` compare a brief without rewriting it.
 
 **The brief carries at most the three most recent previous runs** `[a3 30]`. The full
 history stays in `tasks.json`; a heavily retried task would otherwise grow a prompt without
 bound. When runs are omitted the brief says so: `(4 earlier runs omitted)`.
 
+`configureGeneratedArtifactIsolation` handles the tracked-file half of generated-artifact
+isolation `[a4 4]`. In the **linked worktree's own index**, find tracked paths matching the
+generated-document patterns and mark them `skip-worktree` before any generated file is
+written. It returns the paths it marked. `createTaskWorktree`, `resetTaskWorktree`,
+`generateTaskDocs`, and `updateTaskDocs` call it; the last two call it defensively so a
+resumed worktree created by an older pipeline is covered. The index is per worktree and is
+discarded when that worktree is removed, so the canonical checkout's index is untouched.
+
 ### 1e. Edits to `scripts/prepareTasks.ts`
 
 Add `export` to `initializeSubmodulesInWorktree` and to the private helpers Phases 3 and 6
-need. **Change no existing behavior** — the v1_1 archive calls this file. Confirm every
-existing `prepareTasks` test still passes.
+need. Extract and export pure `renderTaskBriefContent(task, repoRoot)` from
+`writeTaskBriefFile`; the existing writer calls it, so output stays byte-identical. **Change
+no existing behavior** — the v1_1 archive calls this file. Confirm every existing
+`prepareTasks` test still passes.
 
 One behavioral change is required, and it is additive `[a3 18]`: worktree paths are derived
 as `/tmp/taskTools-wt/<basename>/task-N`, which collides between two different repositories
@@ -452,8 +504,16 @@ shared by every linked worktree, edited outside every lock, and never cleaned up
 `.gitignore` rule is one file, written once, correct in every worktree, with no concurrency
 and no accumulation.
 
-Being ignored also keeps generated docs out of every `<base>...HEAD` diff, so test discovery,
-the fence and the modified-file record skip them for free.
+`.gitignore` covers **new/untracked** generated paths. It does not affect an already tracked
+path; this repository currently has tracked `plans/brief-*.md` files. Those are covered by
+`configureGeneratedArtifactIsolation`'s per-worktree `skip-worktree` flags `[a4 4]`. Together,
+the two mechanisms keep generated docs out of `git status`, `git add -A`, commits, and every
+`<base>...HEAD` diff without changing the source checkout's index.
+
+Test with a real linked worktree containing an already tracked `plans/brief-<N>.md`: rewrite
+the brief, run the same `git add -A` used by `commitTaskWork`, and prove the path is absent
+from status, the staged diff, and the resulting commit. Also prove a newly created
+`plans/plan.json` is ignored.
 
 ---
 
@@ -533,7 +593,9 @@ Depends on: Phase 1. Parallel-safe with Phases 2, 4–8. One agent.
 - **does a worktree exist?** reads `readTaskRunState(taskNumber).worktree` and checks the path
   is on disk. A recorded path that has been removed means `exists:false`.
 - **create a worktree** wraps `createWorktreeForGroup`, records the path with
-  `updateCurrentTaskRun`, and records `leaseRunId`.
+  `updateCurrentTaskRun`, records `leaseRunId`, and calls
+  `configureGeneratedArtifactIsolation` before the first generated document can be written
+  `[a4 4]`.
 
   **It also runs submodule init, and that is documented, not hidden** `[a3 15]`.
   `createWorktreeForGroup` already calls `initializeSubmodulesInWorktree`, because
@@ -555,7 +617,9 @@ Depends on: Phase 1. Parallel-safe with Phases 2, 4–8. One agent.
   `deleteTaskMergePersistence`, then `removeWorktreeAndBranch`, then `createTaskWorktree`'s
   exported function. Each step idempotent, so a half-finished reset re-runs safely.
 - **auto generate docs** and **update auto generated docs** are two files, each two lines
-  around `writeTaskBrief`, so each diagram box has a file and neither path can drift.
+  around `configureGeneratedArtifactIsolation` followed by `writeTaskBrief`, so each diagram
+  box has a file, tracked generated paths stay out of the linked-worktree index, and neither
+  path can drift.
   `test_generateTaskDocs_andUpdateTaskDocs_produceTheSameBrief`.
 - **amend last exit notes** appends one section per previous ended run with an `exitType`,
   newest first, capped at three `[a3 30]`:
@@ -584,6 +648,7 @@ Tests: `test_checkTaskWorktreeSafe_reportsUnsafeWhenHeadIsOnTheWrongBranch`,
 `test_resetTaskWorktree_succeedsWhenRunTwice`,
 `test_amendExitNotesIntoBrief_writesOneSectionPerPreviousRunNewestFirst`,
 `test_amendExitNotesIntoBrief_capsTheBriefAtThreePreviousRunsAndSaysHowManyWereOmitted`,
+`test_generateTaskDocs_hidesAnAlreadyTrackedBriefFromGitAddAll`,
 `test_recordImplementationNotes_rejectsAPathThatIsNotInTheWorktree`.
 
 ---
@@ -696,8 +761,8 @@ Depends on: Phase 1. Parallel-safe with Phases 2–4, 6–8. One agent.
 
 | Diagram box | File | stdout JSON |
 |---|---|---|
-| run task tests | `runTaskTests.ts` | `{"passed":bool,"testFiles":[str],"createdTestFiles":[str],"missingTests":bool,"output":str}` |
-| run the full suite | `runFullSuite.ts` | `{"passed":bool,"layers":[{"occurrenceId":str,"passed":bool}],"output":str}` |
+| run task tests | `runTaskTests.ts` | `{"stepId":str,"passed":bool,"testFiles":[str],"createdTestFiles":[str],"missingTests":bool,"output":str}` |
+| run the full suite | `runFullSuite.ts` | `{"stepId":str,"passed":bool,"layers":[{"occurrenceId":str,"passed":bool}],"output":str}` |
 
 ### Which tests are the task's tests
 
@@ -752,9 +817,12 @@ green run gets reported on an untested repository.
 `output` is combined stdout and stderr, truncated to the **last** 8000 characters. Never
 `bun test`.
 
-Both scripts record their result with `updateCurrentTaskRun` — `taskTests` and `fullSuite`
-respectively `[a3 6]` — because `build the closure note` runs after the worktree is gone and
-cannot re-derive them.
+Both scripts require a workflow-derived `stepId` on stdin and record their **entire stdout
+decision** plus `checkedAt` with `updateCurrentTaskRun` before printing it — `taskTests` and
+`fullSuite` respectively `[a3 6, a4 2]`. The workflow creates a new `stepId` for each logical
+visit to TT or FULL and preserves it while reconciling that visit. These scripts are
+mutating, not read-only: a lost result is recovered by reading the matching stored `stepId`
+and returning its stored decision, never by running the tests again.
 
 Tests: `test_runTaskTests_selectsTestFilesTheBranchAddedSinceTheSourceBranch`,
 `test_runTaskTests_ignoresATestFileThatIsOnTheSourceBranch`,
@@ -763,10 +831,10 @@ Tests: `test_runTaskTests_selectsTestFilesTheBranchAddedSinceTheSourceBranch`,
 `test_runTaskTests_findsATestFileInsideASubmodule`,
 `test_runTaskTests_runsASubmodulesTestsInsideThatSubmodule`,
 `test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchAddedNone`,
-`test_runTaskTests_recordsItsResultOnTheRunRecord`,
+`test_runTaskTests_recordsItsWholeDecisionBeforePrinting`,
 `test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen`,
 `test_runFullSuite_reportsRunFailedWhenALayerHasNoDiscoverableSuite`,
-`test_runFullSuite_recordsItsResultOnTheRunRecord`.
+`test_runFullSuite_recordsItsWholeDecisionBeforePrinting`.
 
 ---
 
@@ -792,10 +860,11 @@ rebase box onward. That heartbeat is what makes rule 9's recovery safe `[a3 1]`.
 
 ### commitTaskWork.ts, occurrence-aware `[a1 9]`
 
-Walks `getOccurrencesDeepestFirst`. For each dirty layer: stage everything, commit, then stage
-the resulting gitlink in the parent so the parent's own commit picks it up. The root commits
-last, capturing every gitlink bump beneath it. v1's `implementCommitSteps` in the v1_1 emitter
-is the working reference for the gitlink walk.
+First calls `configureGeneratedArtifactIsolation` defensively `[a4 4]`, then walks
+`getOccurrencesDeepestFirst`. For each dirty layer: stage everything, commit, then stage the
+resulting gitlink in the parent so the parent's own commit picks it up. The root commits last,
+capturing every gitlink bump beneath it. v1's `implementCommitSteps` in the v1_1 emitter is
+the working reference for the gitlink walk.
 
 Two rules:
 
@@ -826,14 +895,14 @@ same checkout concurrently. Per-task `active` flags do not serialize different t
 routes back into this box while the lock is held, so `already-held-by-me` returns
 immediately. Without that, the merge retry deadlocks against itself.
 
-**Waiting is bounded and reported, not open-ended** `[a3 24]`. An earlier draft said the
+**Waiting is bounded and reported, not open-ended** `[a3 24, a4 1]`. An earlier draft said the
 script waits, with no interval, timeout, or status — and a workflow tool call can time out
 before the owner releases. Instead: poll every 10 seconds for at most 2 minutes, then
 **return** `lock:"held"` or `lock:"recoverable"` rather than failing. The workflow logs which
-owner holds it and re-enters the box. Re-entry is cheap and read-only until the lock is
-actually free, so the run waits as long as it takes without any single agent call hanging.
-`lock:"recoverable"` surfaces a cold heartbeat to the user; the workflow does **not** recover
-automatically.
+owner holds it. A warm `held` result re-enters the box; re-entry is cheap and read-only until
+the lock is free. A cold `recoverable` result does **not** loop forever: it exits `run-failed`
+through the normal chain and prints the exact confirmed-recovery command from §1c. The
+workflow never performs that recovery automatically.
 
 Then rebase every layer with `rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, true,
 null)` and `rebaseParentOntoSourceAndTest(...)`, with `manifest` from
@@ -1017,6 +1086,12 @@ Depends on: Phase 1. Parallel-safe with Phases 2–6, 8. One agent.
   why the diagram's two boxes are one `[a2 8]`. This wrapper is what gives `closeTasks`'s
   positional CLI the stdin/JSON contract every other green box has.
 
+  A retry after the archive-first partial state is intentional `[a4 3]`: if the task is in
+  both files, pass the closure note and hashes already stored in `completedTasks.json` back to
+  `closeTasks`. Its upsert is idempotent and the second write finishes removal from
+  `tasks.json`. A close is successful only when the archived record matches and the open
+  record is absent.
+
 Tests: `test_writeTaskExitNotes_exitsNonZeroOnAnUnknownExitType`,
 `test_writeTaskExitNotes_reopensAnAlreadyEndedRunWhenReopenIsSet`,
 `test_recordTaskModifiedFiles_doesNotChangeTheTasksOwnedFilesList`,
@@ -1086,14 +1161,18 @@ merge exit on the second event, matching their exit-note wording.
 A null agent result proves the harness returned nothing, not that the command never ran.
 
 - **Read-only** — `is task number valid?`, `is task open?`, `is task blocked?`,
-  `does a worktree exist?`, `is the worktree safe to use?`, `run task tests`,
-  `run the full suite`, the fence check, both validators, `build the closure note`, and the
-  resolver. Retried up to three times.
-- **Mutating** — everything else. Never retried.
+  `does a worktree exist?`, `is the worktree safe to use?`, the fence check, both validators,
+  `build the closure note`, and the resolver. Retried up to three times.
+- **Mutating** — everything else dispatched by the workflow, **including both test boxes
+  because they write their durable decisions to `task.run`** `[a4 2]`. Never blindly retried.
+- **Maintenance-mutating** — `recoverSourceRepoLock.ts`. It is run directly by an operator,
+  never by an agent or the workflow, so agent-result reconciliation does not apply.
 
-A map from script name to `"read-only" | "mutating"`, with
+A map from script name to `"read-only" | "mutating" | "maintenance-mutating"`, with
 `test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory` asserting the map and the
-directory agree. A new script with no entry fails the suite.
+directory agree. A second test asserts every `"mutating"` workflow entry has a
+`reconcileStep` handler and that the maintenance entry is absent from workflow source. A new
+script with no entry fails the suite.
 
 ### `reconcileStep.ts` — what a lost mutating result actually means `[a3 3, a3 8]`
 
@@ -1104,24 +1183,45 @@ lost `applyPlanAmendments` result may have amended the plan the run then abandon
 
 So diagram rule 11: **before a lost mutating result becomes `run-failed`, the workflow runs a
 read-only reconciliation that reads the world and decides whether the step already happened.**
-One script, one check per mutating box:
+The workflow supplies the original input and its logical `stepId`. `reconcileStep.ts` returns
+`{"status":"completed"|"not-completed"|"ambiguous","result":object|null}`. A completed
+check reconstructs the box's stdout in `result`, so the workflow can take the correct edge
+without rerunning the mutation `[a4 2]`.
+
+One handler covers every mutating workflow script:
 
 | Lost step | Reconciliation reads | Completed if |
 |---|---|---|
 | `claimTaskRun` | `task.run` | active with this `runId` |
+| `createTaskWorktree` | `task.run`, worktree, branch and lease | the recorded worktree is structurally valid and both lease records name this run |
+| `isTaskRunResumable` | prior notes plus both lease records | the resumable verdict can be recomputed and, when true, both leases name this run |
+| `resetTaskWorktree` | worktree, branch, lease and persistence refs | a fresh safe task branch exists for this run and old persistence is gone |
+| `generateTaskDocs` / `updateTaskDocs` | brief bytes and generated-path index flags | the expected brief exists and every tracked generated path is isolated |
+| `amendExitNotesIntoBrief` | prior-run headings in the brief | every intended `runId` heading occurs exactly once; a partial or duplicate set is `ambiguous` |
+| `initTaskSubmodules` | `.gitmodules` and every submodule checkout | every declared submodule is populated recursively |
+| `recordImplementationNotes` | `task.run` | the field is set to the intended existing path |
 | `applyPlanAmendments` | `plan.json` | `revision` already incremented past the value read before the call |
-| `commitTaskWork` | each layer's `git log` and the run record | HEAD commit subject matches the derived message and its hash is on the record |
-| `recordImplementationNotes` | `task.run` | the field is set |
+| `commitTaskWork` | each layer's `git log` and the run record | every derived commit is at HEAD and its hash is on the record |
+| `runTaskTests` / `runFullSuite` | the corresponding run field | its `stepId` matches; return the stored decision as `result` |
 | `rebaseTaskWorktree` / `advanceTaskRebase` | `rebaseInProgress` per layer, and each HEAD | no rebase in progress and HEAD moved |
 | `mergeTaskWorktree` | `findRecordedMergedCommit(repoRoot, operationBranch)` per occurrence | a merged commit is recorded |
 | `recordMergeCommits` | `task.run.commits` | merge-kind entries present |
+| `recordTaskModifiedFiles` | `task.run.modifiedFiles` and the worktree when present | the stored occurrence paths equal the recomputed paths, or the retained non-empty record is authoritative after cleanup |
 | `cleanupTaskWorktree` | the worktree path, the lease, the refs, the lock | all gone |
 | `writeTaskExitNotes` / `markTaskInactive` | `task.run` | the field already has the intended value |
-| `closeTaskRun` | **both task files** | the task is in `completedTasks.json` with this run's commits |
+| `releaseTaskRunHolds` | worktree lease and source lock | neither hold is owned by this run |
+| `closeTaskRun` | **both task files** | the task is in `completedTasks.json` with this run's commits **and absent from `tasks.json`** `[a4 3]` |
 
 Every check is read-only, so it is itself retryable. `completed` continues down the normal
-edge; `not-completed` runs the step once more; **`ambiguous` is the only path to
-`run-failed`**, and its note names what could not be determined.
+edge using the reconstructed `result`. `not-completed` reruns the step only where the handler
+has proved that rerun is idempotent from the observed state. **`ambiguous` is the only path
+to `run-failed`**, and its note names what could not be determined.
+
+Two partial states have explicit repair behavior. If a derived git commit is at HEAD but its
+hash is absent from the run record, rerunning `commitTaskWork` appends that existing hash and
+does not create another commit. If close is present in **both** task files, it is
+`not-completed`; rerunning idempotent `closeTasks` upserts the archive and finishes removal
+from `tasks.json` `[a4 3]`.
 
 The `closeTaskRun` row is the one that matters most `[a3 3]`: without it a successful archive
 followed by a lost result reports `run-failed` and then tries to reopen a task that is no
@@ -1130,8 +1230,12 @@ longer there.
 Fault-injection tests, one per row, dropping the result after the mutation has landed:
 `test_reconcileStep_recognizesACompletedArchiveAfterALostResult`,
 `test_reconcileStep_recognizesAnAlreadyAppliedAmendment`,
+`test_reconcileStep_returnsAStoredTaskTestDecisionWithoutRunningTestsAgain`,
+`test_reconcileStep_recognizesACreatedWorktreeAndAdoptedLease`,
 `test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef`,
 `test_reconcileStep_recognizesACompletedCleanup`,
+`test_reconcileStep_reportsNotCompletedForAnArchivePresentInBothTaskFiles`,
+`test_greenBoxPolicy_hasAReconciliationHandlerForEveryMutatingWorkflowScript`,
 `test_reconcileStep_reportsAmbiguousRatherThanGuessing`.
 
 ### Finalizing a `run-failed`, in four cases `[a2 3]`
@@ -1256,6 +1360,10 @@ const runScript = (scriptName, payload, phaseTitle, schema) => agent(
 
 `BASE` carries `taskNumber`, `projectRoot`, `worktree`, `sourceBranch` and `runId`.
 
+For every mutating script call, the workflow also derives a logical `stepId` and includes it
+in the payload. That id stays unchanged across reconciliation and any proved-safe rerun; a
+later visit to the same diagram box gets a new id. Read-only calls do not need one `[a4 2]`.
+
 Retries follow Phase 8: read-only scripts through the three-attempt null guard from
 `bootstrap.workflow.js:45`; a mutating script's null result goes to `reconcileStep.ts` before
 anything else is decided.
@@ -1291,8 +1399,13 @@ Follow the diagram node for node. In particular:
 - `did the merge land? -- no, 1st time` loops back to the rebase box, which re-acquires its
   own lock as a no-op.
 - `is the rebase finished? -- no` loops back to `did the rebase report conflicts?`.
-- `lock:"held"` or `lock:"recoverable"` from the rebase box logs the holder and re-enters the
-  box; it is not a failure `[a3 24]`.
+- `lock:"held"` from the rebase box logs the holder and re-enters the box `[a3 24]`.
+- `lock:"recoverable"` logs the exact stale owner and maintenance command, then uses the
+  ordinary `run-failed` exit chain. Only a user can run `recoverSourceRepoLock.ts`; a later
+  invocation acquires the now-free lock `[a4 1]`.
+- Every logical TT/FULL visit gets a fresh `stepId`. If a mutating script returns null, call
+  `reconcileStep.ts` with the same `stepId`; on `completed`, use its reconstructed `result`
+  to choose the diagram edge `[a4 2]`.
 
 ### meta
 
@@ -1458,7 +1571,7 @@ and six agents can run at once `[a1 23]`.
 
 ## File map
 
-New under `scripts/tackle-tasks/`, **42 files** `[a3 9]`:
+New under `scripts/tackle-tasks/`, **43 files** `[a3 9, a4 1]`:
 
 | Group | Count | Files |
 |---|---|---|
@@ -1469,16 +1582,16 @@ New under `scripts/tackle-tasks/`, **42 files** `[a3 9]`:
 | tests | 2 | `runTaskTests.ts`, `runFullSuite.ts` |
 | git | 7 | `commitTaskWork.ts`, `rebaseTaskWorktree.ts`, `advanceTaskRebase.ts`, `checkTaskFileFence.ts`, `mergeTaskWorktree.ts`, `recordMergeCommits.ts`, `cleanupTaskWorktree.ts` |
 | exit and close | 6 | `writeTaskExitNotes.ts`, `recordTaskModifiedFiles.ts`, `markTaskInactive.ts`, `releaseTaskRunHolds.ts`, `buildClosureNote.ts`, `closeTaskRun.ts` |
-| policy | 2 | `greenBoxPolicy.ts`, `reconcileStep.ts` |
+| policy and recovery | 3 | `greenBoxPolicy.ts`, `reconcileStep.ts`, `recoverSourceRepoLock.ts` |
 | emitters | 2 | `AgentPromptEmitter.ts`, `SkillBodyEmitter.ts` |
-| | **42** | |
+| | **43** | |
 
 New elsewhere: `skills/tackle-tasks/resolve.workflow.js`.
 
 Rewritten: `skills/tackle-tasks/tackle-tasks.workflow.js`, `skills/tackle-tasks/SKILL.md`.
 
-Edited: `scripts/prepareTasks.ts` (exports plus the worktree-path hash), and the repository
-`.gitignore`.
+Edited: `scripts/prepareTasks.ts` (exports, pure brief renderer extraction, and the
+worktree-path hash), and the repository `.gitignore`.
 
 Archived unchanged: 5 skill files, 3 scripts, 1 test.
 
