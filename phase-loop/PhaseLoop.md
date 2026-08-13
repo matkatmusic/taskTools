@@ -45,11 +45,11 @@ Although five artifact names appear in the table, `<audit>` and `<feedback-phase
 1. The implementor follows `<plan>` and validates the result.
 2. The implementor stages only its implementation and test changes.
 3. The implementor creates an empty root `.done` file and stages it last.
-4. The implementor begins monitoring for `<audit>`, follow-up feedback, or `.resolved`.
+4. The implementor begins monitoring for `<audit>`, `<feedback-phaseN-M.md>`, or `.resolved`.
 
 ### 2. Initial audit
 
-1. The auditor's monitor consumes `.done` and emits `done`.
+1. The auditor's monitor consumes `.done` and emits `done`, waking the auditor.
 2. The auditor freezes the staged snapshot and reviews it against the entire `<plan>`.
 3. The auditor writes `<audit>` next to `<plan>`. Findings include a concrete failure mode, a complete suggested fix, and proving tests. The auditor does not nitpick.
 4. The user reviews and commits the implementation and initial audit.
@@ -58,10 +58,10 @@ If the initial audit contains no findings, the auditor may proceed directly to t
 
 ### 3. Audit remediation
 
-1. The implementor reads the committed `<audit>` and incorporates every finding.
-2. The implementor stages only its remediation changes, creates and stages `.done` last, and monitors for feedback or `.resolved`.
-3. The auditor's monitor consumes `.done` and emits `done`.
-4. The auditor reviews only the items already flagged in `<audit>` and prior feedback. It does not add new audit scope during remediation.
+1. The implementor reads the `<audit>` and incorporates every finding.
+2. The implementor stages only its remediation changes, creates and stages `.done` last, and monitors for `<feedback-phaseN-M.md>` or `.resolved`.
+3. The auditor's monitor consumes `.done` and emits `done`, waking the auditor.
+4. The auditor reviews only the items already flagged in `<audit>` and `<feedback-phaseN-M.md>`. It does not add new audit scope during remediation.
 
 ### 4. Follow-up decision
 
@@ -70,7 +70,7 @@ If any flagged item remains unresolved:
 1. The auditor leaves `<audit>` intact.
 2. The auditor writes a new, uniquely numbered `<feedback-phaseN-M.md>` containing only unresolved items, evidence, complete fixes, and proving tests.
 3. The auditor returns to monitoring for `.done` or `.complete`.
-4. The implementor incorporates all feedback, validates, stages only its changes, creates and stages `.done` last, and returns to monitoring.
+4. The implementor incorporates all feedback in `<feedback-phaseN-M.md>`, validates, stages only its changes, creates and stages `.done` last, and returns to monitoring for a new `<feedback-phaseN-M.md>` or for the presence of `.resolved`. 
 5. Repeat steps 3 and 4 until all flagged items are resolved.
 
 If all flagged items are resolved, continue to the terminal handshake.
@@ -78,9 +78,9 @@ If all flagged items are resolved, continue to the terminal handshake.
 ### 5. Terminal handshake
 
 1. The auditor creates an empty, untracked root `.resolved` and continues monitoring.
-2. The implementor's monitor reports `resolved`.
-3. The implementor deletes `.resolved`, creates an empty, untracked root `.complete`, and exits.
-4. The auditor's monitor consumes `.complete`, emits `complete`, and exits.
+2. The implementor's monitor reports `resolved`, waking the implementor.
+3. The implementor deletes `.resolved`, creates an empty, untracked root `.complete`, and exits the monitoring script.
+4. The auditor's monitor consumes `.complete`, emits `complete`, and exits the monitoring script.
 5. The user or external mechanism performs any final review and commit.
 
 The `.resolved`/`.complete` acknowledgement prevents the auditor from exiting before the implementor has observed the final decision. Consuming terminal markers prevents stale files from terminating a later loop.
@@ -90,12 +90,12 @@ The `.resolved`/`.complete` acknowledgement prevents the auditor from exiting be
 - The first audit compares the full staged implementation with `<plan>`.
 - Every later audit compares the staged snapshot only with findings already recorded in `<audit>` or a prior feedback file.
 - Green tests do not close a finding unless its failure mode and acceptance criteria are actually covered.
-- Do not report optional improvements, style preferences, or unrelated defects during remediation.
+- Do not report optional improvements (nitpicks), style preferences (nitpicks), or unrelated defects during remediation.
 - Minor inconsistencies and speculative edge cases belong in a finding only when they imply a plausible correctness failure.
 
 ## Index and file rules
 
-- The implementor stages `.done` only after all implementation changes are staged, making it the final publication step.
+- The implementor creates and stages `.done` only after all implementation changes are staged, making it the final publication step.
 - The implementor never uses broad staging commands that could capture another actor's work.
 - The auditor never edits implementation files and never changes the staged snapshot except for consuming protocol markers through the monitor.
 - `<audit>` is the stable checklist. Follow-up rounds create new feedback files rather than erasing or rewriting the checklist.
