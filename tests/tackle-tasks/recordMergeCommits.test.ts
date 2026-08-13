@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { recordMergeCommits } from "../../scripts/tackle-tasks/recordMergeCommits.ts";
 import { appendTaskCommits, claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
 import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
 
@@ -25,13 +26,15 @@ function seedTaskAndClaim(projectRoot: string, taskNumber: number, runId: string
 test("test_recordMergeCommits_keepsTheWorkAndRepairCommitsThatCameBefore", () => {
     const projectRoot = tmpMkdir("record-merge-commits-");
     const taskNumber = 40;
-    seedTaskAndClaim(projectRoot, taskNumber, "run-40");
+    const runId = "run-40";
+    seedTaskAndClaim(projectRoot, taskNumber, runId);
+    acquireSourceRepoLock(projectRoot, buildLockOwner(runId, taskNumber));
 
-    appendTaskCommits(taskNumber, [{ occurrenceId: "", hash: "work-hash", kind: "work" }], projectRoot);
-    appendTaskCommits(taskNumber, [{ occurrenceId: "", hash: "repair-hash", kind: "repair" }], projectRoot);
+    appendTaskCommits(taskNumber, runId, [{ occurrenceId: "", hash: "work-hash", kind: "work" }], projectRoot);
+    appendTaskCommits(taskNumber, runId, [{ occurrenceId: "", hash: "repair-hash", kind: "repair" }], projectRoot);
 
     const result = recordMergeCommits({
-        projectRoot, taskNumber,
+        projectRoot, taskNumber, runId,
         commits: [
             { occurrenceId: "child", hash: "merge-child-hash", kind: "merge" },
             { occurrenceId: "", hash: "merge-root-hash", kind: "merge" },
@@ -43,4 +46,39 @@ test("test_recordMergeCommits_keepsTheWorkAndRepairCommitsThatCameBefore", () =>
     const run = getCurrentTaskRun(taskNumber, projectRoot);
     assert.deepEqual(run?.commits.map((commit) => commit.hash), ["work-hash", "repair-hash", "merge-child-hash", "merge-root-hash"]);
     assert.deepEqual(run?.commits.map((commit) => commit.kind), ["work", "repair", "merge", "merge"]);
+});
+
+test("test_recordMergeCommits_refreshesTheExactRunIdTaskNumberOwner", () => {
+    const projectRoot = tmpMkdir("record-merge-commits-");
+    const taskNumber = 41;
+    const runId = "run-41";
+    seedTaskAndClaim(projectRoot, taskNumber, runId);
+    const owner = buildLockOwner(runId, taskNumber);
+    acquireSourceRepoLock(projectRoot, owner);
+    const before = readSourceRepoLock(projectRoot)!;
+
+    recordMergeCommits({
+        projectRoot, taskNumber, runId,
+        commits: [{ occurrenceId: "", hash: "merge-root-hash", kind: "merge" }],
+    });
+
+    const after = readSourceRepoLock(projectRoot)!;
+    assert.equal(after.owner, owner);
+    assert.notEqual(new Date(after.heartbeatAt).getTime() < new Date(before.heartbeatAt).getTime(), true);
+});
+
+test("test_recordMergeCommits_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", () => {
+    const projectRoot = tmpMkdir("record-merge-commits-");
+    const taskNumber = 42;
+    const runId = "run-42";
+    seedTaskAndClaim(projectRoot, taskNumber, runId);
+    acquireSourceRepoLock(projectRoot, buildLockOwner("other-run", taskNumber));
+
+    assert.throws(() => recordMergeCommits({
+        projectRoot, taskNumber, runId,
+        commits: [{ occurrenceId: "", hash: "merge-root-hash", kind: "merge" }],
+    }));
+
+    const run = getCurrentTaskRun(taskNumber, projectRoot);
+    assert.deepEqual(run?.commits, []);
 });

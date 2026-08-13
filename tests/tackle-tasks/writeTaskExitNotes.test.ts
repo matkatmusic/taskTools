@@ -36,7 +36,7 @@ test("test_writeTaskExitNotes_exitsNonZeroOnAnUnknownExitType", () => {
 
     // Running the CLI must fail loudly rather than silently write a bogus exit type.
     assert.throws(() => execFileSync("node", [cliPath], {
-        input: JSON.stringify({ taskNumber: 1, projectRoot: root, exitType: "not-a-real-exit-type", exitNote: "x" }),
+        input: JSON.stringify({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "not-a-real-exit-type", exitNote: "x" }),
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
     }));
@@ -52,7 +52,7 @@ test("test_writeTaskExitNotes_reopensAnAlreadyEndedRunWhenReopenIsSet", () => {
 
     // reopen:true routes to replaceEndedRunOutcome, not updateCurrentTaskRun.
     const output = writeTaskExitNotes({
-        taskNumber: 1, projectRoot: root, exitType: "run-failed", exitNote: "a later box failed", reopen: true,
+        taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "run-failed", exitNote: "a later box failed", reopen: true,
     });
 
     assert.deepEqual(output, { exitType: "run-failed", exitNote: "a later box failed" });
@@ -61,4 +61,20 @@ test("test_writeTaskExitNotes_reopensAnAlreadyEndedRunWhenReopenIsSet", () => {
     assert.equal(state.history.length, 1);
     assert.equal(state.history[0].exitType, "run-failed");
     assert.equal(state.history[0].exitNote, "a later box failed");
+});
+
+test("test_writeTaskExitNotes_throwsWithASiblingRunId", () => {
+    // Scenario (F6): a process pauses, its run ends, a new run is claimed. The paused process
+    // finally writes exit notes — it must fence against the newer run, not silently retarget it.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-new", endedAt: null, exitType: null, exitNote: null })] },
+    }]);
+
+    assert.throws(() => writeTaskExitNotes({
+        taskNumber: 1, runId: "run-old-paused", projectRoot: root, exitType: "run-failed", exitNote: "stale write",
+    }));
+
+    const state = readTaskRunState(1, root);
+    assert.equal(state.history[0].exitType, null);
 });

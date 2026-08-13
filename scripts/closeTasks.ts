@@ -4,12 +4,15 @@ import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
+import type { TaskRunState } from "./tackle-tasks/taskRunState.ts";
 
 export interface CloseTasksResult {
   closed: number[];
   skipped: number[];
   unblocked: number[];
 }
+
+const EMPTY_TASK_RUN_STATE: TaskRunState = { active: false, worktree: null, leaseRunId: null, history: [] };
 
 // Local calendar date, not UTC — toISOString() rolls to tomorrow during US evening hours.
 function localDate(): string {
@@ -62,7 +65,35 @@ export function closeTasks(
     closeTasksLocked(taskNumbers, closureNote, pair, commitHashes), { onAcquired });
 }
 
-function closeTasksLocked(
+// F6's checked archive primitive: decides eligibility from task.run under the SAME lock as
+// the write, instead of an unlocked precheck followed by a plain closeTasks call. The
+// specified run must be the newest record, inactive, ended, and exitType "completed" — commit
+// hashes are derived from that run's own chronological commits, never caller-supplied.
+export function closeTaskRunChecked(
+  taskNumber: number,
+  runId: string,
+  closureNote: string,
+  projectRoot: string = process.cwd(),
+): CloseTasksResult {
+  const pair = resolveTaskFiles(projectRoot);
+  return withTaskStateLock(pair.tasksPath, () => {
+    const tasks = JSON.parse(readFileSync(pair.tasksPath, "utf8")) as (TaskRecord & { run?: TaskRunState })[];
+    const task = tasks.find((t) => t.taskNumber === taskNumber);
+    if (task === undefined) throw new Error(`closeTaskRunChecked: task ${taskNumber} not found`);
+    const state = task.run ?? EMPTY_TASK_RUN_STATE;
+    const newest = state.history[state.history.length - 1];
+    if (
+      state.active || newest === undefined || newest.runId !== runId
+      || newest.endedAt === null || newest.exitType !== "completed"
+    ) {
+      throw new Error(`closeTaskRunChecked: task ${taskNumber} has no ended, completed run "${runId}" to archive`);
+    }
+    const commitHashes = newest.commits.map((commit) => commit.hash);
+    return closeTasksLocked([taskNumber], closureNote, pair, commitHashes);
+  });
+}
+
+export function closeTasksLocked(
   taskNumbers: number[],
   closureNote: string | Record<number, string>,
   pair: TaskFilePair,

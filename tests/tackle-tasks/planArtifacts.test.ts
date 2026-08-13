@@ -111,6 +111,15 @@ test("test_readAndValidateReview_rejectsAScrapVerdictWithNoNotes", () => {
     assert.ok("problem" in result);
 });
 
+test("test_readAndValidateReview_rejectsAnInsertAmendmentWithANonKebabId", () => {
+    const filePath = writeJsonFile({
+        verdict: "amend",
+        amendments: [{ op: "insert", after: "problem", id: "Not_Kebab", title: "T", body: "B" }],
+    });
+    const result = readAndValidateReview(filePath);
+    assert.ok("problem" in result);
+});
+
 test("test_readAndValidateReview_rejectsAnUnknownVerdict", () => {
     const filePath = writeJsonFile({ verdict: "reject" });
     const result = readAndValidateReview(filePath);
@@ -202,6 +211,28 @@ test("test_applyPlanAmendments_allowsReplacingASectionInsertedEarlierInTheBatch"
     assert.ok(result.status === "applied");
     const inserted = result.plan.sections.find((s) => s.id === "step-0a");
     assert.deepEqual(inserted, { id: "step-0a", title: "T2", body: "B2" });
+});
+
+test("test_applyPlanAmendments_rejectsANonKebabInsertedId", () => {
+    const plan = samplePlan();
+    const amendments: PlanAmendment[] = [{ op: "insert", after: "problem", id: "Not_Kebab", title: "T", body: "B" }];
+    const result = applyPlanAmendments(plan, amendments);
+    assert.equal(result.status, "rejected");
+    assert.deepEqual(plan, samplePlan());
+});
+
+test("test_applyPlanAmendments_rejectsRemovingTheSoleSection", () => {
+    const plan: Plan = { task: 169, revision: 1, sections: [{ id: "only", title: "Only", body: "b" }] };
+    const result = applyPlanAmendments(plan, [{ op: "remove", id: "only" }]);
+    assert.equal(result.status, "rejected");
+});
+
+test("test_applyPlanAmendments_rejectsRemovingAllSectionsAcrossABatch", () => {
+    const plan = samplePlan();
+    const amendments: PlanAmendment[] = plan.sections.map((section) => ({ op: "remove", id: section.id }));
+    const result = applyPlanAmendments(plan, amendments);
+    assert.equal(result.status, "rejected");
+    assert.deepEqual(plan, samplePlan());
 });
 
 test("test_applyPlanAmendments_appliesAmendmentsInTheOrderGiven", () => {

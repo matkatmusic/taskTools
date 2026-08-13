@@ -175,6 +175,13 @@ export function refreshSourceRepoLock(
     }, { timeoutMs: options.timeoutMs });
 }
 
+// F2: the one guard every tail-script box calls before doing any work. A discarded
+// {refreshed:false} is exactly the bug — this makes ignoring it impossible.
+export function refreshOwnedSourceRepoLockOrThrow(projectRoot: string, owner: LockOwner): void {
+    const { refreshed } = refreshSourceRepoLock(projectRoot, owner);
+    if (!refreshed) throw new Error(`source repository lock is no longer owned by "${owner}"`);
+}
+
 export function releaseSourceRepoLock(
     projectRoot: string,
     owner: LockOwner,

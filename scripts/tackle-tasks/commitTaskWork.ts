@@ -2,6 +2,7 @@
 // dirty layer, and derives its own message: never accepts one (rule 7).
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { requireAbsolutePath } from "./inputPaths.ts";
 import { getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 import { appendTaskCommits, getCurrentTaskRun, type TaskCommit } from "./taskRunState.ts";
@@ -11,6 +12,7 @@ export type CommitTaskWorkInput = {
     projectRoot: string;
     worktreePath: string;
     taskNumber: number;
+    runId: string;
     rootSourceBranch: string;
 };
 
@@ -32,7 +34,9 @@ function readTaskTitle(taskNumber: number, projectRoot: string): string {
 }
 
 export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput {
-    const { projectRoot, worktreePath, taskNumber, rootSourceBranch } = input;
+    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+    const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
+    const { taskNumber, runId, rootSourceBranch } = input;
     configureGeneratedArtifactIsolation(taskNumber, worktreePath);
 
     const currentRun = getCurrentTaskRun(taskNumber, projectRoot);
@@ -52,7 +56,7 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
         commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind });
     }
 
-    if (commits.length > 0) appendTaskCommits(taskNumber, commits, projectRoot);
+    if (commits.length > 0) appendTaskCommits(taskNumber, runId, commits, projectRoot);
     return { commits };
 }
 

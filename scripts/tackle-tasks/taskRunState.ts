@@ -2,7 +2,7 @@
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { withTaskStateLock, writeJsonAtomically } from "../taskStateLock.ts";
-import { withTaskWorktreeLeaseGuard } from "../prepareTasks.ts";
+import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../prepareTasks.ts";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../taskFiles.ts";
 
 export type TaskExitType =
@@ -16,11 +16,16 @@ export type TaskTestResult = {
     stepId: string;
     testFiles: string[];
     createdTestFiles: string[];
+    deletedTestFiles: string[];
     missingTests: boolean;
     passed: boolean;
     output: string;
     checkedAt: string;
 };
+
+// The tip each source occurrence sat at when the rebase finished. The merge box compares
+// against it, so a clean commit landing on the source while the lock is held cannot slip in.
+export type SourceTipReceipt = { occurrenceId: string; baseBranch: string; sourceTip: string };
 
 export type FullSuiteResult = {
     stepId: string;
@@ -41,6 +46,7 @@ export type TaskRunRecord = {
     implementationNotesFile: string | null;
     taskTests: TaskTestResult | null;
     fullSuite: FullSuiteResult | null;
+    sourceTipsAtRebase?: SourceTipReceipt[];
 };
 
 export type TaskRunState = {
@@ -281,8 +287,109 @@ export function adoptWorktreeLease(taskNumber: number, runId: string, projectRoo
     });
 }
 
+export type LeaseTransitionOutcome =
+    | { status: "adopted" }
+    | { status: "released" }
+    | { status: "absent" }
+    | { status: "refused-owner-mismatch"; heldByRunId: string };
+
+// F4/F5: the single atomic replacement for "adopt, and if that fails, catch-and-release" —
+// resetTaskWorktree's old dance, which swallowed an owner-mismatch throw and then deleted a
+// worktree another run still legitimately held. Re-reads state inside both guards, so a
+// destructive caller never decides from an unlocked snapshot.
+//
+// Lease policy (F5): a worktree whose lease names an ENDED run is released here, never
+// silently adopted — this operation is for callers about to reset/discard the worktree, not
+// resume it. Resuming still goes through adoptWorktreeLease. A physical lease that already
+// names expectedRunId is treated as already-adopted (idempotent retry of a half-finished
+// reset). Any other mismatch between tasks.json and the physical lease refuses and mutates
+// nothing, because that disagreement means someone else has a real claim.
+export function transitionWorktreeLease(
+    taskNumber: number,
+    expectedRunId: string,
+    projectRoot: string,
+): LeaseTransitionOutcome {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const precheckTasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const precheckTask = findTask(precheckTasks, taskNumber);
+        const worktreePath = precheckTask === undefined ? null : getRunState(precheckTask).worktree;
+        if (worktreePath === null) return { status: "absent" };
+
+        return withTaskWorktreeLeaseGuard(worktreePath, (): LeaseTransitionOutcome => {
+            reconcileRetainedAdoptionIntent(worktreePath, projectRoot);
+
+            const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+            const task = findTask(tasks, taskNumber);
+            if (task === undefined) return { status: "absent" };
+            const state = getRunState(task);
+            if (state.worktree === null) return { status: "absent" };
+
+            const leasePath = taskWorktreeLeasePath(state.worktree);
+            const physicalOwner = readTaskWorktreeLeaseOwner(leasePath);
+            if (physicalOwner === null) return { status: "absent" };
+            if (physicalOwner.runId === expectedRunId) return { status: "adopted" };
+            if (state.leaseRunId !== physicalOwner.runId) {
+                return { status: "refused-owner-mismatch", heldByRunId: physicalOwner.runId };
+            }
+            const owningRun = state.history.find((candidate) => candidate.runId === state.leaseRunId);
+            if (owningRun === undefined || owningRun.endedAt === null) {
+                return { status: "refused-owner-mismatch", heldByRunId: physicalOwner.runId };
+            }
+
+            unlinkSync(leasePath);
+            const nextState: TaskRunState = { ...state, leaseRunId: null };
+            task.run = nextState;
+            writeJsonAtomically(tasksPath, tasks);
+            return { status: "released" };
+        });
+    });
+}
+
+// F7: the other half of establishing lease ownership — a fresh acquisition rather than an
+// adoption. Only succeeds when the caller's run is the newest active claimant, the task
+// carries a worktree, and no lease currently exists for it. Journals tasks.json and the
+// physical lease in the same guarded transition so they can never disagree.
+export function acquireAbsentWorktreeLease(
+    taskNumber: number,
+    expectedRunId: string,
+    projectRoot: string,
+): { acquired: boolean } {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const precheckTasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const precheckTask = findTask(precheckTasks, taskNumber);
+        const worktreePath = precheckTask === undefined ? null : getRunState(precheckTask).worktree;
+        if (worktreePath === null) return { acquired: false };
+
+        return withTaskWorktreeLeaseGuard(worktreePath, () => {
+            reconcileRetainedAdoptionIntent(worktreePath, projectRoot);
+
+            const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+            const task = findTask(tasks, taskNumber);
+            if (task === undefined) return { acquired: false };
+            const state = getRunState(task);
+            const currentRun = state.active ? state.history[state.history.length - 1] : undefined;
+            if (currentRun === undefined || currentRun.runId !== expectedRunId) return { acquired: false };
+            if (state.worktree === null) return { acquired: false };
+
+            const leasePath = taskWorktreeLeasePath(state.worktree);
+            if (readTaskWorktreeLeaseOwner(leasePath) !== null) return { acquired: false };
+
+            writeJsonAtomically(leasePath, { runId: expectedRunId, pid: process.pid, createdAt: Date.now() });
+            const nextState: TaskRunState = { ...state, leaseRunId: expectedRunId };
+            task.run = nextState;
+            writeJsonAtomically(tasksPath, tasks);
+            return { acquired: true };
+        });
+    });
+}
+
+// Fences a late writer against a run the workflow has already ended and replaced (rule 11):
+// expectedRunId must name the newest active record, checked inside this same lock window.
 export function updateCurrentTaskRun(
     taskNumber: number,
+    expectedRunId: string,
     changes: Partial<TaskRunRecord> & { worktree?: string | null; leaseRunId?: string | null },
     projectRoot: string,
 ): TaskRunState {
@@ -295,6 +402,9 @@ export function updateCurrentTaskRun(
         const state = getRunState(task);
         if (!state.active) throw new Error(`no active run for task ${taskNumber}`);
         const currentRecord = state.history[state.history.length - 1];
+        if (currentRecord.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s active run is "${currentRecord.runId}", not "${expectedRunId}"`);
+        }
         const nextRecord: TaskRunRecord = { ...currentRecord, ...recordChanges };
         const nextState: TaskRunState = {
             active: true,
@@ -308,7 +418,12 @@ export function updateCurrentTaskRun(
     });
 }
 
-export function appendTaskCommits(taskNumber: number, commits: TaskCommit[], projectRoot: string): TaskRunState {
+export function appendTaskCommits(
+    taskNumber: number,
+    expectedRunId: string,
+    commits: TaskCommit[],
+    projectRoot: string,
+): TaskRunState {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     return withTaskStateLock(tasksPath, () => {
         const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
@@ -317,6 +432,9 @@ export function appendTaskCommits(taskNumber: number, commits: TaskCommit[], pro
         const state = getRunState(task);
         if (!state.active) throw new Error(`no active run for task ${taskNumber}`);
         const currentRecord = state.history[state.history.length - 1];
+        if (currentRecord.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s active run is "${currentRecord.runId}", not "${expectedRunId}"`);
+        }
         const nextRecord: TaskRunRecord = { ...currentRecord, commits: [...currentRecord.commits, ...commits] };
         const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
@@ -325,7 +443,7 @@ export function appendTaskCommits(taskNumber: number, commits: TaskCommit[], pro
     });
 }
 
-export function endTaskRun(taskNumber: number, projectRoot: string): TaskRunState {
+export function endTaskRun(taskNumber: number, expectedRunId: string, projectRoot: string): TaskRunState {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     return withTaskStateLock(tasksPath, () => {
         const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
@@ -334,6 +452,9 @@ export function endTaskRun(taskNumber: number, projectRoot: string): TaskRunStat
         const state = getRunState(task);
         if (!state.active) throw new Error(`no active run for task ${taskNumber}`);
         const currentRecord = state.history[state.history.length - 1];
+        if (currentRecord.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s active run is "${currentRecord.runId}", not "${expectedRunId}"`);
+        }
         const nextRecord: TaskRunRecord = { ...currentRecord, endedAt: getLocalIsoTimestamp() };
         const nextState: TaskRunState = { ...state, active: false, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
@@ -342,8 +463,11 @@ export function endTaskRun(taskNumber: number, projectRoot: string): TaskRunStat
     });
 }
 
+// Replaces the specified ended run's outcome, never "whichever run is newest" implicitly:
+// expectedRunId must name that newest record, checked in the same lock window as the write.
 export function replaceEndedRunOutcome(
     taskNumber: number,
+    expectedRunId: string,
     exitType: TaskExitType,
     exitNote: string,
     projectRoot: string,
@@ -355,8 +479,11 @@ export function replaceEndedRunOutcome(
         if (task === undefined) throw new Error(`task ${taskNumber} not found`);
         const state = getRunState(task);
         const newest = state.history[state.history.length - 1];
-        if (state.active || newest === undefined || newest.endedAt === null || newest.exitType !== "completed") {
-            throw new Error(`task ${taskNumber} has no ended, completed run whose outcome can be replaced`);
+        if (
+            state.active || newest === undefined || newest.runId !== expectedRunId
+            || newest.endedAt === null || newest.exitType !== "completed"
+        ) {
+            throw new Error(`task ${taskNumber} has no ended, completed run "${expectedRunId}" whose outcome can be replaced`);
         }
         const nextRecord: TaskRunRecord = { ...newest, exitType, exitNote, endedAt: getLocalIsoTimestamp() };
         const nextState: TaskRunState = { ...state, active: false, history: [...state.history.slice(0, -1), nextRecord] };

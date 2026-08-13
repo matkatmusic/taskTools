@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+    acquireAbsentWorktreeLease,
     adoptWorktreeLease,
     appendTaskCommits,
     claimTask,
@@ -16,10 +17,12 @@ import {
     getCurrentTaskRun,
     readTaskRunState,
     replaceEndedRunOutcome,
+    transitionWorktreeLease,
     updateCurrentTaskRun,
     type TaskRunRecord,
 } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
+import { closeTaskRunChecked } from "../../scripts/closeTasks.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
@@ -144,7 +147,7 @@ test("test_updateCurrentTaskRun_mergesOnlyTheGivenFields", () => {
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
     // Update only implementationNotesFile.
-    const state = updateCurrentTaskRun(1, { implementationNotesFile: "notes.md" }, root);
+    const state = updateCurrentTaskRun(1, "run-a", { implementationNotesFile: "notes.md" }, root);
     // That field changed; everything else on the record is untouched.
     const record = state.history[state.history.length - 1];
     assert.equal(record.implementationNotesFile, "notes.md");
@@ -157,16 +160,16 @@ test("test_updateCurrentTaskRun_throwsWhenNoRunIsActive", () => {
     // Scenario: no run is active for the task.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     // Calling update without a prior claim must throw, not silently no-op.
-    assert.throws(() => updateCurrentTaskRun(1, { implementationNotesFile: "notes.md" }, root));
+    assert.throws(() => updateCurrentTaskRun(1, "run-a", { implementationNotesFile: "notes.md" }, root));
 });
 
 test("test_appendTaskCommits_neverOverwritesEarlierCommits", () => {
     // Scenario: commits are appended across two separate calls during one run.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
-    appendTaskCommits(1, [{ occurrenceId: "", hash: "aaa", kind: "work" }], root);
+    appendTaskCommits(1, "run-a", [{ occurrenceId: "", hash: "aaa", kind: "work" }], root);
     // Append a second batch of commits.
-    const state = appendTaskCommits(1, [{ occurrenceId: "", hash: "bbb", kind: "repair" }], root);
+    const state = appendTaskCommits(1, "run-a", [{ occurrenceId: "", hash: "bbb", kind: "repair" }], root);
     // Both commits remain, in the order they were appended.
     const record = state.history[state.history.length - 1];
     assert.deepEqual(record.commits, [
@@ -180,7 +183,7 @@ test("test_endTaskRun_stampsEndedAtAndClearsActive", () => {
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
     // End the run.
-    const state = endTaskRun(1, root);
+    const state = endTaskRun(1, "run-a", root);
     // The state is no longer active and the record now has an end timestamp.
     assert.equal(state.active, false);
     assert.notEqual(state.history[state.history.length - 1].endedAt, null);
@@ -193,7 +196,7 @@ test("test_replaceEndedRunOutcome_overwritesCompletedWithRunFailedInOneWrite", (
         run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "completed" })] },
     }]);
     // Reopen the outcome and overwrite it.
-    const state = replaceEndedRunOutcome(1, "run-failed", "clean-up crashed", root);
+    const state = replaceEndedRunOutcome(1, "run-a", "run-failed", "clean-up crashed", root);
     // The newest record's exit type and note are overwritten, and its endedAt is re-stamped.
     const record = state.history[state.history.length - 1];
     assert.equal(record.exitType, "run-failed");
@@ -208,7 +211,7 @@ test("test_replaceEndedRunOutcome_neverLeavesTheRunActive", () => {
         run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "completed" })] },
     }]);
     // Replace the outcome.
-    const state = replaceEndedRunOutcome(1, "run-failed", "clean-up crashed", root);
+    const state = replaceEndedRunOutcome(1, "run-a", "run-failed", "clean-up crashed", root);
     // The returned state, and the file on disk, both show the run as inactive throughout.
     assert.equal(state.active, false);
     const onDisk = readTasksFile(root)[0].run;
@@ -268,7 +271,7 @@ test("test_updateCurrentTaskRun_leavesOtherTasksByteIdentical", () => {
     const beforeTasks = JSON.parse(readFileSync(tasksPath, "utf8"));
     const task2Before = JSON.stringify(beforeTasks[1]);
     // Update task 1's active run.
-    updateCurrentTaskRun(1, { implementationNotesFile: "notes.md" }, root);
+    updateCurrentTaskRun(1, "run-a", { implementationNotesFile: "notes.md" }, root);
     // Task 2's record is byte-for-byte identical to before.
     const afterTasks = JSON.parse(readFileSync(tasksPath, "utf8"));
     const task2After = JSON.stringify(afterTasks[1]);
@@ -294,7 +297,7 @@ test("test_updateCurrentTaskRun_holdsTheTaskStateLockWhileWriting", async () => 
     const start = Date.now();
     const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
     // Write while the lock is externally held.
-    updateCurrentTaskRun(1, { implementationNotesFile: "notes.md" }, root);
+    updateCurrentTaskRun(1, "run-a", { implementationNotesFile: "notes.md" }, root);
     const elapsed = Date.now() - start;
     await once(child, "exit");
     // The write only completed after the external holder released the lock, proving it waited.
@@ -345,7 +348,7 @@ test("test_replaceEndedRunOutcome_throwsAndLeavesBytesUnchangedWhenTheRunIsActiv
     const { tasksPath } = resolveTaskFiles(root);
     const bytesBefore = readFileSync(tasksPath, "utf8");
     // The call must throw rather than silently terminating the active run.
-    assert.throws(() => replaceEndedRunOutcome(1, "run-failed", "note", root));
+    assert.throws(() => replaceEndedRunOutcome(1, "run-a", "run-failed", "note", root));
     assert.equal(readFileSync(tasksPath, "utf8"), bytesBefore);
 });
 
@@ -358,7 +361,7 @@ test("test_replaceEndedRunOutcome_throwsAndLeavesBytesUnchangedWhenTheEndedRunDi
     const { tasksPath } = resolveTaskFiles(root);
     const bytesBefore = readFileSync(tasksPath, "utf8");
     // Only rule 10's fourth case (an ended, completed run) may be reopened.
-    assert.throws(() => replaceEndedRunOutcome(1, "run-failed", "note", root));
+    assert.throws(() => replaceEndedRunOutcome(1, "run-a", "run-failed", "note", root));
     assert.equal(readFileSync(tasksPath, "utf8"), bytesBefore);
 });
 
@@ -516,4 +519,215 @@ test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterU
     const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
     assert.equal(onDisk.leaseRunId, "run-new");
     assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+// --- F6: expectedRunId fencing must reject a late writer targeting a run the workflow has
+// already ended and replaced. ---
+
+test("test_appendTaskCommits_throwsAndLeavesTheNewerRunUnchangedWhenTargetingAnEndedSiblingRun", () => {
+    // Scenario: a paused commit-recording call from an old run wakes up after the workflow
+    // ended that run and a later invocation claimed the task.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-old", root);
+    endTaskRun(1, "run-old", root);
+    claimTask(1, "run-new", root);
+    // The delayed call still names the old run; it must fail rather than write into run-new.
+    assert.throws(() => appendTaskCommits(1, "run-old", [{ occurrenceId: "", hash: "zzz", kind: "work" }], root));
+    // The new run is completely unaffected.
+    const state = readTaskRunState(1, root);
+    const newest = state.history[state.history.length - 1];
+    assert.equal(newest.runId, "run-new");
+    assert.deepEqual(newest.commits, []);
+});
+
+test("test_updateCurrentTaskRun_throwsAndLeavesTheNewerRunUnchangedWhenTargetingAnEndedSiblingRun", () => {
+    // Scenario: a paused task-test recording call wakes up late, after reconciliation moved on.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-old", root);
+    endTaskRun(1, "run-old", root);
+    claimTask(1, "run-new", root);
+    assert.throws(() => updateCurrentTaskRun(1, "run-old", { implementationNotesFile: "stale.md" }, root));
+    const state = readTaskRunState(1, root);
+    const newest = state.history[state.history.length - 1];
+    assert.equal(newest.runId, "run-new");
+    assert.equal(newest.implementationNotesFile, null);
+});
+
+test("test_endTaskRun_throwsWhenTargetingASiblingRunId", () => {
+    // Scenario: a delayed "mark task inactive" call names a run that is not the current one.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-old", root);
+    endTaskRun(1, "run-old", root);
+    claimTask(1, "run-new", root);
+    assert.throws(() => endTaskRun(1, "run-old", root));
+    const state = readTaskRunState(1, root);
+    assert.equal(state.active, true);
+    assert.equal(state.history[state.history.length - 1].runId, "run-new");
+});
+
+test("test_replaceEndedRunOutcome_targetsTheRunNamedByExpectedRunIdNotJustWhicheverIsNewest", () => {
+    // Scenario: the newest ended run is completed, but a delayed caller supplies a stale run ID.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "completed" })] },
+    }]);
+    const { tasksPath } = resolveTaskFiles(root);
+    const bytesBefore = readFileSync(tasksPath, "utf8");
+    // The stale ID does not name the newest record, so the call must throw and change nothing.
+    assert.throws(() => replaceEndedRunOutcome(1, "run-stale", "run-failed", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), bytesBefore);
+});
+
+// --- F6: the checked archive primitive must decide eligibility under the same lock as the write. ---
+
+function makeProjectRootWithTasksAndCompleted(tasks: unknown[]): string {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-close-"));
+    writeFileSync(join(root, "tasks.json"), `${JSON.stringify(tasks, null, 2)}\n`);
+    writeFileSync(join(root, "completedTasks.json"), "[]\n");
+    return root;
+}
+
+test("test_closeTaskRunChecked_archivesACompletedInactiveRunAndDerivesCommitHashesFromIt", () => {
+    const root = makeProjectRootWithTasksAndCompleted([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: false, worktree: null, leaseRunId: null,
+            history: [endedRunRecord({
+                runId: "run-a", exitType: "completed",
+                commits: [{ occurrenceId: "", hash: "aaa", kind: "work" }, { occurrenceId: "", hash: "bbb", kind: "merge" }],
+            })],
+        },
+    }]);
+    const result = closeTaskRunChecked(1, "run-a", "closure note", root);
+    assert.deepEqual(result.closed, [1]);
+    const completed = JSON.parse(readFileSync(join(root, "completedTasks.json"), "utf8"));
+    assert.deepEqual(completed[0].commitHashes, ["aaa", "bbb"]);
+    assert.equal(completed[0].closureNote, "closure note");
+});
+
+test("test_closeTaskRunChecked_throwsAndLeavesBothTaskFilesUnchangedForAStaleRunId", () => {
+    const root = makeProjectRootWithTasksAndCompleted([{
+        taskNumber: 1, title: "t",
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "completed" })] },
+    }]);
+    const { tasksPath, completedTasksPath } = resolveTaskFiles(root);
+    const tasksBefore = readFileSync(tasksPath, "utf8");
+    const completedBefore = readFileSync(completedTasksPath, "utf8");
+    assert.throws(() => closeTaskRunChecked(1, "run-stale", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), tasksBefore);
+    assert.equal(readFileSync(completedTasksPath, "utf8"), completedBefore);
+});
+
+test("test_closeTaskRunChecked_throwsAndLeavesBothTaskFilesUnchangedForAnActiveRun", () => {
+    const root = makeProjectRootWithTasksAndCompleted([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: null, leaseRunId: null,
+            history: [{ runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null }],
+        },
+    }]);
+    const { tasksPath, completedTasksPath } = resolveTaskFiles(root);
+    const tasksBefore = readFileSync(tasksPath, "utf8");
+    const completedBefore = readFileSync(completedTasksPath, "utf8");
+    assert.throws(() => closeTaskRunChecked(1, "run-a", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), tasksBefore);
+    assert.equal(readFileSync(completedTasksPath, "utf8"), completedBefore);
+});
+
+test("test_closeTaskRunChecked_throwsAndLeavesBothTaskFilesUnchangedForANotCompletedRun", () => {
+    const root = makeProjectRootWithTasksAndCompleted([{
+        taskNumber: 1, title: "t",
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "run-failed" })] },
+    }]);
+    const { tasksPath, completedTasksPath } = resolveTaskFiles(root);
+    const tasksBefore = readFileSync(tasksPath, "utf8");
+    const completedBefore = readFileSync(completedTasksPath, "utf8");
+    assert.throws(() => closeTaskRunChecked(1, "run-a", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), tasksBefore);
+    assert.equal(readFileSync(completedTasksPath, "utf8"), completedBefore);
+});
+
+// --- F4/F5: one atomic lease transition. ---
+
+test("test_transitionWorktreeLease_refusesOwnerMismatchAndMutatesNothingWhenTaskStateAndThePhysicalLeaseDisagree", () => {
+    // Scenario: owner B holds the sibling lease on disk, but tasks.json names owner A.
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: worktreePath, leaseRunId: "run-a",
+            history: [{ runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null }],
+        },
+    }], null, 2));
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-b", pid: 1, createdAt: 1 }));
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    const leaseBefore = readFileSync(`${worktreePath}.lease`, "utf8");
+    const outcome = transitionWorktreeLease(1, "run-a", root);
+    assert.deepEqual(outcome, { status: "refused-owner-mismatch", heldByRunId: "run-b" });
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    assert.equal(readFileSync(`${worktreePath}.lease`, "utf8"), leaseBefore);
+});
+
+test("test_transitionWorktreeLease_releasesALeaseWhoseOwningRunHasEnded", () => {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: worktreePath, leaseRunId: "run-old",
+            history: [
+                endedRunRecord({ runId: "run-old", exitType: "run-failed" }),
+                { runId: "run-new", startedAt: "2026-08-02T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null },
+            ],
+        },
+    }], null, 2));
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    const outcome = transitionWorktreeLease(1, "run-new", root);
+    assert.deepEqual(outcome, { status: "released" });
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+    const state = readTaskRunState(1, root);
+    assert.equal(state.leaseRunId, null);
+});
+
+test("test_transitionWorktreeLease_reportsAbsentWhenNoLeaseFileExists", () => {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: worktreePath, leaseRunId: null, history: [{ runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null }] },
+    }], null, 2));
+    const outcome = transitionWorktreeLease(1, "run-a", root);
+    assert.deepEqual(outcome, { status: "absent" });
+});
+
+// --- F7: atomically acquiring an absent lease for the current claimed run. ---
+
+test("test_acquireAbsentWorktreeLease_acquiresForTheCurrentRunAndUpdatesLeaseRunIdInTheSameTransition", () => {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: worktreePath, leaseRunId: null, history: [{ runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null }] },
+    }], null, 2));
+    const result = acquireAbsentWorktreeLease(1, "run-a", root);
+    assert.deepEqual(result, { acquired: true });
+    const state = readTaskRunState(1, root);
+    assert.equal(state.leaseRunId, "run-a");
+    const leaseFile = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
+    assert.equal(leaseFile.runId, "run-a");
+});
+
+test("test_acquireAbsentWorktreeLease_refusesWhenALeaseAlreadyExists", () => {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: worktreePath, leaseRunId: "run-other", history: [{ runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null }] },
+    }], null, 2));
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-other", pid: 1, createdAt: 1 }));
+    const before = readFileSync(`${worktreePath}.lease`, "utf8");
+    const result = acquireAbsentWorktreeLease(1, "run-a", root);
+    assert.deepEqual(result, { acquired: false });
+    assert.equal(readFileSync(`${worktreePath}.lease`, "utf8"), before);
 });

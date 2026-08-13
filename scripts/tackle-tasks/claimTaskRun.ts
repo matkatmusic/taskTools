@@ -2,6 +2,7 @@
 // doubles as the already-active check (rule 12 covers the closing case).
 import { readFileSync } from "node:fs";
 import { claimTask } from "./taskRunState.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ClaimTaskRunOutput = {
     status: "claimed" | "refused" | "closing" | "not-found";
@@ -9,6 +10,7 @@ export type ClaimTaskRunOutput = {
 };
 
 export function claimTaskRun(taskNumber: number, runId: string, projectRoot: string): ClaimTaskRunOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
     const outcome = claimTask(taskNumber, runId, projectRoot);
     return {
         status: outcome.status,

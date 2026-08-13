@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { checkTaskWorktreeSafe } from "../../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../../scripts/taskGroups.ts";
+import { makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -51,6 +52,23 @@ test("test_checkTaskWorktreeSafe_reportsSafeWhenTheWorktreeHasUncommittedChanges
 
     // Verification: dirty alone is never unsafe (rule 6 — the tree is committed where it matters).
     assert.deepEqual(result, { safe: true, problems: [] });
+});
+
+test("test_checkTaskWorktreeSafe_reportsUnsafeWhenAnUninitializedGrandchildSubmoduleIsNested", () => {
+    // Setup: a real root -> child -> grandchild worktree, fully populated, then only the
+    // grandchild is deinitialized (the direct child stays populated).
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    const groupId = 900_001;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
+    execFileSync("git", ["-C", join(worktreePath, "child"), "submodule", "deinit", "-f", "grandchild"], { stdio: "ignore" });
+
+    // Test action: check safety.
+    const result = checkTaskWorktreeSafe(groupId, worktreePath);
+
+    // Verification: unsafe, and the problem names the root-relative "child/grandchild" path —
+    // a direct-only "git submodule status" would have missed this.
+    assert.equal(result.safe, false);
+    assert.ok(result.problems.some((problem) => problem.includes("child/grandchild")));
 });
 
 test("test_checkTaskWorktreeSafe_reportsUnsafeWhenThePathDoesNotOpenAsAGitWorktree", () => {

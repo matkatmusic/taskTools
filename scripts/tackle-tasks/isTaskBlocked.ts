@@ -2,6 +2,7 @@
 // never taskNumber.
 import { readFileSync } from "node:fs";
 import { blockerReport } from "../checkBlockers.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type IsTaskBlockedOutput = {
     blocked: boolean;
@@ -9,6 +10,7 @@ export type IsTaskBlockedOutput = {
 };
 
 export function isTaskBlocked(taskNumber: number, projectRoot: string): IsTaskBlockedOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
     const { openBlockersOf } = blockerReport([taskNumber], projectRoot);
     const blockers = openBlockersOf(taskNumber);
     return { blocked: blockers.length > 0, blockers };

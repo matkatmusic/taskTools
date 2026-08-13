@@ -2,6 +2,7 @@
 // Run alone: node --test tests/tackle-tasks/claimTaskRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,4 +34,19 @@ test("test_claimTaskRun_reportsNotFoundForATaskAbsentFromTasksJson", () => {
     const root = makeProjectRoot([]);
     const output = claimTaskRun(999, "run-a", root);
     assert.deepEqual(output, { status: "not-found", heldByRunId: null });
+});
+
+test("test_claimTaskRun_rejectsRelativeProjectRoot", () => {
+    assert.throws(() => claimTaskRun(1, "run-a", "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_claimTaskRun_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {
+    const root = makeProjectRoot([{ taskNumber: 1 }]);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "claimTaskRun-cwd-"));
+    const stdout = execFileSync(
+        "node",
+        [join(import.meta.dirname, "../../scripts/tackle-tasks/claimTaskRun.ts")],
+        { input: JSON.stringify({ taskNumber: 1, runId: "run-a", projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
+    );
+    assert.deepEqual(JSON.parse(stdout), { status: "claimed", heldByRunId: null });
 });

@@ -7,6 +7,7 @@ import { getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { discoverTestPolicy } from "../testPolicy.ts";
 import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 
@@ -34,11 +35,14 @@ function runCompleteSuite(checkoutPath: string, command: string): { passed: bool
 
 export function runFullSuite(
     taskNumber: number,
+    expectedRunId: string,
     worktreePath: string,
     sourceBranch: string,
     stepId: string,
     projectRoot: string,
 ): RunFullSuiteOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
+    requireAbsolutePath("worktreePath", worktreePath);
     const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, sourceBranch);
     const resolutionManifest = createEmptyResolutionManifest();
 
@@ -62,12 +66,13 @@ export function runFullSuite(
         layers,
         output: truncateOutput(outputs.join("\n")),
     };
-    updateCurrentTaskRun(taskNumber, { fullSuite: { ...result, checkedAt: getLocalIsoTimestamp() } }, projectRoot);
+    updateCurrentTaskRun(taskNumber, expectedRunId, { fullSuite: { ...result, checkedAt: getLocalIsoTimestamp() } }, projectRoot);
     return result;
 }
 
 export type RunFullSuiteCliInput = {
     taskNumber: number;
+    expectedRunId: string;
     worktreePath: string;
     sourceBranch: string;
     stepId: string;
@@ -76,6 +81,8 @@ export type RunFullSuiteCliInput = {
 
 if (process.argv[1]?.endsWith("runFullSuite.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as RunFullSuiteCliInput;
-    const output = runFullSuite(input.taskNumber, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot);
+    const output = runFullSuite(
+        input.taskNumber, input.expectedRunId, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot,
+    );
     process.stdout.write(`${JSON.stringify(output)}\n`);
 }

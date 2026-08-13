@@ -32,7 +32,7 @@ test("test_markTaskInactive_leavesTheExitNotesAndModifiedFilesInPlace", () => {
     }]);
 
     // Marking it inactive stamps endedAt and flips active, and touches nothing else.
-    const output = markTaskInactive({ taskNumber: 1, projectRoot: root });
+    const output = markTaskInactive({ taskNumber: 1, runId: "run-a", projectRoot: root });
 
     assert.equal(output.active, false);
     assert.match(output.endedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
@@ -44,4 +44,17 @@ test("test_markTaskInactive_leavesTheExitNotesAndModifiedFilesInPlace", () => {
     assert.deepEqual(record.modifiedFiles, ["a.ts"]);
     assert.deepEqual(record.commits, [{ occurrenceId: "", hash: "abc123", kind: "merge" }]);
     assert.equal(record.implementationNotesFile, "plans/notes-1.md");
+});
+
+test("test_markTaskInactive_throwsWithASiblingRunId", () => {
+    // F6: the active run belongs to run-new; a paused run-old process must not end it.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [activeRunRecord({ runId: "run-new" })] },
+    }]);
+
+    assert.throws(() => markTaskInactive({ taskNumber: 1, runId: "run-old", projectRoot: root }));
+
+    const state = readTaskRunState(1, root);
+    assert.equal(state.active, true);
 });

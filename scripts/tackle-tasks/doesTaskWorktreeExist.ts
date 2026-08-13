@@ -1,6 +1,7 @@
 // "does a worktree exist?" — plans/tackle-tasks-v1_5-plan.md Phase 3.
 import { existsSync, readFileSync } from "node:fs";
 import { readTaskRunState } from "./taskRunState.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type DoesTaskWorktreeExistOutput = { exists: boolean; worktree: string | null };
 
@@ -14,6 +15,7 @@ export type DoesTaskWorktreeExistCliInput = { taskNumber: number; projectRoot: s
 
 if (process.argv[1]?.endsWith("doesTaskWorktreeExist.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as DoesTaskWorktreeExistCliInput;
-    const output = doesTaskWorktreeExist(input.taskNumber, input.projectRoot);
+    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+    const output = doesTaskWorktreeExist(input.taskNumber, projectRoot);
     process.stdout.write(`${JSON.stringify(output)}\n`);
 }

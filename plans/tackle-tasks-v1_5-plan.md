@@ -1110,6 +1110,116 @@ Tests: `test_writeTaskExitNotes_exitsNonZeroOnAnUnknownExitType`,
 
 ---
 
+## Contract amendments from the Phase 2–7 audit
+
+`plans/phase2-7-audit.md` found thirteen material defects in the Phases 2–7 implementation. The
+fixes changed contracts that Phases 8–13 depend on. **This section overrides the phase sections
+above wherever they disagree.**
+
+### The run-state field, amended
+
+```ts
+export type SourceTipReceipt = { occurrenceId: string; baseBranch: string; sourceTip: string };
+```
+
+- `TaskTestResult` gains `deletedTestFiles: string[]` `[F8]`. A test the branch deleted is never
+  handed to `node --test`; it is an explicit red, not a file-not-found accident.
+- `TaskRunRecord` gains `sourceTipsAtRebase?: SourceTipReceipt[]` `[F3]`. The rebase box records
+  where every source occurrence sat when it finished; the merge box refuses if any of them moved.
+  It is durable precisely so Phase 8 reconciliation can recover it after a lost stdout.
+
+### Every mutation of `task.run` is fenced by `runId` `[F6]`
+
+`expectedRunId` is **mandatory** and is the **second positional argument**:
+
+```ts
+updateCurrentTaskRun(taskNumber, expectedRunId, changes, projectRoot)
+appendTaskCommits(taskNumber, expectedRunId, commits, projectRoot)
+endTaskRun(taskNumber, expectedRunId, projectRoot)
+replaceEndedRunOutcome(taskNumber, expectedRunId, exitType, exitNote, projectRoot)
+```
+
+The check runs **inside the same `withTaskStateLock` window as the write** and throws before
+writing on mismatch. `replaceEndedRunOutcome` replaces the run it is told to, never "the newest".
+Without this a process that timed out under rule 11 writes its result into a **later** run, which
+is silent corruption rather than a visible failure.
+
+So **every green box that mutates the run takes `runId` on stdin**: `createTaskWorktree`,
+`recordImplementationNotes`, `commitTaskWork`, `runTaskTests`, `runFullSuite`,
+`recordMergeCommits`, `writeTaskExitNotes`, `recordTaskModifiedFiles`, `markTaskInactive`,
+`buildClosureNote`, `closeTaskRun`.
+
+### Source and worktree checkout paths are different things `[F1]`
+
+`buildDiscoveryManifest` remaps `checkoutPath` into the worktree, and the rebase helper reads that
+same field as its **source** path — so it fetched from a checkout to itself. Use instead:
+
+```ts
+type WorktreeOccurrence = { occurrenceId; sourceCheckoutPath; worktreeCheckoutPath; depth; baseBranch }
+buildWorktreeOccurrences(worktreePath, projectRoot): WorktreeOccurrence[]
+rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, taskNumber, leaveConflictLive?, typecheckCommand?)
+mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, taskNumber, mergeStepOperations?, typecheckCommand?)
+```
+
+**Caller ordering contract:** these read the live source manifest, so they must run **after** the
+source lock is held or refreshed. Never fetch from `origin` — the locked local source checkout is
+the target-branch authority and its commits may not be pushed.
+
+### The source lock is proved, not assumed `[F2]`
+
+Every script from the rebase box onward calls `refreshOwnedSourceRepoLockOrThrow(projectRoot, owner)`
+before doing any work. A refused refresh means another run owns the lock; continuing is the exact
+race that explicit recovery exists to prevent. `rebaseTaskWorktree` returns `heldByOwner`, and on
+`recoverable` returns `recoveryCommand` built by `formatSourceRepoLockRecoveryCommand` so the
+printed text can never drift from the maintenance CLI.
+
+### Changed stdin and stdout schemas
+
+| Script | Change |
+|---|---|
+| `rebaseTaskWorktree` | output gains `heldByOwner`, `recoveryCommand` |
+| `advanceTaskRebase` | refreshes the lock; writes the source-tip receipt when it finishes clean |
+| `mergeTaskWorktree` | verifies the receipt before merging; a moved **or** dirty source is `run-failed` |
+| `recordMergeCommits` | stdin gains `runId` |
+| `commitTaskWork` | stdin gains `runId` |
+| `cleanupTaskWorktree` | stdin **loses** `branchName` (derived from `taskNumber`); removal failure **throws** |
+| `checkTaskFileFence` | a gitlink is exempt only on the four proven conditions, deepest-first |
+| `runTaskTests` | output gains `deletedTestFiles`; renames run the destination and are not "created" |
+| `isTaskRunResumable` | `leaseAdopted` → `leaseEstablished`; containment checked with `realpathSync` |
+| `releaseTaskRunHolds` | stdin gains `branchName`; output is `{leaseReleased, leaseRetained, lockReleased}` |
+| `closeTaskRun` | stdin is `{taskNumber, runId, projectRoot, closureNote}`; **rejects** `commitHashes` |
+| every CLI | `projectRoot` and worktree paths must be absolute (`requireAbsolutePath`) |
+
+### The lease policy, decided once `[F5]`
+
+**Retain the ended run's lease while its worktree or a retained task branch still exists. Always
+release the source lock. The next claimed run adopts the lease.**
+
+So `cleanupTaskWorktree` keeps the lease when removal fails, and `releaseTaskRunHolds` releases it
+only when both the worktree and its `task-<N>` branch are gone — which is why it now needs
+`branchName`. Releasing it earlier leaves retained work with no ownership marker at all, which is
+the stranding bug the release-ownership-last ordering was written to prevent.
+
+### Two receipts Phase 8 reconciliation must know about
+
+1. **Worktree creation** `[F11]` — `<worktreePath>.create-journal.json`, holding
+   `{taskNumber, runId, worktreePath, branch, createdAt}`. Written **before** the git mutation,
+   deleted on success or clean rollback, **left in place** when rollback itself fails. To
+   reconcile: if the physical lease still names `journal.runId` **and** task state already matches,
+   the creation completed late — delete the journal. Otherwise it never finished — remove that
+   worktree and branch and release that lease, **ownership-checked against `journal.runId`, never
+   inferred from the conventional path**, then delete the journal.
+2. **Source tips at rebase** `[F3]` — `run.sourceTipsAtRebase`, described above.
+
+### Still open
+
+- `mergeTaskWorktree`'s source-clean check ignores `.taskTools/tasks.json` and
+  `completedTasks.json`, because the run itself mutates them with no intervening commit and a
+  literal `--porcelain` clean check would fail every real merge. Neither the plan nor the audit
+  called this out. **Confirm this is the intended production semantics.**
+
+---
+
 ## Phase 8 — the transition table, the retry policy, and reconciliation
 
 Depends on: Phases 4–7. Blocks: Phase 10. One agent. Two scripts and their tests.

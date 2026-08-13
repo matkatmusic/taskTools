@@ -2,6 +2,7 @@
 // Run alone: node --test tests/tackle-tasks/isTaskOpen.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,4 +33,19 @@ test("test_isTaskOpen_reportsCloseInProgressWhenTheTaskIsInBothFiles", () => {
 test("test_isTaskOpen_reportsNotOpenWhenInNeitherFile", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }], []);
     assert.deepEqual(isTaskOpen(999, root), { open: false, closeInProgress: false });
+});
+
+test("test_isTaskOpen_rejectsRelativeProjectRoot", () => {
+    assert.throws(() => isTaskOpen(1, "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_isTaskOpen_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {
+    const root = makeProjectRoot([{ taskNumber: 1 }], []);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskOpen-cwd-"));
+    const stdout = execFileSync(
+        "node",
+        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskOpen.ts")],
+        { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
+    );
+    assert.deepEqual(JSON.parse(stdout), { open: true, closeInProgress: false });
 });

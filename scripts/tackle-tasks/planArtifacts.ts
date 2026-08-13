@@ -43,7 +43,7 @@ function parseJsonFile(filePath: string): { value: unknown } | PlanProblem {
     }
 }
 
-function validatePlanShape(value: unknown, expectedTaskNumber: number): Plan | PlanProblem {
+export function validatePlanShape(value: unknown, expectedTaskNumber: number): Plan | PlanProblem {
     if (typeof value !== "object" || value === null) return { problem: "plan is not an object" };
     const plan = value as Record<string, unknown>;
     if (plan.task !== expectedTaskNumber) {
@@ -82,6 +82,7 @@ function validateAmendmentShape(amendment: unknown): string | null {
     if (op === "insert") {
         if (typeof after !== "string" || after === "") return "insert amendment is missing after";
         if (typeof id !== "string" || id === "") return "insert amendment is missing id";
+        if (!SECTION_ID_PATTERN.test(id)) return `insert amendment id is not valid kebab-case: ${JSON.stringify(id)}`;
         if (typeof title !== "string") return "insert amendment is missing title";
         if (typeof body !== "string") return "insert amendment is missing body";
         return null;
@@ -133,6 +134,9 @@ function findAmendmentProblem(plan: Plan, amendments: PlanAmendment[]): string |
     const liveIds = new Set(plan.sections.map((section) => section.id));
     for (const amendment of amendments) {
         if (amendment.op === "insert") {
+            if (!SECTION_ID_PATTERN.test(amendment.id)) {
+                return `insert id is not valid kebab-case: ${JSON.stringify(amendment.id)}`;
+            }
             if (!liveIds.has(amendment.after)) return `insert names unknown section "${amendment.after}"`;
             if (liveIds.has(amendment.id)) return `insert reuses existing id "${amendment.id}"`;
             liveIds.add(amendment.id);
@@ -141,6 +145,7 @@ function findAmendmentProblem(plan: Plan, amendments: PlanAmendment[]): string |
         if (!liveIds.has(amendment.id)) return `${amendment.op} names unknown section "${amendment.id}"`;
         if (amendment.op === "remove") liveIds.delete(amendment.id);
     }
+    if (liveIds.size === 0) return "amendment batch removes every section";
     return null;
 }
 
@@ -160,8 +165,8 @@ function applyOneAmendment(sections: PlanSection[], amendment: PlanAmendment): P
 export function applyPlanAmendments(plan: Plan, amendments: PlanAmendment[]): AmendmentResult {
     const problem = findAmendmentProblem(plan, amendments);
     if (problem !== null) return { status: "rejected", problem };
-    return {
-        status: "applied",
-        plan: { ...plan, revision: plan.revision + 1, sections: amendments.reduce(applyOneAmendment, plan.sections) },
-    };
+    const candidate = { ...plan, revision: plan.revision + 1, sections: amendments.reduce(applyOneAmendment, plan.sections) };
+    const validated = validatePlanShape(candidate, plan.task);
+    if (isPlanProblem(validated)) return { status: "rejected", problem: validated.problem };
+    return { status: "applied", plan: validated };
 }

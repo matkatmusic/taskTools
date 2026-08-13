@@ -3,33 +3,39 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskRun } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
+import { resolveTaskRun, parseTaskNumberArgument } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../../scripts/prepareTasks.ts";
-
-function git(repoRoot: string, ...args: string[]): string {
-    return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
-}
+import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 function makeProjectRoot(openTasks: unknown[]): string {
-    const root = mkdtempSync(join(tmpdir(), "resolveTaskRun-"));
-    git(root, "init", "-q");
-    git(root, "config", "user.email", "test@example.com");
-    git(root, "config", "user.name", "Test");
-    writeFileSync(join(root, "tasks.json"), JSON.stringify(openTasks));
-    writeFileSync(join(root, "completedTasks.json"), JSON.stringify([]));
-    git(root, "add", ".");
-    git(root, "commit", "-q", "-m", "seed");
-    return root;
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    writeFileSync(join(rootOrigin, "tasks.json"), JSON.stringify(openTasks));
+    writeFileSync(join(rootOrigin, "completedTasks.json"), JSON.stringify([]));
+    git(rootOrigin, "add", "tasks.json", "completedTasks.json");
+    git(rootOrigin, "commit", "-q", "-m", "seed task lists");
+    return rootOrigin;
 }
 
 test("test_resolveTaskRun_createsNoWorktree", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
-    resolveTaskRun("[1]", root);
+    // Setup: a control worktree already exists, so the resolver runs in a repo that is not empty.
+    makeLinkedWorktree(root);
     const conventionDirectory = resolveTaskWorktreeConventionDirectory(root);
-    assert.equal(existsSync(conventionDirectory), false);
+    const worktreeListBefore = git(root, "worktree", "list", "--porcelain");
+    const branchesBefore = git(root, "branch", "--list");
+    const conventionEntriesBefore = existsSync(conventionDirectory) ? readdirSync(conventionDirectory).sort() : [];
+
+    resolveTaskRun("[1]", root);
+
+    const worktreeListAfter = git(root, "worktree", "list", "--porcelain");
+    const branchesAfter = git(root, "branch", "--list");
+    const conventionEntriesAfter = existsSync(conventionDirectory) ? readdirSync(conventionDirectory).sort() : [];
+    assert.equal(worktreeListAfter, worktreeListBefore, "no additional worktree should appear");
+    assert.equal(branchesAfter, branchesBefore, "no additional branch should appear");
+    assert.deepEqual(conventionEntriesAfter, conventionEntriesBefore, "no additional lease/dir should appear");
 });
 
 test("test_resolveTaskRun_writesNothingToTasksJson", () => {
@@ -63,4 +69,39 @@ test("test_resolveTaskRun_rejectsEmptyAndMalformedInput", () => {
     assert.throws(() => resolveTaskRun("0", root), /invalid task number "0"/);
     assert.throws(() => resolveTaskRun("-1", root), /invalid task number "-1"/);
     assert.throws(() => resolveTaskRun("1.5", root), /invalid task number "1.5"/);
+});
+
+test("test_parseTaskNumberArgument_rejectsUnsafeAdjacentIntegersInsteadOfCollapsingThem", () => {
+    // Setup: two distinct, huge integer tokens that would round to the same float.
+    const a = "9007199254740993";
+    const b = "9007199254740995";
+    assert.throws(() => parseTaskNumberArgument(`${a} ${b}`), new RegExp(`invalid task number "${a}"`));
+});
+
+test("test_parseTaskNumberArgument_rejectsUnmatchedLeadingBracket", () => {
+    assert.throws(() => parseTaskNumberArgument("[1"), /unmatched bracket/);
+});
+
+test("test_parseTaskNumberArgument_rejectsUnmatchedTrailingBracket", () => {
+    assert.throws(() => parseTaskNumberArgument("1]"), /unmatched bracket/);
+});
+
+test("test_parseTaskNumberArgument_rejectsInnerBracketToken", () => {
+    assert.throws(() => parseTaskNumberArgument("[1, [2]"), /invalid task number "\[2"/);
+});
+
+test("test_resolveTaskRun_rejectsRelativeProjectRoot", () => {
+    assert.throws(() => resolveTaskRun("[1]", "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_resolveTaskRun_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {
+    const root = makeProjectRoot([{ taskNumber: 1 }]);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "resolveTaskRun-cwd-"));
+    const stdout = execFileSync(
+        "node",
+        [join(import.meta.dirname, "../../scripts/tackle-tasks/resolveTaskRun.ts")],
+        { input: JSON.stringify({ args: "[1]", projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
+    );
+    const output = JSON.parse(stdout);
+    assert.deepEqual(output.taskNumbers, [1]);
 });

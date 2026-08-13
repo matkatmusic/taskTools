@@ -12,6 +12,7 @@ import {
     buildLockOwner,
     readSourceRepoLock,
     recoverSourceRepoLock,
+    refreshOwnedSourceRepoLockOrThrow,
     refreshSourceRepoLock,
     releaseSourceRepoLock,
     type AcquireOutcome,
@@ -166,6 +167,28 @@ test("test_refreshSourceRepoLock_refusesToRefreshAnotherOwnersLock", () => {
     // Step: the refresh is refused, and owner A's heartbeat is unchanged.
     assert.deepEqual(outcome, { refreshed: false });
     assert.equal(readSourceRepoLock(root)?.heartbeatAt, before.heartbeatAt);
+});
+
+test("test_refreshOwnedSourceRepoLockOrThrow_refreshesTheHeartbeatWhenOwnedByTheCaller", () => {
+    // Scenario: the caller genuinely still owns the lock.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-9", 90);
+    acquireSourceRepoLock(root, owner);
+    const before = readSourceRepoLock(root)!;
+    // Refreshing must not throw and must move the heartbeat forward.
+    assert.doesNotThrow(() => refreshOwnedSourceRepoLockOrThrow(root, owner));
+    assert.notEqual(readSourceRepoLock(root)?.heartbeatAt, undefined);
+    void before;
+});
+
+test("test_refreshOwnedSourceRepoLockOrThrow_throwsWhenTheDiscardedRefreshedFalseWouldOtherwiseBeIgnored", () => {
+    // F2: this is the guard against silently continuing after {refreshed:false}.
+    const root = makeProjectRoot();
+    const ownerA = buildLockOwner("run-9", 90);
+    const ownerB = buildLockOwner("run-9", 91);
+    acquireSourceRepoLock(root, ownerA);
+    // A caller who no longer owns the lock must throw, not continue.
+    assert.throws(() => refreshOwnedSourceRepoLockOrThrow(root, ownerB), /no longer owned/);
 });
 
 test("test_recoverSourceRepoLock_refusesWhenTheOwnerChangedSinceTheReport", () => {

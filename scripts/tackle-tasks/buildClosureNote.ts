@@ -3,8 +3,9 @@
 // Replaces closeTasksBrief.ts, whose prompt re-verified and edited files after clean-up.
 import { readFileSync } from "node:fs";
 import { readTaskRunState, type FullSuiteResult, type TaskRunRecord, type TaskTestResult } from "./taskRunState.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
-export type BuildClosureNoteInput = { taskNumber: number; projectRoot: string };
+export type BuildClosureNoteInput = { taskNumber: number; runId: string; projectRoot: string };
 export type BuildClosureNoteOutput = { closureNote: string };
 
 function occurrenceLabel(occurrenceId: string): string {
@@ -37,10 +38,13 @@ export function renderClosureNote(taskNumber: number, record: TaskRunRecord): st
     ].join("\n");
 }
 
+// F6: reads the specified run, never "the newest", so a late call can never describe the
+// wrong run's commits, files, and test results.
 export function buildClosureNote(input: BuildClosureNoteInput): BuildClosureNoteOutput {
+    requireAbsolutePath("projectRoot", input.projectRoot);
     const state = readTaskRunState(input.taskNumber, input.projectRoot);
-    const record = state.history[state.history.length - 1];
-    if (record === undefined) throw new Error(`buildClosureNote: task ${input.taskNumber} has no run history`);
+    const record = state.history.find((candidate) => candidate.runId === input.runId);
+    if (record === undefined) throw new Error(`buildClosureNote: task ${input.taskNumber} has no run "${input.runId}" in its history`);
     return { closureNote: renderClosureNote(input.taskNumber, record) };
 }
 

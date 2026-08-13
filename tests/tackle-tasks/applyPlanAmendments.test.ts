@@ -5,12 +5,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runApplyPlanAmendmentsCli } from "../../scripts/tackle-tasks/applyPlanAmendments.ts";
-import type { Plan } from "../../scripts/tackle-tasks/planArtifacts.ts";
+import { readAndValidatePlan, type Plan } from "../../scripts/tackle-tasks/planArtifacts.ts";
 
 const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/applyPlanAmendments.ts", import.meta.url));
 
@@ -34,8 +34,8 @@ function makeFixture(plan: Plan, review: unknown): { planFilePath: string; revie
     return { planFilePath, reviewFilePath };
 }
 
-function runCli(input: unknown): unknown {
-    const output = execFileSync("node", [cliPath], { input: JSON.stringify(input), encoding: "utf8" });
+function runCli(input: unknown, cwd?: string): unknown {
+    const output = execFileSync("node", [cliPath], { input: JSON.stringify(input), encoding: "utf8", cwd });
     assert.equal(output.split("\n").filter((line) => line.length > 0).length, 1);
     return JSON.parse(output.trim());
 }
@@ -104,4 +104,48 @@ test("test_applyPlanAmendmentsCli_printsOneLineOfJsonOnStdout", () => {
     });
     const output = runCli({ projectRoot: "/repo", planFilePath, reviewFilePath, taskNumber: 42 });
     assert.deepEqual(output, { status: "applied", revision: 2, problem: null });
+});
+
+test("test_applyPlanAmendmentsCli_leavesTheOriginalPlanValidAndByteIdenticalWhenTheWriteFails", () => {
+    const { planFilePath, reviewFilePath } = makeFixture(samplePlan(), {
+        verdict: "amend",
+        amendments: [{ op: "remove", id: "step-1" }],
+    });
+    const before = readFileSync(planFilePath, "utf8");
+    const dir = dirname(planFilePath);
+    chmodSync(dir, 0o500);
+    try {
+        assert.throws(() => runApplyPlanAmendmentsCli({ projectRoot: "/repo", planFilePath, reviewFilePath, taskNumber: 42 }));
+    } finally {
+        chmodSync(dir, 0o700);
+    }
+    assert.equal(readFileSync(planFilePath, "utf8"), before);
+    const stillValid = readAndValidatePlan(planFilePath, 42);
+    assert.ok(!("problem" in stillValid));
+});
+
+test("test_applyPlanAmendmentsCli_behavesIdenticallyFromAnUnrelatedCwd", () => {
+    const { planFilePath, reviewFilePath } = makeFixture(samplePlan(), {
+        verdict: "amend",
+        amendments: [{ op: "remove", id: "step-1" }],
+    });
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
+    const output = runCli({ projectRoot: "/repo", planFilePath, reviewFilePath, taskNumber: 42 }, unrelatedCwd);
+    assert.deepEqual(output, { status: "applied", revision: 2, problem: null });
+});
+
+test("test_applyPlanAmendmentsCli_rejectsARelativePlanFilePath", () => {
+    const { planFilePath, reviewFilePath } = makeFixture(samplePlan(), {
+        verdict: "amend",
+        amendments: [{ op: "remove", id: "step-1" }],
+    });
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
+    const relativePlanFilePath = relative(unrelatedCwd, planFilePath);
+    assert.throws(() =>
+        execFileSync("node", [cliPath], {
+            input: JSON.stringify({ projectRoot: "/repo", planFilePath: relativePlanFilePath, reviewFilePath, taskNumber: 42 }),
+            encoding: "utf8",
+            cwd: unrelatedCwd,
+        }),
+    );
 });

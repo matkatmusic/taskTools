@@ -3,10 +3,12 @@
 // never ordinary open [a3 28].
 import { readFileSync } from "node:fs";
 import { readTaskLists } from "../getTaskDetails.ts";
+import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type IsTaskOpenOutput = { open: boolean; closeInProgress: boolean };
 
 export function isTaskOpen(taskNumber: number, projectRoot: string): IsTaskOpenOutput {
+    requireAbsolutePath("projectRoot", projectRoot);
     const { openTasks, completedTasks } = readTaskLists(projectRoot);
     const inOpen = openTasks.some((task) => task.taskNumber === taskNumber);
     const inCompleted = completedTasks.some((task) => task.taskNumber === taskNumber);

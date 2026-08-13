@@ -2,6 +2,7 @@
 // Run alone: node --test tests/tackle-tasks/isTaskBlocked.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,4 +36,19 @@ test("test_isTaskBlocked_reportsNotBlockedWhenBlockerIsNotOpen", () => {
 test("test_isTaskBlocked_reportsNotBlockedWhenNoBlockedByField", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
     assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [] });
+});
+
+test("test_isTaskBlocked_rejectsRelativeProjectRoot", () => {
+    assert.throws(() => isTaskBlocked(1, "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_isTaskBlocked_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {
+    const root = makeProjectRoot([{ taskNumber: 1 }]);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskBlocked-cwd-"));
+    const stdout = execFileSync(
+        "node",
+        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskBlocked.ts")],
+        { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
+    );
+    assert.deepEqual(JSON.parse(stdout), { blocked: false, blockers: [] });
 });

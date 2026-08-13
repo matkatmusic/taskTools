@@ -2,6 +2,7 @@
 // Run alone: node --test tests/tackle-tasks/isTaskNumberValid.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,4 +33,19 @@ test("test_isTaskNumberValid_reportsBothWhenInBothFiles", () => {
 test("test_isTaskNumberValid_reportsInvalidWhenInNeitherFile", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }], [{ taskNumber: 2 }]);
     assert.deepEqual(isTaskNumberValid(999, root), { valid: false, location: null });
+});
+
+test("test_isTaskNumberValid_rejectsRelativeProjectRoot", () => {
+    assert.throws(() => isTaskNumberValid(1, "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_isTaskNumberValid_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {
+    const root = makeProjectRoot([{ taskNumber: 1 }], []);
+    const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskNumberValid-cwd-"));
+    const stdout = execFileSync(
+        "node",
+        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskNumberValid.ts")],
+        { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
+    );
+    assert.deepEqual(JSON.parse(stdout), { valid: true, location: "open" });
 });

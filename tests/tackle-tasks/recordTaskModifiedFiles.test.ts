@@ -74,7 +74,7 @@ test("test_recordTaskModifiedFiles_doesNotChangeTheTasksOwnedFilesList", () => {
     writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: ["changed.txt"], run: activeRun() });
 
     // Test action: record modified files.
-    recordTaskModifiedFiles({ taskNumber: 1, projectRoot: rootOrigin, worktree: worktreePath, sourceBranch: "main" });
+    recordTaskModifiedFiles({ taskNumber: 1, runId: "run-a", projectRoot: rootOrigin, worktree: worktreePath, sourceBranch: "main" });
 
     // Verification: task.files, the ownership fence, is untouched.
     const tasks = readTasksJson(rootOrigin);
@@ -95,7 +95,7 @@ test("test_recordTaskModifiedFiles_includesPathsChangedInsideASubmodule", () => 
 
     // Test action: record modified files.
     const output = recordTaskModifiedFiles({
-        taskNumber: 1, projectRoot: rootOrigin, worktree: worktreePath, sourceBranch: "main",
+        taskNumber: 1, runId: "run-a", projectRoot: rootOrigin, worktree: worktreePath, sourceBranch: "main",
     });
 
     // Verification: the submodule's changed file is reported, occurrence-prefixed.
@@ -114,11 +114,25 @@ test("test_recordTaskModifiedFiles_leavesAnExistingRecordAloneWhenTheWorktreeIsG
 
     // Test action: record modified files with no worktree.
     const output = recordTaskModifiedFiles({
-        taskNumber: 1, projectRoot: rootOrigin, worktree: null, sourceBranch: "main",
+        taskNumber: 1, runId: "run-a", projectRoot: rootOrigin, worktree: null, sourceBranch: "main",
     });
 
     // Verification: the reported output is empty, but the stored record is untouched.
     assert.deepEqual(output, { modifiedFiles: [] });
     const tasks = readTasksJson(rootOrigin);
     assert.deepEqual(tasks[0].run.history[0].modifiedFiles, ["scripts/foo.ts"]);
+});
+
+test("test_recordTaskModifiedFiles_throwsWithASiblingRunId", () => {
+    // F6: the active run belongs to run-new; a paused run-old process must not be able to
+    // write into it.
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const run = activeRun();
+    run.history[0].runId = "run-new";
+    writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: [], run });
+
+    assert.throws(() => recordTaskModifiedFiles({
+        taskNumber: 1, runId: "run-old", projectRoot: rootOrigin, worktree: worktreePath, sourceBranch: "main",
+    }));
 });
