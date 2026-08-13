@@ -843,3 +843,62 @@ test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRig
     assert.equal(onDisk.leaseRunId, "run-a");
     assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
 });
+
+// --- feedback-phase7-2 F7: reconciliation must never overwrite a different physical owner
+// that legitimately appeared during the recovery window between the kill and the retry. ---
+
+test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsInTheRecoveryWindowAfterTheLeaseIsAlreadyWritten", async () => {
+    // Scenario: the process dies right after replacing the physical lease. A supervisor clears
+    // only the deliberately stale guards, exactly as the existing kill/retry tests do. Before the
+    // retry, another owner legitimately takes the physical lease.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    await runAdoptionInChildAndKillAfter(root, "lease");
+    const otherOwnerBytes = JSON.stringify({ runId: "run-other", pid: 999, createdAt: 987654 });
+    writeFileSync(leasePath, otherOwnerBytes);
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    // The retry must refuse rather than overwrite run-other's legitimate lease.
+    assert.throws(() => adoptWorktreeLease(1, "run-new", root));
+    assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), true);
+});
+
+test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsAfterAnIntentOnlySurvivor", async () => {
+    // Scenario: the process dies right after journaling the intent, before either authority
+    // changed. A different physical owner appears before the retry.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    await runAdoptionInChildAndKillAfter(root, "intent");
+    const otherOwnerBytes = JSON.stringify({ runId: "run-other", pid: 999, createdAt: 987654 });
+    writeFileSync(leasePath, otherOwnerBytes);
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    assert.throws(() => adoptWorktreeLease(1, "run-new", root));
+    assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), true);
+});
+
+test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePriorLeaseBytes", () => {
+    // Scenario: a retained intent whose finish condition is false (its recorded new owner is
+    // not the currently active run, so reconciliation must roll back) finds a third owner
+    // holding the physical lease instead of either the recorded prior state or its own new
+    // owner. Rolling back must not stomp that third owner with previousLeaseBytes.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    const priorOwnerBytes = JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 });
+    const intent = {
+        taskNumber: 1, worktreePath,
+        previousLeaseBytes: priorOwnerBytes, previousStateOwner: "run-old",
+        newOwnerRunId: "run-stale",
+    };
+    writeFileSync(`${leasePath}.adopt-intent`, JSON.stringify(intent));
+    const otherOwnerBytes = JSON.stringify({ runId: "run-other", pid: 999, createdAt: 987654 });
+    writeFileSync(leasePath, otherOwnerBytes);
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    // run-new is the active run in this fixture, not "run-stale", so reconciliation would take
+    // the rollback branch if it were allowed to proceed at all.
+    assert.throws(() => adoptWorktreeLease(1, "run-new", root));
+    assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    assert.equal(existsSync(`${leasePath}.adopt-intent`), true);
+});
