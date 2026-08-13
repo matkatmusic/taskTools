@@ -1,25 +1,59 @@
-Monitor the repo root using `phase-loop/done-monitor.ts` for a `.done` file. 
-When the script triggers, you are being signaled that the staged changes contain the implementation for `<plan>` or `<audit>`. 
+# Auditor role
 
-First: Remove the `.done` file.
+You are the auditing side of a two-agent implementation loop.
 
-Review those staged changes against `<plan>` or `<audit>`.
+Read `phase-loop/PhaseLoop.md` first; it is the protocol source of truth. This file defines only the auditor role.
 
-## If reviewing against the `<plan>` file: 
-- look for issues that block the functionality defined in `<plan>` from being accepted into the codebase.
-- look for bugs, failing tests, implementations that don't match the spec, etc. 
-- DO NOT NITPICK.
+Inputs:
 
-Write your findings up next to `<plan>` as `<plan>-audit.md`. 
-- see **What to put in `<plan>-audit.md`**.
+- `<plan>`: the implementation plan.
+- `<audit>`: the audit file next to `<plan>` (normally `<plan>-audit.md`).
+- `<feedback-phaseN-M.md>`: a uniquely numbered follow-up file for audit iteration `M` of phase `N`.
 
-## If reviewing against the `<audit>`: 
-- DO NOT NITPICK
-- Only check if the flagged items in the `<audit>` were resolved. 
+Do not modify or stage implementation code. Do not disturb changes that are not yours.
 
-If individual items were not resolved, clear `<plan>-audit.md` and follow **What to put in `<plan>-audit.md`**.
-Otherwise: Report to the user the resolved items (or simply put "all resolved" if all items were resolved). 
+## Wait for the implementor
 
-## What to put in `<plan>-audit.md`:
-- include suggested changes that actually resolve the issues found.
-I do not want to need to request a 2nd review by you, so make your suggested changes resolve the issue the first time your changes are implemented. 
+Run `node phase-loop/done-monitor.ts --root <repo-root>`. It emits one of two events:
+
+- `done`: the implementor has finished staging one implementation attempt. The monitor consumes `.done` from both the index and working tree before it emits this event.
+- `complete`: the implementor acknowledged `.resolved`; the loop is finished. The monitor consumes `.complete` before it emits this event.
+
+Do not begin a review until a `done` event arrives. Review the staged snapshot only. Record or otherwise freeze the staged diff at the start of the review so later working-tree edits cannot silently change the review target.
+
+## First review: compare with `<plan>`
+
+Review the staged changes against the full plan. Look for issues that prevent the planned functionality from being accepted: incorrect behavior, missing requirements, unsafe edge cases, regressions, or failing/inadequate tests.
+
+Do not nitpick. Include minor inconsistencies or speculative edge cases only when they could cause real incorrect behavior.
+
+Write the findings next to `<plan>` in `<audit>`. Each finding must:
+
+- identify the violated plan requirement and affected code;
+- explain the concrete failure mode;
+- prescribe a complete fix, including the tests needed to prove it.
+
+Suggested fixes must be specific enough to resolve the issue in one implementation pass. If there are no findings, say `all resolved` in `<audit>` and proceed directly to the `.resolved` handshake below.
+
+After writing `<audit>`, wait for the next `done` or `complete` event. The user may commit the initial implementation and audit before remediation begins; do not alter that commit or its staging state.
+
+## Remediation review: compare with `<audit>`
+
+On each later `done` event, review only the findings already flagged in `<audit>` and any later feedback files. Do not expand the audit and do not nitpick.
+
+For every flagged item, verify the staged code and relevant tests. Do not accept an item merely because code changed near it.
+
+If any flagged item remains unresolved:
+
+1. Leave `<audit>` intact as the stable checklist.
+2. Write a new, uniquely numbered `<feedback-phaseN-M.md>` next to `<plan>`.
+3. Include only unresolved items, the evidence that each remains unresolved, and a concrete fix that will actually resolve it.
+4. Return to monitoring for the next `done` or `complete` event.
+
+If every flagged item is resolved:
+
+1. Create an empty, untracked `.resolved` marker in the repository root. Do not stage it.
+2. Continue monitoring.
+3. When the implementor consumes `.resolved` and creates `.complete`, the monitor emits `complete`; end the loop without another review.
+
+Never create `.done` or `.complete`; those belong to the implementor.

@@ -13,7 +13,17 @@ export type DoneMonitorEvent = {
     markerPath: string;
 };
 
+export type CompleteMonitorEvent = {
+    event: "complete";
+    markerPath: string;
+};
+
+export type AuditorMonitorEvent = DoneMonitorEvent | CompleteMonitorEvent;
+
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+const INDEX_RETRY_TIMEOUT_MS = 5_000;
+const INDEX_RETRY_INTERVAL_MS = 50;
+const INDEX_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
 
 function sleep(milliseconds: number): Promise<void> {
     return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
@@ -46,6 +56,20 @@ export function isRootDoneMarkerStaged(projectRoot: string): boolean {
     return stagedAdds.includes(".done");
 }
 
+export function isRootCompleteMarkerPresent(projectRoot: string): boolean {
+    return existsSync(join(repositoryRoot(projectRoot), ".complete"));
+}
+
+function refuseTrackedMarker(root: string, markerName: ".done" | ".complete"): void {
+    const markerPath = join(root, markerName);
+    try {
+        execFileSync("git", ["-C", root, "cat-file", "-e", `HEAD:${markerName}`], { stdio: "ignore" });
+        throw new Error(`refusing to consume tracked repository file as a marker: ${markerPath}`);
+    } catch (error) {
+        if (error instanceof Error && error.message.startsWith("refusing to consume")) throw error;
+    }
+}
+
 /** Remove the transient marker from both the index and the working tree before firing. */
 export function consumeRootDoneMarker(projectRoot: string): string {
     const root = repositoryRoot(projectRoot);
@@ -56,15 +80,42 @@ export function consumeRootDoneMarker(projectRoot: string): string {
 
     // A marker is protocol state, never repository content. Refuse to reinterpret a tracked file
     // as the transient marker because consuming it would stage an unrelated deletion.
-    try {
-        execFileSync("git", ["-C", root, "cat-file", "-e", "HEAD:.done"], { stdio: "ignore" });
-        throw new Error(`refusing to consume tracked repository file as a marker: ${markerPath}`);
-    } catch (error) {
-        if (error instanceof Error && error.message.startsWith("refusing to consume")) throw error;
-    }
+    refuseTrackedMarker(root, ".done");
 
-    execFileSync("git", ["-C", root, "restore", "--staged", "--", ".done"], { stdio: "ignore" });
+    // The producer may still be completing a larger `git add` when the marker becomes visible.
+    // Retry index-lock contention, but never emit the event until the marker is actually unstaged.
+    const deadline = Date.now() + INDEX_RETRY_TIMEOUT_MS;
+    let lastError: unknown = null;
+    while (isRootDoneMarkerStaged(root)) {
+        try {
+            execFileSync("git", ["-C", root, "restore", "--staged", "--", ".done"], {
+                encoding: "utf8",
+                stdio: ["ignore", "pipe", "pipe"],
+            });
+        } catch (error) {
+            lastError = error;
+            if (Date.now() >= deadline) {
+                const detail = error instanceof Error ? error.message : String(error);
+                throw new Error(`could not unstage ${markerPath} after waiting for the index: ${detail}`);
+            }
+            Atomics.wait(INDEX_RETRY_WAIT, 0, 0, INDEX_RETRY_INTERVAL_MS);
+        }
+    }
+    if (lastError !== null && isRootDoneMarkerStaged(root)) throw lastError;
     if (existsSync(markerPath)) unlinkSync(markerPath);
+    return markerPath;
+}
+
+
+/** Consume the implementor's terminal acknowledgement before ending the auditor loop. */
+export function consumeRootCompleteMarker(projectRoot: string): string {
+    const root = repositoryRoot(projectRoot);
+    const markerPath = join(root, ".complete");
+    if (!existsSync(markerPath)) {
+        throw new Error(`the root completion marker does not exist: ${markerPath}`);
+    }
+    refuseTrackedMarker(root, ".complete");
+    unlinkSync(markerPath);
     return markerPath;
 }
 
@@ -82,6 +133,34 @@ export async function waitForStagedDone(options: DoneMonitorOptions): Promise<Do
         }
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for a staged root .done marker in ${root}`);
+        }
+        await sleep(pollIntervalMs);
+    }
+}
+
+/** Wait for the next implementor handoff: a staged attempt or the terminal acknowledgement. */
+export async function waitForAuditorSignal(options: DoneMonitorOptions): Promise<AuditorMonitorEvent> {
+    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    const timeoutMs = options.timeoutMs ?? null;
+    assertPositiveMilliseconds(pollIntervalMs, "pollIntervalMs");
+    if (timeoutMs !== null) assertPositiveMilliseconds(timeoutMs, "timeoutMs");
+
+    const root = repositoryRoot(options.projectRoot);
+    const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
+    while (true) {
+        const hasDone = isRootDoneMarkerStaged(root);
+        const hasComplete = isRootCompleteMarkerPresent(root);
+        if (hasDone && hasComplete) {
+            throw new Error(`conflicting root protocol markers: ${join(root, ".done")} and ${join(root, ".complete")}`);
+        }
+        if (hasComplete) {
+            return { event: "complete", markerPath: consumeRootCompleteMarker(root) };
+        }
+        if (hasDone) {
+            return { event: "done", markerPath: consumeRootDoneMarker(root) };
+        }
+        if (deadline !== null && Date.now() >= deadline) {
+            throw new Error(`timed out waiting for staged .done or root .complete in ${root}`);
         }
         await sleep(pollIntervalMs);
     }
@@ -113,11 +192,10 @@ function parseCliOptions(args: string[]): CliOptions {
 }
 
 if (process.argv[1]?.endsWith("done-monitor.ts")) {
-    waitForStagedDone(parseCliOptions(process.argv.slice(2)))
+    waitForAuditorSignal(parseCliOptions(process.argv.slice(2)))
         .then((event) => process.stdout.write(`${JSON.stringify(event)}\n`))
         .catch((error) => {
             process.stderr.write(`done-monitor: ${error instanceof Error ? error.message : String(error)}\n`);
             process.exitCode = 1;
         });
 }
-
