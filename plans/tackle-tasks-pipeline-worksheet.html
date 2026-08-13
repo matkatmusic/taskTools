@@ -1,0 +1,177 @@
+<title>Tackle-Tasks Worksheet</title>
+
+<style>
+  :root {
+    --paper: #f2f1ee;
+    --card: #fbfaf8;
+    --ink: #1b1a18;
+    --ink-soft: #55524d;
+    --ink-faint: #8a8781;
+    --rule: #dedbd4;
+    --grid: #e6e3dc;
+    --blue: #2f4d8c;
+    --blue-soft: #e4e8f2;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --body: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17181a;
+      --card: #1e2023;
+      --ink: #e9e7e3;
+      --ink-soft: #a8a49d;
+      --ink-faint: #7b7873;
+      --rule: #33363a;
+      --grid: #232629;
+      --blue: #7f9fdd;
+      --blue-soft: #1c2434;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17181a;
+    --card: #1e2023;
+    --ink: #e9e7e3;
+    --ink-soft: #a8a49d;
+    --ink-faint: #7b7873;
+    --rule: #33363a;
+    --grid: #232629;
+    --blue: #7f9fdd;
+    --blue-soft: #1c2434;
+  }
+
+  body {
+    background: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 2.5rem 1.25rem 6rem;
+  }
+  .wrap { max-width: 52rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+  .prose { max-width: 40rem; }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem;
+    text-wrap: balance;
+  }
+  h2 { font-family: var(--mono); font-size: 1.05rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  p { margin: 0 0 0.8rem; color: var(--ink-soft); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--ink); font-weight: 620; }
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--blue-soft); padding: 0.1em 0.35em; border-radius: 3px; color: var(--ink); }
+
+  .stamp {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--card);
+    background: var(--blue);
+    padding: 0.22rem 0.55rem;
+    border-radius: 2px;
+    margin-bottom: 0.9rem;
+  }
+
+  header, .panel {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 1.6rem;
+  }
+  .panel { display: flex; flex-direction: column; gap: 1.1rem; }
+  .panel-head { border-bottom: 1px solid var(--rule); padding-bottom: 0.8rem; }
+
+  .figure { overflow-x: auto; padding: 0.75rem 0; }
+  pre.mermaid { margin: 0; text-align: center; min-width: fit-content; }
+
+  ol, ul { margin: 0; padding-left: 1.3rem; color: var(--ink-soft); }
+  li { margin-bottom: 0.45rem; }
+  li:last-child { margin-bottom: 0; }
+  li strong { color: var(--ink); }
+
+  .empty {
+    border: 1px dashed var(--rule);
+    border-radius: 4px;
+    padding: 1.1rem;
+    color: var(--ink-faint);
+    font-size: 0.88rem;
+    text-align: center;
+  }
+
+  .log { display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.85rem; }
+  .log-row { display: flex; gap: 0.9rem; align-items: baseline; }
+  .log-when { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-faint); white-space: nowrap; min-width: 5.5rem; }
+  .log-what { color: var(--ink-soft); }
+</style>
+
+<div class="wrap">
+
+  <header class="prose">
+    <span class="stamp">working draft · rebuilt from zero</span>
+    <h1>Tackle-Tasks Worksheet</h1>
+    <p>Starting over. The skill gets rebuilt from the smallest true sequence, and grows only when a question forces it to.</p>
+    <p>The frozen run-B teardown lives at <code>plans/tackle-tasks-pipeline-map-runB.html</code> — that one does not change.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head"><h2>The sequence</h2></div>
+    <div class="figure">
+<pre class="mermaid">
+flowchart LR
+  A["do work on a worktree"] --> B["merge worktree"]
+  classDef n fill:#2f4d8c,stroke:#2f4d8c,color:#fff
+  class A,B n
+</pre>
+    </div>
+    <p>Two phases. Everything the skill does is a subdivision of one of these, and nothing gets added until a checkpoint question demands it.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Where this is headed</h2></div>
+    <p>The two phases expand into four:</p>
+    <ol>
+      <li>Implement the work in a worktree.</li>
+      <li>Verify the work matches the task.</li>
+      <li>Merge the work back to the main tree.</li>
+      <li>Close out the task.</li>
+    </ol>
+    <p>They are not on the diagram yet. A phase earns its box when a question proves the previous phase cannot hand off without it.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>The rule</h2></div>
+    <p>Find every part of that sequence a program can decide, and take it out of the prose in the skill body. Prose is for the parts that need judgment. Everything else is a script that returns an answer.</p>
+    <p>A checkpoint question is the test: if a script can answer it, a script must answer it.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Checkpoint questions</h2></div>
+    <p>Each question is a gate between two phases. A phase may only hand off when its questions are answered.</p>
+    <div class="empty">No questions written yet — this is where we start.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Change log</h2></div>
+    <div class="log">
+      <div class="log-row">
+        <span class="log-when">2026-08-12</span>
+        <span class="log-what">Reset to two phases. Prior seven-stage map and its findings discarded; the run-B snapshot keeps that history.</span>
+      </div>
+      <div class="log-row">
+        <span class="log-when">2026-08-12</span>
+        <span class="log-what">Worksheet split from the run-B snapshot.</span>
+      </div>
+    </div>
+  </section>
+
+</div>
