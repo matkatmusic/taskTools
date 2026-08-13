@@ -2,11 +2,11 @@
 // across many short-lived processes. See plans/diagram/pipeline.mmd rule 9.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
     acquireSourceRepoLock,
     buildLockOwner,
@@ -14,12 +14,49 @@ import {
     recoverSourceRepoLock,
     refreshSourceRepoLock,
     releaseSourceRepoLock,
+    type AcquireOutcome,
 } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-sourceLock-"));
     mkdirSync(join(root, ".git"), { recursive: true });
     return root;
+}
+
+const sourceRepoLockModulePath = fileURLToPath(new URL("../../scripts/tackle-tasks/sourceRepoLock.ts", import.meta.url));
+
+// Runs `functionCall` (an expression referencing the imported lock functions, plus a
+// `waitForFile(path)` busy-wait helper) in its own node process, and resolves with its
+// JSON-parsed stdout. Used to force real cross-process interleavings the audit calls for.
+function spawnLockCall(functionCall: string): Promise<unknown> {
+    const script = `
+        import {
+            acquireSourceRepoLock, refreshSourceRepoLock, releaseSourceRepoLock,
+            recoverSourceRepoLock, buildLockOwner,
+        } from ${JSON.stringify(sourceRepoLockModulePath)};
+        import { existsSync } from "node:fs";
+        const WAIT = new Int32Array(new SharedArrayBuffer(4));
+        function waitForFile(path) {
+            while (!existsSync(path)) Atomics.wait(WAIT, 0, 0, 5);
+        }
+        const result = ${functionCall};
+        process.stdout.write(JSON.stringify(result));
+    `;
+    return new Promise((resolve, reject) => {
+        const child = spawn("node", ["--input-type=module", "-e", script]);
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk) => { stdout += chunk; });
+        child.stderr.on("data", (chunk) => { stderr += chunk; });
+        child.on("close", (code) => {
+            if (code !== 0) reject(new Error(`spawnLockCall exited ${code}: ${stderr}`));
+            else resolve(JSON.parse(stdout));
+        });
+    });
+}
+
+function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 test("test_buildLockOwner_joinsRunIdAndTaskNumberWithAColon", () => {
@@ -197,4 +234,161 @@ test("test_sourceRepoLock_survivesAcquireAndReleaseInSeparateProcesses", () => {
     );
     assert.deepEqual(releaseResult, { released: true });
     assert.equal(readSourceRepoLock(root), null);
+});
+
+test("test_acquireSourceRepoLock_exactlyOneWinnerAmongAcquirersReleasedFromABarrier", async () => {
+    // Step: five processes race to acquire the same lock, all held behind one barrier file.
+    const root = makeProjectRoot();
+    const barrierPath = join(root, "barrier");
+    const owners = Array.from({ length: 5 }, (_, index) => buildLockOwner("run-300", 300 + index));
+    const calls = owners.map((owner) =>
+        spawnLockCall(
+            `(() => { waitForFile(${JSON.stringify(barrierPath)}); `
+            + `return acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}); })()`,
+        ),
+    );
+    // Step: give every process time to spawn and start waiting at the barrier.
+    await wait(150);
+    writeFileSync(barrierPath, "");
+    const results = (await Promise.all(calls)) as AcquireOutcome[];
+    // Step: exactly one process wins; every other reports held or already-held-by-me; none throws.
+    const acquiredCount = results.filter((result) => result.status === "acquired").length;
+    assert.equal(acquiredCount, 1);
+    for (const result of results) {
+        assert.ok(["acquired", "held", "already-held-by-me"].includes(result.status));
+    }
+    // Step: the final lock file is valid JSON naming exactly one of the racing owners.
+    const finalLock = readSourceRepoLock(root);
+    assert.ok(finalLock !== null);
+    assert.ok(owners.includes(finalLock!.owner));
+});
+
+test("test_acquireSourceRepoLock_concurrentReaderNeverSeesAPartialLockDuringPublication", async () => {
+    // Step: a write-stage seam pauses the winner right before its atomic rename.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-310", 310);
+    const pausePath = join(root, "pause-before-publish");
+    const acquireCall = spawnLockCall(
+        `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(pausePath)} } })`,
+    );
+    // Step: while the winner is paused, a concurrent reader must never see a torn document.
+    for (let i = 0; i < 10; i++) {
+        assert.equal(readSourceRepoLock(root), null); // no lock yet, never a partial one
+        await wait(10);
+    }
+    writeFileSync(pausePath, "");
+    const result = (await acquireCall) as AcquireOutcome;
+    assert.deepEqual(result, { status: "acquired" });
+    assert.equal(readSourceRepoLock(root)?.owner, owner);
+});
+
+test("test_acquireSourceRepoLock_leavesNoFinalLockOrTempFileWhenTheTempWriteFails", () => {
+    // Step: inject a failure between the temp-file write and its fsync.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-320", 320);
+    assert.throws(() => {
+        acquireSourceRepoLock(root, owner, { testHooks: { failTempWriteBeforeFsync: true } });
+    });
+    // Step: neither the final lock nor its temp file survive the failure.
+    assert.equal(readSourceRepoLock(root), null);
+    const leftoverTempFiles = readdirSync(join(root, ".git")).filter((name) => name.includes(".tmp"));
+    assert.deepEqual(leftoverTempFiles, []);
+});
+
+test("test_recoverSourceRepoLock_waitsForAPausedRefreshThenRefusesTheNowWarmHeartbeat", async () => {
+    // Step: owner A holds the lock with an old-looking heartbeat.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-330", 330);
+    const staleMs = 1000;
+    acquireSourceRepoLock(root, owner, { nowMs: 0, staleMs });
+    // Step: A's refresh enters the guard, validates ownership, then pauses before writing.
+    const pausePath = join(root, "pause-refresh");
+    const refreshedMs = 5000;
+    const refreshCall = spawnLockCall(
+        `refreshSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ nowMs: ${refreshedMs}, testHooks: { pauseAfterValidateUntilExists: ${JSON.stringify(pausePath)} } })`,
+    );
+    await wait(150);
+    // Step: recovery is attempted against the pre-refresh report while refresh is still paused.
+    const recoveryCheckMs = refreshedMs + 500; // warm relative to the refreshed heartbeat
+    const recoveryCall = spawnLockCall(
+        `recoverSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `${JSON.stringify(`abandon ${owner}`)}, { nowMs: ${recoveryCheckMs}, staleMs: ${staleMs} })`,
+    );
+    await wait(150);
+    // Step: recovery is still queued behind the guard; the heartbeat is still the pre-refresh one.
+    assert.equal(readSourceRepoLock(root)?.heartbeatAt, new Date(0).toISOString());
+    // Step: release the refresh. It publishes the fresh heartbeat, then recovery re-reads it.
+    writeFileSync(pausePath, "");
+    const refreshResult = await refreshCall;
+    const recoveryResult = await recoveryCall;
+    assert.deepEqual(refreshResult, { refreshed: true });
+    assert.deepEqual(recoveryResult, { recovered: false, reason: "the lock's heartbeat is still warm" });
+    assert.equal(readSourceRepoLock(root)?.owner, owner);
+    assert.equal(readSourceRepoLock(root)?.heartbeatAt, new Date(refreshedMs).toISOString());
+});
+
+test("test_releaseSourceRepoLock_pausedReleaseBlocksAReplacementAcquisitionAndNeverRemovesIt", async () => {
+    // Step: owner A holds the lock; its release enters the guard, validates ownership, then pauses.
+    const root = makeProjectRoot();
+    const ownerA = buildLockOwner("run-340", 340);
+    const ownerB = buildLockOwner("run-341", 341);
+    acquireSourceRepoLock(root, ownerA);
+    const pausePath = join(root, "pause-release");
+    const releaseCall = spawnLockCall(
+        `releaseSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(ownerA)}, `
+        + `{ testHooks: { pauseAfterValidateUntilExists: ${JSON.stringify(pausePath)} } })`,
+    );
+    await wait(150);
+    // Step: B's acquisition starts while release is still paused, holding the guard.
+    const acquireCall = spawnLockCall(
+        `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(ownerB)})`,
+    );
+    await wait(150);
+    // Step: acquisition cannot publish B until release completes; A's lock is still on disk.
+    assert.equal(readSourceRepoLock(root)?.owner, ownerA);
+    writeFileSync(pausePath, "");
+    const releaseResult = await releaseCall;
+    const acquireResult = await acquireCall;
+    assert.deepEqual(releaseResult, { released: true });
+    assert.deepEqual(acquireResult, { status: "acquired" });
+    // Step: release never removes B — it had already unlinked A before B ever existed.
+    assert.equal(readSourceRepoLock(root)?.owner, ownerB);
+});
+
+test("test_refreshSourceRepoLock_pausedRefreshBlocksRecoveryAndAcquisition_ownerAIsNeverOverwrittenByB", async () => {
+    // Step: owner A holds the lock; its refresh enters the guard, validates ownership, then pauses.
+    const root = makeProjectRoot();
+    const ownerA = buildLockOwner("run-350", 350);
+    const ownerB = buildLockOwner("run-351", 351);
+    const staleMs = 1000;
+    acquireSourceRepoLock(root, ownerA, { nowMs: 0, staleMs });
+    const pausePath = join(root, "pause-refresh-vs-both");
+    const refreshedMs = 5000;
+    const refreshCall = spawnLockCall(
+        `refreshSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(ownerA)}, `
+        + `{ nowMs: ${refreshedMs}, testHooks: { pauseAfterValidateUntilExists: ${JSON.stringify(pausePath)} } })`,
+    );
+    await wait(150);
+    // Step: both recovery of A and a replacement acquisition of B queue up behind the paused refresh.
+    const recoveryCall = spawnLockCall(
+        `recoverSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(ownerA)}, `
+        + `${JSON.stringify(`abandon ${ownerA}`)}, { nowMs: ${refreshedMs + 500}, staleMs: ${staleMs} })`,
+    );
+    const acquireCall = spawnLockCall(
+        `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(ownerB)}, `
+        + `{ nowMs: ${refreshedMs + 600}, staleMs: ${staleMs} })`,
+    );
+    await wait(150);
+    writeFileSync(pausePath, "");
+    const [refreshResult, recoveryResult, acquireResult] = await Promise.all([refreshCall, recoveryCall, acquireCall]);
+    assert.deepEqual(refreshResult, { refreshed: true });
+    // Step: recovery re-reads the now-fresh heartbeat and refuses it as warm — A is never removed.
+    assert.deepEqual(recoveryResult, { recovered: false, reason: "the lock's heartbeat is still warm" });
+    // Step: B can never acquire, so A can never be overwritten.
+    assert.equal((acquireResult as AcquireOutcome).status, "held");
+    assert.equal((acquireResult as { owner: string }).owner, ownerA);
+    assert.equal(readSourceRepoLock(root)?.owner, ownerA);
+    assert.equal(readSourceRepoLock(root)?.heartbeatAt, new Date(refreshedMs).toISOString());
 });

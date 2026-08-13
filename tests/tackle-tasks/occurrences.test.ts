@@ -11,8 +11,13 @@ import {
     buildOwnedOccurrencePaths,
     getOccurrencesDeepestFirst,
     parseOccurrencePath,
+    resolveOccurrenceBaseRef,
 } from "../../scripts/tackle-tasks/occurrences.ts";
 import type { Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
+import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+
+// git submodule add/clone needs this in a sandboxed test environment.
+process.env.GIT_ALLOW_PROTOCOL = "file";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();
@@ -29,28 +34,27 @@ function makeTempRepoWithCommit(branchName: string): string {
     return repoPath;
 }
 
-// Builds a root repo with a real submodule, then a real linked worktree of the root with the
-// submodule checked out and given its own local branch, per global rule 9 (no mocks, no
-// standalone-repo stand-in for a linked worktree).
-function makeWorktreeWithSubmodule(): { rootOrigin: string; worktreePath: string } {
+// The canonical source repository: a root repo with one real submodule, per global rule 9.
+function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: string } {
     const childOrigin = makeTempRepoWithCommit("child-main");
     const rootOrigin = makeTempRepoWithCommit("main");
-    process.env.GIT_ALLOW_PROTOCOL = "file";
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
     git(rootOrigin, "commit", "-q", "-m", "add submodule child");
+    return { rootOrigin, childOrigin };
+}
 
-    const worktreesParent = mkdtempSync(join(tmpdir(), "occurrences-worktree-"));
-    const worktreePath = join(worktreesParent, "wt");
-    git(rootOrigin, "worktree", "add", "-q", "-b", "task-branch", worktreePath, "main");
-    git(worktreePath, "submodule", "update", "-q", "--init", "--recursive");
-    git(join(worktreePath, "child"), "checkout", "-q", "child-main");
+let nextGroupId = 1;
 
-    return { rootOrigin, worktreePath };
+// The production preparer: creates task-N in both the root repo and every submodule.
+function createLinkedWorktree(rootOrigin: string): string {
+    const groupId = nextGroupId++;
+    return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 
 test("test_getOccurrencesDeepestFirst_putsTheRootLast", () => {
-    // Setup: a root repo with one submodule, checked out into a real linked worktree.
-    const { rootOrigin, worktreePath } = makeWorktreeWithSubmodule();
+    // Setup: a source repo with one submodule, checked out into a real linked worktree.
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: walk the occurrence tree.
     const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
@@ -61,20 +65,69 @@ test("test_getOccurrencesDeepestFirst_putsTheRootLast", () => {
     assert.equal(occurrences[occurrences.length - 1].occurrenceId, "");
 });
 
-test("test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRef", () => {
-    // Setup: a root repo with one submodule whose own branch name differs from the root's.
-    const { rootOrigin, worktreePath } = makeWorktreeWithSubmodule();
+test("test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceManifest", () => {
+    // Setup: a source repo with an unchanged submodule, checked out into a linked worktree
+    // where both layers sit on task-N, not on their own source branches.
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: walk the occurrence tree, supplying the root's own source branch.
     const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
     const root = occurrences.find((occurrence) => occurrence.occurrenceId === "");
     const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
 
-    // Verification: the root uses the supplied root source branch; the submodule resolves its
-    // own base branch, and the two are not the same name.
+    // Verification: the root uses the supplied root source branch. The submodule resolves its
+    // own base branch from the source repository, never "" and never the shared task branch.
     assert.equal(root?.baseRef, "root-base");
     assert.equal(child?.baseRef, "child-main");
+    assert.notEqual(child?.baseRef, "");
+    assert.ok(!child?.baseRef.startsWith("task-"));
     assert.notEqual(root?.baseRef, child?.baseRef);
+});
+
+test("test_getOccurrencesDeepestFirst_keepsChildBaseRefStableAfterASubmoduleChangeAndDiffsCorrectly", () => {
+    // Setup: a source repo with a submodule, checked out into a linked worktree.
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+
+    // Test action: commit a change on the child's task branch, then stage and commit its
+    // updated gitlink in the parent, mirroring a real task edit.
+    writeFileSync(join(worktreePath, "child", "newfile.txt"), "change\n");
+    git(join(worktreePath, "child"), "add", "newfile.txt");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "child change");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
+    const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
+
+    // Verification: the child's base ref is still its unchanged source branch, and diffing
+    // against it (not against task-N) actually reports the submodule change.
+    assert.equal(child?.baseRef, "child-main");
+    const diff = git(join(worktreePath, "child"), "diff", `${child?.baseRef}...HEAD`, "--stat");
+    assert.match(diff, /newfile\.txt/);
+});
+
+test("test_resolveOccurrenceBaseRef_throwsNamingTheOccurrenceWhenNoBaseIsResolvable", () => {
+    // Setup: a non-root occurrence with no source-manifest base branch, checked out somewhere
+    // with no upstream tracking branch configured either.
+    const checkoutPath = makeTempRepoWithCommit("detached-child");
+    const occurrence = {
+        occurrenceId: "child",
+        checkoutPath,
+        parentOccurrenceId: "",
+        pathInParent: "child",
+        gitlinkOid: null,
+        depth: 1,
+        originUrl: "",
+        baseBranch: "",
+        baseOid: "",
+        operationBranch: "",
+        childOccurrenceIds: [],
+        testState: "untested" as const,
+    };
+
+    // Test action + verification: resolving the base ref throws, naming the occurrence.
+    assert.throws(() => resolveOccurrenceBaseRef(occurrence, "root-base"), /child/);
 });
 
 test("test_buildOccurrencePath_roundTripsThroughParseOccurrencePath", () => {
@@ -126,8 +179,9 @@ test("test_buildOwnedOccurrencePaths_prefersTheLongestMatchingOccurrenceId", () 
 });
 
 test("test_buildDiscoveryManifest_populatesBothSubManifests", () => {
-    // Setup: a root repo with one submodule, checked out into a real linked worktree.
-    const { rootOrigin, worktreePath } = makeWorktreeWithSubmodule();
+    // Setup: a source repo with one submodule, checked out into a real linked worktree.
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: build the discovery manifest.
     const manifest = buildDiscoveryManifest(worktreePath, rootOrigin);
@@ -138,4 +192,25 @@ test("test_buildDiscoveryManifest_populatesBothSubManifests", () => {
     assert.deepEqual(manifest.resolutionManifest.resolutionAnswers, {});
     assert.deepEqual(manifest.resolutionManifest.baseReconciliationRequests, []);
     assert.deepEqual(manifest.resolutionManifest.baseReconciliationAnswers, {});
+});
+
+test("test_buildDiscoveryManifest_preservesSourceBaseBranchAndRemapsCheckoutPathsIntoTheWorktree", () => {
+    // Setup: a source repo with one submodule, checked out into a real linked worktree.
+    const { rootOrigin } = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const sourceManifest = buildDiscoveryManifest(rootOrigin, rootOrigin);
+
+    // Test action: build the discovery manifest against the linked worktree.
+    const manifest = buildDiscoveryManifest(worktreePath, rootOrigin);
+
+    // Verification: every occurrence keeps the source manifest's baseBranch/baseOid, but its
+    // checkoutPath is remapped to point inside the linked worktree, not the source repo.
+    for (const occurrence of manifest.repositoryManifest.occurrences) {
+        const sourceOccurrence = sourceManifest.repositoryManifest.occurrences.find(
+            (candidate) => candidate.occurrenceId === occurrence.occurrenceId,
+        );
+        assert.equal(occurrence.baseBranch, sourceOccurrence?.baseBranch);
+        assert.equal(occurrence.baseOid, sourceOccurrence?.baseOid);
+        assert.ok(occurrence.checkoutPath.startsWith(worktreePath));
+    }
 });

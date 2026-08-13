@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -300,4 +300,220 @@ test("test_updateCurrentTaskRun_holdsTheTaskStateLockWhileWriting", async () => 
     // The write only completed after the external holder released the lock, proving it waited.
     assert.ok(elapsed >= holdMs, `expected updateCurrentTaskRun to wait for the lock, took ${elapsed}ms`);
     void tasksPath;
+});
+
+// --- Finding 6: the empty run state must never be a shared mutable object. ---
+
+test("test_readTaskRunState_returnsAFreshEmptyHistoryEveryCallSoMutationCannotLeak", () => {
+    // Scenario: two legacy tasks with no run key at all.
+    const root = makeProjectRootWithTasks([
+        { taskNumber: 1, title: "t1" },
+        { taskNumber: 2, title: "t2" },
+    ]);
+    // Read task 1's empty state and mutate the history array a caller should never keep.
+    const firstRead = readTaskRunState(1, root);
+    firstRead.history.push({
+        runId: "contaminant", startedAt: "x", endedAt: null, exitType: null, exitNote: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+    });
+    // Fresh reads of both task 1 and task 2 must still be empty.
+    assert.deepEqual(readTaskRunState(1, root).history, []);
+    assert.deepEqual(readTaskRunState(2, root).history, []);
+    // Claiming task 1 must persist exactly one new record, not the contaminant plus one.
+    const outcome = claimTask(1, "run-a", root);
+    assert.equal(outcome.status, "claimed");
+    if (outcome.status !== "claimed") return;
+    assert.equal(outcome.state.history.length, 1);
+    assert.equal(outcome.state.history[0].runId, "run-a");
+});
+
+// --- Finding 7: replaceEndedRunOutcome must enforce its ended-completed-run contract. ---
+
+test("test_replaceEndedRunOutcome_throwsAndLeavesBytesUnchangedWhenTheRunIsActive", () => {
+    // Scenario: a caller wrongly targets a run that is still active.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: null, leaseRunId: null,
+            history: [{
+                runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null, exitType: null,
+                exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null,
+                taskTests: null, fullSuite: null,
+            }],
+        },
+    }]);
+    const { tasksPath } = resolveTaskFiles(root);
+    const bytesBefore = readFileSync(tasksPath, "utf8");
+    // The call must throw rather than silently terminating the active run.
+    assert.throws(() => replaceEndedRunOutcome(1, "run-failed", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), bytesBefore);
+});
+
+test("test_replaceEndedRunOutcome_throwsAndLeavesBytesUnchangedWhenTheEndedRunDidNotComplete", () => {
+    // Scenario: the newest run ended, but not with exitType "completed".
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-a", exitType: "tests-red" })] },
+    }]);
+    const { tasksPath } = resolveTaskFiles(root);
+    const bytesBefore = readFileSync(tasksPath, "utf8");
+    // Only rule 10's fourth case (an ended, completed run) may be reopened.
+    assert.throws(() => replaceEndedRunOutcome(1, "run-failed", "note", root));
+    assert.equal(readFileSync(tasksPath, "utf8"), bytesBefore);
+});
+
+// --- Finding 5: worktree-lease adoption must never split-brain tasks.json and the lease file. ---
+
+function makeAdoptionFixture(): { root: string; worktreePath: string; leasePath: string } {
+    const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
+    const worktreePath = join(root, "worktree");
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 1, title: "t",
+        run: {
+            active: true, worktree: worktreePath, leaseRunId: "run-old",
+            history: [
+                endedRunRecord({ runId: "run-old", exitType: "run-failed" }),
+                {
+                    runId: "run-new", startedAt: "2026-08-02T00:00:00-07:00", endedAt: null, exitType: null,
+                    exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null,
+                    taskTests: null, fullSuite: null,
+                },
+            ],
+        },
+    }], null, 2));
+    return { root, worktreePath, leasePath: `${worktreePath}.lease` };
+}
+
+test("test_adoptWorktreeLease_refusesWhenTheOnDiskLeaseOwnerDoesNotMatchTheExpectedStaleOwner", () => {
+    // Scenario: tasks.json says the lease is held by "run-old", but the file on disk names someone else.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-someone-else", pid: 1, createdAt: 1 }));
+    const before = readFileSync(leasePath, "utf8");
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    // Adoption must refuse rather than steal the lease from its real owner.
+    const result = adoptWorktreeLease(1, "run-new", root);
+    assert.equal(result.adopted, false);
+    assert.equal(readFileSync(leasePath, "utf8"), before);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+test("test_adoptWorktreeLease_refusesWhenTheLeaseFileIsMissing", () => {
+    // Scenario: no sibling lease file exists at all.
+    const { root, worktreePath } = makeAdoptionFixture();
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    const result = adoptWorktreeLease(1, "run-new", root);
+    assert.equal(result.adopted, false);
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+});
+
+test("test_adoptWorktreeLease_refusesWhenTheLeaseFileIsMalformed", () => {
+    // Scenario: the sibling lease file exists but is not valid JSON.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, "{ not json");
+    const before = readFileSync(leasePath, "utf8");
+    const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
+    const result = adoptWorktreeLease(1, "run-new", root);
+    assert.equal(result.adopted, false);
+    assert.equal(readFileSync(leasePath, "utf8"), before);
+    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
+    void worktreePath;
+});
+
+test("test_adoptWorktreeLease_injectedLeaseReplacementFailureLeavesTasksJsonOnTheOldOwner", () => {
+    // Scenario: writing the replacement lease fails after the journal is written.
+    const { root, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT = "lease";
+    try {
+        assert.throws(() => adoptWorktreeLease(1, "run-new", root));
+    } finally {
+        delete process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT;
+    }
+    // The lease still names the old owner and tasks.json was never touched.
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-old");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-old");
+    assert.equal(existsSync(`${leasePath}.adopt-intent`), false);
+});
+
+test("test_adoptWorktreeLease_injectedTaskStateWriteFailureRestoresTheExactOldLeaseBytesAndRetainsNoJournal", () => {
+    // Scenario: the lease was already replaced when writing tasks.json fails.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    const oldLeaseBytes = JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 });
+    writeFileSync(leasePath, oldLeaseBytes);
+    process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT = "state";
+    try {
+        assert.throws(() => adoptWorktreeLease(1, "run-new", root));
+    } finally {
+        delete process.env.TASKRUNSTATE_TEST_ADOPT_FAIL_AT;
+    }
+    // The lease is restored byte-for-byte and the journal is gone.
+    assert.equal(readFileSync(leasePath, "utf8"), oldLeaseBytes);
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-old");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+async function runAdoptionInChildAndKillAfter(
+    root: string,
+    step: "intent" | "lease" | "state",
+): Promise<void> {
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
+    const childSource = `
+        import { adoptWorktreeLease } from ${JSON.stringify(moduleUrl)};
+        adoptWorktreeLease(1, "run-new", ${JSON.stringify(root)});
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], {
+        stdio: "inherit",
+        env: { ...process.env, TASKRUNSTATE_TEST_ADOPT_KILL_AFTER: step },
+    });
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
+    // ponytail: the lock/guard files a killed process leaves behind are a separate, already
+    // documented recovery concern (rule 9's explicit-recovery stance), not this finding's
+    // split-brain. Clear them the way a supervisor already would, then let the next lease
+    // operation reconcile the intent/lease/tasks.json split this finding is about.
+    for (const staleLock of [join(root, "task-state.lock"), `${join(root, "worktree")}.lease.guard`]) {
+        if (existsSync(staleLock)) unlinkSync(staleLock);
+    }
+}
+
+test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterWritingTheIntent", async () => {
+    // Scenario: the process dies right after journaling the adoption intent, before any mutation.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    await runAdoptionInChildAndKillAfter(root, "intent");
+    // The next lease operation finishes the adoption instead of leaving a split.
+    const result = adoptWorktreeLease(1, "run-new", root);
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-new");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-new");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+    void result;
+});
+
+test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterReplacingTheLease", async () => {
+    // Scenario: the process dies after the lease already names the new owner but before tasks.json does.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    await runAdoptionInChildAndKillAfter(root, "lease");
+    adoptWorktreeLease(1, "run-new", root);
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-new");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-new");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
+});
+
+test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterUpdatingTaskState", async () => {
+    // Scenario: the process dies after both authorities already agree, but before the journal is deleted.
+    const { root, worktreePath, leasePath } = makeAdoptionFixture();
+    writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    await runAdoptionInChildAndKillAfter(root, "state");
+    adoptWorktreeLease(1, "run-new", root);
+    assert.equal(JSON.parse(readFileSync(leasePath, "utf8")).runId, "run-new");
+    const onDisk = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"))[0].run;
+    assert.equal(onDisk.leaseRunId, "run-new");
+    assert.equal(existsSync(`${worktreePath}.lease.adopt-intent`), false);
 });

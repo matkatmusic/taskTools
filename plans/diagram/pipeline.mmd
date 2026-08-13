@@ -26,8 +26,11 @@ flowchart TB
 %%      Exactly one box releases it - "clean up" on success, "release the worktree
 %%      lease and the source lock if held" on every exit. Every box in the tail
 %%      refreshes the lock's heartbeat, so a lock whose heartbeat has gone cold is
-%%      recoverable and a slow but living run is never taken over. Elapsed time
-%%      alone never authorizes takeover.
+%%      recoverable. A warm lock is waited on; a cold lock stops the waiting run
+%%      and prints the exact owner token. It can be removed only by the explicit
+%%      recoverSourceRepoLock.ts maintenance script with an exact typed confirmation;
+%%      the workflow never invokes recovery itself. Elapsed time alone never
+%%      authorizes takeover.
 %%  10. A script that fails operationally, as opposed to returning a verdict,
 %%      exits the run as run-failed. No step is retried after it has mutated
 %%      anything. How far the exit chain can run depends on where the failure
@@ -39,9 +42,11 @@ flowchart TB
 %%                                - the run is already ended, so the chain reopens
 %%                                  it, overwrites exit type completed with
 %%                                  run-failed, and re-ends it
-%%  11. A mutating box whose result is lost is never retried and never assumed
-%%      failed. Each one has a read-only reconciliation check that reads the world
-%%      and decides whether it already happened. Only an unreconcilable loss is
+%%  11. A mutating box whose result is lost is never blindly retried and never
+%%      assumed failed. Each one, including a test box that records its result,
+%%      has a read-only reconciliation check that reads the world and decides
+%%      whether it already happened. A safe idempotent rerun happens only after
+%%      reconciliation proves it did not complete. Only an ambiguous loss is
 %%      run-failed.
 %%  12. A task stays unclaimable from "claim the task" until its archive lands.
 %%      "mark task inactive" ends the run but does NOT reopen the task: a task
