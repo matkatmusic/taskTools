@@ -3,7 +3,7 @@ import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
-import { type PreparedGroup } from "./prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory, type PreparedGroup } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
@@ -49,7 +49,7 @@ function parseWorktreeListPorcelain(output: string): TaskWorktree[] {
 }
 
 export function listTaskWorktrees(repoRoot: string): TaskWorktree[] {
-    const conventionDir = join(tmpdir(), "taskTools-wt", basename(repoRoot));
+    const conventionDir = resolveTaskWorktreeConventionDirectory(repoRoot);
     // git resolves symlinks in the paths it reports (e.g. macOS /var -> /private/var); match on the resolved form.
     if (!existsSync(conventionDir)) return [];
     const conventionRoot = realpathSync(conventionDir);
