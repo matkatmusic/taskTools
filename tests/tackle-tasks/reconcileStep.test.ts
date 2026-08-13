@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/tackle-tasks/reconcileStep.ts. Run: node --test tests/tackle-tasks/reconcileStep.test.ts
 import { test as nodeTest } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reconcileStep, type ReconcileStepInput } from "../../scripts/tackle-tasks/reconcileStep.ts";
@@ -24,9 +24,7 @@ import { releaseTaskRunHolds } from "../../scripts/tackle-tasks/releaseTaskRunHo
 import { writeTaskExitNotes } from "../../scripts/tackle-tasks/writeTaskExitNotes.ts";
 import { markTaskInactive } from "../../scripts/tackle-tasks/markTaskInactive.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import {
-    HOLD_NOT_RELEASED, HOLD_RELEASED, HOLD_RELEASE_UNKNOWN, SUBMODULES_NOT_INITIALIZED, SUBMODULE_INITIALIZATION_UNKNOWN,
-} from "../../scripts/tackle-tasks/reconciliationOutcomes.ts";
+import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
@@ -75,7 +73,7 @@ test("test_reconcileStep_recognizesACompletedArchiveAfterALostResult", () => {
     // Setup: a task is claimed, does work, exits completed, and is really archived by closeTaskRun.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-close-"));
     buildEndedCompletedRun(root, 1, "run-a", "abc123");
-    const realOutput = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "closed", projectRoot: root });
+    const realOutput = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "closed", projectRoot: root, stepId: "step-1" });
     assert.deepEqual(realOutput.closed, [1]);
 
     // Test action: reconcile as if the box's stdout had been lost.
@@ -84,9 +82,9 @@ test("test_reconcileStep_recognizesACompletedArchiveAfterALostResult", () => {
         stepInput: { closureNote: "closed" },
     }));
 
-    // Verification: the lost result is reconstructed from the real archive.
+    // Verification: the lost result is reconstructed from the real archive's receipt.
     assert.equal(result.status, "completed");
-    assert.deepEqual(result.result?.closed, [1]);
+    assert.deepEqual(result.result, realOutput);
 });
 
 test("test_reconcileStep_reportsNotCompletedForAnArchivePresentInBothTaskFiles", () => {
@@ -356,28 +354,41 @@ test("test_reconcileStep_reportsAmbiguousRatherThanGuessing", () => {
     assert.notEqual(result.note, null);
 });
 
-test("test_reconcileStep_reconstructsInitSubmodulesKnownValueAndFlagsTheAmbiguousOne", () => {
+// F10: `initialized` is reconstructed only from a durable receipt the real box wrote - never
+// guessed from live submodule status. Both reachable booleans are covered.
+test("test_reconcileStep_reconstructsInitSubmodulesReceiptForBothInitializedStates", () => {
     // Case A: no .gitmodules at all - the real box reports initialized:false unconditionally.
     const noSubmodules = makeCommittedRepo("reconcileStep-init-nosub-");
+    writeTasksJson(noSubmodules, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-a", noSubmodules).status, "claimed");
+    const realOutputA = initTaskSubmodules({
+        worktreePath: noSubmodules, taskNumber: 1, runId: "run-a", projectRoot: noSubmodules, stepId: "step-a",
+    });
+    assert.equal(realOutputA.initialized, false);
     const resultA = reconcileStep(baseInput({
-        script: "initTaskSubmodules", taskNumber: 1, runId: "run-a", projectRoot: noSubmodules,
+        script: "initTaskSubmodules", stepId: "step-a", taskNumber: 1, runId: "run-a", projectRoot: noSubmodules,
         stepInput: { worktreePath: noSubmodules },
     }));
     assert.equal(resultA.status, "completed");
-    assert.equal(resultA.result?.initialized, SUBMODULES_NOT_INITIALIZED);
+    assert.deepEqual(resultA.result, realOutputA);
 
-    // Case B: a real submodule that is already populated (git submodule add checks it out).
-    // Fully populated now is indistinguishable between "never uninitialized" and "this box
-    // just populated it", so the honest answer is unknown, not a guessed false.
+    // Case B: a deinitialized submodule that this call actually populates.
     const childOrigin = makeCommittedRepo("reconcileStep-init-child-", "child-main");
     const withSubmodule = makeCommittedRepo("reconcileStep-init-root-", "main");
     addSubmodule(withSubmodule, childOrigin, "child");
+    git(withSubmodule, "submodule", "deinit", "-f", "child");
+    writeTasksJson(withSubmodule, [{ taskNumber: 2, title: "t" }]);
+    assert.equal(claimTask(2, "run-b", withSubmodule).status, "claimed");
+    const realOutputB = initTaskSubmodules({
+        worktreePath: withSubmodule, taskNumber: 2, runId: "run-b", projectRoot: withSubmodule, stepId: "step-b",
+    });
+    assert.equal(realOutputB.initialized, true);
     const resultB = reconcileStep(baseInput({
-        script: "initTaskSubmodules", taskNumber: 1, runId: "run-a", projectRoot: withSubmodule,
+        script: "initTaskSubmodules", stepId: "step-b", taskNumber: 2, runId: "run-b", projectRoot: withSubmodule,
         stepInput: { worktreePath: withSubmodule },
     }));
     assert.equal(resultB.status, "completed");
-    assert.equal(resultB.result?.initialized, SUBMODULE_INITIALIZATION_UNKNOWN);
+    assert.deepEqual(resultB.result, realOutputB);
 });
 
 test("test_reconcileStep_reportsNotCompletedWhenCleanupLeftArtifactsInsideASubmodule", () => {
@@ -514,6 +525,73 @@ test("test_reconcileStep_reportsAmbiguousWhenACreateJournalNamesAnOwnerTheLeaseN
     // Verification: not guessed as safely rerunnable - ambiguous, and nothing touched.
     assert.equal(result.status, "ambiguous");
     assert.ok(existsSync(created.worktree));
+    assert.ok(existsSync(journalPath));
+});
+
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the classifier never
+// compared the retained journal's runId with the requested runId, so a reconcile call for run B
+// could report a completed journal owned by run A as "completed" for run B. Before the fix this
+// test's assert.equal(status, "ambiguous") would fail: it would report "completed" and hand back
+// run-a's worktree/branch to a reconciliation call made on behalf of run-b.
+test("test_reconcileStep_reportsAmbiguousRatherThanCompletingAnotherRunsRetainedCreateJournal", () => {
+    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written
+    // back to simulate death right before its own unlink - a completed retained journal for run-a.
+    const childOrigin = makeCommittedRepo("reconcileStep-journal-otherrun-child-", "child-main");
+    const root = makeCommittedRepo("reconcileStep-journal-otherrun-root-", "main");
+    addSubmodule(root, childOrigin, "vendor");
+    writeTasksJson(root, [{ taskNumber: 1, title: "t", files: [] }]);
+    claimTask(1, "run-a", root);
+    const created = createTaskWorktree(1, "run-a", root);
+    const journalPath = taskWorktreeCreateJournalPath(created.worktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: created.worktree, branch: created.branch,
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action: reconcile on behalf of a different run, run-b.
+    const result = reconcileStep(baseInput({
+        script: "createTaskWorktree", taskNumber: 1, runId: "run-b", projectRoot: root,
+    }));
+
+    // Verification: run-a's completed journal is not handed to run-b as its own completion, and
+    // nothing is destroyed by the read-only classification.
+    assert.equal(result.status, "ambiguous");
+    assert.ok(existsSync(created.worktree));
+    assert.ok(existsSync(journalPath));
+    const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+    assert.equal(journal.runId, "run-a");
+});
+
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching the
+// journal was accepted as proof of a finished creation without also requiring the physical lease
+// to name that run. Before the fix this test's assert.equal(status, "ambiguous") would fail: it
+// would report "completed" from task state alone even though no physical lease exists.
+test("test_reconcileStep_reportsAmbiguousWhenTaskStateMatchesTheCreateJournalButThePhysicalLeaseIsMissing", () => {
+    // Setup: a real worktree/branch exist and task state is recorded to match the journal, but
+    // the physical lease file is then removed - task state claims a lease that does not exist.
+    const childOrigin = makeCommittedRepo("reconcileStep-journal-nolease-child-", "child-main");
+    const root = makeCommittedRepo("reconcileStep-journal-nolease-root-", "main");
+    addSubmodule(root, childOrigin, "vendor");
+    writeTasksJson(root, [{ taskNumber: 1, title: "t", files: [] }]);
+    claimTask(1, "run-a", root);
+    const group = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" as const };
+    const worktree = createWorktreeForGroup(root, group, "run-a");
+    updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
+    unlinkSync(taskWorktreeLeasePath(worktree));
+    const journalPath = taskWorktreeCreateJournalPath(worktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: worktree, branch: taskBranchName(1),
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action: reconcile for the exact run task state names.
+    const result = reconcileStep(baseInput({
+        script: "createTaskWorktree", taskNumber: 1, runId: "run-a", projectRoot: root,
+    }));
+
+    // Verification: task state alone is not accepted as proof, and nothing is destroyed.
+    assert.equal(result.status, "ambiguous");
+    assert.ok(existsSync(worktree));
     assert.ok(existsSync(journalPath));
 });
 
@@ -1016,45 +1094,60 @@ test("test_reconcileStep_recognizesRecordedModifiedFilesAfterALostResult", () =>
 
 test("test_reconcileStep_recognizesReleasedHoldsAfterALostResult", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-release-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-a", root).status, "claimed");
     assert.equal(acquireSourceRepoLock(root, buildLockOwner("run-a", 1)).status, "acquired");
 
     // Test action: release for real (no worktree/branch to consider), then discard the returned value.
-    const realOutput = releaseTaskRunHolds({ taskNumber: 1, runId: "run-a", projectRoot: root, worktree: null, branchName: null });
-    assert.deepEqual(realOutput, { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased: HOLD_RELEASED });
+    const realOutput = releaseTaskRunHolds({
+        taskNumber: 1, runId: "run-a", projectRoot: root, worktree: null, branchName: null, stepId: "step-1",
+    });
+    assert.deepEqual(realOutput, { leaseReleased: false, leaseRetained: false, lockReleased: true });
 
     const result = reconcileStep(baseInput({
-        script: "releaseTaskRunHolds", taskNumber: 1, runId: "run-a", projectRoot: root,
+        script: "releaseTaskRunHolds", stepId: "step-1", taskNumber: 1, runId: "run-a", projectRoot: root,
     }));
 
-    // Verification: leaseReleased matches the real box field-for-field, but lockReleased cannot -
-    // an absent/foreign lock looks identical whether this run's call released it or never held
-    // it, so reconciliation reports the honest unknown rather than the real box's true answer.
+    // Verification: the exact real result is reproduced from the receipt, field-for-field.
     assert.equal(result.status, "completed");
-    assert.deepEqual(result.result, { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased: HOLD_RELEASE_UNKNOWN });
+    assert.deepEqual(result.result, realOutput);
 });
 
 test("test_reconcileStep_recognizesAHoldNotOwnedByThisRunIsNotOursToRelease", () => {
     // Setup: a worktree lease that names a DIFFERENT run - the wrong-owner case for this row.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-release-wrongowner-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-a", root).status, "claimed");
     const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-release-wt-"));
     writeFileSync(taskWorktreeLeasePath(worktreePath), JSON.stringify({ runId: "run-other", pid: 1, createdAt: 1 }));
 
     // The real script leaves a hold it does not own alone in every case (its own F5 comment).
-    const realOutput = releaseTaskRunHolds({ taskNumber: 1, runId: "run-a", projectRoot: root, worktree: worktreePath, branchName: null });
-    assert.deepEqual(realOutput, { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased: HOLD_NOT_RELEASED });
+    const realOutput = releaseTaskRunHolds({
+        taskNumber: 1, runId: "run-a", projectRoot: root, worktree: worktreePath, branchName: null, stepId: "step-1",
+    });
+    assert.deepEqual(realOutput, { leaseReleased: false, leaseRetained: false, lockReleased: false });
 
-    // leaseReleased matches the real box - the owner mismatch is directly observable, so it is
-    // never ambiguous. lockReleased is the SAME indistinguishable post-hoc state as the
-    // previous test (no lock owned by this run), even though the real box's own answer here
-    // happens to be false rather than true - reconciliation cannot tell the two apart, so both
-    // honestly report the unknown value rather than either guessed boolean.
     const result = reconcileStep(baseInput({
-        script: "releaseTaskRunHolds", taskNumber: 1, runId: "run-a", projectRoot: root,
+        script: "releaseTaskRunHolds", stepId: "step-1", taskNumber: 1, runId: "run-a", projectRoot: root,
         stepInput: { worktree: worktreePath },
     }));
 
     assert.equal(result.status, "completed");
-    assert.deepEqual(result.result, { leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased: HOLD_RELEASE_UNKNOWN });
+    assert.deepEqual(result.result, realOutput);
+});
+
+// F10: no receipt for this stepId - the box never reached its durable write, so reconciliation
+// reports not-completed (a rerun is safe/idempotent) rather than inventing an unknown value.
+test("test_reconcileStep_reportsNotCompletedForReleaseHoldsWithNoReceipt", () => {
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-release-noreceipt-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-a", root).status, "claimed");
+
+    const result = reconcileStep(baseInput({
+        script: "releaseTaskRunHolds", stepId: "step-never-ran", taskNumber: 1, runId: "run-a", projectRoot: root,
+    }));
+
+    assert.equal(result.status, "not-completed");
 });
 
 test("test_reconcileStep_recognizesAnInactiveMarkAfterALostResult", () => {
@@ -1131,9 +1224,14 @@ const FAULT_INJECTION_CASES: Record<string, string[]> = {
     cleanupTaskWorktree: ["test_reconcileStep_recognizesACompletedCleanup"],
     closeTaskRun: ["test_reconcileStep_recognizesACompletedArchiveAfterALostResult"],
     commitTaskWork: ["test_reconcileStep_recognizesACompletedCommitWhenOneLayerHadNothingToCommit"],
-    createTaskWorktree: ["test_reconcileStep_recognizesACreatedWorktreeAndAdoptedLease"],
+    createTaskWorktree: [
+        "test_reconcileStep_recognizesACreatedWorktreeAndAdoptedLease",
+        "test_reconcileStep_reportsAmbiguousWhenACreateJournalNamesAnOwnerTheLeaseNoLongerMatches",
+        "test_reconcileStep_reportsAmbiguousRatherThanCompletingAnotherRunsRetainedCreateJournal",
+        "test_reconcileStep_reportsAmbiguousWhenTaskStateMatchesTheCreateJournalButThePhysicalLeaseIsMissing",
+    ],
     generateTaskDocs: ["test_reconcileStep_recognizesAGeneratedBriefAfterALostResult"],
-    initTaskSubmodules: ["test_reconcileStep_reconstructsInitSubmodulesKnownValueAndFlagsTheAmbiguousOne"],
+    initTaskSubmodules: ["test_reconcileStep_reconstructsInitSubmodulesReceiptForBothInitializedStates"],
     isTaskRunResumable: ["test_reconcileStep_classifiesAValidRelativeNotesFileAsContainedForBothHandlers"],
     markTaskInactive: ["test_reconcileStep_recognizesAnInactiveMarkAfterALostResult"],
     mergeTaskWorktree: ["test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef"],

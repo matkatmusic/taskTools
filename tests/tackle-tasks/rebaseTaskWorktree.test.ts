@@ -161,6 +161,7 @@ test("test_rebaseTaskWorktree_recoverableOutputCarriesTheOwnerAndTheExactMainten
 test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-4");
     writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ x: "worktree" }));
     git(worktreePath, "add", "package.json");
     git(worktreePath, "commit", "-q", "-m", "worktree edit");
@@ -176,6 +177,103 @@ test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", asy
     assert.equal(output.conflicted, true);
     assert.equal(output.stoppedAt?.occurrenceId, "");
     assert.deepEqual(output.conflictedFilePaths, ["package.json"]);
+
+    // F3: a root conflict result is persisted too - discard the real return, reconcile the same
+    // stepId, and require the exact same conflict result back.
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-4", taskNumber, runId: "run-4", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "completed");
+    assert.deepEqual(reconciled.result, output);
+});
+
+// F3: reconcileRebase checks a matching step receipt BEFORE checking "is a rebase in progress",
+// so a proven root conflict receipt is replayed - not blindly rerun - while the rebase is still
+// live on disk.
+test("test_rebaseTaskWorktree_reconciliationReproducesARootConflictOutcomeFromTheReceipt", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-16");
+    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ x: "worktree" }));
+    git(worktreePath, "add", "package.json");
+    git(worktreePath, "commit", "-q", "-m", "worktree edit");
+    writeFileSync(join(rootOrigin, "package.json"), JSON.stringify({ x: "source" }));
+    git(rootOrigin, "add", "package.json");
+    git(rootOrigin, "commit", "-q", "-m", "source edit");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-16", stepId: "rebase-16", rootSourceBranch: "main",
+    });
+
+    assert.equal(output.conflicted, true);
+    assert.equal(output.stoppedAt?.occurrenceId, "");
+
+    // The conflict was never resolved or aborted, so the rebase is still live in the worktree.
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-16", taskNumber, runId: "run-16", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "completed");
+    assert.deepEqual(reconciled.result, output);
+});
+
+// F3: same branch, but the conflict - and the still-live rebase - sits at the nested submodule
+// layer, proving the receipt-before-in-progress ordering per layer, not just at root.
+test("test_rebaseTaskWorktree_reconciliationReproducesANestedConflictOutcomeFromTheReceipt", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-17");
+    writeFileSync(join(worktreePath, "child", "package.json"), JSON.stringify({ x: "worktree" }));
+    git(join(worktreePath, "child"), "add", "package.json");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "child worktree edit");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+    writeFileSync(join(rootOrigin, "child", "package.json"), JSON.stringify({ x: "source" }));
+    git(join(rootOrigin, "child"), "add", "package.json");
+    git(join(rootOrigin, "child"), "commit", "-q", "-m", "child source edit");
+    git(rootOrigin, "add", "child");
+    git(rootOrigin, "commit", "-q", "-m", "bump child gitlink (source)");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-17", stepId: "rebase-17", rootSourceBranch: "main",
+    });
+
+    assert.equal(output.conflicted, true);
+    assert.equal(output.stoppedAt?.occurrenceId, "child");
+
+    // The conflict was never resolved or aborted, so the rebase is still live in the child checkout.
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-17", taskNumber, runId: "run-17", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "completed");
+    assert.deepEqual(reconciled.result, output);
+});
+
+// F3: a root test-failure outcome (no conflict at all) must also be reconstructable exactly.
+test("test_rebaseTaskWorktree_reconciliationReproducesAFailedTestOutcomeFromTheReceipt", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-9");
+    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ scripts: { test: "false" } }));
+    git(worktreePath, "add", "package.json");
+    git(worktreePath, "commit", "-q", "-m", "make root tests fail");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-9", stepId: "rebase-9", rootSourceBranch: "main",
+    });
+
+    assert.equal(output.conflicted, false);
+    assert.equal(output.stoppedAt?.occurrenceId, "");
+    assert.notEqual(output.failureReason, null);
+
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-9", taskNumber, runId: "run-9", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "completed");
+    assert.deepEqual(reconciled.result, output);
 });
 
 // F3: two logical rebase visits in the same run. Before the fix, reconcileRebase only checked

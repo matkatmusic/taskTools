@@ -80,8 +80,8 @@ test("test_agentPromptEmitter_exitsNonZeroOnAnUnknownRole", () => {
 
 test("test_agentPromptEmitter_emitsTheSameCodexFallbackChainForBothReviewRoles", () => {
     // Setup: two different review questions routed through the one shared helper.
-    const planReview = codexReviewInstructions("review the plan", "the plan", 1);
-    const testsReview = codexReviewInstructions("review the tests", "the tests", 1);
+    const planReview = codexReviewInstructions("review the plan", "the plan");
+    const testsReview = codexReviewInstructions("review the tests", "the tests");
 
     // Verification: the fallback commands and their surrounding rules are identical in shape,
     // independent of the embedded question text.
@@ -261,9 +261,10 @@ test("test_planPrompt_returnsExactlyPlanWritten", () => {
 });
 
 test("test_reviewPlanPrompt_returnsExactlyReviewWrittenAndReviewer", () => {
-    // Old code returned {task, reviewWritten, reviewer}; task must be gone.
+    // Old code returned {task, reviewWritten, reviewer}; task must be gone. The return
+    // contract now sits before the final DATA section (finding 9), not at the string's end.
     const prompt = reviewPlanPrompt(fakeTask);
-    assert.match(prompt, /Return \{reviewWritten: true, reviewer\}\.\n?$/);
+    assert.match(prompt, /Return \{reviewWritten: true, reviewer\}\.\n/);
     assert.equal(/\{task:/i.test(prompt), false);
 });
 
@@ -276,9 +277,10 @@ test("test_implementPrompt_returnContractDropsTheOldTaskAndSummaryFields", () =>
 });
 
 test("test_reviewTestsPrompt_returnsExactlyFlaggedAndReviewer", () => {
-    // Old code returned {task, flagged, reviewer}; task must be gone.
+    // Old code returned {task, flagged, reviewer}; task must be gone. The return contract
+    // now sits before the final DATA section (finding 9), not at the string's end.
     const prompt = reviewTestsPrompt(fakeTask);
-    assert.match(prompt, /Return \{flagged, reviewer\}\.\n?$/);
+    assert.match(prompt, /Return \{flagged, reviewer\}\.\n/);
     assert.equal(/\{task:/i.test(prompt), false);
 });
 
@@ -422,4 +424,172 @@ test("test_amendTestsPrompt_putsTheReviewerNotesAfterTheDataMarker", () => {
     const markerIndex = prompt.indexOf("---- DATA ----");
     assert.notEqual(markerIndex, -1);
     assert.ok(prompt.indexOf(sentinel) > markerIndex);
+});
+
+// ---------------------------------------------------------------------------
+// Remediation feedback finding 9 — a final "---- DATA ----" block existed, but several
+// builders still spliced runtime values (typecheck command, maxFixRounds, checkoutPath,
+// subject, testReviewFile, the review/test-review output paths) into their STATIC
+// instructions ahead of it. These tests give every runtime argument of every one of the
+// eight roles a distinctive token, then assert (1) no token appears before the LAST
+// "---- DATA ----" marker in the emitted prompt, and (2) no instruction phrase — the
+// return contract or the forbidden-actions clause — appears after it. Before this fix:
+// reviewPlanPrompt/reviewTestsPrompt appended "Never edit any file" / "Write the
+// reviewer's JSON..." / "Return {...}" AFTER the codex block (which itself ends in a
+// nested data section), implementPrompt spliced the typecheck command and maxFixRounds
+// inline via `${...}` at three call sites each, fixConflictsPrompt spliced checkoutPath
+// inline five times, fixCodebasePrompt spliced subject/checkoutPath inline four times,
+// and amendTestsPrompt spliced testReviewFile inline once — so each of these new
+// assertions would have failed against the pre-fix code.
+// ---------------------------------------------------------------------------
+
+function finalDataMarkerIndex(prompt: string): number {
+    const marker = "---- DATA ----";
+    const index = prompt.lastIndexOf(marker);
+    assert.notEqual(index, -1, "prompt has no final DATA marker");
+    return index;
+}
+
+function assertSentinelsOnlyAfterFinalData(prompt: string, sentinels: string[]) {
+    const markerIndex = finalDataMarkerIndex(prompt);
+    for (const sentinel of sentinels) {
+        const firstIndex = prompt.indexOf(sentinel);
+        assert.notEqual(firstIndex, -1, `sentinel "${sentinel}" is missing from the prompt`);
+        assert.ok(firstIndex > markerIndex, `sentinel "${sentinel}" appears before the final DATA section`);
+    }
+}
+
+// A nested codex review carries its own DATA section because codex receives only the question
+// string; that data cannot move to the outer final section. It must still come last within the
+// question, so assert it against the first marker rather than the last.
+function assertNestedSentinelsOnlyAfterNestedData(prompt: string, sentinels: string[]) {
+    const nestedIndex = prompt.indexOf("---- DATA ----");
+    assert.notEqual(nestedIndex, -1, "prompt has no nested DATA marker");
+    for (const sentinel of sentinels) {
+        const firstIndex = prompt.indexOf(sentinel);
+        assert.notEqual(firstIndex, -1, `nested sentinel "${sentinel}" is missing from the prompt`);
+        assert.ok(firstIndex > nestedIndex, `nested sentinel "${sentinel}" appears before its DATA section`);
+    }
+}
+
+function assertNoInstructionAfterFinalData(prompt: string) {
+    const markerIndex = finalDataMarkerIndex(prompt);
+    const after = prompt.slice(markerIndex + "---- DATA ----".length);
+    assert.equal(/Return \{/.test(after), false, "a return contract appears after the final DATA section");
+    assert.equal(/You are forbidden/.test(after), false, "a forbidden-actions clause appears after the final DATA section");
+}
+
+test("test_planPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    const task: PreparedTask = {
+        ...fakeTask,
+        number: 918273,
+        briefFile: "/tmp/SENTINEL_BRIEF_PLAN_a1/brief.md",
+        planFile: "/tmp/SENTINEL_PLANFILE_PLAN_a2/plan.json",
+        files: ["SENTINEL_FILE_PLAN_a3.ts"],
+        tests: "SENTINEL_TESTS_PLAN_a4",
+        repoRoot: "/tmp/SENTINEL_REPOROOT_PLAN_a5",
+    };
+    const preamble = "SENTINEL_PREAMBLE_PLAN_a6";
+    const prompt = planPrompt(task, preamble);
+    assertSentinelsOnlyAfterFinalData(prompt, [
+        String(task.number), task.briefFile, task.planFile, task.files[0], task.tests as string, task.repoRoot, preamble,
+    ]);
+    assertNoInstructionAfterFinalData(prompt);
+});
+
+test("test_reviewPlanPrompt_putsTheReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
+    // This is the exact defect the remediation feedback named: reviewFile used to be
+    // interpolated in an outer instruction line appended AFTER the codex block.
+    const task: PreparedTask = {
+        ...fakeTask,
+        number: 918274,
+        reviewFile: "/tmp/SENTINEL_REVIEWFILE_RP_b1/codex-review.json",
+        briefFile: "/tmp/SENTINEL_BRIEF_RP_b2/brief.md",
+        planFile: "/tmp/SENTINEL_PLANFILE_RP_b3/plan.json",
+        files: ["SENTINEL_FILE_RP_b4.ts"],
+    };
+    const prompt = reviewPlanPrompt(task);
+    assertSentinelsOnlyAfterFinalData(prompt, [String(task.number), task.reviewFile]);
+    assertNoInstructionAfterFinalData(prompt);
+    assertNestedSentinelsOnlyAfterNestedData(prompt, [task.briefFile, task.planFile, task.files[0]]);
+});
+
+test("test_reviewTestsPrompt_putsTheTestReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
+    const task: PreparedTask = {
+        ...fakeTask,
+        number: 918275,
+        testReviewFile: "/tmp/SENTINEL_TESTREVIEWFILE_RT_c1/test-review.json",
+        briefFile: "/tmp/SENTINEL_BRIEF_RT_c2/brief.md",
+        planFile: "/tmp/SENTINEL_PLANFILE_RT_c3/plan.json",
+    };
+    const prompt = reviewTestsPrompt(task);
+    assertSentinelsOnlyAfterFinalData(prompt, [task.testReviewFile]);
+    assertNoInstructionAfterFinalData(prompt);
+    assertNestedSentinelsOnlyAfterNestedData(prompt, [String(task.number), task.briefFile, task.planFile]);
+});
+
+test("test_implementPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    // Before the fix, the typecheck command was spliced inline via `run(${rootedTypecheck})`
+    // at three call sites, and maxFixRounds via `${maxFixRounds}` at three more.
+    const task: PreparedTask = {
+        ...fakeTask,
+        number: 445566,
+        planFile: "/tmp/SENTINEL_PLANFILE_IMPL_d1/plan.json",
+        notesFile: "/tmp/SENTINEL_NOTESFILE_IMPL_d2/notes.md",
+        files: ["SENTINEL_FILE_IMPL_d3.ts"],
+        tests: "SENTINEL_TESTS_IMPL_d4",
+        repoRoot: "/tmp/SENTINEL_REPOROOT_IMPL_d5",
+    };
+    const note = "SENTINEL_NOTE_IMPL_d6";
+    const typecheckCommand = "SENTINEL_TYPECHECK_IMPL_d7";
+    const maxFixRounds = 918273;
+    const prompt = implementPrompt(task, note, typecheckCommand, maxFixRounds);
+    assertSentinelsOnlyAfterFinalData(prompt, [
+        String(task.number), task.planFile, task.notesFile, task.files[0], task.tests as string,
+        task.repoRoot, note, typecheckCommand, String(maxFixRounds),
+    ]);
+    assertNoInstructionAfterFinalData(prompt);
+});
+
+test("test_fixConflictsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    // Before the fix, checkoutPath was spliced inline five separate times.
+    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FC_e1";
+    const conflictedPath = "src/SENTINEL_CONFLICT_PATH_e2.ts";
+    const prompt = fixConflictsPrompt(checkoutPath, [conflictedPath]);
+    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, conflictedPath]);
+    assertNoInstructionAfterFinalData(prompt);
+});
+
+test("test_fixSuitePrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    // Before the fix, subject/checkoutPath were spliced inline four separate times.
+    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FS_f1";
+    const occurrenceId = "SENTINEL_LAYER_FS_f2";
+    const testOutput = "SENTINEL_FAILUREOUTPUT_FS_f3";
+    const forbiddenPath = "SENTINEL_FORBIDDEN_FS_f4";
+    const ownedPath = "SENTINEL_OWNED_FS_f5.ts";
+    const prompt = fixSuitePrompt(checkoutPath, occurrenceId, testOutput, [forbiddenPath], [ownedPath]);
+    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, occurrenceId, testOutput, forbiddenPath, ownedPath]);
+    assertNoInstructionAfterFinalData(prompt);
+});
+
+test("test_fixTestsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FT_g1";
+    const occurrenceId = "SENTINEL_LAYER_FT_g2";
+    const testOutput = "SENTINEL_FAILUREOUTPUT_FT_g3";
+    const forbiddenPath = "SENTINEL_FORBIDDEN_FT_g4";
+    const ownedPath = "SENTINEL_OWNED_FT_g5.ts";
+    const prompt = fixTestsPrompt(checkoutPath, occurrenceId, testOutput, [forbiddenPath], 918273, [ownedPath]);
+    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, occurrenceId, testOutput, forbiddenPath, ownedPath, "918273"]);
+    assertNoInstructionAfterFinalData(prompt);
+});
+
+test("test_amendTestsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
+    // Before the fix, testReviewFile was spliced inline in "Read ${t.testReviewFile}, ...".
+    const task: PreparedTask = { ...fakeTask, testReviewFile: "/tmp/SENTINEL_TESTREVIEWFILE_AT_h1/test-review.json" };
+    const notes = "SENTINEL_NOTES_AT_h2";
+    const createdTestFile = "SENTINEL_CREATED_AT_h3.test.ts";
+    const testFile = "SENTINEL_FOREIGN_AT_h4.test.ts";
+    const prompt = amendTestsPrompt(task, notes, [createdTestFile], [testFile]);
+    assertSentinelsOnlyAfterFinalData(prompt, [task.testReviewFile, notes, createdTestFile, testFile]);
+    assertNoInstructionAfterFinalData(prompt);
 });

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
@@ -288,4 +288,67 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhys
     assert.ok(existsSync(journalPath));
     const journal = JSON.parse(readFileSync(journalPath, "utf8"));
     assert.equal(journal.runId, "run-a");
+});
+
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the current call's
+// runId was never compared with the retained journal's runId, so a call for run B could consume
+// a completed journal for run A and return run A's worktree without ever acquiring ownership for
+// run B. Before the fix this test's assert.throws would fail: run-a's completed journal would be
+// silently adopted (unlinked and returned) by the call made for run-b.
+test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithoutTouchingIt", () => {
+    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written
+    // back to simulate death right before its own unlink - a completed retained journal for run-a.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const created = createTaskWorktree(1, "run-a", root);
+    const journalPath = taskWorktreeCreateJournalPath(created.worktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: created.worktree, branch: created.branch,
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action + verification: a call under run-b must not adopt run-a's completed journal.
+    assert.throws(() => createTaskWorktree(1, "run-b", root));
+
+    // Verification: run-a's worktree, branch and lease are all untouched - not returned to run-b
+    // and not destroyed.
+    assert.ok(existsSync(created.worktree));
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(created.worktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-a");
+    assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
+    assert.ok(existsSync(journalPath));
+    const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+    assert.equal(journal.runId, "run-a");
+});
+
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching
+// the journal was accepted as proof of a finished creation even when the physical lease was
+// absent. Before the fix this test's assert.throws would fail: the mismatched state (task state
+// says leased, no lease file exists) would be silently treated as a completed creation.
+test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButThePhysicalLeaseIsMissing", () => {
+    // Setup: a real worktree/branch exist and task state is recorded to match, but the physical
+    // lease file is then removed - task state claims a lease that no longer physically exists.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    const worktree = createWorktreeForGroup(root, group, "run-a");
+    updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
+    unlinkSync(taskWorktreeLeasePath(worktree));
+    const journalPath = taskWorktreeCreateJournalPath(expectedWorktree);
+    writeFileSync(journalPath, JSON.stringify({
+        taskNumber: 1, runId: "run-a", worktreePath: expectedWorktree, branch: "task-1",
+        createdAt: "2026-01-01T00:00:00+00:00",
+    }));
+
+    // Test action + verification: state alone must not be trusted as proof of a finished creation.
+    assert.throws(() => createTaskWorktree(1, "run-a", root));
+
+    // Verification: nothing is destroyed - the worktree and branch task state still claims are
+    // leased are left exactly as found, and the journal is retained.
+    assert.ok(existsSync(worktree));
+    assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
+    assert.ok(existsSync(journalPath));
 });
