@@ -681,5 +681,39 @@
     ],
     "tests": "An end-to-end test: spawn the watcher as a child process against a temp path, have a separate process write the '.done' file to that path, then assert the watcher fired exactly once, exited 0, and that the '.done' file is gone afterward. A second case asserts a short timeout produces a non-zero exit and a clear message.",
     "difficulty": 5
+  },
+  {
+    "taskNumber": 188,
+    "version": "477d72f20cf34295169c3524e437c2ee328627ac",
+    "title": "Store tasks in SQLite with tags so blockers and files are queries, not agents",
+    "userDescription": "find a way to store tasks so that they're queryable so that an agent isn't needed to investigate open tasks that block and an agent isn't needed to find the files it touches.  probably needs some kind of tagging system per task/file.",
+    "goal": [
+      "- A query script answers \"what blocks task N\" and \"which open tasks touch file X\" from the SQLite database, with no agent run",
+      "- A script regenerates a human-readable tasks.json from the database on demand, and the regenerated file matches what the database holds",
+      "- /create-task shows the derived tags for approval and accepts user-supplied tags instead",
+      "- createTask.workflow.js no longer spawns the blocker-hunter or file-hunter agents; it calls the query script",
+      "- The existing test suite still passes: npm test reports no failures after the storage swap",
+      "- NOT in scope: the .done file watcher handshake — task 187 owns that"
+    ],
+    "description": "Move task storage from .taskTools/tasks.json to a queryable SQLite database at .taskTools/tasks.db. Use node:sqlite or bun:sqlite — already stdlib, so no new dependency. package.json has no \"dependencies\" key at all today, only @types/node.\n\nAdd per-task and per-file tags so 'what blocks task N' and 'which open tasks touch file X' are SQL queries instead of agent research. The query system should behave like the context-mode query system: structured lookups, not prose. Tags are derived automatically from what a task already has, then presented to the user for approval (\"do these tags match? [list]\"), with an optional \"specify tags\" path so the user can supply their own.\n\nKeep a human-readable escape hatch: scripts/generateTasksJson.ts regenerates tasks.json from the database on demand, so a person can still read the task list until the SQLite version is fully integrated everywhere.\n\nThen retire the research agents. skills/create-task/createTask.workflow.js currently spawns two parallel agent() calls through runWithFallback — file-hunter (FILE_HUNTER_SCHEMA: files/description/difficulty) and blocker-hunter (BLOCKER_HUNTER_SCHEMA: blockedBy). Both must be replaced with direct calls to the new query script, and skills/create-task/SKILL.md updated to match.\n\nExisting code to rework: all task I/O funnels through scripts/taskFiles.ts (resolveTaskFiles, readTaskFile, seedTaskFilesIfAbsent) and scripts/appendTask.ts (appendTaskToTasksJson, buildTaskEntry), which read and write tasks.json as a flat JSON array of TaskRecord objects with fields taskNumber, title, userDescription, goal, description, files, tests, difficulty, blockedBy, chainGoal, handoffFilePaths. These become the database-backed read/write layer. scripts/checkBlockers.ts and scripts/getUnblockedTaskNumbers.ts do in-memory graph and cycle detection over blockedBy arrays loaded from tasks.json; that logic becomes SQL. scripts/getTaskDetails.ts, scripts/addTaskFiles.ts, scripts/nextTaskNumber.ts and scripts/closeTasks.ts all read or write tasks.json and must follow.",
+    "files": [
+      ".taskTools/tasks.db",
+      "scripts/taskFiles.ts",
+      "scripts/taskStore.ts",
+      "scripts/generateTasksJson.ts",
+      "scripts/appendTask.ts",
+      "scripts/checkBlockers.ts",
+      "scripts/getUnblockedTaskNumbers.ts",
+      "scripts/getTaskDetails.ts",
+      "scripts/addTaskFiles.ts",
+      "scripts/nextTaskNumber.ts",
+      "scripts/closeTasks.ts",
+      "skills/create-task/createTask.workflow.js",
+      "skills/create-task/SKILL.md",
+      "tests/taskStore.test.ts",
+      "tests/generateTasksJson.test.ts"
+    ],
+    "tests": "Seed a fixture task set into the database, run the query script for 'which open tasks touch file X' and 'what blocks task N', and assert the answers match hand-checked expected results, with no agent involved.",
+    "difficulty": 9
   }
 ]
