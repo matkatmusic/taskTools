@@ -44,6 +44,19 @@ export type RebaseStepReceipt = {
     sourceTips: SourceTipReceipt[];
 };
 
+// F3/F10: one durable receipt per logical mutating step, written before the box's stdout, for
+// every returned outcome (not just a clean/happy result). `result` is the box's exact return
+// value; `occurrenceIds`/`worktreeHeads` are optional live-state evidence a validator can compare
+// against the current worktree to tell a still-live receipt from a stale one. A receipt is looked
+// up by `stepId` (and `script`, so two boxes sharing a run never cross-match).
+export type StepResultReceipt = {
+    stepId: string;
+    script: string;
+    result: unknown;
+    occurrenceIds?: string[];
+    worktreeHeads?: { occurrenceId: string; head: string }[];
+};
+
 export type FullSuiteResult = {
     stepId: string;
     layers: { occurrenceId: string; passed: boolean }[];
@@ -65,6 +78,7 @@ export type TaskRunRecord = {
     fullSuite: FullSuiteResult | null;
     sourceTipsAtRebase?: SourceTipReceipt[];
     rebaseStepReceipt?: RebaseStepReceipt;
+    stepResults?: StepResultReceipt[];
 };
 
 export type TaskRunState = {
@@ -536,6 +550,39 @@ export function updateCurrentTaskRun(
             leaseRunId: leaseRunId !== undefined ? leaseRunId : state.leaseRunId,
             history: [...state.history.slice(0, -1), nextRecord],
         };
+        task.run = nextState;
+        writeJsonAtomically(tasksPath, tasks);
+        return nextState;
+    });
+}
+
+// F3/F10: persists a step-result receipt onto the run named by expectedRunId, whether that run
+// is still active or has already ended (releaseTaskRunHolds runs after markTaskInactive, so this
+// must not require `active`). Locates the run by runId anywhere as the newest history entry —
+// same fencing rule as updateCurrentTaskRun — and replaces any prior receipt for the same stepId
+// rather than accumulating duplicates across retries.
+export function appendStepResult(
+    taskNumber: number,
+    expectedRunId: string,
+    entry: StepResultReceipt,
+    projectRoot: string,
+): TaskRunState {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const task = findTask(tasks, taskNumber);
+        if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+        const state = getRunState(task);
+        const newest = state.history[state.history.length - 1];
+        if (newest === undefined || newest.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
+        }
+        const stepResults = [
+            ...(newest.stepResults ?? []).filter((existing) => existing.stepId !== entry.stepId || existing.script !== entry.script),
+            entry,
+        ];
+        const nextRecord: TaskRunRecord = { ...newest, stepResults };
+        const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
         writeJsonAtomically(tasksPath, tasks);
         return nextState;

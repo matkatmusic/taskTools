@@ -12,6 +12,7 @@ export type CloseTaskRunInput = {
     runId: string;
     projectRoot: string;
     closureNote: string;
+    stepId: string;
 };
 
 export type { CloseTaskRunOutput };
@@ -31,7 +32,7 @@ export function closeTaskRun(input: CloseTaskRunInput): CloseTaskRunOutput {
         throw new Error("closeTaskRun: commitHashes must not be supplied; hashes are derived from the recorded run");
     }
 
-    return closeTaskRunReconciled(input.taskNumber, input.runId, input.closureNote, input.projectRoot);
+    return closeTaskRunReconciled(input.taskNumber, input.runId, input.closureNote, input.projectRoot, input.stepId);
 }
 
 if (process.argv[1]?.endsWith("closeTaskRun.ts")) {

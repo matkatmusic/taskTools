@@ -101,12 +101,12 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
 // Both review roles call this so the chain cannot drift between them.
 // ---------------------------------------------------------------------------
 
-export function codexReviewInstructions(question: string, subjectLabel: string, taskNumber: number): string {
+export function codexReviewInstructions(question: string, subjectLabel: string): string {
     const prompt = JSON.stringify(question);
     const command = `codex exec -s read-only ${prompt}`;
     const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`;
     const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model claude-opus-4-8 --effort high`;
-    return `Review ${subjectLabel} for task #${taskNumber} by running exactly this command:
+    return `Review ${subjectLabel} for the task named by TASK_NUMBER in the DATA section by running exactly this command:
 
 ${command}
 
@@ -223,13 +223,17 @@ OWNED_FILES = ${t.files.join(", ")}`;
 }
 
 export function reviewPlanPrompt(t: PreparedTask): string {
-    return `${codexReviewInstructions(reviewPlanQuestion(t), "the plan", t.number)}
+    return `Never edit any file — this agent only reviews the plan, it never applies fixes to it.
 
-Never edit any file — this agent only reviews the plan, it never applies fixes to it.
+Write the reviewer's JSON verdict to exactly this absolute path: REVIEW_FILE (see final DATA section).
 
-Write the reviewer's JSON verdict to exactly this absolute path: ${t.reviewFile}
+Return {reviewWritten: true, reviewer}.
 
-Return {reviewWritten: true, reviewer}.`;
+${codexReviewInstructions(reviewPlanQuestion(t), "the plan")}
+
+---- DATA ----
+TASK_NUMBER = ${t.number}
+REVIEW_FILE = ${t.reviewFile}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,13 +259,17 @@ PLAN_FILE = ${t.planFile}`;
 }
 
 export function reviewTestsPrompt(t: PreparedTask): string {
-    return `${codexReviewInstructions(reviewTestsQuestion(t), "the tests", t.number)}
+    return `Never edit any file, and never run the tests — this agent only reviews what they assert.
 
-Never edit any file, and never run the tests — this agent only reviews what they assert.
+Write the reviewer's JSON verdict to exactly this absolute path: TEST_REVIEW_FILE (see final DATA section).
 
-Write the reviewer's JSON verdict to exactly this absolute path: ${t.testReviewFile}
+Return {flagged, reviewer}.
 
-Return {flagged, reviewer}.`;
+${codexReviewInstructions(reviewTestsQuestion(t), "the tests")}
+
+---- DATA ----
+TASK_NUMBER = ${t.number}
+TEST_REVIEW_FILE = ${t.testReviewFile}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +279,7 @@ Return {flagged, reviewer}.`;
 
 export function implementPrompt(t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number): string {
     const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`;
+    const testCommandWrapper = `(cd -- ${shellQuote(t.repoRoot)} && <test command>)`;
     return `You are implementing EXACTLY ONE pre-planned task, task #TASK_NUMBER (see DATA below).
 
 Carry out every step below, in order, from top to bottom.
@@ -285,6 +294,9 @@ plan = PLAN_FILE (see DATA below)
 notesFile = NOTES_FILE (see DATA below)
 timeBudget = 10 minutes
 note = NOTE (see DATA below; "(none)" means no note)
+typecheckCommand = TYPECHECK_COMMAND (see DATA below)
+testCommandWrapper = TEST_COMMAND_WRAPPER (see DATA below)
+maxFixRounds = MAX_FIX_ROUNDS (see DATA below)
 
 ${TDD_INSTRUCTION}
 
@@ -299,7 +311,7 @@ if the plan is impossible as written:
 
 implement every step of the plan, editing only ownedPaths
 
-typecheck = run(${rootedTypecheck})
+typecheck = run(typecheckCommand)
 if typecheck reported errors in ownedPaths:
     fix them using their absolute taskWorktree paths
 
@@ -309,15 +321,15 @@ else:
     tests = the absolute test paths under taskWorktree belonging to ownedFiles
 // never run the full suite; that is the close-tasks gate, not yours
 
-results = run every test command as (cd -- ${shellQuote(t.repoRoot)} && <test command>)
+results = run every test command as testCommandWrapper
 fixRound = 0
-while any test failed and fixRound is less than ${maxFixRounds}:
+while any test failed and fixRound is less than maxFixRounds:
     fixRound = fixRound + 1
     fix the cause
-    typecheck = run(${rootedTypecheck})
-    results = run every test command as (cd -- ${shellQuote(t.repoRoot)} && <test command>)
+    typecheck = run(typecheckCommand)
+    results = run every test command as testCommandWrapper
 
-if any test still failed after ${maxFixRounds} fix rounds:
+if any test still failed after maxFixRounds fix rounds:
     return {implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
 
 if typecheck is clean and every test passed:
@@ -333,7 +345,7 @@ if you reach timeBudget before finishing:
 You are forbidden to touch anything outside ownedPaths excluding notesFile; to
 add scope or refactors the plan does not call for; to redecide anything the
 plan already decided; to run the full suite; to stage or commit anything
-yourself — a later step owns committing; to attempt more than ${maxFixRounds} fix
+yourself — a later step owns committing; to attempt more than maxFixRounds fix
 rounds; or to return implemented true with a failing test. Any test file created
 or modified must be listed in ownedFiles; otherwise return implemented false
 without editing it.
@@ -353,7 +365,10 @@ NOTES_FILE = ${t.notesFile}
 NOTE (context passed in for this run) =
 ${note || "(none)"}
 TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) =
-${t.tests ?? "(none)"}`;
+${t.tests ?? "(none)"}
+TYPECHECK_COMMAND (run from TASK_WORKTREE) = ${rootedTypecheck}
+TEST_COMMAND_WRAPPER (wrap each test command as) = ${testCommandWrapper}
+MAX_FIX_ROUNDS = ${maxFixRounds}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,9 +378,9 @@ ${t.tests ?? "(none)"}`;
 // ---------------------------------------------------------------------------
 
 export function fixConflictsPrompt(checkoutPath: string, conflictedFilePaths: string[]): string {
-    return `A rebase in ${checkoutPath} is stopped on live conflict markers, not aborted. Resolve
-exactly the conflicted paths listed in CONFLICTED_PATHS below — that is the complete
-list, do not search the repository for more.
+    return `A rebase in CHECKOUT_PATH (see DATA below) is stopped on live conflict markers, not
+aborted. Resolve exactly the conflicted paths listed in CONFLICTED_PATHS below — that is
+the complete list, do not search the repository for more.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`return {...}\` means stop and report exactly those fields.
@@ -375,15 +390,15 @@ You may EDIT any file in any layer — resolving a conflict often means updating
 site, and a call site can live in a different repository.
 
 for each path in CONFLICTED_PATHS below:
-    open ${checkoutPath}/path
+    open CHECKOUT_PATH/path
     resolve every <<<<<<< / ======= / >>>>>>> block, keeping BOTH sides' intent
     remove the conflict markers
     leave it unstaged and uncommitted — "commit if needed" stages and commits every touched layer next
 
-if resolving a conflict required editing a file in a DIFFERENT repository than ${checkoutPath}:
+if resolving a conflict required editing a file in a DIFFERENT repository than CHECKOUT_PATH:
     edit it there too, and leave that edit uncommitted as well
 
-Do not run \`git rebase --continue\` or \`git rebase --abort\` in ${checkoutPath} yourself — the caller drives that after you return.
+Do not run \`git rebase --continue\` or \`git rebase --abort\` in CHECKOUT_PATH yourself — the caller drives that after you return.
 
 if every listed path has no remaining conflict markers:
     return {resolved: true, unresolvedPaths: []}
@@ -411,16 +426,16 @@ ${conflictedFilePaths.length === 0 ? "  (none)" : conflictedFilePaths.map((p) =>
 // ---------------------------------------------------------------------------
 
 function fixCodebasePrompt(subject: string, checkoutPath: string, testOutput: string, forbiddenPaths: string[], ownedSourcePaths: string[]): string {
-    return `${subject} is RED, in ${checkoutPath}. Fix the cause.
+    return `SUBJECT (see DATA below) is RED, in CHECKOUT_PATH (see DATA below). Fix the cause.
 
 Carry out every step below, in order, from top to bottom.
 A line reading \`return {...}\` means stop and report exactly those fields.
 
 You may READ anything, anywhere in the tree. You may EDIT ONLY the paths listed in
-OWNED_SOURCE_PATHS below, relative to ${checkoutPath} — never the test itself, and never
+OWNED_SOURCE_PATHS below, relative to CHECKOUT_PATH — never the test itself, and never
 any other path, even source code that looks related. The paths listed in FORBIDDEN_PATHS
-below sit on disk under ${checkoutPath} but belong to OTHER layers (separate occurrences)
-and are out of scope even though they sit under ${checkoutPath} — do not edit anything
+below sit on disk under CHECKOUT_PATH but belong to OTHER layers (separate occurrences)
+and are out of scope even though they sit under CHECKOUT_PATH — do not edit anything
 inside them.
 
 fix the cause of the failure described in FAILURE_OUTPUT below, editing only the paths
@@ -444,6 +459,7 @@ force-push or hard-reset anything you did not create; or to stage or commit
 anything yourself.
 
 ---- DATA ----
+SUBJECT = ${subject}
 CHECKOUT_PATH = ${checkoutPath}
 OWNED_SOURCE_PATHS (the complete edit allowlist, relative to CHECKOUT_PATH) =
 ${ownedSourcePaths.length === 0 ? "  (none)" : ownedSourcePaths.map((p) => `  - ${p}`).join("\n")}
@@ -480,10 +496,10 @@ below — the diagram's rule that a test not created in this task's worktree may
 changed when it is broken or asserts nothing applies to every one of these, and to no
 other file.
 
-Read ${t.testReviewFile}, then edit only the files listed in CREATED_TEST_FILES and
-TEST_FILES below, changing exactly what REVIEWER_NOTES calls for. Never edit a source
-file, the brief, or the plan, and never edit a pre-existing test file for any reason
-other than it being broken or asserting nothing.
+Read TEST_REVIEW_FILE (see DATA below), then edit only the files listed in
+CREATED_TEST_FILES and TEST_FILES below, changing exactly what REVIEWER_NOTES calls for.
+Never edit a source file, the brief, or the plan, and never edit a pre-existing test file
+for any reason other than it being broken or asserting nothing.
 
 Leave your edits uncommitted — "commit if needed" stages and commits every touched
 layer next; do not stage or commit anything yourself.
@@ -497,6 +513,7 @@ TEST_FILES; to change a pre-existing test file except to fix it when it is broke
 asserts nothing; or to stage or commit anything yourself.
 
 ---- DATA ----
+TEST_REVIEW_FILE = ${t.testReviewFile}
 CREATED_TEST_FILES (freely editable) =
 ${createdTestFiles.length === 0 ? "  (none)" : createdTestFiles.map((f) => `  - ${f}`).join("\n")}
 TEST_FILES (pre-existing, broken-or-empty exception only) =

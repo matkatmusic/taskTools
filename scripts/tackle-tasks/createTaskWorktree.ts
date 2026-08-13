@@ -125,13 +125,16 @@ function rollbackCreateTaskWorktree(
 // the mutating repair the Phase 8 reconciliation-table row for createTaskWorktree depends on.
 // Read under the lease guard so a concurrent recovery/rollback can never race this one. A
 // physical lease naming neither the journal's run nor nobody is a live third owner: never
-// touched, never inferred safe from the conventional path alone. Otherwise: task state already
-// matching the journal proves the creation finished late (delete the stale journal and return
-// the already-created worktree); anything else means it never finished (remove the
-// journal-owned worktree/branch first, release its lease last, then delete the journal, then
-// let the caller create afresh).
+// touched, never inferred safe from the conventional path alone. A journal naming a run other
+// than the one requesting recovery is also never touched - it is not this call's to finish or
+// roll back. Otherwise: only when BOTH task state and the physical lease name the journal's run
+// is the creation proved finished late (delete the stale journal and return the already-created
+// worktree); task state matching with no physical lease is an unproven inconsistency and is
+// refused rather than destroyed; anything else means it never finished (remove the journal-owned
+// worktree/branch first, release its lease last, then delete the journal, then let the caller
+// create afresh).
 function recoverRetainedCreateJournal(
-    projectRoot: string, taskNumber: number, expectedWorktreePath: string, branch: string, journalPath: string,
+    projectRoot: string, taskNumber: number, runId: string, expectedWorktreePath: string, branch: string, journalPath: string,
 ): CreateTaskWorktreeOutput | null {
     let journal: TaskWorktreeCreateJournal;
     try {
@@ -157,17 +160,37 @@ function recoverRetainedCreateJournal(
                 + `lease is now held by run "${owner.runId}"; refusing to touch it`,
             );
         }
+        // F1 remediation: a journal naming a different run than this call is not this call's to
+        // finish, roll back, or destroy - only the run that owns it (or reconciliation acting on
+        // its behalf) may resolve it.
+        if (journal.runId !== runId) {
+            throw new Error(
+                `retained creation journal at "${journalPath}" names run "${journal.runId}", not the requested `
+                + `run "${runId}"; refusing to touch it`,
+            );
+        }
 
         const { tasksPath } = resolveTaskFiles(projectRoot);
         const tasks = readTaskFile(tasksPath) as { taskNumber: number; run?: { worktree: string | null; leaseRunId: string | null } }[];
         const task = tasks.find((candidate) => candidate.taskNumber === journal.taskNumber);
         const state = task?.run;
-        const completedLate = state?.worktree === journal.worktreePath && state?.leaseRunId === journal.runId;
+        const stateMatchesJournal = state?.worktree === journal.worktreePath && state?.leaseRunId === journal.runId;
 
-        if (completedLate) {
+        // Both authority records - task state AND the physical lease - must name this exact run
+        // before the creation is trusted as finished late. Task state alone is not proof: it can
+        // agree with the journal while the physical lease is absent, an inconsistency that is
+        // refused rather than silently adopted or destroyed.
+        if (stateMatchesJournal && owner !== null) {
             unlinkSync(journalPath);
             recovered = { worktree: journal.worktreePath, branch: journal.branch };
             return;
+        }
+        if (stateMatchesJournal && owner === null) {
+            throw new Error(
+                `recorded task state for task ${taskNumber} names run "${journal.runId}" for the retained `
+                + `creation journal at "${journalPath}", but no physical worktree lease exists; refusing to `
+                + `remove a worktree that task state still claims is leased`,
+            );
         }
 
         removeWorktreeAndBranch(projectRoot, journal.worktreePath, journal.branch);
@@ -182,7 +205,7 @@ export function createTaskWorktree(taskNumber: number, runId: string, projectRoo
     const expectedWorktreePath = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
     const journalPath = taskWorktreeCreateJournalPath(expectedWorktreePath);
 
-    const recovered = recoverRetainedCreateJournal(projectRoot, taskNumber, expectedWorktreePath, branch, journalPath);
+    const recovered = recoverRetainedCreateJournal(projectRoot, taskNumber, runId, expectedWorktreePath, branch, journalPath);
     if (recovered !== null) return recovered;
 
     const { tasksPath } = resolveTaskFiles(projectRoot);

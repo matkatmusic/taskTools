@@ -10,7 +10,9 @@ import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts"
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
-import { updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt } from "./taskRunState.ts";
+import {
+    appendStepResult, updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt,
+} from "./taskRunState.ts";
 import {
     rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
@@ -115,6 +117,22 @@ function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string):
     }));
 }
 
+// F3: durable evidence for EVERY returned outcome of rebaseTaskWorktree/advanceTaskRebase, not
+// just a clean finish — a conflict or test failure is just as much a real result that must be
+// reconstructable. `occurrenceIds`/`worktreeHeads` are captured at the same moment as `result`,
+// so reconciliation can tell a still-live receipt from one the world has since moved past.
+export function persistRebaseStepResult(
+    taskNumber: number, runId: string, stepId: string, script: string, worktreePath: string, projectRoot: string,
+    result: Record<string, unknown>,
+): void {
+    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot);
+    appendStepResult(taskNumber, runId, {
+        stepId, script, result,
+        occurrenceIds: worktreeHeads.map((entry) => entry.occurrenceId).sort(),
+        worktreeHeads,
+    }, projectRoot);
+}
+
 export function persistSourceTipReceipts(
     taskNumber: number, runId: string, stepId: string, worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[],
 ): void {
@@ -180,7 +198,11 @@ export async function rebaseTaskWorktree(
 
     const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
     if (submoduleReport.stoppedAt !== null) {
-        return { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt) };
+        const result: RebaseTaskWorktreeOutput = {
+            lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt),
+        };
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, result);
+        return result;
     }
 
     const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
@@ -198,7 +220,9 @@ export async function rebaseTaskWorktree(
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
         persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
     }
-    return { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
+    const result: RebaseTaskWorktreeOutput = { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
+    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, result);
+    return result;
 }
 
 if (process.argv[1]?.endsWith("rebaseTaskWorktree.ts")) {

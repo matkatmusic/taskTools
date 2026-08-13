@@ -8,7 +8,7 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../resolutionRequests.ts";
 import {
-    captureSourceTipReceipts, persistSourceTipReceipts,
+    captureSourceTipReceipts, persistRebaseStepResult, persistSourceTipReceipts,
 } from "./rebaseTaskWorktree.ts";
 import {
     rebaseInProgress, rebaseParentOntoSourceAndTest,
@@ -137,10 +137,17 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
     refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
     const freshConflict = advanceStoppedLayer(input.stoppedAt);
-    if (freshConflict !== null) return freshConflict;
+    if (freshConflict !== null) {
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, freshConflict);
+        return freshConflict;
+    }
 
     const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
-    if (submoduleReport.stoppedAt !== null) return mapSubmoduleStop(submoduleReport.stoppedAt);
+    if (submoduleReport.stoppedAt !== null) {
+        const result = mapSubmoduleStop(submoduleReport.stoppedAt);
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, result);
+        return result;
+    }
 
     const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
     const parentOutcome = rebaseParentOntoSourceAndTest(
@@ -158,6 +165,7 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
         persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
     }
+    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, result);
     return result;
 }
 

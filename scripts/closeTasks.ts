@@ -4,7 +4,7 @@ import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
-import type { TaskRunRecord, TaskRunState } from "./tackle-tasks/taskRunState.ts";
+import type { StepResultReceipt, TaskRunRecord, TaskRunState } from "./tackle-tasks/taskRunState.ts";
 
 export interface CloseTasksResult {
   closed: number[];
@@ -178,6 +178,30 @@ function archiveOpenTaskRemovalOnly(
   return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked };
 }
 
+// F10: writes the exact real return value of a fresh archive-and-close call onto the just-written
+// archived record's run.history, tagged by stepId — the only place `unblocked` is still knowable
+// once the task has left tasks.json. Only called for a fresh archive (case 1 below): the "both
+// files, same run" case must leave completedTasks.json byte-identical, so it never gets a receipt
+// written into it; that case's own return value is real and freshly computed, not reconstructed.
+function persistCloseStepReceipt(
+  completedTasksPath: string, taskNumber: number, runId: string, stepId: string, result: CloseTaskRunOutput,
+): void {
+  const completed = JSON.parse(readFileSync(completedTasksPath, "utf8")) as ArchivedTaskRecord[];
+  const index = completed.findIndex((task) => task.taskNumber === taskNumber);
+  if (index === -1) throw new Error(`closeTaskRun: task ${taskNumber} was not found in the archive it just wrote`);
+  const archived = completed[index];
+  const state = archived.run ?? EMPTY_TASK_RUN_STATE;
+  const historyIndex = state.history.findIndex((run) => run.runId === runId);
+  if (historyIndex === -1) throw new Error(`closeTaskRun: archived run history for task ${taskNumber} has no entry for "${runId}"`);
+  const record = state.history[historyIndex];
+  const receipt: StepResultReceipt = { stepId, script: "closeTaskRun", result };
+  const stepResults = [...(record.stepResults ?? []).filter((existing) => existing.stepId !== stepId), receipt];
+  const nextHistory = [...state.history];
+  nextHistory[historyIndex] = { ...record, stepResults };
+  completed[index] = { ...archived, run: { ...state, history: nextHistory } };
+  writeJsonAtomically(completedTasksPath, completed);
+}
+
 // F12: the single locked transaction behind closeTaskRun.ts, covering all four presence
 // cases from one read of both task files.
 export function closeTaskRunReconciled(
@@ -185,6 +209,7 @@ export function closeTaskRunReconciled(
   runId: string,
   closureNote: string,
   projectRoot: string,
+  stepId: string,
 ): CloseTaskRunOutput {
   const pair = resolveTaskFiles(projectRoot);
   return withTaskStateLock(pair.tasksPath, () => {
@@ -206,7 +231,9 @@ export function closeTaskRunReconciled(
     const state = (openTask as ArchivedTaskRecord).run ?? EMPTY_TASK_RUN_STATE;
     const newest = requireEndedCompletedRun(state, runId, taskNumber);
     const result = closeTasksLocked([taskNumber], closureNote, pair, chronologicalHashes(newest));
-    return { ...result, ambiguous: [] };
+    const output: CloseTaskRunOutput = { ...result, ambiguous: [] };
+    persistCloseStepReceipt(pair.completedTasksPath, taskNumber, runId, stepId, output);
+    return output;
   });
 }
 

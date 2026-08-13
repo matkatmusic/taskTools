@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeTaskRun } from "../../scripts/tackle-tasks/closeTaskRun.ts";
+import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
 import type { TaskRunRecord, TaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
 
@@ -49,7 +50,7 @@ test("test_closeTaskRun_archivesAndUnblocksInOneCall", () => {
 
     // Test action: close task 1.
     const output = closeTaskRun({
-        taskNumber: 1, runId: "run-a", closureNote: "Task 1 completed.", projectRoot: root,
+        taskNumber: 1, runId: "run-a", closureNote: "Task 1 completed.", projectRoot: root, stepId: "step-1",
     });
 
     // Verification: closed/skipped/unblocked all come back from the one call, task 1 is
@@ -68,7 +69,7 @@ test("test_closeTaskRun_rejectsCallerSuppliedCommitHashes", () => {
     const root = makeProjectRoot([{ taskNumber: 1, title: "t", run: completedRunState() }]);
 
     assert.throws(() => closeTaskRun({
-        taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root,
+        taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root, stepId: "step-1",
         // @ts-expect-error rejected at runtime, not just by the type
         commitHashes: ["forged"],
     }));
@@ -85,7 +86,7 @@ test("test_closeTaskRun_rejectsAnActiveRun", () => {
     const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
-    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root }));
+    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root, stepId: "step-1" }));
 
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
@@ -99,7 +100,7 @@ test("test_closeTaskRun_rejectsANonCompletedExitType", () => {
     const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
-    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root }));
+    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "note", projectRoot: root, stepId: "step-1" }));
 
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
@@ -110,7 +111,7 @@ test("test_closeTaskRun_rejectsAStaleRunId", () => {
     const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
-    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-stale", closureNote: "note", projectRoot: root }));
+    assert.throws(() => closeTaskRun({ taskNumber: 1, runId: "run-stale", closureNote: "note", projectRoot: root, stepId: "step-1" }));
 
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
@@ -139,7 +140,7 @@ test("test_closeTaskRun_archiveFirstRetryReusesTheStoredNoteAndHashesInsteadOfOv
     // Test action: retry the close with a deliberately different note (and no way to even
     // supply different hashes now — the contract no longer accepts them).
     const output = closeTaskRun({
-        taskNumber: 1, runId: "run-a", closureNote: "a completely different, wrong note", projectRoot: root,
+        taskNumber: 1, runId: "run-a", closureNote: "a completely different, wrong note", projectRoot: root, stepId: "step-1",
     });
 
     // Verification: the open record is removed and dependents unblocked, but completedTasks.json
@@ -167,7 +168,7 @@ test("test_closeTaskRun_archiveFirstRetryUnblocksDependentsWhileLeavingTheArchiv
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
     const output = closeTaskRun({
-        taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root,
+        taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root, stepId: "step-1",
     });
 
     assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [2] });
@@ -188,7 +189,7 @@ test("test_closeTaskRun_reconcilesSuccessAfterACompleteSuccessWithoutRewrite", (
     const root = makeProjectRoot([], [archivedRecord]);
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
-    const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "the real note", projectRoot: root });
+    const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "the real note", projectRoot: root, stepId: "step-1" });
 
     assert.deepEqual(output, { closed: [1], skipped: [], ambiguous: [], unblocked: [] });
     // Reconciliation never writes.
@@ -207,7 +208,7 @@ test("test_closeTaskRun_reportsAmbiguityWhenTheOnlyArchivedRecordDoesNotMatchThi
     const root = makeProjectRoot([], [archivedRecord]);
     const completedBefore = readFileSync(join(root, "completedTasks.json"), "utf8");
 
-    const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root });
+    const output = closeTaskRun({ taskNumber: 1, runId: "run-a", closureNote: "a different note", projectRoot: root, stepId: "step-1" });
 
     assert.deepEqual(output, { closed: [], skipped: [], ambiguous: [1], unblocked: [] });
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
@@ -216,8 +217,55 @@ test("test_closeTaskRun_reportsAmbiguityWhenTheOnlyArchivedRecordDoesNotMatchThi
 test("test_closeTaskRun_reportsNotFoundWhenTheTaskIsInNeitherFile", () => {
     const root = makeProjectRoot([], []);
 
-    const output = closeTaskRun({ taskNumber: 99, runId: "run-a", closureNote: "note", projectRoot: root });
+    const output = closeTaskRun({ taskNumber: 99, runId: "run-a", closureNote: "note", projectRoot: root, stepId: "step-1" });
 
     // Not-found uses `skipped`, never `ambiguous` — distinguishable from a real mismatch above.
     assert.deepEqual(output, { closed: [], skipped: [99], ambiguous: [], unblocked: [] });
+});
+
+// F10: closeTaskRun persists its exact real result (including a non-empty `unblocked`) onto the
+// archived record's run.history before returning. Discarding the real return and reconciling the
+// same stepId must reproduce it exactly, since `unblocked` can never be recomputed after the fact.
+test("test_closeTaskRun_reconciliationReproducesANonEmptyUnblockedListFromTheReceipt", () => {
+    const root = makeProjectRoot([
+        { taskNumber: 1, title: "finished", run: completedRunState() },
+        { taskNumber: 2, title: "waiting", blockedBy: [{ taskNum: 1, reason: "needs 1 first" }] },
+    ]);
+
+    const realOutput = closeTaskRun({
+        taskNumber: 1, runId: "run-a", closureNote: "Task 1 completed.", projectRoot: root, stepId: "close-step-1",
+    });
+    assert.deepEqual(realOutput.unblocked, [2]);
+
+    // Discard the real return; reconcile as if the agent's stdout was lost.
+    const reconciled = reconcileStep({
+        script: "closeTaskRun", stepId: "close-step-1", taskNumber: 1, runId: "run-a", projectRoot: root,
+        stepInput: { closureNote: "Task 1 completed." },
+    });
+
+    assert.equal(reconciled.status, "completed");
+    assert.deepEqual(reconciled.result, realOutput);
+});
+
+// F10: a later logical step must never consume an earlier step's receipt.
+test("test_closeTaskRun_reconciliationRejectsAnOlderStepsReceiptForALaterStep", () => {
+    const root = makeProjectRoot([
+        { taskNumber: 1, title: "finished", run: completedRunState() },
+    ]);
+
+    closeTaskRun({
+        taskNumber: 1, runId: "run-a", closureNote: "Task 1 completed.", projectRoot: root, stepId: "close-step-A",
+    });
+
+    const staleVisit = reconcileStep({
+        script: "closeTaskRun", stepId: "close-step-B", taskNumber: 1, runId: "run-a", projectRoot: root,
+        stepInput: { closureNote: "Task 1 completed." },
+    });
+    assert.equal(staleVisit.status, "ambiguous");
+
+    const matchingVisit = reconcileStep({
+        script: "closeTaskRun", stepId: "close-step-A", taskNumber: 1, runId: "run-a", projectRoot: root,
+        stepInput: { closureNote: "Task 1 completed." },
+    });
+    assert.equal(matchingVisit.status, "completed");
 });
