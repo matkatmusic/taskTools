@@ -1,11 +1,11 @@
 // "record implementation notes file" — plans/tackle-tasks-v1_5-plan.md Phase 3. Rejects a path
 // that does not exist inside the worktree: a recorded-but-missing path makes
-// "is the previous run's work resumable?" lie later. F7: the same realpathSync containment
-// check isTaskRunResumable uses, so a symlink escape is rejected here too, not just on read.
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join, sep } from "node:path";
+// "is the previous run's work resumable?" lie later. F5/F7: the same shared containment
+// predicate isTaskRunResumable uses, so a symlink escape is rejected here too, not just on read.
+import { readFileSync } from "node:fs";
 import { updateCurrentTaskRun } from "./taskRunState.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { isNotesFileContained } from "./isTaskRunResumable.ts";
 
 export type RecordImplementationNotesOutput = { implementationNotesFile: string };
 
@@ -16,15 +16,7 @@ export function recordImplementationNotes(
     runId: string,
     projectRoot: string,
 ): RecordImplementationNotesOutput {
-    const fullPath = isAbsolute(implementationNotesFile)
-        ? implementationNotesFile
-        : join(worktreePath, implementationNotesFile);
-    if (!existsSync(fullPath)) {
-        throw new Error(`"${implementationNotesFile}" is not a path inside the worktree "${worktreePath}"`);
-    }
-    const realWorktree = realpathSync(worktreePath);
-    const realNotesPath = realpathSync(fullPath);
-    if (!statSync(realNotesPath).isFile() || !realNotesPath.startsWith(`${realWorktree}${sep}`)) {
+    if (!isNotesFileContained(worktreePath, implementationNotesFile)) {
         throw new Error(`"${implementationNotesFile}" is not a path inside the worktree "${worktreePath}"`);
     }
     updateCurrentTaskRun(taskNumber, runId, { implementationNotesFile }, projectRoot);

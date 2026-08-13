@@ -9,14 +9,21 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { validateArchivedRun, type ArchivedTaskRecord } from "../closeTasks.ts";
 import { collectRetainedTaskArtifacts, findRecordedMergedCommit } from "../mergeTaskWorktrees.ts";
-import { loadRepositoryManifest, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../prepareTasks.ts";
+import {
+    loadRepositoryManifest, readTaskWorktreeLeaseOwner, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath,
+} from "../prepareTasks.ts";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
-import { taskBranchName } from "./createTaskWorktree.ts";
+import { taskBranchName, taskWorktreeCreateJournalPath, type TaskWorktreeCreateJournal } from "./createTaskWorktree.ts";
 import { getGreenBoxCategory } from "./greenBoxPolicy.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { isNotesFileContained } from "./isTaskRunResumable.ts";
 import { buildOccurrencePath, buildWorktreeOccurrences, getOccurrencesDeepestFirst } from "./occurrences.ts";
+import {
+    HOLD_NOT_RELEASED, HOLD_RELEASE_UNKNOWN, SUBMODULES_NOT_INITIALIZED, SUBMODULE_INITIALIZATION_UNKNOWN,
+} from "./reconciliationOutcomes.ts";
 import { buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "./taskRunState.ts";
 import { GENERATED_ARTIFACT_PATTERNS, renderTaskBrief } from "./writeTaskBrief.ts";
@@ -111,13 +118,49 @@ function reconcileClaimTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
     return notCompleted(`task ${input.taskNumber} is not active under ${input.runId}`);
 }
 
+// F1: a retained journal is the durable intent record from a call that died before it could
+// finish or roll back itself. Deleting it (or removing the worktree/branch it owns) is a
+// mutation, so this stays read-only: it only classifies whether a rerun of createTaskWorktree -
+// which self-heals a retained journal it finds - is now proved safe. Never inferred from the
+// conventional path alone: a journal must name this task/path/branch, and a physical lease
+// naming a third run (neither the journal's run nor absent) makes rerunning unsafe (the real
+// function would throw), so that is ambiguous, not not-completed.
+function classifyRetainedCreateJournal(
+    taskNumber: number, branch: string, expectedWorktreePath: string, journalPath: string, state: TaskRunState,
+): ReconcileStepOutput | null {
+    let journal: TaskWorktreeCreateJournal;
+    try {
+        journal = JSON.parse(readFileSync(journalPath, "utf8"));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        return ambiguous(`the retained creation journal at ${journalPath} does not parse`);
+    }
+    if (journal.taskNumber !== taskNumber || journal.worktreePath !== expectedWorktreePath || journal.branch !== branch) {
+        return ambiguous(`the retained creation journal at ${journalPath} does not match task ${taskNumber}'s expected worktree/branch`);
+    }
+    const owner = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(journal.worktreePath));
+    if (owner !== null && owner.runId !== journal.runId) {
+        return ambiguous(
+            `the retained creation journal names run ${journal.runId} but the worktree lease is now held by ${owner.runId}`,
+        );
+    }
+    if (state.worktree === journal.worktreePath && state.leaseRunId === journal.runId) {
+        return completed({ worktree: journal.worktreePath, branch: journal.branch });
+    }
+    return notCompleted("a retained creation journal is present; rerunning createTaskWorktree will recover it");
+}
+
 function reconcileCreateTaskWorktree(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     if (state === null) return ambiguous("the task is not in tasks.json, so the worktree record cannot be read");
     const branch = taskBranchName(input.taskNumber);
+    const expectedWorktreePath = join(resolveTaskWorktreeConventionDirectory(input.projectRoot), branch);
+    const journalVerdict = classifyRetainedCreateJournal(
+        input.taskNumber, branch, expectedWorktreePath, taskWorktreeCreateJournalPath(expectedWorktreePath), state,
+    );
+    if (journalVerdict !== null) return journalVerdict;
+
     const worktreePath = state.worktree;
-    // F11: the create journal is the durable intent record. Deleting it is a mutation, so this
-    // read-only check only classifies; createTaskWorktree's own rollback owns the repair.
     if (worktreePath === null || !existsSync(worktreePath)) {
         return notCompleted("no worktree is recorded on the task or the recorded path is gone");
     }
@@ -133,11 +176,16 @@ function reconcileCreateTaskWorktree(input: ReconcileStepInput): ReconcileStepOu
 function reconcileIsTaskRunResumable(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     if (state === null) return ambiguous("the task is not in tasks.json, so prior notes cannot be read");
-    const worktreePath = readString(input.stepInput, "worktreePath") ?? state.worktree;
+    // F5: the original worktree path, not an inferred one - the mutation's containment contract
+    // is only recomputed correctly against the exact path the lost box was given.
+    const worktreePath = readString(input.stepInput, "worktreePath");
+    if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
     const endedRuns = state.history.filter((run) => run.endedAt !== null);
     const notesFile = endedRuns[endedRuns.length - 1]?.implementationNotesFile ?? null;
-    // A false verdict writes nothing, so recomputing it is the whole reconciliation.
-    if (notesFile === null || worktreePath === null || !existsSync(join(worktreePath, notesFile))) {
+    // A false verdict writes nothing, so recomputing it is the whole reconciliation. The shared
+    // predicate rejects a "../" escape, an absolute-outside path, a symlink escape and a
+    // directory the same way the real isTaskRunResumable does.
+    if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
         return completed({ resumable: false, implementationNotesFile: null, leaseEstablished: false });
     }
     if (state.leaseRunId !== input.runId || !physicalLeaseNames(worktreePath, input.runId)) {
@@ -202,23 +250,34 @@ function reconcileAmendExitNotesIntoBrief(input: ReconcileStepInput): ReconcileS
 function reconcileInitTaskSubmodules(input: ReconcileStepInput): ReconcileStepOutput {
     const worktreePath = readString(input.stepInput, "worktreePath");
     if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
-    // `initialized` reports whether this box had to populate anything, which is unknowable after
-    // the fact. A completed init leaves nothing uninitialized, so false is what a rerun reports.
-    if (!existsSync(join(worktreePath, ".gitmodules"))) return completed({ initialized: false });
+    // No .gitmodules means there was never anything for this box to populate, in every possible
+    // call history — the only branch where `initialized` is knowable rather than guessed.
+    if (!existsSync(join(worktreePath, ".gitmodules"))) return completed({ initialized: SUBMODULES_NOT_INITIALIZED });
     const status = tryGit(worktreePath, "submodule", "status", "--recursive");
     if (status === null) return ambiguous("submodule status could not be read");
     const unpopulated = status.split("\n").filter((line) => line.startsWith("-"));
     if (unpopulated.length > 0) return notCompleted(`${unpopulated.length} declared submodules are not populated`);
-    return completed({ initialized: false });
+    // Fully populated now is indistinguishable between "this call populated them" and "they were
+    // already populated and this box found nothing to do" — the real box alone knows which.
+    return completed({ initialized: SUBMODULE_INITIALIZATION_UNKNOWN });
 }
 
 function reconcileRecordImplementationNotes(input: ReconcileStepInput): ReconcileStepOutput {
+    const worktreePath = readString(input.stepInput, "worktreePath");
     const intended = readString(input.stepInput, "implementationNotesFile");
+    if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
     if (intended === null) return ambiguous("the step input carried no implementationNotesFile");
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     const record = state === null ? null : findRunRecord(state, input.runId);
     if (record === null) return ambiguous(`no run record for ${input.runId}`);
     if (record.implementationNotesFile !== intended) return notCompleted("the run record names a different notes file");
+    // F5: the record matching intended is not enough on its own - the real mutator only ever
+    // wrote that string after this same containment check passed, so recompute it now rather
+    // than trust the stored string blindly (a "../" escape, symlink escape, or a path deleted
+    // after the mutation would otherwise be reconstructed as success).
+    if (!isNotesFileContained(worktreePath, intended)) {
+        return ambiguous(`"${intended}" no longer resolves to a contained regular file inside ${worktreePath}`);
+    }
     return completed({ implementationNotesFile: intended });
 }
 
@@ -258,8 +317,13 @@ function reconcileCommitTaskWork(input: ReconcileStepInput): ReconcileStepOutput
     if (dirty.length > 0) {
         return notCompleted(`${dirty.map((o) => o.occurrenceId || "root").join(", ")} still has uncommitted work`);
     }
-    const derived = record.commits.filter((commit) => commit.kind !== "merge");
-    if (derived.length === 0) return notCompleted("the run record holds no work or repair commits");
+    // F2: scope strictly to this logical step's own commits. A prior step's commits still
+    // sitting unstranded at HEAD must never be handed back as proof that a LATER step finished;
+    // rerunning commitTaskWork is what recovers a landed-but-unrecorded commit, not this check.
+    // A commit recorded with no stepId (or a different one) never counts toward this step -
+    // there is no legacy wildcard.
+    const derived = record.commits.filter((commit) => commit.kind !== "merge" && commit.stepId === input.stepId);
+    if (derived.length === 0) return notCompleted(`the run record holds no commit for step "${input.stepId}"`);
     // A derived commit that is no longer at its layer's HEAD is the repairable partial state:
     // rerunning commitTaskWork appends the existing hash rather than creating a second commit.
     const stranded = derived.filter((commit) => {
@@ -304,13 +368,29 @@ function reconcileRebase(input: ReconcileStepInput, forAdvance: boolean): Reconc
     if (live.length > 0) {
         return notCompleted(`a rebase is still in progress in ${live.map((o) => o.occurrenceId || "root").join(", ")}`);
     }
-    // F3: the source-tip receipt is written only when the rebase finishes clean, so it is the
-    // durable proof that HEAD moved to the rebased tip and that this box got to its end.
+    // F3: the receipt is written only when the rebase/advance finishes clean, and only this
+    // exact step's own receipt counts as proof it got to the end. A receipt naming an earlier
+    // step, a different occurrence set, or a worktree HEAD that has since moved is stale
+    // evidence, not proof this step finished — rerunning the box is always safe, so that is
+    // not-completed rather than a guess at completed.
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     const record = state === null ? null : findRunRecord(state, input.runId);
     if (record === null) return ambiguous(`no run record for ${input.runId}`);
-    if ((record.sourceTipsAtRebase ?? []).length === 0) {
-        return notCompleted("no source-tip receipt was written, so the rebase did not finish");
+    const receipt = record.rebaseStepReceipt;
+    if (receipt === undefined || receipt.stepId !== input.stepId) {
+        return notCompleted(`no rebase receipt for step "${input.stepId}" was found`);
+    }
+    const worktreeOccurrences = buildWorktreeOccurrences(worktreePath, input.projectRoot);
+    const currentOccurrenceIds = worktreeOccurrences.map((occurrence) => occurrence.occurrenceId).sort();
+    if (JSON.stringify(currentOccurrenceIds) !== JSON.stringify(receipt.occurrenceIds)) {
+        return notCompleted("the receipt's occurrence set no longer matches the worktree");
+    }
+    const movedHeads = receipt.worktreeHeads.filter(({ occurrenceId, head }) => {
+        const occurrence = worktreeOccurrences.find((candidate) => candidate.occurrenceId === occurrenceId);
+        return occurrence === undefined || tryGit(occurrence.worktreeCheckoutPath, "rev-parse", "HEAD") !== head;
+    });
+    if (movedHeads.length > 0) {
+        return notCompleted(`${movedHeads.map((h) => h.occurrenceId || "root").join(", ")} moved since the receipt was written`);
     }
     const finishedShape = { conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
     if (forAdvance) return completed({ finished: true, ...finishedShape });
@@ -413,38 +493,57 @@ function reconcileReleaseTaskRunHolds(input: ReconcileStepInput): ReconcileStepO
     const worktreePath = readString(input.stepInput, "worktree");
     const lockHeld = readSourceRepoLock(input.projectRoot)?.owner === buildLockOwner(input.runId, input.taskNumber);
     if (lockHeld) return notCompleted("this run still owns the source lock");
-    if (worktreePath === null) return completed({ leaseReleased: false, leaseRetained: false, lockReleased: true });
+    // Once this run no longer holds the lock, releaseSourceRepoLock's own `released` answer is
+    // lost: the lock could be absent (or owned by someone else) now because this call released
+    // it, or because this run never held it to begin with. Both leave an identical post-hoc
+    // state, so lockReleased is unknowable here — never a guessed true or false.
+    const lockReleased = HOLD_RELEASE_UNKNOWN;
+    if (worktreePath === null) return completed({ leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased });
     const leasePath = taskWorktreeLeasePath(worktreePath);
-    if (!existsSync(leasePath)) return completed({ leaseReleased: true, leaseRetained: false, lockReleased: true });
+    const branchSurvives = hasRef(input.projectRoot, `refs/heads/${taskBranchName(input.taskNumber)}`);
+    const nothingRetained = !existsSync(worktreePath) && !branchSurvives;
+    if (!existsSync(leasePath)) {
+        // Something still retained proves the real script never reached the delete — it keeps
+        // the lease file on that path — so an absent lease here can only mean it never named
+        // this run to begin with. Nothing retained is the same trap as the lock above: an
+        // absent lease this run never owned looks identical to one this run just released.
+        if (!nothingRetained) return completed({ leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased });
+        return completed({ leaseReleased: HOLD_RELEASE_UNKNOWN, leaseRetained: false, lockReleased });
+    }
     // F5: the lease is retained on purpose while a worktree or task branch survives. Retained by
     // this run is the intended end state; retained by another owner is simply not ours to release.
     if (physicalLeaseNames(worktreePath, input.runId)) {
-        const branchSurvives = hasRef(input.projectRoot, `refs/heads/${taskBranchName(input.taskNumber)}`);
-        if (!existsSync(worktreePath) && !branchSurvives) return notCompleted("nothing is retained, so the lease should be gone");
-        return completed({ leaseReleased: false, leaseRetained: true, lockReleased: true });
+        if (nothingRetained) return notCompleted("nothing is retained, so the lease should be gone");
+        return completed({ leaseReleased: HOLD_NOT_RELEASED, leaseRetained: true, lockReleased });
     }
-    return completed({ leaseReleased: true, leaseRetained: false, lockReleased: true });
+    // A lease owned by another run is untouched by the real script, which reports neither a
+    // release nor a retention. Claiming leaseReleased here credits this run with a hold it never held.
+    return completed({ leaseReleased: HOLD_NOT_RELEASED, leaseRetained: false, lockReleased });
 }
 
+// F/a4-4: once close succeeds the task is gone from tasks.json, so readStateOrNull() can never
+// recover the run that produced an archive - the archive's own retained `run.history` is the
+// only durable evidence left. validateArchivedRun (shared with closeTasks.ts's closeTaskRun so
+// the two cannot drift) proves the archive names this exact runId, closure note, and
+// chronological commit hashes before either verdict below is returned.
 function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
+    const closureNote = readString(input.stepInput, "closureNote");
+    if (closureNote === null) return ambiguous("the step input carried no closureNote");
     const { tasksPath, completedTasksPath } = resolveTaskFiles(input.projectRoot);
     const openTasks = readTaskFile(tasksPath) as { taskNumber: number }[];
-    const completedTasks = readTaskFile(completedTasksPath) as { taskNumber: number; commitHashes?: string[] }[];
+    const completedTasks = readTaskFile(completedTasksPath) as ArchivedTaskRecord[];
     const stillOpen = openTasks.some((task) => task.taskNumber === input.taskNumber);
     const archived = completedTasks.find((task) => task.taskNumber === input.taskNumber);
     if (archived === undefined) {
         if (stillOpen) return notCompleted("the task is still only in tasks.json");
         return ambiguous(`task ${input.taskNumber} is in neither task file`);
     }
-    // [a4 3]: present in both files is a half-finished archive, and rerunning idempotent closeTasks
-    // upserts the archive and finishes the removal from tasks.json.
-    if (stillOpen) return notCompleted("the archive is present in both task files");
-    const state = readStateOrNull(input.taskNumber, input.projectRoot);
-    const record = state === null ? null : findRunRecord(state, input.runId);
-    const expected = record === null ? null : record.commits.map((commit) => commit.hash);
-    if (expected !== null && JSON.stringify(archived.commitHashes ?? []) !== JSON.stringify(expected)) {
-        return ambiguous("the archive does not carry this run's commit hashes");
+    if (validateArchivedRun(archived, input.runId, closureNote) === null) {
+        return ambiguous(`the archive for task ${input.taskNumber} does not carry run ${input.runId}'s durable record`);
     }
+    // [a4 3]: present in both files, proved same-run, is a half-finished archive - rerunning
+    // idempotent closeTasks upserts the archive and finishes the removal from tasks.json.
+    if (stillOpen) return notCompleted("the archive is present in both task files");
     // `unblocked` cannot be recovered after the fact: the blockedBy entries it removed are gone.
     return completed({ closed: [input.taskNumber], skipped: [], ambiguous: [], unblocked: [] });
 }

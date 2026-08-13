@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
 import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { rebaseInProgress } from "../../scripts/mergeTaskWorktrees.ts";
@@ -97,7 +98,7 @@ test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflic
     git(rootOrigin, "add", "shared.txt");
     git(rootOrigin, "commit", "-q", "-m", "root source edit");
 
-    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-10", rootSourceBranch: "main" };
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-10", stepId: "rebase-10", rootSourceBranch: "main" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");
@@ -129,7 +130,7 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
 
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
-    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", rootSourceBranch: "main" };
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", stepId: "rebase-11", rootSourceBranch: "main" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");
@@ -158,7 +159,7 @@ test("test_advanceTaskRebase_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     const beforeHead = git(worktreePath, "rev-parse", "HEAD");
 
     assert.throws(() => advanceTaskRebase({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-20", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-20", stepId: "rebase-20", rootSourceBranch: "main",
         stoppedAt: { occurrenceId: "", checkoutPath: worktreePath },
     }));
 
@@ -166,4 +167,77 @@ test("test_advanceTaskRebase_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     assert.equal(rebaseInProgress(worktreePath), false);
     const run = getCurrentTaskRun(taskNumber, rootOrigin) as { sourceTipsAtRebase?: unknown } | null;
     assert.equal(run?.sourceTipsAtRebase, undefined);
+});
+
+// F3: before the fix, reconcileRebase never inspected any worktree HEAD, so a receipt written by
+// a finished advance kept reporting "completed" even after the root worktree moved again.
+test("test_advanceTaskRebase_reconciliationRejectsAStaleReceiptWhenTheRootHeadMovedSinceItFinished", async () => {
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-13");
+    const childCheckoutPath = join(worktreePath, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
+
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-13", stepId: "advance-13", rootSourceBranch: "main" };
+    const first = await rebaseTaskWorktree(rebaseInput);
+    assert.equal(first.conflicted, true);
+    assert.equal(first.stoppedAt?.occurrenceId, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "resolved\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    const second = advanceTaskRebase({ ...rebaseInput, stoppedAt: first.stoppedAt! });
+    assert.equal(second.finished, true);
+
+    writeFileSync(join(worktreePath, "after-advance.txt"), "after\n");
+    git(worktreePath, "add", "after-advance.txt");
+    git(worktreePath, "commit", "-q", "-m", "moved after the advance receipt");
+
+    const reconciled = reconcileStep({
+        script: "advanceTaskRebase", stepId: "advance-13", taskNumber, runId: "run-13", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "not-completed");
+});
+
+// F3: same as above, but the moved HEAD is a nested submodule occurrence, not root.
+test("test_advanceTaskRebase_reconciliationRejectsAStaleReceiptWhenANestedOccurrenceHeadMovedSinceItFinished", async () => {
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-14");
+    const childCheckoutPath = join(worktreePath, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
+
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-14", stepId: "advance-14", rootSourceBranch: "main" };
+    const first = await rebaseTaskWorktree(rebaseInput);
+    assert.equal(first.conflicted, true);
+    assert.equal(first.stoppedAt?.occurrenceId, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "resolved\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    const second = advanceTaskRebase({ ...rebaseInput, stoppedAt: first.stoppedAt! });
+    assert.equal(second.finished, true);
+
+    writeFileSync(join(childCheckoutPath, "after-advance.txt"), "after\n");
+    git(childCheckoutPath, "add", "after-advance.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child moved after the advance receipt");
+
+    const reconciled = reconcileStep({
+        script: "advanceTaskRebase", stepId: "advance-14", taskNumber, runId: "run-14", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "not-completed");
 });

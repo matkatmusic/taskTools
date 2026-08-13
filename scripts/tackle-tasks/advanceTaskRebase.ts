@@ -20,6 +20,7 @@ export type AdvanceTaskRebaseInput = {
     worktreePath: string;
     taskNumber: number;
     runId: string;
+    stepId: string;
     rootSourceBranch: string;
     stoppedAt: { occurrenceId: string; checkoutPath: string };
 };
@@ -155,7 +156,7 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
     if (result.finished) {
         verifyNoRebaseInProgressAnywhere(worktreePath, projectRoot);
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
-        persistSourceTipReceipts(input.taskNumber, input.runId, receipts, projectRoot);
+        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
     }
     return result;
 }

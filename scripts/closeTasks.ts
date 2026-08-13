@@ -22,7 +22,7 @@ export interface CloseTaskRunOutput {
   unblocked: number[];
 }
 
-type ArchivedTaskRecord = TaskRecord & { run?: TaskRunState; closureNote?: unknown; commitHashes?: unknown };
+export type ArchivedTaskRecord = TaskRecord & { run?: TaskRunState; closureNote?: unknown; commitHashes?: unknown };
 
 const EMPTY_TASK_RUN_STATE: TaskRunState = { active: false, worktree: null, leaseRunId: null, history: [] };
 
@@ -133,17 +133,28 @@ function archiveIsWellFormed(archived: ArchivedTaskRecord): boolean {
     && (archived.commitHashes as unknown[]).every((hash) => typeof hash === "string");
 }
 
+// Shared with reconcileStep.ts's reconcileCloseTaskRun so the "does this archive really carry
+// this run's durable record" rule cannot drift between the two callers. Requires an EXACT match
+// of run identity, note, and derived hashes — anything else means the evidence disagrees, not
+// that it's absent.
+export function validateArchivedRun(
+  archived: ArchivedTaskRecord, runId: string, closureNote: string,
+): TaskRunRecord | null {
+  const ended = findEndedRunEntry(archived, runId);
+  if (ended === undefined) return null;
+  if (!archiveIsWellFormed(archived)) return null;
+  if (archived.closureNote !== closureNote) return null;
+  if (JSON.stringify(archived.commitHashes) !== JSON.stringify(chronologicalHashes(ended))) return null;
+  return ended;
+}
+
 // Only-completed: reconciled success requires an EXACT match of run identity, note, and
 // derived hashes. Anything else is ambiguity, distinct from "not found" — evidence exists,
 // it just disagrees — and never a write.
 function reconcileArchivedOnly(
   archived: ArchivedTaskRecord, taskNumber: number, runId: string, closureNote: string,
 ): CloseTaskRunOutput {
-  const ended = findEndedRunEntry(archived, runId);
-  const hashesMatch = ended !== undefined && archiveIsWellFormed(archived)
-    && JSON.stringify(archived.commitHashes) === JSON.stringify(chronologicalHashes(ended));
-  const noteMatches = archived.closureNote === closureNote;
-  if (ended !== undefined && noteMatches && hashesMatch) {
+  if (validateArchivedRun(archived, runId, closureNote) !== null) {
     return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked: [] };
   }
   return { closed: [], skipped: [], ambiguous: [taskNumber], unblocked: [] };

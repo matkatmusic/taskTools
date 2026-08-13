@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "../../scripts/tackle-tasks/recoverSourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
@@ -83,7 +84,7 @@ test("test_rebaseTaskWorktree_rebasesEveryLayerAndReportsNoConflicts", async () 
     git(worktreePath, "commit", "-q", "-m", "root work");
 
     const output = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "rebase-1", rootSourceBranch: "main",
     });
 
     assert.equal(output.lock, "acquired");
@@ -108,13 +109,13 @@ test("test_rebaseTaskWorktree_reacquiringItsOwnSourceLockIsANoOp", async () => {
     git(worktreePath, "commit", "-q", "-m", "root work");
 
     const first = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", stepId: "rebase-2", rootSourceBranch: "main",
     });
     assert.equal(first.lock, "acquired");
 
     const options = fastLockOptions();
     const second = await rebaseTaskWorktree(
-        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", rootSourceBranch: "main" },
+        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", stepId: "rebase-2", rootSourceBranch: "main" },
         options,
     );
 
@@ -131,7 +132,7 @@ test("test_rebaseTaskWorktree_returnsHeldRatherThanBlockingForeverOnAnotherOwner
     assert.equal(outcome.status, "acquired");
 
     const output = await rebaseTaskWorktree(
-        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-3", rootSourceBranch: "main" },
+        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-3", stepId: "rebase-3", rootSourceBranch: "main" },
         { pollIntervalMs: 5, timeoutMs: 20, sleep: async () => {} },
     );
 
@@ -148,7 +149,7 @@ test("test_rebaseTaskWorktree_recoverableOutputCarriesTheOwnerAndTheExactMainten
     acquireSourceRepoLock(rootOrigin, staleOwner, { nowMs: Date.now() - 24 * 60 * 60 * 1000 });
 
     const output = await rebaseTaskWorktree(
-        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-5", rootSourceBranch: "main" },
+        { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-5", stepId: "rebase-5", rootSourceBranch: "main" },
         { pollIntervalMs: 5, timeoutMs: 20, sleep: async () => {} },
     );
 
@@ -168,11 +169,96 @@ test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", asy
     git(rootOrigin, "commit", "-q", "-m", "source edit");
 
     const output = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-4", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-4", stepId: "rebase-4", rootSourceBranch: "main",
     });
 
     assert.equal(output.lock, "acquired");
     assert.equal(output.conflicted, true);
     assert.equal(output.stoppedAt?.occurrenceId, "");
     assert.deepEqual(output.conflictedFilePaths, ["package.json"]);
+});
+
+// F3: two logical rebase visits in the same run. Before the fix, reconcileRebase only checked
+// that `sourceTipsAtRebase` was non-empty and no rebase was in progress - both true after step
+// "rebase-A" - so it reported "completed" for a wholly different, never-run step "rebase-B" too.
+// It must fail this way pre-fix because input.stepId was never read at all.
+test("test_rebaseTaskWorktree_reconciliationRejectsAnOlderStepsReceiptForALaterStep", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-6");
+    writeFileSync(join(worktreePath, "root-work.txt"), "root work\n");
+    git(worktreePath, "add", "root-work.txt");
+    git(worktreePath, "commit", "-q", "-m", "root work");
+
+    const first = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-6", stepId: "rebase-A", rootSourceBranch: "main",
+    });
+    assert.equal(first.conflicted, false);
+
+    const staleVisit = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-B", taskNumber, runId: "run-6", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(staleVisit.status, "not-completed");
+
+    // Sanity: the step that actually produced the receipt is still recognized.
+    const matchingVisit = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-A", taskNumber, runId: "run-6", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(matchingVisit.status, "completed");
+});
+
+// F3: before the fix, reconcileRebase never inspected any worktree HEAD, so a receipt written by
+// a finished rebase kept reporting "completed" even after the root worktree moved again.
+test("test_rebaseTaskWorktree_reconciliationRejectsAStaleReceiptWhenTheRootHeadMovedSinceTheRebase", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-7");
+    writeFileSync(join(worktreePath, "root-work.txt"), "root work\n");
+    git(worktreePath, "add", "root-work.txt");
+    git(worktreePath, "commit", "-q", "-m", "root work");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-7", stepId: "rebase-7", rootSourceBranch: "main",
+    });
+    assert.equal(output.conflicted, false);
+
+    writeFileSync(join(worktreePath, "after-rebase.txt"), "after\n");
+    git(worktreePath, "add", "after-rebase.txt");
+    git(worktreePath, "commit", "-q", "-m", "moved after the rebase receipt");
+
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-7", taskNumber, runId: "run-7", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "not-completed");
+});
+
+// F3: same as above, but the moved HEAD is a nested submodule occurrence, not root - proving the
+// per-layer check, not just a root-only one.
+test("test_rebaseTaskWorktree_reconciliationRejectsAStaleReceiptWhenANestedOccurrenceHeadMovedSinceTheRebase", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-8");
+    writeFileSync(join(worktreePath, "child", "widget.txt"), "widget\n");
+    git(join(worktreePath, "child"), "add", "widget.txt");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "child work");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-8", stepId: "rebase-8", rootSourceBranch: "main",
+    });
+    assert.equal(output.conflicted, false);
+
+    writeFileSync(join(worktreePath, "child", "after-rebase.txt"), "after\n");
+    git(join(worktreePath, "child"), "add", "after-rebase.txt");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "child moved after the receipt");
+
+    const reconciled = reconcileStep({
+        script: "rebaseTaskWorktree", stepId: "rebase-8", taskNumber, runId: "run-8", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "not-completed");
 });

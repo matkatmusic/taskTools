@@ -121,7 +121,70 @@ function rollbackCreateTaskWorktree(
     throw originalErr;
 }
 
+// F1: recovery for a journal retained by an earlier, interrupted call to this same function -
+// the mutating repair the Phase 8 reconciliation-table row for createTaskWorktree depends on.
+// Read under the lease guard so a concurrent recovery/rollback can never race this one. A
+// physical lease naming neither the journal's run nor nobody is a live third owner: never
+// touched, never inferred safe from the conventional path alone. Otherwise: task state already
+// matching the journal proves the creation finished late (delete the stale journal and return
+// the already-created worktree); anything else means it never finished (remove the
+// journal-owned worktree/branch first, release its lease last, then delete the journal, then
+// let the caller create afresh).
+function recoverRetainedCreateJournal(
+    projectRoot: string, taskNumber: number, expectedWorktreePath: string, branch: string, journalPath: string,
+): CreateTaskWorktreeOutput | null {
+    let journal: TaskWorktreeCreateJournal;
+    try {
+        journal = JSON.parse(readFileSync(journalPath, "utf8"));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+    }
+    if (journal.taskNumber !== taskNumber || journal.worktreePath !== expectedWorktreePath || journal.branch !== branch) {
+        throw new Error(
+            `retained creation journal at "${journalPath}" does not match task ${taskNumber}'s expected `
+            + `worktree/branch; refusing to touch it or create a new worktree until it is resolved`,
+        );
+    }
+
+    let recovered: CreateTaskWorktreeOutput | null = null;
+    withTaskWorktreeLeaseGuard(journal.worktreePath, () => {
+        const leasePath = taskWorktreeLeasePath(journal.worktreePath);
+        const owner = readTaskWorktreeLeaseOwner(leasePath);
+        if (owner !== null && owner.runId !== journal.runId) {
+            throw new Error(
+                `retained creation journal at "${journalPath}" names run "${journal.runId}", but the worktree `
+                + `lease is now held by run "${owner.runId}"; refusing to touch it`,
+            );
+        }
+
+        const { tasksPath } = resolveTaskFiles(projectRoot);
+        const tasks = readTaskFile(tasksPath) as { taskNumber: number; run?: { worktree: string | null; leaseRunId: string | null } }[];
+        const task = tasks.find((candidate) => candidate.taskNumber === journal.taskNumber);
+        const state = task?.run;
+        const completedLate = state?.worktree === journal.worktreePath && state?.leaseRunId === journal.runId;
+
+        if (completedLate) {
+            unlinkSync(journalPath);
+            recovered = { worktree: journal.worktreePath, branch: journal.branch };
+            return;
+        }
+
+        removeWorktreeAndBranch(projectRoot, journal.worktreePath, journal.branch);
+        if (owner !== null) unlinkSync(leasePath);
+        unlinkSync(journalPath);
+    });
+    return recovered;
+}
+
 export function createTaskWorktree(taskNumber: number, runId: string, projectRoot: string): CreateTaskWorktreeOutput {
+    const branch = taskBranchName(taskNumber);
+    const expectedWorktreePath = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
+    const journalPath = taskWorktreeCreateJournalPath(expectedWorktreePath);
+
+    const recovered = recoverRetainedCreateJournal(projectRoot, taskNumber, expectedWorktreePath, branch, journalPath);
+    if (recovered !== null) return recovered;
+
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
@@ -131,9 +194,6 @@ export function createTaskWorktree(taskNumber: number, runId: string, projectRoo
         filePaths: Array.isArray(task.files) ? (task.files as string[]) : [],
         scope: "declared",
     };
-    const branch = taskBranchName(taskNumber);
-    const expectedWorktreePath = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
-    const journalPath = taskWorktreeCreateJournalPath(expectedWorktreePath);
     const journal: TaskWorktreeCreateJournal = {
         taskNumber, runId, worktreePath: expectedWorktreePath, branch, createdAt: getLocalIsoTimestamp(),
     };

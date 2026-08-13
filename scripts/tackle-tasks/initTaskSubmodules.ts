@@ -4,19 +4,22 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { initializeSubmodulesInWorktree } from "../prepareTasks.ts";
+import {
+    SUBMODULES_INITIALIZED, SUBMODULES_NOT_INITIALIZED, type SubmoduleInitializationState,
+} from "./reconciliationOutcomes.ts";
 
 function git(worktreePath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", worktreePath, ...args], { encoding: "utf8" });
 }
 
-export type InitTaskSubmodulesOutput = { initialized: boolean };
+export type InitTaskSubmodulesOutput = { initialized: SubmoduleInitializationState };
 
 export function initTaskSubmodules(worktreePath: string): InitTaskSubmodulesOutput {
-    if (!existsSync(join(worktreePath, ".gitmodules"))) return { initialized: false };
+    if (!existsSync(join(worktreePath, ".gitmodules"))) return { initialized: SUBMODULES_NOT_INITIALIZED };
     const status = git(worktreePath, "submodule", "status");
     const wasUninitialized = status.split("\n").some((line) => line.startsWith("-"));
     initializeSubmodulesInWorktree(worktreePath);
-    return { initialized: wasUninitialized };
+    return { initialized: wasUninitialized ? SUBMODULES_INITIALIZED : SUBMODULES_NOT_INITIALIZED };
 }
 
 export type InitTaskSubmodulesCliInput = { worktreePath: string };

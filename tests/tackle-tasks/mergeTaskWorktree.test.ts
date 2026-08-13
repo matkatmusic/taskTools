@@ -78,7 +78,7 @@ async function claimCommitAndRebase(rootOrigin: string, taskNumber: number, work
     commitTaskWorkInWorktree(worktreePath);
     const sourceBranch = currentBranchName(rootOrigin);
     const rebaseResult = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: sourceBranch,
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId, stepId: `rebase-${runId}`, rootSourceBranch: sourceBranch,
     });
     assert.equal(rebaseResult.conflicted, false);
     assert.equal(rebaseResult.stoppedAt, null);

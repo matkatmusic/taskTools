@@ -10,7 +10,11 @@ export type TaskExitType =
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed";
 
-export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge" };
+// F2: `stepId` names the logical commit step that created this commit. Merge-kind commits
+// (mergeTaskWorktree.ts, recordMergeCommits.ts) do not carry one — optional so those untouched
+// producers keep compiling. commitTaskWork.ts always sets it: durable evidence a lost result can
+// be scoped back to the exact step that produced it, instead of any earlier visit's commits.
+export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };
 
 export type TaskTestResult = {
     stepId: string;
@@ -26,6 +30,19 @@ export type TaskTestResult = {
 // The tip each source occurrence sat at when the rebase finished. The merge box compares
 // against it, so a clean commit landing on the source while the lock is held cannot slip in.
 export type SourceTipReceipt = { occurrenceId: string; baseBranch: string; sourceTip: string };
+
+// F3: visit-specific durable evidence for the rebase/advance boxes, separate from
+// `sourceTipsAtRebase` (which mergeTaskWorktree.ts reads and must keep its existing shape).
+// `stepId` fences this receipt to the exact logical step that wrote it, `occurrenceIds` is the
+// exact occurrence set that step covered, and `worktreeHeads` is each layer's HEAD right after
+// the step finished — enough for a read-only reconciliation to tell a stale receipt from a live
+// one without ever accepting a prior visit's evidence for a later step.
+export type RebaseStepReceipt = {
+    stepId: string;
+    occurrenceIds: string[];
+    worktreeHeads: { occurrenceId: string; head: string }[];
+    sourceTips: SourceTipReceipt[];
+};
 
 export type FullSuiteResult = {
     stepId: string;
@@ -47,6 +64,7 @@ export type TaskRunRecord = {
     taskTests: TaskTestResult | null;
     fullSuite: FullSuiteResult | null;
     sourceTipsAtRebase?: SourceTipReceipt[];
+    rebaseStepReceipt?: RebaseStepReceipt;
 };
 
 export type TaskRunState = {
