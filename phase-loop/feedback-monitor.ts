@@ -1,26 +1,22 @@
-import { readdirSync, statSync } from "node:fs";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync, statSync, unlinkSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
 export type FeedbackMonitorOptions = {
     projectRoot: string;
-    auditPath?: string;
     pollIntervalMs?: number;
     timeoutMs?: number | null;
-    includeExisting?: boolean;
 };
 
-export type FeedbackMonitorEvent = {
-    event: "feedback";
-    feedbackPath: string;
-    relativePath: string;
-    phase: number;
-    iteration: number;
-};
-
-export type AuditMonitorEvent = {
-    event: "audit";
+export type ReviewedMonitorEvent = {
+    event: "reviewed";
+    markerPath: string;
+    planPath: string;
     auditPath: string;
-    relativePath: string;
+    reviewPath: string;
+    relativePlanPath: string;
+    relativeAuditPath: string;
+    relativeReviewPath: string;
 };
 
 export type ResolvedMonitorEvent = {
@@ -28,145 +24,29 @@ export type ResolvedMonitorEvent = {
     markerPath: string;
 };
 
-export type ImplementorMonitorEvent = FeedbackMonitorEvent | AuditMonitorEvent | ResolvedMonitorEvent;
+export type ImplementorMonitorEvent = ReviewedMonitorEvent | ResolvedMonitorEvent;
+
+export type ReviewedMarker = {
+    plan: string;
+    audit: string;
+    review: string;
+};
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
-const FEEDBACK_FILE_PATTERN = /^feedback-phase(\d+)-(\d+)\.md$/;
-const SKIPPED_DIRECTORIES = new Set([".git", "node_modules"]);
+const REVIEWED_MARKER_KEYS = new Set([".plan", ".audit", ".review"]);
 
 function sleep(milliseconds: number): Promise<void> {
     return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
 function assertPositiveMilliseconds(value: number, label: string): void {
-    if (!Number.isFinite(value) || value <= 0) {
-        throw new Error(`${label} must be a positive number`);
-    }
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive number`);
 }
 
-/** Find matching feedback files anywhere below the repository root, excluding repository metadata. */
-export function findFeedbackFiles(projectRoot: string): string[] {
-    const root = resolve(projectRoot);
-    const matches: string[] = [];
-    const pending = [root];
-    while (pending.length > 0) {
-        const directory = pending.pop()!;
-        for (const entry of readdirSync(directory, { withFileTypes: true })) {
-            if (entry.isDirectory()) {
-                if (!SKIPPED_DIRECTORIES.has(entry.name)) pending.push(join(directory, entry.name));
-                continue;
-            }
-            if (entry.isFile() && FEEDBACK_FILE_PATTERN.test(entry.name)) {
-                matches.push(join(directory, entry.name));
-            }
-        }
-    }
-    return matches.sort();
-}
-
-function buildFeedbackEvent(projectRoot: string, feedbackPath: string): FeedbackMonitorEvent {
-    const match = FEEDBACK_FILE_PATTERN.exec(basename(feedbackPath));
-    if (match === null) throw new Error(`not a feedback-phaseN-M.md file: ${feedbackPath}`);
-    return {
-        event: "feedback",
-        feedbackPath,
-        relativePath: relative(resolve(projectRoot), feedbackPath),
-        phase: Number(match[1]),
-        iteration: Number(match[2]),
-    };
-}
-
-function resolveAuditPath(projectRoot: string, auditPath: string | undefined): string | null {
-    if (auditPath === undefined) return null;
-    return isAbsolute(auditPath) ? resolve(auditPath) : resolve(projectRoot, auditPath);
-}
-
-function buildAuditEvent(projectRoot: string, auditPath: string): AuditMonitorEvent {
-    return {
-        event: "audit",
-        auditPath,
-        relativePath: relative(resolve(projectRoot), auditPath),
-    };
-}
-
-/**
- * Wait for one newly generated feedback file, emit its identity, and exit. By default files that
- * existed when monitoring began are the baseline and do not fire. `includeExisting` supports an
- * orchestrator restart that deliberately wants to consume an already-created feedback file.
- */
-export async function waitForFeedback(options: FeedbackMonitorOptions): Promise<FeedbackMonitorEvent> {
-    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const timeoutMs = options.timeoutMs ?? null;
-    assertPositiveMilliseconds(pollIntervalMs, "pollIntervalMs");
-    if (timeoutMs !== null) assertPositiveMilliseconds(timeoutMs, "timeoutMs");
-
-    const root = resolve(options.projectRoot);
-    const initialFiles = findFeedbackFiles(root);
-    if (options.includeExisting && initialFiles.length > 0) {
-        const newest = initialFiles
-            .map((path) => ({ path, modifiedAt: statSync(path).mtimeMs }))
-            .sort((left, right) => right.modifiedAt - left.modifiedAt || left.path.localeCompare(right.path))[0];
-        return buildFeedbackEvent(root, newest.path);
-    }
-
-    const baseline = new Set(initialFiles);
-    const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
-    while (true) {
-        const generated = findFeedbackFiles(root).find((path) => !baseline.has(path));
-        if (generated !== undefined) return buildFeedbackEvent(root, generated);
-        if (deadline !== null && Date.now() >= deadline) {
-            throw new Error(`timed out waiting for feedback-phaseN-M.md below ${root}`);
-        }
-        await sleep(pollIntervalMs);
-    }
-}
-
-/** Wait for an auditor instruction file or the auditor's terminal resolution marker. */
-export async function waitForImplementorSignal(
-    options: FeedbackMonitorOptions,
-): Promise<ImplementorMonitorEvent> {
-    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const timeoutMs = options.timeoutMs ?? null;
-    assertPositiveMilliseconds(pollIntervalMs, "pollIntervalMs");
-    if (timeoutMs !== null) assertPositiveMilliseconds(timeoutMs, "timeoutMs");
-
-    const root = resolve(options.projectRoot);
-    const auditPath = resolveAuditPath(root, options.auditPath);
-    const initialFeedback = findFeedbackFiles(root);
-    const auditExistedInitially = auditPath !== null && statPathIsFile(auditPath);
-    const resolvedPath = join(root, ".resolved");
-
-    if (statPathIsFile(resolvedPath)) {
-        return { event: "resolved", markerPath: resolvedPath };
-    }
-
-    if (options.includeExisting) {
-        const existing = [
-            ...initialFeedback.map((path) => ({ kind: "feedback" as const, path, modifiedAt: statSync(path).mtimeMs })),
-            ...(auditExistedInitially && auditPath !== null
-                ? [{ kind: "audit" as const, path: auditPath, modifiedAt: statSync(auditPath).mtimeMs }]
-                : []),
-        ].sort((left, right) => right.modifiedAt - left.modifiedAt || left.path.localeCompare(right.path))[0];
-        if (existing?.kind === "audit") return buildAuditEvent(root, existing.path);
-        if (existing?.kind === "feedback") return buildFeedbackEvent(root, existing.path);
-    }
-
-    const feedbackBaseline = new Set(initialFeedback);
-    const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
-    while (true) {
-        if (statPathIsFile(resolvedPath)) {
-            return { event: "resolved", markerPath: resolvedPath };
-        }
-        if (!auditExistedInitially && auditPath !== null && statPathIsFile(auditPath)) {
-            return buildAuditEvent(root, auditPath);
-        }
-        const feedbackPath = findFeedbackFiles(root).find((path) => !feedbackBaseline.has(path));
-        if (feedbackPath !== undefined) return buildFeedbackEvent(root, feedbackPath);
-        if (deadline !== null && Date.now() >= deadline) {
-            throw new Error(`timed out waiting for audit, feedback, or root .resolved below ${root}`);
-        }
-        await sleep(pollIntervalMs);
-    }
+function repositoryRoot(projectRoot: string): string {
+    return execFileSync("git", ["-C", resolve(projectRoot), "rev-parse", "--show-toplevel"], {
+        encoding: "utf8",
+    }).trim();
 }
 
 function statPathIsFile(path: string): boolean {
@@ -177,22 +57,111 @@ function statPathIsFile(path: string): boolean {
     }
 }
 
+function refuseTrackedMarker(root: string): void {
+    const markerPath = join(root, ".reviewed");
+    try {
+        execFileSync("git", ["-C", root, "cat-file", "-e", "HEAD:.reviewed"], { stdio: "ignore" });
+        throw new Error(`refusing to consume tracked repository file as a marker: ${markerPath}`);
+    } catch (error) {
+        if (error instanceof Error && error.message.startsWith("refusing to consume")) throw error;
+    }
+}
+
+/** Parse a complete auditor publication marker. Each key must occur exactly once. */
+export function parseReviewedMarker(contents: string): ReviewedMarker {
+    const fields = new Map<string, string>();
+    for (const line of contents.split(/\r?\n/)) {
+        if (line.length === 0) continue;
+        const separator = line.indexOf("=");
+        if (separator < 1) throw new Error(`invalid .reviewed line: ${line}`);
+        const key = line.slice(0, separator);
+        const value = line.slice(separator + 1);
+        if (!REVIEWED_MARKER_KEYS.has(key)) throw new Error(`unknown .reviewed key: ${key}`);
+        if (fields.has(key)) throw new Error(`duplicate .reviewed key: ${key}`);
+        if (value.length === 0) throw new Error(`empty .reviewed value for ${key}`);
+        fields.set(key, value);
+    }
+    for (const key of REVIEWED_MARKER_KEYS) {
+        if (!fields.has(key)) throw new Error(`missing .reviewed key: ${key}`);
+    }
+    return {
+        plan: fields.get(".plan")!,
+        audit: fields.get(".audit")!,
+        review: fields.get(".review")!,
+    };
+}
+
+function resolvePublishedPath(root: string, path: string): string {
+    return isAbsolute(path) ? resolve(path) : resolve(root, path);
+}
+
+/** Read, validate, and consume one complete auditor review publication. */
+export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorEvent {
+    const root = repositoryRoot(projectRoot);
+    const markerPath = join(root, ".reviewed");
+    if (!statPathIsFile(markerPath)) throw new Error(`the root review marker does not exist: ${markerPath}`);
+    refuseTrackedMarker(root);
+
+    const marker = parseReviewedMarker(readFileSync(markerPath, "utf8"));
+    const planPath = resolvePublishedPath(root, marker.plan);
+    const auditPath = resolvePublishedPath(root, marker.audit);
+    const reviewPath = resolvePublishedPath(root, marker.review);
+    for (const [label, path] of [["plan", planPath], ["audit", auditPath], ["review", reviewPath]] as const) {
+        if (!statPathIsFile(path)) throw new Error(`.reviewed ${label} path is not a file: ${path}`);
+    }
+
+    unlinkSync(markerPath);
+    return {
+        event: "reviewed",
+        markerPath,
+        planPath,
+        auditPath,
+        reviewPath,
+        relativePlanPath: relative(root, planPath),
+        relativeAuditPath: relative(root, auditPath),
+        relativeReviewPath: relative(root, reviewPath),
+    };
+}
+
+/** Wait for a fully published auditor review or the terminal resolution marker. */
+export async function waitForImplementorSignal(
+    options: FeedbackMonitorOptions,
+): Promise<ImplementorMonitorEvent> {
+    const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    const timeoutMs = options.timeoutMs ?? null;
+    assertPositiveMilliseconds(pollIntervalMs, "pollIntervalMs");
+    if (timeoutMs !== null) assertPositiveMilliseconds(timeoutMs, "timeoutMs");
+
+    const root = repositoryRoot(options.projectRoot);
+    const reviewedPath = join(root, ".reviewed");
+    const resolvedPath = join(root, ".resolved");
+    const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
+    while (true) {
+        const hasReviewed = statPathIsFile(reviewedPath);
+        const hasResolved = statPathIsFile(resolvedPath);
+        if (hasReviewed && hasResolved) {
+            throw new Error(`conflicting root protocol markers: ${reviewedPath} and ${resolvedPath}`);
+        }
+        if (hasResolved) return { event: "resolved", markerPath: resolvedPath };
+        if (hasReviewed) return consumeRootReviewedMarker(root);
+        if (deadline !== null && Date.now() >= deadline) {
+            throw new Error(`timed out waiting for root .reviewed or .resolved in ${root}`);
+        }
+        await sleep(pollIntervalMs);
+    }
+}
+
 type CliOptions = FeedbackMonitorOptions;
 
 function parseCliOptions(args: string[]): CliOptions {
     let projectRoot = process.cwd();
-    let auditPath: string | undefined;
     let pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
     let timeoutMs: number | null = null;
-    let includeExisting = false;
     for (let index = 0; index < args.length; index += 1) {
         const argument = args[index];
         const value = args[index + 1];
         if (argument === "--root" && value !== undefined) {
             projectRoot = isAbsolute(value) ? value : resolve(process.cwd(), value);
-            index += 1;
-        } else if (argument === "--audit" && value !== undefined) {
-            auditPath = value;
             index += 1;
         } else if (argument === "--poll-ms" && value !== undefined) {
             pollIntervalMs = Number(value);
@@ -200,13 +169,11 @@ function parseCliOptions(args: string[]): CliOptions {
         } else if (argument === "--timeout-ms" && value !== undefined) {
             timeoutMs = Number(value);
             index += 1;
-        } else if (argument === "--include-existing") {
-            includeExisting = true;
         } else {
             throw new Error(`unknown or incomplete argument: ${argument}`);
         }
     }
-    return { projectRoot, auditPath, pollIntervalMs, timeoutMs, includeExisting };
+    return { projectRoot, pollIntervalMs, timeoutMs };
 }
 
 if (process.argv[1]?.endsWith("feedback-monitor.ts")) {

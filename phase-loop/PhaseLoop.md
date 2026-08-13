@@ -9,6 +9,8 @@ Neither agent commits. The user or another external mechanism owns every commit.
 - `<plan>` is the plan being implemented.
 - `<audit>` is the initial audit written next to the plan, normally `<plan>-audit.md`.
 - `<feedback-phaseN-M.md>` is follow-up feedback for iteration `M` of phase `N`. Every follow-up filename must be unique and must match `feedback-phase<number>-<number>.md`.
+- `.reviewed` publishes one finished auditor review. Its `.plan`, `.audit`, and `.review` fields
+  identify the loop and the exact review file that is ready to consume.
 
 The concrete `<plan>` and `<audit>` paths must be supplied to both agents before the loop starts. Do not infer the active plan from whichever audit or plan file was modified most recently.
 
@@ -19,24 +21,38 @@ The concrete `<plan>` and `<audit>` paths must be supplied to both agents before
 | `.done` | Implementor | Auditor | Yes, staged last | One complete implementation attempt is staged. `done-monitor.ts` removes it from the index and working tree before emitting `done`. |
 | `<audit>` | Auditor | Implementor | No protocol requirement | Initial plan review and stable remediation checklist. It remains intact throughout follow-up rounds. |
 | `<feedback-phaseN-M.md>` | Auditor | Implementor | No protocol requirement | Only the still-unresolved audit items for one follow-up round. It is not a terminal signal. |
+| `.reviewed` | Auditor | Implementor | No, created last | The review named by `.review` is complete. `feedback-monitor.ts` validates the referenced plan/audit/review files, removes the marker, and emits `reviewed`. |
 | `.resolved` | Auditor | Implementor | No | Every audit item is resolved. The implementor deletes it after receiving it. |
 | `.complete` | Implementor | Auditor | No | The implementor acknowledged `.resolved`. `done-monitor.ts` consumes it and emits `complete`; both agents then exit. |
 
 There are two monitor channels:
 
 - The auditor monitors implementor signals: staged `.done` and `.complete`.
-- The implementor monitors auditor signals: `<audit>`, `<feedback-phaseN-M.md>`, and `.resolved`.
+- The implementor monitors auditor signals: `.reviewed` and `.resolved`. Audit and feedback files
+  are durable content, not signals by themselves.
 
 Typical one-shot invocations are:
 
 ```sh
 node phase-loop/done-monitor.ts --root <repo-root>
-node phase-loop/feedback-monitor.ts --root <repo-root> --audit <audit>
+node phase-loop/feedback-monitor.ts --root <repo-root>
 ```
 
 The orchestrator launches the appropriate agent again after a nonterminal event; the agent then starts a fresh monitor when it returns to a waiting state.
 
-Although five artifact names appear in the table, `<audit>` and `<feedback-phaseN-M.md>` are the same kind of handoff at different stages: durable auditor instructions for the implementor.
+`<audit>` and `<feedback-phaseN-M.md>` are durable auditor instructions. `.reviewed` is their
+publication boundary: its exact three-line format is:
+
+```text
+.plan=<plan>
+.audit=<audit>
+.review=<latest review file>
+```
+
+For the initial audit, `.review` equals `<audit>`. For remediation, it names the newly completed
+`<feedback-phaseN-M.md>`. The auditor writes the review and finishes validation first, then creates
+`.reviewed` in one write as the final action. A published review is immutable; corrections use a
+new uniquely numbered feedback file and a new marker.
 
 ## Sequence
 
@@ -45,21 +61,24 @@ Although five artifact names appear in the table, `<audit>` and `<feedback-phase
 1. The implementor follows `<plan>` and validates the result.
 2. The implementor stages only its implementation and test changes.
 3. The implementor creates an empty root `.done` file and stages it last.
-4. The implementor begins monitoring for `<audit>`, `<feedback-phaseN-M.md>`, or `.resolved`.
+4. The implementor begins monitoring for `.reviewed` or `.resolved`.
 
 ### 2. Initial audit
 
 1. The auditor's monitor consumes `.done` and emits `done`, waking the auditor.
 2. The auditor freezes the staged snapshot and reviews it against the entire `<plan>`.
-3. The auditor writes `<audit>` next to `<plan>`. Findings include a concrete failure mode, a complete suggested fix, and proving tests. The auditor does not nitpick.
+3. The auditor finishes `<audit>` and its validation notes, then creates `.reviewed` last with
+   `.review=<audit>`.
 4. The user reviews and commits the implementation and initial audit.
 
-If the initial audit contains no findings, the auditor may proceed directly to the resolution handshake in step 5.
+If the initial audit contains no findings, the auditor publishes it through `.reviewed`, waits
+for the implementor to consume that marker, and then proceeds to the resolution handshake in
+step 5. `.reviewed` and `.resolved` must not coexist.
 
 ### 3. Audit remediation
 
 1. The implementor reads the `<audit>` and incorporates every finding.
-2. The implementor stages only its remediation changes, creates and stages `.done` last, and monitors for `<feedback-phaseN-M.md>` or `.resolved`.
+2. The implementor stages only its remediation changes, creates and stages `.done` last, and monitors for `.reviewed` or `.resolved`.
 3. The auditor's monitor consumes `.done` and emits `done`, waking the auditor.
 4. The auditor reviews only the items already flagged in `<audit>` and `<feedback-phaseN-M.md>`. It does not add new audit scope during remediation.
 
@@ -68,9 +87,11 @@ If the initial audit contains no findings, the auditor may proceed directly to t
 If any flagged item remains unresolved:
 
 1. The auditor leaves `<audit>` intact.
-2. The auditor writes a new, uniquely numbered `<feedback-phaseN-M.md>` containing only unresolved items, evidence, complete fixes, and proving tests.
-3. The auditor returns to monitoring for `.done` or `.complete`.
-4. The implementor incorporates all feedback in `<feedback-phaseN-M.md>`, validates, stages only its changes, creates and stages `.done` last, and returns to monitoring for a new `<feedback-phaseN-M.md>` or for the presence of `.resolved`. 
+2. The auditor finishes a new, uniquely numbered `<feedback-phaseN-M.md>` containing only unresolved items, evidence, complete fixes, and proving tests.
+3. The auditor creates `.reviewed` last with `.review=<feedback-phaseN-M.md>`, then returns to monitoring for `.done` or `.complete`.
+4. The implementor's monitor consumes `.reviewed`; the implementor reads the named review,
+   validates, stages only its changes, creates and stages `.done` last, and returns to monitoring
+   for a new `.reviewed` marker or `.resolved`.
 5. Repeat steps 3 and 4 until all flagged items are resolved.
 
 If all flagged items are resolved, continue to the terminal handshake.
@@ -99,11 +120,14 @@ The `.resolved`/`.complete` acknowledgement prevents the auditor from exiting be
 - The implementor never uses broad staging commands that could capture another actor's work.
 - The auditor never edits implementation files and never changes the staged snapshot except for consuming protocol markers through the monitor.
 - `<audit>` is the stable checklist. Follow-up rounds create new feedback files rather than erasing or rewriting the checklist.
-- `.done`, `.resolved`, and `.complete` are transient protocol files and must never be committed.
+- `.reviewed` is created only after its referenced review is final. Review files are never amended
+  after publication.
+- `.done`, `.reviewed`, `.resolved`, and `.complete` are transient protocol files and must never be committed.
 
 ## Recovery
 
-- If an agent restarts, inspect the root markers and the explicitly supplied `<audit>` path before waiting. An unconsumed `.resolved` or `.complete` is actionable immediately.
-- Existing audit and feedback files are not automatically new work. Resume from the explicitly selected file or use the monitor's existing-file option deliberately.
+- If an agent restarts, inspect the root markers and the explicitly supplied plan/audit paths before waiting. An unconsumed `.reviewed`, `.resolved`, or `.complete` is actionable immediately.
+- Existing audit and feedback files are not automatically new work. Only `.reviewed` publishes
+  one, unless an orchestrator explicitly resumes from a named review.
 - If `.done` exists but is not staged, the implementation handoff was not published; the auditor must keep waiting.
 - If unrelated staged files appear, stop and ask the owner to restore a reviewable staged boundary. Do not unstage or overwrite another actor's work.
