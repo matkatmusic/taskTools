@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
@@ -253,6 +253,54 @@ test("test_advanceTaskRebase_reconciliationReproducesANestedConflictOutcomeFromT
     });
     assert.equal(reconciled.status, "completed");
     assert.deepEqual(reconciled.result, second);
+});
+
+// No receipt plus a live rebase is undecidable, so reconciliation must never authorise a rerun.
+test("test_advanceTaskRebase_reportsAmbiguousForALiveConflictWhoseReceiptWasNeverAppended", async () => {
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-20");
+    const childCheckoutPath = join(worktreePath, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree-1\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit 1");
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree-2\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit 2");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
+
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-20", stepId: "rebase-20", rootSourceBranch: "main" };
+    const first = await rebaseTaskWorktree(rebaseInput);
+    assert.equal(first.conflicted, true);
+    assert.equal(first.stoppedAt?.occurrenceId, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "resolved-1\n");
+    git(childCheckoutPath, "add", "shared.txt");
+
+    const second = advanceTaskRebase({ ...rebaseInput, stepId: "advance-20", stoppedAt: first.stoppedAt! });
+    assert.equal(second.finished, false);
+    assert.equal(second.conflicted, true);
+
+    // Simulate the process dying before persistRebaseStepResult() appended the receipt: the
+    // live conflict on disk is real, but nothing on record says it happened.
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as Array<{ taskNumber: number; run: { history: Array<{ stepResults?: Array<{ stepId: string }> }> } }>;
+    const task = tasks.find((entry) => entry.taskNumber === taskNumber)!;
+    const currentRun = task.run.history[task.run.history.length - 1];
+    currentRun.stepResults = (currentRun.stepResults ?? []).filter((entry) => entry.stepId !== "advance-20");
+    writeJsonAtomically(tasksPath, tasks);
+
+    const reconciled = reconcileStep({
+        script: "advanceTaskRebase", stepId: "advance-20", taskNumber, runId: "run-20", projectRoot: rootOrigin,
+        stepInput: { worktreePath, rootSourceBranch: "main" },
+    });
+    assert.equal(reconciled.status, "ambiguous");
+    assert.equal(typeof reconciled.note, "string");
+    assert.ok(reconciled.note && reconciled.note.length > 0);
 });
 
 // F3: a root conflict raised BY advanceTaskRebase's own layer walk (after the nested layer

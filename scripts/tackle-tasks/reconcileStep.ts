@@ -372,8 +372,11 @@ function reconcileRunFullSuite(input: ReconcileStepInput): ReconcileStepOutput {
 // advanceTaskRebase (clean finish, conflict, or test failure), not only a clean finish. When its
 // live-state evidence still matches, it is replayed exactly — including a live in-progress rebase
 // this exact step produced, which must never be mistaken for proof that rerunning the mutation is
-// safe. Only when no matching receipt exists does a live rebase or a clean idle worktree decide
-// between "still running, rerun the box" and "nothing to reconstruct, rerun is safe".
+// safe. With no matching receipt, a live rebase is genuinely undecidable: the box may have died
+// before it ever returned, or it may have returned a conflict and died before appending the
+// receipt. Those two histories leave identical state, and rerunning the second one repeats a
+// mutation against a live partial rebase, so that case is ambiguous. Only a clean idle worktree
+// with no receipt proves nothing is left to reconstruct and a rerun is idempotent.
 function reconcileRebase(input: ReconcileStepInput, forAdvance: boolean): ReconcileStepOutput {
     const worktreePath = readString(input.stepInput, "worktreePath");
     const rootSourceBranch = readString(input.stepInput, "rootSourceBranch");
@@ -402,7 +405,7 @@ function reconcileRebase(input: ReconcileStepInput, forAdvance: boolean): Reconc
     const occurrences = getOccurrencesDeepestFirst(worktreePath, input.projectRoot, rootSourceBranch);
     const live = occurrences.filter((occurrence) => isRebaseInProgress(occurrence.checkoutPath));
     if (live.length > 0) {
-        return notCompleted(`a rebase is still in progress in ${live.map((o) => o.occurrenceId || "root").join(", ")}`);
+        return ambiguous(`a rebase is still in progress in ${live.map((o) => o.occurrenceId || "root").join(", ")} and no receipt for step "${input.stepId}" proves what it returned`);
     }
     return notCompleted(`no rebase receipt for step "${input.stepId}" was found`);
 }
