@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -190,51 +190,108 @@ function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: 
     return { rootOrigin, worktree, task };
 }
 
+// Writes and commits a real file at relativePath inside checkoutPath, so occurrence resolution
+// has something real on disk to point at (not just a string it happens to compute correctly).
+function commitRealFile(checkoutPath: string, relativePath: string, contents: string): void {
+    mkdirSync(join(checkoutPath, join(relativePath, "..")), { recursive: true });
+    writeFileSync(join(checkoutPath, relativePath), contents);
+    git(checkoutPath, "add", relativePath);
+    git(checkoutPath, "commit", "-q", "-m", `add ${relativePath}`);
+}
+
+// Parses every "- taggedPath => absolutePath" edit-path line out of one DATA section of a
+// rendered amend-tests prompt, so assertions test what the agent actually receives rather than
+// a path recomputed independently in the test.
+function parseEmittedTestFileEntries(section: string): Array<{ taggedPath: string; absolutePath: string }> {
+    return section.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("- "))
+        .map((line) => {
+            const [taggedPath, absolutePath] = line.slice(2).split(" => ");
+            return { taggedPath, absolutePath };
+        });
+}
+
 test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
     // Setup: testFiles (every runnable changed test) contains both the created test and a
-    // separately modified pre-existing one, as runTaskTests.ts actually returns them.
+    // separately modified pre-existing one, as runTaskTests.ts actually returns them. Both are
+    // real, committed files at the worktree root, and a third real file lives in the child
+    // submodule occurrence.
     const { task } = makeOccurrenceFixture();
     const created = "tests/created.test.ts";
     const modified = "tests/modified.test.ts";
+    const childPath = "tests/child.test.ts";
+    const childTagged = buildOccurrencePath("child", childPath);
+    commitRealFile(task.repoRoot, created, "// created\n");
+    commitRealFile(task.repoRoot, modified, "// modified\n");
+    commitRealFile(join(task.repoRoot, "child"), childPath, "// child\n");
 
-    const prompt = amendTestsPrompt(task, "fix it", [created], [created, modified]);
+    const prompt = amendTestsPrompt(task, "fix it", [created], [created, modified, childTagged]);
 
     // Verification: the created test appears only in CREATED_TEST_FILES, never restated in
     // TEST_FILES as a pre-existing test subject to the broken-or-empty restriction.
     const data = prompt.slice(prompt.indexOf("---- DATA ----"));
     const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
-    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"));
+    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
     assert.match(createdSection, /tests\/created\.test\.ts/);
-    assert.doesNotMatch(preExistingSection.split("REVIEWER_NOTES")[0], /tests\/created\.test\.ts/);
+    assert.doesNotMatch(preExistingSection, /- tests\/created\.test\.ts =>/);
     assert.match(preExistingSection, /tests\/modified\.test\.ts/);
+    assert.match(preExistingSection, /child::tests\/child\.test\.ts/);
+
+    // Verification: every emitted edit path, in both categories, is a real, readable file that
+    // resolves inside the checkout its own tag names — never a nonexistent joined string.
+    const entries = [...parseEmittedTestFileEntries(createdSection), ...parseEmittedTestFileEntries(preExistingSection)];
+    assert.equal(entries.length, 3);
+    for (const { taggedPath, absolutePath } of entries) {
+        const expectedCheckout = taggedPath.startsWith("child::") ? join(task.repoRoot, "child") : task.repoRoot;
+        assert.ok(existsSync(absolutePath), `${absolutePath} does not exist`);
+        assert.equal(statSync(absolutePath).isFile(), true, `${absolutePath} is not a regular file`);
+        assert.doesNotThrow(() => readFileSync(absolutePath, "utf8"), `${absolutePath} could not be read`);
+        assert.equal(absolutePath.startsWith(`${expectedCheckout}/`), true, `${absolutePath} is not inside ${expectedCheckout}`);
+    }
 });
 
 test("test_amendTestsPrompt_resolvesANestedOccurrenceTestFileToAnAbsolutePathInsideItsCheckout", () => {
-    // Setup: a real submodule occurrence "child" and a test file tagged with it, the same shape
-    // runTaskTests.ts produces via buildOccurrencePath for a change inside that submodule.
+    // Setup: a real submodule occurrence "child" and a real, committed test file inside it,
+    // tagged the same way runTaskTests.ts tags a change inside that submodule.
     const { task } = makeOccurrenceFixture();
-    const taggedPath = buildOccurrencePath("child", "tests/child.test.ts");
+    const childPath = "tests/child.test.ts";
+    const taggedPath = buildOccurrencePath("child", childPath);
+    commitRealFile(join(task.repoRoot, "child"), childPath, "// child\n");
 
     const prompt = amendTestsPrompt(task, "fix it", [], [taggedPath]);
 
-    // Verification: the emitted path is absolute, lives inside the child submodule's checkout
-    // in THIS worktree (not the raw tagged string), and is directly openable.
-    const expectedPath = join(task.repoRoot, "child", "tests/child.test.ts");
-    assert.match(prompt, new RegExp(`- ${taggedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} => ${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.equal(prompt.includes("child::tests/child.test.ts =>"), true);
-    assert.equal(prompt.includes(`=> ${expectedPath}`), true);
+    // Verification: the emitted path is absolute, points at the real file inside the child
+    // submodule's checkout in THIS worktree (not the raw tagged string), and is directly openable.
+    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
+    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
+    const [entry] = parseEmittedTestFileEntries(preExistingSection);
+    const expectedCheckout = join(task.repoRoot, "child");
+    assert.equal(entry.taggedPath, taggedPath);
+    assert.ok(existsSync(entry.absolutePath), `${entry.absolutePath} does not exist`);
+    assert.equal(statSync(entry.absolutePath).isFile(), true);
+    assert.doesNotThrow(() => readFileSync(entry.absolutePath, "utf8"));
+    assert.equal(entry.absolutePath.startsWith(`${expectedCheckout}/`), true);
 });
 
 test("test_amendTestsPrompt_resolvesARootOccurrenceTestFileToAnAbsolutePathAtTheWorktreeRoot", () => {
-    // Setup: a plain (untagged) test path, the root occurrence's shape.
+    // Setup: a plain (untagged) test path, the root occurrence's shape, as a real committed file.
     const { task } = makeOccurrenceFixture();
     const rootPath = "tests/root.test.ts";
+    commitRealFile(task.repoRoot, rootPath, "// root\n");
 
     const prompt = amendTestsPrompt(task, "fix it", [rootPath], []);
 
-    // Verification: resolves under the worktree root itself, not the child submodule.
-    const expectedPath = join(task.repoRoot, "tests/root.test.ts");
-    assert.equal(prompt.includes(`- ${rootPath} => ${expectedPath}`), true);
+    // Verification: resolves under the worktree root itself, not the child submodule, and points
+    // at the real file.
+    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
+    const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
+    const [entry] = parseEmittedTestFileEntries(createdSection);
+    assert.equal(entry.taggedPath, rootPath);
+    assert.ok(existsSync(entry.absolutePath), `${entry.absolutePath} does not exist`);
+    assert.equal(statSync(entry.absolutePath).isFile(), true);
+    assert.doesNotThrow(() => readFileSync(entry.absolutePath, "utf8"));
+    assert.equal(entry.absolutePath.startsWith(`${task.repoRoot}/`), true);
 });
 
 test("test_planPrompt_includesTheScrapNotesWhenAPreambleIsGiven", () => {
