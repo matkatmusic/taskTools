@@ -265,7 +265,7 @@ test("skills/tackle-tasks holds only the current workflow files — no old conso
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
   const skillDir = join(repoRoot, "skills/tackle-tasks");
   const workflowFiles = readdirSync(skillDir).filter((name) => name.includes("workflow.js")).sort();
-  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "bootstrap.workflow.js", "tackle-tasks.workflow.js"]);
+  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "bootstrap.workflow.js", "resolve.workflow.js", "tackle-tasks.workflow.js"]);
 });
 
 // The harness rejects a script unless meta is the first statement and a pure literal.

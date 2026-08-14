@@ -52,6 +52,7 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
 // Libraries the pipeline imports but never dispatches as a box. Listed so that
 // test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory fails on any new unclassified script.
 export const NON_DISPATCHED_SCRIPTS: string[] = [
+    "SkillBodyEmitter",
     "greenBoxPolicy",
     "inputPaths",
     "occurrences",
