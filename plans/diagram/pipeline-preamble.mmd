@@ -1,6 +1,6 @@
 flowchart TB
 %% PREAMBLE PIPELINE. Split from pipeline.mmd. Starts at the task number.
-%% Ends by handing an initialized worktree to the planning pipeline, or a stop.
+%% Ends with an active task and an initialized worktree, or with an exit.
 %% Rules that apply everywhere, not steps:
 %%   1. Every git interaction goes through a script. Never prose.
 %%   2. Every read and write of tasks.json is atomic.
@@ -36,17 +36,20 @@ flowchart TB
 %% so drawing it would add one edge per box and hide the flow. Rule 3 is its
 %% specification: a non-zero exit from any script goes straight to the exit
 %% workflow with exit type run-failed and the script's stderr as the note.
+%% Every exit here goes to the exit workflow, which picks its own tail.
 %% invalid-number, not-open and already-active are the only exits that write
 %% nothing to tasks.json: the first two have no open task record to write to, and
-%% the third must not touch a run that belongs to another invocation. All three
-%% report and stop. Every other exit runs the exit workflow.
-%% The initialized worktree this pipeline emits is the input to the planning pipeline.
+%% the third must not touch a run that belongs to another invocation. The exit
+%% workflow gives those three its report-only tail; blocked and run-failed get
+%% the full tail. That choice is drawn there, not here.
+%% The active task and initialized worktree this pipeline emits are the input to
+%% the planning pipeline.
 
-  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> REPORTEDGE
+  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> EXITWF
   QV -- yes --> Q0{"is task open?"}
-  Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> REPORTEDGE
+  Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> EXITWF
   Q0 -- yes --> QA{"is the task active?"}
-  QA -- "yes<br/>exit type: already-active<br/>exit note: a previous run left the task active" --> REPORTEDGE
+  QA -- "yes<br/>exit type: already-active<br/>exit note: a previous run left the task active" --> EXITWF
   QA -- no --> MARK["mark the task active in tasks.json"]
   MARK --> QB{"is task blocked?"}
   QB -- "yes<br/>exit type: blocked<br/>exit note: an open blocker remains" --> EXITWF
@@ -61,13 +64,14 @@ flowchart TB
   QRS -- yes --> UPD
   QS -- yes --> UPD["update auto generated docs"]
   UPD --> INIT["init submodules recursively"]
-  INIT --> NEXT["planning pipeline"]
+  INIT --> RECEIPT["Receipt: { active task, initialized worktree }"]
 
-  EXITWF["exit workflow"]
-  REPORTEDGE["report the exit type and note"] --> STOP["stop"]
+  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote }" ]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class QV,Q0,QA,MARK,QB,Q1,NEW,GEN,QS,QRS,RESET,UPD,INIT,REPORTEDGE,STOP script
-  class NEXT,EXITWF output
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  class QV,Q0,QA,MARK,QB,Q1,NEW,GEN,QS,QRS,RESET,UPD,INIT script
+  class EXITWF fail
+  class RECEIPT,FAIL_RECEIPT output
