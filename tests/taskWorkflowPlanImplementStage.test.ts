@@ -9,7 +9,7 @@ import { buildWorkflowArguments } from '../scripts/prepareTasks.ts'
 import type { TaskRecord } from '../scripts/taskFiles.ts'
 
 const REPO_ROOT = process.cwd()
-const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), 'utf8')
+const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
 const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
 
@@ -29,7 +29,7 @@ const runTaskWorkflowAtRealScriptPath = async (
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js') },
   ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
   const repositoryManifest = {
     occurrences: [{ occurrenceId: '', checkoutPath: args.worktree, parentOccurrenceId: null, pathInParent: null, depth: 0 }],
@@ -118,7 +118,7 @@ const runRawWorkflow = (argsJson: string, agentImpl: AgentImpl) => {
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js') },
   ) as (argsJson: string, log: (...values: unknown[]) => void, agent: AgentImpl) => Promise<WorkflowEnvelope>
   return fn(argsJson, () => {}, agentImpl)
 }

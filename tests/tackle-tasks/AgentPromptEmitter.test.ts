@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/tackle-tasks/AgentPromptEmitter.ts. Run: node --test tests/tackle-tasks/AgentPromptEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +19,8 @@ import {
     reviewTestsPrompt,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
-import { buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
+import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
+import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 
 const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/AgentPromptEmitter.ts", import.meta.url));
 
@@ -130,6 +131,110 @@ test("test_amendTestsPrompt_distinguishesCreatedTestsFromModifiedForeignOnes", (
     assert.match(prompt, /CREATED_TEST_FILES \(freely editable\) =\n {2}- tests\/created\.test\.ts/);
     assert.match(prompt, /broken or asserts nothing applies to every one of these/);
     assert.match(prompt, /TEST_FILES \(pre-existing, broken-or-empty exception only\) =\n {2}- tests\/foreign\.test\.ts/);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 10 audit finding 6 — amendTestsPrompt must derive the pre-existing list from
+// testFiles minus createdTestFiles (never trust the caller's subtraction), and must resolve
+// every occurrence-tagged path to a real absolute path in the worktree, including inside a
+// nested submodule occurrence. A real submodule and a real `git worktree add` are used
+// throughout, per global rule 9 — no mock, no standalone repo standing in for a linked worktree.
+// ---------------------------------------------------------------------------
+
+process.env.GIT_ALLOW_PROTOCOL = "file";
+
+function git(repoPath: string, ...args: string[]): string {
+    return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();
+}
+
+function makeTempRepoWithCommit(branchName: string): string {
+    const repoPath = mkdtempSync(join(tmpdir(), "agent-prompt-emitter-occ-"));
+    git(repoPath, "init", "-q", "-b", branchName);
+    git(repoPath, "config", "user.email", "test@example.com");
+    git(repoPath, "config", "user.name", "Test");
+    writeFileSync(join(repoPath, "seed.txt"), "seed\n");
+    git(repoPath, "add", "seed.txt");
+    git(repoPath, "commit", "-q", "-m", "seed");
+    return repoPath;
+}
+
+// The canonical source repository: a root repo with one real submodule, per global rule 9.
+function makeSourceRepoWithSubmodule(): string {
+    const childOrigin = makeTempRepoWithCommit("child-main");
+    const rootOrigin = makeTempRepoWithCommit("main");
+    git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
+    git(rootOrigin, "commit", "-q", "-m", "add submodule child");
+    return rootOrigin;
+}
+
+let nextOccurrenceGroupId = 9001;
+
+// A real linked worktree (root + submodule checked out via `git worktree add`), with tasks.json
+// and the brief already in place so loadPreparedTask succeeds.
+function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: PreparedTask } {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const taskNumber = nextOccurrenceGroupId++;
+    const worktree = createWorktreeForGroup(rootOrigin, {
+        groupId: taskNumber,
+        taskNumbers: [taskNumber],
+        filePaths: [],
+        scope: "declared",
+    });
+    writeFileSync(join(rootOrigin, "tasks.json"), JSON.stringify([
+        { taskNumber, title: "sample task", files: [], tests: "skip" },
+    ]));
+    writeFileSync(join(rootOrigin, "completedTasks.json"), "[]");
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", `brief-${taskNumber}.md`), `# fixture sentinel brief for task ${taskNumber}\n`);
+    const task = loadPreparedTask(taskNumber, worktree, rootOrigin);
+    return { rootOrigin, worktree, task };
+}
+
+test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
+    // Setup: testFiles (every runnable changed test) contains both the created test and a
+    // separately modified pre-existing one, as runTaskTests.ts actually returns them.
+    const { task } = makeOccurrenceFixture();
+    const created = "tests/created.test.ts";
+    const modified = "tests/modified.test.ts";
+
+    const prompt = amendTestsPrompt(task, "fix it", [created], [created, modified]);
+
+    // Verification: the created test appears only in CREATED_TEST_FILES, never restated in
+    // TEST_FILES as a pre-existing test subject to the broken-or-empty restriction.
+    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
+    const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
+    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"));
+    assert.match(createdSection, /tests\/created\.test\.ts/);
+    assert.doesNotMatch(preExistingSection.split("REVIEWER_NOTES")[0], /tests\/created\.test\.ts/);
+    assert.match(preExistingSection, /tests\/modified\.test\.ts/);
+});
+
+test("test_amendTestsPrompt_resolvesANestedOccurrenceTestFileToAnAbsolutePathInsideItsCheckout", () => {
+    // Setup: a real submodule occurrence "child" and a test file tagged with it, the same shape
+    // runTaskTests.ts produces via buildOccurrencePath for a change inside that submodule.
+    const { task } = makeOccurrenceFixture();
+    const taggedPath = buildOccurrencePath("child", "tests/child.test.ts");
+
+    const prompt = amendTestsPrompt(task, "fix it", [], [taggedPath]);
+
+    // Verification: the emitted path is absolute, lives inside the child submodule's checkout
+    // in THIS worktree (not the raw tagged string), and is directly openable.
+    const expectedPath = join(task.repoRoot, "child", "tests/child.test.ts");
+    assert.match(prompt, new RegExp(`- ${taggedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} => ${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.equal(prompt.includes("child::tests/child.test.ts =>"), true);
+    assert.equal(prompt.includes(`=> ${expectedPath}`), true);
+});
+
+test("test_amendTestsPrompt_resolvesARootOccurrenceTestFileToAnAbsolutePathAtTheWorktreeRoot", () => {
+    // Setup: a plain (untagged) test path, the root occurrence's shape.
+    const { task } = makeOccurrenceFixture();
+    const rootPath = "tests/root.test.ts";
+
+    const prompt = amendTestsPrompt(task, "fix it", [rootPath], []);
+
+    // Verification: resolves under the worktree root itself, not the child submodule.
+    const expectedPath = join(task.repoRoot, "tests/root.test.ts");
+    assert.equal(prompt.includes(`- ${rootPath} => ${expectedPath}`), true);
 });
 
 test("test_planPrompt_includesTheScrapNotesWhenAPreambleIsGiven", () => {

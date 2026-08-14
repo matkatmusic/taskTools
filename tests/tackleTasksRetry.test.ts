@@ -10,8 +10,10 @@ const WORKFLOW_NAMES = ["blockers", "tackle-tasks"];
 const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 17 };
 const HELPER_MARKER = "// ponytail: null/undefined means the harness returned no result";
 
+// The v1.5 rebuild moved tackle-tasks off the blanket retry rule: a mutating box reconciles instead.
+// These gates therefore watch the frozen v1.1 copy, which still retries every agent call.
 const readWorkflow = (name: string) =>
-    readFileSync(join(import.meta.dirname, "..", "skills", "tackle-tasks", `${name}.workflow.js`), "utf8");
+    readFileSync(join(import.meta.dirname, "..", "skills", "tackle-tasks-v1_1", `${name}.workflow.js`), "utf8");
 
 const extractHelper = (source: string) => {
     const start = source.indexOf(HELPER_MARKER);

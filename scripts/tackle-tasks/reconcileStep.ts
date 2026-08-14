@@ -184,6 +184,11 @@ function reconcileCreateTaskWorktree(input: ReconcileStepInput): ReconcileStepOu
     return completed({ worktree: worktreePath, branch });
 }
 
+// Finding 1 (phase10-audit.md): the real box now establishes lease ownership first, independent
+// of the notes verdict, so reconciliation must prove ownership first too. Ownership is proved
+// the same way every other handler here proves it: both lease records name this run. Without
+// that, we cannot tell "the box never ran" from "the box ran but a rival run holds the lease" -
+// both leave the lease unproved, so both stay not-completed, never guessed at.
 function reconcileIsTaskRunResumable(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     if (state === null) return ambiguous("the task is not in tasks.json, so prior notes cannot be read");
@@ -191,16 +196,16 @@ function reconcileIsTaskRunResumable(input: ReconcileStepInput): ReconcileStepOu
     // is only recomputed correctly against the exact path the lost box was given.
     const worktreePath = readString(input.stepInput, "worktreePath");
     if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
+    if (state.leaseRunId !== input.runId || !physicalLeaseNames(worktreePath, input.runId)) {
+        return notCompleted(`the lease does not yet name ${input.runId}`);
+    }
     const endedRuns = state.history.filter((run) => run.endedAt !== null);
     const notesFile = endedRuns[endedRuns.length - 1]?.implementationNotesFile ?? null;
-    // A false verdict writes nothing, so recomputing it is the whole reconciliation. The shared
-    // predicate rejects a "../" escape, an absolute-outside path, a symlink escape and a
-    // directory the same way the real isTaskRunResumable does.
+    // A false verdict writes nothing beyond the lease already proved above, so recomputing it is
+    // the rest of the reconciliation. The shared predicate rejects a "../" escape, an
+    // absolute-outside path, a symlink escape and a directory the same way the real box does.
     if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
-        return completed({ resumable: false, implementationNotesFile: null, leaseEstablished: false });
-    }
-    if (state.leaseRunId !== input.runId || !physicalLeaseNames(worktreePath, input.runId)) {
-        return notCompleted(`resumable work was found but the lease does not yet name ${input.runId}`);
+        return completed({ resumable: false, implementationNotesFile: null, leaseEstablished: true });
     }
     return completed({ resumable: true, implementationNotesFile: notesFile, leaseEstablished: true });
 }
