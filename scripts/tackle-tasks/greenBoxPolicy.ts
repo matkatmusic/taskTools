@@ -13,7 +13,6 @@ export const READ_ONLY_RETRY_LIMIT = 3;
 export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     advanceTaskRebase: "mutating",
     AgentPromptEmitter: "read-only",
-    amendExitNotesIntoBrief: "mutating",
     applyPlanAmendments: "mutating",
     buildClosureNote: "read-only",
     checkTaskFileFence: "read-only",
@@ -52,6 +51,7 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
 // Libraries the pipeline imports but never dispatches as a box. Listed so that
 // test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory fails on any new unclassified script.
 export const NON_DISPATCHED_SCRIPTS: string[] = [
+    "PlannerBodyEmitter",
     "SkillBodyEmitter",
     "greenBoxPolicy",
     "inputPaths",

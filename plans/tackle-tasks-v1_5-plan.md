@@ -443,15 +443,21 @@ Tests: `test_recoverSourceRepoLockCli_requiresTheExactConfirmation`,
 ### 1d. `scripts/tackle-tasks/writeTaskBrief.ts`
 
 ```ts
-export function renderTaskBrief(taskNumber: number, projectRoot: string): string
-export function writeTaskBrief(taskNumber: number, worktreePath: string, projectRoot: string): string
+export function generateTaskBriefContents(taskNumber: number, projectRoot: string): string
+export function writeTaskBriefToDisk(taskNumber: number, worktreePath: string, projectRoot: string): string
 export function configureGeneratedArtifactIsolation(taskNumber: number, worktreePath: string): string[]
 ```
 
-`renderTaskBrief` is pure and returns the expected bytes by calling the extracted
-`renderTaskBriefContent` from `scripts/prepareTasks.ts`. `writeTaskBrief` writes those bytes
-and remains the idempotent wrapper around `writeTaskBriefFile`. The pure renderer is what
-lets `reconcileStep` compare a brief without rewriting it.
+`generateTaskBriefContents` is pure and returns the expected bytes by calling the extracted
+`renderTaskBriefContent` from `scripts/prepareTasks.ts`. `writeTaskBriefToDisk` writes those
+bytes and remains the idempotent wrapper around `writeTaskBriefFile`. The pure renderer is
+what lets `reconcileStep` compare a brief without rewriting it.
+
+Its previous-run sections carry `startedAt`, `exitType`, `exitNote`, `modifiedFiles` and
+`implementationNotesFile`, newest first, skipping any run with no `exitType`. That render
+absorbed the retired `amendExitNotesIntoBrief.ts`, which appended a second `## Previous runs`
+section onto the same file on the fresh-worktree path only. One renderer means one heading,
+and the resumed-worktree path now carries the same history the fresh path does.
 
 **The brief carries at most the three most recent previous runs** `[a3 30]`. The full
 history stays in `tasks.json`; a heavily retried task would otherwise grow a prompt without

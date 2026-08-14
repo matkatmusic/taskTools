@@ -93,8 +93,7 @@ flowchart TB
   QB -- no --> Q1{"does a worktree exist?"}
   Q1 -- no --> NEW["create a worktree"]
   NEW --> GEN["auto generate docs"]
-  GEN --> AMD["amend last exit notes"]
-  AMD --> INIT
+  GEN --> INIT
   Q1 -- yes --> QS{"is the worktree safe to use?"}
   QS -- no --> QRS{"is the previous run's work resumable?"}
   QRS -- no --> RESET["reset the worktree"]
@@ -160,5 +159,5 @@ flowchart TB
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
-  class QV,Q0,MARK,QB,Q1,NEW,GEN,AMD,QS,QRS,RESET,UPD,INIT,VALP,VALR,QR,AM,NOTES,CW,TT,QTF,QCX,RB,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4,HASH,DONE,RECOK,OFFOK,CLEAN,VNOTES,ARCH,EXIT,REC,OFF,REL,STOP script
+  class QV,Q0,MARK,QB,Q1,NEW,GEN,QS,QRS,RESET,UPD,INIT,VALP,VALR,QR,AM,NOTES,CW,TT,QTF,QCX,RB,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4,HASH,DONE,RECOK,OFFOK,CLEAN,VNOTES,ARCH,EXIT,REC,OFF,REL,STOP script
   class P,R,A,RT,FIX,FIXC,FIXT,AMT prose

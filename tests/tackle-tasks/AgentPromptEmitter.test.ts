@@ -333,7 +333,7 @@ for (const [role, buildPrompt] of Object.entries({
 // ---------------------------------------------------------------------------
 
 test("test_loadPreparedTask_doesNotRewriteTheBriefFile", () => {
-    // Setup: a fixture whose brief file holds sentinel content that renderTaskBrief would
+    // Setup: a fixture whose brief file holds sentinel content that generateTaskBriefContents would
     // never produce (it does not know about this exact sentence).
     const { worktree, task } = makeFixture(50);
     const before = readFileSync(task.briefFile, "utf8");

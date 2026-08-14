@@ -1,12 +1,12 @@
 // "auto generate docs" — plans/tackle-tasks-v1_5-plan.md Phase 3.
 import { readFileSync } from "node:fs";
-import { configureGeneratedArtifactIsolation, writeTaskBrief } from "./writeTaskBrief.ts";
+import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./writeTaskBrief.ts";
 
 export type GenerateTaskDocsOutput = { briefFile: string };
 
 export function generateTaskDocs(taskNumber: number, worktreePath: string, projectRoot: string): GenerateTaskDocsOutput {
     configureGeneratedArtifactIsolation(taskNumber, worktreePath);
-    const briefFile = writeTaskBrief(taskNumber, worktreePath, projectRoot);
+    const briefFile = writeTaskBriefToDisk(taskNumber, worktreePath, projectRoot);
     return { briefFile };
 }
 

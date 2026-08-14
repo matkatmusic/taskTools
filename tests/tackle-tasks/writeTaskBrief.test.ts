@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
     configureGeneratedArtifactIsolation,
-    renderTaskBrief,
-    writeTaskBrief,
+    generateTaskBriefContents,
+    writeTaskBriefToDisk,
 } from "../../scripts/tackle-tasks/writeTaskBrief.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 import type { TaskGroup } from "../../scripts/taskGroups.ts";
@@ -64,7 +64,7 @@ function listFilesRecursively(root: string): string[] {
     return results.sort();
 }
 
-test("test_renderTaskBrief_writesNothingToDisk", () => {
+test("test_generateTaskBriefContents_writesNothingToDisk", () => {
     // Scenario: rendering a brief must be a pure read, no side effects on disk.
     const repoRoot = makeTempRepoWithCommit();
     writeFileSync(join(repoRoot, "fileA.txt"), "MARKER-abc123\n");
@@ -72,41 +72,41 @@ test("test_renderTaskBrief_writesNothingToDisk", () => {
     // Snapshot the project directory before rendering.
     const before = listFilesRecursively(repoRoot);
     // Render the brief.
-    renderTaskBrief(1, repoRoot);
+    generateTaskBriefContents(1, repoRoot);
     // The directory listing is unchanged: nothing was written.
     const after = listFilesRecursively(repoRoot);
     assert.deepEqual(after, before);
 });
 
-test("test_renderTaskBrief_returnsTheSameBytesWriteTaskBriefWrites", () => {
-    // Scenario: writeTaskBrief writes exactly what renderTaskBrief computes.
+test("test_generateTaskBriefContents_returnsTheSameBytesWriteTaskBriefToDiskWrites", () => {
+    // Scenario: writeTaskBriefToDisk writes exactly what generateTaskBriefContents computes.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
     const worktreePath = mkdtempSync(join(tmpdir(), "write-task-brief-wt-"));
     // Render, then write, and compare bytes.
-    const rendered = renderTaskBrief(1, repoRoot);
-    const briefFile = writeTaskBrief(1, worktreePath, repoRoot);
+    const rendered = generateTaskBriefContents(1, repoRoot);
+    const briefFile = writeTaskBriefToDisk(1, worktreePath, repoRoot);
     const written = readFileSync(briefFile, "utf8");
     assert.equal(written, rendered);
 });
 
-test("test_writeTaskBrief_isIdempotent", () => {
-    // Scenario: running writeTaskBrief twice must produce the same file with the same bytes.
+test("test_writeTaskBriefToDisk_isIdempotent", () => {
+    // Scenario: running writeTaskBriefToDisk twice must produce the same file with the same bytes.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
     const worktreePath = mkdtempSync(join(tmpdir(), "write-task-brief-wt-"));
     // Write once.
-    const firstPath = writeTaskBrief(1, worktreePath, repoRoot);
+    const firstPath = writeTaskBriefToDisk(1, worktreePath, repoRoot);
     const firstBytes = readFileSync(firstPath, "utf8");
     // Write again.
-    const secondPath = writeTaskBrief(1, worktreePath, repoRoot);
+    const secondPath = writeTaskBriefToDisk(1, worktreePath, repoRoot);
     const secondBytes = readFileSync(secondPath, "utf8");
     // Same path, same bytes.
     assert.equal(secondPath, firstPath);
     assert.equal(secondBytes, firstBytes);
 });
 
-test("test_renderTaskBrief_carriesAtMostThreePreviousRuns", () => {
+test("test_generateTaskBriefContents_carriesAtMostThreePreviousRuns", () => {
     // Scenario: a task has five ended previous runs; the brief must only mention the three most recent.
     const repoRoot = makeTempRepoWithCommit();
     const history = ["run-1", "run-2", "run-3", "run-4", "run-5"].map((runId) => endedRun({ runId }));
@@ -115,7 +115,7 @@ test("test_renderTaskBrief_carriesAtMostThreePreviousRuns", () => {
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
-    const brief = renderTaskBrief(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot);
     // Only the three most recent runs appear; the two oldest are absent.
     assert.ok(brief.includes("run-3"));
     assert.ok(brief.includes("run-4"));
@@ -124,7 +124,7 @@ test("test_renderTaskBrief_carriesAtMostThreePreviousRuns", () => {
     assert.ok(!brief.includes("run-2"));
 });
 
-test("test_renderTaskBrief_saysHowManyEarlierRunsWereOmitted", () => {
+test("test_generateTaskBriefContents_saysHowManyEarlierRunsWereOmitted", () => {
     // Scenario: a task has seven ended previous runs; four are earlier than the three kept.
     const repoRoot = makeTempRepoWithCommit();
     const history = Array.from({ length: 7 }, (_, index) => endedRun({ runId: `run-${index + 1}` }));
@@ -133,19 +133,70 @@ test("test_renderTaskBrief_saysHowManyEarlierRunsWereOmitted", () => {
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
-    const brief = renderTaskBrief(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot);
     // The exact omission wording appears.
     assert.ok(brief.includes("(4 earlier runs omitted)"));
 });
 
-test("test_renderTaskBrief_omitsThePreviousRunSectionWhenThereAreNone", () => {
+test("test_generateTaskBriefContents_omitsThePreviousRunSectionWhenThereAreNone", () => {
     // Scenario: a task has never run before.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
     // Render the brief.
-    const brief = renderTaskBrief(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot);
     // No "previous runs" heading appears anywhere in the brief.
     assert.ok(!/previous runs/i.test(brief));
+});
+
+test("test_generateTaskBriefContents_carriesTheFieldsThatTellTwoRunsApart", () => {
+    // Scenario: absorbed from the deleted amendExitNotesIntoBrief box — a previous-run section
+    // must name its start time, the files it touched and its notes file, or two runs of the
+    // same task read the same.
+    const repoRoot = makeTempRepoWithCommit();
+    const history = [endedRun({
+        runId: "run-a", startedAt: "2026-08-02T03:04:05-07:00", exitType: "tests-red",
+        exitNote: "task tests failed", modifiedFiles: ["src/a.ts", "src/b.ts"],
+        implementationNotesFile: "plans/implementation-notes-1.md",
+    })];
+    writeTasksFile(repoRoot, [{
+        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        run: { active: false, worktree: null, leaseRunId: null, history },
+    }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(brief.includes("### Run run-a — 2026-08-02T03:04:05-07:00"));
+    assert.ok(brief.includes("Exit type: tests-red"));
+    assert.ok(brief.includes("Exit note: task tests failed"));
+    assert.ok(brief.includes("Modified files: src/a.ts, src/b.ts"));
+    assert.ok(brief.includes("Implementation notes: plans/implementation-notes-1.md"));
+});
+
+test("test_generateTaskBriefContents_ordersPreviousRunsNewestFirstAndSkipsRunsWithNoExitType", () => {
+    // Scenario: a run that never recorded an exit type explains nothing, so it is left out.
+    const repoRoot = makeTempRepoWithCommit();
+    const history = [
+        endedRun({ runId: "run-old", startedAt: "2026-08-01T00:00:00-07:00" }),
+        endedRun({ runId: "run-silent", exitType: null }),
+        endedRun({ runId: "run-new", startedAt: "2026-08-03T00:00:00-07:00" }),
+    ];
+    writeTasksFile(repoRoot, [{
+        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        run: { active: false, worktree: null, leaseRunId: null, history },
+    }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(!brief.includes("run-silent"));
+    assert.ok(brief.indexOf("run-new") < brief.indexOf("run-old"));
+});
+
+test("test_generateTaskBriefContents_writesThePreviousRunsHeadingExactlyOnce", () => {
+    // Scenario: the old AMD box appended a second "## Previous runs" section onto the brief.
+    // One renderer means one heading, on every path.
+    const repoRoot = makeTempRepoWithCommit();
+    writeTasksFile(repoRoot, [{
+        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        run: { active: false, worktree: null, leaseRunId: null, history: [endedRun()] },
+    }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.equal(brief.split("## Previous runs").length - 1, 1);
 });
 
 test("test_configureGeneratedArtifactIsolation_marksAnAlreadyTrackedBriefSkipWorktree", () => {

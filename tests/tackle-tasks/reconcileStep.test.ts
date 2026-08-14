@@ -14,7 +14,6 @@ import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.
 import { claimTaskRun } from "../../scripts/tackle-tasks/claimTaskRun.ts";
 import { generateTaskDocs } from "../../scripts/tackle-tasks/generateTaskDocs.ts";
 import { updateTaskDocs } from "../../scripts/tackle-tasks/updateTaskDocs.ts";
-import { amendExitNotesIntoBrief } from "../../scripts/tackle-tasks/amendExitNotesIntoBrief.ts";
 import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
 import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
 import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
@@ -895,39 +894,6 @@ test("test_reconcileStep_recognizesAnUpdatedBriefAfterALostResult", () => {
     assert.deepEqual(result.result, { briefFile: realOutput.briefFile });
 });
 
-test("test_reconcileStep_recognizesAmendedExitNotesAfterALostResult", () => {
-    // Setup: a real ended run with an exitType, then a fresh active run on the same task.
-    const root = mkdtempSync(join(tmpdir(), "reconcileStep-amend-"));
-    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
-    assert.equal(claimTask(1, "run-old", root).status, "claimed");
-    writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "run-failed", exitNote: "stopped" });
-    markTaskInactive({ taskNumber: 1, runId: "run-old", projectRoot: root });
-    assert.equal(claimTask(1, "run-new", root).status, "claimed");
-    const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-amend-wt-"));
-    mkdirSync(join(worktreePath, "plans"), { recursive: true });
-
-    // Test action: amend for real, then discard the returned value.
-    const realOutput = amendExitNotesIntoBrief(1, worktreePath, root);
-    assert.equal(realOutput.runsAmended, 1);
-
-    const result = reconcileStep(baseInput({
-        script: "amendExitNotesIntoBrief", taskNumber: 1, runId: "run-new", projectRoot: root,
-        stepInput: { worktreePath },
-    }));
-
-    // Verification: the reconstructed result matches AmendExitNotesIntoBriefOutput field-for-field.
-    assert.equal(result.status, "completed");
-    assert.deepEqual(result.result, { briefFile: realOutput.briefFile, runsAmended: 1 });
-
-    // Verification: a real second invocation duplicates the heading - ambiguous, never guessed complete.
-    amendExitNotesIntoBrief(1, worktreePath, root);
-    const duplicated = reconcileStep(baseInput({
-        script: "amendExitNotesIntoBrief", taskNumber: 1, runId: "run-new", projectRoot: root,
-        stepInput: { worktreePath },
-    }));
-    assert.equal(duplicated.status, "ambiguous");
-});
-
 test("test_reconcileStep_recognizesAStoredFullSuiteDecisionAfterALostResult", () => {
     // Setup: a real linked worktree whose root has a discoverable, fast, always-green test script.
     const root = makeCommittedRepo("reconcileStep-fullsuite-root-", "main");
@@ -1270,7 +1236,6 @@ test("test_reconcileStep_reportsNotCompletedWhenExitNotesPlainlyWereNotWritten",
 // in this file, fails test_reconcileStep_hasANamedFaultInjectionCaseForEveryMutatingRow below.
 const FAULT_INJECTION_CASES: Record<string, string[]> = {
     advanceTaskRebase: ["test_reconcileStep_recognizesAFinishedAdvanceAfterALostResult"],
-    amendExitNotesIntoBrief: ["test_reconcileStep_recognizesAmendedExitNotesAfterALostResult"],
     applyPlanAmendments: ["test_reconcileStep_recognizesAnAlreadyAppliedAmendment"],
     claimTaskRun: ["test_reconcileStep_recognizesAnActiveClaimAfterALostResult"],
     cleanupTaskWorktree: ["test_reconcileStep_recognizesACompletedCleanup"],

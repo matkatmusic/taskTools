@@ -17,14 +17,25 @@ export const GENERATED_ARTIFACT_PATTERNS = [
     "plans/implementation-notes-*.md",
 ];
 
+// startedAt is what tells two runs of the same task apart, so it leads the heading.
 function renderPreviousRunSection(run: TaskRunRecord): string {
-    return `### Run ${run.runId} (${run.exitType ?? "unknown"})\n\n${run.exitNote ?? "(no note)"}\n`;
+    const modifiedFiles = run.modifiedFiles.length > 0 ? run.modifiedFiles.join(", ") : "(none recorded)";
+    return [
+        `### Run ${run.runId} — ${run.startedAt}`,
+        "",
+        `Exit type: ${run.exitType ?? "(none recorded)"}`,
+        `Exit note: ${run.exitNote ?? "(none recorded)"}`,
+        `Modified files: ${modifiedFiles}`,
+        `Implementation notes: ${run.implementationNotesFile ?? "(none recorded)"}`,
+        "",
+    ].join("\n");
 }
 
 function renderPreviousRunsSection(previousRuns: TaskRunRecord[]): string {
-    if (previousRuns.length === 0) return "";
-    const kept = previousRuns.slice(-MAX_PREVIOUS_RUNS_SHOWN);
-    const omittedCount = previousRuns.length - kept.length;
+    const runsWithExitType = previousRuns.filter((run) => run.exitType !== null).reverse();
+    if (runsWithExitType.length === 0) return "";
+    const kept = runsWithExitType.slice(0, MAX_PREVIOUS_RUNS_SHOWN);
+    const omittedCount = runsWithExitType.length - kept.length;
     return [
         "",
         "## Previous runs",
@@ -34,7 +45,7 @@ function renderPreviousRunsSection(previousRuns: TaskRunRecord[]): string {
     ].join("\n");
 }
 
-export function renderTaskBrief(taskNumber: number, projectRoot: string): string {
+export function generateTaskBriefContents(taskNumber: number, projectRoot: string): string {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
@@ -42,10 +53,10 @@ export function renderTaskBrief(taskNumber: number, projectRoot: string): string
     return renderTaskBriefContent(task, projectRoot) + renderPreviousRunsSection(previousRuns);
 }
 
-export function writeTaskBrief(taskNumber: number, worktreePath: string, projectRoot: string): string {
+export function writeTaskBriefToDisk(taskNumber: number, worktreePath: string, projectRoot: string): string {
     const briefFile = join(worktreePath, "plans", `brief-${taskNumber}.md`);
     mkdirSync(dirname(briefFile), { recursive: true });
-    writeFileSync(briefFile, renderTaskBrief(taskNumber, projectRoot));
+    writeFileSync(briefFile, generateTaskBriefContents(taskNumber, projectRoot));
     return briefFile;
 }
 

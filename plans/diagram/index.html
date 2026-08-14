@@ -23,9 +23,11 @@
     // wrappingWidth keeps long labels inside their shape instead of running past it
     flowchart: { htmlLabels: true, useMaxWidth: false, padding: 12, wrappingWidth: 220 },
   })
+  const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
+  document.title = file
   let last = null
   setInterval(async () => {
-    const src = await (await fetch('pipeline.mmd?t=' + Date.now())).text()
+    const src = await (await fetch(file + '?t=' + Date.now())).text()
     if (src === last) return
     last = src
     try {
