@@ -50,14 +50,22 @@ flowchart TB
   REVIEW --> VALR{"is the review file structure valid?"}
   VALR -- "invalid<br/>exit type: run-failed<br/>exit note: the codex review is malformed" --> EXITWF
   VALR -- valid --> QR{"what is the review verdict?"}
-  QR -- "scrap, 1st time" --> NOTES["script adds the codex scrap<br/>notes to the task brief"]
+  QR --> SCRAP["SCRAP"]
+  QR --> AMEND["AMEND"]
+  QR --> ACCEPT["ACCEPT"]
+
+  SCRAP --> QSCRAP{"First Time Scrap?"}
+  QSCRAP -- yes --> NOTES["script adds the codex scrap<br/>notes to the task brief"]
   NOTES --> P
-  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped<br/>the plan twice" --> EXITWF
-  QR -- amend --> AM["script applies codex<br/>amendments to the plan"]
+  QSCRAP -- no --> SCRAP2["Second Time Scrap"]
+  SCRAP2 -- "exit type: plan-scrapped<br/>exit note: codex scrapped<br/>the plan twice" --> EXITWF
+
+  AMEND --> AM["script applies codex<br/>amendments to the plan"]
   AM --> QAM{"2 amend rounds done?"}
   QAM -- "no: re-review the amended plan" --> R
   QAM -- yes --> RECEIPT
-  QR -- accept --> RECEIPT["Receipt: { plan file }"]
+
+  ACCEPT --> RECEIPT["Receipt: { plan file }"]
 
   EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote, problem }"]
 
@@ -65,7 +73,9 @@ flowchart TB
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class VALP,VALR,QR,AM,QAM,NOTES script
+  classDef verdict fill:#4a4a4a,stroke:#8a8a8a,color:#ffffff
+  class SCRAP,AMEND,ACCEPT,SCRAP2 verdict
+  class VALP,VALR,QR,QSCRAP,AM,QAM,NOTES script
   class P,R prose
   class EXITWF fail
   class INPUT,PLANFILE,REVIEW,RECEIPT,FAIL_RECEIPT output
