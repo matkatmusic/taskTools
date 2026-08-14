@@ -1,0 +1,47 @@
+flowchart TB
+%% PLANNING PIPELINE. Split from pipeline.mmd.
+%% Input: an initialized worktree from the preamble pipeline.
+%% Starts at "plan the task".
+%% Ends with a plan file, or with the plan scrapped.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Every read and write of tasks.json is atomic.
+%%   3. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. No step is retried after it has mutated
+%%      anything. The task is already active and a worktree already exists here,
+%%      so the exit workflow always runs in full.
+%%   4. A mutating box whose result is lost is never blindly retried and never
+%%      assumed failed. Each one has a read-only reconciliation check that reads
+%%      the world and decides whether it already happened. A safe idempotent
+%%      rerun happens only after reconciliation proves it did not complete. Only
+%%      an ambiguous loss is run-failed.
+%%   5. Codex gets two chances. A scrapped plan is replanned once with codex's
+%%      notes; a second scrap ends the run. A plan file that fails validation
+%%      counts as a scrap, so a plan that never validates cannot loop forever.
+%% Exit types this pipeline can produce:
+%%   plan-scrapped      - codex scrapped the plan twice
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge. It can leave ANY green box,
+%% so drawing it would add one edge per box and hide the flow. Rule 3 is its
+%% specification: a non-zero exit from any script goes straight to the exit
+%% workflow with exit type run-failed and the script's stderr as the note.
+%% The plan file this pipeline emits is the input to the implement and test pipeline.
+
+  P["plan the task"] --> VALP["validate the plan file"]
+  VALP -- "invalid: counts as a scrap" --> QR
+  VALP -- valid --> R["codex reviews the plan"]
+  R --> VALR["validate the codex review and read its verdict"]
+  VALR --> QR{"amend or scrap?"}
+  QR -- "scrap, 1st time: replan with codex notes" --> P
+  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXITWF
+  QR -- amend --> AM["script applies codex amendments to the plan"]
+  AM --> PLAN["plan file"]
+
+  EXITWF["exit workflow"]
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class VALP,VALR,QR,AM script
+  class P,R prose
+  class PLAN,EXITWF output

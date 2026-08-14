@@ -1,0 +1,83 @@
+flowchart TB
+%% REBASE AND MERGE PIPELINE. Split from pipeline.mmd.
+%% Input: a finished implementation from the implement and test pipeline, with
+%% the source repo already locked by that pipeline's last box.
+%% Starts at "rebase onto the target branch if needed".
+%% Ends with a merge receipt, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Every read and write of tasks.json is atomic.
+%%   3. "fix the codebase" edits source, not tests.
+%%   4. Never progress past a suite run until every test passes.
+%%   5. Every test loop runs commit the work -> test the work -> repair the work.
+%%      A repair is never tested until it is committed, so each loop re-enters at
+%%      its "commit if needed" box, never at the test box.
+%%   6. "commit if needed" commits nothing when the worktree is clean. Its message
+%%      is derived, not chosen: every commit here is a repair to code that made
+%%      tests fail, or a resolved conflict.
+%%   7. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last: commit, run tests, record
+%%      modified files, the fence check, rebase, advance and merge all walk the
+%%      same occurrence tree. Boxes that only read or write tasks.json do not.
+%%   8. The source repo lock is already held when this pipeline starts and stays
+%%      held until the exit workflow releases it. The rebase re-reads the source
+%%      tip after the lock is acquired. A merge retry re-enters at the rebase
+%%      box, not at the lock box: re-acquiring the same owner token is a no-op.
+%%      Every box here refreshes the lock's heartbeat, so a lock whose heartbeat
+%%      has gone cold is recoverable. A warm lock is waited on; a cold lock stops
+%%      the waiting run and prints the exact owner token. It can be removed only
+%%      by the explicit recoverSourceRepoLock.ts maintenance script with an exact
+%%      typed confirmation; the workflow never invokes recovery itself. Elapsed
+%%      time alone never authorizes takeover.
+%%   9. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. No step is retried after it has mutated
+%%      anything. The task is already active and a worktree already exists here,
+%%      so the exit workflow always runs in full.
+%%  10. A mutating box whose result is lost is never blindly retried and never
+%%      assumed failed. Each one, including a test box that records its result,
+%%      has a read-only reconciliation check that reads the world and decides
+%%      whether it already happened. A safe idempotent rerun happens only after
+%%      reconciliation proves it did not complete. Only an ambiguous loss is
+%%      run-failed.
+%% Exit types this pipeline can produce:
+%%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
+%%   suite-red          - full suite still failing after 2 fix attempts
+%%   fence-violation    - a step changed a file the task does not own
+%%   merge-failed       - the merge did not land twice
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge. It can leave ANY green box,
+%% so drawing it would add one edge per box and hide the flow. Rule 9 is its
+%% specification: a non-zero exit from any script goes straight to the exit
+%% workflow with exit type run-failed and the script's stderr as the note.
+%% The merge receipt this pipeline emits - the merge commit hashes and the set of
+%% modified files - is the input to the exit workflow's success tail.
+
+  RBX["rebase onto the target branch if needed"] --> QC{"did the rebase report conflicts?"}
+  QC -- "yes, under 2 attempts: pass the stopped layer and its conflicted files to the agent" --> FIX["fix conflicts"]
+  FIX --> CS
+  QC -- "yes, after 2 attempts<br/>exit type: rebase-stuck<br/>exit note: the rebase did not advance after 2 conflict fixes" --> EXITWF
+  QC -- no --> CS["commit if needed"]
+  CS --> ADV["advance the rebase"]
+  ADV --> QADV{"is the rebase finished?"}
+  QADV -- "no: it stopped on new conflicts" --> QC
+  QADV -- yes --> FULL["run the full suite"]
+  FULL --> QF{"do all tests pass?"}
+  QF -- "no, under 2 attempts" --> FIXC["fix the codebase"]
+  FIXC --> CS
+  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still failing after 2 codebase fixes" --> EXITWF
+  QF -- yes --> QFENCE{"did every change stay inside the task's owned files?"}
+  QFENCE -- "no<br/>exit type: fence-violation<br/>exit note: a step changed a file the task does not own" --> EXITWF
+  QFENCE -- yes --> B["merge worktrees and submodules, no fast-forward"]
+  B --> Q4{"did the merge land?"}
+  Q4 -- "no, 1st time: rebase and retry" --> RBX
+  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not land twice" --> EXITWF
+  Q4 -- yes --> RECEIPT["merge receipt"]
+
+  EXITWF["exit workflow"]
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class RBX,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4 script
+  class FIX,FIXC prose
+  class RECEIPT,EXITWF output
