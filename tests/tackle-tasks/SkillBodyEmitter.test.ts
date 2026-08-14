@@ -212,6 +212,19 @@ test("test_skillBodyEmitter_resolvesTheRepositoryTopLevelWhenInvokedFromANestedD
     assert.equal(existsSync(join(nestedDirectory, ".git")), false);
 });
 
+test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () => {
+    // Setup: a normal invocation.
+    const brief = skillBody("[75]");
+
+    // Verification: both v1.1 sections the v1.5 rewrite dropped are back, byte-faithful.
+    assert.match(brief, /Invoke `\/ponytail:ponytail ultra`\./);
+    assert.match(brief, /## Commit message/);
+    assert.match(
+        brief,
+        /Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them\. Then invoke the `commit-message` skill to generate a commit-message summary for each affected repo, and show the summaries to the user\./,
+    );
+});
+
 test("test_skillBody_declaresAWorkflowRatherThanAMainAgentEmitterCommand", () => {
     // Setup: the real brief, plus a negative fixture for the forbidden
     // SkillBodyEmitter -> main-agent Bash -> AnotherEmitter chain.

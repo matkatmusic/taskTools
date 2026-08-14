@@ -17,8 +17,8 @@ function renderTaskTests(taskTests: TaskTestResult | null): string {
     return `${taskTests.testFiles.length} files, ${taskTests.passed ? "green" : "red"}`;
 }
 
-function renderFullSuite(fullSuite: FullSuiteResult | null): string {
-    if (fullSuite === null) return "(not recorded)";
+function renderFullSuite(fullSuite: FullSuiteResult | null, exitType: TaskRunRecord["exitType"]): string {
+    if (fullSuite === null) return exitType === "suite-red" ? "not run (rebase tests failed first)" : "(not recorded)";
     return fullSuite.passed ? "green" : "red";
 }
 
@@ -34,7 +34,7 @@ export function renderClosureNote(taskNumber: number, record: TaskRunRecord): st
         commitLines,
         `Modified files: ${modifiedFiles}`,
         `Task tests: ${renderTaskTests(record.taskTests)}`,
-        `Full suite: ${renderFullSuite(record.fullSuite)}`,
+        `Full suite: ${renderFullSuite(record.fullSuite, record.exitType)}`,
     ].join("\n");
 }
 
