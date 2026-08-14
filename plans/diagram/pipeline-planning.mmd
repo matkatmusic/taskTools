@@ -25,6 +25,11 @@ flowchart TB
 %%                                 the fields that verdict requires.
 %%                                 See scripts/tackle-tasks/validateCodexReview.ts
 %%   what is the review verdict?     - three outcomes: accept, amend, scrap.
+%%   script adds the codex scrap notes to the task brief
+%%                               - the replan is not a bare retry. The planner
+%%                                 reads the brief, so the scrap notes have to be
+%%                                 written into the brief or the second plan
+%%                                 repeats the first one's mistakes.
 %%   2 amend rounds done?        - the amendments are applied either way. The
 %%                                 counter only decides whether codex sees the
 %%                                 amended plan again.
@@ -45,9 +50,10 @@ flowchart TB
   REVIEW --> VALR{"is the review file structure valid?"}
   VALR -- "invalid<br/>exit type: run-failed<br/>exit note: the codex review is malformed" --> EXITWF
   VALR -- valid --> QR{"what is the review verdict?"}
-  QR -- "scrap, 1st time: replan with codex notes" --> P
+  QR -- "scrap, 1st time" --> NOTES["script adds the codex scrap<br/>notes to the task brief"]
+  NOTES --> P
   QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXITWF
-  QR -- amend --> AM["script applies codex amendments to the plan"]
+  QR -- amend --> AM["script applies codex<br/>amendments to the plan"]
   AM --> QAM{"2 amend rounds done?"}
   QAM -- "no: re-review the amended plan" --> R
   QAM -- yes --> RECEIPT
@@ -59,7 +65,7 @@ flowchart TB
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class VALP,VALR,QR,AM,QAM script
+  class VALP,VALR,QR,AM,QAM,NOTES script
   class P,R prose
   class EXITWF fail
   class INPUT,PLANFILE,REVIEW,RECEIPT,FAIL_RECEIPT output

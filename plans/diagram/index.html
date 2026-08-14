@@ -22,13 +22,18 @@
 <div id="d"></div>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+  // elk routes edges far better than the default dagre engine on these dense graphs
+  import elk from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs'
+  mermaid.registerLayoutLoaders(elk)
   const dark = matchMedia('(prefers-color-scheme: dark)').matches
   mermaid.initialize({
     startOnLoad: false,
+    layout: 'elk',
     theme: dark ? 'dark' : 'default',
     fontFamily: 'system-ui, sans-serif',
     // wrappingWidth keeps long labels inside their shape instead of running past it
     flowchart: { htmlLabels: true, useMaxWidth: false, padding: 12, wrappingWidth: 220 },
+    elk: { nodePlacementStrategy: 'NETWORK_SIMPLEX', mergeEdges: false },
   })
   const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
   document.title = file
