@@ -52,7 +52,7 @@ flowchart TB
   VALR -- valid --> QR{"what is the review verdict?"}
   QR -- "scrap, 1st time" --> NOTES["script adds the codex scrap<br/>notes to the task brief"]
   NOTES --> P
-  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXITWF
+  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped<br/>the plan twice" --> EXITWF
   QR -- amend --> AM["script applies codex<br/>amendments to the plan"]
   AM --> QAM{"2 amend rounds done?"}
   QAM -- "no: re-review the amended plan" --> R

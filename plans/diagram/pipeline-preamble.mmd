@@ -46,11 +46,11 @@ flowchart TB
 %% the planning pipeline.
 
   TASKNUM["Input: { task number }"] --> QV
-  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> EXITWF
+  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither<br/>tasks.json nor completedTasks.json" --> EXITWF
   QV -- yes --> Q0{"is task open?"}
   Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> EXITWF
   Q0 -- yes --> QA{"is the task active?"}
-  QA -- "yes<br/>exit type: already-active<br/>exit note: a previous run left the task active" --> EXITWF
+  QA -- "yes<br/>exit type: already-active<br/>exit note: a previous run<br/>left the task active" --> EXITWF
   QA -- no --> MARK["mark the task active in tasks.json"]
   MARK --> QB{"is task blocked?"}
   QB -- "yes<br/>exit type: blocked<br/>exit note: an open blocker remains" --> EXITWF

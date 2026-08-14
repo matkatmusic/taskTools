@@ -56,7 +56,7 @@ flowchart TB
   RBX["rebase onto the target branch if needed"] --> QC{"did the rebase report conflicts?"}
   QC -- "yes, under 2 attempts:<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX["fix conflicts"]
   FIX --> CS
-  QC -- "yes, after 2 attempts<br/>exit type: rebase-stuck<br/>exit note: the rebase did not advance after 2 conflict fixes" --> EXITWF
+  QC -- "yes, after 2 attempts<br/>exit type: rebase-stuck<br/>exit note: the rebase did not<br/>advance after 2 conflict fixes" --> EXITWF
   QC -- no --> CS["commit if needed"]
   CS --> ADV["advance the rebase"]
   ADV --> QADV{"is the rebase finished?"}
@@ -65,13 +65,13 @@ flowchart TB
   FULL --> QF{"do all tests pass?"}
   QF -- "no, under 2 attempts" --> FIXC["fix the codebase"]
   FIXC --> CS
-  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still failing after 2 codebase fixes" --> EXITWF
+  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still<br/>failing after 2 codebase fixes" --> EXITWF
   QF -- yes --> QFENCE{"did every change stay<br/>inside the task's owned files?"}
-  QFENCE -- "no<br/>exit type: fence-violation<br/>exit note: a step changed a file the task does not own" --> EXITWF
+  QFENCE -- "no<br/>exit type: fence-violation<br/>exit note: a step changed a file<br/>the task does not own" --> EXITWF
   QFENCE -- yes --> B["merge worktrees and submodules,<br/>no fast-forward"]
   B --> Q4{"did the merge land?"}
   Q4 -- "no, 1st time: rebase and retry" --> RBX
-  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not land twice" --> EXITWF
+  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not<br/>land twice" --> EXITWF
   Q4 -- yes --> RECEIPT["Receipt: { merge commit hashes, modified files }"]
 
   EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote }"]
