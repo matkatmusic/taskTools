@@ -29,7 +29,7 @@ import { runApplyPlanAmendmentsCli } from "../../scripts/tackle-tasks/applyPlanA
 import { recordImplementationNotes } from "../../scripts/tackle-tasks/recordImplementationNotes.ts";
 import { commitTaskWork } from "../../scripts/tackle-tasks/commitTaskWork.ts";
 import { runTaskTests } from "../../scripts/tackle-tasks/runTaskTests.ts";
-import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { rebaseTaskWorktree, type BoundedLockWaitOptions } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
 import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
 import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
 import { checkTaskFileFence } from "../../scripts/tackle-tasks/checkTaskFileFence.ts";
@@ -43,7 +43,9 @@ import { buildClosureNote } from "../../scripts/tackle-tasks/buildClosureNote.ts
 import { closeTaskRun } from "../../scripts/tackle-tasks/closeTaskRun.ts";
 import { releaseTaskRunHolds } from "../../scripts/tackle-tasks/releaseTaskRunHolds.ts";
 import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
-import { buildLockOwner, readSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+import {
+    acquireSourceRepoLock, buildLockOwner, readSourceRepoLock, releaseSourceRepoLock, STALE_HEARTBEAT_MS,
+} from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
 import type { CloseTaskRunOutput } from "../../scripts/closeTasks.ts";
 import { GENERATED_ARTIFACT_PATTERNS } from "../../scripts/tackle-tasks/writeTaskBrief.ts";
@@ -239,7 +241,10 @@ type PipelineOptions = {
     forcedMergeOutcomes?: MergeTaskWorktreeOutput[];
     stopAfterInactivation?: boolean;
     beforeArchive?: (projectRoot: string) => void;
-    beforeUpdateTaskDocs?: (context: BoxContext) => void;
+    beforeUpdateTaskDocs?: (context: BoxContext, resumable: boolean) => void;
+    // The production wait is two minutes at a ten-second poll; a scenario tightens it.
+    lockOptions?: BoundedLockWaitOptions;
+    onHeldSourceLock?: (heldByOwner: string | null, visit: number) => void;
 };
 
 type PipelineOutcome = {
@@ -251,10 +256,15 @@ type PipelineOutcome = {
     branch: string | null;
     closureNote: string | null;
     closeOutput: CloseTaskRunOutput | null;
+    // The verdict the existing-worktree path observed, so a scenario can assert it directly.
+    resumable: boolean | null;
     visited: string[];
 };
 
 const MAX_ATTEMPTS = 2;
+// The diagram re-enters the rebase box for as long as the lock stays warm. This cap is a test
+// harness guard only, so a scenario that never releases the lock fails instead of hanging.
+const MAX_HELD_LOCK_REENTRIES = 10;
 
 class OperationalFailure extends Error {}
 
@@ -276,7 +286,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
 
     const outcome: PipelineOutcome = {
         runId, exitType: "", exitNote: "", claimStatus: "", worktree: null, branch: null,
-        closureNote: null, closeOutput: null, visited: [],
+        closureNote: null, closeOutput: null, resumable: null, visited: [],
     };
 
     let stepCounter = 0;
@@ -320,6 +330,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
     let suiteFixes = 0;
     let mergeAttempts = 0;
     let planAttempts = 0;
+    let heldLockVisits = 0;
     let claimed = false;
     let ended = false;
     let stoppedAt: { occurrenceId: string; checkoutPath: string } | null = null;
@@ -400,6 +411,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     // edge branches on the answer.
                     const resumable = box("isTaskRunResumable",
                         () => isTaskRunResumable(taskNumber, outcome.worktree!, runId, projectRoot));
+                    outcome.resumable = resumable.resumable;
                     if (!safety.safe && !resumable.resumable) { node = "RESET"; break; }
                     node = "UPD";
                     break;
@@ -412,7 +424,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     break;
                 }
                 case "UPD": {
-                    options.beforeUpdateTaskDocs?.(contextOf());
+                    options.beforeUpdateTaskDocs?.(contextOf(), outcome.resumable === true);
                     box("updateTaskDocs", () => updateTaskDocs(taskNumber, outcome.worktree!, projectRoot));
                     node = "INIT";
                     break;
@@ -519,9 +531,23 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     const rebase = await asyncBox("rebaseTaskWorktree", () => rebaseTaskWorktree({
                         projectRoot, worktreePath: outcome.worktree!, taskNumber, runId,
                         stepId: nextStepId("rebaseTaskWorktree"), rootSourceBranch: sourceBranch,
-                    }));
-                    if (rebase.lock !== "acquired") {
-                        return runExitChain("run-failed", `the source lock was ${rebase.lock}`);
+                    }, options.lockOptions));
+                    // Phase 10: a warm held lock logs the holder and re-enters this box; only a
+                    // recoverable (cold) lock takes the ordinary run-failed exit.
+                    if (rebase.lock === "held") {
+                        heldLockVisits += 1;
+                        options.onHeldSourceLock?.(rebase.heldByOwner, heldLockVisits);
+                        if (heldLockVisits > MAX_HELD_LOCK_REENTRIES) {
+                            return runExitChain("run-failed", `the source lock stayed held by ${rebase.heldByOwner}`);
+                        }
+                        node = "RB";
+                        break;
+                    }
+                    if (rebase.lock === "recoverable") {
+                        return runExitChain(
+                            "run-failed",
+                            `the source lock is stale, owned by ${rebase.heldByOwner}; run ${rebase.recoveryCommand}`,
+                        );
                     }
                     stoppedAt = rebase.stoppedAt;
                     conflictedFilePaths = rebase.conflictedFilePaths;
@@ -1128,12 +1154,14 @@ test("test_pipeline_resumesAPreviousRunAndAdoptsItsWorktreeLease", async () => {
     // Test action: a second run drives the complete diagram, entering the existing-worktree path.
     let leaseAtUpdateDocs: string | null = null;
     let stateLeaseAtUpdateDocs: string | null = null;
+    let resumableAtUpdateDocs: boolean | null = null;
     const second = await runPipeline({
         projectRoot, taskNumber: 15, runId: "run-second",
         prose: { implementTask: implementAndRepairTheSuite },
-        beforeUpdateTaskDocs: (context) => {
+        beforeUpdateTaskDocs: (context, resumable) => {
             leaseAtUpdateDocs = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(context.worktreePath))?.runId ?? null;
             stateLeaseAtUpdateDocs = readTaskRunState(15, projectRoot).leaseRunId;
+            resumableAtUpdateDocs = resumable;
         },
     });
 
@@ -1146,12 +1174,69 @@ test("test_pipeline_resumesAPreviousRunAndAdoptsItsWorktreeLease", async () => {
         "closeTaskRun",
     ]);
     assert.ok(!second.visited.includes("createTaskWorktree"), "the second run built a new worktree");
+    // The prior run recorded where it stopped, so its work really is resumable.
+    assert.equal(resumableAtUpdateDocs, true);
+    assert.equal(second.resumable, true);
     assert.equal(leaseAtUpdateDocs, "run-second");
     assert.equal(stateLeaseAtUpdateDocs, "run-second");
     assert.equal(second.exitType, "completed", second.exitNote);
     assert.ok(!existsSync(first.worktree!), "the retained worktree survived the resumed run");
     assert.ok(!existsSync(taskWorktreeLeasePath(first.worktree!)), "the retained lease survived the resumed run");
     assert.equal(readSourceRepoLock(projectRoot), null);
+});
+
+test("test_pipeline_waitsOutAWarmSourceLockHeldByAnotherRunAndThenCompletes", async () => {
+    // Setup: a task ready to rebase, and a real warm source lock already held by another run.
+    const projectRoot = makeSourceRepository("pipeline-warm-lock");
+    seedTask(projectRoot, 19, FENCE_INSIDE(19));
+    const otherOwner = buildLockOwner("run-other", 77);
+    assert.equal(acquireSourceRepoLock(projectRoot, otherOwner).status, "acquired");
+
+    // Test action: drive the diagram. The first real rebase call observes the warm lock; the
+    // held-lock callback releases the other owner, so the next visit can acquire it.
+    let heldVisits = 0;
+    const outcome = await runPipeline({
+        projectRoot, taskNumber: 19, prose: { implementTask: implementInsideTheFence },
+        lockOptions: { pollIntervalMs: 20, timeoutMs: 200 },
+        onHeldSourceLock: (heldByOwner) => {
+            heldVisits += 1;
+            assert.equal(heldByOwner, otherOwner);
+            releaseSourceRepoLock(projectRoot, otherOwner);
+        },
+    });
+
+    // Verification: the held result re-entered the rebase box instead of exiting the run.
+    assert.equal(heldVisits, 1);
+    assert.ok(outcome.visited.filter((name) => name === "rebaseTaskWorktree").length >= 2,
+        `expected the rebase box to be re-entered, saw: ${outcome.visited.join(" -> ")}`);
+    assert.ok(!outcome.visited.includes("releaseTaskRunHolds"), "the held lock ran the exit chain");
+    assert.equal(outcome.exitType, "completed", outcome.exitNote);
+    assert.equal(readSourceRepoLock(projectRoot), null);
+});
+
+test("test_pipeline_exitsRunFailedWhenTheSourceLockIsColdAndRecoverable", async () => {
+    // Setup: a task ready to rebase, and a real lock file whose heartbeat has gone cold.
+    const projectRoot = makeSourceRepository("pipeline-cold-lock");
+    seedTask(projectRoot, 20, FENCE_INSIDE(20));
+    const staleOwner = buildLockOwner("run-crashed", 78);
+    assert.equal(acquireSourceRepoLock(projectRoot, staleOwner).status, "acquired");
+    const lockPath = join(projectRoot, ".git", "taskTools-source.lock");
+    const coldAt = new Date(Date.now() - 2 * STALE_HEARTBEAT_MS).toISOString();
+    writeFileSync(lockPath, JSON.stringify({ ...JSON.parse(readFileSync(lockPath, "utf8")), heartbeatAt: coldAt }));
+
+    // Test action: drive the diagram into the rebase box.
+    const outcome = await runPipeline({
+        projectRoot, taskNumber: 20, prose: { implementTask: implementInsideTheFence },
+        lockOptions: { pollIntervalMs: 20, timeoutMs: 200 },
+    });
+
+    // Verification: a cold lock is run-failed, names the exact stale owner, and is never taken
+    // over — only the maintenance script may remove it.
+    assert.equal(outcome.exitType, "run-failed");
+    assert.ok(outcome.exitNote.includes(staleOwner), `exit note did not name the owner: ${outcome.exitNote}`);
+    assert.ok(outcome.exitNote.includes("recoverSourceRepoLock"), `exit note gave no recovery command: ${outcome.exitNote}`);
+    assert.equal(readSourceRepoLock(projectRoot)?.owner, staleOwner);
+    assert.equal(runStateOf(projectRoot, 20).active, false);
 });
 
 test("test_pipeline_recordsASecondRunWithoutDestroyingTheFirstRunsHistory", async () => {
