@@ -14,7 +14,6 @@ import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWor
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_SkillBodyEmitter.ts", import.meta.url));
-const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks/SKILL.md", import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Conformance: SkillBodyEmitter is a path-only boundary (C86-39).
@@ -32,10 +31,9 @@ test("emitter runs no subprocess and imports nothing relative — only node:fs a
   assert.doesNotMatch(source, /execFileSync|spawn|from "\./);
 });
 
-test("SKILL.md invokes tackle-tasks_SkillBodyEmitter.ts", () => {
-  const skillMd = readFileSync(skillMdPath, "utf8");
-  assert.match(skillMd, /tackle-tasks_SkillBodyEmitter\.ts/);
-});
+// Phase 11: skills/tackle-tasks/SKILL.md now invokes scripts/tackle-tasks/SkillBodyEmitter.ts, and
+// tests/tackle-tasks/SkillBodyEmitter.test.ts asserts that wiring. The frozen v1.1 copy keeps its own
+// SKILL.md assertion in tests/tackle-tasks-v1_1_SkillBodyEmitter.test.ts, so this emitter has no SKILL.md.
 
 test("output never names checkBlockers.ts, getTaskDetails.ts, or prepareTasks.ts — only the bootstrap agent prompt emitter does", () => {
   const brief = skillBody("[75] valid");
@@ -265,7 +263,7 @@ test("skills/tackle-tasks holds only the current workflow files — no old conso
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
   const skillDir = join(repoRoot, "skills/tackle-tasks");
   const workflowFiles = readdirSync(skillDir).filter((name) => name.includes("workflow.js")).sort();
-  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "bootstrap.workflow.js", "tackle-tasks.workflow.js"]);
+  assert.deepEqual(workflowFiles, ["blockers.workflow.js", "bootstrap.workflow.js", "resolve.workflow.js", "tackle-tasks.workflow.js"]);
 });
 
 // The harness rejects a script unless meta is the first statement and a pure literal.
