@@ -52,6 +52,7 @@ flowchart TB
 %% The merge receipt this pipeline emits - the merge commit hashes and the set of
 %% modified files - is the input to the exit workflow's success tail.
 
+  INPUT["Input: { finished implementation, source repo lock }"] --> RBX
   RBX["rebase onto the target branch if needed"] --> QC{"did the rebase report conflicts?"}
   QC -- "yes, under 2 attempts: pass the stopped layer and its conflicted files to the agent" --> FIX["fix conflicts"]
   FIX --> CS
@@ -71,13 +72,15 @@ flowchart TB
   B --> Q4{"did the merge land?"}
   Q4 -- "no, 1st time: rebase and retry" --> RBX
   Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not land twice" --> EXITWF
-  Q4 -- yes --> RECEIPT["merge receipt"]
+  Q4 -- yes --> RECEIPT["Receipt: { merge commit hashes, modified files }"]
 
-  EXITWF["exit workflow"]
+  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote }"]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
   class RBX,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4 script
   class FIX,FIXC prose
-  class RECEIPT,EXITWF output
+  class EXITWF fail
+  class INPUT,RECEIPT,FAIL_RECEIPT output

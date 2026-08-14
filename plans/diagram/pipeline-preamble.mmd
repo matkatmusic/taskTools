@@ -45,6 +45,7 @@ flowchart TB
 %% The active task and initialized worktree this pipeline emits are the input to
 %% the planning pipeline.
 
+  TASKNUM["Input: { task number }"] --> QV
   QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> EXITWF
   QV -- yes --> Q0{"is task open?"}
   Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> EXITWF
@@ -74,4 +75,4 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   class QV,Q0,QA,MARK,QB,Q1,NEW,GEN,QS,QRS,RESET,UPD,INIT script
   class EXITWF fail
-  class RECEIPT,FAIL_RECEIPT output
+  class TASKNUM,RECEIPT,FAIL_RECEIPT output

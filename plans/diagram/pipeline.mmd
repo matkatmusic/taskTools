@@ -7,6 +7,8 @@ flowchart TB
 %%   exit workflow               pipeline-exitWorkflow.mmd
 %% The dotted arrow out of each block is that block's early exit, drawn as one
 %% arrow here. The exit types it carries are listed in that block's own file.
+%% Every "exit workflow" box is the SAME workflow, drawn once per caller so the
+%% arrows stay readable. Red is its failure tail, green its success tail.
 %% The solid arrow between two blocks is the artifact the first hands the second.
 %% Exit types, one per path that reaches [stop]:
 %%   completed          - archived to completedTasks.json
@@ -24,19 +26,25 @@ flowchart TB
 %%   run-failed         - a script failed operationally; can leave ANY green box
 %%                        in any pipeline
 
-  NUM["task number"] --> PRE["preamble pipeline"]
-  PRE -- "initialized worktree" --> PLANP["planning pipeline"]
-  PLANP -- "plan file" --> IMPL["implement and test pipeline"]
-  IMPL -- "finished implementation, source repo locked" --> RM["rebase and merge pipeline"]
-  RM -- "merge receipt" --> EXITWF["exit workflow"]
-  EXITWF --> STOP["stop"]
+  NUM["Input: { task number }"] --> PRE["preamble pipeline"]
+  PRE -- "Receipt: { active task, initialized worktree }" --> PLANP["planning pipeline"]
+  PLANP -- "Receipt: { plan file }" --> IMPL["implement and test pipeline"]
+  IMPL -- "Receipt: { finished implementation, source repo lock }" --> RM["rebase and merge pipeline"]
+  RM -- "Receipt: { merge commit hashes, modified files }" --> EXITOK["exit workflow"]
+  EXITOK --> STOP["stop"]
 
-  PRE -. "invalid-number, not-open, already-active, blocked, run-failed" .-> EXITWF
-  PLANP -. "plan-scrapped, run-failed" .-> EXITWF
-  IMPL -. "tests-red, tests-flagged, run-failed" .-> EXITWF
-  RM -. "rebase-stuck, suite-red, fence-violation, merge-failed, run-failed" .-> EXITWF
+  PRE -. "Receipt: { exitType, exitNote }" .-> EXITPRE["exit workflow"]
+  PLANP -. "Receipt: { exitType, exitNote }" .-> EXITPLAN["exit workflow"]
+  IMPL -. "Receipt: { exitType, exitNote }" .-> EXITIMPL["exit workflow"]
+  RM -. "Receipt: { exitType, exitNote }" .-> EXITRM["exit workflow"]
+  EXITPRE --> STOP
+  EXITPLAN --> STOP
+  EXITIMPL --> STOP
+  EXITRM --> STOP
 
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class PRE,PLANP,IMPL,RM,EXITWF pipeline
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  class PRE,PLANP,IMPL,RM,EXITOK pipeline
+  class EXITPRE,EXITPLAN,EXITIMPL,EXITRM fail
   class NUM,STOP output
