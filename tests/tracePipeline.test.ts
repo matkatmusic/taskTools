@@ -8,13 +8,19 @@ import { traceTaskPipeline, readNamedPaths, type PipelineDecisions } from "../sc
 // A repeat of a loop is indented one level, so a second pass is visible without counting lines.
 const indent = (lines: string[], level = 1): string[] => lines.map((line) => "  ".repeat(level) + line);
 
+// Sub-pipeline boundary banners. Pushed directly by the tracer, so they are never indented,
+// even when the surrounding lines sit inside a loop repeat.
+const EXIT_BANNER = "--------- exit workflow ---------";
+
 // Shared literal fragments. These are expected OUTPUT, not logic — each is a run of lines that
 // several paths quote verbatim, kept in one place so a wording change is a one-line edit.
-const CLAIMED_AND_UNBLOCKED = [
+const ACTIVE_AND_UNBLOCKED = [
     "Run start: Task Num [42]",
+    "--------- preamble ---------",
     "TASK VALID: YES",
     "TASK OPEN: YES",
-    "TASK CLAIMED: CLAIMED",
+    "TASK ACTIVE: NO",
+    "MARK THE TASK ACTIVE",
     "TASK BLOCKED: NO",
 ];
 const FRESH_WORKTREE = [
@@ -22,15 +28,17 @@ const FRESH_WORKTREE = [
     "CREATE A WORKTREE",
     "AUTO GENERATE DOCS",
     "INIT SUBMODULES RECURSIVELY",
+    "--------- planning ---------",
 ];
 const PLAN_ACCEPTED = [
-    "PLAN THE TASK <-- AGENT -->",
+    "<-- AGENT --> PLAN THE TASK",
     "VALIDATE PLAN",
-    "CODEX REVIEWS PLAN <-- AGENT -->",
+    "<-- AGENT --> CODEX REVIEWS PLAN",
     "CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): ACCEPT",
 ];
 const IMPLEMENT_AND_COMMIT = [
-    "IMPLEMENT TASK <-- AGENT -->",
+    "--------- implement and test ---------",
+    "<-- AGENT --> IMPLEMENT TASK",
     "RECORD IMPL NOTES",
     "COMMIT (IF NEEDED)",
 ];
@@ -39,37 +47,54 @@ const TASK_TESTS_PASS = [
     "TESTS FAIL: NO",
 ];
 const CODEX_ACCEPTS_TESTS = [
-    "CODEX REVIEWS TEST <-- AGENT -->",
+    "<-- AGENT --> CODEX REVIEWS TEST",
     "CODEX REVIEW TEST RESULT (FLAG, ACCEPT): ACCEPTED",
 ];
-const REBASE_CLEAN_AND_SUITE_GREEN = [
-    "LOCK SOURCE",
+// The tail run each time the merge-retry loop is entered. LOCK SOURCE (and its banner) happen
+// once per run, outside this loop, so a retry re-enters here rather than at LOCK SOURCE.
+const REBASE_AND_SUITE_TAIL = [
+    "REBASE IF NEEDED",
     "REBASE RESULT (OK, CONFLICT): OK",
     "COMMIT (IF NEEDED)",
     "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
     "RUN FULL SUITE RESULTS (PASS, FAIL): PASS",
     "CHECK FILE FENCE RESULT (PASS, FAIL): PASS",
 ];
+const REBASE_CLEAN_AND_SUITE_GREEN = [
+    "LOCK SOURCE",
+    "--------- rebase and merge ---------",
+    ...REBASE_AND_SUITE_TAIL,
+];
 const CLOSE_OUT = [
+    EXIT_BANNER,
     "RECORD MERGE COMMIT HASHES",
     "WRITE EXIT TYPE: COMPLETED",
     "RECORD MODIFIED FILES",
-    "MARK INACTIVE",
     "CLEAN UP WORKTREES",
     "BUILD CLOSURE NOTE",
+    "MARK INACTIVE",
     "MOVE TASK TO completedTasks.json",
+    "REPORT THE CLOSURE NOTE",
+    "STOP",
 ];
 const MERGE_LANDS_AND_CLOSES = [
     "MERGE WORKTREES AND SUBMODULES RESULT (PASS, FAIL): PASS",
     ...CLOSE_OUT,
 ];
 
-// The common exit chain, run by every exit that has a claimed task record to write to.
-const exitChain = (exitType: string): string[] => [
+// The common exit chain, run by every exit reached after the task was marked active.
+// The release box only names what is actually held: a lease exists once a worktree does,
+// and the source lock is taken at the rebase box. "none" reaches neither.
+// The exit-workflow banner is NOT included here: it is never indented, so callers place it
+// themselves (via EXIT_BANNER) before wrapping the rest of this chain in indent() if needed.
+const exitChain = (exitType: string, holds: "none" | "lease" | "lease-and-lock"): string[] => [
     `WRITE EXIT TYPE: ${exitType}`,
     "RECORD MODIFIED FILES",
     "MARK INACTIVE",
-    "RELEASE WORKTREE LEASE AND SOURCE LOCK",
+    ...(holds === "lease-and-lock" ? ["RELEASE THE WORKTREE LEASE AND SOURCE LOCK"] : []),
+    ...(holds === "lease" ? ["RELEASE THE WORKTREE LEASE"] : []),
+    `REPORT THE RUN'S EXIT TYPE AND NOTE: ${exitType}`,
+    "STOP",
 ];
 
 // Every path's inputs live in scripts/tracePipelinePaths.json, the same file the CLI reads,
@@ -90,8 +115,11 @@ test("test_traceTaskPipeline_stopsAtInvalidNumberWithoutWritingToTasksJson", () 
     const trace = traceTaskPipeline(pathNamed("invalid-number"));
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
+        "--------- preamble ---------",
         "TASK VALID: NO",
-        "REPORT AND STOP: INVALID-NUMBER",
+        EXIT_BANNER,
+        "REPORT EXIT TYPE AND NOTE: INVALID-NUMBER",
+        "STOP",
     ]);
 });
 
@@ -101,38 +129,48 @@ test("test_traceTaskPipeline_stopsAtNotOpenWhenTheTaskIsAlreadyCompleted", () =>
     const trace = traceTaskPipeline(pathNamed("not-open"));
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
+        "--------- preamble ---------",
         "TASK VALID: YES",
         "TASK OPEN: NO",
-        "REPORT AND STOP: NOT-OPEN",
+        EXIT_BANNER,
+        "REPORT EXIT TYPE AND NOTE: NOT-OPEN",
+        "STOP",
     ]);
 });
 
-test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheClaimIsRefused", () => {
-    // Scenario: a previous run left the claim held.
-    // Steps: validity and open both pass; the claim box reports refused. The held run belongs
-    //   to another invocation, so the walk must report and stop without touching that record.
+test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheTaskIsStillActive", () => {
+    // Scenario: a previous run left the task active.
+    // Steps: validity and open both pass; the active box takes its "yes" edge, so the task is
+    //   never marked active a second time. That run belongs to another invocation, so the walk
+    //   must report and stop without touching its record.
     const trace = traceTaskPipeline(pathNamed("already-active"));
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
+        "--------- preamble ---------",
         "TASK VALID: YES",
         "TASK OPEN: YES",
-        "TASK CLAIMED: REFUSED",
-        "REPORT AND STOP: ALREADY-ACTIVE",
+        "TASK ACTIVE: YES",
+        EXIT_BANNER,
+        "REPORT EXIT TYPE AND NOTE: ALREADY-ACTIVE",
+        "STOP",
     ]);
 });
 
 test("test_traceTaskPipeline_runsTheExitChainWhenTheTaskIsBlocked", () => {
-    // Scenario: the claim is taken, then an open blocker is found.
-    // Steps: the claim succeeded, so a run record now exists. The blocked box takes its "yes"
+    // Scenario: the task is marked active, then an open blocker is found.
+    // Steps: marking it active started a run record. The blocked box takes its "yes"
     //   edge and the walk runs the full exit chain, which ends by releasing the holds.
     const trace = traceTaskPipeline(pathNamed("blocked"));
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
+        "--------- preamble ---------",
         "TASK VALID: YES",
         "TASK OPEN: YES",
-        "TASK CLAIMED: CLAIMED",
+        "TASK ACTIVE: NO",
+    "MARK THE TASK ACTIVE",
         "TASK BLOCKED: YES",
-        ...exitChain("BLOCKED"),
+        EXIT_BANNER,
+        ...exitChain("BLOCKED", "none"),
     ]);
 });
 
@@ -143,9 +181,9 @@ test("test_traceTaskPipeline_createsAWorktreeWhenNoneExists", () => {
     // Steps: the worktree box takes its "no" edge, one is created, docs are generated fresh,
     //   and submodules are initialised before planning. No loop repeats, so nothing is indented,
     //   and the agent-run boxes carry the agent marker.
-    const trace = traceTaskPipeline(pathNamed("fresh-worktree-happy-path"));
+    const trace = traceTaskPipeline(pathNamed("worktree-does-not-exist"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
@@ -162,11 +200,12 @@ test("test_traceTaskPipeline_reusesASafeExistingWorktree", () => {
     //   the existing docs are updated rather than generated. The resumable box is never reached.
     const trace = traceTaskPipeline(pathNamed("safe-existing-worktree"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         "WORKTREE EXISTS: YES",
         "WORKTREE SAFE: YES",
         "UPDATE AUTO GENERATED DOCS",
         "INIT SUBMODULES RECURSIVELY",
+        "--------- planning ---------",
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
@@ -183,12 +222,13 @@ test("test_traceTaskPipeline_keepsAnUnsafeWorktreeWhoseWorkIsResumable", () => {
     //   joins the safe path at "update auto generated docs" rather than resetting anything.
     const trace = traceTaskPipeline(pathNamed("unsafe-resumable-worktree"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         "WORKTREE EXISTS: YES",
         "WORKTREE SAFE: NO",
         "PREVIOUS WORK RESUMABLE: YES",
         "UPDATE AUTO GENERATED DOCS",
         "INIT SUBMODULES RECURSIVELY",
+        "--------- planning ---------",
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
@@ -204,13 +244,14 @@ test("test_traceTaskPipeline_resetsAnUnsafeWorktreeWhoseWorkIsNotResumable", () 
     //   walk rejoins the fresh path at "auto generate docs".
     const trace = traceTaskPipeline(pathNamed("unsafe-unresumable-worktree"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         "WORKTREE EXISTS: YES",
         "WORKTREE SAFE: NO",
         "PREVIOUS WORK RESUMABLE: NO",
         "RESET THE WORKTREE",
         "AUTO GENERATE DOCS",
         "INIT SUBMODULES RECURSIVELY",
+        "--------- planning ---------",
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
@@ -229,9 +270,9 @@ test("test_traceTaskPipeline_replansWhenThePlanFileDoesNotValidate", () => {
     //   lines are indented. The second plan validates and is accepted.
     const trace = traceTaskPipeline(pathNamed("plan-file-invalid-then-valid"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
-        "PLAN THE TASK <-- AGENT -->",
+        "<-- AGENT --> PLAN THE TASK",
         "VALIDATE PLAN",
         "PLAN INVALID: COUNTS AS A SCRAP",
         ...indent(PLAN_ACCEPTED),
@@ -249,11 +290,11 @@ test("test_traceTaskPipeline_appliesCodexAmendmentsBeforeImplementing", () => {
     //   before the implement box runs. No replanning happens, so nothing is indented.
     const trace = traceTaskPipeline(pathNamed("codex-amends-plan"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
-        "PLAN THE TASK <-- AGENT -->",
+        "<-- AGENT --> PLAN THE TASK",
         "VALIDATE PLAN",
-        "CODEX REVIEWS PLAN <-- AGENT -->",
+        "<-- AGENT --> CODEX REVIEWS PLAN",
         "CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): AMEND",
         "APPLY CODEX AMENDMENTS TO THE PLAN",
         ...IMPLEMENT_AND_COMMIT,
@@ -271,11 +312,11 @@ test("test_traceTaskPipeline_replansOnceAfterCodexScrapsTheFirstPlan", () => {
     //   the outer level.
     const trace = traceTaskPipeline(pathNamed("codex-scraps-plan-once"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
-        "PLAN THE TASK <-- AGENT -->",
+        "<-- AGENT --> PLAN THE TASK",
         "VALIDATE PLAN",
-        "CODEX REVIEWS PLAN <-- AGENT -->",
+        "<-- AGENT --> CODEX REVIEWS PLAN",
         "CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): SCRAP",
         ...indent(PLAN_ACCEPTED),
         ...IMPLEMENT_AND_COMMIT,
@@ -289,22 +330,24 @@ test("test_traceTaskPipeline_replansOnceAfterCodexScrapsTheFirstPlan", () => {
 test("test_traceTaskPipeline_exitsPlanScrappedWhenCodexScrapsTwice", () => {
     // Scenario: codex scraps the plan on both attempts.
     // Steps: the first scrap sends the walk back to the plan box; the second scrap has no
-    //   attempt left, so the walk runs the exit chain from inside the indented repeat.
+    //   attempt left, so the walk runs the exit chain from inside the indented repeat. The
+    //   exit-workflow banner itself is never indented, even though the chain around it is.
     const trace = traceTaskPipeline(pathNamed("plan-scrapped"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
-        "PLAN THE TASK <-- AGENT -->",
+        "<-- AGENT --> PLAN THE TASK",
         "VALIDATE PLAN",
-        "CODEX REVIEWS PLAN <-- AGENT -->",
+        "<-- AGENT --> CODEX REVIEWS PLAN",
         "CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): SCRAP",
         ...indent([
-            "PLAN THE TASK <-- AGENT -->",
+            "<-- AGENT --> PLAN THE TASK",
             "VALIDATE PLAN",
-            "CODEX REVIEWS PLAN <-- AGENT -->",
+            "<-- AGENT --> CODEX REVIEWS PLAN",
             "CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): SCRAP",
-            ...exitChain("PLAN-SCRAPPED"),
         ]),
+        EXIT_BANNER,
+        ...indent(exitChain("PLAN-SCRAPPED", "lease")),
     ]);
 });
 
@@ -317,13 +360,13 @@ test("test_traceTaskPipeline_fixesTheCodebaseWhenTaskTestsFailOnce", () => {
     //   That second pass is indented.
     const trace = traceTaskPipeline(pathNamed("task-tests-fail-once"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         "RUN TASK TESTS",
         "TESTS FAIL: YES",
-        "FIX THE CODEBASE <-- AGENT -->",
+        "<-- AGENT --> FIX THE CODEBASE",
         ...indent([
             "COMMIT (IF NEEDED)",
             ...TASK_TESTS_PASS,
@@ -340,19 +383,20 @@ test("test_traceTaskPipeline_exitsTestsRedWhenTaskTestsFailTwice", () => {
     //   exit chain with exit type tests-red from inside the indented repeat.
     const trace = traceTaskPipeline(pathNamed("tests-red"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         "RUN TASK TESTS",
         "TESTS FAIL: YES",
-        "FIX THE CODEBASE <-- AGENT -->",
+        "<-- AGENT --> FIX THE CODEBASE",
         ...indent([
             "COMMIT (IF NEEDED)",
             "RUN TASK TESTS",
             "TESTS FAIL: YES",
-            ...exitChain("TESTS-RED"),
         ]),
+        EXIT_BANNER,
+        ...indent(exitChain("TESTS-RED", "lease")),
     ]);
 });
 
@@ -364,14 +408,14 @@ test("test_traceTaskPipeline_amendsTheTestsWhenCodexFlagsThemOnce", () => {
     //   runs the tests again, indented. On the second review codex accepts.
     const trace = traceTaskPipeline(pathNamed("codex-flags-tests-once"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        "CODEX REVIEWS TEST <-- AGENT -->",
+        "<-- AGENT --> CODEX REVIEWS TEST",
         "CODEX REVIEW TEST RESULT (FLAG, ACCEPT): FLAG",
-        "AMEND THE TESTS <-- AGENT -->",
+        "<-- AGENT --> AMEND THE TESTS",
         ...indent([
             "COMMIT (IF NEEDED)",
             ...TASK_TESTS_PASS,
@@ -388,21 +432,22 @@ test("test_traceTaskPipeline_exitsTestsFlaggedWhenCodexFlagsTheTestsTwice", () =
     //   left, so the walk runs the exit chain with exit type tests-flagged.
     const trace = traceTaskPipeline(pathNamed("tests-flagged"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        "CODEX REVIEWS TEST <-- AGENT -->",
+        "<-- AGENT --> CODEX REVIEWS TEST",
         "CODEX REVIEW TEST RESULT (FLAG, ACCEPT): FLAG",
-        "AMEND THE TESTS <-- AGENT -->",
+        "<-- AGENT --> AMEND THE TESTS",
         ...indent([
             "COMMIT (IF NEEDED)",
             ...TASK_TESTS_PASS,
-            "CODEX REVIEWS TEST <-- AGENT -->",
+            "<-- AGENT --> CODEX REVIEWS TEST",
             "CODEX REVIEW TEST RESULT (FLAG, ACCEPT): FLAG",
-            ...exitChain("TESTS-FLAGGED"),
         ]),
+        EXIT_BANNER,
+        ...indent(exitChain("TESTS-FLAGGED", "lease")),
     ]);
 });
 
@@ -414,15 +459,17 @@ test("test_traceTaskPipeline_fixesConflictsWhenTheRebaseReportsThemOnce", () => 
     //   This is the diagram's normal conflict flow, not a second pass, so nothing is indented.
     const trace = traceTaskPipeline(pathNamed("rebase-conflict-once"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): CONFLICT",
-        "FIX CONFLICTS <-- AGENT -->",
+        "<-- AGENT --> FIX CONFLICTS",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
         "RUN FULL SUITE RESULTS (PASS, FAIL): PASS",
@@ -438,21 +485,22 @@ test("test_traceTaskPipeline_exitsRebaseStuckWhenConflictsRecurTwice", () => {
     //   walk exits rebase-stuck.
     const trace = traceTaskPipeline(pathNamed("rebase-stuck"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): CONFLICT",
-        "FIX CONFLICTS <-- AGENT -->",
+        "<-- AGENT --> FIX CONFLICTS",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): CONFLICTS",
-        ...indent([
-            "REBASE RESULT (OK, CONFLICT): CONFLICT",
-            ...exitChain("REBASE-STUCK"),
-        ]),
+        ...indent(["REBASE RESULT (OK, CONFLICT): CONFLICT"]),
+        EXIT_BANNER,
+        ...indent(exitChain("REBASE-STUCK", "lease-and-lock")),
     ]);
 });
 
@@ -463,19 +511,21 @@ test("test_traceTaskPipeline_returnsToTheConflictBoxWhenTheAdvanceStopsOnNewConf
     //   and merge boxes are outside that loop, so they return to the outer level.
     const trace = traceTaskPipeline(pathNamed("advance-uncovers-conflicts"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): OK",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): CONFLICTS",
         ...indent([
             "REBASE RESULT (OK, CONFLICT): CONFLICT",
-            "FIX CONFLICTS <-- AGENT -->",
+            "<-- AGENT --> FIX CONFLICTS",
             "COMMIT (IF NEEDED)",
             "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
             "RUN FULL SUITE RESULTS (PASS, FAIL): PASS",
@@ -493,18 +543,20 @@ test("test_traceTaskPipeline_fixesTheCodebaseWhenTheFullSuiteFailsOnce", () => {
     //   advances the rebase again before the suite is re-run, all indented as a repeat.
     const trace = traceTaskPipeline(pathNamed("full-suite-fails-once"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): OK",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
         "RUN FULL SUITE RESULTS (PASS, FAIL): FAIL",
-        "FIX THE CODEBASE <-- AGENT -->",
+        "<-- AGENT --> FIX THE CODEBASE",
         ...indent([
             "COMMIT (IF NEEDED)",
             "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
@@ -521,24 +573,27 @@ test("test_traceTaskPipeline_exitsSuiteRedWhenTheFullSuiteFailsTwice", () => {
     //   inside the indented repeat.
     const trace = traceTaskPipeline(pathNamed("suite-red"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): OK",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
         "RUN FULL SUITE RESULTS (PASS, FAIL): FAIL",
-        "FIX THE CODEBASE <-- AGENT -->",
+        "<-- AGENT --> FIX THE CODEBASE",
         ...indent([
             "COMMIT (IF NEEDED)",
             "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
             "RUN FULL SUITE RESULTS (PASS, FAIL): FAIL",
-            ...exitChain("SUITE-RED"),
         ]),
+        EXIT_BANNER,
+        ...indent(exitChain("SUITE-RED", "lease-and-lock")),
     ]);
 });
 
@@ -550,30 +605,33 @@ test("test_traceTaskPipeline_exitsFenceViolationWhenAStepChangedAFileTheTaskDoes
     //   the walk runs the exit chain immediately, at the outer level.
     const trace = traceTaskPipeline(pathNamed("fence-violation"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         "LOCK SOURCE",
+        "--------- rebase and merge ---------",
+        "REBASE IF NEEDED",
         "REBASE RESULT (OK, CONFLICT): OK",
         "COMMIT (IF NEEDED)",
         "ADVANCE REBASE RESULT (FINISHED, CONFLICTS): FINISHED",
         "RUN FULL SUITE RESULTS (PASS, FAIL): PASS",
         "CHECK FILE FENCE RESULT (PASS, FAIL): FAIL",
-        ...exitChain("FENCE-VIOLATION"),
+        EXIT_BANNER,
+        ...exitChain("FENCE-VIOLATION", "lease-and-lock"),
     ]);
 });
 
 test("test_traceTaskPipeline_rebasesAndRetriesWhenTheMergeDoesNotLandTheFirstTime", () => {
     // Scenario: another run landed first, so the merge fails once.
-    // Steps: the merge box takes its "no" edge back to the rebase box, so the whole rebase,
-    //   suite and fence tail runs again, indented. The second merge lands, and the close-out
-    //   boxes return to the outer level.
+    // Steps: the merge box takes its "no" edge back to the rebase box, so the rebase, suite and
+    //   fence tail runs again, indented. LOCK SOURCE happens once, so the retry does not repeat
+    //   it. The second merge lands, and the close-out boxes return to the outer level.
     const trace = traceTaskPipeline(pathNamed("merge-retry-then-lands"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
@@ -582,7 +640,7 @@ test("test_traceTaskPipeline_rebasesAndRetriesWhenTheMergeDoesNotLandTheFirstTim
         ...REBASE_CLEAN_AND_SUITE_GREEN,
         "MERGE WORKTREES AND SUBMODULES RESULT (PASS, FAIL): FAIL",
         ...indent([
-            ...REBASE_CLEAN_AND_SUITE_GREEN,
+            ...REBASE_AND_SUITE_TAIL,
             "MERGE WORKTREES AND SUBMODULES RESULT (PASS, FAIL): PASS",
         ]),
         ...CLOSE_OUT,
@@ -595,7 +653,7 @@ test("test_traceTaskPipeline_exitsMergeFailedWhenTheMergeDoesNotLandTwice", () =
     //   attempt left, so the walk runs the exit chain with exit type merge-failed.
     const trace = traceTaskPipeline(pathNamed("merge-failed"));
     assert.deepEqual(trace, [
-        ...CLAIMED_AND_UNBLOCKED,
+        ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
@@ -604,10 +662,11 @@ test("test_traceTaskPipeline_exitsMergeFailedWhenTheMergeDoesNotLandTwice", () =
         ...REBASE_CLEAN_AND_SUITE_GREEN,
         "MERGE WORKTREES AND SUBMODULES RESULT (PASS, FAIL): FAIL",
         ...indent([
-            ...REBASE_CLEAN_AND_SUITE_GREEN,
+            ...REBASE_AND_SUITE_TAIL,
             "MERGE WORKTREES AND SUBMODULES RESULT (PASS, FAIL): FAIL",
-            ...exitChain("MERGE-FAILED"),
         ]),
+        EXIT_BANNER,
+        ...indent(exitChain("MERGE-FAILED", "lease-and-lock")),
     ]);
 });
 
@@ -617,13 +676,14 @@ test("test_traceTaskPipeline_reachesEveryExitTypeInTheDiagramAcrossTheNamedPaths
     // Scenario: the diagram lists thirteen exit types. run-failed is deliberately undrawn — it
     //   can leave any green box — so twelve are reachable by walking edges.
     // Steps: walk every path in scripts/tracePipelinePaths.json, collect the exit type each one
-    //   ends on, and assert the set matches the diagram's list. A new exit type in the diagram,
-    //   or a fixture that reaches no exit at all, fails this test.
+    //   ends on, and assert the set matches the diagram's list. Banner lines never carry an exit
+    //   type, so they fall out of this scan on their own. A new exit type in the diagram, or a
+    //   fixture that reaches no exit at all, fails this test.
     const reached = new Set<string>();
     for (const [name, decisions] of Object.entries(NAMED_PATHS)) {
         const exitLine = traceTaskPipeline(decisions)
             .map((line) => line.trimStart())
-            .find((line) => line.startsWith("REPORT AND STOP: ") || line.startsWith("WRITE EXIT TYPE: "));
+            .find((line) => line.startsWith("REPORT EXIT TYPE AND NOTE: ") || line.startsWith("WRITE EXIT TYPE: "));
         assert.ok(exitLine !== undefined, `path "${name}" walked off the end without reaching an exit`);
         reached.add(exitLine.split(": ")[1]!);
     }
@@ -649,11 +709,12 @@ test("test_traceTaskPipeline_marksEveryAgentRunBoxAndNoScriptBox", () => {
     //   rather than a script. Two of them, FIXT and FIXC, are both "fix the codebase", so the
     //   marked set holds seven distinct names.
     // Steps: walk every named path, keep the lines carrying the marker, strip the marker and the
-    //   indent, and assert the set of marked names is exactly the diagram's yellow set.
+    //   indent, and assert the set of marked names is exactly the diagram's yellow set. Banner
+    //   lines never carry the agent marker, so they fall out of this scan on their own.
     const marked = new Set<string>();
     for (const decisions of Object.values(NAMED_PATHS)) {
         for (const line of traceTaskPipeline(decisions)) {
-            if (line.endsWith(" <-- AGENT -->")) marked.add(line.trimStart().replace(" <-- AGENT -->", ""));
+            if (line.trimStart().startsWith("<-- AGENT --> ")) marked.add(line.trimStart().replace("<-- AGENT --> ", ""));
         }
     }
 

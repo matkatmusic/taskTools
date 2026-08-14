@@ -52,6 +52,7 @@ flowchart TB
 %% The committed, green implementation this pipeline emits is the input to the
 %% rebase and merge pipeline.
 
+  INPUT["Input: { plan file }"] --> A
   A["implement task"] --> NOTES["record implementation notes file to tasks.json"]
   NOTES --> CW["commit if needed"]
   CW --> TT["run task tests"]
@@ -65,13 +66,15 @@ flowchart TB
   AMT --> CW
   QCX -- "yes, after 2 attempts<br/>exit type: tests-flagged<br/>exit note: codex flagged the tests twice" --> EXITWF
   QCX -- no --> RB["lock the source repo"]
-  RB --> IMPL["finished implementation"]
+  RB --> RECEIPT["Receipt: { finished implementation, source repo lock }"]
 
-  EXITWF["exit workflow"]
+  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote }"]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
   class NOTES,CW,TT,QTF,QCX,RB script
   class A,RT,FIXT,AMT prose
-  class IMPL,EXITWF output
+  class EXITWF fail
+  class INPUT,RECEIPT,FAIL_RECEIPT output

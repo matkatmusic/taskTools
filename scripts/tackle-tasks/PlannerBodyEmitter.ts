@@ -1,4 +1,4 @@
-// The planner phase of tackle-tasks, one function per box in plans/diagram/pipeline-plannerPhase.mmd.
+// The planner phase of tackle-tasks, one function per box in plans/diagram/pipeline-preamble.mmd.
 // Every box name in a trailing comment is the box's label in that diagram, verbatim.
 // Every function below is a thin wrapper around an already-tested export; none of them
 // open tasks.json themselves, and each re-derives what it needs from the task number.
