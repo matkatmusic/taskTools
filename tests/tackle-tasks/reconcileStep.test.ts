@@ -25,6 +25,7 @@ import { writeTaskExitNotes } from "../../scripts/tackle-tasks/writeTaskExitNote
 import { markTaskInactive } from "../../scripts/tackle-tasks/markTaskInactive.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
+import { isTaskRunResumable } from "../../scripts/tackle-tasks/isTaskRunResumable.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
@@ -1200,6 +1201,57 @@ test("test_reconcileStep_recognizesWrittenExitNotesAfterALostResult", () => {
     assert.deepEqual(result.result, realOutput);
 });
 
+// Finding 1 (phase10-audit.md): the box now establishes lease ownership BEFORE deciding
+// resumability, so a lost result must be reconciled the same way even when there are no notes to
+// resume from — that "safe, no notes" path is exactly what the finding says used to strand ownership.
+test("test_reconcileStep_recognizesAnEstablishedLeaseAfterALostResultWithNoNotes", () => {
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-lease-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-old", root).status, "claimed");
+    const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-wt-"));
+    updateCurrentTaskRun(1, "run-old", { worktree: worktreePath, leaseRunId: "run-old" }, root);
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
+    writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "run-failed", exitNote: "died" });
+    markTaskInactive({ taskNumber: 1, runId: "run-old", projectRoot: root });
+    assert.equal(claimTask(1, "run-new", root).status, "claimed");
+
+    // Test action: run the real box for real, then discard its returned value.
+    const realOutput = isTaskRunResumable(1, worktreePath, "run-new", root);
+
+    const result = reconcileStep(baseInput({
+        script: "isTaskRunResumable", taskNumber: 1, runId: "run-new", projectRoot: root,
+        stepInput: { worktreePath },
+    }));
+
+    // Verification: the reconstructed result matches IsTaskRunResumableOutput field-for-field,
+    // and ownership (not resumability) is what reconciliation proved.
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.result, realOutput);
+    assert.equal(realOutput.leaseEstablished, true);
+    assert.equal(realOutput.resumable, false);
+});
+
+test("test_reconcileStep_reportsNotCompletedWhenTheLeaseIsNotYetEstablished", () => {
+    // Setup: the box never ran (or ran and failed to establish ownership) - the physical lease
+    // still names a run other than the one being reconciled for.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-noLease-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-old", root).status, "claimed");
+    const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-wt-"));
+    updateCurrentTaskRun(1, "run-old", { worktree: worktreePath, leaseRunId: "run-old" }, root);
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-live", pid: 1, createdAt: 1 }));
+    writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "run-failed", exitNote: "died" });
+    markTaskInactive({ taskNumber: 1, runId: "run-old", projectRoot: root });
+    assert.equal(claimTask(1, "run-new", root).status, "claimed");
+
+    const result = reconcileStep(baseInput({
+        script: "isTaskRunResumable", taskNumber: 1, runId: "run-new", projectRoot: root,
+        stepInput: { worktreePath },
+    }));
+
+    assert.equal(result.status, "not-completed");
+});
+
 test("test_reconcileStep_reportsNotCompletedWhenExitNotesPlainlyWereNotWritten", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-exitnotes-none-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
@@ -1232,7 +1284,10 @@ const FAULT_INJECTION_CASES: Record<string, string[]> = {
     ],
     generateTaskDocs: ["test_reconcileStep_recognizesAGeneratedBriefAfterALostResult"],
     initTaskSubmodules: ["test_reconcileStep_reconstructsInitSubmodulesReceiptForBothInitializedStates"],
-    isTaskRunResumable: ["test_reconcileStep_classifiesAValidRelativeNotesFileAsContainedForBothHandlers"],
+    isTaskRunResumable: [
+        "test_reconcileStep_classifiesAValidRelativeNotesFileAsContainedForBothHandlers",
+        "test_reconcileStep_recognizesAnEstablishedLeaseAfterALostResultWithNoNotes",
+    ],
     markTaskInactive: ["test_reconcileStep_recognizesAnInactiveMarkAfterALostResult"],
     mergeTaskWorktree: ["test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef"],
     rebaseTaskWorktree: ["test_reconcileStep_recognizesAFinishedRebaseAfterALostResult"],

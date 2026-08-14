@@ -392,7 +392,7 @@ test("test_rejectRegatedTaskRemovesTheTaskFromTheQueueAndReportsItSeparatelyFrom
 });
 
 const REPO_ROOT = process.cwd();
-const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
+const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js"), "utf8")
     .replace("export const meta", "const meta");
 const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT, "scripts/tackle-tasks_AgentPromptEmitter.ts");
 
@@ -421,7 +421,7 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
     const fn = compileFunction(
         `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
         ["args", "log", "agent"],
-        { filename: join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js") },
+        { filename: join(REPO_ROOT, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js") },
     ) as TaskWorkflowRunner;
     return await fn(
         JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),

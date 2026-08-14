@@ -10,7 +10,7 @@ import { compileFunction } from "node:vm";
 import { skillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
 import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
 import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
-import { CURRENT_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, currentWorkflowOutputPath, materializeTaskWorkflow } from "../scripts/prepareTasks.ts";
+import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWorkflow, v1_1WorkflowOutputPath } from "../scripts/prepareTasks.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_SkillBodyEmitter.ts", import.meta.url));
@@ -283,9 +283,9 @@ test("every tackle-tasks workflow script opens with a pure-literal meta and noth
 
 test("materializeTaskWorkflow bakes the task number in and leaves no placeholder behind", () => {
   const worktree = join(mkdtempSync(join(tmpdir(), "tt-workflow-")), "task-7");
-  const workflowPath = materializeTaskWorkflow(7, CURRENT_WORKFLOW_TEMPLATE_PATH, currentWorkflowOutputPath(worktree));
+  const workflowPath = materializeTaskWorkflow(7, V1_1_WORKFLOW_TEMPLATE_PATH, v1_1WorkflowOutputPath(worktree));
   const source = readFileSync(workflowPath, "utf8");
-  assert.equal(workflowPath, `${worktree}.tackle-tasks.workflow.js`);
+  assert.equal(workflowPath, `${worktree}.tackle-tasks-v1_1.workflow.js`);
   assert.ok(source.startsWith('export const meta = {\n  name: "task-7",'), source.slice(0, 80));
   assert.doesNotMatch(source, /__TT_TASK__/);
   assert.match(source, /\{ title: "7 Plan", detail: "write and refine the task plan" \}/);
@@ -303,7 +303,7 @@ test("current emitter's brief names workflowPath, never v1_1WorkflowPath", () =>
 // ---------------------------------------------------------------------------
 
 const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
-const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js"), "utf8")
+const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js"), "utf8")
   .replace("export const meta", "const meta");
 const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks_AgentPromptEmitter.ts");
 
@@ -332,7 +332,7 @@ const runTaskWorkflowStage = async (worktreePath: string, args: Record<string, u
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${TASK_WORKFLOW_SOURCE} })()`,
     ["args", "log", "agent"],
-    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks/tackle-tasks.workflow.js") },
+    { filename: join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js") },
   ) as TaskWorkflowRunner;
   return await fn(
     JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH, ...args }),

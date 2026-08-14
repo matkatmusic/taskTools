@@ -1,8 +1,12 @@
 // "is the previous run's work resumable?" — plans/tackle-tasks-v1_5-plan.md Phase 3.
 // F7: the notes file must resolve, by real path, to a regular file inside the real worktree —
 // that one check handles an absolute outside path, a "../" escape and a symlink escape alike.
-// Ownership must be established (adopted from an ended owner, or freshly acquired for an
-// absent lease) before resumable is ever reported true.
+// Finding 1 (phase10-audit.md): ownership is established FIRST, independent of resumability.
+// Every existing-worktree path — safe or not — must adopt an ended owner's lease or acquire an
+// absent one before anything else happens, so a "safe, no notes" run is never left proceeding
+// against a lease still naming a dead run. Only once ownership is established do we decide
+// resumable from the newest ended run's notes file. Neither the notes file's absence nor its
+// failing containment ever blocks lease establishment.
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, sep } from "node:path";
 import { acquireAbsentWorktreeLease, adoptWorktreeLease, readTaskRunState } from "./taskRunState.ts";
@@ -42,20 +46,18 @@ export function isTaskRunResumable(
     runId: string,
     projectRoot: string,
 ): IsTaskRunResumableOutput {
+    const { adopted } = adoptWorktreeLease(taskNumber, runId, projectRoot);
+    const leaseEstablished = adopted || acquireAbsentWorktreeLease(taskNumber, runId, projectRoot).acquired;
+    if (!leaseEstablished) return NOT_RESUMABLE;
+
     const state = readTaskRunState(taskNumber, projectRoot);
     const endedRuns = state.history.filter((run) => run.endedAt !== null);
     const newest = endedRuns[endedRuns.length - 1];
     const notesFile = newest?.implementationNotesFile ?? null;
-    if (notesFile === null) return NOT_RESUMABLE;
-    if (!isNotesFileContained(worktreePath, notesFile)) return NOT_RESUMABLE;
-
-    const { adopted } = adoptWorktreeLease(taskNumber, runId, projectRoot);
-    if (adopted) return { resumable: true, implementationNotesFile: notesFile, leaseEstablished: true };
-
-    const { acquired } = acquireAbsentWorktreeLease(taskNumber, runId, projectRoot);
-    if (acquired) return { resumable: true, implementationNotesFile: notesFile, leaseEstablished: true };
-
-    return NOT_RESUMABLE;
+    if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
+        return { resumable: false, implementationNotesFile: null, leaseEstablished: true };
+    }
+    return { resumable: true, implementationNotesFile: notesFile, leaseEstablished: true };
 }
 
 export type IsTaskRunResumableCliInput = {

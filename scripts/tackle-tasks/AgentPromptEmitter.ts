@@ -10,7 +10,9 @@
 // appends all runtime/bulk data in one final "---- DATA ----" section, referenced by label
 // from the instructions (§6: interpolate data last).
 import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
+import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
 
 function readStdin(): string {
     try {
@@ -485,7 +487,27 @@ export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testO
 // or assertion-free for a pre-existing test it merely modified (diagram rule 3).
 // ---------------------------------------------------------------------------
 
+// Resolves an occurrence-tagged test path (e.g. "child::tests/child.test.ts") to an absolute
+// path inside the matching submodule checkout in this worktree, so the agent can open it
+// directly. A root-occurrence path resolves without touching git/occurrence discovery at all.
+function resolveTestFilePath(t: PreparedTask, taggedPath: string, nonRootOccurrences: () => WorktreeOccurrence[]): string {
+    const { occurrenceId, relativePath } = parseOccurrencePath(taggedPath);
+    if (occurrenceId === "") return worktreePath(t, relativePath);
+    const occurrence = nonRootOccurrences().find((o) => o.occurrenceId === occurrenceId);
+    if (!occurrence) fail(`amend-tests: no occurrence "${occurrenceId}" found for test file "${taggedPath}"`);
+    return join(occurrence.worktreeCheckoutPath, relativePath);
+}
+
 export function amendTestsPrompt(t: PreparedTask, notes: string, createdTestFiles: string[], testFiles: string[]): string {
+    // testFiles is every runnable changed test; createdTestFiles is a subset of it. Derive the
+    // disjoint pre-existing list here rather than trusting the caller to have subtracted it.
+    const preExistingTestFiles = testFiles.filter((f) => !createdTestFiles.includes(f));
+    let cachedOccurrences: WorktreeOccurrence[] | null = null;
+    const nonRootOccurrences = () => cachedOccurrences ??= buildWorktreeOccurrences(t.repoRoot, t.taskStateRoot);
+    const formatTestFiles = (files: string[]) => files.length === 0
+        ? "  (none)"
+        : files.map((f) => `  - ${f} => ${resolveTestFilePath(t, f, nonRootOccurrences)}`).join("\n");
+
     return `Apply test-review feedback, given in REVIEWER_NOTES below.
 
 Files you created in this task's own worktree are listed in CREATED_TEST_FILES below,
@@ -515,9 +537,9 @@ asserts nothing; or to stage or commit anything yourself.
 ---- DATA ----
 TEST_REVIEW_FILE = ${t.testReviewFile}
 CREATED_TEST_FILES (freely editable) =
-${createdTestFiles.length === 0 ? "  (none)" : createdTestFiles.map((f) => `  - ${f}`).join("\n")}
+${formatTestFiles(createdTestFiles)}
 TEST_FILES (pre-existing, broken-or-empty exception only) =
-${testFiles.length === 0 ? "  (none)" : testFiles.map((f) => `  - ${f}`).join("\n")}
+${formatTestFiles(preExistingTestFiles)}
 REVIEWER_NOTES =
 ${notes}`;
 }
@@ -543,13 +565,14 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
             );
         case "fix-conflicts":
             return fixConflictsPrompt(payload.checkoutPath as string, Array.isArray(payload.conflictedFilePaths) ? payload.conflictedFilePaths as string[] : []);
+        // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
         case "fix-suite":
             return fixSuitePrompt(
                 payload.checkoutPath as string,
                 typeof payload.occurrenceId === "string" ? payload.occurrenceId : "",
                 typeof payload.testOutput === "string" ? payload.testOutput : "",
                 Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
-                Array.isArray(payload.ownedPaths) ? payload.ownedPaths as string[] : [],
+                loadPreparedTask(taskNumber, worktree, projectRoot).files,
             );
         case "fix-tests":
             return fixTestsPrompt(
@@ -558,7 +581,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
                 typeof payload.testOutput === "string" ? payload.testOutput : "",
                 Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
                 taskNumber,
-                Array.isArray(payload.ownedPaths) ? payload.ownedPaths as string[] : [],
+                loadPreparedTask(taskNumber, worktree, projectRoot).files,
             );
         case "review-tests":
             return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));

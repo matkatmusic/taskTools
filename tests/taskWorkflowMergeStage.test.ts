@@ -14,7 +14,7 @@ import {
 } from '../scripts/runMergePhase.ts'
 
 const REPO_ROOT = process.cwd()
-const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js'), 'utf8')
+const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
 const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
 
@@ -47,7 +47,7 @@ const runMergeStage = async (worktreePath: string, args: Record<string, unknown>
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js') },
   ) as WorkflowRunner
   return await fn(
     JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: EMITTER_PATH, ...args }),
@@ -188,7 +188,7 @@ const runWorkflowWithRawAgent = async (worktreePath: string, args: Record<string
   const fn = compileFunction(
     `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
     ['args', 'log', 'agent'],
-    { filename: join(REPO_ROOT, 'skills/tackle-tasks/tackle-tasks.workflow.js') },
+    { filename: join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js') },
   ) as WorkflowRunner
   return await fn(JSON.stringify({ worktree: worktreePath, agentPromptEmitterPath: EMITTER_PATH, ...args }), () => {}, rawAgent)
 }
