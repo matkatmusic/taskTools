@@ -177,6 +177,8 @@ export function describeReflows(
 }
 
 export function reflowFile(path: string): Reflow[] {
+  // Markdown prose is not comments; reflowing it mangles plans and docs.
+  if (path.endsWith(".md")) return [];
   const source = readFileSync(path, "utf8");
   const { text, runs } = reflowSource(source);
   if (runs.length > 0 && text !== source) writeFileSync(path, text);
