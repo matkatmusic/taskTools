@@ -1,5 +1,6 @@
 // Replaces bootstrap's "prepare" mode front-end for the box before "is task number valid?".
 // Mutates nothing: no worktree, no tasks.json write. See plans/tackle-tasks-v1_5-plan.md §Phase 2.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { generateRunId } from "../prepareTasks.ts";
 import { currentBranchName } from "../repositoryBranches.ts";
@@ -53,10 +54,21 @@ export function resolveTaskRun(args: string, projectRoot: string): ResolveTaskRu
     };
 }
 
+// The invoking shell may sit in any subdirectory of the repository, and every downstream consumer —
+// sourceRepoLock's <projectRoot>/.git path above all — needs the repository top level, never that
+// subdirectory. This is the one place a working directory is read, and it is normalized here.
+export function repositoryTopLevel(startDirectory: string): string {
+    const topLevel = execFileSync("git", ["-C", startDirectory, "rev-parse", "--show-toplevel"], {
+        encoding: "utf8",
+    }).trim();
+    if (topLevel === "") throw new Error(`no git repository at ${startDirectory}`);
+    return topLevel;
+}
+
 if (process.argv[1]?.endsWith("resolveTaskRun.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as { args: string; projectRoot: string };
+    const input = JSON.parse(readFileSync(0, "utf8")) as { args: string; projectRoot?: string };
     try {
-        const output = resolveTaskRun(input.args, input.projectRoot);
+        const output = resolveTaskRun(input.args, input.projectRoot ?? repositoryTopLevel(process.cwd()));
         process.stdout.write(`${JSON.stringify(output)}\n`);
     } catch (error) {
         process.stderr.write(`resolveTaskRun: ${(error as Error).message}\n`);

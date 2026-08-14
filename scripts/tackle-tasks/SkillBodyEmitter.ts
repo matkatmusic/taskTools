@@ -9,16 +9,16 @@ const withoutTrailingSlash = (path: string): string => path.replace(/\/$/, "");
 
 const SCRIPTS_DIR = withoutTrailingSlash(fileURLToPath(new URL("./", import.meta.url)));
 const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
-const RESOLVE_TASK_RUN_PATH = fileURLToPath(new URL("./resolveTaskRun.ts", import.meta.url));
 const RESOLVE_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
-// The project being worked on, not the plugin holding this file: the two differ on an installed plugin.
-export const skillBody = (argsValue: string, projectRoot: string): string => {
+// The resolver workflow, not this brief, names the script it runs and resolves the project root:
+// both belong on the agent side of the boundary.
+export const skillBody = (argsValue: string): string => {
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const resolveCall = JSON.stringify({
         scriptPath: RESOLVE_WORKFLOW_PATH,
-        args: { argsValue, projectRoot: withoutTrailingSlash(projectRoot), resolveTaskRunPath: RESOLVE_TASK_RUN_PATH },
+        args: { argsValue, scriptsDir: SCRIPTS_DIR },
     });
 
     return `Run \`Workflow(${resolveCall})\`. It returns \`{taskNumbers, projectRoot, sourceBranch, runId}\` — the requested task numbers, parsed and validated in an isolated agent, plus the run identity every task in this run shares.
@@ -61,6 +61,5 @@ if (process.argv[1]?.endsWith("SkillBodyEmitter.ts")) {
         );
         process.exit(1);
     }
-    // The skill body runs in the main agent's shell, whose working directory is the project being worked on.
-    process.stdout.write(skillBody(argsValue, process.cwd()));
+    process.stdout.write(skillBody(argsValue));
 }
