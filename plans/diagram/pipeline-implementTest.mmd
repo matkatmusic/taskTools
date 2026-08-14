@@ -53,14 +53,14 @@ flowchart TB
 %% rebase and merge pipeline.
 
   INPUT["Input: { plan file }"] --> A
-  A["implement task"] --> NOTES["record implementation notes file to tasks.json"]
+  A["implement task"] --> NOTES["record implementation notes<br/>file to tasks.json"]
   NOTES --> CW["commit if needed"]
   CW --> TT["run task tests"]
   TT --> QTF{"do the tests fail?"}
   QTF -- "yes, under 2 attempts" --> FIXT["fix the codebase"]
   FIXT --> CW
   QTF -- "yes, after 2 attempts<br/>exit type: tests-red<br/>exit note: task tests failed after 2 codebase fixes" --> EXITWF
-  QTF -- no --> RT["codex reviews tests against task details and plan file"]
+  QTF -- no --> RT["codex reviews tests against<br/>task details and plan file"]
   RT --> QCX{"are the tests flagged?"}
   QCX -- "yes, under 2 attempts" --> AMT["amend the tests"]
   AMT --> CW

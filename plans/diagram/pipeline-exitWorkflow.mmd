@@ -56,10 +56,10 @@ flowchart TB
   INMERGE["Input: { merge commit hashes, modified files }"] --> HASH["record merge commit hashes to tasks.json"]
   HASH --> DONE["write exit type completed to tasks.json"]
   DONE --> RECOK["record modified files to tasks.json"]
-  RECOK --> CLEAN["clean up worktrees, leases, persistence refs and source lock"]
+  RECOK --> CLEAN["clean up worktrees, leases,<br/>persistence refs and source lock"]
   CLEAN --> VNOTES["build the closure note from the recorded run"]
   VNOTES --> OFFOK["mark task inactive in tasks.json"]
-  OFFOK --> ARCH["move task to completedTasks.json and update tasks blocked by it"]
+  OFFOK --> ARCH["move task to completedTasks.json<br/>and update tasks blocked by it"]
   ARCH --> REPORTDONE["report the closure note"]
   REPORTDONE --> STOP["stop"]
 
