@@ -17,14 +17,15 @@ const RESOLVE_SCHEMA = {
 
 const ARGS = typeof args === 'string' ? JSON.parse(args) : args
 const ARGS_VALUE = ARGS.argsValue
-const PROJECT_ROOT = ARGS.projectRoot
-const RESOLVE_SCRIPT_PATH = ARGS.resolveTaskRunPath
+const SCRIPTS_DIR = ARGS.scriptsDir
 
 if (!ARGS_VALUE) throw new Error('tackle-tasks-resolve: args.argsValue is required')
-if (!PROJECT_ROOT) throw new Error('tackle-tasks-resolve: args.projectRoot is required')
-if (!RESOLVE_SCRIPT_PATH) throw new Error('tackle-tasks-resolve: args.resolveTaskRunPath is required')
+if (!SCRIPTS_DIR) throw new Error('tackle-tasks-resolve: args.scriptsDir is required')
 
-const payload = JSON.stringify({ args: ARGS_VALUE, projectRoot: PROJECT_ROOT })
+// The script names itself only here, on the agent side of the boundary. It normalizes the
+// agent's working directory to the repository top level and returns that as projectRoot.
+const RESOLVE_SCRIPT_PATH = `${SCRIPTS_DIR}/resolveTaskRun.ts`
+const payload = JSON.stringify({ args: ARGS_VALUE })
 
 // ponytail: null/undefined means the harness returned no result; the script is read-only, so re-spawn.
 const retryAgent = async (spawn, attempts = 3) => {
