@@ -8,8 +8,10 @@ export type FeedbackMonitorOptions = {
     timeoutMs?: number | null;
 };
 
-export type ReviewedMonitorEvent = {
-    event: "reviewed";
+export type FeedbackPublishedMonitorEvent = {
+    event: "feedback";
+    status: "landed";
+    nextAction: "implement-published-feedback";
     markerPath: string;
     contents: string;
     planPath: string;
@@ -22,20 +24,22 @@ export type ReviewedMonitorEvent = {
 
 export type ResolvedMonitorEvent = {
     event: "resolved";
+    status: "landed";
+    nextAction: "acknowledge-resolution-with-complete";
     markerPath: string;
     contents: string;
 };
 
-export type ImplementorMonitorEvent = ReviewedMonitorEvent | ResolvedMonitorEvent;
+export type ImplementorMonitorEvent = FeedbackPublishedMonitorEvent | ResolvedMonitorEvent;
 
-export type ReviewedMarker = {
+export type FeedbackMarker = {
     plan: string;
     audit: string;
     review: string;
 };
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
-const REVIEWED_MARKER_KEYS = new Set([".plan", ".audit", ".review"]);
+const FEEDBACK_MARKER_KEYS = new Set([".plan", ".audit", ".review"]);
 
 function sleep(milliseconds: number): Promise<void> {
     return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
@@ -59,7 +63,7 @@ function statPathIsFile(path: string): boolean {
     }
 }
 
-function refuseTrackedMarker(root: string, markerName: ".reviewed" | ".resolved"): void {
+function refuseTrackedMarker(root: string, markerName: ".feedback" | ".resolved"): void {
     const markerPath = join(root, markerName);
     try {
         execFileSync("git", ["-C", root, "cat-file", "-e", `HEAD:${markerName}`], { stdio: "ignore" });
@@ -70,21 +74,21 @@ function refuseTrackedMarker(root: string, markerName: ".reviewed" | ".resolved"
 }
 
 /** Parse a complete auditor publication marker. Each key must occur exactly once. */
-export function parseReviewedMarker(contents: string): ReviewedMarker {
+export function parseFeedbackMarker(contents: string): FeedbackMarker {
     const fields = new Map<string, string>();
     for (const line of contents.split(/\r?\n/)) {
         if (line.length === 0) continue;
         const separator = line.indexOf("=");
-        if (separator < 1) throw new Error(`invalid .reviewed line: ${line}`);
+        if (separator < 1) throw new Error(`invalid .feedback line: ${line}`);
         const key = line.slice(0, separator);
         const value = line.slice(separator + 1);
-        if (!REVIEWED_MARKER_KEYS.has(key)) throw new Error(`unknown .reviewed key: ${key}`);
-        if (fields.has(key)) throw new Error(`duplicate .reviewed key: ${key}`);
-        if (value.length === 0) throw new Error(`empty .reviewed value for ${key}`);
+        if (!FEEDBACK_MARKER_KEYS.has(key)) throw new Error(`unknown .feedback key: ${key}`);
+        if (fields.has(key)) throw new Error(`duplicate .feedback key: ${key}`);
+        if (value.length === 0) throw new Error(`empty .feedback value for ${key}`);
         fields.set(key, value);
     }
-    for (const key of REVIEWED_MARKER_KEYS) {
-        if (!fields.has(key)) throw new Error(`missing .reviewed key: ${key}`);
+    for (const key of FEEDBACK_MARKER_KEYS) {
+        if (!fields.has(key)) throw new Error(`missing .feedback key: ${key}`);
     }
     return {
         plan: fields.get(".plan")!,
@@ -98,27 +102,29 @@ function resolvePublishedPath(root: string, path: string): string {
 }
 
 /** Read and consume one auditor publication marker, then validate the published review. */
-export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorEvent {
+export function consumeRootFeedbackMarker(projectRoot: string): FeedbackPublishedMonitorEvent {
     const root = repositoryRoot(projectRoot);
-    const markerPath = join(root, ".reviewed");
+    const markerPath = join(root, ".feedback");
     if (!statPathIsFile(markerPath)) throw new Error(`the root review marker does not exist: ${markerPath}`);
-    refuseTrackedMarker(root, ".reviewed");
+    refuseTrackedMarker(root, ".feedback");
 
     const markerContents = readFileSync(markerPath, "utf8");
     // Detection consumes the transient signal even when its contents are invalid. This prevents
     // one bad publication from retriggering every restarted monitor; the auditor must correct the
     // review metadata and publish a fresh marker.
     unlinkSync(markerPath);
-    const marker = parseReviewedMarker(markerContents);
+    const marker = parseFeedbackMarker(markerContents);
     const planPath = resolvePublishedPath(root, marker.plan);
     const auditPath = resolvePublishedPath(root, marker.audit);
     const reviewPath = resolvePublishedPath(root, marker.review);
     for (const [label, path] of [["plan", planPath], ["audit", auditPath], ["review", reviewPath]] as const) {
-        if (!statPathIsFile(path)) throw new Error(`.reviewed ${label} path is not a file: ${path}`);
+        if (!statPathIsFile(path)) throw new Error(`.feedback ${label} path is not a file: ${path}`);
     }
 
     return {
-        event: "reviewed",
+        event: "feedback",
+        status: "landed",
+        nextAction: "implement-published-feedback",
         markerPath,
         contents: markerContents,
         planPath,
@@ -131,7 +137,9 @@ export function consumeRootReviewedMarker(projectRoot: string): ReviewedMonitorE
 }
 
 /** Consume the auditor's terminal decision and preserve its bytes in the emitted event. */
-export function consumeRootResolvedMarker(projectRoot: string): ResolvedMonitorEvent {
+export function consumeRootResolvedMarker(
+    projectRoot: string,
+): Omit<ResolvedMonitorEvent, "status" | "nextAction"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".resolved");
     if (!statPathIsFile(markerPath)) throw new Error(`the root resolution marker does not exist: ${markerPath}`);
@@ -151,19 +159,25 @@ export async function waitForImplementorSignal(
     if (timeoutMs !== null) assertPositiveMilliseconds(timeoutMs, "timeoutMs");
 
     const root = repositoryRoot(options.projectRoot);
-    const reviewedPath = join(root, ".reviewed");
+    const feedbackPath = join(root, ".feedback");
     const resolvedPath = join(root, ".resolved");
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
-        const hasReviewed = statPathIsFile(reviewedPath);
+        const hasFeedback = statPathIsFile(feedbackPath);
         const hasResolved = statPathIsFile(resolvedPath);
-        if (hasReviewed && hasResolved) {
-            throw new Error(`conflicting root protocol markers: ${reviewedPath} and ${resolvedPath}`);
+        if (hasFeedback && hasResolved) {
+            throw new Error(`conflicting root protocol markers: ${feedbackPath} and ${resolvedPath}`);
         }
-        if (hasResolved) return consumeRootResolvedMarker(root);
-        if (hasReviewed) return consumeRootReviewedMarker(root);
+        if (hasResolved) {
+            return {
+                status: "landed",
+                nextAction: "acknowledge-resolution-with-complete",
+                ...consumeRootResolvedMarker(root),
+            };
+        }
+        if (hasFeedback) return consumeRootFeedbackMarker(root);
         if (deadline !== null && Date.now() >= deadline) {
-            throw new Error(`timed out waiting for root .reviewed or .resolved in ${root}`);
+            throw new Error(`timed out waiting for root .feedback or .resolved in ${root}`);
         }
         await sleep(pollIntervalMs);
     }

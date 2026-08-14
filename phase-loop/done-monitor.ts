@@ -10,12 +10,16 @@ export type DoneMonitorOptions = {
 
 export type DoneMonitorEvent = {
     event: "done";
+    status: "landed";
+    nextAction: "freeze-staged-snapshot-and-audit";
     markerPath: string;
     contents: string;
 };
 
 export type CompleteMonitorEvent = {
     event: "complete";
+    status: "landed";
+    nextAction: "end-auditor-loop";
     markerPath: string;
     contents: string;
 };
@@ -73,7 +77,9 @@ function refuseTrackedMarker(root: string, markerName: ".done" | ".complete"): v
 }
 
 /** Remove the transient marker from both the index and the working tree before firing. */
-export function consumeRootDoneMarker(projectRoot: string): Omit<DoneMonitorEvent, "event"> {
+export function consumeRootDoneMarker(
+    projectRoot: string,
+): Omit<DoneMonitorEvent, "event" | "status" | "nextAction"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".done");
     if (!isRootDoneMarkerStaged(root)) {
@@ -113,7 +119,9 @@ export function consumeRootDoneMarker(projectRoot: string): Omit<DoneMonitorEven
 
 
 /** Consume the implementor's terminal acknowledgement before ending the auditor loop. */
-export function consumeRootCompleteMarker(projectRoot: string): Omit<CompleteMonitorEvent, "event"> {
+export function consumeRootCompleteMarker(
+    projectRoot: string,
+): Omit<CompleteMonitorEvent, "event" | "status" | "nextAction"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".complete");
     if (!existsSync(markerPath)) {
@@ -135,7 +143,12 @@ export async function waitForStagedDone(options: DoneMonitorOptions): Promise<Do
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
         if (isRootDoneMarkerStaged(root)) {
-            return { event: "done", ...consumeRootDoneMarker(root) };
+            return {
+                event: "done",
+                status: "landed",
+                nextAction: "freeze-staged-snapshot-and-audit",
+                ...consumeRootDoneMarker(root),
+            };
         }
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for a staged root .done marker in ${root}`);
@@ -160,10 +173,20 @@ export async function waitForAuditorSignal(options: DoneMonitorOptions): Promise
             throw new Error(`conflicting root protocol markers: ${join(root, ".done")} and ${join(root, ".complete")}`);
         }
         if (hasComplete) {
-            return { event: "complete", ...consumeRootCompleteMarker(root) };
+            return {
+                event: "complete",
+                status: "landed",
+                nextAction: "end-auditor-loop",
+                ...consumeRootCompleteMarker(root),
+            };
         }
         if (hasDone) {
-            return { event: "done", ...consumeRootDoneMarker(root) };
+            return {
+                event: "done",
+                status: "landed",
+                nextAction: "freeze-staged-snapshot-and-audit",
+                ...consumeRootDoneMarker(root),
+            };
         }
         if (deadline !== null && Date.now() >= deadline) {
             throw new Error(`timed out waiting for staged .done or root .complete in ${root}`);
