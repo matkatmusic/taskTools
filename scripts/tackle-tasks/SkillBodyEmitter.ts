@@ -23,6 +23,8 @@ export const skillBody = (argsValue: string): string => {
 
     return `Run \`Workflow(${resolveCall})\`. It returns \`{taskNumbers, projectRoot, sourceBranch, runId}\` — the requested task numbers, parsed and validated in an isolated agent, plus the run identity every task in this run shares.
 
+Invoke \`/ponytail:ponytail ultra\`.
+
 Then launch one task workflow for every task number in \`taskNumbers\`, in the order given:
 
 \`\`\`
@@ -40,6 +42,10 @@ Task <task>: <exitType> — <exitNote>
 \`\`\`
 
 Report nothing else about a run.
+
+## Commit message
+
+Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them. Then invoke the \`commit-message\` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.
 `;
 };
 

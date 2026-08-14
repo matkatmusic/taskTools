@@ -67,8 +67,10 @@ function isTestPath(path: string | undefined): path is string {
 
 function runNodeTest(checkoutPath: string, relativeTestFiles: string[]): { passed: boolean; output: string } {
     try {
+        // ponytail: strip NODE_TEST_CONTEXT so a red child suite can't inherit a green parent's test context
+        const { NODE_TEST_CONTEXT: _parentTestContext, ...env } = process.env;
         const stdout = execFileSync("node", ["--test", ...relativeTestFiles], {
-            cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+            cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env,
         });
         return { passed: true, output: stdout };
     } catch (error) {

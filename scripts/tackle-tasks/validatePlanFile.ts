@@ -5,14 +5,15 @@ import { isPlanProblem, readAndValidatePlan } from "./planArtifacts.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ValidatePlanFileInput = { projectRoot: string; planFilePath: string; taskNumber: number };
-export type ValidatePlanFileOutput = { valid: boolean; problem: string | null; sectionIds: string[] };
+export type ValidatePlanFileOutput = { valid: boolean; problem: string | null; sectionIds: string[]; revision: number };
 
 export function validatePlanFile(input: ValidatePlanFileInput): ValidatePlanFileOutput {
     requireAbsolutePath("projectRoot", input.projectRoot);
     const planFilePath = requireAbsolutePath("planFilePath", input.planFilePath);
     const result = readAndValidatePlan(planFilePath, input.taskNumber);
-    if (isPlanProblem(result)) return { valid: false, problem: result.problem, sectionIds: [] };
-    return { valid: true, problem: null, sectionIds: result.sections.map((section) => section.id) };
+    // revision 0 on an unreadable plan: no revision was observed, so reconciliation must stay ambiguous.
+    if (isPlanProblem(result)) return { valid: false, problem: result.problem, sectionIds: [], revision: 0 };
+    return { valid: true, problem: null, sectionIds: result.sections.map((section) => section.id), revision: result.revision };
 }
 
 if (process.argv[1]?.endsWith("validatePlanFile.ts")) {

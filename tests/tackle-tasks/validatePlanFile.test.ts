@@ -31,7 +31,7 @@ test("test_validatePlanFile_reportsValidWithSectionIdsForAWellFormedPlan", () =>
         sections: [{ id: "problem", title: "Problem", body: "b" }, { id: "step-1", title: "Step", body: "b" }],
     });
     const output = validatePlanFile({ projectRoot: "/repo", planFilePath, taskNumber: 42 });
-    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem", "step-1"] });
+    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem", "step-1"], revision: 1 });
 });
 
 test("test_validatePlanFile_reportsInvalidWithAProblemAndNoSectionIds", () => {
@@ -49,7 +49,7 @@ test("test_validatePlanFileCli_printsOneLineOfJsonOnStdout", () => {
         sections: [{ id: "problem", title: "Problem", body: "b" }],
     });
     const output = runCli({ projectRoot: "/repo", planFilePath, taskNumber: 7 });
-    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"] });
+    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"], revision: 1 });
 });
 
 test("test_validatePlanFileCli_behavesIdenticallyFromAnUnrelatedCwd", () => {
@@ -60,7 +60,7 @@ test("test_validatePlanFileCli_behavesIdenticallyFromAnUnrelatedCwd", () => {
     });
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
     const output = runCli({ projectRoot: "/repo", planFilePath, taskNumber: 7 }, unrelatedCwd);
-    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"] });
+    assert.deepEqual(output, { valid: true, problem: null, sectionIds: ["problem"], revision: 1 });
 });
 
 test("test_validatePlanFileCli_rejectsARelativePlanFilePath", () => {

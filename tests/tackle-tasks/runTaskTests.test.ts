@@ -288,6 +288,33 @@ test("test_runTaskTests_parsesATestFilenameContainingSpaces", () => {
     assert.equal(result.passed, true);
 });
 
+test("test_runTaskTests_reportsARedSuiteAsRedEvenWhenTheParentProcessHasNodeTestContextSet", () => {
+    // Setup: a failing test file, run with NODE_TEST_CONTEXT set on the parent process (as it is
+    // whenever this suite itself runs under `node --test`).
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    mkdirSync(join(worktreePath, "tests"), { recursive: true });
+    writeFileSync(
+        join(worktreePath, "tests", "failing.test.ts"),
+        `import { test } from "node:test";\nimport assert from "node:assert/strict";\ntest("t", () => { assert.ok(false); });\n`,
+    );
+    git(worktreePath, "add", "tests/failing.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "add failing test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+    process.env.NODE_TEST_CONTEXT = "1";
+
+    // Test action: run the task's tests.
+    let result;
+    try {
+        result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    } finally {
+        delete process.env.NODE_TEST_CONTEXT;
+    }
+
+    // Verification: the red child suite is still reported as red, not silently inherited as green.
+    assert.equal(result.passed, false);
+});
+
 test("test_runTaskTests_throwsWhenTheExpectedRunIdIsStale", () => {
     // Setup: a claimed run that then ends and is replaced by a newer claim, simulating a
     // timed-out process that is still holding the original run's id.

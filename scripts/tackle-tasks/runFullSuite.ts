@@ -24,7 +24,9 @@ function truncateOutput(output: string): string {
 
 function runCompleteSuite(checkoutPath: string, command: string): { passed: boolean; output: string } {
     try {
-        const stdout = execSync(command, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+        // ponytail: strip NODE_TEST_CONTEXT so a red child suite can't inherit a green parent's test context
+        const { NODE_TEST_CONTEXT: _parentTestContext, ...env } = process.env;
+        const stdout = execSync(command, { cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env });
         return { passed: true, output: stdout };
     } catch (error) {
         const execError = error as { status?: number | null; stdout?: string; stderr?: string };

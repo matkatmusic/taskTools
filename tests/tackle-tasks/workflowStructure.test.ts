@@ -114,3 +114,11 @@ test("test_workflow_capsEveryRetryLoopAtTwoAttempts", () => {
     // Verification: no loop invents its own numeric cap.
     assert.doesNotMatch(workflowSource, />=\s*[3-9]\b/);
 });
+
+test("test_workflow_passesRevisionBeforeToApplyPlanAmendments", () => {
+    // Setup: reconcileApplyPlanAmendments returns ambiguous unless stepInput carries revisionBefore.
+    const dispatch = workflowSource.slice(workflowSource.indexOf("'applyPlanAmendments'"));
+
+    // Verification: the observed revision travels with the step input, not just the file paths.
+    assert.match(dispatch.slice(0, 400), /revisionBefore:\s*planValid\.value\.revision/);
+});

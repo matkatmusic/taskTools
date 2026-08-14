@@ -126,7 +126,7 @@ const RESUMABLE_SCHEMA = {
 const BRIEF_SCHEMA = { type: 'object', properties: { briefFile: { type: 'string' } }, required: ['briefFile'] }
 const AMEND_BRIEF_SCHEMA = { type: 'object', properties: { briefFile: { type: 'string' }, runsAmended: { type: 'number' } }, required: ['briefFile'] }
 const SUBMODULES_SCHEMA = { type: 'object', properties: { initialized: { type: 'boolean' } }, required: ['initialized'] }
-const PLAN_VALID_SCHEMA = { type: 'object', properties: { valid: { type: 'boolean' }, problem: NULLABLE_STRING, sectionIds: STRINGS }, required: ['valid'] }
+const PLAN_VALID_SCHEMA = { type: 'object', properties: { valid: { type: 'boolean' }, problem: NULLABLE_STRING, sectionIds: STRINGS, revision: { type: 'number' } }, required: ['valid'] }
 const REVIEW_VALID_SCHEMA = {
   type: 'object',
   properties: {
@@ -532,7 +532,7 @@ const runPlanning = async () => {
 
     const applied = await runMutatingScript(
       'applyPlanAmendments',
-      { planFilePath: planFilePath(), reviewFilePath: reviewFilePath() },
+      { planFilePath: planFilePath(), reviewFilePath: reviewFilePath(), revisionBefore: planValid.value.revision },
       'Plan', AMENDMENTS_SCHEMA, nextStepId('apply-amendments'),
     )
     if (!applied.ok) return await failRun(applied.note)
