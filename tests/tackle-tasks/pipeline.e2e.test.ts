@@ -20,7 +20,6 @@ import { isTaskRunResumable } from "../../scripts/tackle-tasks/isTaskRunResumabl
 import { createTaskWorktree, taskBranchName } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
 import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.ts";
 import { generateTaskDocs } from "../../scripts/tackle-tasks/generateTaskDocs.ts";
-import { amendExitNotesIntoBrief } from "../../scripts/tackle-tasks/amendExitNotesIntoBrief.ts";
 import { updateTaskDocs } from "../../scripts/tackle-tasks/updateTaskDocs.ts";
 import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
 import { validatePlanFile } from "../../scripts/tackle-tasks/validatePlanFile.ts";
@@ -399,7 +398,6 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     break;
                 }
                 case "AMD": {
-                    box("amendExitNotesIntoBrief", () => amendExitNotesIntoBrief(taskNumber, outcome.worktree!, projectRoot));
                     node = "INIT";
                     break;
                 }
@@ -794,7 +792,7 @@ test("test_pipeline_claimsTheTaskThenReleasesItAcrossASuccessfulRun", async () =
     // Verification: every green box on the fresh-worktree success path ran, in diagram order.
     assertVisitedInOrder(outcome.visited, [
         "isTaskNumberValid", "isTaskOpen", "claimTaskRun", "isTaskBlocked", "doesTaskWorktreeExist",
-        "createTaskWorktree", "generateTaskDocs", "amendExitNotesIntoBrief", "initTaskSubmodules",
+        "createTaskWorktree", "generateTaskDocs", "initTaskSubmodules",
         "validatePlanFile", "validateCodexReview", "applyPlanAmendments", "recordImplementationNotes",
         "commitTaskWork", "runTaskTests", "rebaseTaskWorktree", "commitTaskWork", "runFullSuite",
         "checkTaskFileFence", "mergeTaskWorktree", "recordMergeCommits", "writeTaskExitNotes",

@@ -50,7 +50,6 @@ const happyResponses: Record<string, unknown> = {
     checkTaskWorktreeSafe: { safe: true, problems: [] },
     generateTaskDocs: { briefFile: "plans/brief-169.md" },
     updateTaskDocs: { briefFile: "plans/brief-169.md" },
-    amendExitNotesIntoBrief: { briefFile: "plans/brief-169.md", runsAmended: 0 },
     initTaskSubmodules: { initialized: true },
     plan: { planWritten: true },
     validatePlanFile: { valid: true, problem: null, sectionIds: ["one"] },

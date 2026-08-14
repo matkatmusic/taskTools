@@ -23,7 +23,7 @@ import { isNotesFileContained } from "./isTaskRunResumable.ts";
 import { buildOccurrencePath, buildWorktreeOccurrences, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "./taskRunState.ts";
-import { GENERATED_ARTIFACT_PATTERNS, renderTaskBrief } from "./writeTaskBrief.ts";
+import { GENERATED_ARTIFACT_PATTERNS, generateTaskBriefContents } from "./writeTaskBrief.ts";
 
 export type ReconcileStatus = "completed" | "not-completed" | "ambiguous";
 
@@ -236,7 +236,7 @@ function reconcileTaskDocs(input: ReconcileStepInput): ReconcileStepOutput {
     if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
     const briefFile = join(worktreePath, "plans", `brief-${input.taskNumber}.md`);
     if (!existsSync(briefFile)) return notCompleted("the expected brief does not exist");
-    if (readFileSync(briefFile, "utf8") !== renderTaskBrief(input.taskNumber, input.projectRoot)) {
+    if (readFileSync(briefFile, "utf8") !== generateTaskBriefContents(input.taskNumber, input.projectRoot)) {
         return notCompleted("the brief on disk does not match the brief this run would write");
     }
     const flagged = tryGit(worktreePath, "ls-files", "-v", "--", ...GENERATED_ARTIFACT_PATTERNS);
@@ -244,23 +244,6 @@ function reconcileTaskDocs(input: ReconcileStepInput): ReconcileStepOutput {
     const unisolated = flagged.split("\n").filter((line) => line.length > 0 && !line.startsWith("S"));
     if (unisolated.length > 0) return notCompleted(`generated paths are still tracked: ${unisolated.join(", ")}`);
     return completed({ briefFile });
-}
-
-function reconcileAmendExitNotesIntoBrief(input: ReconcileStepInput): ReconcileStepOutput {
-    const worktreePath = readString(input.stepInput, "worktreePath");
-    if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
-    const briefFile = join(worktreePath, "plans", `brief-${input.taskNumber}.md`);
-    if (!existsSync(briefFile)) return notCompleted("the brief does not exist yet");
-    const state = readStateOrNull(input.taskNumber, input.projectRoot);
-    if (state === null) return ambiguous("the task is not in tasks.json, so the intended runs cannot be listed");
-    const previousRuns = state.active ? state.history.slice(0, -1) : state.history.slice();
-    const intended = previousRuns.filter((run) => run.exitType !== null).reverse().slice(0, 3);
-    if (intended.length === 0) return completed({ briefFile, runsAmended: 0 });
-    const brief = readFileSync(briefFile, "utf8");
-    const counts = intended.map((run) => brief.split(`## Previous run — ${run.startedAt} (runId ${run.runId})`).length - 1);
-    if (counts.every((count) => count === 1)) return completed({ briefFile, runsAmended: intended.length });
-    if (counts.every((count) => count === 0)) return notCompleted("no intended run heading is present");
-    return ambiguous(`a partial or duplicated amendment is in the brief: heading counts ${counts.join(", ")}`);
 }
 
 // F10: `initialized` is not derivable from live state alone — a fully-populated worktree is
@@ -560,7 +543,6 @@ function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
 
 const HANDLERS: Record<string, Handler> = {
     advanceTaskRebase: (input) => reconcileRebase(input, true),
-    amendExitNotesIntoBrief: reconcileAmendExitNotesIntoBrief,
     applyPlanAmendments: reconcileApplyPlanAmendments,
     claimTaskRun: reconcileClaimTaskRun,
     cleanupTaskWorktree: reconcileCleanupTaskWorktree,
