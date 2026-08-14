@@ -1,0 +1,77 @@
+flowchart TB
+%% IMPLEMENT AND TEST PIPELINE. Split from pipeline.mmd.
+%% Input: the plan file from the planning pipeline.
+%% Starts at "implement task".
+%% Ends by locking the source repo and handing a finished implementation to the
+%% rebase and merge pipeline, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Every read and write of tasks.json is atomic.
+%%   3. Never update a test that was not created in this task's worktree,
+%%      unless that test is broken or asserts nothing.
+%%   4. "fix the codebase" edits source, not tests.
+%%   5. Never progress past a suite run until every test passes.
+%%   6. Every test loop runs commit the work -> test the work -> repair the work.
+%%      A repair is never tested until it is committed, so each loop re-enters at
+%%      its "commit if needed" box, never at the test box.
+%%   7. "commit if needed" commits nothing when the worktree is clean. Its message
+%%      is derived, not chosen: the run's first commit is the work, and every
+%%      commit after it is a repair to code that made tests fail.
+%%   8. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last: commit and run tests both walk
+%%      the same occurrence tree. Boxes that only read or write tasks.json do not.
+%%   9. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. No step is retried after it has mutated
+%%      anything. The task is already active and a worktree already exists here,
+%%      so the exit workflow always runs in full.
+%%  10. "lock the source repo" holds one lock on the source repository for the
+%%      whole tail of the run, across the rebase and merge pipeline and the exit
+%%      workflow. The lock is a durable file, acquired and released by different
+%%      processes, owned by "runId:taskNumber" - NOT by runId alone, because
+%%      every task workflow in one invocation shares a runId and would otherwise
+%%      read a sibling's lock as its own. Exactly one box releases it: "clean up"
+%%      on success, "release the worktree lease and the source lock if held" on
+%%      every exit. Both live in the exit workflow.
+%%  11. A mutating box whose result is lost is never blindly retried and never
+%%      assumed failed. Each one, including a test box that records its result,
+%%      has a read-only reconciliation check that reads the world and decides
+%%      whether it already happened. A safe idempotent rerun happens only after
+%%      reconciliation proves it did not complete. Only an ambiguous loss is
+%%      run-failed.
+%% Diamond definitions where the name alone is not enough:
+%%   do the task tests pass?           - the test run alone decides this; codex
+%%                                       judges the tests, the tests judge the work
+%% Exit types this pipeline can produce:
+%%   tests-red          - task tests still failing after 2 fix attempts
+%%   tests-flagged      - codex flagged the tests twice
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge. It can leave ANY green box,
+%% so drawing it would add one edge per box and hide the flow. Rule 9 is its
+%% specification: a non-zero exit from any script goes straight to the exit
+%% workflow with exit type run-failed and the script's stderr as the note.
+%% The committed, green implementation this pipeline emits is the input to the
+%% rebase and merge pipeline.
+
+  A["implement task"] --> NOTES["record implementation notes file to tasks.json"]
+  NOTES --> CW["commit if needed"]
+  CW --> TT["run task tests"]
+  TT --> QTF{"do the tests fail?"}
+  QTF -- "yes, under 2 attempts" --> FIXT["fix the codebase"]
+  FIXT --> CW
+  QTF -- "yes, after 2 attempts<br/>exit type: tests-red<br/>exit note: task tests failed after 2 codebase fixes" --> EXITWF
+  QTF -- no --> RT["codex reviews tests against task details and plan file"]
+  RT --> QCX{"are the tests flagged?"}
+  QCX -- "yes, under 2 attempts" --> AMT["amend the tests"]
+  AMT --> CW
+  QCX -- "yes, after 2 attempts<br/>exit type: tests-flagged<br/>exit note: codex flagged the tests twice" --> EXITWF
+  QCX -- no --> RB["lock the source repo"]
+  RB --> IMPL["finished implementation"]
+
+  EXITWF["exit workflow"]
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class NOTES,CW,TT,QTF,QCX,RB script
+  class A,RT,FIXT,AMT prose
+  class IMPL,EXITWF output

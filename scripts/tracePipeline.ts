@@ -9,7 +9,7 @@ export type PipelineDecisions = {
     taskNumber: number;
     taskNumberValid: boolean;
     taskOpen: boolean;
-    claim: "claimed" | "refused";
+    taskActive: boolean;
     taskBlocked: boolean;
     worktreeExists: boolean;
     worktreeSafe: boolean;
@@ -28,7 +28,9 @@ export type PipelineDecisions = {
 const MAX_ATTEMPTS = 2;
 const INDENT = "  ";
 // A box the diagram paints yellow: an agent runs it, not a script.
-const AGENT = " <-- AGENT -->";
+const AGENT = "<-- AGENT -->";
+// Divides the trace into the sub-pipelines, one .mmd file each.
+const BANNER_RULE = "---------";
 
 const yesNo = (value: boolean): string => (value ? "YES" : "NO");
 
@@ -43,29 +45,48 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     const push = (line: string): void => {
         trace.push(INDENT.repeat(depth) + line);
     };
+    // A sub-pipeline boundary. Never indented: it is a divider, not a step inside a loop.
+    const banner = (pipeline: string): void => {
+        trace.push(`${BANNER_RULE} ${pipeline} ${BANNER_RULE}`);
+    };
 
-    // Exits with no claimed run record to write to: report and stop.
+    // Exits reached before the task was marked active: the report reads the edge, not tasks.json.
     const reportAndStop = (exitType: string): string[] => {
-        push(`REPORT AND STOP: ${exitType}`);
+        banner("exit workflow");
+        push(`REPORT EXIT TYPE AND NOTE: ${exitType}`);
+        push("STOP");
         return trace;
     };
-    // Every other exit runs the common exit chain.
+    // A lease exists only once a worktree does; the source lock is taken at the rebase box.
+    // The release box says "if held", so an exit that reached neither has nothing to release.
+    let leaseHeld = false;
+    let sourceLockHeld = false;
+
+    // Every other exit runs the common exit chain, then reports from the ended run record.
     const exitChain = (exitType: string): string[] => {
+        banner("exit workflow");
         push(`WRITE EXIT TYPE: ${exitType}`);
         push("RECORD MODIFIED FILES");
         push("MARK INACTIVE");
-        push("RELEASE WORKTREE LEASE AND SOURCE LOCK");
+        if (sourceLockHeld) push("RELEASE THE WORKTREE LEASE AND SOURCE LOCK");
+        else if (leaseHeld) push("RELEASE THE WORKTREE LEASE");
+        push(`REPORT THE RUN'S EXIT TYPE AND NOTE: ${exitType}`);
+        push("STOP");
         return trace;
     };
 
+    banner("preamble");
     push(`TASK VALID: ${yesNo(decisions.taskNumberValid)}`);
     if (!decisions.taskNumberValid) return reportAndStop("INVALID-NUMBER");
 
     push(`TASK OPEN: ${yesNo(decisions.taskOpen)}`);
     if (!decisions.taskOpen) return reportAndStop("NOT-OPEN");
 
-    push(`TASK CLAIMED: ${decisions.claim.toUpperCase()}`);
-    if (decisions.claim !== "claimed") return reportAndStop("ALREADY-ACTIVE");
+    // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task
+    // active between the question and the write.
+    push(`TASK ACTIVE: ${yesNo(decisions.taskActive)}`);
+    if (decisions.taskActive) return reportAndStop("ALREADY-ACTIVE");
+    push("MARK THE TASK ACTIVE");
 
     push(`TASK BLOCKED: ${yesNo(decisions.taskBlocked)}`);
     if (decisions.taskBlocked) return exitChain("BLOCKED");
@@ -90,13 +111,15 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         }
     }
     push("INIT SUBMODULES RECURSIVELY");
+    leaseHeld = true;
+    banner("planning");
 
     // An invalid plan file counts as a scrap, and skips the codex call entirely.
     const planDepth = depth;
     let planAttempt = 0;
     let codexPlanAttempt = 0;
     for (;;) {
-        push(`PLAN THE TASK${AGENT}`);
+        push(`${AGENT} PLAN THE TASK`);
         push("VALIDATE PLAN");
         if (!attempt(decisions.planFileValid, planAttempt)) {
             push("PLAN INVALID: COUNTS AS A SCRAP");
@@ -105,7 +128,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             depth += 1;
             continue;
         }
-        push(`CODEX REVIEWS PLAN${AGENT}`);
+        push(`${AGENT} CODEX REVIEWS PLAN`);
         const verdict = attempt(decisions.codexPlanVerdict, codexPlanAttempt);
         push(`CODEX REVIEW RESULT (ACCEPT,AMEND,SCRAP): ${verdict.toUpperCase()}`);
         if (verdict !== "scrap") {
@@ -119,7 +142,8 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     }
     depth = planDepth;
 
-    push(`IMPLEMENT TASK${AGENT}`);
+    banner("implement and test");
+    push(`${AGENT} IMPLEMENT TASK`);
     push("RECORD IMPL NOTES");
 
     // Rule 6: every repair re-enters at "commit if needed", never at the test box.
@@ -134,22 +158,27 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         if (testsFail) {
             testAttempt += 1;
             if (testAttempt >= MAX_ATTEMPTS) return exitChain("TESTS-RED");
-            push(`FIX THE CODEBASE${AGENT}`);
+            push(`${AGENT} FIX THE CODEBASE`);
             depth += 1;
             continue;
         }
-        push(`CODEX REVIEWS TEST${AGENT}`);
+        push(`${AGENT} CODEX REVIEWS TEST`);
         const flagged = attempt(decisions.codexTestsFlagged, codexTestAttempt);
         push(`CODEX REVIEW TEST RESULT (FLAG, ACCEPT): ${flagged ? "FLAG" : "ACCEPTED"}`);
         if (!flagged) break;
         codexTestAttempt += 1;
         if (codexTestAttempt >= MAX_ATTEMPTS) return exitChain("TESTS-FLAGGED");
-        push(`AMEND THE TESTS${AGENT}`);
+        push(`${AGENT} AMEND THE TESTS`);
         testAttempt += 1;
         depth += 1;
     }
     depth = testDepth;
 
+    // The last box of "implement and test": the lock is held from here to the exit workflow.
+    push("LOCK SOURCE");
+    sourceLockHeld = true;
+
+    banner("rebase and merge");
     // The merge retry re-enters at the rebase box, so the whole tail below can run twice.
     const mergeDepth = depth;
     let conflictAttempt = 0;
@@ -158,7 +187,8 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     let advanceAttempt = 0;
     let mergeAttempt = 0;
     for (;;) {
-        push("LOCK SOURCE");
+        // Re-entered on a merge retry, where the lock is already ours and the rebase may be a no-op.
+        push("REBASE IF NEEDED");
         let conflicted = attempt(decisions.rebase, rebaseAttempt) === "conflict";
         push(`REBASE RESULT (OK, CONFLICT): ${conflicted ? "CONFLICT" : "OK"}`);
         rebaseAttempt += 1;
@@ -169,7 +199,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             if (conflicted) {
                 conflictAttempt += 1;
                 if (conflictAttempt >= MAX_ATTEMPTS) return exitChain("REBASE-STUCK");
-                push(`FIX CONFLICTS${AGENT}`);
+                push(`${AGENT} FIX CONFLICTS`);
             }
             push("COMMIT (IF NEEDED)");
             const advance = attempt(decisions.rebaseAdvance, advanceAttempt);
@@ -181,7 +211,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
                 if (suitePasses) break;
                 suiteAttempt += 1;
                 if (suiteAttempt >= MAX_ATTEMPTS) return exitChain("SUITE-RED");
-                push(`FIX THE CODEBASE${AGENT}`);
+                push(`${AGENT} FIX THE CODEBASE`);
                 conflicted = false;
                 depth += 1;
                 continue;
@@ -207,13 +237,16 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     }
     depth = mergeDepth;
 
+    banner("exit workflow");
     push("RECORD MERGE COMMIT HASHES");
     push("WRITE EXIT TYPE: COMPLETED");
     push("RECORD MODIFIED FILES");
-    push("MARK INACTIVE");
     push("CLEAN UP WORKTREES");
     push("BUILD CLOSURE NOTE");
+    push("MARK INACTIVE");
     push("MOVE TASK TO completedTasks.json");
+    push("REPORT THE CLOSURE NOTE");
+    push("STOP");
     return trace;
 }
 

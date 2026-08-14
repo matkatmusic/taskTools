@@ -10,8 +10,15 @@
   #err { position: fixed; top: 0; left: 0; right: 0; background: #a52a1e; color: #fff;
          font: 13px/1.5 ui-monospace, monospace; padding: .5rem 1rem; white-space: pre-wrap; }
   #err:empty { display: none; }
+  #nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .5rem 1rem;
+         font: 13px/1.6 system-ui, sans-serif; border-bottom: 1px solid #8884; }
+  #nav a { color: inherit; text-decoration: none; opacity: .6; }
+  #nav a:hover { opacity: 1; text-decoration: underline; }
+  #nav a[aria-current] { opacity: 1; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6e6; } }
 </style>
 <div id="err"></div>
+<nav id="nav"></nav>
 <div id="d"></div>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
@@ -25,6 +32,17 @@
   })
   const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
   document.title = file
+  // ponytail: hardcoded, python http.server gives no listing when index.html exists.
+  // Add a line here when a diagram is added.
+  nav.innerHTML = [
+    ['pipeline.mmd', 'overview'],
+    ['pipeline-preamble.mmd', 'preamble'],
+    ['pipeline-planning.mmd', 'planning'],
+    ['pipeline-implementTest.mmd', 'implement and test'],
+    ['pipeline-rebaseMerge.mmd', 'rebase and merge'],
+    ['pipeline-exitWorkflow.mmd', 'exit workflow'],
+  ].map(([href, label]) =>
+    `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   let last = null
   setInterval(async () => {
     const src = await (await fetch(file + '?t=' + Date.now())).text()

@@ -1,70 +1,18 @@
 flowchart TB
-%% Rules that apply everywhere, not steps:
-%%   1. Every git interaction goes through a script. Never prose.
-%%   2. Every read and write of tasks.json is atomic.
-%%   3. Never update a test that was not created in this task's worktree,
-%%      unless that test is broken or asserts nothing.
-%%   4. "fix the codebase" edits source, not tests.
-%%   5. Never progress past a suite run until every test passes.
-%%   6. Every test loop runs commit the work -> test the work -> repair the work.
-%%      A repair is never tested until it is committed, so each loop re-enters at
-%%      its "commit if needed" box, never at the test box.
-%%   7. "commit if needed" commits nothing when the worktree is clean. Its message
-%%      is derived, not chosen: the run's first commit is the work, and every
-%%      commit after it is a repair to code that made tests fail.
-%%   8. Every box that touches the working tree operates on every repository
-%%      layer, deepest submodule first, root last: commit, run tests, record
-%%      modified files, the fence check, rebase, advance and merge all walk the
-%%      same occurrence tree. Boxes that only read or write tasks.json do not.
-%%   9. "lock the source repo, then rebase onto the target branch" holds one lock
-%%      on the source repository for the whole tail of the run, and re-reads the
-%%      source tip after acquiring it. The lock is a durable file, acquired and
-%%      released by different processes, owned by "runId:taskNumber" - NOT by
-%%      runId alone, because every task workflow in one invocation shares a runId
-%%      and would otherwise read a sibling's lock as its own. Re-entering the box
-%%      on a merge retry re-acquires the SAME owner token, which is a no-op.
-%%      Exactly one box releases it - "clean up" on success, "release the worktree
-%%      lease and the source lock if held" on every exit. Every box in the tail
-%%      refreshes the lock's heartbeat, so a lock whose heartbeat has gone cold is
-%%      recoverable. A warm lock is waited on; a cold lock stops the waiting run
-%%      and prints the exact owner token. It can be removed only by the explicit
-%%      recoverSourceRepoLock.ts maintenance script with an exact typed confirmation;
-%%      the workflow never invokes recovery itself. Elapsed time alone never
-%%      authorizes takeover.
-%%  10. A script that fails operationally, as opposed to returning a verdict,
-%%      exits the run as run-failed. No step is retried after it has mutated
-%%      anything. How far the exit chain can run depends on where the failure
-%%      happened, and there are four cases:
-%%        before the claim        - report and stop; there is no run to write to
-%%        claimed, no worktree    - exit chain runs; modified files records []
-%%        claimed, with worktree  - exit chain runs in full
-%%        after "mark task inactive" on the success tail
-%%                                - the run is already ended, so the chain reopens
-%%                                  it, overwrites exit type completed with
-%%                                  run-failed, and re-ends it
-%%  11. A mutating box whose result is lost is never blindly retried and never
-%%      assumed failed. Each one, including a test box that records its result,
-%%      has a read-only reconciliation check that reads the world and decides
-%%      whether it already happened. A safe idempotent rerun happens only after
-%%      reconciliation proves it did not complete. Only an ambiguous loss is
-%%      run-failed.
-%%  12. A task stays unclaimable from "claim the task" until its archive lands.
-%%      "mark task inactive" ends the run but does NOT reopen the task: a task
-%%      whose newest ended run exited completed, and which is still in tasks.json,
-%%      is closing, and a second invocation must refuse it.
-%% Diamond definitions where the name alone is not enough:
-%%   is the worktree safe to use?      - structural: it opens, it is on the task's
-%%                                       branch, its submodules are intact
-%%   is the previous run's work resumable?
-%%                                     - did the previous implementor record where
-%%                                       in the plan it stopped?
-%%   do the task tests pass?           - the test run alone decides this; codex
-%%                                       judges the tests, the tests judge the work
+%% OVERVIEW. One block per pipeline. Each block is drawn in full in its own file:
+%%   preamble pipeline           pipeline-preamble.mmd
+%%   planning pipeline           pipeline-planning.mmd
+%%   implement and test pipeline pipeline-implementTest.mmd
+%%   rebase and merge pipeline   pipeline-rebaseMerge.mmd
+%%   exit workflow               pipeline-exitWorkflow.mmd
+%% The dotted arrow out of each block is that block's early exit, drawn as one
+%% arrow here. The exit types it carries are listed in that block's own file.
+%% The solid arrow between two blocks is the artifact the first hands the second.
 %% Exit types, one per path that reaches [stop]:
 %%   completed          - archived to completedTasks.json
 %%   invalid-number     - not in tasks.json or completedTasks.json
 %%   not-open           - already completed
-%%   already-active     - a previous run left the claim held
+%%   already-active     - a previous run left the task active
 %%   blocked            - an open blocker remains
 %%   plan-scrapped      - codex scrapped the plan twice
 %%   tests-red          - task tests still failing after 2 fix attempts
@@ -73,91 +21,22 @@ flowchart TB
 %%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
 %%   merge-failed       - the merge did not land twice
 %%   fence-violation    - a step changed a file the task does not own
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge. It can leave ANY green box,
-%% so drawing it would add one edge per box and hide the flow. Rule 10 is its
-%% specification: a non-zero exit from any script goes straight to the common
-%% exit chain with exit type run-failed and the script's stderr as the note.
-%% invalid-number, not-open and already-active are the only exits that write
-%% nothing to tasks.json: the first two have no open task record to write to, and
-%% the third must not touch a run that belongs to another invocation. All three
-%% report and stop. Every other exit runs the common exit chain.
+%%   run-failed         - a script failed operationally; can leave ANY green box
+%%                        in any pipeline
 
-  QV{"is task number valid?"} -- "no<br/>exit type: invalid-number<br/>exit note: task number is in neither tasks.json nor completedTasks.json" --> STOP
-  QV -- yes --> Q0{"is task open?"}
-  Q0 -- "no<br/>exit type: not-open<br/>exit note: task is already completed" --> STOP
-  Q0 -- yes --> MARK["claim the task: mark it active in tasks.json"]
-  MARK -- "claim refused<br/>exit type: already-active<br/>exit note: a previous run left the claim held" --> STOP
-  MARK -- claimed --> QB{"is task blocked?"}
-  QB -- "yes<br/>exit type: blocked<br/>exit note: an open blocker remains" --> EXIT
-  QB -- no --> Q1{"does a worktree exist?"}
-  Q1 -- no --> NEW["create a worktree"]
-  NEW --> GEN["auto generate docs"]
-  GEN --> INIT
-  Q1 -- yes --> QS{"is the worktree safe to use?"}
-  QS -- no --> QRS{"is the previous run's work resumable?"}
-  QRS -- no --> RESET["reset the worktree"]
-  RESET --> GEN
-  QRS -- yes --> UPD
-  QS -- yes --> UPD["update auto generated docs"]
-  UPD --> INIT["init submodules recursively"]
-  INIT --> P["plan the task"]
-  P --> VALP["validate the plan file"]
-  VALP -- "invalid: counts as a scrap" --> QR
-  VALP -- valid --> R["codex reviews the plan"]
-  R --> VALR["validate the codex review and read its verdict"]
-  VALR --> QR{"amend or scrap?"}
-  QR -- "scrap, 1st time: replan with codex notes" --> P
-  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXIT
-  QR -- amend --> AM["script applies codex amendments to the plan"]
-  AM --> A["implement task"]
-  A --> NOTES["record implementation notes file to tasks.json"]
-  NOTES --> CW["commit if needed"]
-  CW --> TT["run task tests"]
-  TT --> QTF{"do the tests fail?"}
-  QTF -- "yes, under 2 attempts" --> FIXT["fix the codebase"]
-  FIXT --> CW
-  QTF -- "yes, after 2 attempts<br/>exit type: tests-red<br/>exit note: task tests failed after 2 codebase fixes" --> EXIT
-  QTF -- no --> RT["codex reviews tests against task details and plan file"]
-  RT --> QCX{"are the tests flagged?"}
-  QCX -- "yes, under 2 attempts" --> AMT["amend the tests"]
-  AMT --> CW
-  QCX -- "yes, after 2 attempts<br/>exit type: tests-flagged<br/>exit note: codex flagged the tests twice" --> EXIT
-  QCX -- no --> RB["lock the source repo, then rebase onto the target branch"]
-  RB --> QC{"did the rebase report conflicts?"}
-  QC -- "yes, under 2 attempts: pass the stopped layer and its conflicted files to the agent" --> FIX["fix conflicts"]
-  FIX --> CS
-  QC -- "yes, after 2 attempts<br/>exit type: rebase-stuck<br/>exit note: the rebase did not advance after 2 conflict fixes" --> EXIT
-  QC -- no --> CS["commit if needed"]
-  CS --> ADV["advance the rebase"]
-  ADV --> QADV{"is the rebase finished?"}
-  QADV -- "no: it stopped on new conflicts" --> QC
-  QADV -- yes --> FULL["run the full suite"]
-  FULL --> QF{"do all tests pass?"}
-  QF -- "no, under 2 attempts" --> FIXC["fix the codebase"]
-  FIXC --> CS
-  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still failing after 2 codebase fixes" --> EXIT
-  QF -- yes --> QFENCE{"did every change stay inside the task's owned files?"}
-  QFENCE -- "no<br/>exit type: fence-violation<br/>exit note: a step changed a file the task does not own" --> EXIT
-  QFENCE -- yes --> B["merge worktrees and submodules, no fast-forward"]
-  B --> Q4{"did the merge land?"}
-  Q4 -- "no, 1st time: rebase and retry" --> RB
-  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not land twice" --> EXIT
-  Q4 -- yes --> HASH["record merge commit hashes to tasks.json"]
-  HASH --> DONE["write exit type completed to tasks.json"]
-  DONE --> RECOK["record modified files to tasks.json"]
-  RECOK --> OFFOK["mark task inactive in tasks.json"]
-  OFFOK --> CLEAN["clean up worktrees, leases, persistence refs and source lock"]
-  CLEAN --> VNOTES["build the closure note from the recorded run"]
-  VNOTES --> ARCH["move task to completedTasks.json and update tasks blocked by it"]
-  ARCH --> STOP["stop"]
+  NUM["task number"] --> PRE["preamble pipeline"]
+  PRE -- "initialized worktree" --> PLANP["planning pipeline"]
+  PLANP -- "plan file" --> IMPL["implement and test pipeline"]
+  IMPL -- "finished implementation, source repo locked" --> RM["rebase and merge pipeline"]
+  RM -- "merge receipt" --> EXITWF["exit workflow"]
+  EXITWF --> STOP["stop"]
 
-  EXIT["write exit type and exit notes to tasks.json"] --> REC["record modified files to tasks.json"]
-  REC --> OFF["mark task inactive in tasks.json"]
-  OFF --> REL["release the worktree lease and the source lock if held"]
-  REL --> STOP
+  PRE -. "invalid-number, not-open, already-active, blocked, run-failed" .-> EXITWF
+  PLANP -. "plan-scrapped, run-failed" .-> EXITWF
+  IMPL -. "tests-red, tests-flagged, run-failed" .-> EXITWF
+  RM -. "rebase-stuck, suite-red, fence-violation, merge-failed, run-failed" .-> EXITWF
 
-  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
-  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
-  class QV,Q0,MARK,QB,Q1,NEW,GEN,QS,QRS,RESET,UPD,INIT,VALP,VALR,QR,AM,NOTES,CW,TT,QTF,QCX,RB,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4,HASH,DONE,RECOK,OFFOK,CLEAN,VNOTES,ARCH,EXIT,REC,OFF,REL,STOP script
-  class P,R,A,RT,FIX,FIXC,FIXT,AMT prose
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class PRE,PLANP,IMPL,RM,EXITWF pipeline
+  class NUM,STOP output
