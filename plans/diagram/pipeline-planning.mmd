@@ -1,37 +1,65 @@
 flowchart TB
 %% PLANNING PIPELINE. Split from pipeline.mmd.
-%% HAPPY PATH ONLY. The loops and the early exits are not drawn yet.
-%% Input: an initialized worktree and an active task from the preamble pipeline.
-%% Starts at "plan the task". Ends with a plan file.
+%% Input: an active task and an initialized worktree from the preamble pipeline.
+%% Starts at "plan the task". Ends with a plan file, or with an exit.
 %% Rules that apply everywhere, not steps:
 %%   1. Every git interaction goes through a script. Never prose.
 %%   2. Every read and write of tasks.json is atomic.
+%%   3. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%%   4. Codex gets two rounds of each kind. Two scraps end the run. Two amend
+%%      rounds stop the re-review: the amendments are applied and the plan is
+%%      taken as it stands.
 %% Box definitions where the name alone is not enough:
-%%   validate the plan file      - a script, structure only, no judgement of the
+%%   is the plan file structure valid?      - a script, structure only, no judgement of the
 %%                                 plan's content: the file parses as JSON, its
 %%                                 task number matches, its revision is a positive
 %%                                 integer, and its sections are a non-empty array
 %%                                 of objects each holding a unique kebab-case id,
 %%                                 a string title and a string body.
 %%                                 See scripts/tackle-tasks/validatePlanFile.ts
-%%   validate the review structure
+%%   is the review file structure valid?
 %%                               - a script, structure only: the review parses,
 %%                                 carries one of the three verdicts, and carries
 %%                                 the fields that verdict requires.
 %%                                 See scripts/tackle-tasks/validateCodexReview.ts
-%%   read the review verdict     - three outcomes: accept, amend, scrap. Only
-%%                                 accept is drawn here.
+%%   what is the review verdict?     - three outcomes: accept, amend, scrap.
+%%   2 amend rounds done?        - the amendments are applied either way. The
+%%                                 counter only decides whether codex sees the
+%%                                 amended plan again.
+%% A structure failure is a broken agent, not a bad plan, so it is not retried and
+%% does not burn a scrap attempt. Its receipt carries the validator's problem text.
+%% Exit types this pipeline can produce:
+%%   plan-scrapped      - codex scrapped the plan twice
+%%   run-failed         - a script failed operationally, structure failures included
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
 
   INPUT["Input: { active task, initialized worktree }"] --> P
-  P["plan the task"] --> VALP["validate the plan file"]
-  VALP --> R["codex reviews the plan"]
-  R --> VALR["validate the review structure"]
-  VALR --> QR["read the review verdict: accept"]
-  QR --> RECEIPT["Receipt: { plan file }"]
+  P["plan the task"] --> PLANFILE["Receipt: { plan file:<br/>task, revision, sections[ id, title, body ] }"]
+  PLANFILE --> VALP{"is the plan file structure valid?"}
+  VALP -- "invalid<br/>exit type: run-failed<br/>exit note: the plan file is malformed" --> EXITWF
+  VALP -- valid --> R["codex reviews the plan"]
+  R --> REVIEW["Receipt: { codex review:<br/>verdict, notes, amendments[] }"]
+  REVIEW --> VALR{"is the review file structure valid?"}
+  VALR -- "invalid<br/>exit type: run-failed<br/>exit note: the codex review is malformed" --> EXITWF
+  VALR -- valid --> QR{"what is the review verdict?"}
+  QR -- "scrap, 1st time: replan with codex notes" --> P
+  QR -- "scrap, 2nd time<br/>exit type: plan-scrapped<br/>exit note: codex scrapped the plan twice" --> EXITWF
+  QR -- amend --> AM["script applies codex amendments to the plan"]
+  AM --> QAM{"2 amend rounds done?"}
+  QAM -- "no: re-review the amended plan" --> R
+  QAM -- yes --> RECEIPT
+  QR -- accept --> RECEIPT["Receipt: { plan file }"]
+
+  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote, problem }"]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class VALP,VALR,QR script
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  class VALP,VALR,QR,AM,QAM script
   class P,R prose
-  class INPUT,RECEIPT output
+  class EXITWF fail
+  class INPUT,PLANFILE,REVIEW,RECEIPT,FAIL_RECEIPT output
