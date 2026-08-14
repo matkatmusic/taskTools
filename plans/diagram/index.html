@@ -6,7 +6,6 @@
   body { margin: 0; min-height: 100vh; background: #fff; }
   @media (prefers-color-scheme: dark) { body { background: #16181b; } }
   #d { padding: 2rem; overflow: auto; }
-  #d foreignObject { overflow: visible; }
   #err { position: fixed; top: 0; left: 0; right: 0; background: #a52a1e; color: #fff;
          font: 13px/1.5 ui-monospace, monospace; padding: .5rem 1rem; white-space: pre-wrap; }
   #err:empty { display: none; }
@@ -22,18 +21,17 @@
 <div id="d"></div>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
-  // elk routes edges far better than the default dagre engine on these dense graphs
-  import elk from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs'
-  mermaid.registerLayoutLoaders(elk)
+  // dagre, not elk: elk reflows the ranks around the back edges and the diagram stops reading top to bottom
   const dark = matchMedia('(prefers-color-scheme: dark)').matches
   mermaid.initialize({
     startOnLoad: false,
-    layout: 'elk',
     theme: dark ? 'dark' : 'default',
     fontFamily: 'system-ui, sans-serif',
-    // wrappingWidth keeps long labels inside their shape instead of running past it
-    flowchart: { htmlLabels: true, useMaxWidth: false, padding: 12, wrappingWidth: 220 },
-    elk: { nodePlacementStrategy: 'NETWORK_SIMPLEX', mergeEdges: false },
+    // htmlLabels:false makes mermaid measure the text itself, so a shape actually fits its label.
+    // With htmlLabels:true the box is sized before the foreignObject's real width is known and text spills out.
+    // nodeSpacing/rankSpacing stop dagre stacking wide boxes and edge labels on top of each other.
+    flowchart: { htmlLabels: false, useMaxWidth: false, padding: 12, wrappingWidth: 220,
+                 nodeSpacing: 60, rankSpacing: 80 },
   })
   const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
   document.title = file
