@@ -1,15 +1,15 @@
-// Walks the five diagrams in plans/diagram for one set of decision outcomes and names every box
-// it visits, in order. Nothing here touches a repository — it is the diagram made runnable, so a
-// path can be read end to end without running a task.
-//
-//   plans/diagram/pipeline-preamble.mmd       banner "preamble"
-//   plans/diagram/pipeline-planning.mmd       banner "planning"
-//   plans/diagram/pipeline-implementTest.mmd  banner "implement and test"
-//   plans/diagram/pipeline-rebaseMerge.mmd    banner "rebase and merge"
-//   plans/diagram/pipeline-exitWorkflow.mmd   banner "exit workflow"
-//
-// Every step's wording comes from the diagrams themselves, not from a hand-written copy. See
-// mmdGraph.ts for the parser and label(id) below for the lookup that keeps this file honest.
+/* Walks the five diagrams in plans/diagram for one set of decision outcomes and names every box
+   it visits, in order. Nothing here touches a repository — it is the diagram made runnable, so a
+   path can be read end to end without running a task.
+
+     plans/diagram/pipeline-preamble.mmd       banner "preamble"
+     plans/diagram/pipeline-planning.mmd       banner "planning"
+     plans/diagram/pipeline-implementTest.mmd  banner "implement and test"
+     plans/diagram/pipeline-rebaseMerge.mmd    banner "rebase and merge"
+     plans/diagram/pipeline-exitWorkflow.mmd   banner "exit workflow"
+
+   Every step's wording comes from the diagrams themselves, not from a hand-written copy. See
+   mmdGraph.ts for the parser and L(id) below for the lookup that keeps this file honest. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseMmd } from "./mmdGraph.ts";
@@ -23,9 +23,7 @@ const DIAGRAM_FILES = [
     "pipeline.mmd",
 ];
 
-// Built once at module load: every node id any diagram defines, mapped to its label. An id two
-// files define with different labels is a diagram bug, not the tracer's to paper over — it throws
-// immediately while merging the diagrams, before anything walks a path.
+// Built at module load: every diagram node id mapped to its label. Conflicting labels throw.
 const nodeLabels = new Map<string, string>();
 for (const file of DIAGRAM_FILES) {
     const path = fileURLToPath(new URL(`../plans/diagram/${file}`, import.meta.url));
@@ -39,9 +37,8 @@ for (const file of DIAGRAM_FILES) {
     }
 }
 
-// The verbatim label for a diagram node, its `\n` line breaks joined back to one line. Throws
-// immediately on a typo'd id.
-const L = (id: string): string => {
+// A diagram node label, on one line. Throws immediately on a typo’d id.
+export const L = (id: string): string => {
     const label = nodeLabels.get(id);
     if (label === undefined) throw new Error(`tracePipeline: no diagram node named "${id}"`);
     return label.replaceAll("\n", " ");
@@ -61,8 +58,7 @@ export type ReceiptName =
     | "fix the full suite"
     | "merge";
 
-// The five diagram node ids behind one receipt's output -> receipt -> structure check -> output ->
-// trusted-receipt chain, spelled out per receipt rather than derived from a naming pattern.
+// The five diagram node ids behind one receipt’s chain, spelled out per receipt.
 const RECEIPT_NODES: Record<ReceiptName, { output: string; receipt: string; valid: string; outputTrusted: string; receiptTrusted: string }> = {
     "active task": {
         output: "ACTIVE_TASK_WORKTREE_OUTPUT",
@@ -163,8 +159,7 @@ export type PipelineDecisions = {
     fullSuitePasses: boolean[];
     fenceHeld: boolean;
     mergeLands: boolean[];
-    // Names the one receipt whose structure check fails. Absent means every receipt validates.
-    // One field, not one flag per receipt: a run only ever dies on the first malformed receipt.
+    // Names the one receipt whose structure check fails; absent means every receipt validates.
     malformedReceipt?: ReceiptName;
 };
 
@@ -177,8 +172,7 @@ const BANNER_RULE = "---------";
 
 const yesNo = (value: boolean): string => (value ? "YES" : "NO");
 
-// Reads one attempt's outcome. Past the end of the list the last entry repeats, so a settings
-// object only has to spell out the attempts whose outcome actually differs.
+// Reads one attempt’s outcome; past the end of the list the last entry repeats.
 const attempt = <T,>(outcomes: T[], index: number): T => outcomes[Math.min(index, outcomes.length - 1)]!;
 
 export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
@@ -200,8 +194,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         push(L("STOP"));
         return trace;
     };
-    // A lease exists only once a worktree does; the source lock is taken in "implement and test".
-    // The release box says "if held", so an exit that reached neither has nothing to release.
+    // The release box says "if held", so an exit reaching neither has nothing to release.
     let leaseHeld = false;
     let sourceLockHeld = false;
 
@@ -223,7 +216,6 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         return trace;
     };
 
-    // Output -> receipt -> structure check -> output -> the same receipt, now trusted.
     // Returns the finished trace when the structure check fails, null when the run continues.
     const receipt = (name: ReceiptName): string[] | null => {
         const nodes = RECEIPT_NODES[name];
@@ -243,8 +235,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
 
     push(`${L("IS_TASK_BLOCKED")}: ${yesNo(decisions.taskBlocked)}`);
     if (decisions.taskBlocked) return reportAndStop("BLOCKED");
-    // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task
-    // active between the question and the write.
+    // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task active between the question and the write.
     push(`${L("IS_TASK_ACTIVE")}: ${yesNo(decisions.taskActive)}`);
     if (decisions.taskActive) return reportAndStop("ALREADY-ACTIVE");
     push(L("MARK_TASK_ACTIVE"));
