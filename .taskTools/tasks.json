@@ -767,5 +767,24 @@
     ],
     "tests": "search the codebase for 'true' 'false' being used in a source file and not as part of a comment.  can probably be done with regex?",
     "difficulty": 9
+  },
+  {
+    "taskNumber": 190,
+    "version": "53e3de50ba468819f85f4913e181cad21664c602",
+    "title": "Add a /mermaid skill that diagrams a codebase into a .mmd file",
+    "userDescription": "make a '/mermaid' skill that searches a codebase and builds a .mmd mermaid diagram.  it should follow the same mermaid diagram rules that I used for the diagrams in taskTools-86 (Yes/No boxes at decision points, output boxes -> what gets outputted, etc)",
+    "goal": [
+      "- A /mermaid skill exists at skills/mermaid/SKILL.md and appears in the skill list.",
+      "- Running /mermaid against a codebase writes a .mmd file the user can name and open.",
+      "- The written .mmd follows the taskTools-86 rules: every decision node branches to a Yes box and a No box, every emitted artifact has an output box, and a classDef/class block assigns every node a role.",
+      "- The skill contains an explicit written checklist of those diagram rules, and the skill follows that checklist when it draws.",
+      "- NOT in scope: changing any existing diagram in plans/diagram/, and changing scripts/mmdGraph.ts. The skill only reads mmdGraph.ts as the parser its output must satisfy."
+    ],
+    "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, following the existing skill format seen in skills/view-task/SKILL.md and skills/create-task/SKILL.md) that searches a target codebase and emits a .mmd mermaid flowchart. It must codify the diagramming grammar already used in plans/diagram/*.mmd: flowchart TB, decision points as diamond nodes `NODE_ID{\"question?\"}` branching to `_YES`/`_NO` labeled boxes, plain rectangular nodes for actions/steps, `Receipt: { ... }` white boxes for structured data handed between stages, `Output` boxes for externally visible artifacts, dotted arrows for early-exit/failure paths, and a `classDef`/`class` block at the end assigning colors by role (pipeline=green, receipt=white, output=blue, pass=bright green, nopass=dark red, fail=red). Reference examples: plans/diagram/pipeline.mmd (top-level overview linking sub-pipeline files via Receipt boxes) and plans/diagram/pipeline-preamble.mmd, pipeline-planning.mmd, pipeline-rebaseMerge.mmd, pipeline-exitWorkflow.mmd (each a fully drawn sub-pipeline with YES/NO decision chains). No existing skill in skills/ produces diagrams; this is a new skill directory, not an edit to an existing one. The skill must also carry an explicit written checklist of these diagram rules that it follows while it draws.",
+    "files": [
+      "skills/mermaid/SKILL.md"
+    ],
+    "tests": "Run the skill on a small fixture folder, then feed the .mmd it writes into scripts/mmdGraph.ts. The graph must parse, every node must have a class, and every decision node must have exactly a Yes edge and a No edge.",
+    "difficulty": 6
   }
 ]
