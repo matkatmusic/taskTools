@@ -13,7 +13,6 @@ import { compileFunction, constants as vmConstants } from "node:vm";
 import { skillBody } from "./SkillBodyEmitter.ts";
 import { traceTaskPipeline, readNamedPaths } from "../tracePipeline.ts";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
-import { isTaskOpen } from "./isTaskOpen.ts";
 import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
 import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
@@ -40,7 +39,6 @@ function derivePreambleDecisions(taskNumber: number, projectRoot: string): Decis
     const decisions: Decisions = {
         taskNumber,
         taskNumberValid: isTaskNumberValid(taskNumber, projectRoot).valid,
-        taskOpen: true,
         taskActive: false,
         taskBlocked: false,
         worktreeExists: false,
@@ -48,9 +46,6 @@ function derivePreambleDecisions(taskNumber: number, projectRoot: string): Decis
         previousWorkResumable: false,
     };
     if (!decisions.taskNumberValid) return decisions;
-
-    decisions.taskOpen = isTaskOpen(taskNumber, projectRoot).open;
-    if (!decisions.taskOpen) return decisions;
 
     const currentRun = getCurrentTaskRun(taskNumber, projectRoot);
     decisions.taskActive = currentRun !== null && currentRun.exitType === null;

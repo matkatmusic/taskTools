@@ -180,21 +180,6 @@ test("test_traceTaskPipeline_stopsAtInvalidNumberWithoutWritingToTasksJson", () 
     ]);
 });
 
-test("test_traceTaskPipeline_stopsAtNotOpenWhenTheTaskIsAlreadyCompleted", () => {
-    // Scenario: the number is valid but the task lives in completedTasks.json.
-    // Steps: validity passes, the open box takes its "no" edge, and the walk reports and stops.
-    const trace = traceTaskPipeline(pathNamed("not-open"));
-    assert.deepEqual(trace, [
-        "Run start: Task Num [42]",
-        PREAMBLE_BANNER,
-        "is task number valid?: YES",
-        "is task open?: NO",
-        EXIT_BANNER,
-        "report the exit type and note: NOT-OPEN",
-        "stop",
-    ]);
-});
-
 test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheTaskIsStillActive", () => {
     // Scenario: a previous run left the task active.
     // Steps: validity and open both pass; the active box takes its "yes" edge, so the task is

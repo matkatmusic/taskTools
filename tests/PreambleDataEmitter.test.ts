@@ -65,7 +65,6 @@ test("test_preambleDataEmitter_readOnlyModesProduceNonEmptyPromptsWithDataLast",
     const projectRoot = makeProjectFixture(taskNumber);
     const readOnlyModes: [string, unknown][] = [
         ["task-number-valid", { projectRoot }],
-        ["task-open", { projectRoot }],
         ["task-blocked", { projectRoot }],
         ["worktree-exists", { projectRoot }],
         ["validate-active-task-receipt", {
@@ -153,7 +152,7 @@ test("test_preambleDataEmitter_unknownModeThrowsNamingTheMode", () => {
 test("test_preambleDataEmitterCli_failsLoudlyOnAPayloadMissingARequiredField", () => {
     const taskNumber = nextTaskNumber++;
     // task-open requires "projectRoot" — omit it entirely.
-    const result = runCli(taskNumber, "task-open", {});
+    const result = runCli(taskNumber, "task-blocked", {});
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /payload missing "projectRoot"/);
 });
@@ -163,7 +162,6 @@ test("test_preambleDataEmitter_missingRequiredFieldThrowsForEveryMode", () => {
     const projectRoot = makeProjectFixture(taskNumber);
     const fullPayloads: Record<string, unknown> = {
         "task-number-valid": { projectRoot },
-        "task-open": { projectRoot },
         "claim-task": { projectRoot, runId: "run-1" },
         "task-blocked": { projectRoot },
         "worktree-exists": { projectRoot },
