@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 
 import { resolveTaskRun } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
 import { isTaskNumberValid } from "../../scripts/tackle-tasks/isTaskNumberValid.ts";
-import { claimTaskRun } from "../../scripts/tackle-tasks/claimTaskRun.ts";
+import { isTaskActive } from "../../scripts/tackle-tasks/isTaskActive.ts";
 import { isTaskBlocked } from "../../scripts/tackle-tasks/isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "../../scripts/tackle-tasks/doesTaskWorktreeExist.ts";
 import { checkTaskWorktreeSafe } from "../../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
@@ -349,7 +349,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     break;
                 }
                 case "MARK": {
-                    const claim = box("claimTaskRun", () => claimTaskRun(taskNumber, runId, projectRoot));
+                    const claim = box("isTaskActive", () => isTaskActive(taskNumber, runId, projectRoot));
                     outcome.claimStatus = claim.status;
                     if (claim.status !== "claimed") {
                         outcome.exitType = claim.status === "not-found" ? "run-failed" : "already-active";
@@ -780,7 +780,7 @@ test("test_pipeline_claimsTheTaskThenReleasesItAcrossASuccessfulRun", async () =
 
     // Verification: every green box on the fresh-worktree success path ran, in diagram order.
     assertVisitedInOrder(outcome.visited, [
-        "isTaskNumberValid", "claimTaskRun", "isTaskBlocked", "doesTaskWorktreeExist",
+        "isTaskNumberValid", "isTaskActive", "isTaskBlocked", "doesTaskWorktreeExist",
         "createTaskWorktree", "generateTaskDocs", "initTaskSubmodules",
         "validatePlanFile", "validateCodexReview", "applyPlanAmendments", "recordImplementationNotes",
         "commitTaskWork", "runTaskTests", "rebaseTaskWorktree", "commitTaskWork", "runFullSuite",
@@ -992,7 +992,7 @@ test("test_pipeline_leavesTheTaskInactiveAfterEveryExitPathThatWritesState", asy
     const quietRoot = makeSourceRepository("pipeline-non-writing-exits");
     seedTaskFiles(quietRoot, [{ taskNumber: 50, title: "task 50", description: "do it", files: FENCE_INSIDE(50) }]);
     writeJsonAtomically(resolveTaskFiles(quietRoot).completedTasksPath, [{ taskNumber: 51, title: "task 51" }]);
-    assert.equal(claimTaskRun(50, "run-live", quietRoot).status, "claimed");
+    assert.equal(isTaskActive(50, "run-live", quietRoot).status, "claimed");
     const liveStateBefore = JSON.stringify(readTaskRunState(50, quietRoot));
 
     // Test action: drive the non-writing exit, once for a number in no file and once for a
@@ -1040,7 +1040,7 @@ test("test_pipeline_refusesASecondConcurrentRunOfTheSameTask", async () => {
     // Setup: a task already claimed by a first run that has not ended.
     const projectRoot = makeSourceRepository("pipeline-concurrent");
     seedTask(projectRoot, 11, FENCE_INSIDE(11));
-    const first = claimTaskRun(11, "run-first", projectRoot);
+    const first = isTaskActive(11, "run-first", projectRoot);
 
     // Test action: a second invocation drives the diagram from its first box.
     const second = await runPipeline({
@@ -1069,7 +1069,7 @@ test("test_pipeline_refusesASecondClaimBetweenInactivationAndArchive", async () 
     });
 
     // Test action: a second invocation tries to claim the still-open, now-inactive task.
-    const second = claimTaskRun(12, "run-second", projectRoot);
+    const second = isTaskActive(12, "run-second", projectRoot);
 
     // Verification: the claim reports closing, distinct from refused (diagram rule 12).
     assert.equal(outcome.exitType, "completed", outcome.exitNote);
@@ -1276,8 +1276,8 @@ test("test_pipeline_runsTwoTaskWorktreeCreationsConcurrentlyWithoutInterference"
         { taskNumber: 17, title: "task 17", description: "do it", files: FENCE_INSIDE(17) },
         { taskNumber: 18, title: "task 18", description: "do it", files: FENCE_INSIDE(18) },
     ]);
-    assert.equal(claimTaskRun(17, "run-17", projectRoot).status, "claimed");
-    assert.equal(claimTaskRun(18, "run-18", projectRoot).status, "claimed");
+    assert.equal(isTaskActive(17, "run-17", projectRoot).status, "claimed");
+    assert.equal(isTaskActive(18, "run-18", projectRoot).status, "claimed");
 
     const scriptsDirectory = join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks");
     const runnerPath = join(projectRoot, "concurrent-create-runner.mjs");

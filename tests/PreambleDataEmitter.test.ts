@@ -81,7 +81,7 @@ test("test_preambleDataEmitter_readOnlyModesProduceNonEmptyPromptsWithDataLast",
 test("test_preambleDataEmitter_claimTaskProducesANonEmptyPromptWithDataLast", () => {
     const taskNumber = nextTaskNumber++;
     const projectRoot = makeProjectFixture(taskNumber);
-    const prompt = emitPreambleData(taskNumber, "claim-task", { projectRoot, runId: "run-1" });
+    const prompt = emitPreambleData(taskNumber, "task-active", { projectRoot, runId: "run-1" });
     assert.ok(prompt.length > 0);
     assert.match(prompt, /"status":"claimed"/);
     assertDataIsLast(prompt);
@@ -92,9 +92,9 @@ test("test_preambleDataEmitter_worktreeLifecycleModesProduceNonEmptyPromptsWithD
     const projectRoot = makeGitProjectFixture(taskNumber);
     const runId = "run-lifecycle-1";
 
-    // create-worktree records task.run.worktree onto the active run — claim-task must run first,
+    // create-worktree records task.run.worktree onto the active run — task-active must run first,
     // same order the preamble pipeline itself follows.
-    emitPreambleData(taskNumber, "claim-task", { projectRoot, runId });
+    emitPreambleData(taskNumber, "task-active", { projectRoot, runId });
 
     const createPrompt = emitPreambleData(taskNumber, "create-worktree", { projectRoot, runId });
     assert.ok(createPrompt.length > 0);
@@ -162,7 +162,7 @@ test("test_preambleDataEmitter_missingRequiredFieldThrowsForEveryMode", () => {
     const projectRoot = makeProjectFixture(taskNumber);
     const fullPayloads: Record<string, unknown> = {
         "task-number-valid": { projectRoot },
-        "claim-task": { projectRoot, runId: "run-1" },
+        "task-active": { projectRoot, runId: "run-1" },
         "task-blocked": { projectRoot },
         "worktree-exists": { projectRoot },
         "worktree-safe": { worktreePath: "/abs/worktree" },

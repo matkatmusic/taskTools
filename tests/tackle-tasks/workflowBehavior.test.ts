@@ -41,7 +41,7 @@ const payloadOf = (prompt: string) => {
 const happyResponses: Record<string, unknown> = {
     isTaskNumberValid: { valid: true, reason: null },
     isTaskOpen: { open: true, closeInProgress: false },
-    claimTaskRun: { status: "claimed", heldByRunId: null },
+    isTaskActive: { status: "claimed", heldByRunId: null },
     isTaskBlocked: { blocked: false, blockers: [] },
     doesTaskWorktreeExist: { exists: false, worktree: null },
     createTaskWorktree: { worktree: "/abs/repo/.worktrees/task-169", branch: "task-169" },
@@ -176,14 +176,14 @@ test("test_workflow_reconcilesTheProvedSafeRerunWhenItsResultIsAlsoLost", async 
     // Setup: the claim loses its result, reconciliation proves nothing landed, the rerun
     // lands the claim but loses its result too.
     const run = await runWorkflow({
-        claimTaskRun: () => null,
+        isTaskActive: () => null,
         reconcileStep: (visit) => (visit === 1
             ? { status: "not-completed", result: null, note: "no claim on record" }
             : { status: "completed", result: { status: "claimed", heldByRunId: null }, note: null }),
     });
 
     // Verification: two reconciliations, exactly two claim attempts, and the run carried on.
-    assert.equal(run.countOf("claimTaskRun"), 2);
+    assert.equal(run.countOf("isTaskActive"), 2);
     assert.equal(run.countOf("reconcileStep"), 2);
     assert.equal(run.result.exitType, "completed");
 });
@@ -191,12 +191,12 @@ test("test_workflow_reconcilesTheProvedSafeRerunWhenItsResultIsAlsoLost", async 
 test("test_workflow_neverRunsAMutatingBoxAThirdTime", async () => {
     // Setup: both results are lost and reconciliation proves nothing landed either time.
     const run = await runWorkflow({
-        claimTaskRun: () => null,
+        isTaskActive: () => null,
         reconcileStep: () => ({ status: "not-completed", result: null, note: "no claim on record" }),
     });
 
     // Verification: two attempts, two reconciliations, then run-failed — no third mutation.
-    assert.equal(run.countOf("claimTaskRun"), 2);
+    assert.equal(run.countOf("isTaskActive"), 2);
     assert.equal(run.countOf("reconcileStep"), 2);
     assert.equal(run.result.exitType, "run-failed");
     // The claim never landed, so there is no run record to write to.
@@ -357,7 +357,7 @@ test("test_workflow_saysAlreadyCompletedWhenTheTaskIsOnlyArchived", async () => 
 test("test_workflow_namesTheArchivalCloseWhenTheClaimReportsClosing", async () => {
     // Setup: the task is closing, so the claim is refused for a different reason.
     const run = await runWorkflow({
-        claimTaskRun: () => ({ status: "closing", heldByRunId: null }),
+        isTaskActive: () => ({ status: "closing", heldByRunId: null }),
     });
 
     // Verification: the note says archival, not a held claim, and no exit-chain box ran.
@@ -370,7 +370,7 @@ test("test_workflow_namesTheArchivalCloseWhenTheClaimReportsClosing", async () =
 test("test_workflow_namesTheHeldClaimWhenTheClaimIsRefused", async () => {
     // Setup: a previous run left the claim held.
     const run = await runWorkflow({
-        claimTaskRun: () => ({ status: "refused", heldByRunId: "run-old" }),
+        isTaskActive: () => ({ status: "refused", heldByRunId: "run-old" }),
     });
 
     // Verification: the held-claim note, distinct from the closing one.

@@ -17,7 +17,7 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     buildClosureNote: "read-only",
     checkTaskFileFence: "read-only",
     checkTaskWorktreeSafe: "read-only",
-    claimTaskRun: "mutating",
+    isTaskActive: "mutating",
     cleanupTaskWorktree: "mutating",
     closeTaskRun: "mutating",
     commitTaskWork: "mutating",
