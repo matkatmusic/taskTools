@@ -17,7 +17,7 @@ flowchart TB
 %%      tests fail, or a resolved conflict.
 %%   7. Every box that touches the working tree operates on every repository
 %%      layer, deepest submodule first, root last: commit, run tests, record
-%%      modified files, the fence check, rebase, advance and merge all walk the
+%%      modified files, the fence check, rebase, replay and merge all walk the
 %%      same occurrence tree. Boxes that only read or write tasks.json do not.
 %%   8. The source repo lock is already held when this pipeline starts and stays
 %%      held until the exit workflow releases it. The rebase re-reads the source
@@ -52,35 +52,104 @@ flowchart TB
 %% The merge receipt this pipeline emits - the merge commit hashes and the set of
 %% modified files - is the input to the exit workflow's success tail.
 
-  INPUT["Input: { finished implementation, source repo lock }"] --> RBX
-  RBX["rebase onto the target branch if needed"] --> QC{"did the rebase report conflicts?"}
-  QC -- "yes, under 2 attempts:<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX["fix conflicts"]
-  FIX --> CS
-  QC -- "yes, after 2 attempts<br/>exit type: rebase-stuck<br/>exit note: the rebase did not<br/>advance after 2 conflict fixes" --> EXITWF
-  QC -- no --> CS["commit if needed"]
-  CS --> ADV["advance the rebase"]
-  ADV --> QADV{"is the rebase finished?"}
-  QADV -- "no: it stopped on new conflicts" --> QC
-  QADV -- yes --> FULL["run the full suite"]
-  FULL --> QF{"do all tests pass?"}
-  QF -- "no, under 2 attempts" --> FIXC["fix the codebase"]
-  FIXC --> CS
-  QF -- "no, after 2 attempts<br/>exit type: suite-red<br/>exit note: full suite still<br/>failing after 2 codebase fixes" --> EXITWF
-  QF -- yes --> QFENCE{"did every change stay<br/>inside the task's owned files?"}
-  QFENCE -- "no<br/>exit type: fence-violation<br/>exit note: a step changed a file<br/>the task does not own" --> EXITWF
-  QFENCE -- yes --> B["merge worktrees and submodules,<br/>no fast-forward"]
-  B --> Q4{"did the merge land?"}
-  Q4 -- "no, 1st time: rebase and retry" --> RBX
-  Q4 -- "no, 2nd time<br/>exit type: merge-failed<br/>exit note: the merge did not<br/>land twice" --> EXITWF
-  Q4 -- yes --> RECEIPT["Receipt: { merge commit hashes, modified files }"]
+  FINISHED_IMPLEMENTATION_INPUT["Input: { finished implementation, source repo lock }"] --> REBASE_ONTO_TARGET_BRANCH
+  REBASE_ONTO_TARGET_BRANCH["Try: rebase onto the target branch if needed"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
+  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_YES["YES"]
+  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_NO["NO"]
 
-  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote }"]
+  DID_REBASE_REPORT_CONFLICTS_YES --> IS_FIRST_CONFLICT{"First conflict?"}
+  IS_FIRST_CONFLICT --> IS_FIRST_CONFLICT_YES["YES"]
+  IS_FIRST_CONFLICT --> IS_FIRST_CONFLICT_NO["NO"]
+  IS_FIRST_CONFLICT_YES -- "pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
+  FIX_CONFLICTS --> CONFLICT_FIX_OUTPUT["Output"]
+  CONFLICT_FIX_OUTPUT --> CONFLICT_FIX_RECEIPT["Receipt: { resolved, unresolvedPaths }"]
+  CONFLICT_FIX_RECEIPT --> IS_CONFLICT_FIX_RECEIPT_VALID{"is the conflict fix receipt structure valid?"}
+  IS_CONFLICT_FIX_RECEIPT_VALID --> IS_CONFLICT_FIX_RECEIPT_VALID_YES["YES"]
+  IS_CONFLICT_FIX_RECEIPT_VALID --> IS_CONFLICT_FIX_RECEIPT_VALID_NO["NO"]
+  IS_CONFLICT_FIX_RECEIPT_VALID_YES --> CONFLICT_FIX_OUTPUT_TRUSTED["Output"]
+  CONFLICT_FIX_OUTPUT_TRUSTED --> CONFLICT_FIX_RECEIPT_TRUSTED["Receipt: { resolved, unresolvedPaths }"]
+  CONFLICT_FIX_RECEIPT_TRUSTED --> COMMIT_IF_NEEDED
+  IS_CONFLICT_FIX_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the conflict fix<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
+  IS_FIRST_CONFLICT_NO --> REBASE_CONFLICTED_2X["2nd conflict?"]
+  REBASE_CONFLICTED_2X -- "exit type: rebase-stuck<br/>exit note: the rebase did not<br/>advance after 2 conflict fixes" --> EXIT_WORKFLOW
 
+  DID_REBASE_REPORT_CONFLICTS_NO --> COMMIT_IF_NEEDED["commit if needed"]
+  COMMIT_IF_NEEDED --> REPLAY_COMMITS_ON_TARGET_BRANCH["Try: continue replaying commits<br/>on top of the target branch"]
+  REPLAY_COMMITS_ON_TARGET_BRANCH --> IS_REBASE_FINISHED{"is the rebase finished?"}
+  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_YES["YES"]
+  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_NO["NO"]
+  IS_REBASE_FINISHED_NO -- "it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
+
+  IS_REBASE_FINISHED_YES --> RUN_FULL_SUITE["Try: run the full suite"]
+  RUN_FULL_SUITE --> DO_ALL_TESTS_PASS{"do all tests pass?"}
+  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_YES["YES"]
+  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_NO["NO"]
+
+  DO_ALL_TESTS_PASS_NO --> IS_FIRST_SUITE_FAILURE{"First suite failure?"}
+  IS_FIRST_SUITE_FAILURE --> IS_FIRST_SUITE_FAILURE_YES["YES"]
+  IS_FIRST_SUITE_FAILURE --> IS_FIRST_SUITE_FAILURE_NO["NO"]
+  IS_FIRST_SUITE_FAILURE_YES --> FIX_THE_CODEBASE["fix the codebase"]
+  FIX_THE_CODEBASE --> FIXED_CODEBASE_OUTPUT["Output"]
+  FIXED_CODEBASE_OUTPUT --> FIXED_CODEBASE_RECEIPT["Receipt: { fixed }"]
+  FIXED_CODEBASE_RECEIPT --> IS_FIX_RECEIPT_VALID{"is the fix receipt structure valid?"}
+  IS_FIX_RECEIPT_VALID --> IS_FIX_RECEIPT_VALID_YES["YES"]
+  IS_FIX_RECEIPT_VALID --> IS_FIX_RECEIPT_VALID_NO["NO"]
+  IS_FIX_RECEIPT_VALID_YES --> FIXED_CODEBASE_OUTPUT_TRUSTED["Output"]
+  FIXED_CODEBASE_OUTPUT_TRUSTED --> FIXED_CODEBASE_RECEIPT_TRUSTED["Receipt: { fixed }"]
+  FIXED_CODEBASE_RECEIPT_TRUSTED --> COMMIT_IF_NEEDED
+  IS_FIX_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the fix<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
+  IS_FIRST_SUITE_FAILURE_NO --> SUITE_FAILED_2X["2nd suite failure?"]
+  SUITE_FAILED_2X -- "exit type: suite-red<br/>exit note: full suite still<br/>failing after 2 codebase fixes" --> EXIT_WORKFLOW
+
+  DO_ALL_TESTS_PASS_YES --> DID_CHANGES_STAY_INSIDE_FENCE{"did every change stay<br/>inside the task's owned files?"}
+  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_YES["YES"]
+  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_NO["NO"]
+  DID_CHANGES_STAY_INSIDE_FENCE_NO -- "exit type: fence-violation<br/>exit note: a step changed a file<br/>the task does not own" --> EXIT_WORKFLOW
+
+  DID_CHANGES_STAY_INSIDE_FENCE_YES --> MERGE_WORKTREES["Try: merge worktrees and submodules,<br/>no fast-forward"]
+  MERGE_WORKTREES --> DID_MERGE_LAND{"did the merge land?"}
+  DID_MERGE_LAND --> DID_MERGE_LAND_YES["YES"]
+  DID_MERGE_LAND --> DID_MERGE_LAND_NO["NO"]
+
+  DID_MERGE_LAND_NO --> IS_FIRST_MERGE_FAILURE{"First merge failure?"}
+  IS_FIRST_MERGE_FAILURE --> IS_FIRST_MERGE_FAILURE_YES["YES"]
+  IS_FIRST_MERGE_FAILURE --> IS_FIRST_MERGE_FAILURE_NO["NO"]
+  IS_FIRST_MERGE_FAILURE_YES -- "rebase and retry" --> REBASE_ONTO_TARGET_BRANCH
+  IS_FIRST_MERGE_FAILURE_NO --> MERGE_FAILED_2X["2nd merge failure?"]
+  MERGE_FAILED_2X -- "exit type: merge-failed<br/>exit note: the merge did not<br/>land twice" --> EXIT_WORKFLOW
+
+  DID_MERGE_LAND_YES --> MERGE_RECEIPT_OUTPUT["Output"]
+  MERGE_RECEIPT_OUTPUT --> MERGE_RECEIPT["Receipt: { merge commit hashes, modified files }"]
+  MERGE_RECEIPT --> IS_MERGE_RECEIPT_VALID{"is the merge receipt structure valid?"}
+  IS_MERGE_RECEIPT_VALID --> IS_MERGE_RECEIPT_VALID_YES["YES"]
+  IS_MERGE_RECEIPT_VALID --> IS_MERGE_RECEIPT_VALID_NO["NO"]
+  IS_MERGE_RECEIPT_VALID_YES --> MERGE_RECEIPT_OUTPUT_TRUSTED["Output"]
+  MERGE_RECEIPT_OUTPUT_TRUSTED --> MERGE_RECEIPT_TRUSTED["Receipt: { merge commit hashes, modified files }"]
+  IS_MERGE_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the merge<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
+
+  VALIDATOR_FAILURE_OUTPUT["Output"] --> VALIDATOR_FAILURE_RECEIPT["Receipt: { exitType, exitNote }"]
+  VALIDATOR_FAILURE_RECEIPT --> EXIT_WORKFLOW
+
+  EXIT_WORKFLOW["exit workflow"] --> EXIT_OUTPUT["Output"]
+  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { exitType, exitNote }"]
+
+  %% pass/nopass: green is the branch that keeps heading for the receipt,
+  %% red is the branch that ends in the exit workflow.
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
-  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef receipt fill:#ffffff,stroke:#333333,color:#000000
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class RBX,QC,CS,ADV,QADV,FULL,QF,QFENCE,B,Q4 script
-  class FIX,FIXC prose
-  class EXITWF fail
-  class INPUT,RECEIPT,FAIL_RECEIPT output
+  classDef verdict fill:#4a4a4a,stroke:#8a8a8a,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DID_REBASE_REPORT_CONFLICTS,IS_FIRST_CONFLICT,IS_REBASE_FINISHED,DO_ALL_TESTS_PASS,IS_FIRST_SUITE_FAILURE,DID_CHANGES_STAY_INSIDE_FENCE,DID_MERGE_LAND,IS_FIRST_MERGE_FAILURE,IS_CONFLICT_FIX_RECEIPT_VALID,IS_FIX_RECEIPT_VALID,IS_MERGE_RECEIPT_VALID decision
+  class REBASE_ONTO_TARGET_BRANCH,COMMIT_IF_NEEDED,REPLAY_COMMITS_ON_TARGET_BRANCH,RUN_FULL_SUITE,MERGE_WORKTREES script
+  class FIX_CONFLICTS,FIX_THE_CODEBASE agent
+  class REBASE_CONFLICTED_2X,SUITE_FAILED_2X,MERGE_FAILED_2X verdict
+  class DID_REBASE_REPORT_CONFLICTS_NO,IS_FIRST_CONFLICT_YES,IS_REBASE_FINISHED_YES,DO_ALL_TESTS_PASS_YES,IS_FIRST_SUITE_FAILURE_YES,DID_CHANGES_STAY_INSIDE_FENCE_YES,DID_MERGE_LAND_YES,IS_FIRST_MERGE_FAILURE_YES,IS_CONFLICT_FIX_RECEIPT_VALID_YES,IS_FIX_RECEIPT_VALID_YES,IS_MERGE_RECEIPT_VALID_YES pass
+  class DID_REBASE_REPORT_CONFLICTS_YES,IS_FIRST_CONFLICT_NO,IS_REBASE_FINISHED_NO,DO_ALL_TESTS_PASS_NO,IS_FIRST_SUITE_FAILURE_NO,DID_CHANGES_STAY_INSIDE_FENCE_NO,DID_MERGE_LAND_NO,IS_FIRST_MERGE_FAILURE_NO,IS_CONFLICT_FIX_RECEIPT_VALID_NO,IS_FIX_RECEIPT_VALID_NO,IS_MERGE_RECEIPT_VALID_NO nopass
+  class EXIT_WORKFLOW fail
+  class FINISHED_IMPLEMENTATION_INPUT,MERGE_RECEIPT_OUTPUT_TRUSTED,EXIT_OUTPUT,CONFLICT_FIX_OUTPUT,CONFLICT_FIX_OUTPUT_TRUSTED,FIXED_CODEBASE_OUTPUT,FIXED_CODEBASE_OUTPUT_TRUSTED,MERGE_RECEIPT_OUTPUT,VALIDATOR_FAILURE_OUTPUT output
+  class CONFLICT_FIX_RECEIPT,FIXED_CODEBASE_RECEIPT,MERGE_RECEIPT,EXIT_RECEIPT,CONFLICT_FIX_RECEIPT_TRUSTED,FIXED_CODEBASE_RECEIPT_TRUSTED,MERGE_RECEIPT_TRUSTED,VALIDATOR_FAILURE_RECEIPT receipt

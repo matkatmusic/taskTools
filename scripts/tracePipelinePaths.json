@@ -1,32 +1,1513 @@
 {
-  "invalid-number":              { "taskNumber": 42, "taskNumberValid": false, "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "not-open":                    { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": false, "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "already-active":               { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": true , "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "blocked":                     { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": true,  "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-
-  "worktree-does-not-exist":   { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "safe-existing-worktree":      { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": true,  "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "unsafe-resumable-worktree":   { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": true,  "worktreeSafe": false, "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "unsafe-unresumable-worktree": { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": true,  "worktreeSafe": false, "previousWorkResumable": false, "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-
-  "plan-file-invalid-then-valid":{ "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [false, true], "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "codex-amends-plan":           { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["amend"],           "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "codex-scraps-plan-once":      { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true, true],  "codexPlanVerdict": ["scrap", "accept"], "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "plan-scrapped":               { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true, true],  "codexPlanVerdict": ["scrap", "scrap"],  "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-
-  "task-tests-fail-once":        { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [true, false],  "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "tests-red":                   { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [true, true],   "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "codex-flags-tests-once":      { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false, false], "codexTestsFlagged": [true, false], "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "tests-flagged":               { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false, false], "codexTestsFlagged": [true, true],  "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-
-  "rebase-conflict-once":        { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["conflict", "ok"],    "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "rebase-stuck":                { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["conflict", "conflict"], "rebaseAdvance": ["conflicts"],           "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-  "advance-uncovers-conflicts":  { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok", "conflict"],    "rebaseAdvance": ["conflicts", "finished"],  "fullSuitePasses": [true],        "fenceHeld": true,  "mergeLands": [true] },
-
-  "full-suite-fails-once":       { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [false, true], "fenceHeld": true,  "mergeLands": [true] },
-  "suite-red":                   { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished", "finished"],   "fullSuitePasses": [false, false],"fenceHeld": true,  "mergeLands": [true] },
-
-  "fence-violation":             { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok"],                "rebaseAdvance": ["finished"],               "fullSuitePasses": [true],        "fenceHeld": false, "mergeLands": [true] },
-  "merge-retry-then-lands":      { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok", "ok"],          "rebaseAdvance": ["finished", "finished"],   "fullSuitePasses": [true, true],  "fenceHeld": true,  "mergeLands": [false, true] },
-  "merge-failed":                { "taskNumber": 42, "taskNumberValid": true,  "taskOpen": true,  "taskActive": false, "taskBlocked": false, "worktreeExists": false, "worktreeSafe": true,  "previousWorkResumable": true,  "planFileValid": [true],        "codexPlanVerdict": ["accept"],          "taskTestsFail": [false],        "codexTestsFlagged": [false],       "rebase": ["ok", "ok"],          "rebaseAdvance": ["finished", "finished"],   "fullSuitePasses": [true, true],  "fenceHeld": true,  "mergeLands": [false, false] }
+    "invalid-number": {
+        "taskNumber": 42,
+        "taskNumberValid": false,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "not-open": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": false,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "already-active": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": true,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "blocked": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": true,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "worktree-does-not-exist": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "safe-existing-worktree": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "unsafe-resumable-worktree": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": false,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "unsafe-unresumable-worktree": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": false,
+        "previousWorkResumable": false,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "codex-amends-plan-then-accepts": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "amend",
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "codex-amends-plan-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "amend",
+            "amend"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "codex-scraps-plan-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "scrap",
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "plan-scrapped": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "scrap",
+            "scrap"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "task-tests-fail-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "tests-red": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "codex-flags-tests-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "tests-flagged": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            true
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "source-repo-held-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "lock-race-lost-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-conflict-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-stuck": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "advance-uncovers-conflicts": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "full-suite-fails-once": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "suite-red": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": [
+            true
+        ]
+    },
+    "merge-retry-then-lands": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ]
+    },
+    "merge-failed": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ]
+    },
+    "malformed-active-task-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "active task"
+    },
+    "malformed-plan-file-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "plan file"
+    },
+    "malformed-codex-review-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "codex review"
+    },
+    "malformed-finished-plan-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished plan"
+    },
+    "malformed-fix-the-codebase-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "fix the codebase"
+    },
+    "malformed-test-review-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "test review"
+    },
+    "malformed-amend-tests-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "amend tests"
+    },
+    "malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "malformed-fix-the-full-suite-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "fix the full suite"
+    },
+    "malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    }
 }
