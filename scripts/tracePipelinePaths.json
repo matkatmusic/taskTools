@@ -37,44 +37,6 @@
             true
         ]
     },
-    "not-open": {
-        "taskNumber": 42,
-        "taskNumberValid": true,
-        "taskOpen": false,
-        "taskActive": false,
-        "taskBlocked": false,
-        "worktreeExists": false,
-        "worktreeSafe": true,
-        "previousWorkResumable": true,
-        "codexPlanVerdict": [
-            "accept"
-        ],
-        "taskTestsFail": [
-            false
-        ],
-        "codexTestsFlagged": [
-            false
-        ],
-        "sourceRepoFree": [
-            true
-        ],
-        "lockSucceeds": [
-            true
-        ],
-        "rebase": [
-            "ok"
-        ],
-        "rebaseAdvance": [
-            "finished"
-        ],
-        "fullSuitePasses": [
-            true
-        ],
-        "fenceHeld": true,
-        "mergeLands": [
-            true
-        ]
-    },
     "already-active": {
         "taskNumber": 42,
         "taskNumberValid": true,

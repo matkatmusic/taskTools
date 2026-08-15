@@ -5,7 +5,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
-import { isTaskOpen } from "./isTaskOpen.ts";
 import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { claimTask } from "./taskRunState.ts";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
@@ -65,11 +64,11 @@ const getInvalidAndValidTask = (taskNumber: TaskNum, ctx: RunContext): InvalidVa
     return split(taskNumber, !valid);
 };
 
-const getClosedAndOpenTask = (taskNumber: TaskNum, ctx: RunContext): ClosedOpen => {
-    if (taskNumber === null) return [null, null];
-    const { open } = isTaskOpen(taskNumber, ctx.projectRoot);
-    return split(taskNumber, !open);
-};
+// const getClosedAndOpenTask = (taskNumber: TaskNum, ctx: RunContext): ClosedOpen => {
+//     if (taskNumber === null) return [null, null];
+//     const { open } = isTaskOpen(taskNumber, ctx.projectRoot);
+//     return split(taskNumber, !open);
+// };
 
 const claimTaskNumber = (taskNumber: TaskNum, ctx: RunContext): ClaimedTask => {
     if (taskNumber === null) return [null, null];
@@ -177,27 +176,17 @@ export const skillBody = (taskNumber: number, shouldBeValidated: boolean, ctx: R
         // No task record exists to write to, so this exit reports and stops.
         return stop(invalidTaskNumber, { exitType: "invalid-number", exitNote: "task number is in neither tasks.json nor completedTasks.json" });
     }
-
-    const [closedTaskNumber, openTaskNumber] = getClosedAndOpenTask(validTaskNumber, ctx); // "is task open?"
-    if (closedTaskNumber) {
-        return stop(closedTaskNumber, { exitType: "not-open", exitNote: "task is already completed" });
+    const [blockedTaskNumber, unblockedTaskNumber] = splitBlockedAndUnblockedTask(validTaskNumber, ctx); // "is task blocked?"
+    if (blockedTaskNumber) {
+        // No task record exists to write to, so this exit reports and stops.
+        return stop(blockedTaskNumber, { exitType: "blocked-number", exitNote: "task number is blocked" });
     }
-    const [failedClaimedTask, claimedTask] = claimTaskNumber(openTaskNumber, ctx); // "claim the task: mark it active in tasks.json"
+    const [failedClaimedTask, claimedTask] = claimTaskNumber(unblockedTaskNumber, ctx); // "claim the task: mark it active in tasks.json"
     if (failedClaimedTask) {
         // The held claim belongs to another invocation's run, so this exit must not write to it.
         return stop(failedClaimedTask, { exitType: "already-active", exitNote: "a previous run left the claim held" });
     }
-    const [blockedTaskNumber, unblockedTaskNumber] = splitBlockedAndUnblockedTask(claimedTask, ctx); // "is task blocked?"
-    if (blockedTaskNumber) {
-        const blockedExitInfo: ExitInfo = { exitType: "blocked", exitNote: "an open blocker remains" };
-        writeExitInfo(blockedTaskNumber, blockedExitInfo, ctx);
-        recordModifiedFiles(blockedTaskNumber, ctx);
-        markInactive(blockedTaskNumber, ctx);
-        // release the worktree lease and the source lock if held
-        releaseWorktreeLeaseAndSourceLock(blockedTaskNumber, ctx);
-        return stop(blockedTaskNumber, blockedExitInfo);
-    }
-
+    
     const [taskWithExistingWorktree, taskWithoutExistingWorktree] = getWorktreeForTask(unblockedTaskNumber, ctx); // "does a worktree exist?"
     const taskWithNewWorktree = createWorktree(taskWithoutExistingWorktree, ctx); // "create a worktree"
     const [taskWithUnsafeWorktree, taskWithSafeWorktree] = getUnsafeAndSafeWorktrees(taskWithExistingWorktree, ctx); // "is the worktree safe to use?"

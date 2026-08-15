@@ -46,10 +46,11 @@ flowchart TB
 %%   merge-failed       - the merge did not land twice
 %%   fence-violation    - a step changed a file the task does not own
 %%   run-failed         - a script failed operationally
-%% invalid-number and already-active are the only exits that write nothing to
-%% tasks.json: the first has no open task record to write to, and the second must
-%% not touch a run that belongs to another invocation. Both take the report-only
-%% tail. Every other exit takes the failure tail.
+%% invalid-number, blocked and already-active are the only exits that write
+%% nothing to tasks.json: all three happen before "mark the task active", so
+%% there is no run record to write to, and already-active must not touch a run
+%% that belongs to another invocation. All three take the report-only tail.
+%% Every other exit takes the failure tail.
 
   MERGE_RECEIPT_INPUT["Input: { merge commit hashes, modified files }"] --> RECORD_MERGE_COMMIT_HASHES["record merge commit hashes to tasks.json"]
   RECORD_MERGE_COMMIT_HASHES --> WRITE_EXIT_TYPE_COMPLETED["write exit type completed to tasks.json"]
@@ -79,7 +80,7 @@ flowchart TB
   RELEASE_WORKTREE_LEASE_AND_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
   REPORT_EXIT_TYPE_AND_NOTE --> STOP
 
-  EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exitType, exitNote }<br/>invalid-number or already-active:<br/>no run record to write to"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
+  EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exitType, exitNote }<br/>invalid-number, blocked or already-active:<br/>no run record to write to"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
   REPORT_EXIT_TYPE_NO_WRITE --> STOP
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff

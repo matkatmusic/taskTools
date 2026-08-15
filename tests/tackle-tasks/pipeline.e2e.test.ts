@@ -11,7 +11,6 @@ import { dirname, join } from "node:path";
 
 import { resolveTaskRun } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
 import { isTaskNumberValid } from "../../scripts/tackle-tasks/isTaskNumberValid.ts";
-import { isTaskOpen } from "../../scripts/tackle-tasks/isTaskOpen.ts";
 import { claimTaskRun } from "../../scripts/tackle-tasks/claimTaskRun.ts";
 import { isTaskBlocked } from "../../scripts/tackle-tasks/isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "../../scripts/tackle-tasks/doesTaskWorktreeExist.ts";
@@ -344,16 +343,6 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                     if (!valid) {
                         outcome.exitType = "invalid-number";
                         outcome.exitNote = "task number is in neither tasks.json nor completedTasks.json";
-                        return outcome;
-                    }
-                    node = "Q0";
-                    break;
-                }
-                case "Q0": {
-                    const open = box("isTaskOpen", () => isTaskOpen(taskNumber, projectRoot)).open;
-                    if (!open) {
-                        outcome.exitType = "not-open";
-                        outcome.exitNote = "task is already completed";
                         return outcome;
                     }
                     node = "MARK";
@@ -791,7 +780,7 @@ test("test_pipeline_claimsTheTaskThenReleasesItAcrossASuccessfulRun", async () =
 
     // Verification: every green box on the fresh-worktree success path ran, in diagram order.
     assertVisitedInOrder(outcome.visited, [
-        "isTaskNumberValid", "isTaskOpen", "claimTaskRun", "isTaskBlocked", "doesTaskWorktreeExist",
+        "isTaskNumberValid", "claimTaskRun", "isTaskBlocked", "doesTaskWorktreeExist",
         "createTaskWorktree", "generateTaskDocs", "initTaskSubmodules",
         "validatePlanFile", "validateCodexReview", "applyPlanAmendments", "recordImplementationNotes",
         "commitTaskWork", "runTaskTests", "rebaseTaskWorktree", "commitTaskWork", "runFullSuite",
@@ -998,22 +987,23 @@ test("test_pipeline_leavesTheTaskInactiveAfterEveryExitPathThatWritesState", asy
         assert.equal(runStateOf(projectRoot, scenario.taskNumber).active, false, `task ${scenario.taskNumber} active`);
     }
 
-    // Setup: one repository holding an active run of task 50 and an archived task 51, so the two
-    // non-writing exits that are reachable here can be checked against a live neighbouring run.
+    // Setup: one repository holding an active run of task 50 and an archived task 51, so the
+    // non-writing exit that is reachable here can be checked against a live neighbouring run.
     const quietRoot = makeSourceRepository("pipeline-non-writing-exits");
     seedTaskFiles(quietRoot, [{ taskNumber: 50, title: "task 50", description: "do it", files: FENCE_INSIDE(50) }]);
     writeJsonAtomically(resolveTaskFiles(quietRoot).completedTasksPath, [{ taskNumber: 51, title: "task 51" }]);
     assert.equal(claimTaskRun(50, "run-live", quietRoot).status, "claimed");
     const liveStateBefore = JSON.stringify(readTaskRunState(50, quietRoot));
 
-    // Test action: drive the two non-writing exits.
+    // Test action: drive the non-writing exit, once for a number in no file and once for a
+    // number only in completedTasks.json — being archived is not being valid.
     const invalidNumber = await runPipeline({ projectRoot: quietRoot, taskNumber: 52 });
-    const notOpen = await runPipeline({ projectRoot: quietRoot, taskNumber: 51 });
+    const archived = await runPipeline({ projectRoot: quietRoot, taskNumber: 51 });
 
     // Verification: neither ran the exit chain, and neither touched the live run's state.
     assert.equal(invalidNumber.exitType, "invalid-number");
-    assert.equal(notOpen.exitType, "not-open");
-    for (const outcome of [invalidNumber, notOpen]) {
+    assert.equal(archived.exitType, "invalid-number");
+    for (const outcome of [invalidNumber, archived]) {
         assert.ok(!outcome.visited.includes("writeTaskExitNotes"), "a non-writing exit ran the exit chain");
         assert.ok(!outcome.visited.includes("markTaskInactive"), "a non-writing exit ran the exit chain");
     }

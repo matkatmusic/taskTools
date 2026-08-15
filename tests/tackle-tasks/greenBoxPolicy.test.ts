@@ -57,7 +57,7 @@ test("test_greenBoxPolicy_throwsForAnUnknownScriptName", () => {
 
 test("test_greenBoxPolicy_classifiesEveryReadOnlyBoxFromTheDiagram", () => {
     const readOnlyBoxes = [
-        "isTaskNumberValid", "isTaskOpen", "isTaskBlocked", "doesTaskWorktreeExist",
+        "isTaskNumberValid", "isTaskBlocked", "doesTaskWorktreeExist",
         "checkTaskWorktreeSafe", "checkTaskFileFence", "validatePlanFile", "validateCodexReview",
         "buildClosureNote", "resolveTaskRun",
     ];

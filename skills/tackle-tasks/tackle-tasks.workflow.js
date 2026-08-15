@@ -136,6 +136,18 @@ const preamblePhase = async () => {
     }
   }
 
+  step('is task blocked?', yesNo(d.taskBlocked))
+  if (d.taskBlocked) {
+    return {
+      ok: false,
+      trace: exitChain(
+        'blocked',
+        'an open blocker remains',
+        { lease: false, sourceLock: false, noRunRecord: true },
+      ),
+    }
+  }
+
   // Drawn as two boxes, but one atomic read-modify-write of tasks.json: nothing
   // can make the task active between the question and the write.
   step('is the task active?', yesNo(d.taskActive))
@@ -155,18 +167,6 @@ const preamblePhase = async () => {
     {},
     () => ({}),
   )
-
-  step('is task blocked?', yesNo(d.taskBlocked))
-  if (d.taskBlocked) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'blocked',
-        'an open blocker remains',
-        { lease: false, sourceLock: false, noRunRecord: false },
-      ),
-    }
-  }
 
   // Four worktree shapes converge on "init submodules recursively".
   step('does a worktree exist?', yesNo(d.worktreeExists))

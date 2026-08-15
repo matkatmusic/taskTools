@@ -73,10 +73,9 @@ const ACTIVE_AND_UNBLOCKED = [
     "Run start: Task Num [42]",
     PREAMBLE_BANNER,
     "is task number valid?: YES",
-    "is task open?: YES",
+    "is task blocked?: NO",
     "is the task active?: NO",
     "Try: mark the task active in tasks.json",
-    "is task blocked?: NO",
 ];
 const FRESH_WORKTREE_STEPS = ["does a worktree exist?: NO", "create a worktree", "auto generate docs", "init submodules recursively"];
 const FRESH_WORKTREE = [...FRESH_WORKTREE_STEPS, ...receiptOk("active task"), PLANNING_BANNER];
@@ -190,7 +189,7 @@ test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheTaskIsStillActive", () =
         "Run start: Task Num [42]",
         PREAMBLE_BANNER,
         "is task number valid?: YES",
-        "is task open?: YES",
+        "is task blocked?: NO",
         "is the task active?: YES",
         EXIT_BANNER,
         "report the exit type and note: ALREADY-ACTIVE",
@@ -198,13 +197,21 @@ test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheTaskIsStillActive", () =
     ]);
 });
 
-test("test_traceTaskPipeline_runsTheExitChainWhenTheTaskIsBlocked", () => {
-    // Scenario: the task is marked active, then an open blocker is found.
-    // Steps: marking it active started a run record. The blocked box takes its "yes"
-    //   edge and the walk runs the full exit chain, which ends by releasing the holds.
-    //   No worktree exists yet, so nothing is released.
+test("test_traceTaskPipeline_reportsAndStopsWhenTheTaskIsBlocked", () => {
+    // Scenario: an open blocker is found before the task is ever marked active.
+    // Steps: the blocked box now sits ahead of "mark the task active", so no run record
+    //   exists to write an exit type to. The walk takes the report-only tail, the same one
+    //   invalid-number and already-active take.
     const trace = traceTaskPipeline(pathNamed("blocked"));
-    assert.deepEqual(trace, [...ACTIVE_AND_UNBLOCKED.slice(0, -1), "is task blocked?: YES", EXIT_BANNER, ...exitChain("BLOCKED", "none")]);
+    assert.deepEqual(trace, [
+        "Run start: Task Num [42]",
+        PREAMBLE_BANNER,
+        "is task number valid?: YES",
+        "is task blocked?: YES",
+        EXIT_BANNER,
+        "report the exit type and note: BLOCKED",
+        "stop",
+    ]);
 });
 
 // -------------------------------------------------------------------- the four worktree shapes
@@ -1123,7 +1130,6 @@ test("test_traceTaskPipeline_reachesEveryExitTypeTheNamedPathsCanReach", () => {
         "FENCE-VIOLATION",
         "INVALID-NUMBER",
         "MERGE-FAILED",
-        "NOT-OPEN",
         "PLAN-SCRAPPED",
         "REBASE-STUCK",
         "RUN-FAILED",

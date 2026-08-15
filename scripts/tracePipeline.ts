@@ -241,14 +241,13 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     push(`${L("IS_TASK_NUMBER_VALID")}: ${yesNo(decisions.taskNumberValid)}`);
     if (!decisions.taskNumberValid) return reportAndStop("INVALID-NUMBER");
 
+    push(`${L("IS_TASK_BLOCKED")}: ${yesNo(decisions.taskBlocked)}`);
+    if (decisions.taskBlocked) return reportAndStop("BLOCKED");
     // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task
     // active between the question and the write.
     push(`${L("IS_TASK_ACTIVE")}: ${yesNo(decisions.taskActive)}`);
     if (decisions.taskActive) return reportAndStop("ALREADY-ACTIVE");
     push(L("MARK_TASK_ACTIVE"));
-
-    push(`${L("IS_TASK_BLOCKED")}: ${yesNo(decisions.taskBlocked)}`);
-    if (decisions.taskBlocked) return exitChain("BLOCKED");
 
     // Four worktree shapes converge on "init submodules recursively".
     push(`${L("DOES_WORKTREE_EXIST")}: ${yesNo(decisions.worktreeExists)}`);

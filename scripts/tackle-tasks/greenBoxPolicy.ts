@@ -27,7 +27,6 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     initTaskSubmodules: "mutating",
     isTaskBlocked: "read-only",
     isTaskNumberValid: "read-only",
-    isTaskOpen: "read-only",
     isTaskRunResumable: "mutating",
     markTaskInactive: "mutating",
     mergeTaskWorktree: "mutating",
@@ -52,13 +51,17 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
 // test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory fails on any new unclassified script.
 export const NON_DISPATCHED_SCRIPTS: string[] = [
     "PlannerBodyEmitter",
+    "PreambleDataEmitter",
     "SkillBodyEmitter",
+    "WorkflowResultCodes",
+    "emitPipelineOutput",
     "greenBoxPolicy",
     "inputPaths",
     "occurrences",
     "planArtifacts",
     "sourceRepoLock",
     "taskRunState",
+    "validateActiveTaskReceipt",
     "writeTaskBrief",
 ];
 

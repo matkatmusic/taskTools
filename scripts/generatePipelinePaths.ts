@@ -75,17 +75,13 @@ function interpretPreamble(markers: Markers): Fragment {
     fields.taskNumberValid = taskNumberValid;
     if (!taskNumberValid) return { ok: true, fields, terminal: true, events: ["invalid-number"] };
 
-    const taskOpen = yes(markers.next());
-    fields.taskOpen = taskOpen;
-    if (!taskOpen) return { ok: true, fields, terminal: true, events: ["not-open"] };
+    const taskBlocked = yes(markers.next());
+    fields.taskBlocked = taskBlocked;
+    if (taskBlocked) return { ok: true, fields, terminal: true, events: ["blocked"] };
 
     const taskActive = yes(markers.next());
     fields.taskActive = taskActive;
     if (taskActive) return { ok: true, fields, terminal: true, events: ["already-active"] };
-
-    const taskBlocked = yes(markers.next());
-    fields.taskBlocked = taskBlocked;
-    if (taskBlocked) return { ok: true, fields, terminal: true, events: ["blocked"] };
 
     const worktreeExists = yes(markers.next());
     fields.worktreeExists = worktreeExists;
