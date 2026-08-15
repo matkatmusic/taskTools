@@ -53,29 +53,29 @@ flowchart TB
 %% the third must not touch a run that belongs to another invocation. All three
 %% take the report-only tail. Every other exit takes the failure tail.
 
-  INMERGE["Input: { merge commit hashes, modified files }"] --> HASH["record merge commit hashes to tasks.json"]
-  HASH --> DONE["write exit type completed to tasks.json"]
-  DONE --> RECOK["record modified files to tasks.json"]
-  RECOK --> CLEAN["clean up worktrees, leases,<br/>persistence refs and source lock"]
-  CLEAN --> VNOTES["build the closure note from the recorded run"]
-  VNOTES --> OFFOK["mark task inactive in tasks.json"]
-  OFFOK --> ARCH["move task to completedTasks.json<br/>and update tasks blocked by it"]
-  ARCH --> REPORTDONE["report the closure note"]
-  REPORTDONE --> STOP["stop"]
+  MERGE_RECEIPT_INPUT["Input: { merge commit hashes, modified files }"] --> RECORD_MERGE_COMMIT_HASHES["record merge commit hashes to tasks.json"]
+  RECORD_MERGE_COMMIT_HASHES --> WRITE_EXIT_TYPE_COMPLETED["write exit type completed to tasks.json"]
+  WRITE_EXIT_TYPE_COMPLETED --> RECORD_MODIFIED_FILES_SUCCESS["record modified files to tasks.json"]
+  RECORD_MODIFIED_FILES_SUCCESS --> CLEAN_UP_WORKTREES["clean up worktrees, leases,<br/>persistence refs and source lock"]
+  CLEAN_UP_WORKTREES --> BUILD_CLOSURE_NOTE["build the closure note from the recorded run"]
+  BUILD_CLOSURE_NOTE --> MARK_TASK_INACTIVE_SUCCESS["mark task inactive in tasks.json"]
+  MARK_TASK_INACTIVE_SUCCESS --> ARCHIVE_TASK["move task to completedTasks.json<br/>and update tasks blocked by it"]
+  ARCHIVE_TASK --> REPORT_CLOSURE_NOTE["report the closure note"]
+  REPORT_CLOSURE_NOTE --> STOP["stop"]
 
-  INFAIL["Input: { exitType, exitNote }"] --> EXIT["write exit type and exit notes to tasks.json"]
-  EXIT --> REC["record modified files to tasks.json"]
-  REC --> OFF["mark task inactive in tasks.json"]
-  OFF --> REL["release the worktree lease and the source lock if held"]
-  REL --> REPORTRUN["report the run's exit type and note"]
-  REPORTRUN --> STOP
+  EXIT_TYPE_NOTE_INPUT["Input: { exitType, exitNote }"] --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
+  WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"]
+  RECORD_MODIFIED_FILES_FAILURE --> MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"]
+  MARK_TASK_INACTIVE_FAILURE --> RELEASE_WORKTREE_LEASE_AND_LOCK["release the worktree lease and the source lock if held"]
+  RELEASE_WORKTREE_LEASE_AND_LOCK --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  REPORT_EXIT_TYPE_AND_NOTE --> STOP
 
-  INNOWRITE["Input: { exitType, exitNote }<br/>invalid-number, not-open or already-active:<br/>no run record to write to"] --> REPORTEDGE["report the exit type and note"]
-  REPORTEDGE --> STOP
+  EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exitType, exitNote }<br/>invalid-number, not-open or already-active:<br/>no run record to write to"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
+  REPORT_EXIT_TYPE_NO_WRITE --> STOP
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class HASH,DONE,RECOK,CLEAN,VNOTES,OFFOK,ARCH,REPORTDONE,EXIT,REC,OFF,REL,REPORTRUN,REPORTEDGE,STOP script
-  class INMERGE,INFAIL,INNOWRITE output
+  class RECORD_MERGE_COMMIT_HASHES,WRITE_EXIT_TYPE_COMPLETED,RECORD_MODIFIED_FILES_SUCCESS,CLEAN_UP_WORKTREES,BUILD_CLOSURE_NOTE,MARK_TASK_INACTIVE_SUCCESS,ARCHIVE_TASK,REPORT_CLOSURE_NOTE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,RELEASE_WORKTREE_LEASE_AND_LOCK,REPORT_EXIT_TYPE_AND_NOTE,REPORT_EXIT_TYPE_NO_WRITE,STOP script
+  class MERGE_RECEIPT_INPUT,EXIT_TYPE_NOTE_INPUT,EXIT_TYPE_NOTE_NO_WRITE_INPUT output

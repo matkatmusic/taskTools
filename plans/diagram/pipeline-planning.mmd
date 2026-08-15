@@ -41,41 +41,76 @@ flowchart TB
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
 %% ANY green box, so drawing it would add one edge per box and hide the flow.
 
-  INPUT["Input: { active task, initialized worktree }"] --> P
-  P["plan the task"] --> PLANFILE["Receipt: { plan file:<br/>task, revision, sections[ id, title, body ] }"]
-  PLANFILE --> VALP{"is the plan file structure valid?"}
-  VALP -- "invalid<br/>exit type: run-failed<br/>exit note: the plan file is malformed" --> EXITWF
-  VALP -- valid --> R["codex reviews the plan"]
-  R --> REVIEW["Receipt: { codex review:<br/>verdict, notes, amendments[] }"]
-  REVIEW --> VALR{"is the review file structure valid?"}
-  VALR -- "invalid<br/>exit type: run-failed<br/>exit note: the codex review is malformed" --> EXITWF
-  VALR -- valid --> QR{"what is the review verdict?"}
-  QR --> SCRAP["SCRAP"]
-  QR --> AMEND["AMEND"]
-  QR --> ACCEPT["ACCEPT"]
+  ACTIVE_TASK_WORKTREE_INPUT["Input: { active task, initialized worktree }"] --> PLAN_THE_TASK
+  PLAN_THE_TASK["plan the task"] --> DRAFT_PLAN_FILE_OUTPUT["Output"]
+  DRAFT_PLAN_FILE_OUTPUT --> DRAFT_PLAN_FILE_RECEIPT["Receipt: { plan file:<br/>task, revision, sections[ id, title, body ] }"]
+  DRAFT_PLAN_FILE_RECEIPT --> IS_PLAN_FILE_VALID{"is the plan file structure valid?"}
+  IS_PLAN_FILE_VALID --> IS_PLAN_FILE_VALID_YES["YES"]
+  IS_PLAN_FILE_VALID --> IS_PLAN_FILE_VALID_NO["NO"]
+  IS_PLAN_FILE_VALID_YES --> DRAFT_PLAN_FILE_OUTPUT_TRUSTED["Output"]
+  DRAFT_PLAN_FILE_OUTPUT_TRUSTED --> DRAFT_PLAN_FILE_RECEIPT_TRUSTED["Receipt: { plan file:<br/>task, revision, sections[ id, title, body ] }"]
+  DRAFT_PLAN_FILE_RECEIPT_TRUSTED --> CODEX_REVIEWS_PLAN["codex reviews the plan"]
+  IS_PLAN_FILE_VALID_NO -- "exit type: run-failed<br/>exit note: the plan file is malformed" --> VALIDATOR_FAILURE_OUTPUT
+  CODEX_REVIEWS_PLAN --> CODEX_REVIEW_OUTPUT["Output"]
+  CODEX_REVIEW_OUTPUT --> CODEX_REVIEW_RECEIPT["Receipt: { codex review:<br/>verdict, notes, amendments[] }"]
+  CODEX_REVIEW_RECEIPT --> IS_REVIEW_FILE_VALID{"is the review file structure valid?"}
+  IS_REVIEW_FILE_VALID --> IS_REVIEW_FILE_VALID_YES["YES"]
+  IS_REVIEW_FILE_VALID --> IS_REVIEW_FILE_VALID_NO["NO"]
+  IS_REVIEW_FILE_VALID_YES --> CODEX_REVIEW_OUTPUT_TRUSTED["Output"]
+  CODEX_REVIEW_OUTPUT_TRUSTED --> CODEX_REVIEW_RECEIPT_TRUSTED["Receipt: { codex review:<br/>verdict, notes, amendments[] }"]
+  CODEX_REVIEW_RECEIPT_TRUSTED --> WHAT_IS_REVIEW_VERDICT{"what is the review verdict?"}
+  IS_REVIEW_FILE_VALID_NO -- "exit type: run-failed<br/>exit note: the codex review is malformed" --> VALIDATOR_FAILURE_OUTPUT
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_SCRAP["SCRAP"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_AMEND["AMEND"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_ACCEPT["ACCEPT"]
 
-  SCRAP --> QSCRAP{"First Time Scrap?"}
-  QSCRAP -- yes --> NOTES["script adds the codex scrap<br/>notes to the task brief"]
-  NOTES --> P
-  QSCRAP -- no --> SCRAP2["Second Time Scrap"]
-  SCRAP2 -- "exit type: plan-scrapped<br/>exit note: codex scrapped<br/>the plan twice" --> EXITWF
+  VERDICT_SCRAP --> IS_FIRST_TIME_SCRAP{"First Time Scrap?"}
+  IS_FIRST_TIME_SCRAP --> IS_FIRST_TIME_SCRAP_YES["YES"]
+  IS_FIRST_TIME_SCRAP --> IS_FIRST_TIME_SCRAP_NO["NO"]
+  IS_FIRST_TIME_SCRAP_YES --> ADD_SCRAP_NOTES_TO_BRIEF["script adds the codex scrap<br/>notes to the task brief"]
+  ADD_SCRAP_NOTES_TO_BRIEF --> PLAN_THE_TASK
+  IS_FIRST_TIME_SCRAP_NO --> PLAN_SCRAPPED_2X["Second Time Scrap"]
+  PLAN_SCRAPPED_2X -- "exit type: plan-scrapped<br/>exit note: codex scrapped<br/>the plan twice" --> EXIT_WORKFLOW
 
-  AMEND --> AM["script applies codex<br/>amendments to the plan"]
-  AM --> QAM{"2 amend rounds done?"}
-  QAM -- "no: re-review the amended plan" --> R
-  QAM -- yes --> RECEIPT
+  VERDICT_AMEND --> APPLY_CODEX_AMENDMENTS["Try: script applies codex<br/>amendments to the plan"]
+  APPLY_CODEX_AMENDMENTS --> ARE_2_AMEND_ROUNDS_DONE{"2 amend rounds done?"}
+  ARE_2_AMEND_ROUNDS_DONE --> ARE_2_AMEND_ROUNDS_DONE_YES["YES"]
+  ARE_2_AMEND_ROUNDS_DONE --> ARE_2_AMEND_ROUNDS_DONE_NO["NO"]
+  ARE_2_AMEND_ROUNDS_DONE_YES --> FINISHED_PLAN_OUTPUT
+  ARE_2_AMEND_ROUNDS_DONE_NO -- "re-review the amended plan" --> CODEX_REVIEWS_PLAN
 
-  ACCEPT --> RECEIPT["Receipt: { plan file }"]
+  VERDICT_ACCEPT --> FINISHED_PLAN_OUTPUT["Output"]
+  FINISHED_PLAN_OUTPUT --> FINISHED_PLAN_RECEIPT["Receipt: { plan file }"]
+  FINISHED_PLAN_RECEIPT --> IS_FINISHED_PLAN_RECEIPT_VALID{"is the finished plan receipt structure valid?"}
+  IS_FINISHED_PLAN_RECEIPT_VALID --> IS_FINISHED_PLAN_RECEIPT_VALID_YES["YES"]
+  IS_FINISHED_PLAN_RECEIPT_VALID --> IS_FINISHED_PLAN_RECEIPT_VALID_NO["NO"]
+  IS_FINISHED_PLAN_RECEIPT_VALID_YES --> FINISHED_PLAN_OUTPUT_TRUSTED["Output"]
+  FINISHED_PLAN_OUTPUT_TRUSTED --> FINISHED_PLAN_RECEIPT_TRUSTED["Receipt: { plan file }"]
+  IS_FINISHED_PLAN_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the finished plan<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
 
-  EXITWF["exit workflow"] --> FAIL_RECEIPT["Receipt: { exitType, exitNote, problem }"]
+  VALIDATOR_FAILURE_OUTPUT["Output"] --> VALIDATOR_FAILURE_RECEIPT["Receipt: { exitType, exitNote }"]
+  VALIDATOR_FAILURE_RECEIPT --> EXIT_WORKFLOW
 
+  EXIT_WORKFLOW["exit workflow"] --> EXIT_OUTPUT["Output"]
+  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { exitType, exitNote, problem }"]
+
+  %% pass/nopass: green is the branch that keeps heading for the receipt,
+  %% red is the branch that ends in the exit workflow.
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
-  classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef receipt fill:#ffffff,stroke:#333333,color:#000000
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef verdict fill:#4a4a4a,stroke:#8a8a8a,color:#ffffff
-  class SCRAP,AMEND,ACCEPT,SCRAP2 verdict
-  class VALP,VALR,QR,QSCRAP,AM,QAM,NOTES script
-  class P,R prose
-  class EXITWF fail
-  class INPUT,PLANFILE,REVIEW,RECEIPT,FAIL_RECEIPT output
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class IS_PLAN_FILE_VALID,IS_REVIEW_FILE_VALID,WHAT_IS_REVIEW_VERDICT,IS_FIRST_TIME_SCRAP,ARE_2_AMEND_ROUNDS_DONE,IS_FINISHED_PLAN_RECEIPT_VALID,VERDICT_AMEND decision
+  class APPLY_CODEX_AMENDMENTS,ADD_SCRAP_NOTES_TO_BRIEF script
+  class PLAN_THE_TASK,CODEX_REVIEWS_PLAN agent
+  class PLAN_SCRAPPED_2X verdict
+  class IS_FIRST_TIME_SCRAP_YES,ARE_2_AMEND_ROUNDS_DONE_YES,ARE_2_AMEND_ROUNDS_DONE_NO,IS_PLAN_FILE_VALID_YES,IS_REVIEW_FILE_VALID_YES,IS_FINISHED_PLAN_RECEIPT_VALID_YES,VERDICT_ACCEPT pass
+  class IS_FIRST_TIME_SCRAP_NO,IS_PLAN_FILE_VALID_NO,IS_REVIEW_FILE_VALID_NO,IS_FINISHED_PLAN_RECEIPT_VALID_NO,VERDICT_SCRAP nopass
+  class EXIT_WORKFLOW fail
+  class ACTIVE_TASK_WORKTREE_INPUT,FINISHED_PLAN_OUTPUT_TRUSTED,EXIT_OUTPUT,DRAFT_PLAN_FILE_OUTPUT,DRAFT_PLAN_FILE_OUTPUT_TRUSTED,CODEX_REVIEW_OUTPUT,CODEX_REVIEW_OUTPUT_TRUSTED,FINISHED_PLAN_OUTPUT,VALIDATOR_FAILURE_OUTPUT output
+  class DRAFT_PLAN_FILE_RECEIPT,CODEX_REVIEW_RECEIPT,FINISHED_PLAN_RECEIPT,EXIT_RECEIPT,DRAFT_PLAN_FILE_RECEIPT_TRUSTED,CODEX_REVIEW_RECEIPT_TRUSTED,FINISHED_PLAN_RECEIPT_TRUSTED,VALIDATOR_FAILURE_RECEIPT receipt

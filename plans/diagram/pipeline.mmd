@@ -8,8 +8,9 @@ flowchart TB
 %% The dotted arrow out of each block is that block's early exit, drawn as one
 %% arrow here. The exit types it carries are listed in that block's own file.
 %% Every "exit workflow" box is the SAME workflow, drawn once per caller so the
-%% arrows stay readable. Red is its failure tail, green its success tail.
-%% The solid arrow between two blocks is the artifact the first hands the second.
+%% arrows stay readable.
+%% Every pipeline emits a white Receipt block, on both paths: the success receipt
+%% is the next pipeline's input, the failure receipt is the exit workflow's.
 %% Exit types, one per path that reaches [stop]:
 %%   completed          - archived to completedTasks.json
 %%   invalid-number     - not in tasks.json or completedTasks.json
@@ -26,25 +27,36 @@ flowchart TB
 %%   run-failed         - a script failed operationally; can leave ANY green box
 %%                        in any pipeline
 
-  NUM["Input: { task number }"] --> PRE["preamble pipeline"]
-  PRE -- "Receipt: { active task, initialized worktree }" --> PLANP["planning pipeline"]
-  PLANP -- "Receipt: { plan file }" --> IMPL["implement and test pipeline"]
-  IMPL -- "Receipt: { finished implementation, source repo lock }" --> RM["rebase and merge pipeline"]
-  RM -- "Receipt: { merge commit hashes, modified files }" --> EXITOK["exit workflow"]
-  EXITOK --> STOP["stop"]
+  TASK_NUMBER_INPUT["Input: { task number }"] --> PREAMBLE_PIPELINE["preamble pipeline"]
+  PREAMBLE_PIPELINE --> PREAMBLE_PIPELINE_SUCCESS["SUCCESS"] --> ACTIVE_TASK_WORKTREE_RECEIPT["Receipt: { active task, initialized worktree }"]
+  ACTIVE_TASK_WORKTREE_RECEIPT --> PLANNING_PIPELINE["planning pipeline"]
+  PLANNING_PIPELINE --> PLANNING_PIPELINE_SUCCESS["SUCCESS"] --> PLAN_FILE_RECEIPT["Receipt: { plan file }"]
+  PLAN_FILE_RECEIPT --> IMPLEMENT_AND_TEST_PIPELINE["implement and test pipeline"]
+  IMPLEMENT_AND_TEST_PIPELINE --> IMPLEMENT_AND_TEST_PIPELINE_SUCCESS["SUCCESS"] --> FINISHED_IMPLEMENTATION_RECEIPT["Receipt: { finished implementation, source repo lock }"]
+  FINISHED_IMPLEMENTATION_RECEIPT --> REBASE_AND_MERGE_PIPELINE["rebase and merge pipeline"]
+  REBASE_AND_MERGE_PIPELINE --> REBASE_AND_MERGE_PIPELINE_SUCCESS["SUCCESS"] --> MERGE_RECEIPT["Receipt: { merge commit hashes, modified files }"]
+  MERGE_RECEIPT --> EXIT_WORKFLOW_SUCCESS["exit workflow"]
+  EXIT_WORKFLOW_SUCCESS --> STOP["stop"]
 
-  PRE -. "Receipt: { exitType, exitNote }" .-> EXITPRE["exit workflow"]
-  PLANP -. "Receipt: { exitType, exitNote }" .-> EXITPLAN["exit workflow"]
-  IMPL -. "Receipt: { exitType, exitNote }" .-> EXITIMPL["exit workflow"]
-  RM -. "Receipt: { exitType, exitNote }" .-> EXITRM["exit workflow"]
-  EXITPRE --> STOP
-  EXITPLAN --> STOP
-  EXITIMPL --> STOP
-  EXITRM --> STOP
+  PREAMBLE_PIPELINE -.-> PREAMBLE_PIPELINE_FAIL["FAILED"]
+  PREAMBLE_PIPELINE_FAIL --> PIPELINE_FAILURE_RECEIPT["Receipt: { exitType, exitNote }"]
+  PIPELINE_FAILURE_RECEIPT --> EXIT_WORKFLOW_FAILURE["exit workflow"]
+
+  PLANNING_PIPELINE -.-> PLANNING_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
+  IMPLEMENT_AND_TEST_PIPELINE -.-> IMPLEMENT_AND_TEST_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
+
+  REBASE_AND_MERGE_PIPELINE -.-> REBASE_AND_MERGE_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
+  EXIT_WORKFLOW_FAILURE --> STOP
 
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef receipt fill:#ffffff,stroke:#333333,color:#000000
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class PRE,PLANP,IMPL,RM,EXITOK pipeline
-  class EXITPRE,EXITPLAN,EXITIMPL,EXITRM fail
-  class NUM,STOP output
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  classDef pass fill:#00ff00,stroke:#6d1a12,color:#000000
+  class PREAMBLE_PIPELINE,PLANNING_PIPELINE,IMPLEMENT_AND_TEST_PIPELINE,REBASE_AND_MERGE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class ACTIVE_TASK_WORKTREE_RECEIPT,PLAN_FILE_RECEIPT,FINISHED_IMPLEMENTATION_RECEIPT,MERGE_RECEIPT,PIPELINE_FAILURE_RECEIPT receipt
+  class PREAMBLE_PIPELINE_SUCCESS,PLANNING_PIPELINE_SUCCESS,IMPLEMENT_AND_TEST_PIPELINE_SUCCESS,REBASE_AND_MERGE_PIPELINE_SUCCESS pass
+  class PREAMBLE_PIPELINE_FAIL,PLANNING_PIPELINE_FAIL,IMPLEMENT_AND_TEST_PIPELINE_FAIL,REBASE_AND_MERGE_PIPELINE_FAIL nopass
+  class EXIT_WORKFLOW_FAILURE fail
+  class TASK_NUMBER_INPUT,STOP output
