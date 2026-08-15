@@ -1,9 +1,6 @@
-// Writes plans/diagram/pipeline-output-<N>.md: the exact body SkillBodyEmitter prints for one
-// task number, every line annotated with the SkillBodyEmitter.ts line it came from.
+// Writes plans/diagram/pipeline-output-<N>.md: the emitted body, annotated with its source lines.
 //
-// N is found the way the user asked: run the real workflow for this task's codepath, take the
-// pipeline block it prints, and match that block against the named fixtures in
-// scripts/tracePipelinePaths.json. The matching fixture's 1-based position is N.
+// N is the 1-based position of the scripts/tracePipelinePaths.json fixture whose block matches.
 //
 // Usage: node scripts/tackle-tasks/emitPipelineOutput.ts <taskNumber> [projectRoot]
 import { readFileSync, writeFileSync } from "node:fs";
@@ -29,8 +26,7 @@ const OUTPUT_DIR = join(REPO_ROOT, "plans/diagram/output renders");
 const PROBE_RUN_ID = "pipeline-output-probe";
 
 // ---------------------------------------------------------------------------
-// Preamble decisions, derived read-only. Nothing below mutates tasks.json or the worktree:
-// a generator that marks your task active as a side effect is a trap.
+// Preamble decisions, derived read-only: nothing below mutates tasks.json or the worktree.
 // ---------------------------------------------------------------------------
 
 type Decisions = Record<string, unknown>;
@@ -66,8 +62,7 @@ function derivePreambleDecisions(taskNumber: number, projectRoot: string): Decis
     return decisions;
 }
 
-// The downstream keys — codex verdicts, test outcomes, lock races — cannot be predicted from a
-// task number, so they come from an existing fixture rather than being invented here.
+// Downstream keys cannot be predicted from a task number, so a fixture supplies them.
 function withDownstreamDefaults(preamble: Decisions): Decisions {
     const base = readNamedPaths()["safe-existing-worktree"] as unknown as Decisions;
     return { ...base, ...preamble };
@@ -89,8 +84,7 @@ async function runWorkflow(fake: Decisions): Promise<string[]> {
     }, () => {});
 }
 
-// The fixtures all carry taskNumber 42, which the trace's first line prints, so the real task
-// number is substituted into each fixture before comparing rather than stripped from the trace.
+// Every fixture carries taskNumber 42, so the real number is substituted before comparing.
 export function matchPathNumber(trace: string[], taskNumber: number): { number: number; name: string } {
     const wanted = JSON.stringify(trace);
     const entries = Object.entries(readNamedPaths());
@@ -102,8 +96,7 @@ export function matchPathNumber(trace: string[], taskNumber: number): { number: 
 }
 
 // ---------------------------------------------------------------------------
-// Annotate. skillBody() is one template literal, so output line i is source line start+i —
-// computed from the source, never hand-mapped.
+// skillBody() is one template literal, so output line i is source line start+i.
 // ---------------------------------------------------------------------------
 
 function templateFirstLine(): number {
@@ -114,15 +107,15 @@ function templateFirstLine(): number {
     return index + 1;
 }
 
-export function annotatedBody(taskNumber: number): string {
+export function annotatedBody(taskNumber: number, projectRoot: string): string {
     const start = templateFirstLine();
-    return skillBody(`[${taskNumber}]`, REPO_ROOT)
+    return skillBody(`[${taskNumber}]`, projectRoot)
         .split("\n")
         .map((line, offset) => (line === "" ? line : `<!-- ${EMITTER_NAME}:${start + offset} -->\n${line}`))
         .join("\n");
 }
 
-function render(taskNumber: number, path: { number: number; name: string }, trace: string[]): string {
+function render(taskNumber: number, projectRoot: string, path: { number: number; name: string }, trace: string[]): string {
     return `<!-- PATH ${path.number} — ${path.name}   |   input: [${taskNumber}]
 
      Pipeline block printed by skills/tackle-tasks/tackle-tasks.workflow.js for this codepath,
@@ -134,7 +127,7 @@ ${trace.map((line) => `       ${line}`).join("\n")}
      stripping them leaves the body byte-faithful. Craft this into what SHOULD print for this path.
 -->
 
-${annotatedBody(taskNumber)}`;
+${annotatedBody(taskNumber, projectRoot)}`;
 }
 
 export async function writePipelineOutput(taskNumber: number, projectRoot: string): Promise<string> {
@@ -142,7 +135,7 @@ export async function writePipelineOutput(taskNumber: number, projectRoot: strin
     const trace = await runWorkflow(decisions);
     const path = matchPathNumber(trace, taskNumber);
     const file = join(OUTPUT_DIR, `pipeline-output-${path.number}.md`);
-    writeFileSync(file, render(taskNumber, path, trace));
+    writeFileSync(file, render(taskNumber, projectRoot, path, trace));
     return file;
 }
 

@@ -1,5 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts and skills/tackle-tasks/resolve.workflow.js.
-// Run: node --test tests/tackle-tasks/SkillBodyEmitter.test.ts
+// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts and skills/tackle-tasks/resolve.workflow.js.  Run: node --test tests/tackle-tasks/SkillBodyEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -13,7 +12,6 @@ import { skillBody } from "../../scripts/tackle-tasks/SkillBodyEmitter.ts";
 import { acquireSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 
 const emitterPath = fileURLToPath(new URL("../../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
-const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/, "");
 const skillMdPath = fileURLToPath(new URL("../../skills/tackle-tasks/SKILL.md", import.meta.url));
 const resolveWorkflowPath = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 
@@ -22,17 +20,19 @@ after(() => {
     for (const directory of temporaryDirectories) rmSync(directory, { recursive: true, force: true });
 });
 
-// A real repository standing in for the project the skill is invoked on, distinct from this
-// plugin checkout, so a project-root bug cannot hide behind the two paths being the same.
-const makeTargetRepository = (): string => {
+// A real repository standing in for the project, distinct from this plugin checkout.
+const makeTargetRepository = (taskNumbers: number[] = [1]): string => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "skillBody-target-")));
     temporaryDirectories.push(root);
     const git = (...gitArguments: string[]) => execFileSync("git", ["-C", root, ...gitArguments], { encoding: "utf8" });
     git("init", "-b", "master");
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "Test");
-    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 1, title: "Target task" }]));
-    git("add", "tasks.json");
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    const tasks = taskNumbers.map((taskNumber) => ({ taskNumber, title: `Target task ${taskNumber}` }));
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify(tasks));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), JSON.stringify([]));
+    git("add", ".taskTools");
     git("commit", "-m", "initial");
     return root;
 };
@@ -58,13 +58,12 @@ const runResolveWorkflow = async (
     return { result, prompts, schemas };
 };
 
-// A main agent told to run any emitter with Bash keeps that output in the main context,
-// which is the leak the whole chain exists to prevent.
+// An emitter run by the main agent leaks its output into the main context.
 const namesAnEmitterBashCommand = (body: string): boolean => /node\s+"?[^"\s]*Emitter\.ts/.test(body);
 
 test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     // Verification: the emitted brief is ready to run, with nothing left for a shell to expand.
     assert.ok(brief.trim().length > 0);
@@ -76,9 +75,7 @@ test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyPreambleChecks", () =>
     // Setup: the emitter's own source is the boundary under test.
     const source = readFileSync(emitterPath, "utf8");
 
-    // Verification: still no subprocess. Relative imports are now allowed, but only the preamble
-    // checks the emitter must run to decide whether a body is worth generating at all — never the
-    // bulk data scripts, whose output is exactly what the workflow boundary exists to contain.
+    // Verification: still no subprocess, and only the preamble checks are imported.
     assert.doesNotMatch(source, /execFileSync|spawn/);
     const relativeImports = [...source.matchAll(/from "\.\/([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(relativeImports.sort(), ["PreambleDataEmitter.ts", "WorkflowResultCodes.ts", "resolveTaskRun.ts"]);
@@ -86,7 +83,7 @@ test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyPreambleChecks", () =>
 
 test("test_skillBody_replacesTheWholeBodyWithOneLineWhenATaskNumberIsInNoTaskStore", () => {
     // Setup: a task number present in neither tasks.json nor completedTasks.json.
-    const brief = skillBody("[191]", repositoryRoot);
+    const brief = skillBody("[191]", makeTargetRepository([74]));
 
     // Verification: nothing to resolve, launch, merge or commit — so none of it is emitted.
     assert.equal(brief, "Say: '191 not found in `.taskTools/tasks.json`'\n");
@@ -104,7 +101,7 @@ test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
 
 test("test_skillBody_namesNoDataScriptAndNoTaskFile", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     // Verification: the main agent never learns of a data script or a task file.
     assert.doesNotMatch(brief, /checkBlockers\.ts/);
@@ -116,7 +113,7 @@ test("test_skillBody_namesNoDataScriptAndNoTaskFile", () => {
 
 test("test_skillBody_usesNoBootstrapPrepareMode", () => {
     // The plan forbids bootstrap's prepare mode: it takes worktree leases before preflight runs.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     assert.doesNotMatch(brief, /bootstrap/i);
     assert.doesNotMatch(brief, /"mode": *"prepare"/);
@@ -124,7 +121,7 @@ test("test_skillBody_usesNoBootstrapPrepareMode", () => {
 
 test("test_skillBody_emitsTheResolverWorkflowPath", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     // Verification: the resolver runs as a workflow, carrying the arguments as an argument value.
     assert.ok(brief.includes(resolveWorkflowPath), "the resolver workflow path must appear in the brief");
@@ -134,7 +131,7 @@ test("test_skillBody_emitsTheResolverWorkflowPath", () => {
 
 test("test_skillBody_emitsOneWorkflowLaunchPerTaskNumber", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[35,36]", repositoryRoot);
+    const brief = skillBody("[35,36]", makeTargetRepository([35, 36]));
 
     // Test action: count the task-workflow launch templates in the brief.
     const launchTemplates = brief.split("tackle-tasks.workflow.js").length - 1;
@@ -148,7 +145,7 @@ test("test_skillBody_emitsOneWorkflowLaunchPerTaskNumber", () => {
 
 test("test_skillBody_tellsTheAgentTasksMayRunConcurrentlyBehindTheSourceRepositoryLock", () => {
     // Nobody may reintroduce a merge queue: the source-repository lock is what serializes the tails.
-    const brief = skillBody("[35,36]", repositoryRoot);
+    const brief = skillBody("[35,36]", makeTargetRepository([35, 36]));
 
     assert.match(brief, /concurrent/i);
     assert.match(brief, /source-repository lock/);
@@ -157,7 +154,7 @@ test("test_skillBody_tellsTheAgentTasksMayRunConcurrentlyBehindTheSourceReposito
 
 test("test_skillBody_reportsEachRunsExitTypeAndExitNote", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     // Verification: the report format names the two fields the workflow returns.
     assert.match(brief, /\{task, exitType, exitNote, chainRan\}/);
@@ -171,7 +168,7 @@ test("test_skillBodyEmitter_failsLoudlyOnEmptyStdin", () => {
 
 test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
     // The resolver script is named on the agent side of the boundary, never in the main agent's brief.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     assert.doesNotMatch(brief, /resolveTaskRun\.ts/);
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
@@ -207,7 +204,7 @@ test("test_skillBodyEmitter_resolvesTheRepositoryTopLevelWhenInvokedFromANestedD
 
 test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[74]", repositoryRoot);
+    const brief = skillBody("[74]", makeTargetRepository([74]));
 
     // Verification: both v1.1 sections the v1.5 rewrite dropped are back, byte-faithful.
     assert.match(brief, /Invoke `\/ponytail:ponytail ultra`\./);
@@ -219,9 +216,8 @@ test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () 
 });
 
 test("test_skillBody_declaresAWorkflowRatherThanAMainAgentEmitterCommand", () => {
-    // Setup: the real brief, plus a negative fixture for the forbidden
-    // SkillBodyEmitter -> main-agent Bash -> AnotherEmitter chain.
-    const brief = skillBody("[74]", repositoryRoot);
+    // Setup: the real brief, plus a negative fixture for the forbidden SkillBodyEmitter -> main-agent Bash -> AnotherEmitter chain.
+    const brief = skillBody("[74]", makeTargetRepository([74]));
     const forbiddenChain = 'Run `node "/abs/scripts/tackle-tasks/AgentPromptEmitter.ts" 75 plan` with Bash.';
 
     // Verification: the checker catches the forbidden chain, and the real brief does not trip it.

@@ -105,7 +105,7 @@ function readString(stepInput: Record<string, unknown>, field: string): string |
 // in greenBoxPolicy has an entry here, which test_greenBoxPolicy_hasAReconciliationHandlerFor... asserts.
 type Handler = (input: ReconcileStepInput) => ReconcileStepOutput;
 
-function reconcileClaimTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
+function reconcileIsTaskActive(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     if (state === null) return notCompleted("the task is not in tasks.json, so no claim is held");
     const newest = state.history[state.history.length - 1];
@@ -544,7 +544,7 @@ function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
 const HANDLERS: Record<string, Handler> = {
     advanceTaskRebase: (input) => reconcileRebase(input, true),
     applyPlanAmendments: reconcileApplyPlanAmendments,
-    claimTaskRun: reconcileClaimTaskRun,
+    isTaskActive: reconcileIsTaskActive,
     cleanupTaskWorktree: reconcileCleanupTaskWorktree,
     closeTaskRun: reconcileCloseTaskRun,
     commitTaskWork: reconcileCommitTaskWork,

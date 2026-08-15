@@ -11,7 +11,7 @@ import { cleanupTaskWorktree } from "../../scripts/tackle-tasks/cleanupTaskWorkt
 import { commitTaskWork } from "../../scripts/tackle-tasks/commitTaskWork.ts";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
 import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.ts";
-import { claimTaskRun } from "../../scripts/tackle-tasks/claimTaskRun.ts";
+import { isTaskActive } from "../../scripts/tackle-tasks/isTaskActive.ts";
 import { generateTaskDocs } from "../../scripts/tackle-tasks/generateTaskDocs.ts";
 import { updateTaskDocs } from "../../scripts/tackle-tasks/updateTaskDocs.ts";
 import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
@@ -783,18 +783,18 @@ test("test_reconcileStep_rejectsANotesFileDeletedAfterTheMutationConsistentlyFor
 // declared Output type field-for-field.
 
 test("test_reconcileStep_recognizesAnActiveClaimAfterALostResult", () => {
-    // Setup: a real claim, via the actual claimTaskRun script.
+    // Setup: a real claim, via the actual isTaskActive script.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-claim-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
-    const realOutput = claimTaskRun(1, "run-a", root);
+    const realOutput = isTaskActive(1, "run-a", root);
     assert.equal(realOutput.status, "claimed");
 
     // Test action: reconcile as if the box's stdout had been lost.
     const result = reconcileStep(baseInput({
-        script: "claimTaskRun", taskNumber: 1, runId: "run-a", projectRoot: root,
+        script: "isTaskActive", taskNumber: 1, runId: "run-a", projectRoot: root,
     }));
 
-    // Verification: the reconstructed result matches ClaimTaskRunOutput field-for-field.
+    // Verification: the reconstructed result matches IsTaskActiveOutput field-for-field.
     assert.equal(result.status, "completed");
     assert.deepEqual(result.result, { status: "claimed", heldByRunId: null });
 });
@@ -803,10 +803,10 @@ test("test_reconcileStep_reportsNotCompletedWhenNoClaimIsActiveUnderThisRun", ()
     // Setup: the task is claimed under a DIFFERENT run - this run's claim plainly never happened.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-claim-none-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
-    assert.equal(claimTaskRun(1, "run-other", root).status, "claimed");
+    assert.equal(isTaskActive(1, "run-other", root).status, "claimed");
 
     const result = reconcileStep(baseInput({
-        script: "claimTaskRun", taskNumber: 1, runId: "run-a", projectRoot: root,
+        script: "isTaskActive", taskNumber: 1, runId: "run-a", projectRoot: root,
     }));
 
     assert.equal(result.status, "not-completed");
@@ -1237,7 +1237,7 @@ test("test_reconcileStep_reportsNotCompletedWhenExitNotesPlainlyWereNotWritten",
 const FAULT_INJECTION_CASES: Record<string, string[]> = {
     advanceTaskRebase: ["test_reconcileStep_recognizesAFinishedAdvanceAfterALostResult"],
     applyPlanAmendments: ["test_reconcileStep_recognizesAnAlreadyAppliedAmendment"],
-    claimTaskRun: ["test_reconcileStep_recognizesAnActiveClaimAfterALostResult"],
+    isTaskActive: ["test_reconcileStep_recognizesAnActiveClaimAfterALostResult"],
     cleanupTaskWorktree: ["test_reconcileStep_recognizesACompletedCleanup"],
     closeTaskRun: ["test_reconcileStep_recognizesACompletedArchiveAfterALostResult"],
     commitTaskWork: ["test_reconcileStep_recognizesACompletedCommitWhenOneLayerHadNothingToCommit"],

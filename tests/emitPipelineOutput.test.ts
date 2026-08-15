@@ -1,13 +1,28 @@
 // Run: node --test tests/emitPipelineOutput.test.ts
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { annotatedBody, matchPathNumber } from "../scripts/tackle-tasks/emitPipelineOutput.ts";
 import { skillBody } from "../scripts/tackle-tasks/SkillBodyEmitter.ts";
 import { traceTaskPipeline, readNamedPaths } from "../scripts/tracePipeline.ts";
 
-const repositoryRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
+const temporaryDirectories: string[] = [];
+after(() => {
+    for (const directory of temporaryDirectories) rmSync(directory, { recursive: true, force: true });
+});
+
+// A throwaway repository, so emitting a body never marks a real task active.
+const makeTargetRepository = (taskNumber: number): string => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "emitPipelineOutput-")));
+    temporaryDirectories.push(root);
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "Target task" }]));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), JSON.stringify([]));
+    return root;
+};
 
 const emitterSource = readFileSync(
     fileURLToPath(new URL("../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url)),
@@ -19,21 +34,19 @@ const stripAnnotations = (body: string): string =>
 
 test("test_annotatedBody_leavesTheEmittedBodyByteFaithfulOnceCommentsAreStripped", () => {
     // The file is a thing to craft, so the annotations must add nothing the emitter did not print.
-    assert.equal(stripAnnotations(annotatedBody(74)), skillBody("[74]", repositoryRoot));
+    assert.equal(stripAnnotations(annotatedBody(74, makeTargetRepository(74))), skillBody("[74]", makeTargetRepository(74)));
 });
 
 test("test_annotatedBody_pointsEachLineAtTheSourceLineThatEmittedIt", () => {
     // Setup: pair every annotation with the body line directly beneath it.
-    const lines = annotatedBody(74).split("\n");
+    const lines = annotatedBody(74, makeTargetRepository(74)).split("\n");
 
-    // Verification: the cited source line really does hold that text, so an edit to the emitter's
-    // template cannot silently shift every annotation by one.
+    // Verification: the cited source line really holds that text, so annotations cannot shift.
     let checked = 0;
     for (let index = 0; index < lines.length - 1; index += 1) {
         const cited = /^<!-- SkillBodyEmitter\.ts:(\d+) -->$/.exec(lines[index]);
         if (cited === null) continue;
-        // The source escapes backticks and interpolates paths, so only the body line's opening
-        // run of plain text is guaranteed to appear there verbatim.
+        // Only a line's opening run of plain text appears in the source verbatim.
         const plain = lines[index + 1].split(/[`$]/)[0].trim().slice(0, 20);
         if (plain.length < 8) continue;
         assert.ok(

@@ -1,13 +1,10 @@
-// The skill body for tackle-tasks v1.5: paths and prose only, never a subprocess and never task data.
-// The only legal chain is SkillBodyEmitter -> Workflow -> agent(...) -> AgentPromptEmitter.
-// See plans/tackle-tasks-v1_5-plan.md §Phase 11 and plans/workflow-only-context-injection.md §4, §5, §7.
+// The tackle-tasks skill body: paths and prose only, never a subprocess and never task data.
 //
-// The emitter also runs the preamble's checks, so a preamble that fails can skip body generation
-// altogether: an invalid task number has nothing to resolve, launch, merge or commit, and every
-// line of the full body would be instructions for work that will never happen.
+// It also runs the preamble, so a failed check replaces the whole body with one line.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runPreamble } from "./PreambleDataEmitter.ts";
+import { generateRunId } from "../prepareTasks.ts";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
 
@@ -19,12 +16,12 @@ const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts
 const RESOLVE_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
-// The resolver workflow, not this brief, names the script it runs and resolves the project root:
-// both belong on the agent side of the boundary.
+// The resolver workflow, not this brief, names its script and resolves the project root.
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // ponytail: one task at a time for now — multiple tasks come later.
     const [taskNumber] = parseTaskNumberArgument(argsValue);
-    const preambleResult = runPreamble(taskNumber, projectRoot);
+    // ponytail: the resolver mints its own runId, so this one only marks the task active.
+    const preambleResult = runPreamble(taskNumber, generateRunId(), projectRoot);
     if (preambleResult.code === WorkflowResultCodes.DO_NOT_PROCEED) {
         return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
     }

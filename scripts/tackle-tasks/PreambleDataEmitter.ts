@@ -1,13 +1,7 @@
-// Emits the prompt text for one preamble-pipeline box (plans/diagram/pipeline-preamble.mmd).
-// Unlike AgentPromptEmitter (which hands a subagent bulk data to read itself), every box here
-// is a small script/decision whose real work IS the data script — so this emitter imports the
-// data script, runs it now, and bakes the small resolved result into the prompt. The subagent
-// running this file's stdout never touches the data script itself; only this emitter does, per
-// workflow-only-context-injection.md §2/§6. Every builder puts instructions first and the
-// resolved result in one final "---- DATA ----" section (§6: interpolate data last).
+// Emits the prompt text for one box of plans/diagram/pipeline-preamble.mmd, data baked in.
 import { readFileSync } from "node:fs";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
-import { claimTaskRun } from "./claimTaskRun.ts";
+import { isTaskActive } from "./isTaskActive.ts";
 import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
 import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
@@ -49,8 +43,7 @@ function requireString(payload: PreambleDataEmitterPayload, field: keyof Preambl
 }
 
 // ---------------------------------------------------------------------------
-// Shared prompt shape: the instructions and return contract come first, the resolved
-// result (already computed by this emitter) comes last, as the only thing "DATA" holds.
+// Shared prompt shape: instructions and return contract first, the resolved result last.
 // ---------------------------------------------------------------------------
 
 function resultPrompt(description: string, returnContract: string, result: unknown): string {
@@ -65,12 +58,11 @@ ${JSON.stringify(result)}`;
 
 // ---------------------------------------------------------------------------
 // The preamble's main function: walk the boxes and say whether the caller may keep going.
-// One box so far — the rest of pipeline-preamble.mmd lands here as it is wired up.
 // ---------------------------------------------------------------------------
 
 export type PreambleResult = { code: WorkflowResultCode; reason: string | null };
 
-export function runPreamble(taskNumber: number, projectRoot: string): PreambleResult {
+export function runPreamble(taskNumber: number, runId: string, projectRoot: string): PreambleResult {
     const taskNumberCheck = isTaskNumberValid(taskNumber, projectRoot);
     if (!taskNumberCheck.valid) {
         return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason };
@@ -79,6 +71,11 @@ export function runPreamble(taskNumber: number, projectRoot: string): PreambleRe
     const blockedCheck = isTaskBlocked(taskNumber, projectRoot);
     if (blockedCheck.blocked) {
         return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason };
+    }
+
+    const activeCheck = isTaskActive(taskNumber, runId, projectRoot);
+    if (activeCheck.status !== "claimed") {
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason };
     }
 
     return { code: WorkflowResultCodes.PROCEED, reason: null };
@@ -99,13 +96,13 @@ export function emitPreambleData(taskNumber: number, mode: string, payload: Prea
                 result,
             );
         }
-        case "claim-task": {
+        case "task-active": {
             const projectRoot = requireString(payload, "projectRoot");
             const runId = requireString(payload, "runId");
-            const result = claimTaskRun(taskNumber, runId, projectRoot);
+            const result = isTaskActive(taskNumber, runId, projectRoot);
             return resultPrompt(
                 "The task's active/claimed status was just atomically checked and, if it was free, marked active for this run.",
-                '{"status": "claimed"|"refused"|"closing"|"not-found", "heldByRunId": <string|null>}',
+                '{"status": "claimed"|"refused"|"closing"|"not-found", "heldByRunId": <string|null>, "reason": <string|null>}',
                 result,
             );
         }
