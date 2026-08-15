@@ -1,3 +1,18 @@
+export const meta = {
+  name: 'tackle-task',
+  description: 'Drive one task from validation to merge, per plans/diagram/pipeline.mmd',
+  phases: [
+    { title: 'Preamble', detail: 'validate the number, mark the task active, prepare the worktree' },
+    { title: 'Planning', detail: 'write the plan, review it, apply amendments' },
+    { title: 'Implement and test', detail: 'implement, run the task tests, review them, lock the source repo' },
+    { title: 'Rebase and merge', detail: 'rebase, run the full suite, check the fence, merge' },
+    { title: 'Exit workflow', detail: 'record the outcome, release what is held, report' },
+  ],
+}
+
+// meta must be the very first thing in the file — the Workflow harness reads it as a pure
+// literal before evaluating anything else, so nothing may precede it, comments included.
+//
 // Drives one task from validation to merge. The shape of this file is dictated by
 // plans/diagram/*.mmd — every step() line below is a node label copied verbatim from a diagram.
 //
@@ -16,18 +31,6 @@
 // REAL MODE: deliberately not built. Every decision that would need a real reconciliation
 // script, a real structure validator, or a real git/test result routes through realDecisions(),
 // which throws naming the missing piece instead of silently taking the happy path.
-
-export const meta = {
-  name: 'tackle-task',
-  description: 'Drive one task from validation to merge, per plans/diagram/pipeline.mmd',
-  phases: [
-    { title: 'Preamble', detail: 'validate the number, mark the task active, prepare the worktree' },
-    { title: 'Planning', detail: 'write the plan, review it, apply amendments' },
-    { title: 'Implement and test', detail: 'implement, run the task tests, review them, lock the source repo' },
-    { title: 'Rebase and merge', detail: 'rebase, run the full suite, check the fence, merge' },
-    { title: 'Exit workflow', detail: 'record the outcome, release what is held, report' },
-  ],
-}
 
 // ---------------------------------------------------------------------------
 // Skeleton. Phase functions below use ONLY these helpers and invent nothing.
