@@ -15,24 +15,21 @@ function makeProjectRoot(openTasks: unknown[], completedTasks: unknown[]): strin
     return root;
 }
 
-test("test_isTaskNumberValid_reportsOpenWhenOnlyInTasksJson", () => {
+test("test_isTaskNumberValid_reportsValidWhenInTasksJson", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }], []);
-    assert.deepEqual(isTaskNumberValid(1, root), { valid: true, location: "open" });
+    assert.deepEqual(isTaskNumberValid(1, root), { valid: true, reason: null });
 });
 
-test("test_isTaskNumberValid_reportsCompletedWhenOnlyInCompletedTasksJson", () => {
+test("test_isTaskNumberValid_reportsInvalidWhenOnlyInCompletedTasksJson", () => {
+    // Completed work is not a task this skill can run, so being archived does not make it valid.
     const root = makeProjectRoot([], [{ taskNumber: 2 }]);
-    assert.deepEqual(isTaskNumberValid(2, root), { valid: true, location: "completed" });
+    assert.deepEqual(isTaskNumberValid(2, root), { valid: false, reason: "not found in `tasks.json`" });
 });
 
-test("test_isTaskNumberValid_reportsBothWhenInBothFiles", () => {
-    const root = makeProjectRoot([{ taskNumber: 3 }], [{ taskNumber: 3 }]);
-    assert.deepEqual(isTaskNumberValid(3, root), { valid: true, location: "both" });
-});
-
-test("test_isTaskNumberValid_reportsInvalidWhenInNeitherFile", () => {
-    const root = makeProjectRoot([{ taskNumber: 1 }], [{ taskNumber: 2 }]);
-    assert.deepEqual(isTaskNumberValid(999, root), { valid: false, location: null });
+test("test_isTaskNumberValid_reasonNamesTheTaskStoreThatWasActuallySearched", () => {
+    // The store is not always at the project root, so the reason must name the resolved file.
+    const root = makeProjectRoot([{ taskNumber: 1 }], []);
+    assert.deepEqual(isTaskNumberValid(999, root), { valid: false, reason: "not found in `tasks.json`" });
 });
 
 test("test_isTaskNumberValid_rejectsRelativeProjectRoot", () => {
@@ -47,5 +44,5 @@ test("test_isTaskNumberValid_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory
         [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskNumberValid.ts")],
         { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
-    assert.deepEqual(JSON.parse(stdout), { valid: true, location: "open" });
+    assert.deepEqual(JSON.parse(stdout), { valid: true, reason: null });
 });

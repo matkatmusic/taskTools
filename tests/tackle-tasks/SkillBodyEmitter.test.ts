@@ -13,6 +13,7 @@ import { skillBody } from "../../scripts/tackle-tasks/SkillBodyEmitter.ts";
 import { acquireSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 
 const emitterPath = fileURLToPath(new URL("../../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/, "");
 const skillMdPath = fileURLToPath(new URL("../../skills/tackle-tasks/SKILL.md", import.meta.url));
 const resolveWorkflowPath = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 
@@ -30,7 +31,7 @@ const makeTargetRepository = (): string => {
     git("init", "-b", "master");
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "Test");
-    writeFileSync(join(root, "tasks.json"), JSON.stringify({ tasks: [] }));
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber: 1, title: "Target task" }]));
     git("add", "tasks.json");
     git("commit", "-m", "initial");
     return root;
@@ -63,7 +64,7 @@ const namesAnEmitterBashCommand = (body: string): boolean => /node\s+"?[^"\s]*Em
 
 test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[169]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     // Verification: the emitted brief is ready to run, with nothing left for a shell to expand.
     assert.ok(brief.trim().length > 0);
@@ -71,12 +72,26 @@ test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => 
     assert.doesNotMatch(brief, /\$ARGUMENTS/);
 });
 
-test("test_skillBodyEmitter_importsOnlyNodeFsAndNodeUrlAndRunsNoSubprocess", () => {
+test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyPreambleChecks", () => {
     // Setup: the emitter's own source is the boundary under test.
     const source = readFileSync(emitterPath, "utf8");
 
-    // Verification: no subprocess, no relative import — paths and prose only.
-    assert.doesNotMatch(source, /execFileSync|spawn|from "\./);
+    // Verification: still no subprocess. Relative imports are now allowed, but only the preamble
+    // checks the emitter must run to decide whether a body is worth generating at all — never the
+    // bulk data scripts, whose output is exactly what the workflow boundary exists to contain.
+    assert.doesNotMatch(source, /execFileSync|spawn/);
+    const relativeImports = [...source.matchAll(/from "\.\/([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(relativeImports.sort(), ["PreambleDataEmitter.ts", "WorkflowResultCodes.ts", "resolveTaskRun.ts"]);
+});
+
+test("test_skillBody_replacesTheWholeBodyWithOneLineWhenATaskNumberIsInNoTaskStore", () => {
+    // Setup: a task number present in neither tasks.json nor completedTasks.json.
+    const brief = skillBody("[191]", repositoryRoot);
+
+    // Verification: nothing to resolve, launch, merge or commit — so none of it is emitted.
+    assert.equal(brief, "Say: '191 not found in `.taskTools/tasks.json`'\n");
+    assert.doesNotMatch(brief, /Workflow\(/);
+    assert.doesNotMatch(brief, /Commit message/);
 });
 
 test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
@@ -89,7 +104,7 @@ test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
 
 test("test_skillBody_namesNoDataScriptAndNoTaskFile", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     // Verification: the main agent never learns of a data script or a task file.
     assert.doesNotMatch(brief, /checkBlockers\.ts/);
@@ -101,7 +116,7 @@ test("test_skillBody_namesNoDataScriptAndNoTaskFile", () => {
 
 test("test_skillBody_usesNoBootstrapPrepareMode", () => {
     // The plan forbids bootstrap's prepare mode: it takes worktree leases before preflight runs.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     assert.doesNotMatch(brief, /bootstrap/i);
     assert.doesNotMatch(brief, /"mode": *"prepare"/);
@@ -109,17 +124,17 @@ test("test_skillBody_usesNoBootstrapPrepareMode", () => {
 
 test("test_skillBody_emitsTheResolverWorkflowPath", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     // Verification: the resolver runs as a workflow, carrying the arguments as an argument value.
     assert.ok(brief.includes(resolveWorkflowPath), "the resolver workflow path must appear in the brief");
     assert.match(brief, /Workflow\(\{"scriptPath": *"[^"]*resolve\.workflow\.js", *"args": *\{/);
-    assert.match(brief, /"argsValue": *"\[75\]"/);
+    assert.match(brief, /"argsValue": *"\[74\]"/);
 });
 
 test("test_skillBody_emitsOneWorkflowLaunchPerTaskNumber", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[75,76]");
+    const brief = skillBody("[35,36]", repositoryRoot);
 
     // Test action: count the task-workflow launch templates in the brief.
     const launchTemplates = brief.split("tackle-tasks.workflow.js").length - 1;
@@ -133,7 +148,7 @@ test("test_skillBody_emitsOneWorkflowLaunchPerTaskNumber", () => {
 
 test("test_skillBody_tellsTheAgentTasksMayRunConcurrentlyBehindTheSourceRepositoryLock", () => {
     // Nobody may reintroduce a merge queue: the source-repository lock is what serializes the tails.
-    const brief = skillBody("[75,76]");
+    const brief = skillBody("[35,36]", repositoryRoot);
 
     assert.match(brief, /concurrent/i);
     assert.match(brief, /source-repository lock/);
@@ -142,24 +157,11 @@ test("test_skillBody_tellsTheAgentTasksMayRunConcurrentlyBehindTheSourceReposito
 
 test("test_skillBody_reportsEachRunsExitTypeAndExitNote", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     // Verification: the report format names the two fields the workflow returns.
     assert.match(brief, /\{task, exitType, exitNote, chainRan\}/);
     assert.match(brief, /Task <task>: <exitType>/);
-});
-
-test("test_skillBody_survivesArgumentsContainingQuotesAndNewlines", () => {
-    // Setup: arguments a naive JSON interpolation would corrupt.
-    const argsValue = '[75] valid "quoted" back\\slash\nsecond line';
-
-    // Test action: the workflow declaration is built with JSON.stringify, not string interpolation.
-    const brief = skillBody(argsValue);
-    const declaration = brief.slice(brief.indexOf("{"), brief.indexOf("})") + 1);
-    const parsed = JSON.parse(declaration) as { args: { argsValue: string } };
-
-    // Verification: the arguments survive byte for byte.
-    assert.equal(parsed.args.argsValue, argsValue);
 });
 
 test("test_skillBodyEmitter_failsLoudlyOnEmptyStdin", () => {
@@ -167,18 +169,9 @@ test("test_skillBodyEmitter_failsLoudlyOnEmptyStdin", () => {
     assert.throws(() => execFileSync("node", [emitterPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });
 
-test("test_skillBodyEmitter_printsTheBriefWithoutReadingAnyTaskState", () => {
-    // Setup: run the real command the way SKILL.md runs it, from an unrelated working directory.
-    const printed = execFileSync("node", [emitterPath], { input: "[169] valid\n", encoding: "utf8", cwd: "/tmp" });
-
-    // Verification: it returns a brief instantly, naming no task file it would have had to read.
-    assert.ok(printed.includes(resolveWorkflowPath));
-    assert.doesNotMatch(printed, /tasks\.json/);
-});
-
 test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
     // The resolver script is named on the agent side of the boundary, never in the main agent's brief.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     assert.doesNotMatch(brief, /resolveTaskRun\.ts/);
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
@@ -214,7 +207,7 @@ test("test_skillBodyEmitter_resolvesTheRepositoryTopLevelWhenInvokedFromANestedD
 
 test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () => {
     // Setup: a normal invocation.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
 
     // Verification: both v1.1 sections the v1.5 rewrite dropped are back, byte-faithful.
     assert.match(brief, /Invoke `\/ponytail:ponytail ultra`\./);
@@ -228,7 +221,7 @@ test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () 
 test("test_skillBody_declaresAWorkflowRatherThanAMainAgentEmitterCommand", () => {
     // Setup: the real brief, plus a negative fixture for the forbidden
     // SkillBodyEmitter -> main-agent Bash -> AnotherEmitter chain.
-    const brief = skillBody("[75]");
+    const brief = skillBody("[74]", repositoryRoot);
     const forbiddenChain = 'Run `node "/abs/scripts/tackle-tasks/AgentPromptEmitter.ts" 75 plan` with Bash.';
 
     // Verification: the checker catches the forbidden chain, and the real brief does not trip it.

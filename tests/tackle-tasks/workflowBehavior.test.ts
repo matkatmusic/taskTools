@@ -39,7 +39,7 @@ const payloadOf = (prompt: string) => {
 
 // A run that reaches "completed" when nothing is overridden.
 const happyResponses: Record<string, unknown> = {
-    isTaskNumberValid: { valid: true, location: "open" },
+    isTaskNumberValid: { valid: true, reason: null },
     isTaskOpen: { open: true, closeInProgress: false },
     claimTaskRun: { status: "claimed", heldByRunId: null },
     isTaskBlocked: { blocked: false, blockers: [] },
@@ -318,7 +318,7 @@ test("test_workflow_doesNotRetryAReadOnlyBoxThatFailsOperationally", async () =>
 test("test_workflow_retriesAReadOnlyBoxThatLosesItsResult", async () => {
     // Setup: re-reading the world changes nothing, so a lost read-only result is re-spawned.
     const run = await runWorkflow({
-        isTaskNumberValid: (visit) => (visit < 3 ? null : { valid: true, location: "open" }),
+        isTaskNumberValid: (visit) => (visit < 3 ? null : { valid: true, reason: null }),
     });
 
     // Verification: three attempts, and the run carried on.
