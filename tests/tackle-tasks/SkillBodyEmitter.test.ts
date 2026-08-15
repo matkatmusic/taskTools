@@ -119,48 +119,6 @@ test("test_skillBody_usesNoBootstrapPrepareMode", () => {
     assert.doesNotMatch(brief, /"mode": *"prepare"/);
 });
 
-test("test_skillBody_emitsTheResolverWorkflowPath", () => {
-    // Setup: a normal invocation.
-    const brief = skillBody("[74]", makeTargetRepository([74]));
-
-    // Verification: the resolver runs as a workflow, carrying the arguments as an argument value.
-    assert.ok(brief.includes(resolveWorkflowPath), "the resolver workflow path must appear in the brief");
-    assert.match(brief, /Workflow\(\{"scriptPath": *"[^"]*resolve\.workflow\.js", *"args": *\{/);
-    assert.match(brief, /"argsValue": *"\[74\]"/);
-});
-
-test("test_skillBody_emitsOneWorkflowLaunchPerTaskNumber", () => {
-    // Setup: a normal invocation.
-    const brief = skillBody("[35,36]", makeTargetRepository([35, 36]));
-
-    // Test action: count the task-workflow launch templates in the brief.
-    const launchTemplates = brief.split("tackle-tasks.workflow.js").length - 1;
-
-    // Verification: exactly one template, applied once per entry of taskNumbers, never batched.
-    assert.equal(launchTemplates, 1);
-    assert.match(brief, /for every task number in `taskNumbers`/);
-    assert.match(brief, /"task": <task number>/);
-    assert.match(brief, /never batch/i);
-});
-
-test("test_skillBody_tellsTheAgentTasksMayRunConcurrentlyBehindTheSourceRepositoryLock", () => {
-    // Nobody may reintroduce a merge queue: the source-repository lock is what serializes the tails.
-    const brief = skillBody("[35,36]", makeTargetRepository([35, 36]));
-
-    assert.match(brief, /concurrent/i);
-    assert.match(brief, /source-repository lock/);
-    assert.match(brief, /merge queue/);
-});
-
-test("test_skillBody_reportsEachRunsExitTypeAndExitNote", () => {
-    // Setup: a normal invocation.
-    const brief = skillBody("[74]", makeTargetRepository([74]));
-
-    // Verification: the report format names the two fields the workflow returns.
-    assert.match(brief, /\{task, exitType, exitNote, chainRan\}/);
-    assert.match(brief, /Task <task>: <exitType>/);
-});
-
 test("test_skillBodyEmitter_failsLoudlyOnEmptyStdin", () => {
     // A brief built from missing arguments points nowhere, so an empty read must stop the run.
     assert.throws(() => execFileSync("node", [emitterPath], { input: "", encoding: "utf8", stdio: "pipe" }));
@@ -172,58 +130,6 @@ test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
 
     assert.doesNotMatch(brief, /resolveTaskRun\.ts/);
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
-});
-
-test("test_skillBodyEmitter_resolvesTheRepositoryTopLevelWhenInvokedFromANestedDirectory", () => {
-    // Setup: a target repository with a nested directory, distinct from this plugin checkout.
-    const targetRepository = makeTargetRepository();
-    const nestedDirectory = join(targetRepository, "scripts", "deeper");
-    mkdirSync(nestedDirectory, { recursive: true });
-
-    // Test action: run the real emitter, then the resolver boundary, both from the nested directory.
-    const brief = execFileSync("node", [emitterPath], { input: "[1]\n", encoding: "utf8", cwd: nestedDirectory });
-    const resolverPayload = JSON.parse(
-        brief.slice(brief.indexOf("{"), brief.indexOf("})") + 1),
-    ) as { args: { scriptsDir: string; projectRoot?: string } };
-    const resolved = JSON.parse(execFileSync(
-        "node",
-        [join(resolverPayload.args.scriptsDir, "resolveTaskRun.ts")],
-        { input: JSON.stringify({ args: "[1]" }), encoding: "utf8", cwd: nestedDirectory },
-    )) as { projectRoot: string; taskNumbers: number[] };
-
-    // Verification: the brief carries no project root at all, and the resolver reports the top level,
-    // so the source lock lands in the repository's real .git rather than in the nested directory.
-    assert.equal(resolverPayload.args.projectRoot, undefined);
-    assert.notEqual(resolverPayload.args.scriptsDir, join(targetRepository, "scripts"));
-    assert.equal(resolved.projectRoot, targetRepository);
-    assert.deepEqual(resolved.taskNumbers, [1]);
-    assert.deepEqual(acquireSourceRepoLock(resolved.projectRoot, "run-1:1"), { status: "acquired" });
-    assert.equal(existsSync(join(targetRepository, ".git", "taskTools-source.lock")), true);
-    assert.equal(existsSync(join(nestedDirectory, ".git")), false);
-});
-
-test("test_skillBody_restoresPonytailInvokeAndCommitMessageSectionFromV1_1", () => {
-    // Setup: a normal invocation.
-    const brief = skillBody("[74]", makeTargetRepository([74]));
-
-    // Verification: both v1.1 sections the v1.5 rewrite dropped are back, byte-faithful.
-    assert.match(brief, /Invoke `\/ponytail:ponytail ultra`\./);
-    assert.match(brief, /## Commit message/);
-    assert.match(
-        brief,
-        /Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them\. Then invoke the `commit-message` skill to generate a commit-message summary for each affected repo, and show the summaries to the user\./,
-    );
-});
-
-test("test_skillBody_declaresAWorkflowRatherThanAMainAgentEmitterCommand", () => {
-    // Setup: the real brief, plus a negative fixture for the forbidden SkillBodyEmitter -> main-agent Bash -> AnotherEmitter chain.
-    const brief = skillBody("[74]", makeTargetRepository([74]));
-    const forbiddenChain = 'Run `node "/abs/scripts/tackle-tasks/AgentPromptEmitter.ts" 75 plan` with Bash.';
-
-    // Verification: the checker catches the forbidden chain, and the real brief does not trip it.
-    assert.equal(namesAnEmitterBashCommand(forbiddenChain), true);
-    assert.equal(namesAnEmitterBashCommand(brief), false);
-    assert.match(brief, /Workflow\(\{"scriptPath"/);
 });
 
 test("test_resolveWorkflow_namesTheResolverScriptOnlyInsideTheAgentPromptAndReturnsItsResult", async () => {

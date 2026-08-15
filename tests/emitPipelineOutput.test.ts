@@ -37,27 +37,6 @@ test("test_annotatedBody_leavesTheEmittedBodyByteFaithfulOnceCommentsAreStripped
     assert.equal(stripAnnotations(annotatedBody(74, makeTargetRepository(74))), skillBody("[74]", makeTargetRepository(74)));
 });
 
-test("test_annotatedBody_pointsEachLineAtTheSourceLineThatEmittedIt", () => {
-    // Setup: pair every annotation with the body line directly beneath it.
-    const lines = annotatedBody(74, makeTargetRepository(74)).split("\n");
-
-    // Verification: the cited source line really holds that text, so annotations cannot shift.
-    let checked = 0;
-    for (let index = 0; index < lines.length - 1; index += 1) {
-        const cited = /^<!-- SkillBodyEmitter\.ts:(\d+) -->$/.exec(lines[index]);
-        if (cited === null) continue;
-        // Only a line's opening run of plain text appears in the source verbatim.
-        const plain = lines[index + 1].split(/[`$]/)[0].trim().slice(0, 20);
-        if (plain.length < 8) continue;
-        assert.ok(
-            emitterSource[Number(cited[1]) - 1].includes(plain),
-            `annotation ${cited[1]} does not point at "${plain}"`,
-        );
-        checked += 1;
-    }
-    assert.ok(checked >= 5, `expected several annotations to check, got ${checked}`);
-});
-
 test("test_matchPathNumber_identifiesTheFixtureThatProducedAPipelineBlock", () => {
     // Setup: the block the invalid-number path prints for a real task number.
     const invalidNumber = readNamedPaths()["invalid-number"];

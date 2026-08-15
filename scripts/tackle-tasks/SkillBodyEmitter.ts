@@ -3,20 +3,15 @@
 // It also runs the preamble, so a failed check replaces the whole body with one line.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { L } from "../tracePipeline.ts";
 import { runPreamble } from "./PreambleDataEmitter.ts";
 import { generateRunId } from "../prepareTasks.ts";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
 
-// Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand.
-const withoutTrailingSlash = (path: string): string => path.replace(/\/$/, "");
+// The last box of pipeline-preamble.mmd that is wired up. Move it as each new box lands.
+const LAST_BUILT_BOX = "IS_TASK_ACTIVE";
 
-const SCRIPTS_DIR = withoutTrailingSlash(fileURLToPath(new URL("./", import.meta.url)));
-const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
-const RESOLVE_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
-const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
-
-// The resolver workflow, not this brief, names its script and resolves the project root.
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // ponytail: one task at a time for now — multiple tasks come later.
     const [taskNumber] = parseTaskNumberArgument(argsValue);
@@ -25,6 +20,16 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     if (preambleResult.code === WorkflowResultCodes.DO_NOT_PROCEED) {
         return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
     }
+
+    return `Say: 'stopped at ${L(LAST_BUILT_BOX)}'\n`;
+};
+
+/* Retired until the boxes after LAST_BUILT_BOX are wired up again — the v1.5 body:
+
+const SCRIPTS_DIR = fileURLToPath(new URL("./", import.meta.url)).replace(/\/$/, "");
+const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
+const RESOLVE_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
+const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const resolveCall = JSON.stringify({
@@ -58,7 +63,7 @@ Report nothing else about a run.
 
 Finally, stage the changes made this session — which may span multiple git repos or submodules — in each affected repo, but do not commit in any of them. Then invoke the \`commit-message\` skill to generate a commit-message summary for each affected repo, and show the summaries to the user.
 `;
-};
+*/
 
 function readStdin(): string {
     try {
