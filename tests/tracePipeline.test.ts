@@ -1,5 +1,7 @@
 // Behavioral checks for tracePipeline.ts: the box-by-box walk of plans/diagram/pipeline.mmd
 // for one set of decision outcomes. One test per path the pipeline can take.
+// Every expected line below is the diagram node's verbatim label (its `<br/>` line breaks
+// joined back to one line by mmdGraph's parser), not hand-written wording.
 // Run alone: node --test tests/tracePipeline.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,12 +20,11 @@ const IMPLEMENT_BANNER = "--------- implement and test ---------";
 const REBASE_BANNER = "--------- rebase and merge ---------";
 const EXIT_BANNER = "--------- exit workflow ---------";
 
-// Every receipt's field list, exactly as tracePipeline.ts hardcodes it. Kept in one place so a
-// wording change to a receipt's fields is a one-line edit, not a find-and-replace across tests.
+// Every receipt's field list, the diagram's verbatim "Receipt: { ... }" label.
 const RECEIPT_FIELDS: Record<ReceiptName, string> = {
     "active task": "{ active task, initialized worktree }",
-    "plan file": "{ plan file: task, revision, sections }",
-    "codex review": "{ codex review: verdict, notes, amendments }",
+    "plan file": "{ plan file: task, revision, sections[ id, title, body ] }",
+    "codex review": "{ codex review: verdict, notes, amendments[] }",
     "finished plan": "{ plan file }",
     "fix the codebase": "{ fixed }",
     "test review": "{ flagged, reviewer, test review file }",
@@ -34,15 +35,36 @@ const RECEIPT_FIELDS: Record<ReceiptName, string> = {
     merge: "{ merge commit hashes, modified files }",
 };
 
-// Output -> receipt -> "IS THE ... VALID: YES" -> output -> the same receipt, now trusted.
+// The diagram's agent-run label for the full-suite fix, distinct from the task-test fix.
+const FIX_THE_CODEBASE_FOR_SUITE = "fix the codebase so the full suite passes";
+
+// The diagram's verbatim "is the ... receipt structure valid?" label per receipt. The cluster's
+// base name and its validity diamond do not always match — see RECEIPT_NODES in tracePipeline.ts.
+const RECEIPT_VALID_QUESTION: Record<ReceiptName, string> = {
+    "active task": "is the active task receipt structure valid?",
+    "plan file": "is the plan file structure valid?",
+    "codex review": "is the review file structure valid?",
+    "finished plan": "is the finished plan receipt structure valid?",
+    "fix the codebase": "is the fix receipt structure valid?",
+    "test review": "is the test review receipt structure valid?",
+    "amend tests": "is the amendment receipt structure valid?",
+    "finished implementation": "is the finished implementation receipt structure valid?",
+    "conflict fix": "is the conflict fix receipt structure valid?",
+    "fix the full suite": "is the suite fix receipt structure valid?",
+    merge: "is the merge receipt structure valid?",
+};
+
+// Output -> receipt -> "is the ... valid?: YES" -> output -> the same receipt, printed again.
+// The diagrams give the post-validation output and receipt the exact same label as the
+// pre-validation pair — there is no "(TRUSTED)" marker drawn anywhere.
 const receiptOk = (name: ReceiptName): string[] => {
-    const fields = RECEIPT_FIELDS[name];
-    return ["OUTPUT", `RECEIPT: ${fields}`, `IS THE ${name.toUpperCase()} RECEIPT VALID: YES`, "OUTPUT", `RECEIPT (TRUSTED): ${fields}`];
+    const fields = `Receipt: ${RECEIPT_FIELDS[name]}`;
+    return ["Output", fields, `${RECEIPT_VALID_QUESTION[name]}: YES`, "Output", fields];
 };
 // The structure check fails: no trusted receipt is ever emitted, and the run goes to the exit chain.
 const receiptFail = (name: ReceiptName): string[] => {
-    const fields = RECEIPT_FIELDS[name];
-    return ["OUTPUT", `RECEIPT: ${fields}`, `IS THE ${name.toUpperCase()} RECEIPT VALID: NO`];
+    const fields = `Receipt: ${RECEIPT_FIELDS[name]}`;
+    return ["Output", fields, `${RECEIPT_VALID_QUESTION[name]}: NO`];
 };
 
 // Shared literal fragments. These are expected OUTPUT, not logic — each is a run of lines that
@@ -50,35 +72,35 @@ const receiptFail = (name: ReceiptName): string[] => {
 const ACTIVE_AND_UNBLOCKED = [
     "Run start: Task Num [42]",
     PREAMBLE_BANNER,
-    "TASK VALID: YES",
-    "TASK OPEN: YES",
-    "TASK ACTIVE: NO",
-    "MARK THE TASK ACTIVE",
-    "TASK BLOCKED: NO",
+    "is task number valid?: YES",
+    "is task open?: YES",
+    "is the task active?: NO",
+    "Try: mark the task active in tasks.json",
+    "is task blocked?: NO",
 ];
-const FRESH_WORKTREE_STEPS = ["WORKTREE EXISTS: NO", "CREATE A WORKTREE", "AUTO GENERATE DOCS", "INIT SUBMODULES RECURSIVELY"];
+const FRESH_WORKTREE_STEPS = ["does a worktree exist?: NO", "create a worktree", "auto generate docs", "init submodules recursively"];
 const FRESH_WORKTREE = [...FRESH_WORKTREE_STEPS, ...receiptOk("active task"), PLANNING_BANNER];
 
-const PLAN_THE_TASK = [`${AGENT} PLAN THE TASK`, ...receiptOk("plan file")];
-const CODEX_REVIEWS_PLAN = [`${AGENT} CODEX REVIEWS THE PLAN`, ...receiptOk("codex review")];
+const PLAN_THE_TASK = [`${AGENT} plan the task`, ...receiptOk("plan file")];
+const CODEX_REVIEWS_PLAN = [`${AGENT} codex reviews the plan`, ...receiptOk("codex review")];
 // The plan loop's happy path: one plan, one review, accepted first time.
 const PLAN_ACCEPTED = [
     ...PLAN_THE_TASK,
     ...CODEX_REVIEWS_PLAN,
-    "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): ACCEPT",
+    "what is the review verdict?: ACCEPT",
     ...receiptOk("finished plan"),
     IMPLEMENT_BANNER,
 ];
 
-const IMPLEMENT_AND_COMMIT = [`${AGENT} IMPLEMENT TASK`, "RECORD IMPL NOTES", "COMMIT (IF NEEDED)"];
-const TASK_TESTS_PASS = ["RUN TASK TESTS", "TESTS FAIL: NO"];
-const CODEX_ACCEPTS_TESTS = [`${AGENT} CODEX REVIEWS TESTS`, ...receiptOk("test review"), "TESTS FLAGGED: NO"];
+const IMPLEMENT_AND_COMMIT = [`${AGENT} implement task`, "record implementation notes file to tasks.json", "commit if needed"];
+const TASK_TESTS_PASS = ["Try: run task tests", "do the tests fail?: NO"];
+const CODEX_ACCEPTS_TESTS = [`${AGENT} codex reviews tests against task details and plan file`, ...receiptOk("test review"), "are the tests flagged?: NO"];
 
 // Both source-repo two-strike loops taking their "yes" edge first try, ending at the rebase banner.
 const LOCK_SOURCE_CLEAN = [
-    "SOURCE REPO CAN BE LOCKED: YES",
-    "LOCK THE SOURCE REPO",
-    "LOCKING SUCCEEDED: YES",
+    "can the source repo be locked?: YES",
+    "Try: lock the source repo",
+    "did locking the source repo succeed?: YES",
     ...receiptOk("finished implementation"),
     REBASE_BANNER,
 ];
@@ -86,45 +108,50 @@ const LOCK_SOURCE_CLEAN = [
 // The tail run each time the merge-retry loop is entered: a clean rebase, a finished advance,
 // a green suite, and a held fence. LOCK SOURCE happens once, outside this loop.
 const REBASE_SUITE_AND_FENCE_CLEAN = [
-    "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-    "REBASE REPORTED CONFLICTS: NO",
-    "COMMIT (IF NEEDED)",
-    "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-    "REBASE FINISHED: YES",
-    "RUN THE FULL SUITE",
-    "ALL TESTS PASS: YES",
-    "EVERY CHANGE STAYED INSIDE THE OWNED FILES: YES",
+    "Try: rebase onto the target branch if needed",
+    "did the rebase report conflicts?: NO",
+    "commit if needed",
+    "Try: continue replaying commits on top of the target branch",
+    "is the rebase finished?: YES",
+    "Try: run the full suite",
+    "do all tests pass?: YES",
+    "did every change stay inside the task's owned files?: YES",
 ];
-const MERGE_LANDS = ["MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD", "MERGE LANDED: YES"];
+const MERGE_LANDS = ["Try: merge worktrees and submodules, no fast-forward", "did the merge land?: YES"];
 
 const CLOSE_OUT = [
     EXIT_BANNER,
-    "RECORD MERGE COMMIT HASHES",
-    "WRITE EXIT TYPE: COMPLETED",
-    "RECORD MODIFIED FILES",
-    "CLEAN UP WORKTREES",
-    "BUILD CLOSURE NOTE",
-    "MARK INACTIVE",
-    "MOVE TASK TO completedTasks.json",
-    "REPORT THE CLOSURE NOTE",
-    "STOP",
+    "record merge commit hashes to tasks.json",
+    "write exit type completed to tasks.json",
+    "record modified files to tasks.json",
+    "clean up worktrees, leases, persistence refs and source lock",
+    "build the closure note from the recorded run",
+    "mark task inactive in tasks.json",
+    "move task to completedTasks.json and update tasks blocked by it",
+    "report the closure note",
+    "stop",
 ];
 // The full happy-path tail from the rebase banner to the finished run.
 const REBASE_CLEAN_MERGE_AND_CLOSE = [REBASE_BANNER, ...REBASE_SUITE_AND_FENCE_CLEAN, ...MERGE_LANDS, ...receiptOk("merge"), ...CLOSE_OUT];
 
-// The common exit chain, run by every exit reached after the task was marked active.
-// The release line only names what is actually held: a lease exists once a worktree does,
-// and the source lock is taken during "implement and test". "none" reaches neither.
+// The common exit chain, run by every exit reached after the task was marked active. The
+// diagram draws a decision for whether a worktree was created, then (only if so) a second
+// decision for whether the source repo was locked, so the release line names only what is
+// actually held: nothing before a worktree exists, the lease only before the lock, both after.
 // The exit-workflow banner is NOT included here: it is never indented, so callers place it
 // themselves before wrapping the rest of this chain in indent() if needed.
 const exitChain = (exitType: string, holds: "none" | "lease" | "lease-and-lock"): string[] => [
-    `WRITE EXIT TYPE: ${exitType}`,
-    "RECORD MODIFIED FILES",
-    "MARK INACTIVE",
-    ...(holds === "lease-and-lock" ? ["RELEASE THE WORKTREE LEASE AND SOURCE LOCK"] : []),
-    ...(holds === "lease" ? ["RELEASE THE WORKTREE LEASE"] : []),
-    `REPORT THE RUN'S EXIT TYPE AND NOTE: ${exitType}`,
-    "STOP",
+    `write exit type and exit notes to tasks.json: ${exitType}`,
+    "record modified files to tasks.json",
+    "mark task inactive in tasks.json",
+    `was a worktree created?: ${holds === "none" ? "NO" : "YES"}`,
+    ...(holds === "none"
+        ? ["nothing to release"]
+        : holds === "lease"
+          ? ["was the source repo locked?: NO", "release the worktree lease"]
+          : ["was the source repo locked?: YES", "release the worktree lease and the source lock"]),
+    `report the run's exit type and note: ${exitType}`,
+    "stop",
 ];
 
 // Every path's inputs live in scripts/tracePipelinePaths.json, the same file the CLI reads,
@@ -146,10 +173,10 @@ test("test_traceTaskPipeline_stopsAtInvalidNumberWithoutWritingToTasksJson", () 
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
         PREAMBLE_BANNER,
-        "TASK VALID: NO",
+        "is task number valid?: NO",
         EXIT_BANNER,
-        "REPORT EXIT TYPE AND NOTE: INVALID-NUMBER",
-        "STOP",
+        "report the exit type and note: INVALID-NUMBER",
+        "stop",
     ]);
 });
 
@@ -160,11 +187,11 @@ test("test_traceTaskPipeline_stopsAtNotOpenWhenTheTaskIsAlreadyCompleted", () =>
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
         PREAMBLE_BANNER,
-        "TASK VALID: YES",
-        "TASK OPEN: NO",
+        "is task number valid?: YES",
+        "is task open?: NO",
         EXIT_BANNER,
-        "REPORT EXIT TYPE AND NOTE: NOT-OPEN",
-        "STOP",
+        "report the exit type and note: NOT-OPEN",
+        "stop",
     ]);
 });
 
@@ -177,12 +204,12 @@ test("test_traceTaskPipeline_stopsAtAlreadyActiveWhenTheTaskIsStillActive", () =
     assert.deepEqual(trace, [
         "Run start: Task Num [42]",
         PREAMBLE_BANNER,
-        "TASK VALID: YES",
-        "TASK OPEN: YES",
-        "TASK ACTIVE: YES",
+        "is task number valid?: YES",
+        "is task open?: YES",
+        "is the task active?: YES",
         EXIT_BANNER,
-        "REPORT EXIT TYPE AND NOTE: ALREADY-ACTIVE",
-        "STOP",
+        "report the exit type and note: ALREADY-ACTIVE",
+        "stop",
     ]);
 });
 
@@ -192,7 +219,7 @@ test("test_traceTaskPipeline_runsTheExitChainWhenTheTaskIsBlocked", () => {
     //   edge and the walk runs the full exit chain, which ends by releasing the holds.
     //   No worktree exists yet, so nothing is released.
     const trace = traceTaskPipeline(pathNamed("blocked"));
-    assert.deepEqual(trace, [...ACTIVE_AND_UNBLOCKED.slice(0, -1), "TASK BLOCKED: YES", EXIT_BANNER, ...exitChain("BLOCKED", "none")]);
+    assert.deepEqual(trace, [...ACTIVE_AND_UNBLOCKED.slice(0, -1), "is task blocked?: YES", EXIT_BANNER, ...exitChain("BLOCKED", "none")]);
 });
 
 // -------------------------------------------------------------------- the four worktree shapes
@@ -225,10 +252,10 @@ test("test_traceTaskPipeline_reusesASafeExistingWorktree", () => {
     const trace = traceTaskPipeline(pathNamed("safe-existing-worktree"));
     assert.deepEqual(trace, [
         ...ACTIVE_AND_UNBLOCKED,
-        "WORKTREE EXISTS: YES",
-        "WORKTREE SAFE: YES",
-        "UPDATE AUTO GENERATED DOCS",
-        "INIT SUBMODULES RECURSIVELY",
+        "does a worktree exist?: YES",
+        "is the worktree safe to use?: YES",
+        "update auto generated docs",
+        "init submodules recursively",
         ...receiptOk("active task"),
         PLANNING_BANNER,
         ...PLAN_ACCEPTED,
@@ -251,11 +278,11 @@ test("test_traceTaskPipeline_keepsAnUnsafeWorktreeWhoseWorkIsResumable", () => {
     const trace = traceTaskPipeline(pathNamed("unsafe-resumable-worktree"));
     assert.deepEqual(trace, [
         ...ACTIVE_AND_UNBLOCKED,
-        "WORKTREE EXISTS: YES",
-        "WORKTREE SAFE: NO",
-        "PREVIOUS WORK RESUMABLE: YES",
-        "UPDATE AUTO GENERATED DOCS",
-        "INIT SUBMODULES RECURSIVELY",
+        "does a worktree exist?: YES",
+        "is the worktree safe to use?: NO",
+        "is the previous run's work resumable?: YES",
+        "update auto generated docs",
+        "init submodules recursively",
         ...receiptOk("active task"),
         PLANNING_BANNER,
         ...PLAN_ACCEPTED,
@@ -277,12 +304,12 @@ test("test_traceTaskPipeline_resetsAnUnsafeWorktreeWhoseWorkIsNotResumable", () 
     const trace = traceTaskPipeline(pathNamed("unsafe-unresumable-worktree"));
     assert.deepEqual(trace, [
         ...ACTIVE_AND_UNBLOCKED,
-        "WORKTREE EXISTS: YES",
-        "WORKTREE SAFE: NO",
-        "PREVIOUS WORK RESUMABLE: NO",
-        "RESET THE WORKTREE",
-        "AUTO GENERATE DOCS",
-        "INIT SUBMODULES RECURSIVELY",
+        "does a worktree exist?: YES",
+        "is the worktree safe to use?: NO",
+        "is the previous run's work resumable?: NO",
+        "reset the worktree",
+        "auto generate docs",
+        "init submodules recursively",
         ...receiptOk("active task"),
         PLANNING_BANNER,
         ...PLAN_ACCEPTED,
@@ -310,10 +337,10 @@ test("test_traceTaskPipeline_appliesCodexAmendmentsOnceThenAccepts", () => {
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
         ...CODEX_REVIEWS_PLAN,
-        "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): AMEND",
-        "SCRIPT APPLIES CODEX AMENDMENTS TO THE PLAN",
-        "2 AMEND ROUNDS DONE: NO",
-        ...indent([...CODEX_REVIEWS_PLAN, "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): ACCEPT"]),
+        "what is the review verdict?: AMEND",
+        "Try: script applies codex amendments to the plan",
+        "2 amend rounds done?: NO",
+        ...indent([...CODEX_REVIEWS_PLAN, "what is the review verdict?: ACCEPT"]),
         ...receiptOk("finished plan"),
         IMPLEMENT_BANNER,
         ...IMPLEMENT_AND_COMMIT,
@@ -338,14 +365,14 @@ test("test_traceTaskPipeline_exitsThePlanLoopAfterTwoAmendRounds", () => {
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
         ...CODEX_REVIEWS_PLAN,
-        "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): AMEND",
-        "SCRIPT APPLIES CODEX AMENDMENTS TO THE PLAN",
-        "2 AMEND ROUNDS DONE: NO",
+        "what is the review verdict?: AMEND",
+        "Try: script applies codex amendments to the plan",
+        "2 amend rounds done?: NO",
         ...indent([
             ...CODEX_REVIEWS_PLAN,
-            "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): AMEND",
-            "SCRIPT APPLIES CODEX AMENDMENTS TO THE PLAN",
-            "2 AMEND ROUNDS DONE: YES",
+            "what is the review verdict?: AMEND",
+            "Try: script applies codex amendments to the plan",
+            "2 amend rounds done?: YES",
         ]),
         ...receiptOk("finished plan"),
         IMPLEMENT_BANNER,
@@ -371,10 +398,10 @@ test("test_traceTaskPipeline_replansOnceAfterCodexScrapsTheFirstPlan", () => {
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
         ...CODEX_REVIEWS_PLAN,
-        "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): SCRAP",
-        "FIRST TIME SCRAP: YES",
-        "SCRIPT ADDS THE CODEX SCRAP NOTES TO THE TASK BRIEF",
-        ...indent([...PLAN_THE_TASK, ...CODEX_REVIEWS_PLAN, "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): ACCEPT"]),
+        "what is the review verdict?: SCRAP",
+        "First Time Scrap?: YES",
+        "script adds the codex scrap notes to the task brief",
+        ...indent([...PLAN_THE_TASK, ...CODEX_REVIEWS_PLAN, "what is the review verdict?: ACCEPT"]),
         ...receiptOk("finished plan"),
         IMPLEMENT_BANNER,
         ...IMPLEMENT_AND_COMMIT,
@@ -399,15 +426,15 @@ test("test_traceTaskPipeline_exitsPlanScrappedWhenCodexScrapsTwice", () => {
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
         ...CODEX_REVIEWS_PLAN,
-        "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): SCRAP",
-        "FIRST TIME SCRAP: YES",
-        "SCRIPT ADDS THE CODEX SCRAP NOTES TO THE TASK BRIEF",
+        "what is the review verdict?: SCRAP",
+        "First Time Scrap?: YES",
+        "script adds the codex scrap notes to the task brief",
         ...indent([
             ...PLAN_THE_TASK,
             ...CODEX_REVIEWS_PLAN,
-            "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): SCRAP",
-            "FIRST TIME SCRAP: NO",
-            "SECOND TIME SCRAP",
+            "what is the review verdict?: SCRAP",
+            "First Time Scrap?: NO",
+            "Second Time Scrap",
         ]),
         EXIT_BANNER,
         ...indent(exitChain("PLAN-SCRAPPED", "lease")),
@@ -427,12 +454,12 @@ test("test_traceTaskPipeline_fixesTheCodebaseWhenTaskTestsFailOnce", () => {
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
-        "RUN TASK TESTS",
-        "TESTS FAIL: YES",
-        "FIRST FAIL: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: run task tests",
+        "do the tests fail?: YES",
+        "First fail?: YES",
+        `${AGENT} fix the codebase`,
         ...receiptOk("fix the codebase"),
-        ...indent(["COMMIT (IF NEEDED)", ...TASK_TESTS_PASS, ...CODEX_ACCEPTS_TESTS]),
+        ...indent(["commit if needed", ...TASK_TESTS_PASS, ...CODEX_ACCEPTS_TESTS]),
         ...LOCK_SOURCE_CLEAN,
         ...REBASE_SUITE_AND_FENCE_CLEAN,
         ...MERGE_LANDS,
@@ -451,12 +478,12 @@ test("test_traceTaskPipeline_exitsTestsRedWhenTaskTestsFailTwice", () => {
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
-        "RUN TASK TESTS",
-        "TESTS FAIL: YES",
-        "FIRST FAIL: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: run task tests",
+        "do the tests fail?: YES",
+        "First fail?: YES",
+        `${AGENT} fix the codebase`,
         ...receiptOk("fix the codebase"),
-        ...indent(["COMMIT (IF NEEDED)", "RUN TASK TESTS", "TESTS FAIL: YES", "FIRST FAIL: NO", "TESTS FAILED 2X"]),
+        ...indent(["commit if needed", "Try: run task tests", "do the tests fail?: YES", "First fail?: NO", "2nd fail"]),
         EXIT_BANNER,
         ...indent(exitChain("TESTS-RED", "lease")),
     ]);
@@ -475,13 +502,13 @@ test("test_traceTaskPipeline_amendsTheTestsWhenCodexFlagsThemOnce", () => {
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        `${AGENT} CODEX REVIEWS TESTS`,
+        `${AGENT} codex reviews tests against task details and plan file`,
         ...receiptOk("test review"),
-        "TESTS FLAGGED: YES",
-        "FIRST FLAGGING: YES",
-        `${AGENT} AMEND THE TESTS`,
+        "are the tests flagged?: YES",
+        "First flagging?: YES",
+        `${AGENT} amend the tests`,
         ...receiptOk("amend tests"),
-        ...indent(["COMMIT (IF NEEDED)", ...TASK_TESTS_PASS, ...CODEX_ACCEPTS_TESTS]),
+        ...indent(["commit if needed", ...TASK_TESTS_PASS, ...CODEX_ACCEPTS_TESTS]),
         ...LOCK_SOURCE_CLEAN,
         ...REBASE_SUITE_AND_FENCE_CLEAN,
         ...MERGE_LANDS,
@@ -501,20 +528,20 @@ test("test_traceTaskPipeline_exitsTestsFlaggedWhenCodexFlagsTheTestsTwice", () =
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        `${AGENT} CODEX REVIEWS TESTS`,
+        `${AGENT} codex reviews tests against task details and plan file`,
         ...receiptOk("test review"),
-        "TESTS FLAGGED: YES",
-        "FIRST FLAGGING: YES",
-        `${AGENT} AMEND THE TESTS`,
+        "are the tests flagged?: YES",
+        "First flagging?: YES",
+        `${AGENT} amend the tests`,
         ...receiptOk("amend tests"),
         ...indent([
-            "COMMIT (IF NEEDED)",
+            "commit if needed",
             ...TASK_TESTS_PASS,
-            `${AGENT} CODEX REVIEWS TESTS`,
+            `${AGENT} codex reviews tests against task details and plan file`,
             ...receiptOk("test review"),
-            "TESTS FLAGGED: YES",
-            "FIRST FLAGGING: NO",
-            "TESTS FLAGGED 2X",
+            "are the tests flagged?: YES",
+            "First flagging?: NO",
+            "2nd flagging",
         ]),
         EXIT_BANNER,
         ...indent(exitChain("TESTS-FLAGGED", "lease")),
@@ -535,10 +562,10 @@ test("test_traceTaskPipeline_waitsOnceWhenTheSourceRepoIsHeldThenLocks", () => {
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
-        "SOURCE REPO CAN BE LOCKED: NO",
-        "FIRST TIME HELD: YES",
-        "WAIT",
-        ...indent(["SOURCE REPO CAN BE LOCKED: YES", "LOCK THE SOURCE REPO", "LOCKING SUCCEEDED: YES"]),
+        "can the source repo be locked?: NO",
+        "First time held?: YES",
+        "Try: wait",
+        ...indent(["can the source repo be locked?: YES", "Try: lock the source repo", "did locking the source repo succeed?: YES"]),
         ...receiptOk("finished implementation"),
         ...REBASE_CLEAN_MERGE_AND_CLOSE,
     ]);
@@ -556,10 +583,10 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheSourceRepoStaysHeldTwice", () 
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
-        "SOURCE REPO CAN BE LOCKED: NO",
-        "FIRST TIME HELD: YES",
-        "WAIT",
-        ...indent(["SOURCE REPO CAN BE LOCKED: NO", "FIRST TIME HELD: NO", "SOURCE REPO HELD 2X"]),
+        "can the source repo be locked?: NO",
+        "First time held?: YES",
+        "Try: wait",
+        ...indent(["can the source repo be locked?: NO", "First time held?: NO", "2nd time held"]),
         EXIT_BANNER,
         ...indent(exitChain("RUN-FAILED", "lease")),
     ]);
@@ -577,12 +604,12 @@ test("test_traceTaskPipeline_waitsOnceWhenLockingLosesTheRaceThenSucceeds", () =
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
-        "SOURCE REPO CAN BE LOCKED: YES",
-        "LOCK THE SOURCE REPO",
-        "LOCKING SUCCEEDED: NO",
-        "FIRST LOCK FAILURE: YES",
-        "WAIT",
-        ...indent(["SOURCE REPO CAN BE LOCKED: YES", "LOCK THE SOURCE REPO", "LOCKING SUCCEEDED: YES"]),
+        "can the source repo be locked?: YES",
+        "Try: lock the source repo",
+        "did locking the source repo succeed?: NO",
+        "First lock failure?: YES",
+        "Try: wait",
+        ...indent(["can the source repo be locked?: YES", "Try: lock the source repo", "did locking the source repo succeed?: YES"]),
         ...receiptOk("finished implementation"),
         ...REBASE_CLEAN_MERGE_AND_CLOSE,
     ]);
@@ -600,17 +627,17 @@ test("test_traceTaskPipeline_exitsRunFailedWhenLockingLosesTheRaceTwice", () => 
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
-        "SOURCE REPO CAN BE LOCKED: YES",
-        "LOCK THE SOURCE REPO",
-        "LOCKING SUCCEEDED: NO",
-        "FIRST LOCK FAILURE: YES",
-        "WAIT",
+        "can the source repo be locked?: YES",
+        "Try: lock the source repo",
+        "did locking the source repo succeed?: NO",
+        "First lock failure?: YES",
+        "Try: wait",
         ...indent([
-            "SOURCE REPO CAN BE LOCKED: YES",
-            "LOCK THE SOURCE REPO",
-            "LOCKING SUCCEEDED: NO",
-            "FIRST LOCK FAILURE: NO",
-            "LOCK FAILED 2X",
+            "can the source repo be locked?: YES",
+            "Try: lock the source repo",
+            "did locking the source repo succeed?: NO",
+            "First lock failure?: NO",
+            "2nd lock failure",
         ]),
         EXIT_BANNER,
         ...indent(exitChain("RUN-FAILED", "lease")),
@@ -632,17 +659,17 @@ test("test_traceTaskPipeline_fixesConflictsWhenTheRebaseReportsThemOnce", () => 
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: YES",
-        "FIRST CONFLICT: YES",
-        `${AGENT} FIX CONFLICTS`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: YES",
+        "First conflict?: YES",
+        `${AGENT} fix conflicts`,
         ...receiptOk("conflict fix"),
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: YES",
-        "RUN THE FULL SUITE",
-        "ALL TESTS PASS: YES",
-        "EVERY CHANGE STAYED INSIDE THE OWNED FILES: YES",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: YES",
+        "Try: run the full suite",
+        "do all tests pass?: YES",
+        "did every change stay inside the task's owned files?: YES",
         ...MERGE_LANDS,
         ...receiptOk("merge"),
         ...CLOSE_OUT,
@@ -666,17 +693,17 @@ test("test_traceTaskPipeline_exitsRebaseStuckWhenTwoConflictFixesNeverAdvanceThe
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: YES",
-        "FIRST CONFLICT: YES",
-        `${AGENT} FIX CONFLICTS`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: YES",
+        "First conflict?: YES",
+        `${AGENT} fix conflicts`,
         ...receiptOk("conflict fix"),
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: NO",
-        "  REBASE REPORTED CONFLICTS: YES",
-        "  FIRST CONFLICT: NO",
-        "  REBASE CONFLICTED 2X",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: NO",
+        "  did the rebase report conflicts?: YES",
+        "  First conflict?: NO",
+        "  2nd conflict?",
         EXIT_BANNER,
         ...indent(exitChain("REBASE-STUCK", "lease-and-lock")),
     ]);
@@ -697,20 +724,20 @@ test("test_traceTaskPipeline_returnsToTheConflictBoxWhenTheAdvanceStopsWithoutFi
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: NO",
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: NO",
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: NO",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: NO",
         ...indent([
-            "REBASE REPORTED CONFLICTS: NO",
-            "COMMIT (IF NEEDED)",
-            "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-            "REBASE FINISHED: YES",
-            "RUN THE FULL SUITE",
-            "ALL TESTS PASS: YES",
+            "did the rebase report conflicts?: NO",
+            "commit if needed",
+            "Try: continue replaying commits on top of the target branch",
+            "is the rebase finished?: YES",
+            "Try: run the full suite",
+            "do all tests pass?: YES",
         ]),
-        "EVERY CHANGE STAYED INSIDE THE OWNED FILES: YES",
+        "did every change stay inside the task's owned files?: YES",
         ...MERGE_LANDS,
         ...receiptOk("merge"),
         ...CLOSE_OUT,
@@ -732,24 +759,24 @@ test("test_traceTaskPipeline_fixesTheCodebaseWhenTheFullSuiteFailsOnce", () => {
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: NO",
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: YES",
-        "RUN THE FULL SUITE",
-        "ALL TESTS PASS: NO",
-        "FIRST SUITE FAILURE: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: NO",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: YES",
+        "Try: run the full suite",
+        "do all tests pass?: NO",
+        "First suite failure?: YES",
+        `${AGENT} ${FIX_THE_CODEBASE_FOR_SUITE}`,
         ...receiptOk("fix the full suite"),
         ...indent([
-            "COMMIT (IF NEEDED)",
-            "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-            "REBASE FINISHED: YES",
-            "RUN THE FULL SUITE",
-            "ALL TESTS PASS: YES",
+            "commit if needed",
+            "Try: continue replaying commits on top of the target branch",
+            "is the rebase finished?: YES",
+            "Try: run the full suite",
+            "do all tests pass?: YES",
         ]),
-        "EVERY CHANGE STAYED INSIDE THE OWNED FILES: YES",
+        "did every change stay inside the task's owned files?: YES",
         ...MERGE_LANDS,
         ...receiptOk("merge"),
         ...CLOSE_OUT,
@@ -769,24 +796,24 @@ test("test_traceTaskPipeline_exitsSuiteRedWhenTheFullSuiteFailsTwice", () => {
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: NO",
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: YES",
-        "RUN THE FULL SUITE",
-        "ALL TESTS PASS: NO",
-        "FIRST SUITE FAILURE: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: NO",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: YES",
+        "Try: run the full suite",
+        "do all tests pass?: NO",
+        "First suite failure?: YES",
+        `${AGENT} ${FIX_THE_CODEBASE_FOR_SUITE}`,
         ...receiptOk("fix the full suite"),
         ...indent([
-            "COMMIT (IF NEEDED)",
-            "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-            "REBASE FINISHED: YES",
-            "RUN THE FULL SUITE",
-            "ALL TESTS PASS: NO",
-            "FIRST SUITE FAILURE: NO",
-            "SUITE FAILED 2X",
+            "commit if needed",
+            "Try: continue replaying commits on top of the target branch",
+            "is the rebase finished?: YES",
+            "Try: run the full suite",
+            "do all tests pass?: NO",
+            "First suite failure?: NO",
+            "2nd suite failure?",
         ]),
         EXIT_BANNER,
         ...indent(exitChain("SUITE-RED", "lease-and-lock")),
@@ -808,14 +835,14 @@ test("test_traceTaskPipeline_exitsFenceViolationWhenAStepChangedAFileTheTaskDoes
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: NO",
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: YES",
-        "RUN THE FULL SUITE",
-        "ALL TESTS PASS: YES",
-        "EVERY CHANGE STAYED INSIDE THE OWNED FILES: NO",
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: NO",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: YES",
+        "Try: run the full suite",
+        "do all tests pass?: YES",
+        "did every change stay inside the task's owned files?: NO",
         EXIT_BANNER,
         ...exitChain("FENCE-VIOLATION", "lease-and-lock"),
     ]);
@@ -836,10 +863,10 @@ test("test_traceTaskPipeline_rebasesAndRetriesWhenTheMergeDoesNotLandTheFirstTim
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
         ...REBASE_SUITE_AND_FENCE_CLEAN,
-        "MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD",
-        "MERGE LANDED: NO",
-        "FIRST MERGE FAILURE: YES",
-        ...indent([...REBASE_SUITE_AND_FENCE_CLEAN, "MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD", "MERGE LANDED: YES"]),
+        "Try: merge worktrees and submodules, no fast-forward",
+        "did the merge land?: NO",
+        "First merge failure?: YES",
+        ...indent([...REBASE_SUITE_AND_FENCE_CLEAN, "Try: merge worktrees and submodules, no fast-forward", "did the merge land?: YES"]),
         ...receiptOk("merge"),
         ...CLOSE_OUT,
     ]);
@@ -859,15 +886,15 @@ test("test_traceTaskPipeline_exitsMergeFailedWhenTheMergeDoesNotLandTwice", () =
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
         ...REBASE_SUITE_AND_FENCE_CLEAN,
-        "MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD",
-        "MERGE LANDED: NO",
-        "FIRST MERGE FAILURE: YES",
+        "Try: merge worktrees and submodules, no fast-forward",
+        "did the merge land?: NO",
+        "First merge failure?: YES",
         ...indent([
             ...REBASE_SUITE_AND_FENCE_CLEAN,
-            "MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD",
-            "MERGE LANDED: NO",
-            "FIRST MERGE FAILURE: NO",
-            "MERGE FAILED 2X",
+            "Try: merge worktrees and submodules, no fast-forward",
+            "did the merge land?: NO",
+            "First merge failure?: NO",
+            "2nd merge failure?",
         ]),
         EXIT_BANNER,
         ...indent(exitChain("MERGE-FAILED", "lease-and-lock")),
@@ -878,8 +905,8 @@ test("test_traceTaskPipeline_exitsMergeFailedWhenTheMergeDoesNotLandTwice", () =
 
 test("test_traceTaskPipeline_exitsRunFailedWhenTheActiveTaskReceiptIsMalformed", () => {
     // Scenario: the preamble's own receipt fails its structure check.
-    // Steps: the "IS THE ACTIVE TASK RECEIPT VALID" box takes its "no" edge. No trusted
-    //   receipt is ever output, and the run goes straight to the exit chain as run-failed.
+    // Steps: the "is the active task receipt structure valid?" box takes its "no" edge. No
+    //   trusted receipt is ever output, and the run goes straight to the exit chain as run-failed.
     const trace = traceTaskPipeline(pathNamed("malformed-active-task-receipt"));
     assert.deepEqual(trace, [
         ...ACTIVE_AND_UNBLOCKED,
@@ -897,7 +924,7 @@ test("test_traceTaskPipeline_exitsRunFailedWhenThePlanFileReceiptIsMalformed", (
     assert.deepEqual(trace, [
         ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
-        `${AGENT} PLAN THE TASK`,
+        `${AGENT} plan the task`,
         ...receiptFail("plan file"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -912,7 +939,7 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheCodexReviewReceiptIsMalformed"
         ...ACTIVE_AND_UNBLOCKED,
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
-        `${AGENT} CODEX REVIEWS THE PLAN`,
+        `${AGENT} codex reviews the plan`,
         ...receiptFail("codex review"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -928,7 +955,7 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheFinishedPlanReceiptIsMalformed
         ...FRESH_WORKTREE,
         ...PLAN_THE_TASK,
         ...CODEX_REVIEWS_PLAN,
-        "REVIEW VERDICT (ACCEPT, AMEND, SCRAP): ACCEPT",
+        "what is the review verdict?: ACCEPT",
         ...receiptFail("finished plan"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -944,10 +971,10 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheFixTheCodebaseReceiptIsMalform
         ...FRESH_WORKTREE,
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
-        "RUN TASK TESTS",
-        "TESTS FAIL: YES",
-        "FIRST FAIL: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: run task tests",
+        "do the tests fail?: YES",
+        "First fail?: YES",
+        `${AGENT} fix the codebase`,
         ...receiptFail("fix the codebase"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -964,7 +991,7 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheTestReviewReceiptIsMalformed",
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        `${AGENT} CODEX REVIEWS TESTS`,
+        `${AGENT} codex reviews tests against task details and plan file`,
         ...receiptFail("test review"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -981,11 +1008,11 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheAmendTestsReceiptIsMalformed",
         ...PLAN_ACCEPTED,
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
-        `${AGENT} CODEX REVIEWS TESTS`,
+        `${AGENT} codex reviews tests against task details and plan file`,
         ...receiptOk("test review"),
-        "TESTS FLAGGED: YES",
-        "FIRST FLAGGING: YES",
-        `${AGENT} AMEND THE TESTS`,
+        "are the tests flagged?: YES",
+        "First flagging?: YES",
+        `${AGENT} amend the tests`,
         ...receiptFail("amend tests"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease"),
@@ -1003,9 +1030,9 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheFinishedImplementationReceiptI
         ...IMPLEMENT_AND_COMMIT,
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
-        "SOURCE REPO CAN BE LOCKED: YES",
-        "LOCK THE SOURCE REPO",
-        "LOCKING SUCCEEDED: YES",
+        "can the source repo be locked?: YES",
+        "Try: lock the source repo",
+        "did locking the source repo succeed?: YES",
         ...receiptFail("finished implementation"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease-and-lock"),
@@ -1025,10 +1052,10 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheConflictFixReceiptIsMalformed"
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: YES",
-        "FIRST CONFLICT: YES",
-        `${AGENT} FIX CONFLICTS`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: YES",
+        "First conflict?: YES",
+        `${AGENT} fix conflicts`,
         ...receiptFail("conflict fix"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease-and-lock"),
@@ -1047,15 +1074,15 @@ test("test_traceTaskPipeline_exitsRunFailedWhenTheFixTheFullSuiteReceiptIsMalfor
         ...TASK_TESTS_PASS,
         ...CODEX_ACCEPTS_TESTS,
         ...LOCK_SOURCE_CLEAN,
-        "REBASE ONTO THE TARGET BRANCH IF NEEDED",
-        "REBASE REPORTED CONFLICTS: NO",
-        "COMMIT (IF NEEDED)",
-        "CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH",
-        "REBASE FINISHED: YES",
-        "RUN THE FULL SUITE",
-        "ALL TESTS PASS: NO",
-        "FIRST SUITE FAILURE: YES",
-        `${AGENT} FIX THE CODEBASE`,
+        "Try: rebase onto the target branch if needed",
+        "did the rebase report conflicts?: NO",
+        "commit if needed",
+        "Try: continue replaying commits on top of the target branch",
+        "is the rebase finished?: YES",
+        "Try: run the full suite",
+        "do all tests pass?: NO",
+        "First suite failure?: YES",
+        `${AGENT} ${FIX_THE_CODEBASE_FOR_SUITE}`,
         ...receiptFail("fix the full suite"),
         EXIT_BANNER,
         ...exitChain("RUN-FAILED", "lease-and-lock"),
@@ -1095,11 +1122,13 @@ test("test_traceTaskPipeline_reachesEveryExitTypeTheNamedPathsCanReach", () => {
     //   type at all, fails this test.
     const reached = new Set<string>();
     for (const [name, decisions] of Object.entries(NAMED_PATHS)) {
-        const exitLine = traceTaskPipeline(decisions)
-            .map((line) => line.trimStart())
-            .find((line) => line.startsWith("REPORT EXIT TYPE AND NOTE: ") || line.startsWith("WRITE EXIT TYPE: "));
-        assert.ok(exitLine !== undefined, `path "${name}" walked off the end without reaching an exit`);
-        reached.add(exitLine.split(": ")[1]!);
+        const lines = traceTaskPipeline(decisions).map((line) => line.trimStart());
+        const completed = lines.includes("write exit type completed to tasks.json");
+        const exitLine = lines.find(
+            (line) => line.startsWith("report the exit type and note: ") || line.startsWith("write exit type and exit notes to tasks.json: "),
+        );
+        assert.ok(completed || exitLine !== undefined, `path "${name}" walked off the end without reaching an exit`);
+        reached.add(completed ? "COMPLETED" : exitLine!.split(": ")[1]!);
     }
 
     assert.deepEqual([...reached].sort(), [
@@ -1120,9 +1149,9 @@ test("test_traceTaskPipeline_reachesEveryExitTypeTheNamedPathsCanReach", () => {
 });
 
 test("test_traceTaskPipeline_marksEveryAgentRunBoxAndNoScriptBox", () => {
-    // Scenario: the diagrams paint seven distinct boxes orange — the ones an agent runs rather
-    //   than a script. FIX THE CODEBASE is reused for both the task-test fix and the full-suite
-    //   fix, so it appears once in the marked set despite backing two different loops.
+    // Scenario: the diagrams paint eight distinct boxes orange — the ones an agent runs rather
+    //   than a script. The task-test fix and the full-suite fix are now two distinct boxes with
+    //   distinct wording, so both appear in the marked set.
     // Steps: walk every named path, keep the lines carrying the marker, strip the marker and the
     //   indent, and assert the set of marked names is exactly the diagrams' agent set. Banner
     //   lines and receipt lines never carry the agent marker, so they fall out of this scan.
@@ -1134,20 +1163,23 @@ test("test_traceTaskPipeline_marksEveryAgentRunBoxAndNoScriptBox", () => {
     }
 
     assert.deepEqual([...marked].sort(), [
-        "AMEND THE TESTS",
-        "CODEX REVIEWS TESTS",
-        "CODEX REVIEWS THE PLAN",
-        "FIX CONFLICTS",
-        "FIX THE CODEBASE",
-        "IMPLEMENT TASK",
-        "PLAN THE TASK",
+        "amend the tests",
+        "codex reviews tests against task details and plan file",
+        "codex reviews the plan",
+        "fix conflicts",
+        "fix the codebase",
+        FIX_THE_CODEBASE_FOR_SUITE,
+        "implement task",
+        "plan the task",
     ]);
 });
 
 test("test_traceTaskPipeline_validatesEveryReceiptNameAcrossTheNamedPaths", () => {
-    // Scenario: the tracer validates eleven distinct receipts. This guard proves the named
-    //   paths actually exercise every one of them (as a trusted "YES" at least once), so a
-    //   receipt validator that silently stopped running would show up as a gap here.
+    // Scenario: the tracer validates eleven distinct receipts, each behind its own validity
+    //   question now that the task-test fix and the full-suite fix have separate diagram
+    //   clusters. This guard proves the named paths actually exercise every one of them (as a
+    //   trusted "YES" at least once), so a receipt validator that silently stopped running would
+    //   show up as a gap here.
     const ALL_RECEIPT_NAMES: ReceiptName[] = [
         "active task",
         "plan file",
@@ -1161,11 +1193,14 @@ test("test_traceTaskPipeline_validatesEveryReceiptNameAcrossTheNamedPaths", () =
         "fix the full suite",
         "merge",
     ];
+
     const validated = new Set<string>();
     for (const decisions of Object.values(NAMED_PATHS)) {
         for (const line of traceTaskPipeline(decisions)) {
-            const match = /^IS THE (.+) RECEIPT VALID: YES$/.exec(line.trimStart());
-            if (match) validated.add(match[1]!.toLowerCase());
+            const trimmed = line.trimStart();
+            for (const name of ALL_RECEIPT_NAMES) {
+                if (trimmed === `${RECEIPT_VALID_QUESTION[name]}: YES`) validated.add(name);
+            }
         }
     }
 

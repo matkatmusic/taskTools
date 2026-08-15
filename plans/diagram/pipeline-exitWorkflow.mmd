@@ -9,11 +9,10 @@ flowchart TB
 %%   3. Every box that touches the working tree operates on every repository
 %%      layer, deepest submodule first, root last. Boxes that only read or write
 %%      tasks.json do not.
-%%   4. Exactly one box releases the source repo lock: "clean up" on the success
-%%      tail, "release the worktree lease and the source lock if held" on the
-%%      failure tail. The release line names only what is actually held: nothing
-%%      before a worktree exists, the lease only before the source repo was
-%%      locked, both after.
+%%   4. Exactly one box releases the source repo lock on the failure tail. The
+%%      release line names only what is actually held: nothing before a
+%%      worktree exists, the lease only before the source repo was locked, both
+%%      after. "clean up" releases both on the success tail.
 %%   5. A script that fails operationally, as opposed to returning a verdict,
 %%      exits the run as run-failed. No step is retried after it has mutated
 %%      anything. How far this workflow can run depends on where the failure
@@ -66,8 +65,19 @@ flowchart TB
   EXIT_TYPE_NOTE_INPUT["Input: { exitType, exitNote }"] --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
   WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"]
   RECORD_MODIFIED_FILES_FAILURE --> MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"]
-  MARK_TASK_INACTIVE_FAILURE --> RELEASE_WORKTREE_LEASE_AND_LOCK["release the worktree lease and the source lock if held"]
-  RELEASE_WORKTREE_LEASE_AND_LOCK --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  MARK_TASK_INACTIVE_FAILURE --> WAS_WORKTREE_CREATED{"was a worktree created?"}
+  WAS_WORKTREE_CREATED --> WAS_WORKTREE_CREATED_YES["YES"]
+  WAS_WORKTREE_CREATED --> WAS_WORKTREE_CREATED_NO["NO"]
+  WAS_WORKTREE_CREATED_NO --> NOTHING_TO_RELEASE["nothing to release"]
+  NOTHING_TO_RELEASE --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+
+  WAS_WORKTREE_CREATED_YES --> WAS_SOURCE_REPO_LOCKED{"was the source repo locked?"}
+  WAS_SOURCE_REPO_LOCKED --> WAS_SOURCE_REPO_LOCKED_YES["YES"]
+  WAS_SOURCE_REPO_LOCKED --> WAS_SOURCE_REPO_LOCKED_NO["NO"]
+  WAS_SOURCE_REPO_LOCKED_NO --> RELEASE_WORKTREE_LEASE["release the worktree lease"]
+  RELEASE_WORKTREE_LEASE --> REPORT_EXIT_TYPE_AND_NOTE
+  WAS_SOURCE_REPO_LOCKED_YES --> RELEASE_WORKTREE_LEASE_AND_LOCK["release the worktree lease and the source lock"]
+  RELEASE_WORKTREE_LEASE_AND_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
   REPORT_EXIT_TYPE_AND_NOTE --> STOP
 
   EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exitType, exitNote }<br/>invalid-number, not-open or already-active:<br/>no run record to write to"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
@@ -75,7 +85,13 @@ flowchart TB
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef prose fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
-  class RECORD_MERGE_COMMIT_HASHES,WRITE_EXIT_TYPE_COMPLETED,RECORD_MODIFIED_FILES_SUCCESS,CLEAN_UP_WORKTREES,BUILD_CLOSURE_NOTE,MARK_TASK_INACTIVE_SUCCESS,ARCHIVE_TASK,REPORT_CLOSURE_NOTE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,RELEASE_WORKTREE_LEASE_AND_LOCK,REPORT_EXIT_TYPE_AND_NOTE,REPORT_EXIT_TYPE_NO_WRITE,STOP script
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class WAS_WORKTREE_CREATED,WAS_SOURCE_REPO_LOCKED decision
+  class WAS_WORKTREE_CREATED_YES,WAS_SOURCE_REPO_LOCKED_YES pass
+  class WAS_WORKTREE_CREATED_NO,WAS_SOURCE_REPO_LOCKED_NO nopass
+  class RECORD_MERGE_COMMIT_HASHES,WRITE_EXIT_TYPE_COMPLETED,RECORD_MODIFIED_FILES_SUCCESS,CLEAN_UP_WORKTREES,BUILD_CLOSURE_NOTE,MARK_TASK_INACTIVE_SUCCESS,ARCHIVE_TASK,REPORT_CLOSURE_NOTE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,NOTHING_TO_RELEASE,RELEASE_WORKTREE_LEASE,RELEASE_WORKTREE_LEASE_AND_LOCK,REPORT_EXIT_TYPE_AND_NOTE,REPORT_EXIT_TYPE_NO_WRITE,STOP script
   class MERGE_RECEIPT_INPUT,EXIT_TYPE_NOTE_INPUT,EXIT_TYPE_NOTE_NO_WRITE_INPUT output

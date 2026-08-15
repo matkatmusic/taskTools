@@ -92,7 +92,7 @@ flowchart TB
   VALIDATOR_FAILURE_RECEIPT --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["exit workflow"] --> EXIT_OUTPUT["Output"]
-  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { exitType, exitNote, problem }"]
+  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { exitType, exitNote }"]
 
   %% pass/nopass: green is the branch that keeps heading for the receipt,
   %% red is the branch that ends in the exit workflow.
