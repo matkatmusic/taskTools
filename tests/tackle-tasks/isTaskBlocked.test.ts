@@ -23,6 +23,7 @@ test("test_isTaskBlocked_reportsBlockedWhenBlockedByNamesAnOpenTask", () => {
     assert.deepEqual(isTaskBlocked(1, root), {
         blocked: true,
         blockers: [{ taskNum: 2, reason: "needs schema" }],
+        reason: "is blocked by 2",
     });
 });
 
@@ -30,12 +31,12 @@ test("test_isTaskBlocked_reportsNotBlockedWhenBlockerIsNotOpen", () => {
     const root = makeProjectRoot([
         { taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] },
     ]);
-    assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [] });
+    assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [], reason: null });
 });
 
 test("test_isTaskBlocked_reportsNotBlockedWhenNoBlockedByField", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
-    assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [] });
+    assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [], reason: null });
 });
 
 test("test_isTaskBlocked_rejectsRelativeProjectRoot", () => {
@@ -50,5 +51,5 @@ test("test_isTaskBlocked_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", (
         [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskBlocked.ts")],
         { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
-    assert.deepEqual(JSON.parse(stdout), { blocked: false, blockers: [] });
+    assert.deepEqual(JSON.parse(stdout), { blocked: false, blockers: [], reason: null });
 });

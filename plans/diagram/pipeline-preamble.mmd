@@ -36,11 +36,12 @@ flowchart TB
 %% specification: a non-zero exit from any script goes straight to the exit
 %% workflow with exit type run-failed and the script's stderr as the note.
 %% Every exit here goes to the exit workflow, which picks its own tail.
-%% invalid-number and already-active are the only exits that write nothing to
-%% tasks.json: the first has no open task record to write to, and the second must
-%% not touch a run that belongs to another invocation. The exit workflow gives
-%% those two its report-only tail; blocked and run-failed get the full tail.
-%% That choice is drawn there, not here.
+%% invalid-number, blocked and already-active are the only exits that write
+%% nothing to tasks.json: all three happen before "mark the task active", so
+%% there is no run record to write to, and already-active must not touch a run
+%% that belongs to another invocation. The exit workflow gives those three its
+%% report-only tail; run-failed gets the full tail. That choice is drawn there,
+%% not here.
 %% The active task and initialized worktree this pipeline emits are the input to
 %% the planning pipeline.
 
@@ -48,16 +49,16 @@ flowchart TB
   IS_TASK_NUMBER_VALID{"is task number valid?"} --> IS_TASK_NUMBER_VALID_YES["YES"]
   IS_TASK_NUMBER_VALID --> IS_TASK_NUMBER_VALID_NO["NO"]
   IS_TASK_NUMBER_VALID_NO -- "exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> EXIT_WORKFLOW
-  IS_TASK_NUMBER_VALID_YES --> IS_TASK_ACTIVE{"is the task active?"}
+  IS_TASK_NUMBER_VALID_YES --> IS_TASK_BLOCKED{"is task blocked?"}
+  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_YES["YES"]
+  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_NO["NO"]
+  IS_TASK_BLOCKED_YES -- "exit type: blocked<br/>exit note: an open blocker remains" --> EXIT_WORKFLOW
+  IS_TASK_BLOCKED_NO --> IS_TASK_ACTIVE{"is the task active?"}
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_YES["YES"]
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_NO["NO"]
   IS_TASK_ACTIVE_YES -- "exit type: already-active<br/>exit note: a previous run<br/>left the task active" --> EXIT_WORKFLOW
   IS_TASK_ACTIVE_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
-  MARK_TASK_ACTIVE --> IS_TASK_BLOCKED{"is task blocked?"}
-  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_YES["YES"]
-  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_NO["NO"]
-  IS_TASK_BLOCKED_YES -- "exit type: blocked<br/>exit note: an open blocker remains" --> EXIT_WORKFLOW
-  IS_TASK_BLOCKED_NO --> DOES_WORKTREE_EXIST{"does a worktree exist?"}
+  MARK_TASK_ACTIVE --> DOES_WORKTREE_EXIST{"does a worktree exist?"}
   DOES_WORKTREE_EXIST --> DOES_WORKTREE_EXIST_YES["YES"]
   DOES_WORKTREE_EXIST --> DOES_WORKTREE_EXIST_NO["NO"]
   DOES_WORKTREE_EXIST_NO --> CREATE_WORKTREE["create a worktree"]
