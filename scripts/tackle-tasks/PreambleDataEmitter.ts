@@ -19,6 +19,7 @@ import { generateTaskDocs } from "./generateTaskDocs.ts";
 import { updateTaskDocs } from "./updateTaskDocs.ts";
 import { initTaskSubmodules } from "./initTaskSubmodules.ts";
 import { validateActiveTaskReceipt } from "./validateActiveTaskReceipt.ts";
+import { WorkflowResultCodes, type WorkflowResultCode } from "./WorkflowResultCodes.ts";
 
 function readStdin(): string {
     try {
@@ -64,6 +65,21 @@ ${JSON.stringify(result)}`;
 }
 
 // ---------------------------------------------------------------------------
+// The preamble's main function: walk the boxes and say whether the caller may keep going.
+// One box so far — the rest of pipeline-preamble.mmd lands here as it is wired up.
+// ---------------------------------------------------------------------------
+
+export type PreambleResult = { code: WorkflowResultCode; reason: string | null };
+
+export function runPreamble(taskNumber: number, projectRoot: string): PreambleResult {
+    const taskNumberCheck = isTaskNumberValid(taskNumber, projectRoot);
+    if (!taskNumberCheck.valid) {
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason };
+    }
+    return { code: WorkflowResultCodes.PROCEED, reason: null };
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch — one case per preamble-pipeline box.
 // ---------------------------------------------------------------------------
 
@@ -74,7 +90,7 @@ export function emitPreambleData(taskNumber: number, mode: string, payload: Prea
             const result = isTaskNumberValid(taskNumber, projectRoot);
             return resultPrompt(
                 "Report whether the task number is valid: present in tasks.json and/or completedTasks.json.",
-                '{"valid": <boolean>, "location": "open"|"completed"|"both"|null}',
+                '{"valid": <boolean>, "location": "open"|"completed"|null, "reason": <string|null>}',
                 result,
             );
         }

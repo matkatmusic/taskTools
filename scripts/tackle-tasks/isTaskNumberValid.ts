@@ -1,25 +1,24 @@
-// "is task number valid?" — pipeline.mmd. Presence in tasks.json and/or completedTasks.json.
+// "is task number valid?" — pipeline.mmd. A task is valid when it is in tasks.json. Nothing else:
+// completedTasks.json holds finished work, which is not a task this skill can run.
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { readTaskLists } from "../getTaskDetails.ts";
+import { relative } from "node:path";
+import { resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
-export type TaskNumberLocation = "open" | "completed" | "both" | null;
-
-export type IsTaskNumberValidOutput = { valid: boolean; location: TaskNumberLocation };
+// `reason` is worded here, once, so no caller has to word it again. It names the real task
+// store, which is not always in the same place.
+export type IsTaskNumberValidOutput = { valid: boolean; reason: string | null };
 
 export function isTaskNumberValid(taskNumber: number, projectRoot: string): IsTaskNumberValidOutput {
     requireAbsolutePath("projectRoot", projectRoot);
-    const { openTasks, completedTasks } = readTaskLists(projectRoot);
-    const inOpen = openTasks.some((task) => task.taskNumber === taskNumber);
-    const inCompleted = completedTasks.some((task) => task.taskNumber === taskNumber);
-    if (inOpen && inCompleted) return { valid: true, location: "both" };
-    if (inOpen) return { valid: true, location: "open" };
-    if (inCompleted) return { valid: true, location: "completed" };
-    return { valid: false, location: null };
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    const found = execFileSync("jq", [`any(.[]; .taskNumber == ${taskNumber})`, tasksPath], { encoding: "utf8" }).trim();
+    if (found === "true") return { valid: true, reason: null };
+    return { valid: false, reason: `not found in \`${relative(projectRoot, tasksPath)}\`` };
 }
 
 if (process.argv[1]?.endsWith("isTaskNumberValid.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as { taskNumber: number; projectRoot: string };
-    const output = isTaskNumberValid(input.taskNumber, input.projectRoot);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    process.stdout.write(`${JSON.stringify(isTaskNumberValid(input.taskNumber, input.projectRoot))}\n`);
 }
