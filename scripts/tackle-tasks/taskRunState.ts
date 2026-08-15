@@ -6,7 +6,7 @@ import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../prepa
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../taskFiles.ts";
 
 export type TaskExitType =
-    | "completed" | "invalid-number" | "not-open" | "already-active" | "blocked"
+    | "completed" | "invalid-number" | "already-active" | "blocked"
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed";
 

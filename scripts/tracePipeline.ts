@@ -241,9 +241,6 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     push(`${L("IS_TASK_NUMBER_VALID")}: ${yesNo(decisions.taskNumberValid)}`);
     if (!decisions.taskNumberValid) return reportAndStop("INVALID-NUMBER");
 
-    push(`${L("IS_TASK_OPEN")}: ${yesNo(decisions.taskOpen)}`);
-    if (!decisions.taskOpen) return reportAndStop("NOT-OPEN");
-
     // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task
     // active between the question and the write.
     push(`${L("IS_TASK_ACTIVE")}: ${yesNo(decisions.taskActive)}`);

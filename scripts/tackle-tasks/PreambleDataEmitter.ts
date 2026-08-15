@@ -7,7 +7,6 @@
 // resolved result in one final "---- DATA ----" section (§6: interpolate data last).
 import { readFileSync } from "node:fs";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
-import { isTaskOpen } from "./isTaskOpen.ts";
 import { claimTaskRun } from "./claimTaskRun.ts";
 import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
@@ -76,6 +75,12 @@ export function runPreamble(taskNumber: number, projectRoot: string): PreambleRe
     if (!taskNumberCheck.valid) {
         return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason };
     }
+
+    const blockedCheck = isTaskBlocked(taskNumber, projectRoot);
+    if (blockedCheck.blocked) {
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason };
+    }
+
     return { code: WorkflowResultCodes.PROCEED, reason: null };
 }
 
@@ -91,15 +96,6 @@ export function emitPreambleData(taskNumber: number, mode: string, payload: Prea
             return resultPrompt(
                 "Report whether the task number is valid: present in tasks.json and/or completedTasks.json.",
                 '{"valid": <boolean>, "location": "open"|"completed"|null, "reason": <string|null>}',
-                result,
-            );
-        }
-        case "task-open": {
-            const projectRoot = requireString(payload, "projectRoot");
-            const result = isTaskOpen(taskNumber, projectRoot);
-            return resultPrompt(
-                "Report whether the task is still open (not already completed).",
-                '{"open": <boolean>, "closeInProgress": <boolean>}',
                 result,
             );
         }

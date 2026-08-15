@@ -136,18 +136,6 @@ const preamblePhase = async () => {
     }
   }
 
-  step('is task open?', yesNo(d.taskOpen))
-  if (!d.taskOpen) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'not-open',
-        'task is already completed',
-        { lease: false, sourceLock: false, noRunRecord: true },
-      ),
-    }
-  }
-
   // Drawn as two boxes, but one atomic read-modify-write of tasks.json: nothing
   // can make the task active between the question and the write.
   step('is the task active?', yesNo(d.taskActive))
