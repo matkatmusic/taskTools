@@ -1509,5 +1509,3659 @@
             true
         ],
         "malformedReceipt": "merge"
+    },
+    "preamble--safe-worktree-then-malformed-active-task-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "active task"
+    },
+    "preamble--resumable-worktree-then-malformed-active-task-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": false,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "active task"
+    },
+    "preamble--unresumable-worktree-then-malformed-active-task-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": true,
+        "worktreeSafe": false,
+        "previousWorkResumable": false,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "active task"
+    },
+    "planning--verdict-scrap-then-verdict-accept-then-malformed-finished-plan-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "scrap",
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished plan"
+    },
+    "planning--verdict-amend-twice-then-malformed-finished-plan-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "amend",
+            "amend"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished plan"
+    },
+    "planning--verdict-amend-then-verdict-accept-then-malformed-finished-plan-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "amend",
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished plan"
+    },
+    "implement-test--tests-fail-then-tests-flagged-then-malformed-amend-tests-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            true
+        ],
+        "sourceRepoFree": [],
+        "lockSucceeds": [],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "amend tests"
+    },
+    "implement-test--tests-fail-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-fail-then-lock-race-lost": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-fail-then-lock-race-lost-twice-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-lock-race-lost-then-source-repo-held": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-lock-race-lost-then-source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-fail-then-lock-race-lost-then-source-repo-held-then-lock-race-lost-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-lock-race-lost-then-source-repo-held-twice-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-source-repo-held": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-fail-then-source-repo-held-then-lock-race-lost": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-source-repo-held-then-lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-fail-then-source-repo-held-then-lock-race-lost-twice-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-source-repo-held-then-lock-race-lost-then-source-repo-held-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-source-repo-held-twice-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            false
+        ],
+        "lockSucceeds": [],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-fail-then-malformed-test-review-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            true,
+            false
+        ],
+        "codexTestsFlagged": [],
+        "sourceRepoFree": [],
+        "lockSucceeds": [],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "test review"
+    },
+    "implement-test--tests-flagged-then-tests-fail-then-malformed-fix-the-codebase-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            true
+        ],
+        "codexTestsFlagged": [
+            true
+        ],
+        "sourceRepoFree": [],
+        "lockSucceeds": [],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "fix the codebase"
+    },
+    "implement-test--tests-flagged-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-flagged-then-lock-race-lost": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-twice-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-then-source-repo-held": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-then-source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-then-source-repo-held-then-lock-race-lost-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-lock-race-lost-then-source-repo-held-twice-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-source-repo-held": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-flagged-then-source-repo-held-then-lock-race-lost": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-source-repo-held-then-lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--tests-flagged-then-source-repo-held-then-lock-race-lost-twice-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-source-repo-held-then-lock-race-lost-then-source-repo-held-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--tests-flagged-then-source-repo-held-twice-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false,
+            false
+        ],
+        "codexTestsFlagged": [
+            true,
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            false
+        ],
+        "lockSucceeds": [],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--lock-race-lost-then-source-repo-held": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--lock-race-lost-then-source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--lock-race-lost-then-source-repo-held-then-lock-race-lost-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--lock-race-lost-then-source-repo-held-twice-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true,
+            false,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--source-repo-held-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--source-repo-held-then-lock-race-lost": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--source-repo-held-then-lock-race-lost-then-malformed-finished-implementation-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "finished implementation"
+    },
+    "implement-test--source-repo-held-then-lock-race-lost-twice-then-lock-race-lost-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            true
+        ],
+        "lockSucceeds": [
+            false,
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "implement-test--source-repo-held-then-lock-race-lost-then-source-repo-held-then-source-repo-held-twice": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            false,
+            true,
+            false
+        ],
+        "lockSucceeds": [
+            false
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-then-rebase-conflict": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-then-rebase-conflict-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-then-rebase-conflict-then-merge-fail-then-merge-failed": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            false
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-then-rebase-conflict-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": [
+            false
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--rebase-conflict-then-merge-fail-twice-then-merge-failed": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            false
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": []
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail-twice-then-suite-red": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": []
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail-then-advance-uncovers-conflicts-then-rebase-conflict-then-rebase-stuck": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "conflicts"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": []
+    },
+    "rebase-merge--rebase-conflict-then-suite-fail-then-malformed-fix-the-full-suite-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "fix the full suite"
+    },
+    "rebase-merge--rebase-conflict-then-advance-uncovers-conflicts": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-merge--rebase-conflict-then-advance-uncovers-conflicts-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--rebase-conflict-then-advance-uncovers-conflicts-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": []
+    },
+    "rebase-merge--rebase-conflict-then-advance-uncovers-conflicts-then-suite-fail-then-malformed-fix-the-full-suite-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "fix the full suite"
+    },
+    "rebase-merge--rebase-conflict-then-advance-uncovers-conflicts-twice-then-rebase-conflict-then-rebase-stuck": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "conflict",
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "conflicts"
+        ],
+        "fullSuitePasses": [],
+        "fenceHeld": true,
+        "mergeLands": []
+    },
+    "rebase-merge--merge-fail-then-rebase-conflict": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ]
+    },
+    "rebase-merge--merge-fail-then-rebase-conflict-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--merge-fail-then-rebase-conflict-then-merge-fail-then-merge-failed": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            false
+        ]
+    },
+    "rebase-merge--merge-fail-then-rebase-conflict-then-advance-uncovers-conflicts-then-rebase-conflict-then-rebase-stuck": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "conflicts"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ]
+    },
+    "rebase-merge--merge-fail-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--merge-fail-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false,
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--merge-fail-then-advance-uncovers-conflicts-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "conflicts"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--suite-fail-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--suite-fail-then-merge-fail-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--suite-fail-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false,
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": []
+    },
+    "rebase-merge--suite-fail-then-advance-uncovers-conflicts-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "finished",
+            "conflicts"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ]
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict-then-merge-fail-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": []
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict-then-suite-fail-then-malformed-fix-the-full-suite-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "fix the full suite"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-rebase-conflict-then-advance-uncovers-conflicts-then-rebase-conflict-then-rebase-stuck": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "conflict",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "conflicts"
+        ],
+        "fullSuitePasses": [],
+        "fenceHeld": true,
+        "mergeLands": []
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-malformed-merge-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            true
+        ],
+        "malformedReceipt": "merge"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-merge-fail-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": true,
+        "mergeLands": [
+            false
+        ],
+        "malformedReceipt": "conflict fix"
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-fence-violation": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            true
+        ],
+        "fenceHeld": false,
+        "mergeLands": []
+    },
+    "rebase-merge--advance-uncovers-conflicts-then-suite-fail-then-malformed-fix-the-full-suite-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "finished"
+        ],
+        "fullSuitePasses": [
+            false
+        ],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "fix the full suite"
+    },
+    "rebase-merge--advance-uncovers-conflicts-twice-then-rebase-conflict-then-malformed-conflict-fix-receipt": {
+        "taskNumber": 42,
+        "taskNumberValid": true,
+        "taskOpen": true,
+        "taskActive": false,
+        "taskBlocked": false,
+        "worktreeExists": false,
+        "worktreeSafe": true,
+        "previousWorkResumable": true,
+        "codexPlanVerdict": [
+            "accept"
+        ],
+        "taskTestsFail": [
+            false
+        ],
+        "codexTestsFlagged": [
+            false
+        ],
+        "sourceRepoFree": [
+            true
+        ],
+        "lockSucceeds": [
+            true
+        ],
+        "rebase": [
+            "ok",
+            "ok",
+            "conflict"
+        ],
+        "rebaseAdvance": [
+            "conflicts",
+            "conflicts"
+        ],
+        "fullSuitePasses": [],
+        "fenceHeld": true,
+        "mergeLands": [],
+        "malformedReceipt": "conflict fix"
     }
 }
