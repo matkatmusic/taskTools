@@ -7,8 +7,45 @@
 //   plans/diagram/pipeline-implementTest.mmd  banner "implement and test"
 //   plans/diagram/pipeline-rebaseMerge.mmd    banner "rebase and merge"
 //   plans/diagram/pipeline-exitWorkflow.mmd   banner "exit workflow"
+//
+// Every step's wording comes from the diagrams themselves, not from a hand-written copy. See
+// mmdGraph.ts for the parser and label(id) below for the lookup that keeps this file honest.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseMmd } from "./mmdGraph.ts";
+
+const DIAGRAM_FILES = [
+    "pipeline-preamble.mmd",
+    "pipeline-planning.mmd",
+    "pipeline-implementTest.mmd",
+    "pipeline-rebaseMerge.mmd",
+    "pipeline-exitWorkflow.mmd",
+    "pipeline.mmd",
+];
+
+// Built once at module load: every node id any diagram defines, mapped to its label. An id two
+// files define with different labels is a diagram bug, not the tracer's to paper over — it throws
+// immediately while merging the diagrams, before anything walks a path.
+const nodeLabels = new Map<string, string>();
+for (const file of DIAGRAM_FILES) {
+    const path = fileURLToPath(new URL(`../plans/diagram/${file}`, import.meta.url));
+    const { nodes } = parseMmd(readFileSync(path, "utf8"));
+    for (const [id, label] of nodes) {
+        const existing = nodeLabels.get(id);
+        if (existing !== undefined && existing !== label) {
+            throw new Error(`tracePipeline: node "${id}" has conflicting labels across diagrams: ${JSON.stringify(existing)} vs ${JSON.stringify(label)}`);
+        }
+        nodeLabels.set(id, label);
+    }
+}
+
+// The verbatim label for a diagram node, its `\n` line breaks joined back to one line. Throws
+// immediately on a typo'd id.
+const L = (id: string): string => {
+    const label = nodeLabels.get(id);
+    if (label === undefined) throw new Error(`tracePipeline: no diagram node named "${id}"`);
+    return label.replaceAll("\n", " ");
+};
 
 // Every receipt a pipeline emits. Each one is validated before anything reads its contents.
 export type ReceiptName =
@@ -23,6 +60,88 @@ export type ReceiptName =
     | "conflict fix"
     | "fix the full suite"
     | "merge";
+
+// The five diagram node ids behind one receipt's output -> receipt -> structure check -> output ->
+// trusted-receipt chain, spelled out per receipt rather than derived from a naming pattern.
+const RECEIPT_NODES: Record<ReceiptName, { output: string; receipt: string; valid: string; outputTrusted: string; receiptTrusted: string }> = {
+    "active task": {
+        output: "ACTIVE_TASK_WORKTREE_OUTPUT",
+        receipt: "ACTIVE_TASK_WORKTREE_RECEIPT",
+        valid: "IS_ACTIVE_TASK_RECEIPT_VALID",
+        outputTrusted: "ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED",
+        receiptTrusted: "ACTIVE_TASK_WORKTREE_RECEIPT_TRUSTED",
+    },
+    "plan file": {
+        output: "DRAFT_PLAN_FILE_OUTPUT",
+        receipt: "DRAFT_PLAN_FILE_RECEIPT",
+        valid: "IS_PLAN_FILE_VALID",
+        outputTrusted: "DRAFT_PLAN_FILE_OUTPUT_TRUSTED",
+        receiptTrusted: "DRAFT_PLAN_FILE_RECEIPT_TRUSTED",
+    },
+    "codex review": {
+        output: "CODEX_REVIEW_OUTPUT",
+        receipt: "CODEX_REVIEW_RECEIPT",
+        valid: "IS_REVIEW_FILE_VALID",
+        outputTrusted: "CODEX_REVIEW_OUTPUT_TRUSTED",
+        receiptTrusted: "CODEX_REVIEW_RECEIPT_TRUSTED",
+    },
+    "finished plan": {
+        output: "FINISHED_PLAN_OUTPUT",
+        receipt: "FINISHED_PLAN_RECEIPT",
+        valid: "IS_FINISHED_PLAN_RECEIPT_VALID",
+        outputTrusted: "FINISHED_PLAN_OUTPUT_TRUSTED",
+        receiptTrusted: "FINISHED_PLAN_RECEIPT_TRUSTED",
+    },
+    "fix the codebase": {
+        output: "FIXED_CODEBASE_OUTPUT",
+        receipt: "FIXED_CODEBASE_RECEIPT",
+        valid: "IS_FIX_RECEIPT_VALID",
+        outputTrusted: "FIXED_CODEBASE_OUTPUT_TRUSTED",
+        receiptTrusted: "FIXED_CODEBASE_RECEIPT_TRUSTED",
+    },
+    "test review": {
+        output: "TEST_REVIEW_OUTPUT",
+        receipt: "TEST_REVIEW_RECEIPT",
+        valid: "IS_TEST_REVIEW_RECEIPT_VALID",
+        outputTrusted: "TEST_REVIEW_OUTPUT_TRUSTED",
+        receiptTrusted: "TEST_REVIEW_RECEIPT_TRUSTED",
+    },
+    "amend tests": {
+        output: "AMEND_TESTS_OUTPUT",
+        receipt: "AMEND_TESTS_RECEIPT",
+        valid: "IS_AMENDMENT_RECEIPT_VALID",
+        outputTrusted: "AMEND_TESTS_OUTPUT_TRUSTED",
+        receiptTrusted: "AMEND_TESTS_RECEIPT_TRUSTED",
+    },
+    "finished implementation": {
+        output: "FINISHED_IMPLEMENTATION_OUTPUT",
+        receipt: "FINISHED_IMPLEMENTATION_RECEIPT",
+        valid: "IS_FINISHED_IMPLEMENTATION_RECEIPT_VALID",
+        outputTrusted: "FINISHED_IMPLEMENTATION_OUTPUT_TRUSTED",
+        receiptTrusted: "FINISHED_IMPLEMENTATION_RECEIPT_TRUSTED",
+    },
+    "conflict fix": {
+        output: "CONFLICT_FIX_OUTPUT",
+        receipt: "CONFLICT_FIX_RECEIPT",
+        valid: "IS_CONFLICT_FIX_RECEIPT_VALID",
+        outputTrusted: "CONFLICT_FIX_OUTPUT_TRUSTED",
+        receiptTrusted: "CONFLICT_FIX_RECEIPT_TRUSTED",
+    },
+    "fix the full suite": {
+        output: "FIXED_CODEBASE_SUITE_OUTPUT",
+        receipt: "FIXED_CODEBASE_SUITE_RECEIPT",
+        valid: "IS_SUITE_FIX_RECEIPT_VALID",
+        outputTrusted: "FIXED_CODEBASE_SUITE_OUTPUT_TRUSTED",
+        receiptTrusted: "FIXED_CODEBASE_SUITE_RECEIPT_TRUSTED",
+    },
+    merge: {
+        output: "MERGE_RECEIPT_OUTPUT",
+        receipt: "MERGE_RECEIPT",
+        valid: "IS_MERGE_RECEIPT_VALID",
+        outputTrusted: "MERGE_RECEIPT_OUTPUT_TRUSTED",
+        receiptTrusted: "MERGE_RECEIPT_TRUSTED",
+    },
+};
 
 // Loop decisions hold one entry per attempt: taskTestsFail [true, false] fails once, then passes.
 export type PipelineDecisions = {
@@ -77,8 +196,8 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     // Exits reached before the task was marked active: the report reads the edge, not tasks.json.
     const reportAndStop = (exitType: string): string[] => {
         banner("exit workflow");
-        push(`REPORT EXIT TYPE AND NOTE: ${exitType}`);
-        push("STOP");
+        push(`${L("REPORT_EXIT_TYPE_NO_WRITE")}: ${exitType}`);
+        push(L("STOP"));
         return trace;
     };
     // A lease exists only once a worktree does; the source lock is taken in "implement and test".
@@ -89,67 +208,73 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     // Every other exit runs the common exit chain, then reports from the ended run record.
     const exitChain = (exitType: string): string[] => {
         banner("exit workflow");
-        push(`WRITE EXIT TYPE: ${exitType}`);
-        push("RECORD MODIFIED FILES");
-        push("MARK INACTIVE");
-        if (sourceLockHeld) push("RELEASE THE WORKTREE LEASE AND SOURCE LOCK");
-        else if (leaseHeld) push("RELEASE THE WORKTREE LEASE");
-        push(`REPORT THE RUN'S EXIT TYPE AND NOTE: ${exitType}`);
-        push("STOP");
+        push(`${L("WRITE_EXIT_TYPE_AND_NOTE")}: ${exitType}`);
+        push(L("RECORD_MODIFIED_FILES_FAILURE"));
+        push(L("MARK_TASK_INACTIVE_FAILURE"));
+        push(`${L("WAS_WORKTREE_CREATED")}: ${yesNo(leaseHeld)}`);
+        if (!leaseHeld) {
+            push(L("NOTHING_TO_RELEASE"));
+        } else {
+            push(`${L("WAS_SOURCE_REPO_LOCKED")}: ${yesNo(sourceLockHeld)}`);
+            push(sourceLockHeld ? L("RELEASE_WORKTREE_LEASE_AND_LOCK") : L("RELEASE_WORKTREE_LEASE"));
+        }
+        push(`${L("REPORT_EXIT_TYPE_AND_NOTE")}: ${exitType}`);
+        push(L("STOP"));
         return trace;
     };
 
     // Output -> receipt -> structure check -> output -> the same receipt, now trusted.
     // Returns the finished trace when the structure check fails, null when the run continues.
-    const receipt = (name: ReceiptName, fields: string): string[] | null => {
-        push("OUTPUT");
-        push(`RECEIPT: ${fields}`);
+    const receipt = (name: ReceiptName): string[] | null => {
+        const nodes = RECEIPT_NODES[name];
+        push(L(nodes.output));
+        push(L(nodes.receipt));
         const valid = decisions.malformedReceipt !== name;
-        push(`IS THE ${name.toUpperCase()} RECEIPT VALID: ${yesNo(valid)}`);
+        push(`${L(nodes.valid)}: ${yesNo(valid)}`);
         if (!valid) return exitChain("RUN-FAILED");
-        push("OUTPUT");
-        push(`RECEIPT (TRUSTED): ${fields}`);
+        push(L(nodes.outputTrusted));
+        push(L(nodes.receiptTrusted));
         return null;
     };
 
     banner("preamble");
-    push(`TASK VALID: ${yesNo(decisions.taskNumberValid)}`);
+    push(`${L("IS_TASK_NUMBER_VALID")}: ${yesNo(decisions.taskNumberValid)}`);
     if (!decisions.taskNumberValid) return reportAndStop("INVALID-NUMBER");
 
-    push(`TASK OPEN: ${yesNo(decisions.taskOpen)}`);
+    push(`${L("IS_TASK_OPEN")}: ${yesNo(decisions.taskOpen)}`);
     if (!decisions.taskOpen) return reportAndStop("NOT-OPEN");
 
     // Drawn as two boxes, but one atomic read-modify-write: nothing can make the task
     // active between the question and the write.
-    push(`TASK ACTIVE: ${yesNo(decisions.taskActive)}`);
+    push(`${L("IS_TASK_ACTIVE")}: ${yesNo(decisions.taskActive)}`);
     if (decisions.taskActive) return reportAndStop("ALREADY-ACTIVE");
-    push("MARK THE TASK ACTIVE");
+    push(L("MARK_TASK_ACTIVE"));
 
-    push(`TASK BLOCKED: ${yesNo(decisions.taskBlocked)}`);
+    push(`${L("IS_TASK_BLOCKED")}: ${yesNo(decisions.taskBlocked)}`);
     if (decisions.taskBlocked) return exitChain("BLOCKED");
 
     // Four worktree shapes converge on "init submodules recursively".
-    push(`WORKTREE EXISTS: ${yesNo(decisions.worktreeExists)}`);
+    push(`${L("DOES_WORKTREE_EXIST")}: ${yesNo(decisions.worktreeExists)}`);
     if (!decisions.worktreeExists) {
-        push("CREATE A WORKTREE");
-        push("AUTO GENERATE DOCS");
+        push(L("CREATE_WORKTREE"));
+        push(L("AUTO_GENERATE_DOCS"));
     } else {
-        push(`WORKTREE SAFE: ${yesNo(decisions.worktreeSafe)}`);
+        push(`${L("IS_WORKTREE_SAFE_TO_USE")}: ${yesNo(decisions.worktreeSafe)}`);
         if (decisions.worktreeSafe) {
-            push("UPDATE AUTO GENERATED DOCS");
+            push(L("UPDATE_AUTO_GENERATED_DOCS"));
         } else {
-            push(`PREVIOUS WORK RESUMABLE: ${yesNo(decisions.previousWorkResumable)}`);
+            push(`${L("IS_PREVIOUS_RUN_RESUMABLE")}: ${yesNo(decisions.previousWorkResumable)}`);
             if (decisions.previousWorkResumable) {
-                push("UPDATE AUTO GENERATED DOCS");
+                push(L("UPDATE_AUTO_GENERATED_DOCS"));
             } else {
-                push("RESET THE WORKTREE");
-                push("AUTO GENERATE DOCS");
+                push(L("RESET_WORKTREE"));
+                push(L("AUTO_GENERATE_DOCS"));
             }
         }
     }
-    push("INIT SUBMODULES RECURSIVELY");
+    push(L("INIT_SUBMODULES_RECURSIVELY"));
     leaseHeld = true;
-    const preambleReceipt = receipt("active task", "{ active task, initialized worktree }");
+    const preambleReceipt = receipt("active task");
     if (preambleReceipt) return preambleReceipt;
 
     banner("planning");
@@ -160,86 +285,86 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     let verdict: "accept" | "amend" | "scrap" = "accept";
     let verdictIndex = 0;
     planning: for (;;) {
-        push(`${AGENT} PLAN THE TASK`);
-        const planReceipt = receipt("plan file", "{ plan file: task, revision, sections }");
+        push(`${AGENT} ${L("PLAN_THE_TASK")}`);
+        const planReceipt = receipt("plan file");
         if (planReceipt) return planReceipt;
 
         for (;;) {
-            push(`${AGENT} CODEX REVIEWS THE PLAN`);
-            const reviewReceipt = receipt("codex review", "{ codex review: verdict, notes, amendments }");
+            push(`${AGENT} ${L("CODEX_REVIEWS_PLAN")}`);
+            const reviewReceipt = receipt("codex review");
             if (reviewReceipt) return reviewReceipt;
 
             verdict = attempt(decisions.codexPlanVerdict, verdictIndex);
             verdictIndex += 1;
-            push(`REVIEW VERDICT (ACCEPT, AMEND, SCRAP): ${verdict.toUpperCase()}`);
+            push(`${L("WHAT_IS_REVIEW_VERDICT")}: ${verdict.toUpperCase()}`);
 
             if (verdict === "accept") break planning;
 
             if (verdict === "scrap") {
                 scrapAttempt += 1;
-                push(`FIRST TIME SCRAP: ${yesNo(scrapAttempt < MAX_ATTEMPTS)}`);
+                push(`${L("IS_FIRST_TIME_SCRAP")}: ${yesNo(scrapAttempt < MAX_ATTEMPTS)}`);
                 if (scrapAttempt >= MAX_ATTEMPTS) {
-                    push("SECOND TIME SCRAP");
+                    push(L("PLAN_SCRAPPED_2X"));
                     return exitChain("PLAN-SCRAPPED");
                 }
-                push("SCRIPT ADDS THE CODEX SCRAP NOTES TO THE TASK BRIEF");
+                push(L("ADD_SCRAP_NOTES_TO_BRIEF"));
                 depth += 1;
                 continue planning;
             }
 
-            push("SCRIPT APPLIES CODEX AMENDMENTS TO THE PLAN");
+            push(L("APPLY_CODEX_AMENDMENTS"));
             amendRound += 1;
             const roundsDone = amendRound >= MAX_ATTEMPTS;
-            push(`2 AMEND ROUNDS DONE: ${yesNo(roundsDone)}`);
+            push(`${L("ARE_2_AMEND_ROUNDS_DONE")}: ${yesNo(roundsDone)}`);
             if (roundsDone) break planning;
             depth += 1;
         }
     }
     depth = planDepth;
-    const planFileReceipt = receipt("finished plan", "{ plan file }");
+    const planFileReceipt = receipt("finished plan");
     if (planFileReceipt) return planFileReceipt;
 
     banner("implement and test");
-    push(`${AGENT} IMPLEMENT TASK`);
-    push("RECORD IMPL NOTES");
+    push(`${AGENT} ${L("IMPLEMENT_TASK")}`);
+    push(L("RECORD_IMPLEMENTATION_NOTES"));
 
     // Rule: every repair re-enters at "commit if needed", never at the test box.
     const testDepth = depth;
     let testAttempt = 0;
     let codexTestAttempt = 0;
     for (;;) {
-        push("COMMIT (IF NEEDED)");
-        push("RUN TASK TESTS");
+        push(L("COMMIT_IF_NEEDED"));
+        push(L("RUN_TASK_TESTS"));
         const testsFail = attempt(decisions.taskTestsFail, testAttempt);
-        push(`TESTS FAIL: ${yesNo(testsFail)}`);
+        push(`${L("DO_TASK_TESTS_FAIL")}: ${yesNo(testsFail)}`);
         if (testsFail) {
             testAttempt += 1;
-            push(`FIRST FAIL: ${yesNo(testAttempt < MAX_ATTEMPTS)}`);
+            push(`${L("IS_FIRST_TASK_TEST_FAIL")}: ${yesNo(testAttempt < MAX_ATTEMPTS)}`);
             if (testAttempt >= MAX_ATTEMPTS) {
-                push("TESTS FAILED 2X");
+                push(L("TESTS_FAILED_2X"));
                 return exitChain("TESTS-RED");
             }
-            push(`${AGENT} FIX THE CODEBASE`);
-            const fixReceipt = receipt("fix the codebase", "{ fixed }");
+            push(`${AGENT} ${L("FIX_THE_CODEBASE")}`);
+            const fixReceipt = receipt("fix the codebase");
             if (fixReceipt) return fixReceipt;
             depth += 1;
             continue;
         }
-        push(`${AGENT} CODEX REVIEWS TESTS`);
-        const testReviewReceipt = receipt("test review", "{ flagged, reviewer, test review file }");
+        push(`${AGENT} ${L("CODEX_REVIEWS_TESTS")}`);
+        const testReviewReceipt = receipt("test review");
         if (testReviewReceipt) return testReviewReceipt;
 
         const flagged = attempt(decisions.codexTestsFlagged, codexTestAttempt);
-        push(`TESTS FLAGGED: ${yesNo(flagged)}`);
+        push(`${L("ARE_TESTS_FLAGGED")}: ${yesNo(flagged)}`);
         if (!flagged) break;
         codexTestAttempt += 1;
-        push(`FIRST FLAGGING: ${yesNo(codexTestAttempt < MAX_ATTEMPTS)}`);
+        push(`${L("IS_FIRST_FLAGGING")}: ${yesNo(codexTestAttempt < MAX_ATTEMPTS)}`);
         if (codexTestAttempt >= MAX_ATTEMPTS) {
-            push("TESTS FLAGGED 2X");
+            push(L("TESTS_FLAGGED_2X"));
             return exitChain("TESTS-FLAGGED");
         }
-        push(`${AGENT} AMEND THE TESTS`);
-        const amendReceipt = receipt("amend tests", "{ amended }");
+        push(`${AGENT} ${L("AMEND_TESTS")}`);
+        const amendReceipt = receipt("amend tests");
         if (amendReceipt) return amendReceipt;
         testAttempt += 1;
         depth += 1;
@@ -255,37 +380,37 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     for (;;) {
         const free = attempt(decisions.sourceRepoFree, freeIndex);
         freeIndex += 1;
-        push(`SOURCE REPO CAN BE LOCKED: ${yesNo(free)}`);
+        push(`${L("CAN_SOURCE_REPO_BE_LOCKED")}: ${yesNo(free)}`);
         if (!free) {
             heldAttempt += 1;
-            push(`FIRST TIME HELD: ${yesNo(heldAttempt < MAX_ATTEMPTS)}`);
+            push(`${L("IS_FIRST_TIME_HELD")}: ${yesNo(heldAttempt < MAX_ATTEMPTS)}`);
             if (heldAttempt >= MAX_ATTEMPTS) {
-                push("SOURCE REPO HELD 2X");
+                push(L("SOURCE_REPO_HELD_2X"));
                 return exitChain("RUN-FAILED");
             }
-            push("WAIT");
+            push(L("WAIT_FOR_LOCK_FREE"));
             depth += 1;
             continue;
         }
-        push("LOCK THE SOURCE REPO");
+        push(L("LOCK_SOURCE_REPO"));
         const locked = attempt(decisions.lockSucceeds, lockIndex);
         lockIndex += 1;
-        push(`LOCKING SUCCEEDED: ${yesNo(locked)}`);
+        push(`${L("DID_LOCKING_SOURCE_REPO_SUCCEED")}: ${yesNo(locked)}`);
         if (locked) {
             sourceLockHeld = true;
             break;
         }
         lockFailAttempt += 1;
-        push(`FIRST LOCK FAILURE: ${yesNo(lockFailAttempt < MAX_ATTEMPTS)}`);
+        push(`${L("IS_FIRST_LOCK_FAILURE")}: ${yesNo(lockFailAttempt < MAX_ATTEMPTS)}`);
         if (lockFailAttempt >= MAX_ATTEMPTS) {
-            push("LOCK FAILED 2X");
+            push(L("LOCK_FAILED_2X"));
             return exitChain("RUN-FAILED");
         }
-        push("WAIT");
+        push(L("WAIT_AFTER_LOCK_RACE"));
         depth += 1;
     }
     depth = lockDepth;
-    const implReceipt = receipt("finished implementation", "{ finished implementation, source repo lock }");
+    const implReceipt = receipt("finished implementation");
     if (implReceipt) return implReceipt;
 
     banner("rebase and merge");
@@ -297,9 +422,9 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     let advanceAttempt = 0;
     let mergeAttempt = 0;
     for (;;) {
-        push("REBASE ONTO THE TARGET BRANCH IF NEEDED");
+        push(L("REBASE_ONTO_TARGET_BRANCH"));
         let conflicted = attempt(decisions.rebase, rebaseAttempt) === "conflict";
-        push(`REBASE REPORTED CONFLICTS: ${yesNo(conflicted)}`);
+        push(`${L("DID_REBASE_REPORT_CONFLICTS")}: ${yesNo(conflicted)}`);
         rebaseAttempt += 1;
 
         // "did the rebase report conflicts?" is re-entered by the replay box, not just the rebase.
@@ -307,33 +432,33 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         for (;;) {
             if (conflicted) {
                 conflictAttempt += 1;
-                push(`FIRST CONFLICT: ${yesNo(conflictAttempt < MAX_ATTEMPTS)}`);
+                push(`${L("IS_FIRST_CONFLICT")}: ${yesNo(conflictAttempt < MAX_ATTEMPTS)}`);
                 if (conflictAttempt >= MAX_ATTEMPTS) {
-                    push("REBASE CONFLICTED 2X");
+                    push(L("REBASE_CONFLICTED_2X"));
                     return exitChain("REBASE-STUCK");
                 }
-                push(`${AGENT} FIX CONFLICTS`);
-                const conflictReceipt = receipt("conflict fix", "{ resolved, unresolvedPaths }");
+                push(`${AGENT} ${L("FIX_CONFLICTS")}`);
+                const conflictReceipt = receipt("conflict fix");
                 if (conflictReceipt) return conflictReceipt;
             }
-            push("COMMIT (IF NEEDED)");
-            push("CONTINUE REPLAYING COMMITS ON TOP OF THE TARGET BRANCH");
+            push(L("COMMIT_IF_NEEDED"));
+            push(L("REPLAY_COMMITS_ON_TARGET_BRANCH"));
             const advance = attempt(decisions.rebaseAdvance, advanceAttempt);
-            push(`REBASE FINISHED: ${yesNo(advance === "finished")}`);
+            push(`${L("IS_REBASE_FINISHED")}: ${yesNo(advance === "finished")}`);
             advanceAttempt += 1;
             if (advance === "finished") {
-                push("RUN THE FULL SUITE");
+                push(L("RUN_FULL_SUITE"));
                 const suitePasses = attempt(decisions.fullSuitePasses, suiteAttempt);
-                push(`ALL TESTS PASS: ${yesNo(suitePasses)}`);
+                push(`${L("DO_ALL_TESTS_PASS")}: ${yesNo(suitePasses)}`);
                 if (suitePasses) break;
                 suiteAttempt += 1;
-                push(`FIRST SUITE FAILURE: ${yesNo(suiteAttempt < MAX_ATTEMPTS)}`);
+                push(`${L("IS_FIRST_SUITE_FAILURE")}: ${yesNo(suiteAttempt < MAX_ATTEMPTS)}`);
                 if (suiteAttempt >= MAX_ATTEMPTS) {
-                    push("SUITE FAILED 2X");
+                    push(L("SUITE_FAILED_2X"));
                     return exitChain("SUITE-RED");
                 }
-                push(`${AGENT} FIX THE CODEBASE`);
-                const suiteFixReceipt = receipt("fix the full suite", "{ fixed }");
+                push(`${AGENT} ${L("FIX_THE_CODEBASE_FOR_SUITE")}`);
+                const suiteFixReceipt = receipt("fix the full suite");
                 if (suiteFixReceipt) return suiteFixReceipt;
                 conflicted = false;
                 depth += 1;
@@ -341,22 +466,22 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             }
             conflicted = attempt(decisions.rebase, rebaseAttempt) === "conflict";
             depth += 1;
-            push(`REBASE REPORTED CONFLICTS: ${yesNo(conflicted)}`);
+            push(`${L("DID_REBASE_REPORT_CONFLICTS")}: ${yesNo(conflicted)}`);
             rebaseAttempt += 1;
         }
         depth = rebaseTailDepth;
 
-        push(`EVERY CHANGE STAYED INSIDE THE OWNED FILES: ${yesNo(decisions.fenceHeld)}`);
+        push(`${L("DID_CHANGES_STAY_INSIDE_FENCE")}: ${yesNo(decisions.fenceHeld)}`);
         if (!decisions.fenceHeld) return exitChain("FENCE-VIOLATION");
 
-        push("MERGE WORKTREES AND SUBMODULES, NO FAST-FORWARD");
+        push(L("MERGE_WORKTREES"));
         const merged = attempt(decisions.mergeLands, mergeAttempt);
-        push(`MERGE LANDED: ${yesNo(merged)}`);
+        push(`${L("DID_MERGE_LAND")}: ${yesNo(merged)}`);
         if (merged) break;
         mergeAttempt += 1;
-        push(`FIRST MERGE FAILURE: ${yesNo(mergeAttempt < MAX_ATTEMPTS)}`);
+        push(`${L("IS_FIRST_MERGE_FAILURE")}: ${yesNo(mergeAttempt < MAX_ATTEMPTS)}`);
         if (mergeAttempt >= MAX_ATTEMPTS) {
-            push("MERGE FAILED 2X");
+            push(L("MERGE_FAILED_2X"));
             return exitChain("MERGE-FAILED");
         }
         conflictAttempt = 0;
@@ -364,19 +489,19 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         depth += 1;
     }
     depth = mergeDepth;
-    const mergeReceipt = receipt("merge", "{ merge commit hashes, modified files }");
+    const mergeReceipt = receipt("merge");
     if (mergeReceipt) return mergeReceipt;
 
     banner("exit workflow");
-    push("RECORD MERGE COMMIT HASHES");
-    push("WRITE EXIT TYPE: COMPLETED");
-    push("RECORD MODIFIED FILES");
-    push("CLEAN UP WORKTREES");
-    push("BUILD CLOSURE NOTE");
-    push("MARK INACTIVE");
-    push("MOVE TASK TO completedTasks.json");
-    push("REPORT THE CLOSURE NOTE");
-    push("STOP");
+    push(L("RECORD_MERGE_COMMIT_HASHES"));
+    push(L("WRITE_EXIT_TYPE_COMPLETED"));
+    push(L("RECORD_MODIFIED_FILES_SUCCESS"));
+    push(L("CLEAN_UP_WORKTREES"));
+    push(L("BUILD_CLOSURE_NOTE"));
+    push(L("MARK_TASK_INACTIVE_SUCCESS"));
+    push(L("ARCHIVE_TASK"));
+    push(L("REPORT_CLOSURE_NOTE"));
+    push(L("STOP"));
     return trace;
 }
 
