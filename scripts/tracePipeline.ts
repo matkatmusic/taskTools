@@ -1,15 +1,10 @@
-/* Walks the five diagrams in plans/diagram for one set of decision outcomes and names every box
-   it visits, in order. Nothing here touches a repository — it is the diagram made runnable, so a
-   path can be read end to end without running a task.
+/*
+  Walks the five diagrams in plans/diagram for one set of decision outcomes and names every box it visits, in order. Nothing here touches a repository — it is the diagram made runnable, so a path can be read end to end without running a task.
 
-     plans/diagram/pipeline-preamble.mmd       banner "preamble"
-     plans/diagram/pipeline-planning.mmd       banner "planning"
-     plans/diagram/pipeline-implementTest.mmd  banner "implement and test"
-     plans/diagram/pipeline-rebaseMerge.mmd    banner "rebase and merge"
-     plans/diagram/pipeline-exitWorkflow.mmd   banner "exit workflow"
+  plans/diagram/pipeline-preamble.mmd       banner "preamble" plans/diagram/pipeline-planning.mmd       banner "planning" plans/diagram/pipeline-implementTest.mmd  banner "implement and test" plans/diagram/pipeline-rebaseMerge.mmd    banner "rebase and merge" plans/diagram/pipeline-exitWorkflow.mmd   banner "exit workflow"
 
-   Every step's wording comes from the diagrams themselves, not from a hand-written copy. See
-   mmdGraph.ts for the parser and L(id) below for the lookup that keeps this file honest. */
+  Every step's wording comes from the diagrams themselves, not from a hand-written copy. See mmdGraph.ts for the parser and L(id) below for the lookup that keeps this file honest.
+*/
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseMmd } from "./mmdGraph.ts";
@@ -139,6 +134,17 @@ const RECEIPT_NODES: Record<ReceiptName, { output: string; receipt: string; vali
     },
 };
 
+// The eight orange boxes, named by the diagram ids DID_<name>_RETURN_A_RESULT and RETRY_<name>.
+export type AgentBoxName =
+    | "PLANNER"
+    | "PLAN_REVIEWER"
+    | "IMPLEMENTER"
+    | "TEST_REVIEWER"
+    | "CODEBASE_FIXER"
+    | "TEST_AMENDER"
+    | "CONFLICT_FIXER"
+    | "SUITE_FIXER";
+
 // Loop decisions hold one entry per attempt: taskTestsFail [true, false] fails once, then passes.
 export type PipelineDecisions = {
     taskNumber: number;
@@ -161,6 +167,8 @@ export type PipelineDecisions = {
     mergeLands: boolean[];
     // Names the one receipt whose structure check fails; absent means every receipt validates.
     malformedReceipt?: ReceiptName;
+    // One entry per visit to an agent box; false means the harness lost that agent's result.  Absent, or short, means the agent returned: an untouched fixture never loses one.
+    agentReturnsResult?: Partial<Record<AgentBoxName, boolean[]>>;
 };
 
 const MAX_ATTEMPTS = 2;
@@ -229,6 +237,22 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         return null;
     };
 
+    // Every visit an agent box has already had, so a box inside a loop keeps its own attempt count.
+    const agentVisits = new Map<AgentBoxName, number>();
+
+    // An orange box. The harness can lose the agent, and the diagram sends that back to the box.
+    const agentBox = (nodeId: string, box: AgentBoxName): void => {
+        for (let round = 0; round < MAX_ATTEMPTS; round += 1) {
+            push(`${AGENT} ${L(nodeId)}`);
+            const visit = agentVisits.get(box) ?? 0;
+            agentVisits.set(box, visit + 1);
+            const returned = attempt(decisions.agentReturnsResult?.[box] ?? [true], visit);
+            push(`${L(`DID_${box}_RETURN_A_RESULT`)}: ${yesNo(returned)}`);
+            if (returned) return;
+            push(L(`RETRY_${box}`));
+        }
+    };
+
     banner("preamble");
     push(`${L("IS_TASK_NUMBER_VALID")}: ${yesNo(decisions.taskNumberValid)}`);
     if (!decisions.taskNumberValid) return reportAndStop("INVALID-NUMBER");
@@ -272,12 +296,12 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     let verdict: "accept" | "amend" | "scrap" = "accept";
     let verdictIndex = 0;
     planning: for (;;) {
-        push(`${AGENT} ${L("PLAN_THE_TASK")}`);
+        agentBox("PLAN_THE_TASK", "PLANNER");
         const planReceipt = receipt("plan file");
         if (planReceipt) return planReceipt;
 
         for (;;) {
-            push(`${AGENT} ${L("CODEX_REVIEWS_PLAN")}`);
+            agentBox("CODEX_REVIEWS_PLAN", "PLAN_REVIEWER");
             const reviewReceipt = receipt("codex review");
             if (reviewReceipt) return reviewReceipt;
 
@@ -312,7 +336,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
     if (planFileReceipt) return planFileReceipt;
 
     banner("implement and test");
-    push(`${AGENT} ${L("IMPLEMENT_TASK")}`);
+    agentBox("IMPLEMENT_TASK", "IMPLEMENTER");
     push(L("RECORD_IMPLEMENTATION_NOTES"));
 
     // Rule: every repair re-enters at "commit if needed", never at the test box.
@@ -331,13 +355,13 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
                 push(L("TESTS_FAILED_2X"));
                 return exitChain("TESTS-RED");
             }
-            push(`${AGENT} ${L("FIX_THE_CODEBASE")}`);
+            agentBox("FIX_THE_CODEBASE", "CODEBASE_FIXER");
             const fixReceipt = receipt("fix the codebase");
             if (fixReceipt) return fixReceipt;
             depth += 1;
             continue;
         }
-        push(`${AGENT} ${L("CODEX_REVIEWS_TESTS")}`);
+        agentBox("CODEX_REVIEWS_TESTS", "TEST_REVIEWER");
         const testReviewReceipt = receipt("test review");
         if (testReviewReceipt) return testReviewReceipt;
 
@@ -350,7 +374,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             push(L("TESTS_FLAGGED_2X"));
             return exitChain("TESTS-FLAGGED");
         }
-        push(`${AGENT} ${L("AMEND_TESTS")}`);
+        agentBox("AMEND_TESTS", "TEST_AMENDER");
         const amendReceipt = receipt("amend tests");
         if (amendReceipt) return amendReceipt;
         testAttempt += 1;
@@ -424,7 +448,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
                     push(L("REBASE_CONFLICTED_2X"));
                     return exitChain("REBASE-STUCK");
                 }
-                push(`${AGENT} ${L("FIX_CONFLICTS")}`);
+                agentBox("FIX_CONFLICTS", "CONFLICT_FIXER");
                 const conflictReceipt = receipt("conflict fix");
                 if (conflictReceipt) return conflictReceipt;
             }
@@ -444,7 +468,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
                     push(L("SUITE_FAILED_2X"));
                     return exitChain("SUITE-RED");
                 }
-                push(`${AGENT} ${L("FIX_THE_CODEBASE_FOR_SUITE")}`);
+                agentBox("FIX_THE_CODEBASE_FOR_SUITE", "SUITE_FIXER");
                 const suiteFixReceipt = receipt("fix the full suite");
                 if (suiteFixReceipt) return suiteFixReceipt;
                 conflicted = false;

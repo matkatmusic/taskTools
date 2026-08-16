@@ -1,27 +1,14 @@
-// Derives scripts/tracePipelinePaths.json fixtures directly from the four decision-bearing
-// sub-pipeline diagrams (preamble, planning, implement-and-test, rebase-and-merge), instead of
-// searching PipelineDecisions' combinatorial space.
+// Derives scripts/tracePipelinePaths.json fixtures directly from the four decision-bearing sub-pipeline diagrams (preamble, planning, implement-and-test, rebase-and-merge), instead of searching PipelineDecisions' combinatorial space.
 //
-// mmdGraph.ts's enumeratePaths already runs the DFS that finds every terminating walk through a
-// diagram (maxEdgeUses=2, matching MAX_ATTEMPTS=2). This script treats that walk list as the
-// INPUT: for each diagram, for each enumerated node-id path, it inverts the path into the
-// PipelineDecisions fragment that would make traceTaskPipeline walk exactly those boxes, then
-// composes that fragment with "boring" (everything-succeeds) fragments for the other three
-// phases to get one complete end-to-end decisions object per path. Dedupe by resulting trace.
+// mmdGraph.ts's enumeratePaths already runs the DFS that finds every terminating walk through a diagram (maxEdgeUses=2, matching MAX_ATTEMPTS=2). This script treats that walk list as the INPUT: for each diagram, for each enumerated node-id path, it inverts the path into the PipelineDecisions fragment that would make traceTaskPipeline walk exactly those boxes, then composes that fragment with "boring" (everything-succeeds) fragments for the other three phases to get one complete end-to-end decisions object per path. Dedupe by resulting trace.
 //
-// Every YES/NO/verdict node in a path is either:
-//   - a genuine decision the tracer reads from PipelineDecisions (recorded into a fragment field)
-//   - a derived "first time?" / "N rounds done?" gate computed from an attempt counter, not
-//     supplied by any field. Its value is forced by the counter, so it is *validated* against
-//     what the counter implies rather than recorded. A path that disagrees with the counter is
-//     not producible by any decisions object - see reportUnrealizable().
+// Every YES/NO/verdict node in a path is either: - a genuine decision the tracer reads from PipelineDecisions (recorded into a fragment field) - a derived "first time?" / "N rounds done?" gate computed from an attempt counter, not supplied by any field. Its value is forced by the counter, so it is *validated* against what the counter implies rather than recorded. A path that disagrees with the counter is not producible by any decisions object - see reportUnrealizable().
 //
-// Run: node scripts/generatePipelinePaths.ts
-// Deterministic: no Math.random, no Date.now. Re-running reproduces the file byte-for-byte.
+// Run: node scripts/generatePipelinePaths.ts Deterministic: no Math.random, no Date.now. Re-running reproduces the file byte-for-byte.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseMmd, enumeratePaths, type MmdGraph } from "./mmdGraph.ts";
-import { traceTaskPipeline, readNamedPaths, PATHS_FILE, type PipelineDecisions, type ReceiptName } from "./tracePipeline.ts";
+import { traceTaskPipeline, readNamedPaths, PATHS_FILE, type PipelineDecisions, type ReceiptName, type AgentBoxName } from "./tracePipeline.ts";
 
 const DIAGRAM_DIR = fileURLToPath(new URL("../plans/diagram/", import.meta.url));
 const MAX_ATTEMPTS = 2;
@@ -53,8 +40,7 @@ type Fragment = { ok: true; fields: Partial<PipelineDecisions>; terminal: boolea
 
 const yes = (m: string): boolean => m.endsWith("_YES");
 
-// Validates a derived "first time?" style gate against the counter that actually governs it.
-// firstBranch/secondBranch are "YES"|"NO": what the marker must be on the 1st vs 2nd visit.
+// Validates a derived gate against its counter.  firstBranch/secondBranch: expected marker on the 1st vs 2nd visit.
 function gate(m: Markers, attempt: number, firstBranch: "YES" | "NO", secondBranch: "YES" | "NO"): { ok: true; isSecond: boolean } | { ok: false; reason: string } {
     const marker = m.next();
     const got = yes(marker) ? "YES" : "NO";
@@ -63,6 +49,16 @@ function gate(m: Markers, attempt: number, firstBranch: "YES" | "NO", secondBran
         return { ok: false, reason: `derived gate ${marker} disagrees with its attempt counter (attempt ${attempt}, expected ${expected})` };
     }
     return { ok: true, isSecond: attempt >= MAX_ATTEMPTS };
+}
+
+// Consumes one agent box's retry loop, appending each visit's result to its running array.
+function consumeAgentBox(m: Markers, results: Partial<Record<AgentBoxName, boolean[]>>, box: AgentBoxName): void {
+    const arr = results[box] ?? (results[box] = []);
+    for (let round = 0; round < MAX_ATTEMPTS; round += 1) {
+        const returned = yes(m.next());
+        arr.push(returned);
+        if (returned) return;
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -113,23 +109,24 @@ function interpretPreamble(markers: Markers): Fragment {
 function interpretPlanning(markers: Markers): Fragment {
     const verdicts: ("accept" | "amend" | "scrap")[] = [];
     const events: string[] = [];
+    const agentReturnsResult: Partial<Record<AgentBoxName, boolean[]>> = {};
     let scrapAttempt = 0;
     let amendRound = 0;
 
     for (;;) {
+        consumeAgentBox(markers, agentReturnsResult, "PLANNER");
         const planFileValid = yes(markers.next());
         if (!planFileValid) {
-            return { ok: true, fields: { codexPlanVerdict: verdicts.length ? verdicts : ["accept"], malformedReceipt: "plan file" }, terminal: true, events: [...events, "malformed-plan-file-receipt"] };
+            return { ok: true, fields: { codexPlanVerdict: verdicts.length ? verdicts : ["accept"], malformedReceipt: "plan file", agentReturnsResult }, terminal: true, events: [...events, "malformed-plan-file-receipt"] };
         }
 
         for (;;) {
+            consumeAgentBox(markers, agentReturnsResult, "PLAN_REVIEWER");
             const reviewValid = yes(markers.next());
             if (!reviewValid) {
-                // receipt() only fails equality by name, always on the FIRST call to that
-                // receipt - a malformed codex review after a verdict already landed is not
-                // producible by any decisions object.
+                // receipt() only fails on the FIRST call by name.  A malformed review after a verdict lands is not producible.
                 if (verdicts.length > 0) return { ok: false, reason: "malformed codex-review receipt appears after an earlier verdict; malformedReceipt only fails the first call" };
-                return { ok: true, fields: { codexPlanVerdict: ["accept"], malformedReceipt: "codex review" }, terminal: true, events: [...events, "malformed-codex-review-receipt"] };
+                return { ok: true, fields: { codexPlanVerdict: ["accept"], malformedReceipt: "codex review", agentReturnsResult }, terminal: true, events: [...events, "malformed-codex-review-receipt"] };
             }
 
             const verdictMarker = markers.next();
@@ -138,7 +135,7 @@ function interpretPlanning(markers: Markers): Fragment {
             events.push(`verdict-${verdict}`);
 
             if (verdict === "accept") {
-                return finishPlanning(markers, verdicts, events);
+                return finishPlanning(markers, verdicts, events, agentReturnsResult);
             }
             if (verdict === "scrap") {
                 scrapAttempt += 1;
@@ -146,7 +143,7 @@ function interpretPlanning(markers: Markers): Fragment {
                 if (!g.ok) return g;
                 if (g.isSecond) {
                     events.push("plan-scrapped");
-                    return { ok: true, fields: { codexPlanVerdict: verdicts }, terminal: true, events };
+                    return { ok: true, fields: { codexPlanVerdict: verdicts, agentReturnsResult }, terminal: true, events };
                 }
                 break; // re-enter outer loop: re-plan
             }
@@ -155,19 +152,19 @@ function interpretPlanning(markers: Markers): Fragment {
             const g = gate(markers, amendRound, "NO", "YES");
             if (!g.ok) return g;
             if (g.isSecond) {
-                return finishPlanning(markers, verdicts, events);
+                return finishPlanning(markers, verdicts, events, agentReturnsResult);
             }
             // else: continue inner loop, re-review without re-planning
         }
     }
 }
 
-function finishPlanning(markers: Markers, verdicts: ("accept" | "amend" | "scrap")[], events: string[]): Fragment {
+function finishPlanning(markers: Markers, verdicts: ("accept" | "amend" | "scrap")[], events: string[], agentReturnsResult: Partial<Record<AgentBoxName, boolean[]>>): Fragment {
     const receiptValid = yes(markers.next());
     if (!receiptValid) {
-        return { ok: true, fields: { codexPlanVerdict: verdicts, malformedReceipt: "finished plan" }, terminal: true, events: [...events, "malformed-finished-plan-receipt"] };
+        return { ok: true, fields: { codexPlanVerdict: verdicts, malformedReceipt: "finished plan", agentReturnsResult }, terminal: true, events: [...events, "malformed-finished-plan-receipt"] };
     }
-    return { ok: true, fields: { codexPlanVerdict: verdicts }, terminal: false, events };
+    return { ok: true, fields: { codexPlanVerdict: verdicts, agentReturnsResult }, terminal: false, events };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -178,10 +175,13 @@ function interpretImplementTest(markers: Markers): Fragment {
     const sourceRepoFree: boolean[] = [];
     const lockSucceeds: boolean[] = [];
     const events: string[] = [];
+    const agentReturnsResult: Partial<Record<AgentBoxName, boolean[]>> = {};
     let testAttempt = 0;
     let codexTestAttempt = 0;
     let heldAttempt = 0;
     let lockFailAttempt = 0;
+
+    consumeAgentBox(markers, agentReturnsResult, "IMPLEMENTER");
 
     for (;;) {
         const fails = yes(markers.next());
@@ -193,18 +193,20 @@ function interpretImplementTest(markers: Markers): Fragment {
             if (!g.ok) return g;
             if (g.isSecond) {
                 events.push("tests-red");
-                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds }, terminal: true, events };
+                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, agentReturnsResult }, terminal: true, events };
             }
+            consumeAgentBox(markers, agentReturnsResult, "CODEBASE_FIXER");
             const fixValid = yes(markers.next());
             if (!fixValid) {
-                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "fix the codebase" }, terminal: true, events: [...events, "malformed-fix-the-codebase-receipt"] };
+                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "fix the codebase", agentReturnsResult }, terminal: true, events: [...events, "malformed-fix-the-codebase-receipt"] };
             }
             continue;
         }
 
+        consumeAgentBox(markers, agentReturnsResult, "TEST_REVIEWER");
         const testReviewValid = yes(markers.next());
         if (!testReviewValid) {
-            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "test review" }, terminal: true, events: [...events, "malformed-test-review-receipt"] };
+            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "test review", agentReturnsResult }, terminal: true, events: [...events, "malformed-test-review-receipt"] };
         }
         const flagged = yes(markers.next());
         codexTestsFlagged.push(flagged);
@@ -215,11 +217,12 @@ function interpretImplementTest(markers: Markers): Fragment {
         if (!g.ok) return g;
         if (g.isSecond) {
             events.push("tests-flagged-twice");
-            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds }, terminal: true, events };
+            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, agentReturnsResult }, terminal: true, events };
         }
+        consumeAgentBox(markers, agentReturnsResult, "TEST_AMENDER");
         const amendValid = yes(markers.next());
         if (!amendValid) {
-            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "amend tests" }, terminal: true, events: [...events, "malformed-amend-tests-receipt"] };
+            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "amend tests", agentReturnsResult }, terminal: true, events: [...events, "malformed-amend-tests-receipt"] };
         }
     }
 
@@ -233,7 +236,7 @@ function interpretImplementTest(markers: Markers): Fragment {
             if (!g.ok) return g;
             if (g.isSecond) {
                 events.push("source-repo-held-twice");
-                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds }, terminal: true, events };
+                return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, agentReturnsResult }, terminal: true, events };
             }
             continue;
         }
@@ -246,15 +249,15 @@ function interpretImplementTest(markers: Markers): Fragment {
         if (!g.ok) return g;
         if (g.isSecond) {
             events.push("lock-race-lost-twice");
-            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds }, terminal: true, events };
+            return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, agentReturnsResult }, terminal: true, events };
         }
     }
 
     const implReceiptValid = yes(markers.next());
     if (!implReceiptValid) {
-        return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "finished implementation" }, terminal: true, events: [...events, "malformed-finished-implementation-receipt"] };
+        return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, malformedReceipt: "finished implementation", agentReturnsResult }, terminal: true, events: [...events, "malformed-finished-implementation-receipt"] };
     }
-    return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds }, terminal: false, events };
+    return { ok: true, fields: { taskTestsFail, codexTestsFlagged, sourceRepoFree, lockSucceeds, agentReturnsResult }, terminal: false, events };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -269,10 +272,11 @@ function interpretRebaseMerge(markers: Markers): Fragment {
     let suiteAttempt = 0;
     let mergeAttempt = 0;
     let fenceHeld = true;
+    const agentReturnsResult: Partial<Record<AgentBoxName, boolean[]>> = {};
 
     const done = (extra: Partial<PipelineDecisions> = {}): Fragment => ({
         ok: true,
-        fields: { rebase, rebaseAdvance, fullSuitePasses, fenceHeld, mergeLands, ...extra },
+        fields: { rebase, rebaseAdvance, fullSuitePasses, fenceHeld, mergeLands, agentReturnsResult, ...extra },
         terminal: true,
         events,
     });
@@ -291,6 +295,7 @@ function interpretRebaseMerge(markers: Markers): Fragment {
                     events.push("rebase-stuck");
                     return done();
                 }
+                consumeAgentBox(markers, agentReturnsResult, "CONFLICT_FIXER");
                 const conflictFixValid = yes(markers.next());
                 if (!conflictFixValid) {
                     events.push("malformed-conflict-fix-receipt");
@@ -311,6 +316,7 @@ function interpretRebaseMerge(markers: Markers): Fragment {
                     events.push("suite-red");
                     return done();
                 }
+                consumeAgentBox(markers, agentReturnsResult, "SUITE_FIXER");
                 const suiteFixValid = yes(markers.next());
                 if (!suiteFixValid) {
                     events.push("malformed-fix-the-full-suite-receipt");
@@ -349,7 +355,7 @@ function interpretRebaseMerge(markers: Markers): Fragment {
         events.push("malformed-merge-receipt");
         return done({ malformedReceipt: "merge" });
     }
-    return { ok: true, fields: { rebase, rebaseAdvance, fullSuitePasses, fenceHeld, mergeLands }, terminal: false, events };
+    return { ok: true, fields: { rebase, rebaseAdvance, fullSuitePasses, fenceHeld, mergeLands, agentReturnsResult }, terminal: false, events };
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -1,15 +1,10 @@
-// Which green boxes may be retried after a lost agent result — plans/tackle-tasks-v1_5-plan.md Phase 8.
-// A null agent result proves the harness returned nothing, not that the command never ran, so the
-// category decides between a blind retry and a read-only reconciliation. No CLI: this is a table.
+// Which green boxes may be retried after a lost agent result — plans/tackle-tasks-v1_5-plan.md Phase 8.  A null agent result proves the harness returned nothing, not that the command never ran, so the category decides between a blind retry and a read-only reconciliation. No CLI: this is a table.
 export type GreenBoxCategory = "read-only" | "mutating" | "maintenance-mutating";
 
 // A read-only box mutates nothing, so a lost result is answered by running it again.
 export const READ_ONLY_RETRY_LIMIT = 3;
 
-// Every script the workflow dispatches, keyed by its file basename without the extension.
-// Both test boxes are "mutating" because they write their durable decision to task.run before
-// they print stdout [a4 2]. recoverSourceRepoLock is run by an operator, never by the workflow,
-// so agent-result reconciliation does not apply to it.
+// Every script the workflow dispatches, keyed by its file basename without the extension.  Both test boxes are "mutating" because they write their durable decision to task.run before they print stdout [a4 2]. recoverSourceRepoLock is run by an operator, never by the workflow, so agent-result reconciliation does not apply to it.
 export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     advanceTaskRebase: "mutating",
     AgentPromptEmitter: "read-only",
@@ -47,12 +42,20 @@ export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     writeTaskExitNotes: "mutating",
 };
 
-// Libraries the pipeline imports but never dispatches as a box. Listed so that
-// test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory fails on any new unclassified script.
+// Libraries the pipeline imports but never dispatches as a box. Every new script must be listed.
 export const NON_DISPATCHED_SCRIPTS: string[] = [
+    "AmendTestsBodyEmitter",
+    "CodexReviewBodyEmitter",
+    "CodexTestReviewBodyEmitter",
+    "FixCodebaseBodyEmitter",
+    "FixConflictsBodyEmitter",
+    "ImplementTestPipelineEmitter",
     "PlannerBodyEmitter",
+    "PlanningPipelineEmitter",
     "PreambleDataEmitter",
+    "RebaseMergePipelineEmitter",
     "SkillBodyEmitter",
+    "SuiteFixBodyEmitter",
     "WorkflowResultCodes",
     "emitPipelineOutput",
     "greenBoxPolicy",
@@ -60,6 +63,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "occurrences",
     "planArtifacts",
     "sourceRepoLock",
+    "stepPipeline",
     "taskRunState",
     "validateActiveTaskReceipt",
     "writeTaskBrief",

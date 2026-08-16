@@ -10,27 +10,15 @@ export const meta = {
   ],
 }
 
-// meta must be the very first thing in the file — the Workflow harness reads it as a pure
-// literal before evaluating anything else, so nothing may precede it, comments included.
+// meta must be the very first thing in the file — the Workflow harness reads it as a pure literal before evaluating anything else, so nothing may precede it, comments included.
 //
-// Drives one task from validation to merge. The shape of this file is dictated by
-// plans/diagram/*.mmd — every step() line below is a node label copied verbatim from a diagram.
+// Drives one task from validation to merge. The shape of this file is dictated by plans/diagram/*.mmd — every step() line below is a node label copied verbatim from a diagram.
 //
-// The sandbox cannot import, require, read files, or run commands. Everything is inline, and
-// every box that does work — script boxes and agent boxes alike — goes through run(). A
-// subagent's Bash is the only way to run a command here, so a "script" box (git, tasks.json,
-// tests) is executed the same way an "agent" box (plan, review, fix) is: there is one chokepoint,
-// not two.
+// The sandbox cannot import, require, read files, or run commands. Everything is inline, and every box that does work — script boxes and agent boxes alike — goes through run(). A subagent's Bash is the only way to run a command here, so a "script" box (git, tasks.json, tests) is executed the same way an "agent" box (plan, review, fix) is: there is one chokepoint, not two.
 //
-// FAKE MODE: pass args.fake = <a fixture from scripts/tracePipelinePaths.json> and run()
-// returns the canned receipt from its call site instead of launching anything. That lets the
-// whole pipeline walk any path in the diagrams offline, so its output can be diffed against
-// scripts/tracePipeline.ts. tests/workflowMatchesTracer.test.ts is the guard against the
-// labels below drifting from the diagrams.
+// FAKE MODE: pass args.fake = <a fixture from scripts/tracePipelinePaths.json> and run() returns the canned receipt from its call site instead of launching anything. That lets the whole pipeline walk any path in the diagrams offline, so its output can be diffed against scripts/tracePipeline.ts. tests/workflowMatchesTracer.test.ts is the guard against the labels below drifting from the diagrams.
 //
-// REAL MODE: deliberately not built. Every decision that would need a real reconciliation
-// script, a real structure validator, or a real git/test result routes through realDecisions(),
-// which throws naming the missing piece instead of silently taking the happy path.
+// REAL MODE: deliberately not built. Every decision that would need a real reconciliation script, a real structure validator, or a real git/test result routes through realDecisions(), which throws naming the missing piece instead of silently taking the happy path.
 
 // ---------------------------------------------------------------------------
 // Skeleton. Phase functions below use ONLY these helpers and invent nothing.
@@ -42,7 +30,9 @@ const isFake = () => FAKE !== null && FAKE !== undefined
 const trace = []
 let depth = 0
 
-/** One diagram box. `label` must be copied verbatim from the .mmd node. */
+/*
+  One diagram box. `label` must be copied verbatim from the .mmd node.
+*/
 const step = (label, suffix) => {
   const line = '  '.repeat(depth) + (suffix === undefined ? label : `${label}: ${suffix}`)
   trace.push(line)
@@ -50,7 +40,9 @@ const step = (label, suffix) => {
   return line
 }
 
-/** A sub-pipeline boundary. Never indented — it is a divider, not a step inside a loop. */
+/*
+  A sub-pipeline boundary. Never indented — it is a divider, not a step inside a loop.
+*/
 const banner = (name) => {
   const line = `--------- ${name} ---------`
   trace.push(line)
@@ -58,22 +50,47 @@ const banner = (name) => {
   return line
 }
 
-/** A repeat of a two-strike loop is indented one level, matching the tracer. */
+/*
+  A repeat of a two-strike loop is indented one level, matching the tracer.
+*/
 const enterRetry = () => { depth += 1 }
 const leaveRetry = () => { depth -= 1 }
 
 const yesNo = (value) => (value ? 'YES' : 'NO')
 
-/** The diagram's orange-box marker, prefixed onto an agent box's label. */
+/*
+  The diagram's orange-box marker, prefixed onto an agent box's label.
+*/
 const AGENT_MARK = '<-- AGENT -->'
 
-/** Every box that does work. In fake mode `canned()` stands in for the real run; in real mode
- *  the sandbox hands the prompt to the injected `agent()` — the only way anything here can run
- *  a command. `isAgentBox` matches the diagram's orange boxes with the tracer's AGENT marker. */
-const run = async (label, prompt, opts, canned, isAgentBox = false) => {
-  step(isAgentBox ? `${AGENT_MARK} ${label}` : label)
-  if (isFake()) return canned()
-  return agent(prompt, opts)
+/*
+  Every visit an agent box has had, so a box inside a loop keeps its own attempt count.
+*/
+const agentVisits = new Map()
+
+/*
+  Whether the harness handed back this agent's result on its next visit.
+*/
+const agentReturns = (boxName) => {
+  const visit = agentVisits.get(boxName) ?? 0
+  agentVisits.set(boxName, visit + 1)
+  const outcomes = (FAKE.agentReturnsResult ?? {})[boxName] ?? [true]
+  return outcomes[Math.min(visit, outcomes.length - 1)]
+}
+
+const run = async (label, prompt, opts, canned, agentBoxName = null) => {
+  if (agentBoxName === null) {
+    step(label)
+    if (isFake()) return canned()
+    return agent(prompt, opts)
+  }
+  for (let round = 0; round < 2; round += 1) {
+    step(`${AGENT_MARK} ${label}`)
+    const result = isFake() ? (agentReturns(agentBoxName) ? canned() : null) : await agent(prompt, opts)
+    step('did the agent return a result?', yesNo(result !== null))
+    if (result !== null) return result
+    step('retry the box')
+  }
 }
 
 /** Real mode is deliberately not built. Every decision that would need a real reconciliation
@@ -82,7 +99,9 @@ const realDecisions = (what) => {
   throw new Error(`tackle-tasks workflow: real mode not implemented yet for ${what}`)
 }
 
-/** Output -> Receipt -> structure check -> Output -> the same receipt, now trusted. */
+/*
+  Output -> Receipt -> structure check -> Output -> the same receipt, now trusted.
+*/
 const receipt = (outputLabel, receiptLabel, validQuestion, valid) => {
   step(outputLabel)
   step(receiptLabel)
@@ -93,7 +112,9 @@ const receipt = (outputLabel, receiptLabel, validQuestion, valid) => {
   return true
 }
 
-/** The failure tail. Never validated — that would feed the exit workflow into itself. */
+/*
+  The failure tail. Never validated — that would feed the exit workflow into itself.
+*/
 const exitChain = (exitType, exitNote, held) => {
   const shoutedExitType = exitType.toUpperCase()
   banner('exit workflow')
@@ -148,8 +169,7 @@ const preamblePhase = async () => {
     }
   }
 
-  // Drawn as two boxes, but one atomic read-modify-write of tasks.json: nothing
-  // can make the task active between the question and the write.
+  // Drawn as two boxes, but one atomic read-modify-write of tasks.json: nothing can make the task active between the question and the write.
   step('is the task active?', yesNo(d.taskActive))
   if (d.taskActive) {
     return {
@@ -192,7 +212,7 @@ const preamblePhase = async () => {
   const receiptValid = d.malformedReceipt !== 'active task'
   const receiptOk = receipt(
     'Output',
-    'Receipt: { active task, initialized worktree }',
+    'Receipt: { }',
     'is the active task receipt structure valid?',
     receiptValid,
   )
@@ -234,7 +254,7 @@ const planningPhase = async () => {
       'Read the task brief and write a plan file: task number, revision, and sections (id, title, body).',
       {},
       () => ({ task: 1, revision: 1, sections: [{ id: 'draft', title: 'Draft', body: 'Draft plan.' }] }),
-      true,
+      "PLANNER",
     )
 
     const planValid = isFake()
@@ -242,7 +262,7 @@ const planningPhase = async () => {
       : realDecisions('plan file receipt validity')
     const planOk = receipt(
       'Output',
-      'Receipt: { plan file: task, revision, sections[ id, title, body ] }',
+      'Receipt: { }',
       'is the plan file structure valid?',
       planValid,
     )
@@ -256,7 +276,7 @@ const planningPhase = async () => {
         'Review the plan file and return a verdict (accept, amend, or scrap) with notes and any amendments.',
         {},
         () => ({ verdict: planVerdictFor(verdictIndex), notes: '', amendments: [] }),
-        true,
+        "PLAN_REVIEWER",
       )
 
       const reviewValid = isFake()
@@ -264,7 +284,7 @@ const planningPhase = async () => {
         : realDecisions('codex review receipt validity')
       const reviewOk = receipt(
         'Output',
-        'Receipt: { codex review: verdict, notes, amendments[] }',
+        'Receipt: { }',
         'is the review file structure valid?',
         reviewValid,
       )
@@ -322,7 +342,7 @@ const planningPhase = async () => {
     : realDecisions('finished plan receipt validity')
   const finishedOk = receipt(
     'Output',
-    'Receipt: { plan file }',
+    'Receipt: { }',
     'is the finished plan receipt structure valid?',
     finishedValid,
   )
@@ -348,7 +368,7 @@ const implementTestPhase = async () => {
     'Read the plan file and implement the task it describes: write the code changes.',
     {},
     () => ({ implemented: true }),
-    true,
+    "IMPLEMENTER",
   )
   await run(
     'record implementation notes file to tasks.json',
@@ -381,12 +401,12 @@ const implementTestPhase = async () => {
         'Edit source files, never tests, so the failing task tests pass.',
         {},
         () => ({ fixed: true }),
-        true,
+        "CODEBASE_FIXER",
       )
       const fixValid = d.malformedReceipt !== 'fix the codebase'
       const fixOk = receipt(
         'Output',
-        'Receipt: { fixed }',
+        'Receipt: { }',
         'is the fix receipt structure valid?',
         fixValid,
       )
@@ -407,12 +427,12 @@ const implementTestPhase = async () => {
         reviewer: 'codex',
         testReviewFile: 'test-review.md',
       }),
-      true,
+      "TEST_REVIEWER",
     )
     const reviewValid = d.malformedReceipt !== 'test review'
     const reviewOk = receipt(
       'Output',
-      'Receipt: { flagged, reviewer, test review file }',
+      'Receipt: { }',
       'is the test review receipt structure valid?',
       reviewValid,
     )
@@ -437,12 +457,12 @@ const implementTestPhase = async () => {
       'Edit this task own tests to resolve codex flags. Never edit a test this task did not create, unless it is broken or asserts nothing.',
       {},
       () => ({ amended: true }),
-      true,
+      "TEST_AMENDER",
     )
     const amendValid = d.malformedReceipt !== 'amend tests'
     const amendOk = receipt(
       'Output',
-      'Receipt: { amended }',
+      'Receipt: { }',
       'is the amendment receipt structure valid?',
       amendValid,
     )
@@ -459,8 +479,7 @@ const implementTestPhase = async () => {
     testRetryDepth -= 1
   }
 
-  // Two boxes for the source repo lock, per rule 10: "can the source repo be locked?" reads
-  // whether it's free, then "lock the source repo" takes it. Each has its own two-strike wait.
+  // Two boxes for the source repo lock, per rule 10: "can the source repo be locked?" reads whether it's free, then "lock the source repo" takes it. Each has its own two-strike wait.
   let sourceHeldAttempt = 0
   let lockFailAttempt = 0
   let freeIndex = 0
@@ -515,7 +534,7 @@ const implementTestPhase = async () => {
   const implValid = d.malformedReceipt !== 'finished implementation'
   const implOk = receipt(
     'Output',
-    'Receipt: { finished implementation, source repo lock }',
+    'Receipt: { }',
     'is the finished implementation receipt structure valid?',
     implValid,
   )
@@ -563,10 +582,10 @@ const rebaseMergePhase = async () => {
           'Resolve the current rebase conflicts, deepest submodule first, root last. Report which files were resolved and which remain unresolved.',
           {},
           () => ({ resolved: true, unresolvedPaths: [] }),
-          true,
+          "CONFLICT_FIXER",
         )
         const valid = d.malformedReceipt !== 'conflict fix'
-        const ok = receipt('Output', 'Receipt: { resolved, unresolvedPaths }', 'is the conflict fix receipt structure valid?', valid)
+        const ok = receipt('Output', 'Receipt: { }', 'is the conflict fix receipt structure valid?', valid)
         if (!ok) return { ok: false, trace: exitChain('run-failed', 'the conflict fix receipt is malformed', held) }
       }
 
@@ -594,10 +613,10 @@ const rebaseMergePhase = async () => {
           'The full suite is still failing after the rebase. Fix the source code, not the tests, so every test passes.',
           {},
           () => ({ fixed: true }),
-          true,
+          "SUITE_FIXER",
         )
         const valid = d.malformedReceipt !== 'fix the full suite'
-        const ok = receipt('Output', 'Receipt: { fixed }', 'is the suite fix receipt structure valid?', valid)
+        const ok = receipt('Output', 'Receipt: { }', 'is the suite fix receipt structure valid?', valid)
         if (!ok) return { ok: false, trace: exitChain('run-failed', 'the suite fix receipt is malformed', held) }
         conflicted = false
         enterRetry()
@@ -644,16 +663,14 @@ const rebaseMergePhase = async () => {
   }
 
   const mergeValid = d.malformedReceipt !== 'merge'
-  const ok = receipt('Output', 'Receipt: { merge commit hashes, modified files }', 'is the merge receipt structure valid?', mergeValid)
+  const ok = receipt('Output', 'Receipt: { }', 'is the merge receipt structure valid?', mergeValid)
   if (!ok) return { ok: false, trace: exitChain('run-failed', 'the merge receipt is malformed', held) }
 
   return { ok: true }
 }
 
 // ---------------------------------------------------------------------------
-// Driver — runs the four phases in order, then the success tail of
-// plans/diagram/pipeline-exitWorkflow.mmd. A phase returning { ok: false } ends
-// the run with the trace it already produced.
+// Driver — runs the four phases in order, then the success tail of plans/diagram/pipeline-exitWorkflow.mmd. A phase returning { ok: false } ends the run with the trace it already produced.
 // ---------------------------------------------------------------------------
 
 const taskNumber = isFake() ? FAKE.taskNumber : realDecisions('task number')

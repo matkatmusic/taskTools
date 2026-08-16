@@ -45,7 +45,7 @@ flowchart TB
 %% The active task and initialized worktree this pipeline emits are the input to
 %% the planning pipeline.
 
-  TASK_NUMBER_INPUT["Input: { task number }"] --> IS_TASK_NUMBER_VALID
+  TASK_NUMBER_INPUT["Input: { }"] --> IS_TASK_NUMBER_VALID
   IS_TASK_NUMBER_VALID{"is task number valid?"} --> IS_TASK_NUMBER_VALID_YES["YES"]
   IS_TASK_NUMBER_VALID --> IS_TASK_NUMBER_VALID_NO["NO"]
   IS_TASK_NUMBER_VALID_NO -- "exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> EXIT_WORKFLOW
@@ -76,19 +76,19 @@ flowchart TB
   IS_WORKTREE_SAFE_TO_USE_YES --> UPDATE_AUTO_GENERATED_DOCS["update auto generated docs"]
   UPDATE_AUTO_GENERATED_DOCS --> INIT_SUBMODULES_RECURSIVELY["init submodules recursively"]
   INIT_SUBMODULES_RECURSIVELY --> ACTIVE_TASK_WORKTREE_OUTPUT["Output"]
-  ACTIVE_TASK_WORKTREE_OUTPUT --> ACTIVE_TASK_WORKTREE_RECEIPT["Receipt: { active task, initialized worktree }"]
+  ACTIVE_TASK_WORKTREE_OUTPUT --> ACTIVE_TASK_WORKTREE_RECEIPT["Receipt: { }"]
   ACTIVE_TASK_WORKTREE_RECEIPT --> IS_ACTIVE_TASK_RECEIPT_VALID{"is the active task receipt structure valid?"}
   IS_ACTIVE_TASK_RECEIPT_VALID --> IS_ACTIVE_TASK_RECEIPT_VALID_YES["YES"]
   IS_ACTIVE_TASK_RECEIPT_VALID --> IS_ACTIVE_TASK_RECEIPT_VALID_NO["NO"]
   IS_ACTIVE_TASK_RECEIPT_VALID_YES --> ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED["Output"]
-  ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED --> ACTIVE_TASK_WORKTREE_RECEIPT_TRUSTED["Receipt: { active task, initialized worktree }"]
+  ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED --> ACTIVE_TASK_WORKTREE_RECEIPT_TRUSTED["Receipt: { }"]
   IS_ACTIVE_TASK_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the active task<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
 
-  VALIDATOR_FAILURE_OUTPUT["Output"] --> VALIDATOR_FAILURE_RECEIPT["Receipt: { exitType, exitNote }"]
+  VALIDATOR_FAILURE_OUTPUT["Output"] --> VALIDATOR_FAILURE_RECEIPT["Receipt: { }"]
   VALIDATOR_FAILURE_RECEIPT --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["exit workflow"] --> EXIT_OUTPUT["Output"]
-  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { exitType, exitNote }"]
+  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { }"]
 
   %% pass/nopass: green is the branch that keeps heading for the receipt,
   %% red is the branch that ends in the exit workflow.
