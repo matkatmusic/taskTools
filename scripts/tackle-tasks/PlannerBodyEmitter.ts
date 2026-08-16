@@ -1,7 +1,4 @@
-// The planner phase of tackle-tasks, one function per box in plans/diagram/pipeline-preamble.mmd.
-// Every box name in a trailing comment is the box's label in that diagram, verbatim.
-// Every function below is a thin wrapper around an already-tested export; none of them
-// open tasks.json themselves, and each re-derives what it needs from the task number.
+// The planner phase of tackle-tasks, one function per box in plans/diagram/pipeline-preamble.mmd.  Every box name in a trailing comment is the box's label in that diagram, verbatim.  Every function below is a thin wrapper around an already-tested export; none of them open tasks.json themselves, and each re-derives what it needs from the task number.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
@@ -21,6 +18,10 @@ import { markTaskInactive } from "./markTaskInactive.ts";
 import { releaseSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { loadPreparedTask, planPrompt } from "./AgentPromptEmitter.ts";
 import { generateRunId, releaseTaskWorktreeLease } from "../prepareTasks.ts";
+import type { Plan } from "./planArtifacts.ts";
+
+// The receipt the "plan the task" agent box hands back: the plan file it drafted.
+export type PlanFileReceipt = Plan;
 
 // A task number that survived a box, or null when that box's path was not traversed.
 type TaskNum = number | null;
@@ -34,8 +35,7 @@ type WorktreePresence = [withWorktree: TaskNum, withoutWorktree: TaskNum];
 type WorktreeSafety = [unsafe: TaskNum, safe: TaskNum];
 type WorktreeResumability = [unresumable: TaskNum, resumable: TaskNum];
 
-// The run identity every box shares. One runId per invocation, not per task, so the
-// source-repo lock owner "runId:taskNumber" stays unique per task.
+// The run identity every box shares. One runId per invocation, not per task, so the source-repo lock owner "runId:taskNumber" stays unique per task.
 export type RunContext = { runId: string; projectRoot: string; sourceBranch: string };
 
 export type ExitInfo = { exitType: string; exitNote: string };
@@ -210,8 +210,7 @@ if (process.argv[1]?.endsWith("PlannerBodyEmitter.ts")) {
         projectRoot: string;
         sourceBranch?: string;
     };
-    // Never defaulted to cwd: the source lock lives in projectRoot/.git, and a linked
-    // worktree's .git is a file, so a wrong root fails only at the last box of an exit.
+    // Never defaulted to cwd: the source lock lives in projectRoot/.git, and a linked worktree's .git is a file, so a wrong root fails only at the last box of an exit.
     const projectRoot = input.projectRoot;
     const ctx: RunContext = {
         runId: input.runId ?? generateRunId(),
