@@ -6,7 +6,7 @@ import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
 import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
 import { isTaskRunResumable } from "./isTaskRunResumable.ts";
-import { createTaskWorktree } from "./createTaskWorktree.ts";
+import { createTaskWorktree, taskBranchName } from "./createTaskWorktree.ts";
 import { resetTaskWorktree } from "./resetTaskWorktree.ts";
 import { generateTaskDocs } from "./generateTaskDocs.ts";
 import { updateTaskDocs } from "./updateTaskDocs.ts";
@@ -60,25 +60,63 @@ ${JSON.stringify(result)}`;
 // The preamble's main function: walk the boxes and say whether the caller may keep going.
 // ---------------------------------------------------------------------------
 
-export type PreambleResult = { code: WorkflowResultCode; reason: string | null };
+// `step` is the diagram node id of the box this result came from.
+export type PreambleResult = { code: WorkflowResultCode; reason: string | null; step: string };
 
 export function runPreamble(taskNumber: number, runId: string, projectRoot: string): PreambleResult {
     const taskNumberCheck = isTaskNumberValid(taskNumber, projectRoot);
     if (!taskNumberCheck.valid) {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason, step: "IS_TASK_NUMBER_VALID" };
     }
 
     const blockedCheck = isTaskBlocked(taskNumber, projectRoot);
     if (blockedCheck.blocked) {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason, step: "IS_TASK_BLOCKED" };
     }
 
     const activeCheck = isTaskActive(taskNumber, runId, projectRoot);
     if (activeCheck.status !== "claimed") {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason, step: "IS_TASK_ACTIVE" };
     }
 
-    return { code: WorkflowResultCodes.PROCEED, reason: null };
+    const worktreeCheck = doesTaskWorktreeExist(taskNumber, projectRoot);
+    if (!worktreeCheck.exists) {
+        const created = createTaskWorktree(taskNumber, runId, projectRoot);
+        const docs = generateTaskDocs(taskNumber, created.worktree, projectRoot);
+        const submodules = initTaskSubmodules({
+            worktreePath: created.worktree, taskNumber, runId, projectRoot, stepId: "init-submodules",
+        });
+        const receipt = {
+            taskNumber, worktree: created.worktree, branch: created.branch,
+            briefFile: docs.briefFile, initialized: submodules.initialized,
+        };
+        const receiptCheck = validateActiveTaskReceipt({ receipt, taskNumber });
+        if (!receiptCheck.valid) {
+            return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: receiptCheck.problem, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+        }
+        return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+    }
+
+    const safeCheck = checkTaskWorktreeSafe(taskNumber, worktreeCheck.worktree as string);
+    if (!safeCheck.safe) {
+        // isTaskRunResumable(taskNumber, worktreeCheck.worktree as string, runId, projectRoot);
+        // NO -> resetTaskWorktree(taskNumber, runId, projectRoot) then generateTaskDocs; YES -> updateTaskDocs.
+        return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_PREVIOUS_RUN_RESUMABLE" };
+    }
+
+    const docs = updateTaskDocs(taskNumber, worktreeCheck.worktree as string, projectRoot);
+    const submodules = initTaskSubmodules({
+        worktreePath: worktreeCheck.worktree as string, taskNumber, runId, projectRoot, stepId: "init-submodules",
+    });
+    const receipt = {
+        taskNumber, worktree: worktreeCheck.worktree as string, branch: taskBranchName(taskNumber),
+        briefFile: docs.briefFile, initialized: submodules.initialized,
+    };
+    const receiptCheck = validateActiveTaskReceipt({ receipt, taskNumber });
+    if (!receiptCheck.valid) {
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: receiptCheck.problem, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+    }
+    return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
 }
 
 // ---------------------------------------------------------------------------

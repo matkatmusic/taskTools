@@ -2,14 +2,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction } from "node:vm";
 import { after } from "node:test";
 import { skillBody } from "../../scripts/tackle-tasks/SkillBodyEmitter.ts";
-import { acquireSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../../scripts/prepareTasks.ts";
 
 const emitterPath = fileURLToPath(new URL("../../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../../skills/tackle-tasks/SKILL.md", import.meta.url));
@@ -23,7 +23,7 @@ after(() => {
 // A real repository standing in for the project, distinct from this plugin checkout.
 const makeTargetRepository = (taskNumbers: number[] = [1]): string => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "skillBody-target-")));
-    temporaryDirectories.push(root);
+    temporaryDirectories.push(root, resolveTaskWorktreeConventionDirectory(root));
     const git = (...gitArguments: string[]) => execFileSync("git", ["-C", root, ...gitArguments], { encoding: "utf8" });
     git("init", "-b", "master");
     git("config", "user.email", "test@example.com");
@@ -57,9 +57,6 @@ const runResolveWorkflow = async (
     const result = await compiled(JSON.stringify(workflowArguments), () => {}, stubAgent);
     return { result, prompts, schemas };
 };
-
-// An emitter run by the main agent leaks its output into the main context.
-const namesAnEmitterBashCommand = (body: string): boolean => /node\s+"?[^"\s]*Emitter\.ts/.test(body);
 
 test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => {
     // Setup: a normal invocation.
