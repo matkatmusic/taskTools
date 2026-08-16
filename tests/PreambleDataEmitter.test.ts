@@ -1,13 +1,19 @@
 // Behavioral checks for scripts/tackle-tasks/PreambleDataEmitter.ts.
 // Run: node --test tests/PreambleDataEmitter.test.ts
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { emitPreambleData } from "../scripts/tackle-tasks/PreambleDataEmitter.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
+
+const temporaryDirectories: string[] = [];
+after(() => {
+    for (const directory of temporaryDirectories) rmSync(directory, { recursive: true, force: true });
+});
 
 const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/PreambleDataEmitter.ts", import.meta.url));
 
@@ -19,6 +25,7 @@ function git(repoPath: string, ...args: string[]): string {
 // tasks.json-only modes. No git repo needed for these.
 function makeProjectFixture(taskNumber: number): string {
     const projectRoot = mkdtempSync(join(tmpdir(), "preamble-data-emitter-"));
+    temporaryDirectories.push(projectRoot, resolveTaskWorktreeConventionDirectory(projectRoot));
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([{ taskNumber, title: "sample task", files: [] }]));
     writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
     return projectRoot;
@@ -29,6 +36,7 @@ function makeProjectFixture(taskNumber: number): string {
 // run-resumable, update-docs, reset-worktree).
 function makeGitProjectFixture(taskNumber: number): string {
     const projectRoot = mkdtempSync(join(tmpdir(), "preamble-data-emitter-git-"));
+    temporaryDirectories.push(projectRoot, resolveTaskWorktreeConventionDirectory(projectRoot));
     git(projectRoot, "init", "-q", "-b", "main");
     git(projectRoot, "config", "user.email", "test@example.com");
     git(projectRoot, "config", "user.name", "Test");

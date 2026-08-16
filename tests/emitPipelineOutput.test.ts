@@ -1,13 +1,15 @@
 // Run: node --test tests/emitPipelineOutput.test.ts
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { annotatedBody, matchPathNumber } from "../scripts/tackle-tasks/emitPipelineOutput.ts";
 import { skillBody } from "../scripts/tackle-tasks/SkillBodyEmitter.ts";
 import { traceTaskPipeline, readNamedPaths } from "../scripts/tracePipeline.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 
 const temporaryDirectories: string[] = [];
 after(() => {
@@ -17,17 +19,18 @@ after(() => {
 // A throwaway repository, so emitting a body never marks a real task active.
 const makeTargetRepository = (taskNumber: number): string => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "emitPipelineOutput-")));
-    temporaryDirectories.push(root);
+    temporaryDirectories.push(root, resolveTaskWorktreeConventionDirectory(root));
+    const git = (...gitArguments: string[]) => execFileSync("git", ["-C", root, ...gitArguments], { encoding: "utf8" });
+    git("init", "-b", "master");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
     mkdirSync(join(root, ".taskTools"), { recursive: true });
-    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "Target task" }]));
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "Target task", files: [] }]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), JSON.stringify([]));
+    git("add", ".taskTools");
+    git("commit", "-m", "initial");
     return root;
 };
-
-const emitterSource = readFileSync(
-    fileURLToPath(new URL("../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url)),
-    "utf8",
-).split("\n");
 
 const stripAnnotations = (body: string): string =>
     body.split("\n").filter((line) => !/^<!-- SkillBodyEmitter\.ts:\d+ -->$/.test(line)).join("\n");

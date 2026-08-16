@@ -9,9 +9,6 @@ import { generateRunId } from "../prepareTasks.ts";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
 
-// The last box of pipeline-preamble.mmd that is wired up. Move it as each new box lands.
-const LAST_BUILT_BOX = "IS_TASK_ACTIVE";
-
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // ponytail: one task at a time for now — multiple tasks come later.
     const [taskNumber] = parseTaskNumberArgument(argsValue);
@@ -21,7 +18,7 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
         return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
     }
 
-    return `Say: 'stopped at ${L(LAST_BUILT_BOX)}'\n`;
+    return `Say: 'stopped at ${L(preambleResult.step)}'\n`;
 };
 
 /* Retired until the boxes after LAST_BUILT_BOX are wired up again — the v1.5 body:
