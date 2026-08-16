@@ -32,6 +32,14 @@ So the command has exactly two places to run: the main agent's shell, or the wor
 - workflow agent's prompt: These are blocks of text normally in the workflow.js file. 
 - Skill body: the current body of the skill being converted.  usually contains mostly prose and some lines of !`<command>` to dynamically inject content into the skill body when the skill is invoked. 
 
+## The Goal
+
+SkillBodyEmitter.ts must emit the complete governing prompt for a tackle-tasks run, built box by box from the diagrams. For every box, the work goes at the cheapest correct place, and there are exactly three:
+
+1. Run it now, inside SkillBodyEmitter — bake the result into the skill body as pre-computed text. 
+2. Run it in the workflow's subagent — the body never contains the command's output, only the WORKFLOW: {...} declaration carrying the paths and arguments the workflow needs. The subagent runs AgentPromptEmitter with Bash, and that output stays in the subagent.
+3. Only the main agent can do it — AskUserQuestion, launching workflows, approval gates, the final report. That becomes prose in the body.
+
 ## Steps
 
 Names below use the commit-message skill as the worked example, so `SKILL_DIR = commit-message` and `DATA_SCRIPT = stagedDiffs`. Substitute your own.
