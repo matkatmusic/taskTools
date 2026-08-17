@@ -123,20 +123,20 @@ back. Never report a fallback review as codex.`;
 
 export function planPrompt(t: PreparedTask, preamble = ""): string {
     return `Invoke /ponytail:ponytail ultra.
-Read the brief file at BRIEF_FILE (see DATA below) by its absolute path.
-Owned files are listed in OWNED_FILES below, as repo-relative path => absolute path in TASK_WORKTREE.
+Read the brief file at ${t.briefFile} by its absolute path.
+Owned files are listed under OWNED FILES below, as repo-relative path => absolute path in ${t.repoRoot}.
 
-For every filesystem tool call, use the absolute TASK_WORKTREE path shown below.
+For every filesystem tool call, use the absolute path under ${t.repoRoot}.
 Never resolve a repo-relative task path against your ambient working directory,
 and never read or edit the same relative path in another checkout.
 
 Read the owned files — a plan that guesses at their contents will be rejected.
-Follow ~/.claude/guides/planning.md and write the plan as JSON to exactly PLAN_FILE
-(see DATA below).
+Follow ~/.claude/guides/planning.md and write the plan as JSON to exactly
+${t.planFile}
 Do not change any source file — this is planning only, not implementation.
 
 Write the plan per plans/plan-format.md:
-{"task": TASK_NUMBER, "revision": 1, "sections": [{"id": "...", "title": "...", "body": "markdown"}]}
+{"task": ${t.number}, "revision": 1, "sections": [{"id": "...", "title": "...", "body": "markdown"}]}
 Each section id is stable, lowercase, kebab-case, and unique within the plan — codex
 addresses feedback by id, and a renamed id orphans that feedback. "sections" order is
 the plan order; nothing else encodes sequence. Each body is markdown, following
@@ -157,27 +157,24 @@ The plan must be exact enough that the implementer makes no discovery of its own
 - State the verification that proves the change worked, as commands with expected results.
 - ${TESTS_FIELD_INSTRUCTION}
 
-If the plan would need to edit a file outside the absolute owned paths above, or to READ
+If the plan would need to edit a file outside the absolute owned paths below, or to READ
 a file outside them to write an exact plan, or if the task is unclear or no longer
-applies to the codebase, do not write PLAN_FILE — return planWritten: false. Otherwise
-write the plan file exactly at PLAN_FILE and return planWritten: true.
+applies to the codebase, do not write the plan file — return planWritten: false. Otherwise
+write the plan file exactly at ${t.planFile} and return planWritten: true.
 
 Return {planWritten}.
-You are forbidden to edit any file other than PLAN_FILE; to read a task source
+You are forbidden to edit any file other than ${t.planFile}; to read a task source
 file outside the absolute owned paths; to leave a decision for the implementer; or to
-write a plan step whose exact target you did not read. BRIEF_FILE and PLAN_FILE below,
-plus ~/.claude/guides/planning.md, are the only non-source read exceptions.
+write a plan step whose exact target you did not read. The brief file and the plan file
+named above, plus ~/.claude/guides/planning.md, are the only non-source read exceptions.
 
----- DATA ----
-TASK_WORKTREE = ${t.repoRoot}
-TASK_NUMBER = ${t.number}
-BRIEF_FILE = ${t.briefFile}
-PLAN_FILE = ${t.planFile}
-OWNED_FILES (repo-relative => absolute in TASK_WORKTREE) =
+---- OWNED FILES (repo-relative => absolute in ${t.repoRoot}) ----
 ${ownedPathMap(t)}
-TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) =
+
+---- TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) ----
 ${t.tests ?? "(none)"}
-PREAMBLE (codex's reason for scrapping the previous plan, empty if none) =
+
+---- PREAMBLE (codex's reason for scrapping the previous plan, empty if none) ----
 ${preamble || "(none)"}`;
 }
 
