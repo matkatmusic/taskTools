@@ -1,0 +1,69 @@
+flowchart TB
+%% REBASE PIPELINE. Split from pipeline-rebaseMerge.mmd.
+%% Input: a finished implementation, with the source repo lock already held by
+%% the rebase preamble pipeline.
+%% One job: get the task's commits sitting on top of the target branch.
+%% Starts at "rebase onto the target branch". Ends rebased, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. A repair is never replayed until it is committed, so the conflict cycle
+%%      always runs fix -> commit -> continue, never fix -> continue.
+%%   3. "commit if needed" commits nothing when the worktree is clean.
+%%   4. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last.
+%%   5. The source repo lock is already held and stays held until the exit
+%%      workflow releases it. Every box here refreshes its heartbeat.
+%%   6. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%% Exit types this pipeline can produce:
+%%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The rebased worktree this pipeline emits is the input to the full suite
+%% pipeline. The merge pipeline re-enters here when a merge does not land.
+
+  SOURCE_REPO_LOCKED_INPUT["Input: { worktree, target branch }"] --> REBASE_ONTO_TARGET_BRANCH
+  REBASE_ONTO_TARGET_BRANCH["Try: rebase onto the target branch"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
+  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_YES["YES"]
+  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_NO["NO"]
+
+  DID_REBASE_REPORT_CONFLICTS_YES --> ARE_2_CONFLICT_FIXES_DONE{"2 conflict fixes done?"}
+  ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_NO["NO"]
+  ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_YES["YES"]
+  ARE_2_CONFLICT_FIXES_DONE_YES -- "exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW
+  ARE_2_CONFLICT_FIXES_DONE_NO -- "pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
+  FIX_CONFLICTS --> COMMIT_IF_NEEDED["commit if needed"]
+  COMMIT_IF_NEEDED --> CONTINUE_REBASE["Try: continue the rebase"]
+  CONTINUE_REBASE --> IS_REBASE_FINISHED{"is the rebase finished?"}
+  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_YES["YES"]
+  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_NO["NO"]
+  IS_REBASE_FINISHED_NO -- "it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
+
+  DID_REBASE_REPORT_CONFLICTS_NO --> SUITE_PIPELINE
+  IS_REBASE_FINISHED_YES --> SUITE_PIPELINE["full suite pipeline"]
+
+  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+
+  EXIT_WORKFLOW["failures exit"]
+
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
+  %% red is the branch that goes back round the conflict cycle.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class AGENT_ERRORED nopass
+  class EXIT_WORKFLOW,REPORT_ONLY_EXIT fail
+  class DID_REBASE_REPORT_CONFLICTS,IS_REBASE_FINISHED,ARE_2_CONFLICT_FIXES_DONE decision
+  class REBASE_ONTO_TARGET_BRANCH,COMMIT_IF_NEEDED,CONTINUE_REBASE script
+  class FIX_CONFLICTS agent
+  class SUITE_PIPELINE pipeline
+  class DID_REBASE_REPORT_CONFLICTS_NO,IS_REBASE_FINISHED_YES,ARE_2_CONFLICT_FIXES_DONE_NO pass
+  class DID_REBASE_REPORT_CONFLICTS_YES,IS_REBASE_FINISHED_NO,ARE_2_CONFLICT_FIXES_DONE_YES nopass
+  class SOURCE_REPO_LOCKED_INPUT output

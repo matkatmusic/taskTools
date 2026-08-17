@@ -1,0 +1,46 @@
+flowchart TB
+%% IMPLEMENT PIPELINE. Split from pipeline-implementTest.mmd.
+%% Input: an accepted plan from the review plan pipeline.
+%% One job: write the code and commit it.
+%% Starts at "implement task". Ends with committed work.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Every read and write of tasks.json is atomic.
+%%   3. Never update a test that was not created in this task's worktree,
+%%      unless that test is broken or asserts nothing.
+%%   4. "commit if needed" commits nothing when the worktree is clean.
+%%   5. The implementor reads the tasks.json entry, so a pipeline that sends the
+%%      run back here writes what went wrong into the entry first. A bare retry
+%%      would repeat the same mistake.
+%%   6. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last.
+%%   7. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%%   8. The source repo lock is NOT taken here. The rebase preamble pipeline
+%%      takes it, much later.
+%% Exit types this pipeline can produce:
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The committed work this pipeline emits is the input to the task tests
+%% pipeline. Two pipelines re-enter here after amending the tasks.json entry:
+%% the task tests pipeline and the review task tests pipeline.
+
+  ACCEPTED_PLAN_INPUT["Input: { plan, tasks.json entry }"] --> IMPLEMENT_TASK
+  IMPLEMENT_TASK["implement task"] --> COMMIT_IF_NEEDED["commit if needed"]
+  COMMIT_IF_NEEDED --> TASK_TESTS_PIPELINE["task tests pipeline"]
+  IMPLEMENT_TASK -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class COMMIT_IF_NEEDED script
+  class TASK_TESTS_PIPELINE pipeline
+  class IMPLEMENT_TASK agent
+  class AGENT_ERRORED nopass
+  class REPORT_ONLY_EXIT fail
+  class ACCEPTED_PLAN_INPUT output

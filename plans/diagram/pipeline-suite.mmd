@@ -1,0 +1,67 @@
+flowchart TB
+%% FULL SUITE PIPELINE. Split from pipeline-rebaseMerge.mmd.
+%% Input: a rebased worktree from the rebase pipeline, with the source repo lock
+%% already held by the rebase preamble pipeline.
+%% One job: get the whole test suite green on top of the target branch.
+%% Starts at "run the full suite". Ends green, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. "fix the codebase so the full suite passes" edits source, not tests.
+%%   3. Never progress past a suite run until every test passes.
+%%   4. A repair is never tested until it is committed, so the cycle always runs
+%%      fix -> commit -> run, never fix -> run.
+%%   5. "commit if needed" commits nothing when the worktree is clean.
+%%   6. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last.
+%%   7. The source repo lock is already held and stays held until the exit
+%%      workflow releases it. Every box here refreshes its heartbeat.
+%%   8. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%% Exit types this pipeline can produce:
+%%   suite-red          - full suite still failing after 2 fix attempts
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The suite-red exit leaves the worktree in place. The work is committed, so the
+%% next invocation of this task picks it up.
+%% The green worktree this pipeline emits is the input to the merge pipeline.
+
+  REBASED_WORKTREE_INPUT["Input: { worktree }"] --> RUN_FULL_SUITE
+  RUN_FULL_SUITE["Try: run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
+  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_YES["YES"]
+  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_NO["NO"]
+
+  DO_ALL_TESTS_PASS_NO --> ARE_2_SUITE_FAILURES_DONE{"2 suite failures done?"}
+  ARE_2_SUITE_FAILURES_DONE --> ARE_2_SUITE_FAILURES_DONE_NO["NO"]
+  ARE_2_SUITE_FAILURES_DONE --> ARE_2_SUITE_FAILURES_DONE_YES["YES"]
+  ARE_2_SUITE_FAILURES_DONE_NO -- "pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
+  FIX_THE_CODEBASE_FOR_SUITE --> COMMIT_IF_NEEDED["commit if needed"]
+  COMMIT_IF_NEEDED --> RUN_FULL_SUITE
+  ARE_2_SUITE_FAILURES_DONE_YES -- "exit type: suite-red<br/>exit note: full suite failed 2X.<br/>rebase and merge aborted.<br/>worktree preserved." --> EXIT_WORKFLOW
+
+  DO_ALL_TESTS_PASS_YES --> MERGE_PIPELINE["merge pipeline"]
+
+  FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+
+  EXIT_WORKFLOW["failures exit"]
+
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
+  %% red is the branch that goes back round the cycle or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DO_ALL_TESTS_PASS,ARE_2_SUITE_FAILURES_DONE decision
+  class RUN_FULL_SUITE,COMMIT_IF_NEEDED script
+  class FIX_THE_CODEBASE_FOR_SUITE agent
+  class MERGE_PIPELINE pipeline
+  class DO_ALL_TESTS_PASS_YES,ARE_2_SUITE_FAILURES_DONE_NO pass
+  class DO_ALL_TESTS_PASS_NO,ARE_2_SUITE_FAILURES_DONE_YES nopass
+  class AGENT_ERRORED nopass
+  class EXIT_WORKFLOW,REPORT_ONLY_EXIT fail
+  class REBASED_WORKTREE_INPUT output

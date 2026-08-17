@@ -1,61 +1,81 @@
 flowchart TB
 %% OVERVIEW. One block per pipeline. Each block is drawn in full in its own file:
-%%   preamble pipeline           pipeline-preamble.mmd
-%%   planning pipeline           pipeline-planning.mmd
-%%   implement and test pipeline pipeline-implementTest.mmd
-%%   rebase and merge pipeline   pipeline-rebaseMerge.mmd
-%%   exit workflow               pipeline-exitWorkflow.mmd
+%%   preamble pipeline                    pipeline-preamble.mmd
+%%   plan pipeline                        pipeline-plan.mmd
+%%   review plan pipeline                 pipeline-reviewPlan.mmd
+%%   implement pipeline                   pipeline-implement.mmd
+%%   task tests pipeline                  pipeline-taskTests.mmd
+%%   review task tests pipeline           pipeline-reviewTests.mmd
+%%   rebase preamble pipeline             pipeline-rebasePreamble.mmd
+%%   rebase pipeline                      pipeline-rebase.mmd
+%%   full suite pipeline                  pipeline-suite.mmd
+%%   merge pipeline                       pipeline-merge.mmd
+%%   merge succeeded exit                 pipeline-mergeSucceededExit.mmd
+%%   failures exit                        pipeline-failuresExit.mmd
+%%   report only exit                     pipeline-reportOnlyExit.mmd
 %% The dotted arrow out of each block is that block's early exit, drawn as one
 %% arrow here. The exit types it carries are listed in that block's own file.
-%% Every "exit workflow" box is the SAME workflow, drawn once per caller so the
-%% arrows stay readable.
-%% Every pipeline emits a white Receipt block, on both paths: the success receipt
-%% is the next pipeline's input, the failure receipt is the exit workflow's.
+%% There are three exit tails, and each has its own file:
+%%   merge succeeded exit - records the run, archives the task, releases everything
+%%   failures exit        - records why the run ended, then releases what it holds
+%%   report only exit     - the task never started, so nothing is written or held
+%% The REFUSED arrow out of the preamble is invalid-number, blocked and
+%% already-active: all three happen before "mark the task active".
+%% Four pipelines send the run back to the pipeline before them, after writing
+%% what went wrong into the tasks.json entry. Those loops are drawn in their own
+%% files, not here:
+%%   review plan pipeline        -> plan pipeline
+%%   task tests pipeline         -> implement pipeline
+%%   review task tests pipeline  -> implement pipeline
+%%   merge pipeline              -> rebase pipeline
 %% Exit types, one per path that reaches [stop]:
 %%   completed          - archived to completedTasks.json
 %%   invalid-number     - not in tasks.json or completedTasks.json
 %%   already-active     - a previous run left the task active
 %%   blocked            - an open blocker remains
-%%   plan-scrapped      - codex scrapped the plan twice
-%%   tests-red          - task tests still failing after 2 fix attempts
+%%   plan-scrapped      - codex did not accept the plan in two reviews
+%%   tests-red          - task tests still failing after 2 attempts
 %%   tests-flagged      - codex flagged the tests twice
-%%   suite-red          - full suite still failing after 2 fix attempts
 %%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
+%%   suite-red          - full suite still failing after 2 fix attempts
 %%   merge-failed       - the merge did not land twice
-%%   fence-violation    - a step changed a file the task does not own
 %%   run-failed         - a script failed operationally; can leave ANY green box
 %%                        in any pipeline
 
-  TASK_NUMBER_INPUT["Input: { }"] --> PREAMBLE_PIPELINE["preamble pipeline"]
-  PREAMBLE_PIPELINE --> PREAMBLE_PIPELINE_SUCCESS["SUCCESS"] --> ACTIVE_TASK_WORKTREE_RECEIPT["Receipt: { }"]
-  ACTIVE_TASK_WORKTREE_RECEIPT --> PLANNING_PIPELINE["planning pipeline"]
-  PLANNING_PIPELINE --> PLANNING_PIPELINE_SUCCESS["SUCCESS"] --> PLAN_FILE_RECEIPT["Receipt: { }"]
-  PLAN_FILE_RECEIPT --> IMPLEMENT_AND_TEST_PIPELINE["implement and test pipeline"]
-  IMPLEMENT_AND_TEST_PIPELINE --> IMPLEMENT_AND_TEST_PIPELINE_SUCCESS["SUCCESS"] --> FINISHED_IMPLEMENTATION_RECEIPT["Receipt: { }"]
-  FINISHED_IMPLEMENTATION_RECEIPT --> REBASE_AND_MERGE_PIPELINE["rebase and merge pipeline"]
-  REBASE_AND_MERGE_PIPELINE --> REBASE_AND_MERGE_PIPELINE_SUCCESS["SUCCESS"] --> MERGE_RECEIPT["Receipt: { }"]
-  MERGE_RECEIPT --> EXIT_WORKFLOW_SUCCESS["exit workflow"]
+  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble pipeline"]
+  PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> PLAN_PIPELINE["plan pipeline"]
+  PLAN_PIPELINE --> PLAN_SUCCESS["SUCCESS"] --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
+  REVIEW_PLAN_PIPELINE --> REVIEW_PLAN_SUCCESS["SUCCESS"] --> IMPLEMENT_PIPELINE["implement pipeline"]
+  IMPLEMENT_PIPELINE --> IMPLEMENT_SUCCESS["SUCCESS"] --> TASK_TESTS_PIPELINE["task tests pipeline"]
+  TASK_TESTS_PIPELINE --> TASK_TESTS_SUCCESS["SUCCESS"] --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
+  REVIEW_TESTS_PIPELINE --> REVIEW_TESTS_SUCCESS["SUCCESS"] --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
+  REBASE_PREAMBLE_PIPELINE --> REBASE_PREAMBLE_SUCCESS["SUCCESS"] --> REBASE_PIPELINE["rebase pipeline"]
+  REBASE_PIPELINE --> REBASE_SUCCESS["SUCCESS"] --> SUITE_PIPELINE["full suite pipeline"]
+  SUITE_PIPELINE --> SUITE_SUCCESS["SUCCESS"] --> MERGE_PIPELINE["merge pipeline"]
+  MERGE_PIPELINE --> MERGE_SUCCESS["SUCCESS"] --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
   EXIT_WORKFLOW_SUCCESS --> STOP["stop"]
 
-  PREAMBLE_PIPELINE -.-> PREAMBLE_PIPELINE_FAIL["FAILED"]
-  PREAMBLE_PIPELINE_FAIL --> PIPELINE_FAILURE_RECEIPT["Receipt: { }"]
-  PIPELINE_FAILURE_RECEIPT --> EXIT_WORKFLOW_FAILURE["exit workflow"]
-
-  PLANNING_PIPELINE -.-> PLANNING_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
-  IMPLEMENT_AND_TEST_PIPELINE -.-> IMPLEMENT_AND_TEST_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
-
-  REBASE_AND_MERGE_PIPELINE -.-> REBASE_AND_MERGE_PIPELINE_FAIL["FAILED"] --> PIPELINE_FAILURE_RECEIPT
+  PREAMBLE_PIPELINE -.-> PREAMBLE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE["failures exit"]
+  PREAMBLE_PIPELINE -.-> PREAMBLE_REFUSED["REFUSED"] --> EXIT_WORKFLOW_REPORT_ONLY["report only exit"]
+  EXIT_WORKFLOW_REPORT_ONLY --> STOP
+  PLAN_PIPELINE -.-> PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  REVIEW_PLAN_PIPELINE -.-> REVIEW_PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  IMPLEMENT_PIPELINE -.-> IMPLEMENT_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  TASK_TESTS_PIPELINE -.-> TASK_TESTS_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  REVIEW_TESTS_PIPELINE -.-> REVIEW_TESTS_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  REBASE_PREAMBLE_PIPELINE -.-> REBASE_PREAMBLE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  REBASE_PIPELINE -.-> REBASE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  SUITE_PIPELINE -.-> SUITE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  MERGE_PIPELINE -.-> MERGE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
   EXIT_WORKFLOW_FAILURE --> STOP
 
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
-  classDef receipt fill:#ffffff,stroke:#333333,color:#000000
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   classDef pass fill:#00ff00,stroke:#6d1a12,color:#000000
-  class PREAMBLE_PIPELINE,PLANNING_PIPELINE,IMPLEMENT_AND_TEST_PIPELINE,REBASE_AND_MERGE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
-  class ACTIVE_TASK_WORKTREE_RECEIPT,PLAN_FILE_RECEIPT,FINISHED_IMPLEMENTATION_RECEIPT,MERGE_RECEIPT,PIPELINE_FAILURE_RECEIPT receipt
-  class PREAMBLE_PIPELINE_SUCCESS,PLANNING_PIPELINE_SUCCESS,IMPLEMENT_AND_TEST_PIPELINE_SUCCESS,REBASE_AND_MERGE_PIPELINE_SUCCESS pass
-  class PREAMBLE_PIPELINE_FAIL,PLANNING_PIPELINE_FAIL,IMPLEMENT_AND_TEST_PIPELINE_FAIL,REBASE_AND_MERGE_PIPELINE_FAIL nopass
-  class EXIT_WORKFLOW_FAILURE fail
+  class PREAMBLE_PIPELINE,PLAN_PIPELINE,REVIEW_PLAN_PIPELINE,IMPLEMENT_PIPELINE,TASK_TESTS_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE,REBASE_PIPELINE,SUITE_PIPELINE,MERGE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class PREAMBLE_SUCCESS,PLAN_SUCCESS,REVIEW_PLAN_SUCCESS,IMPLEMENT_SUCCESS,TASK_TESTS_SUCCESS,REVIEW_TESTS_SUCCESS,REBASE_PREAMBLE_SUCCESS,REBASE_SUCCESS,SUITE_SUCCESS,MERGE_SUCCESS pass
+  class PREAMBLE_FAIL,PLAN_FAIL,REVIEW_PLAN_FAIL,IMPLEMENT_FAIL,TASK_TESTS_FAIL,REVIEW_TESTS_FAIL,REBASE_PREAMBLE_FAIL,REBASE_FAIL,SUITE_FAIL,MERGE_FAIL,PREAMBLE_REFUSED nopass
+  class EXIT_WORKFLOW_FAILURE,EXIT_WORKFLOW_REPORT_ONLY fail
   class TASK_NUMBER_INPUT,STOP output
