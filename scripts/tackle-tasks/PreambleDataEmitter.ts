@@ -1,4 +1,4 @@
-// Emits the prompt text for one box of plans/diagram/pipeline-preamble.mmd, data baked in.
+// Emits the prompt text for one box of the three preamble diagrams, data baked in.
 import { readFileSync } from "node:fs";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
 import { isTaskActive } from "./isTaskActive.ts";
@@ -11,7 +11,8 @@ import { resetTaskWorktree } from "./resetTaskWorktree.ts";
 import { generateTaskDocs } from "./generateTaskDocs.ts";
 import { updateTaskDocs } from "./updateTaskDocs.ts";
 import { initTaskSubmodules } from "./initTaskSubmodules.ts";
-import { validateActiveTaskReceipt } from "./validateActiveTaskReceipt.ts";
+import { validateActiveTaskReceipt, type ActiveTaskWorktreeReceipt } from "./validateActiveTaskReceipt.ts";
+import { checkResumedWorktreeFence } from "./checkResumedWorktreeFence.ts";
 import { WorkflowResultCodes, type WorkflowResultCode } from "./WorkflowResultCodes.ts";
 
 function readStdin(): string {
@@ -60,63 +61,91 @@ ${JSON.stringify(result)}`;
 // The preamble's main function: walk the boxes and say whether the caller may keep going.
 // ---------------------------------------------------------------------------
 
-// `step` is the diagram node id of the box this result came from.
-export type PreambleResult = { code: WorkflowResultCode; reason: string | null; step: string };
+// AUTOGEN builds docs for a fresh worktree; UPDATE refreshes the docs a resumed one already has.
+export type DocsMode = "AUTOGEN" | "UPDATE";
 
+// Which tail an exit takes, decided by whether the task was already marked active.
+export type ExitTail = "report-only" | "failures";
+
+// `step` is the diagram node id of the box this result came from.
+export type PreambleResult = {
+    code: WorkflowResultCode;
+    reason: string | null;
+    step: string;
+    receipt: ActiveTaskWorktreeReceipt | null;
+    exitType: string | null;
+    tail: ExitTail | null;
+};
+
+// Walks the preamble status check, then the worktree check, then document generation.
 export function runPreamble(taskNumber: number, runId: string, projectRoot: string): PreambleResult {
     const taskNumberCheck = isTaskNumberValid(taskNumber, projectRoot);
     if (!taskNumberCheck.valid) {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason, step: "IS_TASK_NUMBER_VALID" };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: taskNumberCheck.reason, step: "IS_TASK_NUMBER_VALID", receipt: null, exitType: "invalid-number", tail: "report-only" };
     }
 
     const blockedCheck = isTaskBlocked(taskNumber, projectRoot);
     if (blockedCheck.blocked) {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason, step: "IS_TASK_BLOCKED" };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: blockedCheck.reason, step: "IS_TASK_BLOCKED", receipt: null, exitType: "blocked", tail: "report-only" };
     }
 
     const activeCheck = isTaskActive(taskNumber, runId, projectRoot);
     if (activeCheck.status !== "claimed") {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason, step: "IS_TASK_ACTIVE" };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason, step: "IS_TASK_ACTIVE", receipt: null, exitType: "already-active", tail: "report-only" };
     }
 
+    // Everything below runs with the task active, so every exit takes the failures tail.
     const worktreeCheck = doesTaskWorktreeExist(taskNumber, projectRoot);
+    let worktree: string;
+    let branch: string;
+    let docsMode: DocsMode;
+
     if (!worktreeCheck.exists) {
         const created = createTaskWorktree(taskNumber, runId, projectRoot);
-        const docs = generateTaskDocs(taskNumber, created.worktree, projectRoot);
-        const submodules = initTaskSubmodules({
-            worktreePath: created.worktree, taskNumber, runId, projectRoot, stepId: "init-submodules",
-        });
-        const receipt = {
-            taskNumber, worktree: created.worktree, branch: created.branch,
-            briefFile: docs.briefFile, initialized: submodules.initialized,
-        };
-        const receiptCheck = validateActiveTaskReceipt({ receipt, taskNumber });
-        if (!receiptCheck.valid) {
-            return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: receiptCheck.problem, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+        worktree = created.worktree;
+        branch = created.branch;
+        docsMode = "AUTOGEN";
+    } else if (!checkTaskWorktreeSafe(taskNumber, worktreeCheck.worktree as string).safe) {
+        // An unsafe worktree is reset, never resumed, so it is never asked about resumability.
+        const reset = resetTaskWorktree(taskNumber, runId, projectRoot);
+        worktree = reset.worktree;
+        branch = reset.branch;
+        docsMode = "AUTOGEN";
+    } else {
+        const existingWorktree = worktreeCheck.worktree as string;
+        const resumeCheck = isTaskRunResumable(taskNumber, existingWorktree, runId, projectRoot);
+        // A safe worktree is never reset, because its committed work is the user's to keep or discard.
+        if (!resumeCheck.resumable) {
+            return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: "a safe worktree holds work no run recorded a stopping point for", step: "IS_PREVIOUS_RUN_RESUMABLE", receipt: null, exitType: "not-resumable", tail: "failures" };
         }
-        return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+
+        const fenceCheck = checkResumedWorktreeFence({ projectRoot, worktreePath: existingWorktree, taskNumber });
+        if (!fenceCheck.inside) {
+            return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: `the resumed worktree touched files the task does not own: ${fenceCheck.violations.join(", ")}`, step: "DOES_FENCE_COVER_WORKTREE", receipt: null, exitType: "fence-violation", tail: "failures" };
+        }
+
+        worktree = existingWorktree;
+        branch = taskBranchName(taskNumber);
+        docsMode = "UPDATE";
     }
 
-    const safeCheck = checkTaskWorktreeSafe(taskNumber, worktreeCheck.worktree as string);
-    if (!safeCheck.safe) {
-        // isTaskRunResumable(taskNumber, worktreeCheck.worktree as string, runId, projectRoot);
-        // NO -> resetTaskWorktree(taskNumber, runId, projectRoot) then generateTaskDocs; YES -> updateTaskDocs.
-        return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_PREVIOUS_RUN_RESUMABLE" };
-    }
-
-    const docs = updateTaskDocs(taskNumber, worktreeCheck.worktree as string, projectRoot);
+    // Submodules come up before the docs, so the docs describe an initialized worktree.
     const submodules = initTaskSubmodules({
-        worktreePath: worktreeCheck.worktree as string, taskNumber, runId, projectRoot, stepId: "init-submodules",
+        worktreePath: worktree, taskNumber, runId, projectRoot, stepId: "init-submodules",
     });
-    const receipt = {
-        taskNumber, worktree: worktreeCheck.worktree as string, branch: taskBranchName(taskNumber),
-        briefFile: docs.briefFile, initialized: submodules.initialized,
+
+    const docs = docsMode === "AUTOGEN"
+        ? generateTaskDocs(taskNumber, worktree, projectRoot)
+        : updateTaskDocs(taskNumber, worktree, projectRoot);
+
+    const receipt: ActiveTaskWorktreeReceipt = {
+        taskNumber, worktree, branch, briefFile: docs.briefFile, initialized: submodules.initialized,
     };
     const receiptCheck = validateActiveTaskReceipt({ receipt, taskNumber });
     if (!receiptCheck.valid) {
-        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: receiptCheck.problem, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+        return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: receiptCheck.problem, step: "IS_ACTIVE_TASK_RECEIPT_VALID", receipt: null, exitType: "run-failed", tail: "failures" };
     }
-    return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_ACTIVE_TASK_RECEIPT_VALID" };
+    return { code: WorkflowResultCodes.PROCEED, reason: null, step: "IS_ACTIVE_TASK_RECEIPT_VALID", receipt, exitType: null, tail: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +158,7 @@ export function emitPreambleData(taskNumber: number, mode: string, payload: Prea
             const projectRoot = requireString(payload, "projectRoot");
             const result = isTaskNumberValid(taskNumber, projectRoot);
             return resultPrompt(
-                "Report whether the task number is valid: present in tasks.json and/or completedTasks.json.",
+                "Report whether the task number is valid: present in tasks.json. completedTasks.json is not consulted.",
                 '{"valid": <boolean>, "location": "open"|"completed"|null, "reason": <string|null>}',
                 result,
             );

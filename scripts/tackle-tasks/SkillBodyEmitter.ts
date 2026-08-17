@@ -3,7 +3,6 @@
 // It also runs the preamble, so a failed check replaces the whole body with one line.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { L } from "../tracePipeline.ts";
 import { runPreamble } from "./PreambleDataEmitter.ts";
 import { generateRunId } from "../prepareTasks.ts";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
@@ -30,10 +29,6 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     return `WORKFLOW: ${workflowCall}
 
 execute \`Workflow(WORKFLOW)\`
-
-Its ${L("PLAN_THE_TASK")} box launches the planner in a subagent, which builds its own prompt. The plan file never enters your context.
-
-Say: 'stopped at ${L("PLAN_THE_TASK")}'
 `;
 };
 

@@ -10,10 +10,7 @@ export type TaskExitType =
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed";
 
-// F2: `stepId` names the logical commit step that created this commit. Merge-kind commits
-// (mergeTaskWorktree.ts, recordMergeCommits.ts) do not carry one — optional so those untouched
-// producers keep compiling. commitTaskWork.ts always sets it: durable evidence a lost result can
-// be scoped back to the exact step that produced it, instead of any earlier visit's commits.
+// F2: `stepId` names the logical step that produced this commit. Merge-kind commits omit it.
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };
 
 export type TaskTestResult = {
@@ -27,16 +24,10 @@ export type TaskTestResult = {
     checkedAt: string;
 };
 
-// The tip each source occurrence sat at when the rebase finished. The merge box compares
-// against it, so a clean commit landing on the source while the lock is held cannot slip in.
+// The tip each source occurrence sat at when the rebase finished, so a later commit cannot slip in.
 export type SourceTipReceipt = { occurrenceId: string; baseBranch: string; sourceTip: string };
 
-// F3: visit-specific durable evidence for the rebase/advance boxes, separate from
-// `sourceTipsAtRebase` (which mergeTaskWorktree.ts reads and must keep its existing shape).
-// `stepId` fences this receipt to the exact logical step that wrote it, `occurrenceIds` is the
-// exact occurrence set that step covered, and `worktreeHeads` is each layer's HEAD right after
-// the step finished — enough for a read-only reconciliation to tell a stale receipt from a live
-// one without ever accepting a prior visit's evidence for a later step.
+// F3: per-step rebase evidence, so a reconciliation can tell a stale receipt from a live one.
 export type RebaseStepReceipt = {
     stepId: string;
     occurrenceIds: string[];
@@ -44,11 +35,7 @@ export type RebaseStepReceipt = {
     sourceTips: SourceTipReceipt[];
 };
 
-// F3/F10: one durable receipt per logical mutating step, written before the box's stdout, for
-// every returned outcome (not just a clean/happy result). `result` is the box's exact return
-// value; `occurrenceIds`/`worktreeHeads` are optional live-state evidence a validator can compare
-// against the current worktree to tell a still-live receipt from a stale one. A receipt is looked
-// up by `stepId` (and `script`, so two boxes sharing a run never cross-match).
+// F3/F10: one durable receipt per mutating step, written before the box's stdout, keyed by stepId and script.
 export type StepResultReceipt = {
     stepId: string;
     script: string;
@@ -118,9 +105,7 @@ function writeFileAtomically(path: string, contents: string): void {
     renameSync(tmp, path);
 }
 
-// Generalized across both ways ownership changes hands: adopting an ended run's lease
-// (previousLeaseBytes set) and acquiring a wholly absent one (previousLeaseBytes null,
-// meaning "no physical lease existed before this transition").
+// Covers both ways ownership changes hands: adopting an ended run's lease, or acquiring an absent one.
 type WorktreeLeaseTransitionIntent = {
     taskNumber: number;
     worktreePath: string;
@@ -150,8 +135,7 @@ function readTransitionIntent(worktreePath: string): WorktreeLeaseTransitionInte
     }
 }
 
-// Writes back exactly the physical state the intent recorded as "before": the prior lease
-// bytes if one existed, or removes the file if the lease was absent beforehand.
+// Restores exactly the state the intent recorded as before, removing the file when none existed.
 function restoreOrRemoveLease(leasePath: string, previousLeaseBytes: string | null): void {
     if (previousLeaseBytes === null) {
         try {
@@ -183,11 +167,7 @@ function describeLeaseOwner(bytes: string | null): string {
     }
 }
 
-// The only question a retained intent's reconciliation is allowed to answer from the
-// physical lease: is it still exactly where the intent left the world (or found it), or
-// does it already show the new owner's partially-completed write? Anything else names a
-// third run that must never be overwritten, so it is a hard mismatch, not a data point to
-// weigh against tasks.json.
+// The only question a retained intent's reconciliation is allowed to answer from the physical lease: is it still exactly where the intent left the world (or found it), or does it already show the new owner's partially-completed write? Anything else names a third run that must never be overwritten, so it is a hard mismatch, not a data point to weigh against tasks.json.
 function isPhysicalLeaseCompatibleWithIntent(
     physicalBytes: string | null,
     intent: WorktreeLeaseTransitionIntent,
@@ -201,15 +181,7 @@ function isPhysicalLeaseCompatibleWithIntent(
     }
 }
 
-// Runs under both guards, at the top of every lease mutation. A retained intent means a
-// prior adoption or acquisition died between writing the journal and deleting it. Before
-// changing either authority, read the physical lease that exists right now and classify it
-// against the intent: only the exact recorded prior state (including absence) or the
-// intent's own new owner are safe to act on. Anything else is a different run that acquired
-// or was assigned the lease during the recovery window — refuse outright rather than finish
-// or roll back over it. Otherwise finish if the new run is still the active claimant and the
-// previous owner (if any) has ended, or roll back to the prior physical state. Either way the
-// intent is gone by the time this returns.
+// Runs under both guards, at the top of every lease mutation. A retained intent means a prior adoption or acquisition died between writing the journal and deleting it. Before changing either authority, read the physical lease that exists right now and classify it against the intent: only the exact recorded prior state (including absence) or the intent's own new owner are safe to act on. Anything else is a different run that acquired or was assigned the lease during the recovery window — refuse outright rather than finish or roll back over it. Otherwise finish if the new run is still the active claimant and the previous owner (if any) has ended, or roll back to the prior physical state. Either way the intent is gone by the time this returns.
 function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: string): void {
     const intent = readTransitionIntent(worktreePath);
     if (intent === null) return;
@@ -291,8 +263,7 @@ export function claimTask(taskNumber: number, runId: string, projectRoot: string
             const held = current.history[current.history.length - 1] ?? null;
             return { status: "refused", heldByRunId: held?.runId ?? null };
         }
-        // Rule 12: inactive is not the same as claimable. A run that exited
-        // completed leaves the task closing until its archive lands.
+        // Rule 12: inactive is not the same as claimable. A run that exited completed leaves the task closing until its archive lands.
         const newest = current.history[current.history.length - 1];
         if (newest !== undefined && newest.endedAt !== null && newest.exitType === "completed") {
             return { status: "closing" };
@@ -309,8 +280,7 @@ export function claimTask(taskNumber: number, runId: string, projectRoot: string
     });
 }
 
-// Lock order: task-state lock outermost, worktree-lease guard innermost. Every path here —
-// and the reconciliation it runs first — takes them in that order; never the reverse.
+// Lock order: task-state lock outermost, worktree-lease guard innermost. Every path here — and the reconciliation it runs first — takes them in that order; never the reverse.
 export function adoptWorktreeLease(taskNumber: number, runId: string, projectRoot: string): { adopted: boolean } {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     return withTaskStateLock(tasksPath, () => {
@@ -397,17 +367,7 @@ export type LeaseTransitionOutcome =
     | { status: "absent" }
     | { status: "refused-owner-mismatch"; heldByRunId: string };
 
-// F4/F5: the single atomic replacement for "adopt, and if that fails, catch-and-release" —
-// resetTaskWorktree's old dance, which swallowed an owner-mismatch throw and then deleted a
-// worktree another run still legitimately held. Re-reads state inside both guards, so a
-// destructive caller never decides from an unlocked snapshot.
-//
-// Lease policy (F5): a worktree whose lease names an ENDED run is released here, never
-// silently adopted — this operation is for callers about to reset/discard the worktree, not
-// resume it. Resuming still goes through adoptWorktreeLease. A physical lease that already
-// names expectedRunId is treated as already-adopted (idempotent retry of a half-finished
-// reset). Any other mismatch between tasks.json and the physical lease refuses and mutates
-// nothing, because that disagreement means someone else has a real claim.
+// F4/F5: the single atomic replacement for "adopt, and if that fails, catch-and-release" — resetTaskWorktree's old dance, which swallowed an owner-mismatch throw and then deleted a worktree another run still legitimately held. Re-reads state inside both guards, so a destructive caller never decides from an unlocked snapshot.  Lease policy (F5): a worktree whose lease names an ENDED run is released here, never silently adopted — this operation is for callers about to reset/discard the worktree, not resume it. Resuming still goes through adoptWorktreeLease. A physical lease that already names expectedRunId is treated as already-adopted (idempotent retry of a half-finished reset). Any other mismatch between tasks.json and the physical lease refuses and mutates nothing, because that disagreement means someone else has a real claim.
 export function transitionWorktreeLease(
     taskNumber: number,
     expectedRunId: string,
@@ -450,13 +410,7 @@ export function transitionWorktreeLease(
     });
 }
 
-// F7: the other half of establishing lease ownership — a fresh acquisition rather than an
-// adoption. Only succeeds when the caller's run is the newest active claimant, the task
-// carries a worktree, and no lease currently exists for it. Journals the transition intent
-// before either authority changes, then the physical lease, then tasks.json — the same
-// order and the same reconciliation as adoptWorktreeLease, so a death between the two
-// durable writes is always recoverable instead of stranding the worktree as
-// permanently non-resumable.
+// F7: the other half of establishing lease ownership — a fresh acquisition rather than an adoption. Only succeeds when the caller's run is the newest active claimant, the task carries a worktree, and no lease currently exists for it. Journals the transition intent before either authority changes, then the physical lease, then tasks.json — the same order and the same reconciliation as adoptWorktreeLease, so a death between the two durable writes is always recoverable instead of stranding the worktree as permanently non-resumable.
 export function acquireAbsentWorktreeLease(
     taskNumber: number,
     expectedRunId: string,
@@ -483,8 +437,7 @@ export function acquireAbsentWorktreeLease(
             const leasePath = taskWorktreeLeasePath(state.worktree);
             const existingOwner = readTaskWorktreeLeaseOwner(leasePath);
             if (existingOwner !== null) {
-                // Idempotent retry: reconciliation above may have just finished this exact
-                // acquisition. Only report acquired when both authorities already agree.
+                // Idempotent retry: reconciliation above may have just finished this exact acquisition. Only report acquired when both authorities already agree.
                 return { acquired: existingOwner.runId === expectedRunId && state.leaseRunId === expectedRunId };
             }
 
@@ -523,8 +476,7 @@ export function acquireAbsentWorktreeLease(
     });
 }
 
-// Fences a late writer against a run the workflow has already ended and replaced (rule 11):
-// expectedRunId must name the newest active record, checked inside this same lock window.
+// Fences a late writer against a run the workflow has already ended and replaced (rule 11): expectedRunId must name the newest active record, checked inside this same lock window.
 export function updateCurrentTaskRun(
     taskNumber: number,
     expectedRunId: string,
@@ -556,11 +508,7 @@ export function updateCurrentTaskRun(
     });
 }
 
-// F3/F10: persists a step-result receipt onto the run named by expectedRunId, whether that run
-// is still active or has already ended (releaseTaskRunHolds runs after markTaskInactive, so this
-// must not require `active`). Locates the run by runId anywhere as the newest history entry —
-// same fencing rule as updateCurrentTaskRun — and replaces any prior receipt for the same stepId
-// rather than accumulating duplicates across retries.
+// F3/F10: persists a step-result receipt onto the run named by expectedRunId, whether that run is still active or has already ended (releaseTaskRunHolds runs after markTaskInactive, so this must not require `active`). Locates the run by runId anywhere as the newest history entry — same fencing rule as updateCurrentTaskRun — and replaces any prior receipt for the same stepId rather than accumulating duplicates across retries.
 export function appendStepResult(
     taskNumber: number,
     expectedRunId: string,
@@ -634,8 +582,7 @@ export function endTaskRun(taskNumber: number, expectedRunId: string, projectRoo
     });
 }
 
-// Replaces the specified ended run's outcome, never "whichever run is newest" implicitly:
-// expectedRunId must name that newest record, checked in the same lock window as the write.
+// Replaces the specified ended run's outcome, never "whichever run is newest" implicitly: expectedRunId must name that newest record, checked in the same lock window as the write.
 export function replaceEndedRunOutcome(
     taskNumber: number,
     expectedRunId: string,

@@ -13,9 +13,23 @@ flowchart TB
 %% ---
 %% The lease is taken or adopted before any reset, per resetTaskWorktree.ts.
 %% ---
+%% A safe worktree is never reset, because its committed work is the user's to keep or discard.
+%% ---
+%% The fence question is asked only of a resumable worktree, and it is asked last.
+%% ---
+%% It covers committed work plus staged and unstaged edits, on every layer.
+%% ---
+%% Untracked files are excluded, because the generated docs are untracked by design.
+%% ---
+%% Every exit here takes the failures exit, because the task is already active.
+%% ---
 %% Exit types this pipeline can produce:
 %% ---
-%%   run-failed - a script failed operationally
+%%   not-resumable   - a safe worktree holds work no run recorded a stopping point for
+%% ---
+%%   fence-violation - the resumed worktree touched files the task does not own
+%% ---
+%%   run-failed      - a script failed operationally
 
   ACTIVE_TASK_INPUT["Input: { taskNumber, worktree path }"] --> DOES_WORKTREE_EXIST
   DOES_WORKTREE_EXIST{"does a worktree exist?"} --> DOES_WORKTREE_EXIST_YES["YES"]
@@ -33,12 +47,19 @@ flowchart TB
   IS_WORKTREE_SAFE_TO_USE_YES --> IS_PREVIOUS_RUN_RESUMABLE{"is the previous run's work resumable?<br/>adopt the lease for this run"}
   IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_YES["YES"]
   IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_NO["NO"]
-  IS_PREVIOUS_RUN_RESUMABLE_YES -- "docs mode: UPDATE" --> INIT_SUBMODULES_RECURSIVELY
-  IS_PREVIOUS_RUN_RESUMABLE_NO --> RESET_WORKTREE
+  IS_PREVIOUS_RUN_RESUMABLE_NO -- "exit type: not-resumable<br/>exit note: a safe worktree holds work<br/>no run recorded a stopping point for" --> FAILURES_EXIT
+
+  IS_PREVIOUS_RUN_RESUMABLE_YES --> DOES_FENCE_COVER_WORKTREE{"does the task's file list cover<br/>what the worktree touched?"}
+  DOES_FENCE_COVER_WORKTREE --> DOES_FENCE_COVER_WORKTREE_YES["YES"]
+  DOES_FENCE_COVER_WORKTREE --> DOES_FENCE_COVER_WORKTREE_NO["NO"]
+  DOES_FENCE_COVER_WORKTREE_YES -- "docs mode: UPDATE" --> INIT_SUBMODULES_RECURSIVELY
+  DOES_FENCE_COVER_WORKTREE_NO -- "exit type: fence-violation<br/>exit note: the resumed worktree touched<br/>files the task does not own" --> FAILURES_EXIT
 
   RESET_WORKTREE["reset the worktree"] -- "docs mode: AUTOGEN" --> INIT_SUBMODULES_RECURSIVELY
 
   INIT_SUBMODULES_RECURSIVELY["init submodules recursively"] --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+
+  FAILURES_EXIT["failures exit"]
 
   %% pass/nopass: green reuses what is already there, red rebuilds it.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
@@ -47,9 +68,11 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE decision
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  class DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE,DOES_FENCE_COVER_WORKTREE decision
   class CREATE_WORKTREE,RESET_WORKTREE,INIT_SUBMODULES_RECURSIVELY,TAKE_WORKTREE_LEASE,TAKE_WORKTREE_LEASE_BEFORE_RESET script
   class DOCUMENT_GENERATION_PIPELINE pipeline
-  class DOES_WORKTREE_EXIST_YES,IS_WORKTREE_SAFE_TO_USE_YES,IS_PREVIOUS_RUN_RESUMABLE_YES pass
-  class DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_NO nopass
+  class DOES_WORKTREE_EXIST_YES,IS_WORKTREE_SAFE_TO_USE_YES,IS_PREVIOUS_RUN_RESUMABLE_YES,DOES_FENCE_COVER_WORKTREE_YES pass
+  class DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_NO,DOES_FENCE_COVER_WORKTREE_NO nopass
+  class FAILURES_EXIT fail
   class ACTIVE_TASK_INPUT output

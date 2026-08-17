@@ -100,7 +100,7 @@ branch, and its submodules are intact. This question says nothing about the work
 Ask this **only of a structurally safe worktree**, and ask it second: it is a semantic question, not
 a structural one. Report whether the previous run recorded where in the plan it stopped, and adopt
 that run's lease for this run. The run that recorded the stopping point held the lease, so adopting
-it is a journalled swap, not a silent reuse. When resumable, emit docs mode `UPDATE`.
+it is a journalled swap, not a silent reuse. When resumable, ask the fence question below.
 
 **16.** `take the worktree lease for this run` `reset the worktree` [C]
 When the worktree is unsafe, **take the lease before resetting**, then reset, then emit docs mode
@@ -109,9 +109,23 @@ wrong branch and resuming there would commit the task's work onto that branch. M
 whose lease may still belong to another run is what taking the lease first prevents. See
 `resetTaskWorktree.ts`, where `transitionWorktreeLease` runs before `removeWorktreeAndBranch`.
 
-**17.** `is the previous run's work resumable?` = NO `reset the worktree` [C]
-When a safe worktree is not resumable, reset it and emit docs mode `AUTOGEN`. The lease was already
-adopted by the question above, so nothing is mutated unowned.
+**16b.** `is the previous run's work resumable?` = NO [C]
+When a safe worktree is not resumable, **do not reset it**. Stop with exit type `not-resumable` and
+the note `a safe worktree holds work no run recorded a stopping point for`, and take the failures
+exit. A structurally sound worktree may still hold committed work, and only the user can say whether
+that work is worth keeping, so the run never destroys it on their behalf. **A safe worktree is never
+reset**; only the unsafe path above resets, because being on the wrong branch makes its work
+unusable where it sits.
+
+**17.** `does the task's file list cover what the worktree touched?` [C]
+Ask this last, and **only of a resumable worktree**. Compare the task's declared `files` against
+everything the worktree already touched — the commits on its branch plus its staged and unstaged
+edits — on every repository layer. Untracked files are excluded, because the generated docs are
+untracked by design. Derive the diff and the source branch here rather than accepting either, so no
+caller can widen the fence. When the list does not cover it, stop with exit type `fence-violation`
+and the note `the resumed worktree touched files the task does not own`, and take the failures exit.
+Resuming would otherwise inherit an escape the run never made and later merge it. When the list does
+cover it, emit docs mode `UPDATE`.
 
 **18.** *(whole pipeline)* [C]
 **Resumption is worktree-level, not phase-level.** A resumed worktree keeps its committed work, but
@@ -568,6 +582,7 @@ writing to it would corrupt a live run.
 | `blocked` | an open blocker remains |
 | `plan-scrapped` | codex did not accept the plan in two reviews |
 | `clarify-stuck` | the planner asked twice for what the docs cannot supply |
+| `not-resumable` | a safe worktree holds work no run recorded a stopping point for |
 | `tests-red` | task tests still failing after 2 fix attempts |
 | `tests-flagged` | codex flagged the tests twice |
 | `rebase-stuck` | the rebase did not advance after 2 conflict fixes |

@@ -4,12 +4,13 @@ export type GreenBoxCategory = "read-only" | "mutating" | "maintenance-mutating"
 // A read-only box mutates nothing, so a lost result is answered by running it again.
 export const READ_ONLY_RETRY_LIMIT = 3;
 
-// Every script the workflow dispatches, keyed by its file basename without the extension.  Both test boxes are "mutating" because they write their durable decision to task.run before they print stdout [a4 2]. recoverSourceRepoLock is run by an operator, never by the workflow, so agent-result reconciliation does not apply to it.
+// Every script the workflow dispatches, keyed by its file basename without the extension.
 export const GREEN_BOX_POLICY: Record<string, GreenBoxCategory> = {
     advanceTaskRebase: "mutating",
     AgentPromptEmitter: "read-only",
     applyPlanAmendments: "mutating",
     buildClosureNote: "read-only",
+    checkResumedWorktreeFence: "read-only",
     checkTaskFileFence: "read-only",
     checkTaskWorktreeSafe: "read-only",
     isTaskActive: "mutating",
