@@ -1,15 +1,5 @@
-// Emits the yellow-box prompt text for one tackle-tasks agent role. This is the only place
-// that imports data scripts to build a prompt — see workflow-only-context-injection.md §2/§6.
-// Prompt text is copied from scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts per the mapping
-// table at plans/tackle-tasks-v1_5-plan.md lines 1405-1414; only the edits that table names
-// were made. No CLI role here ever tells the agent to run a git command — the commit box
-// owns committing (rule 1).
-//
-// This emitter is classified read-only (greenBoxPolicy.ts): it must never write to the
-// worktree. Every builder below puts its static instructions and return contract first and
-// appends all runtime/bulk data in one final "---- DATA ----" section, referenced by label
-// from the instructions (§6: interpolate data last).
-import { existsSync, readFileSync } from "node:fs";
+// Emits yellow-box prompts for tackle-tasks agent roles (read-only per greenBoxPolicy.ts); see workflow-only-context-injection.md §2/§6.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
@@ -71,9 +61,7 @@ const ownedPathMap = (t: PreparedTask) => t.files
     .join("\n");
 
 // ---------------------------------------------------------------------------
-// loadPreparedTask — read-only. Derives and validates the expected brief path but never
-// writes it; the generate/update-docs boxes own brief writes. Fails explicitly (never
-// silently creates one) when the brief does not exist yet.
+// loadPreparedTask — read-only. Validates the brief path exists but never writes it; the docs boxes own brief writes.
 // ---------------------------------------------------------------------------
 
 export function loadPreparedTask(taskNumber: number, worktree: string, projectRoot: string): PreparedTask {
@@ -99,8 +87,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
 }
 
 // ---------------------------------------------------------------------------
-// Shared codex command + fallback chain — v1_1 lines 160-200, verbatim structure.
-// Both review roles call this so the chain cannot drift between them.
+// Shared codex command + fallback chain, v1_1 lines 160-200. Both review roles call this to avoid drift.
 // ---------------------------------------------------------------------------
 
 export function codexReviewInstructions(question: string, subjectLabel: string): string {
@@ -131,8 +118,7 @@ back. Never report a fallback review as codex.`;
 }
 
 // ---------------------------------------------------------------------------
-// plan — copied from plannerBrief; writes plan.json per plans/plan-format.md and
-// accepts an optional preamble carrying codex's scrap notes.
+// plan — copied from plannerBrief; writes plan.json per plans/plan-format.md and accepts an optional preamble carrying codex's scrap notes.
 // ---------------------------------------------------------------------------
 
 export function planPrompt(t: PreparedTask, preamble = ""): string {
@@ -196,8 +182,7 @@ ${preamble || "(none)"}`;
 }
 
 // ---------------------------------------------------------------------------
-// review-plan — copied from codexPrompt + verifierBrief; returns codex-review.json
-// instead of APPROVED/REJECTED prose.
+// review-plan — copied from codexPrompt + verifierBrief; returns codex-review.json instead of APPROVED/REJECTED prose.
 // ---------------------------------------------------------------------------
 
 function reviewPlanQuestion(t: PreparedTask): string {
@@ -239,8 +224,7 @@ REVIEW_FILE = ${t.reviewFile}`;
 }
 
 // ---------------------------------------------------------------------------
-// review-tests — copied from verifierBrief's command scaffolding, with a new
-// review question. Never run the tests.
+// review-tests — copied from verifierBrief's command scaffolding, with a new review question. Never run the tests.
 // ---------------------------------------------------------------------------
 
 function reviewTestsQuestion(t: PreparedTask): string {
@@ -275,8 +259,7 @@ TEST_REVIEW_FILE = ${t.testReviewFile}`;
 }
 
 // ---------------------------------------------------------------------------
-// implement — copied from workerBrief, with its commit steps dropped. The commit
-// box owns committing (rule 1).
+// implement — copied from workerBrief, with its commit steps dropped. The commit box owns committing (rule 1).
 // ---------------------------------------------------------------------------
 
 export function implementPrompt(t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number): string {
@@ -374,9 +357,7 @@ MAX_FIX_ROUNDS = ${maxFixRounds}`;
 }
 
 // ---------------------------------------------------------------------------
-// fix-conflicts — copied from mergeConflictBrief, with its git add lines dropped.
-// Returns {resolved, unresolvedPaths}. Keeps "do not run git rebase --continue" —
-// correct now because "advance the rebase" does that.
+// fix-conflicts — from mergeConflictBrief, git add lines dropped. Keeps "no git rebase --continue"; "advance the rebase" does that now.
 // ---------------------------------------------------------------------------
 
 export function fixConflictsPrompt(checkoutPath: string, conflictedFilePaths: string[]): string {
@@ -421,10 +402,7 @@ ${conflictedFilePaths.length === 0 ? "  (none)" : conflictedFilePaths.map((p) =>
 }
 
 // ---------------------------------------------------------------------------
-// fix-suite / fix-tests — copied from rebaseFixBrief, with the permission to edit
-// the failing test removed and the self-commit removed. "fix the codebase" edits
-// source, never tests (diagram rule 4). The edit allowlist is exactly the
-// occurrence-appropriate owned source paths — never the whole checkout.
+// fix-suite / fix-tests — from rebaseFixBrief, minus test-editing and self-commit. Edits source only, never tests (diagram rule 4).
 // ---------------------------------------------------------------------------
 
 function fixCodebasePrompt(subject: string, checkoutPath: string, testOutput: string, forbiddenPaths: string[], ownedSourcePaths: string[]): string {
@@ -482,14 +460,10 @@ export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testO
 }
 
 // ---------------------------------------------------------------------------
-// amend-tests — copied from applyFeedbackBrief, retargeted at test files. The
-// only role that may edit tests: freely for files it created, only when broken
-// or assertion-free for a pre-existing test it merely modified (diagram rule 3).
+// amend-tests — from applyFeedbackBrief, retargeted at tests. Edits own tests freely; pre-existing ones only if broken/empty (rule 3).
 // ---------------------------------------------------------------------------
 
-// Resolves an occurrence-tagged test path (e.g. "child::tests/child.test.ts") to an absolute
-// path inside the matching submodule checkout in this worktree, so the agent can open it
-// directly. A root-occurrence path resolves without touching git/occurrence discovery at all.
+// Resolves an occurrence-tagged test path (e.g. "child::tests/child.test.ts") to an absolute path in the matching submodule checkout.
 function resolveTestFilePath(t: PreparedTask, taggedPath: string, nonRootOccurrences: () => WorktreeOccurrence[]): string {
     const { occurrenceId, relativePath } = parseOccurrencePath(taggedPath);
     if (occurrenceId === "") return worktreePath(t, relativePath);
@@ -499,8 +473,7 @@ function resolveTestFilePath(t: PreparedTask, taggedPath: string, nonRootOccurre
 }
 
 export function amendTestsPrompt(t: PreparedTask, notes: string, createdTestFiles: string[], testFiles: string[]): string {
-    // testFiles is every runnable changed test; createdTestFiles is a subset of it. Derive the
-    // disjoint pre-existing list here rather than trusting the caller to have subtracted it.
+    // testFiles is every changed test; createdTestFiles is a subset. Derive pre-existing here, don't trust the caller subtracted it.
     const preExistingTestFiles = testFiles.filter((f) => !createdTestFiles.includes(f));
     let cachedOccurrences: WorktreeOccurrence[] | null = null;
     const nonRootOccurrences = () => cachedOccurrences ??= buildWorktreeOccurrences(t.repoRoot, t.taskStateRoot);
@@ -547,6 +520,13 @@ ${notes}`;
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
+
+// Saves a real run's prompt beside the generated one for diffing; idempotent, keeping this emitter read-only-safe per greenBoxPolicy.
+function logEmittedPrompt(taskNumber: number, role: string, payload: AgentPromptEmitterPayload, prompt: string): void {
+    const directory = join(payload.projectRoot, "plans/diagram/output renders", String(taskNumber), "runs", payload.runId);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, `${role}.md`), prompt);
+}
 
 export function emitAgentPrompt(taskNumber: number, role: string, payload: AgentPromptEmitterPayload): string {
     const worktree = payload.worktree;
@@ -611,7 +591,9 @@ if (process.argv[1]?.endsWith("AgentPromptEmitter.ts")) {
     if (!PAYLOAD.runId) fail('payload missing "runId"');
 
     try {
-        process.stdout.write(emitAgentPrompt(N, ROLE, PAYLOAD));
+        const prompt = emitAgentPrompt(N, ROLE, PAYLOAD);
+        logEmittedPrompt(N, ROLE, PAYLOAD, prompt);
+        process.stdout.write(prompt);
     } catch (error) {
         fail(String((error as Error)?.message ?? error));
     }

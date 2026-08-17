@@ -297,12 +297,8 @@ test("test_buildWorkflowArgumentsRollsBackEarlierCandidateLeasesWhenALaterTaskHa
     assert.equal(retried.groups.length, 2);
 });
 
-test("test_generateRunIdProducesDifferentValuesOnEachCall", () => {
-    const first = generateRunId();
-    const second = generateRunId();
-    assert.equal(typeof first, "string");
-    assert.ok(first.length > 0);
-    assert.notEqual(first, second);
+test("test_generateRunIdIsALocalTimestampToTheMillisecond", () => {
+    assert.match(generateRunId(), /^\d{8}-\d{6}\.\d{3}$/);
 });
 
 test("test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath", () => {
@@ -591,8 +587,7 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
 // Finding 4: current and archived workflow materialization must never converge.
 // ---------------------------------------------------------------------------
 
-// The test that actually catches the defect: materializeTaskWorkflow's output depends only
-// on the templatePath it was given, and each emitter's brief references only its own field.
+// Catches the defect: output depends only on templatePath, and each brief cites only its own field.
 test("current and archived materialized files each carry their own marker, and each emitter names only its own field", () => {
     const dir = mkdtempSync(join(tmpdir(), "tt-workflow-markers-"));
     const currentTemplate = join(dir, "current.workflow.js");
@@ -670,8 +665,7 @@ test("buildWorkflowArguments releases the worktree lease and leaves no sibling f
     const currentOutput = currentWorkflowOutputPath(worktree);
     const v1_1Output = v1_1WorkflowOutputPath(worktree);
     mkdirSync(dirname(v1_1Output), { recursive: true });
-    // Pre-existing read-only file at the archived output path forces the second call to fail
-    // after the first call already wrote the current output successfully.
+    // A read-only file at the archived path fails the second call, after the first one succeeded.
     writeFileSync(v1_1Output, "blocked\n", { mode: 0o444 });
 
     try {

@@ -71,8 +71,12 @@ export function selectRequestedTasks(openTasks: TaskRecord[], requestedNumbers: 
     return runnableTasks;
 }
 
+// Local time to the millisecond. Two runs starting in the same millisecond would share an id.
 export function generateRunId(): string {
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const now = new Date();
+    const pad = (value: number, width = 2) => String(value).padStart(width, "0");
+    const day = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    return `${day}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${pad(now.getMilliseconds(), 3)}`;
 }
 
 export function resolveMergeScriptPath(): string {
@@ -187,8 +191,7 @@ export function taskWorktreeLeaseGuardPath(worktreePath: string): string {
     return `${worktreePath}.lease.guard`;
 }
 
-// Makes one read/validate/write transition on the lease indivisible. Not the lease itself —
-// acquire/release/adopt all pass through this so only one of them touches the lease at a time.
+// Makes one read/validate/write transition on the lease indivisible, so acquire, release and adopt never overlap.
 export function withTaskWorktreeLeaseGuard<T>(worktreePath: string, action: () => T): T {
     const guardPath = taskWorktreeLeaseGuardPath(worktreePath);
     const deadline = Date.now() + LEASE_GUARD_TIMEOUT_MS;
@@ -254,7 +257,7 @@ export function releaseTaskWorktreeLease(lease: TaskWorktreeLease): void {
     });
 }
 
-// ponytail: no automatic liveness probe on the stored pid; explicit human call only, mirroring taskStateLock's fail-safe stance. Retained work still blocks a takeover, same as ordinary reuse.
+// ponytail: no auto liveness probe on the pid; explicit human call only, like taskStateLock's fail-safe stance.
 export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: string): void {
     const leasePath = taskWorktreeLeasePath(worktreePath);
     if (readTaskWorktreeLeaseOwner(leasePath) === null) return;
@@ -270,8 +273,7 @@ export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: st
 
 // Two repos sharing a basename (or two clones of one repo) would otherwise collide here.
 export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string {
-    // realpathSync, not resolve: a spawned child's process.cwd() reports the symlink-resolved
-    // form (macOS /var -> /private/var), so the raw string would hash differently per caller.
+    // realpathSync, not resolve: a child reports /private/var, so the raw string hashes differently.
     const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
     return join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
 }
@@ -356,9 +358,7 @@ export function v1_1WorkflowOutputPath(worktreePath: string): string {
     return `${worktreePath}.tackle-tasks-v1_1.workflow.js`;
 }
 
-// The harness needs a literal `meta` first statement, so bake the task number in.
-// templatePath is always explicit — no hidden default, so archived and current callers can never
-// silently converge on the same file.
+// Harness needs a literal `meta` first statement, so bake in the task number. templatePath stays explicit, no hidden default.
 export function materializeTaskWorkflow(taskNumber: number, templatePath: string, outputPath: string): string {
     writeFileSync(outputPath, readFileSync(templatePath, "utf8").replaceAll("__TT_TASK__", String(taskNumber)));
     return outputPath;

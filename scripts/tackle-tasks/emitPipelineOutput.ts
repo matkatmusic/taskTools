@@ -117,20 +117,24 @@ export function annotatedBody(taskNumber: number, projectRoot: string): string {
 // The four agent boxes a run reaches when every block succeeds, in visit order.
 export const HAPPY_PATH_ROLES = ["plan", "review-plan", "implement", "review-tests"] as const;
 
-export function agentPrompts(taskNumber: number, projectRoot: string): string {
+// One file per role, byte-pure, so a real run's logged prompt diffs against it cleanly.
+export function writeAgentPrompts(taskNumber: number, projectRoot: string): string[] {
     const worktree = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
-    // A path that stages no worktree has no brief, so there is no prompt to show.
-    if (!existsSync(worktree)) return "(this path stages no worktree, so no agent prompt exists yet)";
+    // A path that stages no worktree has no brief, so there is no prompt to write.
+    if (!existsSync(worktree)) return [];
+    const directory = join(OUTPUT_DIR, String(taskNumber));
+    mkdirSync(directory, { recursive: true });
     return HAPPY_PATH_ROLES.map((role) => {
-        const prompt = emitAgentPrompt(taskNumber, role, {
+        const file = join(directory, `${role}.md`);
+        writeFileSync(file, emitAgentPrompt(taskNumber, role, {
             worktree,
             projectRoot,
             sourceBranch: currentBranchName(projectRoot),
             // No role reads runId, so a literal keeps this off the run-identity path.
             runId: "inspect",
-        });
-        return `<!-- AgentPromptEmitter.ts role "${role}", verbatim -->\n\n\`\`\`\n${prompt}\n\`\`\``;
-    }).join("\n\n");
+        }));
+        return file;
+    });
 }
 
 function render(taskNumber: number, projectRoot: string, pathName: string, trace: string[]): string {
@@ -145,23 +149,15 @@ ${trace.map((line) => `       ${line}`).join("\n")}
 -->
 
 ${annotatedBody(taskNumber, projectRoot)}
-
-<!--
-  AGENT PROMPTS
-
-  Every agent box the happy path visits, in order. Only its subagent sees each one in a real run.
--->
-
-${agentPrompts(taskNumber, projectRoot)}
 `;
 }
 
-export async function writePipelineOutput(taskNumber: number, projectRoot: string, pathName: string): Promise<string> {
+export async function writePipelineOutput(taskNumber: number, projectRoot: string, pathName: string): Promise<string[]> {
     const trace = await runWorkflow(defaultDecisions(taskNumber));
     const file = join(OUTPUT_DIR, `pipeline-output-task-${taskNumber}-${pathName}.md`);
     mkdirSync(OUTPUT_DIR, { recursive: true });
     writeFileSync(file, render(taskNumber, projectRoot, pathName, trace));
-    return file;
+    return [file, ...writeAgentPrompts(taskNumber, projectRoot)];
 }
 
 // ---------------------------------------------------------------------------
@@ -205,10 +201,11 @@ function teardown(taskNumber: number, projectRoot: string, tasksSnapshot: Buffer
     const worktreePath = join(conventionDirectory, `task-${taskNumber}`);
     const branch = taskBranchName(taskNumber);
 
-    if (existsSync(worktreePath)) removeWorktreeAndBranch(projectRoot, worktreePath, branch);
+    // Restored first: a throwing worktree removal must not strand the task marked active.
+    writeFileSync(resolveTaskFiles(projectRoot).tasksPath, tasksSnapshot);
     rmSync(`${worktreePath}.lease`, { force: true });
     rmSync(taskWorktreeCreateJournalPath(worktreePath), { force: true });
-    writeFileSync(resolveTaskFiles(projectRoot).tasksPath, tasksSnapshot);
+    if (existsSync(worktreePath)) removeWorktreeAndBranch(projectRoot, worktreePath, branch);
 }
 
 function waitForQuit(): Promise<void> {
@@ -238,8 +235,8 @@ if (process.argv[1]?.endsWith("emitPipelineOutput.ts")) {
     const tasksSnapshot = readFileSync(resolveTaskFiles(projectRoot).tasksPath);
     try {
         stagePath(pathName, taskNumber, projectRoot);
-        const file = await writePipelineOutput(taskNumber, projectRoot, pathName);
-        process.stdout.write(`${file}\n`);
+        const files = await writePipelineOutput(taskNumber, projectRoot, pathName);
+        process.stdout.write(`${files.join("\n")}\n`);
         const worktreePath = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
         if (existsSync(worktreePath)) process.stdout.write(`worktree: ${worktreePath}\n`);
         await waitForQuit();
