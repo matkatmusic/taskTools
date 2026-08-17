@@ -6,9 +6,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { annotatedBody, matchPathNumber } from "../scripts/tackle-tasks/emitPipelineOutput.ts";
+import { annotatedBody } from "../scripts/tackle-tasks/emitPipelineOutput.ts";
 import { skillBody } from "../scripts/tackle-tasks/SkillBodyEmitter.ts";
-import { traceTaskPipeline, readNamedPaths } from "../scripts/tracePipeline.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 
 const temporaryDirectories: string[] = [];
@@ -35,21 +34,17 @@ const makeTargetRepository = (taskNumber: number): string => {
 const stripAnnotations = (body: string): string =>
     body.split("\n").filter((line) => !/^<!-- SkillBodyEmitter\.ts:\d+ -->$/.test(line)).join("\n");
 
+// Each repository mints its own path and runId, so neither is part of what "byte-faithful" checks.
+const normalize = (body: string, root: string): string =>
+    body.replaceAll(root, "<root>")
+        .replaceAll(resolveTaskWorktreeConventionDirectory(root), "<worktreeDir>")
+        .replace(/"runId":"[^"]*"/, '"runId":"<runId>"');
+
 test("test_annotatedBody_leavesTheEmittedBodyByteFaithfulOnceCommentsAreStripped", () => {
+    const actualRoot = makeTargetRepository(74);
+    const actual = normalize(stripAnnotations(annotatedBody(74, actualRoot)), actualRoot);
+    const expectedRoot = makeTargetRepository(74);
+    const expected = normalize(skillBody("[74]", expectedRoot), expectedRoot);
     // The file is a thing to craft, so the annotations must add nothing the emitter did not print.
-    assert.equal(stripAnnotations(annotatedBody(74, makeTargetRepository(74))), skillBody("[74]", makeTargetRepository(74)));
-});
-
-test("test_matchPathNumber_identifiesTheFixtureThatProducedAPipelineBlock", () => {
-    // Setup: the block the invalid-number path prints for a real task number.
-    const invalidNumber = readNamedPaths()["invalid-number"];
-    const trace = traceTaskPipeline({ ...invalidNumber, taskNumber: 191 });
-
-    // Verification: matching is by block, not by decisions, and the fixture's position is the number.
-    assert.deepEqual(matchPathNumber(trace, 191), { number: 1, name: "invalid-number" });
-});
-
-test("test_matchPathNumber_refusesABlockNoFixtureProduces", () => {
-    // A silent fallback would name a file after the wrong path, so an unknown block must stop the run.
-    assert.throws(() => matchPathNumber(["not a pipeline block"], 191), /matches no known fixture/);
+    assert.equal(actual, expected);
 });

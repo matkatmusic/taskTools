@@ -1,4 +1,4 @@
-// Renders the skill body and the plan agent prompt for one preamble path.
+// Renders the happy path: its trace, the skill body, and every agent prompt it uses.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,6 +15,7 @@ import { markTaskInactive } from "./markTaskInactive.ts";
 import { removeWorktreeAndBranch } from "../mergeTaskWorktrees.ts";
 import { releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory } from "../prepareTasks.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
+import { L } from "../tracePipeline.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const EMITTER_PATH = fileURLToPath(new URL("./SkillBodyEmitter.ts", import.meta.url));
@@ -45,16 +46,48 @@ function defaultDecisions(taskNumber: number): Decisions {
     };
 }
 
+// Every workflow line that can print a trace line, in source order.
+function workflowEmitters(): { line: number; text: string }[] {
+    const emitters: { line: number; text: string }[] = [];
+    readFileSync(WORKFLOW_PATH, "utf8").split("\n").forEach((source, index) => {
+        const banner = source.match(/banner\('(.+)'\)/);
+        if (banner) emitters.push({ line: index + 1, text: `--------- ${banner[1]} ---------` });
+        // The label map itself writes bare ids, so only real L.ID uses match here.
+        for (const [, id] of source.matchAll(/L\.([A-Z0-9_]+)/g)) emitters.push({ line: index + 1, text: L(id!) });
+    });
+    return emitters;
+}
+
+// step() prints the label alone, with a ": SUFFIX", or behind runAgent's agent marker.
+const emitted = (traceLine: string, label: string): boolean =>
+    traceLine === label || traceLine.startsWith(`${label}: `) || traceLine === `<-- AGENT --> ${label}`;
+
+// Names the source line behind each trace line. Loops re-enter, so the search wraps around.
+function annotate(trace: string[]): string[] {
+    const emitters = workflowEmitters();
+    const driverLine = readFileSync(WORKFLOW_PATH, "utf8").split("\n").findIndex((s) => s.includes("Run start: Task Num")) + 1;
+    let cursor = 0;
+    return trace.map((raw, index) => {
+        const text = raw.trimStart();
+        const ahead = emitters.findIndex((e, i) => i >= cursor && emitted(text, e.text));
+        const found = ahead === -1 ? emitters.findIndex((e) => emitted(text, e.text)) : ahead;
+        cursor = found + 1;
+        const line = index === 0 ? driverLine : (found === -1 ? 0 : emitters[found]!.line);
+        return `[workflow.js:${String(line).padStart(3)}]  ${raw}`;
+    });
+}
+
 async function runWorkflow(fake: Decisions): Promise<string[]> {
     const source = readFileSync(WORKFLOW_PATH, "utf8").replace("export const meta", "const meta");
     const fn = compileFunction(
+        // lineOffset -1 cancels the wrapper line, so a stack frame names the real source line.
         `return (async () => { 'use strict'\n${source} })()`,
         ["args", "log", "agent", "phase"],
-        { filename: WORKFLOW_PATH, importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+        { filename: WORKFLOW_PATH, lineOffset: -1, importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
     ) as (a: unknown, l: () => void, g: unknown, p: unknown) => Promise<string[]>;
-    return fn({ fake, task: fake.taskNumber }, () => {}, async () => {
+    return annotate(await fn({ fake, task: fake.taskNumber }, () => {}, async () => {
         throw new Error("emitPipelineOutput: the workflow must not launch an agent");
-    }, () => {});
+    }, () => {}));
 }
 
 // ---------------------------------------------------------------------------
@@ -78,20 +111,26 @@ export function annotatedBody(taskNumber: number, projectRoot: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// The plan agent's prompt, exactly as its subagent receives it from the workflow.
+// The agent prompts, exactly as each subagent receives them from the workflow.
 // ---------------------------------------------------------------------------
 
-export function planAgentPrompt(taskNumber: number, projectRoot: string): string {
+// The four agent boxes a run reaches when every block succeeds, in visit order.
+export const HAPPY_PATH_ROLES = ["plan", "review-plan", "implement", "review-tests"] as const;
+
+export function agentPrompts(taskNumber: number, projectRoot: string): string {
     const worktree = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
     // A path that stages no worktree has no brief, so there is no prompt to show.
-    if (!existsSync(worktree)) return "(this path stages no worktree, so no plan prompt exists yet)";
-    return emitAgentPrompt(taskNumber, "plan", {
-        worktree,
-        projectRoot,
-        sourceBranch: currentBranchName(projectRoot),
-        // No role reads runId, so a literal keeps this off the run-identity path.
-        runId: "inspect",
-    });
+    if (!existsSync(worktree)) return "(this path stages no worktree, so no agent prompt exists yet)";
+    return HAPPY_PATH_ROLES.map((role) => {
+        const prompt = emitAgentPrompt(taskNumber, role, {
+            worktree,
+            projectRoot,
+            sourceBranch: currentBranchName(projectRoot),
+            // No role reads runId, so a literal keeps this off the run-identity path.
+            runId: "inspect",
+        });
+        return `<!-- AgentPromptEmitter.ts role "${role}", verbatim -->\n\n\`\`\`\n${prompt}\n\`\`\``;
+    }).join("\n\n");
 }
 
 function render(taskNumber: number, projectRoot: string, pathName: string, trace: string[]): string {
@@ -108,14 +147,12 @@ ${trace.map((line) => `       ${line}`).join("\n")}
 ${annotatedBody(taskNumber, projectRoot)}
 
 <!--
-  PLAN AGENT PROMPT
+  AGENT PROMPTS
 
-  AgentPromptEmitter.ts role "plan", verbatim. Only its subagent sees this in a real run.
+  Every agent box the happy path visits, in order. Only its subagent sees each one in a real run.
 -->
 
-\`\`\`
-${planAgentPrompt(taskNumber, projectRoot)}
-\`\`\`
+${agentPrompts(taskNumber, projectRoot)}
 `;
 }
 
@@ -183,7 +220,8 @@ function waitForQuit(): Promise<void> {
 if (process.argv[1]?.endsWith("emitPipelineOutput.ts")) {
     const commandArguments = process.argv.slice(2);
     const pathFlagIndex = commandArguments.indexOf("--path");
-    const pathName = pathFlagIndex === -1 ? "worktree-does-not-exist" : commandArguments[pathFlagIndex + 1];
+    // Defaults to the path that stages a worktree, because every agent prompt needs one.
+    const pathName = pathFlagIndex === -1 ? "safe-existing-worktree" : commandArguments[pathFlagIndex + 1];
     const positional = pathFlagIndex === -1 ? commandArguments : commandArguments.toSpliced(pathFlagIndex, 2);
 
     const taskNumber = Number(positional[0]);
