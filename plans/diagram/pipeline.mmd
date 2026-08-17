@@ -1,60 +1,45 @@
 flowchart TB
-%% OVERVIEW. One block per pipeline. Each block is drawn in full in its own file:
-%%   preamble status check pipeline       pipeline-preambleStatusCheck.mmd
-%%   worktree check pipeline              pipeline-worktreeCheck.mmd
-%%   document generation pipeline         pipeline-documentGeneration.mmd
-%%   plan pipeline                        pipeline-plan.mmd
-%%   review plan pipeline                 pipeline-reviewPlan.mmd
-%%   implement pipeline                   pipeline-implement.mmd
-%%   task tests pipeline                  pipeline-taskTests.mmd
-%%   review task tests pipeline           pipeline-reviewTests.mmd
-%%   rebase preamble pipeline             pipeline-rebasePreamble.mmd
-%%   rebase pipeline                      pipeline-rebase.mmd
-%%   full suite pipeline                  pipeline-suite.mmd
-%%   merge pipeline                       pipeline-merge.mmd
-%%   merge succeeded exit                 pipeline-mergeSucceededExit.mmd
-%%   failures exit                        pipeline-failuresExit.mmd
-%%   report only exit                     pipeline-reportOnlyExit.mmd
-%% The dotted arrow out of each block is that block's early exit, drawn as one
-%% arrow here. The exit types it carries are listed in that block's own file.
-%% There are three exit tails, and each has its own file:
-%%   merge succeeded exit - records the run, archives the task, releases everything
-%%   failures exit        - records why the run ended, then releases what it holds
-%%   report only exit     - the task never started, so nothing is written or held
-%% The REFUSED arrow out of the preamble is invalid-number, blocked, already-active
-%% and closing: all four happen before "mark the task active".
-%% Five pipelines send the run back to the pipeline before them, after writing
-%% what went wrong into the tasks.json entry. Those loops are drawn in their own
-%% files, not here:
-%%   review plan pipeline        -> plan pipeline
-%%   plan pipeline               -> document generation pipeline (CLARIFY, capped at
-%%                                  2 rounds, and it carries the clarify request)
-%%   task tests pipeline         -> implement pipeline
-%%   review task tests pipeline  -> implement pipeline
-%%   merge pipeline              -> rebase pipeline
-%% Exit types, one per path that reaches [stop]:
-%%   completed          - archived to completedTasks.json. FINAL: once written, no
-%%                        later failure may overwrite it. See the failures exit.
-%%   invalid-number     - not in tasks.json. completedTasks.json is NOT consulted.
-%%   already-active     - a previous run left the task active
-%%   blocked            - an open blocker remains
-%%   closing            - the task merged already and is waiting to be archived
-%%   plan-scrapped      - codex did not accept the plan in two reviews
-%%   clarify-stuck      - the planner asked twice for something the docs cannot
-%%                        supply
-%%   tests-red          - task tests still failing after 2 fix attempts
-%%   tests-flagged      - codex flagged the tests twice
-%%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
-%%   suite-red          - full suite still red after 2 fix attempts
-%%   fence-violation    - a change edited files the task does not own
-%%   merge-failed       - the merge did not land twice
-%%   agent-failed       - an agent returned nothing usable
-%%   run-failed         - a script failed operationally; can leave ANY green box
-%%                        in any pipeline
-%% Every counter above counts FIX ATTEMPTS, not failing runs: 2 attempts means up to
-%% 3 runs. No counter is written to tasks.json, so each invocation starts at zero.
-%% cleanup-incomplete is NOT an exit type. It is a repair flag the failures exit
-%% writes beside a completed exit type when the post-merge cleanup dies partway.
+%% OVERVIEW. One diagram file per pipeline, named pipeline-<blockName>.mmd.
+%% ---
+%% REFUSED covers invalid-number, blocked, already-active, closing, and run-failed before the task is active.
+%% ---
+%% A post-merge cleanup failure can still fail the run after merge succeeds.
+%% ---
+%% Master exit-type list, one per path that reaches [stop]:
+%% ---
+%%   completed            - archived to completedTasks.json. FINAL.
+%% ---
+%%   invalid-number       - not in tasks.json, completedTasks.json not consulted
+%% ---
+%%   already-active       - a previous run left the task active
+%% ---
+%%   blocked              - an open blocker remains
+%% ---
+%%   closing              - the task merged already and waits to be archived
+%% ---
+%%   plan-scrapped        - codex did not accept the plan in two reviews
+%% ---
+%%   clarify-stuck        - the planner asked twice for what the docs cannot supply
+%% ---
+%%   tests-red            - task tests still failing after 2 fix attempts
+%% ---
+%%   tests-flagged        - codex flagged the tests twice
+%% ---
+%%   rebase-stuck         - the rebase did not advance after 2 conflict fixes
+%% ---
+%%   suite-red            - full suite still red after 2 fix attempts
+%% ---
+%%   fence-violation      - a change edited files the task does not own
+%% ---
+%%   merge-failed         - nothing landed after 2 attempts
+%% ---
+%%   agent-failed         - an agent returned nothing usable
+%% ---
+%%   partially-published  - some layers landed, some did not. RECOVERY ONLY.
+%% ---
+%%   run-failed           - a script failed operationally, can leave ANY green box
+%% ---
+%% cleanup-incomplete is a repair flag, not an exit type; see the failures exit.
 
   TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble status<br/>check pipeline"]
   PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
@@ -71,20 +56,21 @@ flowchart TB
   MERGE_PIPELINE --> MERGE_SUCCESS["SUCCESS"] --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
   EXIT_WORKFLOW_SUCCESS --> STOP["stop"]
 
-  PREAMBLE_PIPELINE -.-> PREAMBLE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE["failures exit"]
   PREAMBLE_PIPELINE -.-> PREAMBLE_REFUSED["REFUSED"] --> EXIT_WORKFLOW_REPORT_ONLY["report only exit"]
   EXIT_WORKFLOW_REPORT_ONLY --> STOP
-  WORKTREE_CHECK_PIPELINE -.-> WORKTREE_CHECK_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  DOCUMENT_GENERATION_PIPELINE -.-> DOCUMENT_GENERATION_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  PLAN_PIPELINE -.-> PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  REVIEW_PLAN_PIPELINE -.-> REVIEW_PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  IMPLEMENT_PIPELINE -.-> IMPLEMENT_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  TASK_TESTS_PIPELINE -.-> TASK_TESTS_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  REVIEW_TESTS_PIPELINE -.-> REVIEW_TESTS_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  REBASE_PREAMBLE_PIPELINE -.-> REBASE_PREAMBLE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  REBASE_PIPELINE -.-> REBASE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  SUITE_PIPELINE -.-> SUITE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
-  MERGE_PIPELINE -.-> MERGE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  WORKTREE_CHECK_PIPELINE -.-> FAILED
+  DOCUMENT_GENERATION_PIPELINE -.-> FAILED
+  PLAN_PIPELINE -.-> FAILED
+  REVIEW_PLAN_PIPELINE -.-> FAILED
+  IMPLEMENT_PIPELINE -.-> FAILED
+  TASK_TESTS_PIPELINE -.-> FAILED
+  REVIEW_TESTS_PIPELINE -.-> FAILED
+  REBASE_PREAMBLE_PIPELINE -.-> FAILED
+  REBASE_PIPELINE -.-> FAILED
+  SUITE_PIPELINE -.-> FAILED
+  MERGE_PIPELINE -.-> FAILED
+  FAILED["FAILED"] --> EXIT_WORKFLOW_FAILURE["failures exit"]
+  EXIT_WORKFLOW_SUCCESS -.-> CLEANUP_FAIL["FAILED:<br/>post-merge cleanup"] --> EXIT_WORKFLOW_FAILURE
   EXIT_WORKFLOW_FAILURE --> STOP
 
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
@@ -94,6 +80,6 @@ flowchart TB
   classDef pass fill:#00ff00,stroke:#6d1a12,color:#000000
   class PREAMBLE_PIPELINE,PLAN_PIPELINE,REVIEW_PLAN_PIPELINE,IMPLEMENT_PIPELINE,TASK_TESTS_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE,REBASE_PIPELINE,SUITE_PIPELINE,MERGE_PIPELINE,WORKTREE_CHECK_PIPELINE,DOCUMENT_GENERATION_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
   class PREAMBLE_SUCCESS,PLAN_SUCCESS,REVIEW_PLAN_SUCCESS,IMPLEMENT_SUCCESS,TASK_TESTS_SUCCESS,REVIEW_TESTS_SUCCESS,REBASE_PREAMBLE_SUCCESS,REBASE_SUCCESS,SUITE_SUCCESS,MERGE_SUCCESS,WORKTREE_CHECK_SUCCESS,DOCUMENT_GENERATION_SUCCESS pass
-  class PREAMBLE_FAIL,PLAN_FAIL,REVIEW_PLAN_FAIL,IMPLEMENT_FAIL,TASK_TESTS_FAIL,REVIEW_TESTS_FAIL,REBASE_PREAMBLE_FAIL,REBASE_FAIL,SUITE_FAIL,MERGE_FAIL,PREAMBLE_REFUSED,WORKTREE_CHECK_FAIL,DOCUMENT_GENERATION_FAIL nopass
+  class FAILED,CLEANUP_FAIL,PREAMBLE_REFUSED nopass
   class EXIT_WORKFLOW_FAILURE,EXIT_WORKFLOW_REPORT_ONLY fail
   class TASK_NUMBER_INPUT,STOP output

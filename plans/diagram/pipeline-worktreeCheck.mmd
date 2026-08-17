@@ -1,0 +1,55 @@
+flowchart TB
+%% WORKTREE CHECK. Input: an active task from the preamble pipeline.
+%% ---
+%% Every git interaction goes through a script, never prose.
+%% ---
+%% A lost mutation is reconciled by re-reading state, never retried blindly.
+%% ---
+%% "safe to use" is structural only; it says nothing about the work inside.
+%% ---
+%% "resumable" is semantic: did the previous run record where it stopped.
+%% ---
+%% RESUME IS WORKTREE-LEVEL: the workflow still restarts at document generation and planning.
+%% ---
+%% The lease is taken or adopted before any reset, per resetTaskWorktree.ts.
+%% ---
+%% Exit types this pipeline can produce:
+%% ---
+%%   run-failed - a script failed operationally
+
+  ACTIVE_TASK_INPUT["Input: { taskNumber, worktree path }"] --> DOES_WORKTREE_EXIST
+  DOES_WORKTREE_EXIST{"does a worktree exist?"} --> DOES_WORKTREE_EXIST_YES["YES"]
+  DOES_WORKTREE_EXIST --> DOES_WORKTREE_EXIST_NO["NO"]
+  DOES_WORKTREE_EXIST_NO --> CREATE_WORKTREE["create a worktree"]
+  CREATE_WORKTREE --> TAKE_WORKTREE_LEASE["take the worktree lease for this run"]
+  TAKE_WORKTREE_LEASE -- "docs mode: AUTOGEN" --> INIT_SUBMODULES_RECURSIVELY
+
+  DOES_WORKTREE_EXIST_YES --> IS_WORKTREE_SAFE_TO_USE{"is the worktree safe to use?"}
+  IS_WORKTREE_SAFE_TO_USE --> IS_WORKTREE_SAFE_TO_USE_YES["YES"]
+  IS_WORKTREE_SAFE_TO_USE --> IS_WORKTREE_SAFE_TO_USE_NO["NO"]
+  IS_WORKTREE_SAFE_TO_USE_NO --> TAKE_WORKTREE_LEASE_BEFORE_RESET["take the worktree lease for this run"]
+  TAKE_WORKTREE_LEASE_BEFORE_RESET --> RESET_WORKTREE
+
+  IS_WORKTREE_SAFE_TO_USE_YES --> IS_PREVIOUS_RUN_RESUMABLE{"is the previous run's work resumable?<br/>adopt the lease for this run"}
+  IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_YES["YES"]
+  IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_NO["NO"]
+  IS_PREVIOUS_RUN_RESUMABLE_YES -- "docs mode: UPDATE" --> INIT_SUBMODULES_RECURSIVELY
+  IS_PREVIOUS_RUN_RESUMABLE_NO --> RESET_WORKTREE
+
+  RESET_WORKTREE["reset the worktree"] -- "docs mode: AUTOGEN" --> INIT_SUBMODULES_RECURSIVELY
+
+  INIT_SUBMODULES_RECURSIVELY["init submodules recursively"] --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+
+  %% pass/nopass: green reuses what is already there, red rebuilds it.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE decision
+  class CREATE_WORKTREE,RESET_WORKTREE,INIT_SUBMODULES_RECURSIVELY,TAKE_WORKTREE_LEASE,TAKE_WORKTREE_LEASE_BEFORE_RESET script
+  class DOCUMENT_GENERATION_PIPELINE pipeline
+  class DOES_WORKTREE_EXIST_YES,IS_WORKTREE_SAFE_TO_USE_YES,IS_PREVIOUS_RUN_RESUMABLE_YES pass
+  class DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_NO nopass
+  class ACTIVE_TASK_INPUT output

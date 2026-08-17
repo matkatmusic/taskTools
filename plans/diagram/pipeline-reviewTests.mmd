@@ -1,40 +1,31 @@
 flowchart TB
 %% REVIEW TASK TESTS PIPELINE. Split from pipeline-implementTest.mmd.
-%% Input: a green implementation from the task tests pipeline, together with the
-%% plan, the tasks.json entry and the task's test files.
-%% One job: decide whether the tests are worth trusting.
-%% Starts at "codex reviews the tests". Ends with accepted tests, with the run
-%% back in the implement pipeline, or with an exit.
-%% Rules that apply everywhere, not steps:
-%%   1. Every read and write of tasks.json is atomic.
-%%   2. Codex gets two reviews. On the second flagging the pipeline aborts.
-%%   3. Green tests are not the same as good tests. The test run decides whether
-%%      the work is correct; this pipeline decides whether the tests prove it.
-%%   4. To decide that, the reviewer needs more than the tests. Reading tests alone
-%%      cannot catch the two failures that matter most:
-%%        - tests that pass against the wrong implementation. Needs the
-%%          implementation diff, so the reviewer can see what the tests assert
-%%          against.
-%%        - tests that were already there, presented as this task's coverage. Needs
-%%          the pre-existing test files, so new tests can be told from old ones.
-%%      So the input also carries the executed test command and its results: a test
-%%      the reviewer believes ran may not have run at all.
-%%   5. A script that fails operationally, as opposed to returning a verdict,
-%%      exits the run as run-failed. The task is already active and a worktree
-%%      already exists here, so the exit workflow always runs in full.
-%% Box definitions where the name alone is not enough:
-%%   amend tasks.json entry       - the retry is not a bare retry. The implementor
-%%                                  reads the task entry, so codex's notes and
-%%                                  fixes are written into it or the next attempt
-%%                                  repeats the same mistake.
-%% Exit types this pipeline can produce:
-%%   agent-failed       - an agent returned nothing usable
-%%   tests-flagged      - codex flagged the tests twice
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge out of every box. It can leave
-%% ANY green box, so drawing it would add one edge per box and hide the flow.
-%% The finished implementation this pipeline emits is the input to the rebase
-%% preamble pipeline.
+%% ---
+%% Input: a green implementation from the task tests pipeline.
+%% ---
+%% Job: decide whether the tests are worth trusting.
+%% ---
+%% Input provenance:
+%% ---
+%% The implementation diff and the pre-existing test files are derived here.
+%% ---
+%% Both come from the task branch's merge-base with the target branch.
+%% ---
+%% No earlier pipeline captures them.
+%% ---
+%% The test command and test results come from the task tests pipeline that just ran.
+%% ---
+%% Rules not shown in the graph:
+%% ---
+%% Codex gets 2 reviews; a second flagging exits the pipeline.
+%% ---
+%% Reading tests alone misses wrong-implementation passes.
+%% ---
+%% It also misses pre-existing tests claimed as new coverage.
+%% ---
+%% A script that fails operationally exits as run-failed.
+%% ---
+%% Exit types: agent-failed, tests-flagged, run-failed.
 
   GREEN_IMPLEMENTATION_INPUT["Input: { plan, tasks.json entry,<br/>task test files, implementation diff,<br/>test command, test results,<br/>pre-existing test files }"] --> CODEX_REVIEWS_TESTS
   CODEX_REVIEWS_TESTS["codex reviews the tests"] --> ARE_TESTS_FLAGGED{"are the tests flagged?"}
@@ -54,8 +45,9 @@ flowchart TB
 
   EXIT_WORKFLOW["failures exit"]
 
-  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
-  %% red is the branch that reimplements or ends in the exit workflow.
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red reimplements, or ends in the exit workflow.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a

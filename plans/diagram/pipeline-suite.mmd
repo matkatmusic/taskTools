@@ -1,49 +1,31 @@
 flowchart TB
 %% FULL SUITE PIPELINE. Split from pipeline-rebaseMerge.mmd.
-%% Input: a rebased worktree from the rebase pipeline, with the source repo lock
-%% already held by the rebase preamble pipeline.
-%% One job: get the whole test suite green on top of the target branch.
-%% Starts at "run the full suite". Ends green, or with an exit.
-%% Rules that apply everywhere, not steps:
-%%   1. Every git interaction goes through a script. Never prose.
-%%   2. "fix the codebase so the full suite passes" edits source, not tests.
-%%   3. Never progress past a suite run until every test passes.
-%%   4. A repair is never tested until it is committed, so the cycle always runs
-%%      fix -> commit -> run, never fix -> run.
-%%   5. "commit if needed" commits nothing when the worktree is clean.
-%%   6. Every box that touches the working tree operates on every repository
-%%      layer, deepest submodule first, root last.
-%%   7. The source repo lock is already held and stays held until the exit
-%%      workflow releases it. Every box here refreshes its heartbeat on entry.
-%%      KNOWN CEILING: the lock goes stale after 15 minutes, and the refresh is one
-%%      call per box, not a background timer. A single full-suite run or a single
-%%      agent repair can itself take longer than 15 minutes, and nothing refreshes
-%%      the lock while it does. See sourceRepoLock.ts: there is no setInterval.
-%%      Upgrade path if this is ever observed: a periodic heartbeat that runs for as
-%%      long as the box does. Until then, keep the boxes short.
-%%   8. The suite fixer edits source, so its edits are subject to the same file
-%%      ownership fence as the implementor's. The fence is checked once, after the
-%%      loop ends and before the merge, so it covers every fix attempt at once.
-%%      The check re-derives the diff itself; it never trusts what an agent says it
-%%      changed. See checkTaskFileFence.ts.
-%%   9. Counter scope, for every counter in this pipeline: it counts FIX ATTEMPTS,
-%%      not failing runs, and it lives for this invocation only. 2 fix attempts means
-%%      up to 3 suite runs. It is not written to tasks.json, so a new invocation
-%%      starts at zero. A merge-triggered rebase re-enters this pipeline and does
-%%      NOT reset it: the fixes it already spent still count.
-%%  10. A script that fails operationally, as opposed to returning a verdict,
-%%      exits the run as run-failed. The task is already active and a worktree
-%%      already exists here, so the exit workflow always runs in full.
-%% Exit types this pipeline can produce:
-%%   agent-failed       - an agent returned nothing usable
-%%   suite-red          - full suite still red after 2 fix attempts
-%%   fence-violation    - a repair edited files the task does not own
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge out of every box. It can leave
-%% ANY green box, so drawing it would add one edge per box and hide the flow.
-%% The suite-red exit leaves the worktree in place. The work is committed, so the
-%% next invocation of this task picks it up.
-%% The green worktree this pipeline emits is the input to the merge pipeline.
+%% ---
+%% Input: a rebased worktree, with the source repo lock already held.
+%% ---
+%% Job: get the whole test suite green on the target branch.
+%% ---
+%% Rules not shown in the graph:
+%% ---
+%% The fence gate runs once, after the fix loop and before the merge.
+%% ---
+%% It re-derives the diff itself and never trusts an agent's self-report.
+%% ---
+%% See checkTaskFileFence.ts.
+%% ---
+%% Counters count fix attempts, not failing runs.
+%% ---
+%% They are per-invocation, not persisted to tasks.json.
+%% ---
+%% KNOWN CEILING: the source lock goes stale at 15 minutes.
+%% ---
+%% Refreshes happen only between boxes, no background timer.
+%% ---
+%% See sourceRepoLock.ts, no setInterval.
+%% ---
+%% A script that fails operationally exits as run-failed.
+%% ---
+%% Exit types: agent-failed, suite-red, fence-violation, run-failed.
 
   REBASED_WORKTREE_INPUT["Input: { worktree }"] --> RUN_FULL_SUITE
   RUN_FULL_SUITE["Try: run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
@@ -68,8 +50,9 @@ flowchart TB
 
   EXIT_WORKFLOW["failures exit"]
 
-  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
-  %% red is the branch that goes back round the cycle or ends in the exit workflow.
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red goes back round the cycle or ends in the exit workflow.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a

@@ -1,79 +1,85 @@
 flowchart TB
-%% FAILURES EXIT. Split from pipeline-exitWorkflow.mmd.
-%% Input: an exit type and exit note from any pipeline, once the task is active.
-%% One job: record why the run ended, then let go of what the run holds.
-%% Ends at [stop].
-%% Rules that apply everywhere, not steps:
-%%   1. Every git interaction goes through a script. Never prose.
-%%   2. Every read and write of tasks.json is atomic.
-%%   3. Every box that touches the working tree operates on every repository
-%%      layer, deepest submodule first, root last. Boxes that only read or write
-%%      tasks.json do not.
-%%   4. Exactly one box releases what the run holds, and the box it picks names
-%%      only what is actually held. The test is "does this run hold the worktree
-%%      lease right now?", read from the lease file, NOT "was a worktree created
-%%      at some point": a resumed worktree was created by an earlier run, and a
-%%      lease can have been lost to another owner since. See releaseTaskRunHolds.ts,
-%%      which compares the physical lease owner against this run's id.
-%%   5. The worktree itself is NEVER removed here. Releasing a lease is not
-%%      deleting a worktree. The committed work stays on disk, so the next
-%%      invocation of this task finds it at the preamble's "does a worktree
-%%      exist?" and resumes. Only the merge succeeded exit removes a worktree.
-%%      See releaseTaskRunHolds.ts here, removeTaskWorktreeAndBranches there.
-%%   6. A merge is published work and can never be un-published. Once a run has
-%%      written exit type completed, that exit type is FINAL. A later failure on the
-%%      same run records cleanup-incomplete beside it and leaves completed alone.
-%%      Overwriting it with run-failed would erase the only durable proof the merge
-%%      landed: the preamble's "is the task closing?" reads exactly that field, so
-%%      the next invocation would re-run a task whose work is already on the target
-%%      branch, against a worktree that may no longer exist.
-%%   7. cleanup-incomplete is a repair flag, not an exit type. The task stays in
-%%      tasks.json, still marked closing, and the recorded merge commit hashes are
-%%      enough to finish the archive by hand or on the next sweep. A post-merge
-%%      failure NEVER sends the run back into implementation.
-%%   8. How far this tail can run depends on where the failure happened:
-%%        active, no lease held - this tail runs; modified files records []
-%%        active, lease held    - this tail runs in full
-%%        after the merge succeeded exit wrote completed
-%%                              - rule 6: record cleanup-incomplete, keep completed
-%%      A failure BEFORE the task is active never reaches here. It takes the
-%%      report-only exit. See pipeline-reportOnlyExit.mmd.
-%% Exit types that reach this tail:
-%%   plan-scrapped      - codex did not accept the plan in two reviews
-%%   clarify-stuck      - the planner asked twice for something the docs cannot
-%%                        supply
-%%   fence-violation    - a change edited files the task does not own
-%%   tests-red          - task tests still failing after 2 fix attempts
-%%   tests-flagged      - codex flagged the tests twice
-%%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
-%%   suite-red          - full suite still failing after 2 fix attempts
-%%   merge-failed       - the merge did not land twice
-%%   agent-failed       - an agent returned nothing usable
-%%   run-failed         - a script failed operationally
+%% FAILURES EXIT.
+%% ---
+%% Input: an exit type and exit note, task already active.
+%% ---
+%% The lease and the source lock are two independent holdings.
+%% ---
+%% Neither's release gates the other's; each checks its own owner.
+%% ---
+%% See releaseTaskRunHolds.ts.
+%% ---
+%% Every release and write here runs before "mark task inactive".
+%% ---
+%% Marking inactive is what reopens the task to another run.
+%% ---
+%% Every mutating box here is reconciled, not retried.
+%% ---
+%% Only an ambiguous read is run-failed, reported to the operator.
+%% ---
+%% See reconcileStep.ts.
+%% ---
+%% The worktree is NEVER removed here; only the merge succeeded exit removes one.
+%% ---
+%% This tail asks GIT what landed, not whether exit type is completed.
+%% ---
+%% completed is written long after the merge, so a gap failure must not reopen it.
+%% ---
+%% Did ANY work land? YES: keep completed if present, else write partially-published.
+%% ---
+%% Either way the incoming exit type is discarded, run-failed included.
+%% ---
+%% cleanup-incomplete and partially-published both mean RECOVERY ONLY.
+%% ---
+%% Exit types reaching this tail:
+%% ---
+%% plan-scrapped
+%% ---
+%% clarify-stuck
+%% ---
+%% fence-violation
+%% ---
+%% partially-published
+%% ---
+%% tests-red
+%% ---
+%% tests-flagged
+%% ---
+%% rebase-stuck
+%% ---
+%% suite-red
+%% ---
+%% merge-failed
+%% ---
+%% agent-failed
+%% ---
+%% run-failed
 
-  EXIT_TYPE_NOTE_INPUT["Input: { exit type, exit note }"] --> DID_THIS_RUN_ALREADY_MERGE
-  DID_THIS_RUN_ALREADY_MERGE{"did this run already exit completed?"} --> DID_THIS_RUN_ALREADY_MERGE_YES["YES"]
-  DID_THIS_RUN_ALREADY_MERGE --> DID_THIS_RUN_ALREADY_MERGE_NO["NO"]
+  EXIT_TYPE_NOTE_INPUT["Input: { exit type, exit note }"] --> READ_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+  READ_PUBLICATION_STATE --> DID_ANY_WORK_LAND{"did ANY of this task's work land?"}
+  DID_ANY_WORK_LAND --> DID_ANY_WORK_LAND_YES["YES"]
+  DID_ANY_WORK_LAND --> DID_ANY_WORK_LAND_NO["NO"]
 
-  DID_THIS_RUN_ALREADY_MERGE_YES --> RECORD_CLEANUP_INCOMPLETE["record cleanup-incomplete and the note<br/>on the run, KEEP exit type completed"]
-  RECORD_CLEANUP_INCOMPLETE --> REPORT_EXIT_TYPE_AND_NOTE
+  DID_ANY_WORK_LAND_YES --> WRITE_PUBLICATION_OUTCOME["write the publication outcome:<br/>keep completed if it is there, else write<br/>partially-published. NEVER run-failed.<br/>add cleanup-incomplete and the note"]
+  WRITE_PUBLICATION_OUTCOME --> RECORD_MODIFIED_FILES_FAILURE
 
-  DID_THIS_RUN_ALREADY_MERGE_NO --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
-  WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"]
-  RECORD_MODIFIED_FILES_FAILURE --> MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"]
-  MARK_TASK_INACTIVE_FAILURE --> DOES_RUN_HOLD_LEASE{"does this run hold the worktree lease?"}
+  DID_ANY_WORK_LAND_NO --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
+  WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE
+
+  RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"] --> DOES_RUN_HOLD_LEASE{"does this run still hold<br/>the worktree lease?"}
   DOES_RUN_HOLD_LEASE --> DOES_RUN_HOLD_LEASE_YES["YES"]
   DOES_RUN_HOLD_LEASE --> DOES_RUN_HOLD_LEASE_NO["NO"]
-  DOES_RUN_HOLD_LEASE_NO --> NOTHING_TO_RELEASE["nothing to release"]
-  NOTHING_TO_RELEASE --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  DOES_RUN_HOLD_LEASE_YES --> RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
+  RELEASE_WORKTREE_LEASE --> DOES_RUN_HOLD_SOURCE_LOCK
+  DOES_RUN_HOLD_LEASE_NO --> DOES_RUN_HOLD_SOURCE_LOCK
 
-  DOES_RUN_HOLD_LEASE_YES --> WAS_SOURCE_REPO_LOCKED{"was the source repo locked?"}
-  WAS_SOURCE_REPO_LOCKED --> WAS_SOURCE_REPO_LOCKED_YES["YES"]
-  WAS_SOURCE_REPO_LOCKED --> WAS_SOURCE_REPO_LOCKED_NO["NO"]
-  WAS_SOURCE_REPO_LOCKED_NO --> RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
-  RELEASE_WORKTREE_LEASE --> REPORT_EXIT_TYPE_AND_NOTE
-  WAS_SOURCE_REPO_LOCKED_YES --> RELEASE_WORKTREE_LEASE_AND_LOCK["release the worktree lease and the<br/>source lock, keep the worktree"]
-  RELEASE_WORKTREE_LEASE_AND_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
+  DOES_RUN_HOLD_SOURCE_LOCK{"does this run still hold<br/>the source repo lock?"} --> DOES_RUN_HOLD_SOURCE_LOCK_YES["YES"]
+  DOES_RUN_HOLD_SOURCE_LOCK --> DOES_RUN_HOLD_SOURCE_LOCK_NO["NO"]
+  DOES_RUN_HOLD_SOURCE_LOCK_YES --> RELEASE_SOURCE_LOCK["release the source repo lock"]
+  RELEASE_SOURCE_LOCK --> MARK_TASK_INACTIVE_FAILURE
+  DOES_RUN_HOLD_SOURCE_LOCK_NO --> MARK_TASK_INACTIVE_FAILURE
+
+  MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"] --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
   REPORT_EXIT_TYPE_AND_NOTE --> STOP["stop"]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
@@ -81,8 +87,8 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class DOES_RUN_HOLD_LEASE,WAS_SOURCE_REPO_LOCKED,DID_THIS_RUN_ALREADY_MERGE decision
-  class DOES_RUN_HOLD_LEASE_YES,WAS_SOURCE_REPO_LOCKED_YES,DID_THIS_RUN_ALREADY_MERGE_NO pass
-  class DOES_RUN_HOLD_LEASE_NO,WAS_SOURCE_REPO_LOCKED_NO,DID_THIS_RUN_ALREADY_MERGE_YES nopass
-  class WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,NOTHING_TO_RELEASE,RELEASE_WORKTREE_LEASE,RELEASE_WORKTREE_LEASE_AND_LOCK,REPORT_EXIT_TYPE_AND_NOTE,RECORD_CLEANUP_INCOMPLETE,STOP script
+  class DOES_RUN_HOLD_LEASE,DOES_RUN_HOLD_SOURCE_LOCK,DID_ANY_WORK_LAND decision
+  class DOES_RUN_HOLD_LEASE_YES,DOES_RUN_HOLD_SOURCE_LOCK_YES,DID_ANY_WORK_LAND_NO pass
+  class DOES_RUN_HOLD_LEASE_NO,DOES_RUN_HOLD_SOURCE_LOCK_NO,DID_ANY_WORK_LAND_YES nopass
+  class READ_PUBLICATION_STATE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,RELEASE_WORKTREE_LEASE,RELEASE_SOURCE_LOCK,REPORT_EXIT_TYPE_AND_NOTE,WRITE_PUBLICATION_OUTCOME,STOP script
   class EXIT_TYPE_NOTE_INPUT output
