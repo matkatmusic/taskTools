@@ -1,7 +1,7 @@
 flowchart TB
 %% OVERVIEW. One diagram file per pipeline, named pipeline-<blockName>.mmd.
 %% ---
-%% REFUSED covers invalid-number, blocked, already-active, closing, and run-failed before the task is active.
+%% REFUSED covers invalid-number, blocked, already-active, and run-failed before the task is active.
 %% ---
 %% A post-merge cleanup failure can still fail the run after merge succeeds.
 %% ---
@@ -14,8 +14,6 @@ flowchart TB
 %%   already-active       - a previous run left the task active
 %% ---
 %%   blocked              - an open blocker remains
-%% ---
-%%   closing              - the task merged already and waits to be archived
 %% ---
 %%   plan-scrapped        - codex did not accept the plan in two reviews
 %% ---

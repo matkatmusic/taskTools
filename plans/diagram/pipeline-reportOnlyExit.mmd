@@ -3,7 +3,7 @@ flowchart TB
 %% ---
 %% Nothing is written to tasks.json; there is no run record yet.
 %% ---
-%% already-active and closing must not touch the run they find; it belongs to another invocation.
+%% already-active must not touch the run it finds; that run belongs to another invocation.
 %% ---
 %% Exit types that reach this tail:
 %% ---
@@ -12,8 +12,6 @@ flowchart TB
 %%   already-active  - a previous run left the task active
 %% ---
 %%   blocked         - an open blocker remains
-%% ---
-%%   closing         - the task merged already, waiting to be archived
 %% ---
 %%   run-failed      - a script failed before the task was marked active
 

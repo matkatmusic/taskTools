@@ -7,9 +7,9 @@ flowchart TB
 %% ---
 %% Still unknown after that re-read counts as run-failed.
 %% ---
-%% "is the task active?", "is it closing?" and "mark it active" are one atomic write.
+%% "is the task active?" and "mark it active" are one atomic write.
 %% ---
-%% See claimTask in taskRunState.ts, which returns claimed, active or closing.
+%% See claimTask in taskRunState.ts.
 %% ---
 %% Task number and blocked checks happen before that atomic claim.
 %% ---
@@ -33,8 +33,6 @@ flowchart TB
 %% ---
 %%   already-active  - a previous run left the task active
 %% ---
-%%   closing         - the task merged already, waiting to be archived
-%% ---
 %%   run-failed      - a script failed before the task became active
 
   TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
@@ -49,11 +47,7 @@ flowchart TB
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_YES["YES"]
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_NO["NO"]
   IS_TASK_ACTIVE_YES -- "exit type: already-active<br/>exit note: a previous run<br/>left the task active" --> REPORT_ONLY_EXIT
-  IS_TASK_ACTIVE_NO --> IS_TASK_CLOSING{"is the task closing?"}
-  IS_TASK_CLOSING --> IS_TASK_CLOSING_YES["YES"]
-  IS_TASK_CLOSING --> IS_TASK_CLOSING_NO["NO"]
-  IS_TASK_CLOSING_YES -- "exit type: closing<br/>exit note: the task merged already<br/>and is waiting to be archived" --> REPORT_ONLY_EXIT
-  IS_TASK_CLOSING_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
+  IS_TASK_ACTIVE_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
   MARK_TASK_ACTIVE --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
 
   REPORT_ONLY_EXIT["report only exit"]
@@ -66,10 +60,10 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class IS_TASK_NUMBER_VALID,IS_TASK_BLOCKED,IS_TASK_ACTIVE,IS_TASK_CLOSING decision
+  class IS_TASK_NUMBER_VALID,IS_TASK_BLOCKED,IS_TASK_ACTIVE decision
   class MARK_TASK_ACTIVE script
   class WORKTREE_CHECK_PIPELINE pipeline
-  class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO,IS_TASK_CLOSING_NO pass
-  class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES,IS_TASK_CLOSING_YES nopass
+  class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO pass
+  class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES nopass
   class REPORT_ONLY_EXIT fail
   class TASK_NUMBER_INPUT output
