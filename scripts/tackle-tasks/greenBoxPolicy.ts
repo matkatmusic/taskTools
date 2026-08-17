@@ -1,4 +1,4 @@
-// Which green boxes may be retried after a lost agent result — plans/tackle-tasks-v1_5-plan.md Phase 8.  A null agent result proves the harness returned nothing, not that the command never ran, so the category decides between a blind retry and a read-only reconciliation. No CLI: this is a table.
+// Which green boxes may be retried after a lost agent result. No CLI: this is a table.
 export type GreenBoxCategory = "read-only" | "mutating" | "maintenance-mutating";
 
 // A read-only box mutates nothing, so a lost result is answered by running it again.
@@ -58,6 +58,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "SuiteFixBodyEmitter",
     "WorkflowResultCodes",
     "emitPipelineOutput",
+    "generateTaskWorkflow",
     "greenBoxPolicy",
     "inputPaths",
     "occurrences",

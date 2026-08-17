@@ -109,7 +109,7 @@ export function matchPathNumber(trace: string[], taskNumber: number): { number: 
 function templateFirstLine(): number {
     const lines = readFileSync(EMITTER_PATH, "utf8").split("\n");
     // Anchored on the body's own opening words, so an earlier short-circuit `return` cannot win.
-    const index = lines.findIndex((line) => /^\s*return `Say: 'stopped at /.test(line));
+    const index = lines.findIndex((line) => /^\s*return `WORKFLOW: /.test(line));
     if (index === -1) throw new Error(`emitPipelineOutput: no template literal found in ${EMITTER_NAME}`);
     return index + 1;
 }
