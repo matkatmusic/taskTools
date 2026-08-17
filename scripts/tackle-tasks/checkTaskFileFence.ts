@@ -1,7 +1,4 @@
-// "did every change stay inside the task's owned files?" (pipeline.mmd). Computes the diff
-// itself, deepest-first over every occurrence; never trusts a self-reported changedPaths.
-// Both the diff and task.files go through buildOccurrencePath/buildOwnedOccurrencePaths so the
-// two namespaces are comparable. A violation always exits; there is no in-run widening.
+// "did every change stay inside the task's owned files?" (pipeline.mmd). Derives the diff itself.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
@@ -38,10 +35,8 @@ function readGitlinkOidAtHead(checkoutPath: string, pathInParent: string): strin
     }
 }
 
-// F10: a parent gitlink is exempt from the fence only when the child occurrence proves it, not
-// merely because it is structural. Computed deepest-first, so a nested gitlink is justified by
-// its own child rather than blanket-exempted, and its result feeds the next-shallower check.
-function computeExemptGitlinkPaths(
+// F10: deepest-first, so a parent gitlink is exempt only when its own child occurrence proves it.
+export function computeExemptGitlinkPaths(
     worktreePath: string,
     projectRoot: string,
     changedPathsByOccurrenceId: Map<string, string[]>,
@@ -62,8 +57,7 @@ function computeExemptGitlinkPaths(
         const childChangedPaths = changedPathsByOccurrenceId.get(occurrence.occurrenceId) ?? [];
         // Condition 1: the child occurrence contains at least one task change.
         const childHasAChange = childChangedPaths.length > 0;
-        // Condition 2: every non-structural child change (i.e. not already justified by this
-        // same deepest-first pass) is itself inside the owned occurrence paths.
+        // Condition 2: every non-structural child change sits inside the owned occurrence paths.
         const nonStructuralChildChanges = childChangedPaths.filter((path) => !exempt.has(path));
         const everyNonStructuralChangeIsOwned = nonStructuralChildChanges.every((path) => ownedPaths.has(path));
         // Condition 3: the parent's recorded gitlink equals the child checkout's actual HEAD.
