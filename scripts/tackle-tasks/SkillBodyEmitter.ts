@@ -1,11 +1,8 @@
-// The tackle-tasks skill body: paths and prose only, never a subprocess and never task data.
-//
-// It also runs the preamble, so a failed check replaces the whole body with one line.
+// The tackle-tasks skill body: paths only, plus the preamble that can replace it.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runPreamble } from "./PreambleDataEmitter.ts";
-import { generateRunId } from "../prepareTasks.ts";
-import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
+import { repositoryTopLevel, resolveTaskRun } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
 
 const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
@@ -13,9 +10,9 @@ const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tack
 
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // ponytail: one task at a time for now — multiple tasks come later.
-    const [taskNumber] = parseTaskNumberArgument(argsValue);
-    // ponytail: the resolver mints its own runId, so this one only marks the task active.
-    const preambleResult = runPreamble(taskNumber, generateRunId(), projectRoot);
+    const run = resolveTaskRun(argsValue, projectRoot);
+    const [taskNumber] = run.taskNumbers;
+    const preambleResult = runPreamble(taskNumber, run.runId, projectRoot);
     if (preambleResult.code === WorkflowResultCodes.DO_NOT_PROCEED) {
         return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
     }
@@ -23,7 +20,15 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const workflowCall = JSON.stringify({
         scriptPath: TASK_WORKFLOW_PATH,
-        args: { task: taskNumber, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH },
+        args: {
+            task: taskNumber,
+            agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH,
+            // AgentPromptEmitter's CLI rejects a payload missing any of these four.
+            worktree: preambleResult.receipt!.worktree,
+            projectRoot,
+            sourceBranch: run.sourceBranch,
+            runId: run.runId,
+        },
     });
 
     return `WORKFLOW: ${workflowCall}

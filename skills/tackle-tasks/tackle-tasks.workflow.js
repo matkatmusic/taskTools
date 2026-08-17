@@ -1,48 +1,159 @@
 export const meta = {
   name: 'tackle-task',
-  description: 'Drive one task from validation to merge, per plans/diagram/pipeline.mmd',
+  description: 'Drive one active task from planning to merge, per plans/diagram/pipeline-*.mmd',
   phases: [
-    { title: 'Preamble', detail: 'validate the number, mark the task active, prepare the worktree' },
-    { title: 'Planning', detail: 'write the plan, review it, apply amendments' },
-    { title: 'Implement and test', detail: 'implement, run the task tests, review them, lock the source repo' },
-    { title: 'Rebase and merge', detail: 'rebase, run the full suite, check the fence, merge' },
-    { title: 'Exit workflow', detail: 'record the outcome, release what is held, report' },
+    { title: 'Plan', detail: 'write the plan, review it, replan or clarify' },
+    { title: 'Implement', detail: 'implement, commit, run the task tests, review them' },
+    { title: 'Rebase and merge', detail: 'lock the source repo, rebase, run the full suite, merge' },
+    { title: 'Exit', detail: 'record the outcome, release what is held, report' },
   ],
 }
 
-// meta must come first: the harness reads it as a pure literal, so nothing may precede it.
-//
-// Drives one task from validation to merge. The shape of this file is dictated by plans/diagram/*.mmd — every step() line below is a node label copied verbatim from a diagram.
-//
-// The sandbox cannot import, require, read files, or run commands: everything here is inline.
-//
-// FAKE MODE: pass args.fake = <a fixture from scripts/tracePipelinePaths.json> and run() returns the canned receipt from its call site instead of launching anything. That lets the whole pipeline walk any path in the diagrams offline, so its output can be diffed against scripts/tracePipeline.ts. tests/workflowMatchesTracer.test.ts is the guard against the labels below drifting from the diagrams.
-//
-// REAL MODE: deliberately not built. Every decision that would need a real reconciliation script, a real structure validator, or a real git/test result routes through realDecisions(), which throws naming the missing piece instead of silently taking the happy path.
+/*
+  meta comes first: the harness reads it as a pure literal.
+*/
 
-// ---------------------------------------------------------------------------
-// Skeleton. Phase functions below use ONLY these helpers and invent nothing.
-// ---------------------------------------------------------------------------
+/*
+  Drives paragraphs 18 to 97 of plans/tackle-tasks-v1_5-prompt.md.
+*/
 
+/*
+  Paragraphs 1 to 17 already ran in PreambleDataEmitter.ts:runPreamble, at skill-invocation time.
+*/
+
+/*
+  So this file starts from an active task, an initialized worktree, and a written brief.
+*/
+
+/*
+  WIRED: the 6 [S] paragraphs 23, 30, 36, 45, 58, 63, as real agent() calls.
+*/
+
+/*
+  NOT WIRED: the 90 [C] paragraphs. The sandbox cannot run a command, so each throws.
+*/
+
+/*
+  FAKE MODE: args.fake supplies every [C] decision, so a path walks offline with no repository.
+*/
+
+/*
+  Paragraph 18: resumption is worktree-level, so there is no resume entry point here.
+*/
+
+/*
+  Paragraph 19: the preamble initializes submodules on every path, before this file runs.
+*/
+
+const TASK = args.task
+const EMITTER = args.agentPromptEmitterPath
+const WORKTREE = args.worktree
+const PROJECT_ROOT = args.projectRoot
+const SOURCE_BRANCH = args.sourceBranch
+const RUN_ID = args.runId
 const FAKE = args && typeof args === 'object' ? args.fake : null
-const AGENT_PROMPT_EMITTER_PATH = args && typeof args === 'object' ? args.agentPromptEmitterPath : null
 const isFake = () => FAKE !== null && FAKE !== undefined
 
+// ---------------------------------------------------------------------------
+// Diagram labels, spliced from plans/diagram/*.mmd by generateTaskWorkflow.ts
+// ---------------------------------------------------------------------------
+
+/*
+  Every label below is its node's text. A typo fails the build, never a run.
+*/
+
+const L = {
+  ACCEPTED_PLAN_INPUT: "Input: { plan, tasks.json entry }",
+  AGENT_ERRORED: "agent() errored",
+  AMEND_ENTRY_WITH_CODEX_NOTES: "amend tasks.json entry with codex's notes and fixes",
+  AMEND_ENTRY_WITH_FAILING_TESTS: "amend tasks.json entry with the failing tests",
+  ARCHIVE_TASK: "move task to completedTasks.json and update tasks blocked by it",
+  ARE_2_CLARIFY_ROUNDS_DONE: "2 clarify rounds done?",
+  ARE_2_CONFLICT_FIXES_DONE: "2 conflict fixes done?",
+  ARE_2_MERGE_ATTEMPTS_DONE: "2 merge attempts done?",
+  ARE_2_REVIEWS_DONE: "2 codex reviews done?",
+  ARE_2_SUITE_FIXES_DONE: "2 suite fix attempts done?",
+  ARE_2_TEST_FIXES_DONE: "have 2 fixes already been attempted?",
+  ARE_2_TEST_REVIEWS_DONE: "2 codex test reviews done?",
+  ARE_TESTS_FLAGGED: "are the tests flagged?",
+  BUILD_CLOSURE_NOTE: "build the closure note from the recorded run",
+  CLEAN_UP_WORKTREES: "clean up worktrees, leases, persistence refs and source lock",
+  CODEX_REVIEWS_PLAN: "codex reviews the plan",
+  CODEX_REVIEWS_TESTS: "codex reviews the tests",
+  COMMITTED_WORK_INPUT: "Input: { worktree, task test files }",
+  COMMIT_IF_NEEDED: "commit if needed",
+  CONTINUE_REBASE: "Try: continue the rebase",
+  DID_ANY_WORK_LAND: "did ANY of this task's work land?",
+  DID_CHANGES_STAY_INSIDE_FENCE: "did every change stay inside the task's file fence?",
+  DID_REBASE_REPORT_CONFLICTS: "did the rebase report conflicts?",
+  DOCS_INPUT: "Input: { brief, docs, codexNotes? }",
+  DOES_RUN_HOLD_LEASE: "does this run still hold the worktree lease?",
+  DOES_RUN_HOLD_SOURCE_LOCK: "does this run still hold the source repo lock?",
+  DO_ALL_TESTS_PASS: "do all tests pass?",
+  DO_TASK_TESTS_PASS: "do the task tests pass?",
+  DRAFT_PLAN_INPUT: "Input: { tasks.json entry, plan }",
+  FINISHED_IMPLEMENTATION_INPUT: "Input: { runId, taskNumber }",
+  FIX_CONFLICTS: "fix conflicts",
+  FIX_THE_CODEBASE_FOR_SUITE: "fix the codebase so the full suite passes",
+  GREEN_IMPLEMENTATION_INPUT: "Input: { plan, tasks.json entry, task test files, implementation diff, test command, test results, pre-existing test files }",
+  GREEN_WORKTREE_INPUT: "Input: { worktree, target branch, merge receipt so far }",
+  HAVE_15_MINUTES_PASSED: "have 15 minutes passed?",
+  IMPLEMENT_TASK: "implement task",
+  IS_REBASE_FINISHED: "is the rebase finished?",
+  LOCK_SOURCE_REPO: "Try: lock the source repo",
+  MARK_TASK_INACTIVE_FAILURE: "mark task inactive in tasks.json",
+  MARK_TASK_INACTIVE_SUCCESS: "mark task inactive in tasks.json",
+  MERGE_RECEIPT_INPUT: "Input: { merge commit hashes, modified files }",
+  MERGE_WORKTREES: "Try: merge worktrees and submodules, no fast-forward. Each layer that lands writes its merge ref AS it lands",
+  PLAN_THE_TASK: "plan the task",
+  READ_PUBLICATION_STATE: "read the publication state from the layer merge refs",
+  REBASED_WORKTREE_INPUT: "Input: { worktree }",
+  REBASE_ONTO_TARGET_BRANCH: "Try: rebase onto the target branch. skip every layer the receipt records as already landed",
+  RECORD_MERGE_COMMIT_HASHES: "record merge commit hashes to tasks.json",
+  RECORD_MODIFIED_FILES_FAILURE: "record modified files to tasks.json",
+  RECORD_MODIFIED_FILES_SUCCESS: "record modified files to tasks.json",
+  RELEASE_SOURCE_LOCK: "release the source repo lock",
+  RELEASE_WORKTREE_LEASE: "release the worktree lease, keep the worktree",
+  REPORT_CLOSURE_NOTE: "report the closure note",
+  REPORT_EXIT_TYPE_AND_NOTE: "report the run's exit type and note",
+  RUN_FULL_SUITE: "Try: run the full suite",
+  RUN_TASK_TESTS: "Try: run task tests",
+  SOURCE_REPO_LOCKED_INPUT: "Input: { worktree, target branch, merge receipt }",
+  STOP: "stop",
+  UPDATE_AUTO_GENERATED_DOCS: "update auto generated docs",
+  UPDATE_TASK_ENTRY: "update tasks.json entry",
+  WAS_LOCK_ACQUIRED: "acquired?",
+  WHAT_DID_THE_PLANNER_RETURN: "what did the planner return?",
+  WHAT_IS_DOCS_MODE: "what is the docs mode?",
+  WHAT_IS_PUBLICATION_STATE: "what is the publication state?",
+  WHAT_IS_REVIEW_VERDICT: "what is the review verdict?",
+  WORKTREE_DOCS_MODE_INPUT: "Input: { worktree, docs mode, clarify request? }",
+  WRITE_CLARIFY_REQUEST: "write the clarify request into the tasks.json entry",
+  WRITE_EXIT_TYPE_AND_NOTE: "write exit type and exit notes to tasks.json",
+  WRITE_EXIT_TYPE_COMPLETED: "write exit type completed to tasks.json",
+  WRITE_PUBLICATION_OUTCOME: "write the publication outcome: keep completed if it is there, else write partially-published. NEVER run-failed. add cleanup-incomplete and the note",
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton
+// ---------------------------------------------------------------------------
+
 const trace = []
+const INDENT = '  '
 let depth = 0
 
 /*
-  One diagram box. `label` must be copied verbatim from the .mmd node.
+  One diagram box, indented one level per repeat of a loop.
 */
 const step = (label, suffix) => {
-  const line = '  '.repeat(depth) + (suffix === undefined ? label : `${label}: ${suffix}`)
+  const line = INDENT.repeat(depth) + (suffix === undefined ? label : `${label}: ${suffix}`)
   trace.push(line)
   log(line)
   return line
 }
 
 /*
-  A sub-pipeline boundary. Never indented — it is a divider, not a step inside a loop.
+  A sub-pipeline boundary, one per plans/diagram/pipeline-<name>.mmd file. Never indented.
 */
 const banner = (name) => {
   const line = `--------- ${name} ---------`
@@ -51,58 +162,129 @@ const banner = (name) => {
   return line
 }
 
-/*
-  A repeat of a two-strike loop is indented one level, matching the tracer.
-*/
-const enterRetry = () => { depth += 1 }
-const leaveRetry = () => { depth -= 1 }
-
 const yesNo = (value) => (value ? 'YES' : 'NO')
 
 /*
-  The diagram's orange-box marker, prefixed onto an agent box's label.
+  Reads one attempt's outcome; past the end of the list the last entry repeats.
 */
-const AGENT_MARK = '<-- AGENT -->'
+const attempt = (outcomes, index) => outcomes[Math.min(index, outcomes.length - 1)]
 
 /*
-  Every visit an agent box has had, so a box inside a loop keeps its own attempt count.
+  A [C] box. Throws naming its diagram box, because the sandbox cannot run its script.
 */
+const notWired = (box) => {
+  throw new Error(`tackle-tasks workflow: [C] box not wired yet — ${box}`)
+}
+
+/*
+  A [C] decision. Real mode throws; fake mode reads the fixture, so a path walks offline.
+*/
+const decide = (box, field, index) => {
+  if (!isFake()) return notWired(box)
+  return attempt(FAKE[field], index)
+}
+
+/*
+  Paragraph 3: an operational script failure ends the run as run-failed, from any green box.
+*/
+
+/*
+  Paragraph 4: a lost mutating result is reconciled first, never blindly retried.
+*/
+
+/*
+  The whole prompt for an [S] box, per workflow-only-context-injection.md section 3.
+*/
+const emitterPrompt = (role, extra) => {
+  // Serialized, never interpolated, and delivered on quoted-heredoc stdin.
+  const payload = JSON.stringify(Object.assign(
+    { worktree: WORKTREE, projectRoot: PROJECT_ROOT, sourceBranch: SOURCE_BRANCH, runId: RUN_ID },
+    extra || {},
+  ))
+  // No backtick anywhere: a prompt is not a shell, and command substitution never expands here.
+  return `Run this with Bash:
+node ${EMITTER} ${TASK} ${role} <<'TTPAYLOAD'
+${payload}
+TTPAYLOAD
+Follow the printed instructions.`
+}
+
 const agentVisits = new Map()
 
 /*
-  Whether the harness handed back this agent's result on its next visit.
+  An [S] box. A null result is the diagram's dotted "agent() errored" edge.
 */
-const agentReturns = (boxName) => {
-  const visit = agentVisits.get(boxName) ?? 0
-  agentVisits.set(boxName, visit + 1)
-  const outcomes = (FAKE.agentReturnsResult ?? {})[boxName] ?? [true]
-  return outcomes[Math.min(visit, outcomes.length - 1)]
+const runAgent = async (label, box, role, schema, extra) => {
+  step(`<-- AGENT --> ${label}`)
+  const visit = agentVisits.get(box) ?? 0
+  agentVisits.set(box, visit + 1)
+  if (isFake()) {
+    const errored = attempt((FAKE.agentErrors ?? {})[box] ?? [false], visit)
+    if (errored) step(L.AGENT_ERRORED)
+    return errored ? null : {}
+  }
+  const result = await agent(emitterPrompt(role, extra), { label: `${role}:${TASK}`, schema })
+  if (result === null) step(L.AGENT_ERRORED)
+  return result
 }
 
-const run = async (label, prompt, opts, canned, agentBoxName = null) => {
-  if (agentBoxName === null) {
-    step(label)
-    if (isFake()) return canned()
-    return agent(prompt, opts)
-  }
-  for (let round = 0; round < 2; round += 1) {
-    step(`${AGENT_MARK} ${label}`)
-    const result = isFake() ? (agentReturns(agentBoxName) ? canned() : null) : await agent(prompt, opts)
-    step('did the agent return a result?', yesNo(result !== null))
-    if (result !== null) return result
-    step('retry the box')
-  }
+// ---------------------------------------------------------------------------
+// Return shapes for the 6 agent boxes
+// ---------------------------------------------------------------------------
+
+const PLAN_RESULT = {
+  type: 'object',
+  required: ['outcome'],
+  properties: {
+    outcome: { type: 'string', enum: ['PLAN', 'CLARIFY', 'ERROR'] },
+    clarifyRequest: { type: 'string' },
+  },
 }
 
-/** Real mode is deliberately not built. Every decision that would need a real reconciliation
- *  script, structure validator, or git/test result calls this instead of guessing a default. */
-const realDecisions = (what) => {
-  throw new Error(`tackle-tasks workflow: real mode not implemented yet for ${what}`)
+const REVIEW_PLAN_RESULT = {
+  type: 'object',
+  required: ['verdict'],
+  properties: {
+    verdict: { type: 'string', enum: ['ACCEPT', 'AMEND', 'SCRAP'] },
+    notes: { type: 'string' },
+  },
 }
+
+const IMPLEMENT_RESULT = {
+  type: 'object',
+  required: ['implemented'],
+  properties: { implemented: { type: 'boolean' }, notes: { type: 'string' } },
+}
+
+const REVIEW_TESTS_RESULT = {
+  type: 'object',
+  required: ['flagged'],
+  properties: { flagged: { type: 'boolean' }, notes: { type: 'string' } },
+}
+
+const FIX_CONFLICTS_RESULT = {
+  type: 'object',
+  required: ['resolved'],
+  properties: {
+    resolved: { type: 'boolean' },
+    unresolvedPaths: { type: 'array', items: { type: 'string' } },
+  },
+}
+
+const FIX_SUITE_RESULT = {
+  type: 'object',
+  required: ['fixed'],
+  properties: { fixed: { type: 'boolean' }, notes: { type: 'string' } },
+}
+
+// ---------------------------------------------------------------------------
+// Plan-file validators, spliced from planArtifacts.ts by generateTaskWorkflow.ts
+// ---------------------------------------------------------------------------
 
 /*
-  Structure validators, spliced from their TypeScript source by scripts/tackle-tasks/generateTaskWorkflow.ts.
+  The v1.5 diagrams dropped the receipt-validity boxes, so nothing calls these yet.
 */
+
 const SECTION_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 function isPlanProblem(result                    )                        {
@@ -136,623 +318,532 @@ function validatePlanShape(value         , expectedTaskNumber        )          
     return { task: plan.task          , revision: plan.revision          , sections: plan.sections                  };
 }
 
-/*
-  Output -> Receipt -> structure check -> Output -> the same receipt, now trusted.
-*/
-const receipt = (outputLabel, receiptLabel, validQuestion, valid) => {
-  step(outputLabel)
-  step(receiptLabel)
-  step(validQuestion, yesNo(valid))
-  if (!valid) return false
-  step(outputLabel)
-  step(receiptLabel)
-  return true
-}
+// ---------------------------------------------------------------------------
+// Counters — paragraph 5
+// ---------------------------------------------------------------------------
 
 /*
-  The failure tail. Never validated — that would feed the exit workflow into itself.
+  Every counter counts fix attempts, not failing runs, so two allows three runs.
 */
-const exitChain = (exitType, exitNote, held) => {
-  const shoutedExitType = exitType.toUpperCase()
-  banner('exit workflow')
-  if (held.noRunRecord) {
-    step('report the exit type and note', shoutedExitType)
-    step('stop')
-    return trace
+
+/*
+  None is written to tasks.json, so each invocation starts at zero.
+*/
+
+/*
+  conflictFixes and suiteFixes live here and never reset: a merge-triggered rebase respends them.
+*/
+
+const MAX_ATTEMPTS = 2
+
+let clarifyRounds = 0
+let planReviews = 0
+let testFixes = 0
+let testReviews = 0
+let conflictFixes = 0
+let suiteFixes = 0
+let mergeAttempts = 0
+
+let plannerIndex = 0
+let verdictIndex = 0
+let testsIndex = 0
+let flaggedIndex = 0
+let lockIndex = 0
+let conflictsIndex = 0
+let finishedIndex = 0
+let suiteIndex = 0
+let publicationIndex = 0
+
+const AGENT_FAILED_NOTE = 'the agent returned nothing usable'
+
+// ---------------------------------------------------------------------------
+// Exits
+// ---------------------------------------------------------------------------
+
+/*
+  Every exit below the preamble takes the failures tail, because the task is already active.
+*/
+const toFailures = (exitType, exitNote, workLanded) => ({ done: true, exitType, exitNote, workLanded: workLanded === true })
+
+/*
+  Taken from the rebase preamble onward, and released by whichever exit tail runs.
+*/
+let sourceLockHeld = false
+
+/*
+  plans/diagram/pipeline-failuresExit.mmd. Every box is [C].
+*/
+const failuresExit = (exitType, exitNote, workLanded) => {
+  banner('failures exit')
+  // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
+  step(L.READ_PUBLICATION_STATE)
+  step(L.DID_ANY_WORK_LAND, yesNo(workLanded))
+  // Paragraph 86: landed work discards the incoming exit type, run-failed included.
+  if (workLanded) step(L.WRITE_PUBLICATION_OUTCOME)
+  else step(L.WRITE_EXIT_TYPE_AND_NOTE, exitType.toUpperCase())
+  step(L.RECORD_MODIFIED_FILES_FAILURE)
+  // Paragraphs 89 and 90: the lease and the source lock are independent ownership checks.
+  step(L.DOES_RUN_HOLD_LEASE, 'YES')
+  // Paragraph 93: the worktree is never removed here, only its lease released.
+  step(L.RELEASE_WORKTREE_LEASE)
+  step(L.DOES_RUN_HOLD_SOURCE_LOCK, yesNo(sourceLockHeld))
+  if (sourceLockHeld) step(L.RELEASE_SOURCE_LOCK)
+  // Paragraph 91: mark inactive last, after every release and every write.
+  step(L.MARK_TASK_INACTIVE_FAILURE)
+  step(L.REPORT_EXIT_TYPE_AND_NOTE, exitType.toUpperCase())
+  step(L.STOP)
+  return { task: TASK, exitType, exitNote, trace }
+}
+
+/*
+  Paragraph 94: every mutating box on that tail is reconciled, not retried.
+*/
+
+/*
+  plans/diagram/pipeline-mergeSucceededExit.mmd. Every box is [C].
+*/
+const mergeSucceededExit = () => {
+  banner('merge succeeded exit')
+  step(L.MERGE_RECEIPT_INPUT)
+  step(L.RECORD_MERGE_COMMIT_HASHES)
+  // Paragraph 79: completed is the point of no return, written before any release.
+  step(L.WRITE_EXIT_TYPE_COMPLETED)
+  step(L.RECORD_MODIFIED_FILES_SUCCESS)
+  // Paragraph 81: the only box releasing both the source lock and the worktree lease.
+  step(L.CLEAN_UP_WORKTREES)
+  step(L.BUILD_CLOSURE_NOTE)
+  step(L.MARK_TASK_INACTIVE_SUCCESS)
+  step(L.ARCHIVE_TASK)
+  step(L.REPORT_CLOSURE_NOTE)
+  step(L.STOP)
+  return { task: TASK, exitType: 'completed', exitNote: '', trace }
+}
+
+/*
+  Paragraph 84: the merge's layer refs make a dead run safe, not this tail.
+*/
+
+// ---------------------------------------------------------------------------
+// Plan — plans/diagram/pipeline-plan.mmd, paragraphs 23 to 29
+// ---------------------------------------------------------------------------
+
+const planPipeline = async () => {
+  banner('plan')
+  phase('Plan')
+  step(L.DOCS_INPUT)
+
+  // Paragraph 23 [S]: turn the tasks.json entry into a plan, reading the entry and docs only.
+  const result = await runAgent(L.PLAN_THE_TASK, 'PLANNER', 'plan', PLAN_RESULT)
+
+  // Paragraph 26: nothing usable back, and the task is active, so the failures exit runs.
+  if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+  const outcome = isFake() ? attempt(FAKE.plannerOutcome, plannerIndex) : result.outcome
+  plannerIndex += 1
+  step(L.WHAT_DID_THE_PLANNER_RETURN, outcome)
+
+  if (outcome === 'ERROR') return toFailures('agent-failed', AGENT_FAILED_NOTE)
+  // Paragraph 25.
+  if (outcome === 'PLAN') return { next: 'review-plan' }
+
+  // Paragraph 27: CLARIFY is how a planner asks for what it was never given.
+  const roundsDone = clarifyRounds >= MAX_ATTEMPTS
+  // Capped at 2 rounds: no user answers, so a third ask learns nothing new.
+  step(L.ARE_2_CLARIFY_ROUNDS_DONE, yesNo(roundsDone))
+
+  // Paragraph 29.
+  if (roundsDone) {
+    return toFailures(
+      'clarify-stuck',
+      'the planner asked twice for something the docs cannot supply. worktree preserved.',
+    )
   }
-  step('write exit type and exit notes to tasks.json', shoutedExitType)
-  step('record modified files to tasks.json')
-  step('mark task inactive in tasks.json')
-  step('was a worktree created?', yesNo(held.lease))
-  if (!held.lease) {
-    step('nothing to release')
-  } else {
-    step('was the source repo locked?', yesNo(held.sourceLock))
-    step(held.sourceLock ? 'release the worktree lease and the source lock' : 'release the worktree lease')
-  }
-  step("report the run's exit type and note", shoutedExitType)
-  step('stop')
-  return trace
+
+  clarifyRounds += 1
+  // Paragraph 28: the planner reads only the entry and the docs, so write it there.
+  step(L.WRITE_CLARIFY_REQUEST)
+  depth += 1
+  return { next: 'document-generation' }
 }
 
 // ---------------------------------------------------------------------------
-// Preamble (plans/diagram/pipeline-preamble.mmd)
+// Document generation — plans/diagram/pipeline-documentGeneration.mmd, paragraphs 20 to 22
 // ---------------------------------------------------------------------------
 
-const preamblePhase = async () => {
-  const d = isFake() ? FAKE : realDecisions('preamble decisions')
-
-  step('is task number valid?', yesNo(d.taskNumberValid))
-  if (!d.taskNumberValid) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'invalid-number',
-        'task number is in neither tasks.json nor completedTasks.json',
-        { lease: false, sourceLock: false, noRunRecord: true },
-      ),
-    }
-  }
-
-  step('is task blocked?', yesNo(d.taskBlocked))
-  if (d.taskBlocked) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'blocked',
-        'an open blocker remains',
-        { lease: false, sourceLock: false, noRunRecord: true },
-      ),
-    }
-  }
-
-  // Two boxes, but one atomic read-modify-write: nothing can make the task active between them.
-  step('is the task active?', yesNo(d.taskActive))
-  if (d.taskActive) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'already-active',
-        'a previous run left the task active',
-        { lease: false, sourceLock: false, noRunRecord: true },
-      ),
-    }
-  }
-  await run(
-    'Try: mark the task active in tasks.json',
-    'Mark this task active in tasks.json.',
-    {},
-    () => ({}),
-  )
-
-  // Four worktree shapes converge on "init submodules recursively".
-  step('does a worktree exist?', yesNo(d.worktreeExists))
-  if (!d.worktreeExists) {
-    await run('create a worktree', 'Create a git worktree for this task.', {}, () => ({}))
-    await run('auto generate docs', 'Auto-generate this worktree docs.', {}, () => ({}))
-  } else {
-    step('is the worktree safe to use?', yesNo(d.worktreeSafe))
-    if (d.worktreeSafe) {
-      await run('update auto generated docs', 'Update the auto-generated docs.', {}, () => ({}))
-    } else {
-      step("is the previous run's work resumable?", yesNo(d.previousWorkResumable))
-      if (d.previousWorkResumable) {
-        await run('update auto generated docs', 'Update the auto-generated docs.', {}, () => ({}))
-      } else {
-        await run('reset the worktree', 'Reset the worktree to a clean state.', {}, () => ({}))
-        await run('auto generate docs', 'Auto-generate this worktree docs.', {}, () => ({}))
-      }
-    }
-  }
-  await run('init submodules recursively', 'Init submodules recursively.', {}, () => ({}))
-
-  const receiptValid = d.malformedReceipt !== 'active task'
-  const receiptOk = receipt(
-    'Output',
-    'Receipt: { }',
-    'is the active task receipt structure valid?',
-    receiptValid,
-  )
-  if (!receiptOk) {
-    return {
-      ok: false,
-      trace: exitChain(
-        'run-failed',
-        'the active task receipt is malformed',
-        { lease: true, sourceLock: false, noRunRecord: false },
-      ),
-    }
-  }
-
-  return { ok: true }
+const documentGenerationPipeline = async () => {
+  banner('document generation')
+  step(L.WORKTREE_DOCS_MODE_INPUT)
+  // A clarify round always re-enters in UPDATE mode; AUTOGEN belongs to the preamble.
+  step(L.WHAT_IS_DOCS_MODE, 'UPDATE')
+  // Paragraph 21: UPDATE docs read the clarify request and grow to cover what it names.
+  step(L.UPDATE_AUTO_GENERATED_DOCS)
+  return { next: 'plan' }
 }
 
 // ---------------------------------------------------------------------------
-// Planning (plans/diagram/pipeline-planning.mmd)
+// Review plan — plans/diagram/pipeline-reviewPlan.mmd, paragraphs 30 to 35
 // ---------------------------------------------------------------------------
 
-const planningPhase = async () => {
-  const held = { lease: true, sourceLock: false, noRunRecord: false }
-  const MAX_ATTEMPTS = 2
+const reviewPlanPipeline = async () => {
+  banner('review plan')
+  step(L.DRAFT_PLAN_INPUT)
 
-  let scrapAttempt = 0
-  let amendRound = 0
-  let verdictIndex = 0
-  let retryDepth = 0
+  // Paragraph 30 [S].
+  const result = await runAgent(L.CODEX_REVIEWS_PLAN, 'PLAN_REVIEWER', 'review-plan', REVIEW_PLAN_RESULT)
 
-  const planVerdictFor = (index) => {
-    const verdicts = FAKE.codexPlanVerdict
-    return verdicts[Math.min(index, verdicts.length - 1)]
-  }
+  // Paragraph 31.
+  if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
 
-  planning: for (;;) {
-    const plan = await run(
-      'plan the task',
-      `Run Bash(node ${AGENT_PROMPT_EMITTER_PATH} ${taskNumber} plan).\nFollow the printed instructions.`,
-      {},
-      () => ({ task: 1, revision: 1, sections: [{ id: 'draft', title: 'Draft', body: 'Draft plan.' }] }),
-      "PLANNER",
-    )
+  const verdict = isFake() ? attempt(FAKE.planVerdict, verdictIndex) : result.verdict
+  verdictIndex += 1
+  step(L.WHAT_IS_REVIEW_VERDICT, verdict)
 
-    const planValid = isFake()
-      ? FAKE.malformedReceipt !== 'plan file'
-      : !isPlanProblem(validatePlanShape(plan, taskNumber))
-    const planOk = receipt(
-      'Output',
-      'Receipt: { }',
-      'is the plan file structure valid?',
-      planValid,
-    )
-    if (!planOk) {
-      return { ok: false, trace: exitChain('run-failed', 'the plan file is malformed', held) }
-    }
+  // Paragraph 32.
+  if (verdict === 'ACCEPT') return { next: 'implement' }
 
-    for (;;) {
-      const review = await run(
-        'codex reviews the plan',
-        'Review the plan file and return a verdict (accept, amend, or scrap) with notes and any amendments.',
-        {},
-        () => ({ verdict: planVerdictFor(verdictIndex), notes: '', amendments: [] }),
-        "PLAN_REVIEWER",
-      )
+  // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
+  step(L.UPDATE_TASK_ENTRY)
+  planReviews += 1
 
-      const reviewValid = isFake()
-        ? FAKE.malformedReceipt !== 'codex review'
-        : realDecisions('codex review receipt validity')
-      const reviewOk = receipt(
-        'Output',
-        'Receipt: { }',
-        'is the review file structure valid?',
-        reviewValid,
-      )
-      if (!reviewOk) {
-        return { ok: false, trace: exitChain('run-failed', 'the codex review is malformed', held) }
-      }
+  const reviewsDone = planReviews >= MAX_ATTEMPTS
+  step(L.ARE_2_REVIEWS_DONE, yesNo(reviewsDone))
 
-      const verdict = isFake() ? planVerdictFor(verdictIndex) : review.verdict
-      verdictIndex += 1
-      step('what is the review verdict?', verdict.toUpperCase())
+  // Paragraph 35: the task cannot be planned as written and needs dividing.
+  if (reviewsDone) return toFailures('plan-scrapped', 'codex did not accept the plan in two reviews')
 
-      if (verdict === 'accept') break planning
-
-      if (verdict === 'scrap') {
-        scrapAttempt += 1
-        const firstTimeScrap = scrapAttempt < MAX_ATTEMPTS
-        step('First Time Scrap?', yesNo(firstTimeScrap))
-        if (!firstTimeScrap) {
-          step('Second Time Scrap')
-          return { ok: false, trace: exitChain('plan-scrapped', 'codex scrapped the plan twice', held) }
-        }
-        await run(
-          'script adds the codex scrap notes to the task brief',
-          'Add the codex scrap notes to the task brief.',
-          {},
-          () => ({}),
-        )
-        enterRetry()
-        retryDepth += 1
-        continue planning
-      }
-
-      await run(
-        'Try: script applies codex amendments to the plan',
-        'Apply the codex amendments to the plan.',
-        {},
-        () => ({}),
-      )
-      amendRound += 1
-      const roundsDone = amendRound >= MAX_ATTEMPTS
-      step('2 amend rounds done?', yesNo(roundsDone))
-      if (roundsDone) break planning
-      enterRetry()
-      retryDepth += 1
-    }
-  }
-
-  while (retryDepth > 0) {
-    leaveRetry()
-    retryDepth -= 1
-  }
-
-  const finishedValid = isFake()
-    ? FAKE.malformedReceipt !== 'finished plan'
-    : realDecisions('finished plan receipt validity')
-  const finishedOk = receipt(
-    'Output',
-    'Receipt: { }',
-    'is the finished plan receipt structure valid?',
-    finishedValid,
-  )
-  if (!finishedOk) {
-    return { ok: false, trace: exitChain('run-failed', 'the finished plan receipt is malformed', held) }
-  }
-
-  return { ok: true }
+  // Paragraph 34.
+  depth += 1
+  return { next: 'plan' }
 }
 
 // ---------------------------------------------------------------------------
-// Implement and test (plans/diagram/pipeline-implementTest.mmd)
+// Implement — plans/diagram/pipeline-implement.mmd, paragraphs 36 to 40
 // ---------------------------------------------------------------------------
 
-const implementTestPhase = async () => {
-  const held = { lease: true, sourceLock: false, noRunRecord: false }
-  const MAX_ATTEMPTS = 2
-  const d = isFake() ? FAKE : realDecisions('implement and test decisions')
-  const attempt = (arr, idx) => arr[Math.min(idx, arr.length - 1)]
+const implementPipeline = async () => {
+  banner('implement')
+  phase('Implement')
+  step(L.ACCEPTED_PLAN_INPUT)
 
-  await run(
-    'implement task',
-    'Read the plan file and implement the task it describes: write the code changes.',
-    {},
-    () => ({ implemented: true }),
-    "IMPLEMENTER",
-  )
-  await run(
-    'record implementation notes file to tasks.json',
-    'Record the implementation notes file to tasks.json.',
-    {},
-    () => ({}),
-  )
+  // Paragraph 36 [S]: implement the accepted plan, treating the worktree as project root.
+  const result = await runAgent(L.IMPLEMENT_TASK, 'IMPLEMENTER', 'implement', IMPLEMENT_RESULT)
 
-  let testAttempt = 0
-  let codexTestAttempt = 0
-  let testRetryDepth = 0
+  // Paragraph 37.
+  if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
 
-  testLoop: for (;;) {
-    await run('commit if needed', 'Commit the worktree if it is dirty.', {}, () => ({}))
-    await run('Try: run task tests', 'Run this task tests.', {}, () => ({}))
-    const testsFail = attempt(d.taskTestsFail, testAttempt)
-    step('do the tests fail?', yesNo(testsFail))
+  // Paragraph 38: commit dirty work, commit nothing clean; later steps rebase and would lose it.
+  step(L.COMMIT_IF_NEEDED)
+  return { next: 'task-tests' }
+}
 
-    if (testsFail) {
-      testAttempt += 1
-      const isFirstFail = testAttempt < MAX_ATTEMPTS
-      step('First fail?', yesNo(isFirstFail))
-      if (!isFirstFail) {
-        step('2nd fail')
-        return { ok: false, trace: exitChain('tests-red', 'task tests failed after 2 codebase fixes', held) }
-      }
+/*
+  Paragraph 39: the source lock is not taken here; the rebase preamble takes it later.
+*/
 
-      await run(
-        'fix the codebase',
-        'Edit source files, never tests, so the failing task tests pass.',
-        {},
-        () => ({ fixed: true }),
-        "CODEBASE_FIXER",
-      )
-      const fixValid = d.malformedReceipt !== 'fix the codebase'
-      const fixOk = receipt(
-        'Output',
-        'Receipt: { }',
-        'is the fix receipt structure valid?',
-        fixValid,
-      )
-      if (!fixOk) {
-        return { ok: false, trace: exitChain('run-failed', 'the fix receipt is malformed', held) }
-      }
-      enterRetry()
-      testRetryDepth += 1
-      continue testLoop
-    }
+/*
+  Paragraph 40: both test pipelines re-enter implement, each amending the entry first.
+*/
 
-    await run(
-      'codex reviews tests against task details and plan file',
-      "Review this task's tests against the task details and plan file. Flag them if they are wrong or assert nothing.",
-      {},
-      () => ({
-        flagged: attempt(d.codexTestsFlagged, codexTestAttempt),
-        reviewer: 'codex',
-        testReviewFile: 'test-review.md',
-      }),
-      "TEST_REVIEWER",
-    )
-    const reviewValid = d.malformedReceipt !== 'test review'
-    const reviewOk = receipt(
-      'Output',
-      'Receipt: { }',
-      'is the test review receipt structure valid?',
-      reviewValid,
-    )
-    if (!reviewOk) {
-      return { ok: false, trace: exitChain('run-failed', 'the test review receipt is malformed', held) }
-    }
+// ---------------------------------------------------------------------------
+// Task tests — plans/diagram/pipeline-taskTests.mmd, paragraphs 41 to 44
+// ---------------------------------------------------------------------------
 
-    const flagged = attempt(d.codexTestsFlagged, codexTestAttempt)
-    step('are the tests flagged?', yesNo(flagged))
-    if (!flagged) break testLoop
+const taskTestsPipeline = async () => {
+  banner('task tests')
+  step(L.COMMITTED_WORK_INPUT)
 
-    codexTestAttempt += 1
-    const isFirstFlag = codexTestAttempt < MAX_ATTEMPTS
-    step('First flagging?', yesNo(isFirstFlag))
-    if (!isFirstFlag) {
-      step('2nd flagging')
-      return { ok: false, trace: exitChain('tests-flagged', 'codex flagged the tests twice', held) }
-    }
+  // Paragraph 41: run only this task's tests; the full suite belongs to the rebase phase.
+  step(L.RUN_TASK_TESTS)
+  const testsPass = decide('RUN_TASK_TESTS', 'taskTestsPass', testsIndex)
+  testsIndex += 1
+  step(L.DO_TASK_TESTS_PASS, yesNo(testsPass))
+  if (testsPass) return { next: 'review-tests' }
 
-    await run(
-      'amend the tests',
-      'Edit this task own tests to resolve codex flags. Never edit a test this task did not create, unless it is broken or asserts nothing.',
-      {},
-      () => ({ amended: true }),
-      "TEST_AMENDER",
-    )
-    const amendValid = d.malformedReceipt !== 'amend tests'
-    const amendOk = receipt(
-      'Output',
-      'Receipt: { }',
-      'is the amendment receipt structure valid?',
-      amendValid,
-    )
-    if (!amendOk) {
-      return { ok: false, trace: exitChain('run-failed', 'the amendment receipt is malformed', held) }
-    }
-    testAttempt += 1
-    enterRetry()
-    testRetryDepth += 1
-  }
+  // Paragraph 42: ask the counter BEFORE amending, or the first failure spends it.
+  const fixesDone = testFixes >= MAX_ATTEMPTS
+  step(L.ARE_2_TEST_FIXES_DONE, yesNo(fixesDone))
 
-  while (testRetryDepth > 0) {
-    leaveRetry()
-    testRetryDepth -= 1
-  }
+  // Paragraph 44.
+  if (fixesDone) return toFailures('tests-red', 'task tests still failing after 2 fix attempts')
 
-  // Two boxes for the source repo lock, per rule 10: "can the source repo be locked?" reads whether it's free, then "lock the source repo" takes it. Each has its own two-strike wait.
-  let sourceHeldAttempt = 0
-  let lockFailAttempt = 0
-  let freeIndex = 0
-  let lockIndex = 0
-  let lockRetryDepth = 0
-
-  lockLoop: for (;;) {
-    const free = attempt(d.sourceRepoFree, freeIndex)
-    freeIndex += 1
-    step('can the source repo be locked?', yesNo(free))
-
-    if (!free) {
-      sourceHeldAttempt += 1
-      const isFirstHeld = sourceHeldAttempt < MAX_ATTEMPTS
-      step('First time held?', yesNo(isFirstHeld))
-      if (!isFirstHeld) {
-        step('2nd time held')
-        return { ok: false, trace: exitChain('run-failed', 'the source repo lock is held by another owner', held) }
-      }
-      await run('Try: wait', 'Wait for the source repo lock to free up.', {}, () => ({}))
-      enterRetry()
-      lockRetryDepth += 1
-      continue lockLoop
-    }
-
-    await run('Try: lock the source repo', 'Lock the source repo.', {}, () => ({}))
-    const locked = attempt(d.lockSucceeds, lockIndex)
-    lockIndex += 1
-    step('did locking the source repo succeed?', yesNo(locked))
-    if (locked) {
-      held.sourceLock = true
-      break lockLoop
-    }
-
-    lockFailAttempt += 1
-    const isFirstLockFail = lockFailAttempt < MAX_ATTEMPTS
-    step('First lock failure?', yesNo(isFirstLockFail))
-    if (!isFirstLockFail) {
-      step('2nd lock failure')
-      return { ok: false, trace: exitChain('run-failed', 'the source repo lock could not be acquired', held) }
-    }
-    await run('Try: wait', 'Wait after losing the lock race.', {}, () => ({}))
-    enterRetry()
-    lockRetryDepth += 1
-  }
-
-  while (lockRetryDepth > 0) {
-    leaveRetry()
-    lockRetryDepth -= 1
-  }
-
-  const implValid = d.malformedReceipt !== 'finished implementation'
-  const implOk = receipt(
-    'Output',
-    'Receipt: { }',
-    'is the finished implementation receipt structure valid?',
-    implValid,
-  )
-  if (!implOk) {
-    return { ok: false, trace: exitChain('run-failed', 'the finished implementation receipt is malformed', held) }
-  }
-
-  return { ok: true, sourceLockHeld: true }
+  // Paragraph 43: a repair is never tested until committed, so re-enter implement.
+  step(L.AMEND_ENTRY_WITH_FAILING_TESTS)
+  testFixes += 1
+  depth += 1
+  return { next: 'implement' }
 }
 
 // ---------------------------------------------------------------------------
-// Rebase and merge (plans/diagram/pipeline-rebaseMerge.mmd)
+// Review task tests — plans/diagram/pipeline-reviewTests.mmd, paragraphs 45 to 50
 // ---------------------------------------------------------------------------
 
-const rebaseMergePhase = async () => {
-  const held = { lease: true, sourceLock: true, noRunRecord: false }
-  const d = isFake() ? FAKE : realDecisions('rebase and merge decisions')
-  const attempt = (arr, idx) => arr[Math.min(idx, arr.length - 1)]
+const reviewTestsPipeline = async () => {
+  banner('review task tests')
+  step(L.GREEN_IMPLEMENTATION_INPUT)
 
-  let conflictAttempt = 0
-  let suiteAttempt = 0
-  let rebaseAttempt = 0
-  let advanceAttempt = 0
-  let mergeAttempt = 0
-  let outerRetries = 0
+  // Paragraph 45 [S]: review the tests, not the codebase.
+  const result = await runAgent(L.CODEX_REVIEWS_TESTS, 'TEST_REVIEWER', 'review-tests', REVIEW_TESTS_RESULT)
+
+  // Paragraph 47.
+  if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+  const flagged = isFake() ? attempt(FAKE.testsFlagged, flaggedIndex) : result.flagged
+  flaggedIndex += 1
+  step(L.ARE_TESTS_FLAGGED, yesNo(flagged))
+
+  // Paragraph 48.
+  if (!flagged) return { next: 'rebase-preamble' }
+
+  const reviewsDone = testReviews >= MAX_ATTEMPTS
+  step(L.ARE_2_TEST_REVIEWS_DONE, yesNo(reviewsDone))
+
+  // Paragraph 50.
+  if (reviewsDone) return toFailures('tests-flagged', 'task tests failed codex review')
+
+  // Paragraph 49: write codex's notes and fixes into the entry, then reimplement.
+  step(L.AMEND_ENTRY_WITH_CODEX_NOTES)
+  testReviews += 1
+  depth += 1
+  return { next: 'implement' }
+}
+
+/*
+  Paragraph 46: reviewTestsPrompt passes three of the seven inputs the diagram names.
+*/
+
+/*
+  The diff and pre-existing tests are derived here, from the merge-base with the target.
+*/
+
+// ---------------------------------------------------------------------------
+// Rebase preamble — plans/diagram/pipeline-rebasePreamble.mmd, paragraphs 51 to 55
+// ---------------------------------------------------------------------------
+
+const rebasePreamblePipeline = async () => {
+  banner('rebase preamble')
+  phase('Rebase and merge')
+  step(L.FINISHED_IMPLEMENTATION_INPUT)
+
+  // Paragraph 51: the lock owner is runId:taskNumber, never runId alone.
+  step(L.LOCK_SOURCE_REPO)
+  const acquired = decide('LOCK_SOURCE_REPO', 'lockAcquired', lockIndex)
+  lockIndex += 1
+  step(L.WAS_LOCK_ACQUIRED, yesNo(acquired))
+
+  // Paragraphs 52 and 53: the 5s poll and its 15-minute cap live inside the script.
+  if (!acquired) {
+    step(L.HAVE_15_MINUTES_PASSED, 'YES')
+    return toFailures('run-failed', 'the source repo lock did not come free within 15 minutes')
+  }
+
+  sourceLockHeld = true
+  return { next: 'rebase' }
+}
+
+/*
+  Paragraph 54: the lock file sits under <projectRoot>/.git and is cleared by hand.
+*/
+
+/*
+  Paragraph 55: every rebase, suite and merge box refreshes the lock heartbeat on entry.
+*/
+
+// ---------------------------------------------------------------------------
+// Rebase — plans/diagram/pipeline-rebase.mmd, paragraphs 56 to 61
+// ---------------------------------------------------------------------------
+
+const rebasePipeline = async () => {
+  banner('rebase')
+  step(L.SOURCE_REPO_LOCKED_INPUT)
 
   for (;;) {
-    await run('Try: rebase onto the target branch if needed', 'Rebase this worktree onto the target branch if needed.', {}, () => ({}))
-    let conflicted = attempt(d.rebase, rebaseAttempt) === 'conflict'
-    step('did the rebase report conflicts?', yesNo(conflicted))
-    rebaseAttempt += 1
+    // Paragraphs 56 and 57: deepest layer first, skipping every layer the receipt calls landed.
+    step(L.REBASE_ONTO_TARGET_BRANCH)
+    const conflicted = decide('REBASE_ONTO_TARGET_BRANCH', 'rebaseConflicts', conflictsIndex)
+    conflictsIndex += 1
+    step(L.DID_REBASE_REPORT_CONFLICTS, yesNo(conflicted))
+    if (!conflicted) return { next: 'suite' }
 
-    let innerRetries = 0
-    for (;;) {
-      if (conflicted) {
-        conflictAttempt += 1
-        const first = conflictAttempt < 2
-        step('First conflict?', yesNo(first))
-        if (!first) {
-          step('2nd conflict?')
-          return { ok: false, trace: exitChain('rebase-stuck', 'the rebase did not advance after 2 conflict fixes', held) }
-        }
-        await run(
-          'fix conflicts',
-          'Resolve the current rebase conflicts, deepest submodule first, root last. Report which files were resolved and which remain unresolved.',
-          {},
-          () => ({ resolved: true, unresolvedPaths: [] }),
-          "CONFLICT_FIXER",
-        )
-        const valid = d.malformedReceipt !== 'conflict fix'
-        const ok = receipt('Output', 'Receipt: { }', 'is the conflict fix receipt structure valid?', valid)
-        if (!ok) return { ok: false, trace: exitChain('run-failed', 'the conflict fix receipt is malformed', held) }
-      }
+    const fixesDone = conflictFixes >= MAX_ATTEMPTS
+    step(L.ARE_2_CONFLICT_FIXES_DONE, yesNo(fixesDone))
 
-      await run('commit if needed', 'Commit the worktree if it is dirty.', {}, () => ({}))
-      await run('Try: continue replaying commits on top of the target branch', 'Continue replaying commits on top of the target branch.', {}, () => ({}))
-      const advance = attempt(d.rebaseAdvance, advanceAttempt)
-      const finished = advance === 'finished'
-      step('is the rebase finished?', yesNo(finished))
-      advanceAttempt += 1
-
-      if (finished) {
-        await run('Try: run the full suite', 'Run the full test suite.', {}, () => ({}))
-        const suitePasses = attempt(d.fullSuitePasses, suiteAttempt)
-        step('do all tests pass?', yesNo(suitePasses))
-        if (suitePasses) break
-        suiteAttempt += 1
-        const first = suiteAttempt < 2
-        step('First suite failure?', yesNo(first))
-        if (!first) {
-          step('2nd suite failure?')
-          return { ok: false, trace: exitChain('suite-red', 'full suite still failing after 2 codebase fixes', held) }
-        }
-        await run(
-          'fix the codebase so the full suite passes',
-          'The full suite is still failing after the rebase. Fix the source code, not the tests, so every test passes.',
-          {},
-          () => ({ fixed: true }),
-          "SUITE_FIXER",
-        )
-        const valid = d.malformedReceipt !== 'fix the full suite'
-        const ok = receipt('Output', 'Receipt: { }', 'is the suite fix receipt structure valid?', valid)
-        if (!ok) return { ok: false, trace: exitChain('run-failed', 'the suite fix receipt is malformed', held) }
-        conflicted = false
-        enterRetry()
-        innerRetries += 1
-        continue
-      }
-
-      conflicted = attempt(d.rebase, rebaseAttempt) === 'conflict'
-      enterRetry()
-      innerRetries += 1
-      step('did the rebase report conflicts?', yesNo(conflicted))
-      rebaseAttempt += 1
-    }
-    while (innerRetries > 0) {
-      leaveRetry()
-      innerRetries -= 1
+    // Paragraph 61.
+    if (fixesDone) {
+      return toFailures('rebase-stuck', 'the rebase did not advance after 2 conflict fixes')
     }
 
-    const fenceHeld = d.fenceHeld
-    step("did every change stay inside the task's owned files?", yesNo(fenceHeld))
-    if (!fenceHeld) return { ok: false, trace: exitChain('fence-violation', "a step changed a file the task does not own", held) }
+    // Paragraph 58 [S]: leave the markers, pass the stopped layer and its files.
+    const result = await runAgent(L.FIX_CONFLICTS, 'CONFLICT_FIXER', 'fix-conflicts', FIX_CONFLICTS_RESULT, {
+      checkoutPath: WORKTREE,
+      conflictedFilePaths: [],
+    })
 
-    await run('Try: merge worktrees and submodules, no fast-forward', 'Merge worktrees and submodules, no fast-forward.', {}, () => ({}))
-    const merged = attempt(d.mergeLands, mergeAttempt)
-    step('did the merge land?', yesNo(merged))
-    if (merged) {
-      while (outerRetries > 0) {
-        leaveRetry()
-        outerRetries -= 1
-      }
-      break
-    }
-    mergeAttempt += 1
-    const firstMerge = mergeAttempt < 2
-    step('First merge failure?', yesNo(firstMerge))
-    if (!firstMerge) {
-      step('2nd merge failure?')
-      return { ok: false, trace: exitChain('merge-failed', 'the merge did not land twice', held) }
-    }
-    conflictAttempt = 0
-    suiteAttempt = 0
-    enterRetry()
-    outerRetries += 1
+    // Paragraph 59.
+    if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    conflictFixes += 1
+
+    // Paragraph 60: always fix, then commit, then continue — never fix then continue.
+    step(L.COMMIT_IF_NEEDED)
+    step(L.CONTINUE_REBASE)
+    const finished = decide('CONTINUE_REBASE', 'rebaseFinished', finishedIndex)
+    finishedIndex += 1
+    step(L.IS_REBASE_FINISHED, yesNo(finished))
+    if (finished) return { next: 'suite' }
+    // A rebase can stop more than once, so an unfinished rebase turns this loop again.
+    depth += 1
   }
-
-  const mergeValid = d.malformedReceipt !== 'merge'
-  const ok = receipt('Output', 'Receipt: { }', 'is the merge receipt structure valid?', mergeValid)
-  if (!ok) return { ok: false, trace: exitChain('run-failed', 'the merge receipt is malformed', held) }
-
-  return { ok: true }
 }
 
 // ---------------------------------------------------------------------------
-// Driver — runs the four phases in order, then the success tail of plans/diagram/pipeline-exitWorkflow.mmd. A phase returning { ok: false } ends the run with the trace it already produced.
+// Full suite — plans/diagram/pipeline-suite.mmd, paragraphs 62 to 69
 // ---------------------------------------------------------------------------
 
-const taskNumber = isFake() ? FAKE.taskNumber : realDecisions('task number')
-trace.push(`Run start: Task Num [${taskNumber}]`)
-log(trace[0])
+const suitePipeline = async () => {
+  banner('full suite')
+  step(L.REBASED_WORKTREE_INPUT)
+
+  for (;;) {
+    // Paragraph 62: the full suite is what proves the task broke nothing else.
+    step(L.RUN_FULL_SUITE)
+    const passes = decide('RUN_FULL_SUITE', 'suitePasses', suiteIndex)
+    suiteIndex += 1
+    step(L.DO_ALL_TESTS_PASS, yesNo(passes))
+    if (passes) break
+
+    const fixesDone = suiteFixes >= MAX_ATTEMPTS
+    step(L.ARE_2_SUITE_FIXES_DONE, yesNo(fixesDone))
+
+    // Paragraph 66.
+    if (fixesDone) {
+      return toFailures(
+        'suite-red',
+        'full suite still red after 2 fix attempts. merge aborted. worktree preserved.',
+      )
+    }
+
+    // Paragraph 63 [S]: pass the failing tests, and fix the codebase, not the tests.
+    const result = await runAgent(
+      L.FIX_THE_CODEBASE_FOR_SUITE,
+      'SUITE_FIXER',
+      'fix-suite',
+      FIX_SUITE_RESULT,
+      { checkoutPath: WORKTREE, testOutput: '', forbiddenPaths: [] },
+    )
+
+    // Paragraph 65.
+    if (result === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    suiteFixes += 1
+
+    // Paragraph 64: commit the repair before rerunning, so it is fix, commit, run.
+    step(L.COMMIT_IF_NEEDED)
+    depth += 1
+  }
+
+  // Paragraph 67: the fence gate runs once, after the fix loop and before the merge.
+  const fenceHeld = isFake() ? FAKE.fenceHeld : notWired('DID_CHANGES_STAY_INSIDE_FENCE')
+  // Paragraph 68: it re-derives the diff and never accepts a fence from a caller.
+  step(L.DID_CHANGES_STAY_INSIDE_FENCE, yesNo(fenceHeld))
+  if (!fenceHeld) {
+    return toFailures(
+      'fence-violation',
+      'a repair edited files the task does not own. nothing merged. worktree preserved.',
+    )
+  }
+  return { next: 'merge' }
+}
+
+/*
+  Paragraph 69 is a known ceiling: one suite run can outlast the 15-minute lock.
+*/
+
+// ---------------------------------------------------------------------------
+// Merge — plans/diagram/pipeline-merge.mmd, paragraphs 70 to 78
+// ---------------------------------------------------------------------------
+
+const mergePipeline = async () => {
+  banner('merge')
+  step(L.GREEN_WORKTREE_INPUT)
+
+  // Paragraphs 70 and 71: no fast-forward, and each layer writes its merge ref as it lands.
+  step(L.MERGE_WORKTREES)
+
+  // Paragraph 72: a read-only reconciliation over those refs, never a returned boolean.
+  step(L.READ_PUBLICATION_STATE)
+  const state = decide('WHAT_IS_PUBLICATION_STATE', 'publicationState', publicationIndex)
+  publicationIndex += 1
+  // Paragraph 73: merged, no-op and root-merged-but-not-closed are LANDED; conflicted is not.
+  step(L.WHAT_IS_PUBLICATION_STATE, state)
+
+  // Paragraph 74.
+  if (state === 'ALL LANDED') return { next: 'merge-succeeded' }
+
+  // Paragraph 77: never retry a partial publication; it would re-land around public work.
+  if (state === 'SOME LANDED') {
+    return toFailures(
+      'partially-published',
+      'some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.',
+      true,
+    )
+  }
+
+  const attemptsDone = mergeAttempts >= MAX_ATTEMPTS
+  step(L.ARE_2_MERGE_ATTEMPTS_DONE, yesNo(attemptsDone))
+
+  // Paragraph 76.
+  if (attemptsDone) return toFailures('merge-failed', 'nothing landed after 2 attempts. worktree preserved.')
+
+  mergeAttempts += 1
+  depth += 1
+  // Paragraph 75: re-enter rebase, not the rebase preamble; the target branch tip moved.
+  return { next: 'rebase' }
+}
+
+/*
+  Paragraph 78: a no-op layer is a real completion, so an all-no-op task lands ALL LANDED.
+*/
+
+// ---------------------------------------------------------------------------
+// Driver
+// ---------------------------------------------------------------------------
+
+/*
+  The diagrams have back-edges, so the pipelines are a state machine, not a chain.
+*/
+const PIPELINES = {
+  'plan': planPipeline,
+  'document-generation': documentGenerationPipeline,
+  'review-plan': reviewPlanPipeline,
+  'implement': implementPipeline,
+  'task-tests': taskTestsPipeline,
+  'review-tests': reviewTestsPipeline,
+  'rebase-preamble': rebasePreamblePipeline,
+  'rebase': rebasePipeline,
+  'suite': suitePipeline,
+  'merge': mergePipeline,
+}
 
 const driver = async () => {
-  banner('preamble')
-  const preambleResult = await preamblePhase()
-  if (!preambleResult.ok) return preambleResult.trace
+  trace.push(`Run start: Task Num [${TASK}]`)
+  log(trace[0])
 
-  banner('planning')
-  const planningResult = await planningPhase()
-  if (!planningResult.ok) return planningResult.trace
+  let current = 'plan'
+  for (;;) {
+    const result = await PIPELINES[current]()
 
-  banner('implement and test')
-  const implementResult = await implementTestPhase()
-  if (!implementResult.ok) return implementResult.trace
-
-  banner('rebase and merge')
-  const rebaseResult = await rebaseMergePhase()
-  if (!rebaseResult.ok) return rebaseResult.trace
-
-  banner('exit workflow')
-  await run('record merge commit hashes to tasks.json', 'Record merge commit hashes to tasks.json.', {}, () => ({}))
-  await run('write exit type completed to tasks.json', 'Write exit type completed to tasks.json.', {}, () => ({}))
-  await run('record modified files to tasks.json', 'Record modified files to tasks.json.', {}, () => ({}))
-  await run(
-    'clean up worktrees, leases, persistence refs and source lock',
-    'Clean up worktrees, leases, persistence refs and the source lock.',
-    {},
-    () => ({}),
-  )
-  await run('build the closure note from the recorded run', 'Build the closure note from the recorded run.', {}, () => ({}))
-  await run('mark task inactive in tasks.json', 'Mark task inactive in tasks.json.', {}, () => ({}))
-  await run(
-    'move task to completedTasks.json and update tasks blocked by it',
-    'Move task to completedTasks.json and update tasks blocked by it.',
-    {},
-    () => ({}),
-  )
-  await run('report the closure note', 'Report the closure note.', {}, () => ({}))
-  step('stop')
-
-  return trace
+    if (result.done) {
+      phase('Exit')
+      failuresExit(result.exitType, result.exitNote, result.workLanded)
+      return trace
+    }
+    if (result.next === 'merge-succeeded') {
+      phase('Exit')
+      mergeSucceededExit()
+      return trace
+    }
+    current = result.next
+  }
 }
 
 return driver()
