@@ -14,13 +14,30 @@ flowchart TB
 %%   6. Every box that touches the working tree operates on every repository
 %%      layer, deepest submodule first, root last.
 %%   7. The source repo lock is already held and stays held until the exit
-%%      workflow releases it. Every box here refreshes its heartbeat.
-%%   8. A script that fails operationally, as opposed to returning a verdict,
+%%      workflow releases it. Every box here refreshes its heartbeat on entry.
+%%      KNOWN CEILING: the lock goes stale after 15 minutes, and the refresh is one
+%%      call per box, not a background timer. A single full-suite run or a single
+%%      agent repair can itself take longer than 15 minutes, and nothing refreshes
+%%      the lock while it does. See sourceRepoLock.ts: there is no setInterval.
+%%      Upgrade path if this is ever observed: a periodic heartbeat that runs for as
+%%      long as the box does. Until then, keep the boxes short.
+%%   8. The suite fixer edits source, so its edits are subject to the same file
+%%      ownership fence as the implementor's. The fence is checked once, after the
+%%      loop ends and before the merge, so it covers every fix attempt at once.
+%%      The check re-derives the diff itself; it never trusts what an agent says it
+%%      changed. See checkTaskFileFence.ts.
+%%   9. Counter scope, for every counter in this pipeline: it counts FIX ATTEMPTS,
+%%      not failing runs, and it lives for this invocation only. 2 fix attempts means
+%%      up to 3 suite runs. It is not written to tasks.json, so a new invocation
+%%      starts at zero. A merge-triggered rebase re-enters this pipeline and does
+%%      NOT reset it: the fixes it already spent still count.
+%%  10. A script that fails operationally, as opposed to returning a verdict,
 %%      exits the run as run-failed. The task is already active and a worktree
 %%      already exists here, so the exit workflow always runs in full.
 %% Exit types this pipeline can produce:
 %%   agent-failed       - an agent returned nothing usable
-%%   suite-red          - full suite still failing after 2 fix attempts
+%%   suite-red          - full suite still red after 2 fix attempts
+%%   fence-violation    - a repair edited files the task does not own
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
 %% ANY green box, so drawing it would add one edge per box and hide the flow.
@@ -33,15 +50,19 @@ flowchart TB
   DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_YES["YES"]
   DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_NO["NO"]
 
-  DO_ALL_TESTS_PASS_NO --> ARE_2_SUITE_FAILURES_DONE{"2 suite failures done?"}
-  ARE_2_SUITE_FAILURES_DONE --> ARE_2_SUITE_FAILURES_DONE_NO["NO"]
-  ARE_2_SUITE_FAILURES_DONE --> ARE_2_SUITE_FAILURES_DONE_YES["YES"]
-  ARE_2_SUITE_FAILURES_DONE_NO -- "pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
+  DO_ALL_TESTS_PASS_NO --> ARE_2_SUITE_FIXES_DONE{"2 suite fix attempts done?"}
+  ARE_2_SUITE_FIXES_DONE --> ARE_2_SUITE_FIXES_DONE_NO["NO"]
+  ARE_2_SUITE_FIXES_DONE --> ARE_2_SUITE_FIXES_DONE_YES["YES"]
+  ARE_2_SUITE_FIXES_DONE_NO -- "pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
   FIX_THE_CODEBASE_FOR_SUITE --> COMMIT_IF_NEEDED["commit if needed"]
   COMMIT_IF_NEEDED --> RUN_FULL_SUITE
-  ARE_2_SUITE_FAILURES_DONE_YES -- "exit type: suite-red<br/>exit note: full suite failed 2X.<br/>rebase and merge aborted.<br/>worktree preserved." --> EXIT_WORKFLOW
+  ARE_2_SUITE_FIXES_DONE_YES -- "exit type: suite-red<br/>exit note: full suite still red after<br/>2 fix attempts. merge aborted.<br/>worktree preserved." --> EXIT_WORKFLOW
 
-  DO_ALL_TESTS_PASS_YES --> MERGE_PIPELINE["merge pipeline"]
+  DO_ALL_TESTS_PASS_YES --> DID_CHANGES_STAY_INSIDE_FENCE{"did every change stay inside<br/>the task's file fence?"}
+  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_YES["YES"]
+  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_NO["NO"]
+  DID_CHANGES_STAY_INSIDE_FENCE_YES --> MERGE_PIPELINE["merge pipeline"]
+  DID_CHANGES_STAY_INSIDE_FENCE_NO -- "exit type: fence-violation<br/>exit note: a repair edited files the<br/>task does not own. nothing merged.<br/>worktree preserved." --> EXIT_WORKFLOW
 
   FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
 
@@ -57,12 +78,12 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class DO_ALL_TESTS_PASS,ARE_2_SUITE_FAILURES_DONE decision
+  class DO_ALL_TESTS_PASS,ARE_2_SUITE_FIXES_DONE,DID_CHANGES_STAY_INSIDE_FENCE decision
   class RUN_FULL_SUITE,COMMIT_IF_NEEDED script
   class FIX_THE_CODEBASE_FOR_SUITE agent
   class MERGE_PIPELINE pipeline
-  class DO_ALL_TESTS_PASS_YES,ARE_2_SUITE_FAILURES_DONE_NO pass
-  class DO_ALL_TESTS_PASS_NO,ARE_2_SUITE_FAILURES_DONE_YES nopass
+  class DO_ALL_TESTS_PASS_YES,ARE_2_SUITE_FIXES_DONE_NO,DID_CHANGES_STAY_INSIDE_FENCE_YES pass
+  class DO_ALL_TESTS_PASS_NO,ARE_2_SUITE_FIXES_DONE_YES,DID_CHANGES_STAY_INSIDE_FENCE_NO nopass
   class AGENT_ERRORED nopass
   class EXIT_WORKFLOW fail
   class REBASED_WORKTREE_INPUT output

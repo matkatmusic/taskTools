@@ -21,30 +21,40 @@ flowchart TB
 %%   merge succeeded exit - records the run, archives the task, releases everything
 %%   failures exit        - records why the run ended, then releases what it holds
 %%   report only exit     - the task never started, so nothing is written or held
-%% The REFUSED arrow out of the preamble is invalid-number, blocked and
-%% already-active: all three happen before "mark the task active".
+%% The REFUSED arrow out of the preamble is invalid-number, blocked, already-active
+%% and closing: all four happen before "mark the task active".
 %% Five pipelines send the run back to the pipeline before them, after writing
 %% what went wrong into the tasks.json entry. Those loops are drawn in their own
 %% files, not here:
 %%   review plan pipeline        -> plan pipeline
-%%   plan pipeline               -> document generation pipeline (CLARIFY)
+%%   plan pipeline               -> document generation pipeline (CLARIFY, capped at
+%%                                  2 rounds, and it carries the clarify request)
 %%   task tests pipeline         -> implement pipeline
 %%   review task tests pipeline  -> implement pipeline
 %%   merge pipeline              -> rebase pipeline
 %% Exit types, one per path that reaches [stop]:
-%%   completed          - archived to completedTasks.json
-%%   invalid-number     - not in tasks.json or completedTasks.json
+%%   completed          - archived to completedTasks.json. FINAL: once written, no
+%%                        later failure may overwrite it. See the failures exit.
+%%   invalid-number     - not in tasks.json. completedTasks.json is NOT consulted.
 %%   already-active     - a previous run left the task active
 %%   blocked            - an open blocker remains
+%%   closing            - the task merged already and is waiting to be archived
 %%   plan-scrapped      - codex did not accept the plan in two reviews
-%%   tests-red          - task tests still failing after 2 attempts
+%%   clarify-stuck      - the planner asked twice for something the docs cannot
+%%                        supply
+%%   tests-red          - task tests still failing after 2 fix attempts
 %%   tests-flagged      - codex flagged the tests twice
 %%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
-%%   suite-red          - full suite still failing after 2 fix attempts
+%%   suite-red          - full suite still red after 2 fix attempts
+%%   fence-violation    - a change edited files the task does not own
 %%   merge-failed       - the merge did not land twice
 %%   agent-failed       - an agent returned nothing usable
 %%   run-failed         - a script failed operationally; can leave ANY green box
 %%                        in any pipeline
+%% Every counter above counts FIX ATTEMPTS, not failing runs: 2 attempts means up to
+%% 3 runs. No counter is written to tasks.json, so each invocation starts at zero.
+%% cleanup-incomplete is NOT an exit type. It is a repair flag the failures exit
+%% writes beside a completed exit type when the post-merge cleanup dies partway.
 
   TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble status<br/>check pipeline"]
   PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]

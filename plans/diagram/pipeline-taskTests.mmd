@@ -24,7 +24,7 @@ flowchart TB
 %%                                  the same mistake. This box also raises the
 %%                                  failure counter by one.
 %% Exit types this pipeline can produce:
-%%   tests-red          - task tests still failing after 2 attempts
+%%   tests-red          - task tests still failing after 2 fix attempts
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
 %% ANY green box, so drawing it would add one edge per box and hide the flow.
@@ -37,11 +37,11 @@ flowchart TB
   DO_TASK_TESTS_PASS --> DO_TASK_TESTS_PASS_NO["NO"]
 
   DO_TASK_TESTS_PASS_NO --> AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
-  AMEND_ENTRY_WITH_FAILING_TESTS --> ARE_2_TEST_FAILURES_DONE{"2 test failures done?"}
+  AMEND_ENTRY_WITH_FAILING_TESTS --> ARE_2_TEST_FAILURES_DONE{"2 test fix attempts done?"}
   ARE_2_TEST_FAILURES_DONE --> ARE_2_TEST_FAILURES_DONE_NO["NO"]
   ARE_2_TEST_FAILURES_DONE --> ARE_2_TEST_FAILURES_DONE_YES["YES"]
   ARE_2_TEST_FAILURES_DONE_NO -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
-  ARE_2_TEST_FAILURES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 attempts" --> EXIT_WORKFLOW
+  ARE_2_TEST_FAILURES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW
 
   DO_TASK_TESTS_PASS_YES --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
 

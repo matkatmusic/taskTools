@@ -5,20 +5,32 @@ flowchart TB
 %% Rules that apply everywhere, not steps:
 %%   1. Every read and write of tasks.json is atomic.
 %%   2. A task stays unavailable to another run from "mark the task active" until its
-%%      archive lands. "is the task active?" and "mark the task active" are drawn as two
-%%      boxes but are one atomic read-modify-write of tasks.json under rule 1: nothing can
-%%      make the task active between the two.
-%%   3. All three exits here happen BEFORE "mark the task active", so there is no
-%%      run record to write to and nothing is held. All three take the report only
+%%      archive lands. "is the task active?", "is the task closing?" and "mark the task
+%%      active" are drawn as three boxes but are one atomic read-modify-write of
+%%      tasks.json under rule 1: nothing can change the task between them. See
+%%      claimTask in taskRunState.ts, which returns claimed, active or closing.
+%%   3. All four exits here happen BEFORE "mark the task active", so there is no
+%%      run record to write to and nothing is held. All four take the report only
 %%      exit. already-active must not touch the run it finds: that run belongs to
-%%      another invocation.
-%%   4. A script that fails operationally exits the run as run-failed. Before
+%%      another invocation. closing must not touch it either: another run merged
+%%      that task and is still archiving it.
+%%   4. "is the task closing?" means: the task is inactive, its newest ended run
+%%      exited completed, and it is still in tasks.json. That task merged already.
+%%      Running it again would redo published work. See the merge succeeded exit.
+%%   5. ACCEPTED GAP: "is task number valid?" and "is task blocked?" are read before
+%%      the atomic claim, not inside it. A human can add a blocker in that window and
+%%      the run will still take the task. We accept it: adding a blocker is a manual
+%%      act, the window is milliseconds, and the worst case is one extra completed
+%%      task. Widen the claim predicate only if this is ever observed.
+%%   6. A script that fails operationally exits the run as run-failed. Before
 %%      "mark the task active" that takes the report only exit; after it, the
 %%      failures exit. Neither is drawn as an edge: it can leave ANY green box.
 %% Exit types this pipeline can produce:
-%%   invalid-number     - not in tasks.json
+%%   invalid-number     - not in tasks.json. completedTasks.json is NOT consulted:
+%%                        finished work is not a task this skill can run.
 %%   blocked            - an open blocker remains
 %%   already-active     - a previous run left the task active
+%%   closing            - the task merged already and is waiting to be archived
 %%   run-failed         - a script failed operationally
 %% The active task this pipeline emits is the input to the worktree check pipeline.
 
@@ -34,7 +46,11 @@ flowchart TB
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_YES["YES"]
   IS_TASK_ACTIVE --> IS_TASK_ACTIVE_NO["NO"]
   IS_TASK_ACTIVE_YES -- "exit type: already-active<br/>exit note: a previous run<br/>left the task active" --> REPORT_ONLY_EXIT
-  IS_TASK_ACTIVE_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
+  IS_TASK_ACTIVE_NO --> IS_TASK_CLOSING{"is the task closing?"}
+  IS_TASK_CLOSING --> IS_TASK_CLOSING_YES["YES"]
+  IS_TASK_CLOSING --> IS_TASK_CLOSING_NO["NO"]
+  IS_TASK_CLOSING_YES -- "exit type: closing<br/>exit note: the task merged already<br/>and is waiting to be archived" --> REPORT_ONLY_EXIT
+  IS_TASK_CLOSING_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
   MARK_TASK_ACTIVE --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
 
   REPORT_ONLY_EXIT["report only exit"]
@@ -48,10 +64,10 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class IS_TASK_NUMBER_VALID,IS_TASK_BLOCKED,IS_TASK_ACTIVE decision
+  class IS_TASK_NUMBER_VALID,IS_TASK_BLOCKED,IS_TASK_ACTIVE,IS_TASK_CLOSING decision
   class MARK_TASK_ACTIVE script
   class WORKTREE_CHECK_PIPELINE pipeline
-  class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO pass
-  class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES nopass
+  class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO,IS_TASK_CLOSING_NO pass
+  class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES,IS_TASK_CLOSING_YES nopass
   class REPORT_ONLY_EXIT fail
   class TASK_NUMBER_INPUT output
