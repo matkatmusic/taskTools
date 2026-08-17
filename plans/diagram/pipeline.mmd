@@ -1,6 +1,8 @@
 flowchart TB
 %% OVERVIEW. One block per pipeline. Each block is drawn in full in its own file:
-%%   preamble pipeline                    pipeline-preamble.mmd
+%%   preamble status check pipeline       pipeline-preambleStatusCheck.mmd
+%%   worktree check pipeline              pipeline-worktreeCheck.mmd
+%%   document generation pipeline         pipeline-documentGeneration.mmd
 %%   plan pipeline                        pipeline-plan.mmd
 %%   review plan pipeline                 pipeline-reviewPlan.mmd
 %%   implement pipeline                   pipeline-implement.mmd
@@ -21,10 +23,11 @@ flowchart TB
 %%   report only exit     - the task never started, so nothing is written or held
 %% The REFUSED arrow out of the preamble is invalid-number, blocked and
 %% already-active: all three happen before "mark the task active".
-%% Four pipelines send the run back to the pipeline before them, after writing
+%% Five pipelines send the run back to the pipeline before them, after writing
 %% what went wrong into the tasks.json entry. Those loops are drawn in their own
 %% files, not here:
 %%   review plan pipeline        -> plan pipeline
+%%   plan pipeline               -> document generation pipeline (CLARIFY)
 %%   task tests pipeline         -> implement pipeline
 %%   review task tests pipeline  -> implement pipeline
 %%   merge pipeline              -> rebase pipeline
@@ -43,8 +46,10 @@ flowchart TB
 %%   run-failed         - a script failed operationally; can leave ANY green box
 %%                        in any pipeline
 
-  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble pipeline"]
-  PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> PLAN_PIPELINE["plan pipeline"]
+  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble status<br/>check pipeline"]
+  PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
+  WORKTREE_CHECK_PIPELINE --> WORKTREE_CHECK_SUCCESS["SUCCESS"] --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+  DOCUMENT_GENERATION_PIPELINE --> DOCUMENT_GENERATION_SUCCESS["SUCCESS"] --> PLAN_PIPELINE["plan pipeline"]
   PLAN_PIPELINE --> PLAN_SUCCESS["SUCCESS"] --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
   REVIEW_PLAN_PIPELINE --> REVIEW_PLAN_SUCCESS["SUCCESS"] --> IMPLEMENT_PIPELINE["implement pipeline"]
   IMPLEMENT_PIPELINE --> IMPLEMENT_SUCCESS["SUCCESS"] --> TASK_TESTS_PIPELINE["task tests pipeline"]
@@ -59,6 +64,8 @@ flowchart TB
   PREAMBLE_PIPELINE -.-> PREAMBLE_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE["failures exit"]
   PREAMBLE_PIPELINE -.-> PREAMBLE_REFUSED["REFUSED"] --> EXIT_WORKFLOW_REPORT_ONLY["report only exit"]
   EXIT_WORKFLOW_REPORT_ONLY --> STOP
+  WORKTREE_CHECK_PIPELINE -.-> WORKTREE_CHECK_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
+  DOCUMENT_GENERATION_PIPELINE -.-> DOCUMENT_GENERATION_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
   PLAN_PIPELINE -.-> PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
   REVIEW_PLAN_PIPELINE -.-> REVIEW_PLAN_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
   IMPLEMENT_PIPELINE -.-> IMPLEMENT_FAIL["FAILED"] --> EXIT_WORKFLOW_FAILURE
@@ -75,8 +82,8 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   classDef pass fill:#00ff00,stroke:#6d1a12,color:#000000
-  class PREAMBLE_PIPELINE,PLAN_PIPELINE,REVIEW_PLAN_PIPELINE,IMPLEMENT_PIPELINE,TASK_TESTS_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE,REBASE_PIPELINE,SUITE_PIPELINE,MERGE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
-  class PREAMBLE_SUCCESS,PLAN_SUCCESS,REVIEW_PLAN_SUCCESS,IMPLEMENT_SUCCESS,TASK_TESTS_SUCCESS,REVIEW_TESTS_SUCCESS,REBASE_PREAMBLE_SUCCESS,REBASE_SUCCESS,SUITE_SUCCESS,MERGE_SUCCESS pass
-  class PREAMBLE_FAIL,PLAN_FAIL,REVIEW_PLAN_FAIL,IMPLEMENT_FAIL,TASK_TESTS_FAIL,REVIEW_TESTS_FAIL,REBASE_PREAMBLE_FAIL,REBASE_FAIL,SUITE_FAIL,MERGE_FAIL,PREAMBLE_REFUSED nopass
+  class PREAMBLE_PIPELINE,PLAN_PIPELINE,REVIEW_PLAN_PIPELINE,IMPLEMENT_PIPELINE,TASK_TESTS_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE,REBASE_PIPELINE,SUITE_PIPELINE,MERGE_PIPELINE,WORKTREE_CHECK_PIPELINE,DOCUMENT_GENERATION_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class PREAMBLE_SUCCESS,PLAN_SUCCESS,REVIEW_PLAN_SUCCESS,IMPLEMENT_SUCCESS,TASK_TESTS_SUCCESS,REVIEW_TESTS_SUCCESS,REBASE_PREAMBLE_SUCCESS,REBASE_SUCCESS,SUITE_SUCCESS,MERGE_SUCCESS,WORKTREE_CHECK_SUCCESS,DOCUMENT_GENERATION_SUCCESS pass
+  class PREAMBLE_FAIL,PLAN_FAIL,REVIEW_PLAN_FAIL,IMPLEMENT_FAIL,TASK_TESTS_FAIL,REVIEW_TESTS_FAIL,REBASE_PREAMBLE_FAIL,REBASE_FAIL,SUITE_FAIL,MERGE_FAIL,PREAMBLE_REFUSED,WORKTREE_CHECK_FAIL,DOCUMENT_GENERATION_FAIL nopass
   class EXIT_WORKFLOW_FAILURE,EXIT_WORKFLOW_REPORT_ONLY fail
   class TASK_NUMBER_INPUT,STOP output
