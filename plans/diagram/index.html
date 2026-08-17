@@ -10,7 +10,9 @@
          font: 13px/1.5 ui-monospace, monospace; padding: .5rem 1rem; white-space: pre-wrap; }
   #err:empty { display: none; }
   #nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .5rem 1rem;
-         font: 13px/1.6 system-ui, sans-serif; border-bottom: 1px solid #8884; }
+         font: 13px/1.6 system-ui, sans-serif; border-bottom: 1px solid #8884;
+         position: sticky; top: 0; z-index: 1; background: #fff; }
+  @media (prefers-color-scheme: dark) { #nav { background: #16181b; } }
   #nav a { color: inherit; text-decoration: none; opacity: .6; }
   #nav a:hover { opacity: 1; text-decoration: underline; }
   #nav a[aria-current] { opacity: 1; font-weight: 600; }
@@ -27,23 +29,28 @@
     startOnLoad: false,
     theme: dark ? 'dark' : 'default',
     fontFamily: 'system-ui, sans-serif',
-    // htmlLabels:false makes mermaid measure the text itself, so a shape actually fits its label.
-    // With htmlLabels:true the box is sized before the foreignObject's real width is known and text spills out.
-    // nodeSpacing/rankSpacing stop dagre stacking wide boxes and edge labels on top of each other.
+    // htmlLabels:false sizes shapes to their labels; spacing stops dagre overlap.
     flowchart: { htmlLabels: false, useMaxWidth: false, padding: 12, wrappingWidth: 220,
                  nodeSpacing: 60, rankSpacing: 80 },
   })
   const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
   document.title = file
-  // ponytail: hardcoded, python http.server gives no listing when index.html exists.
-  // Add a line here when a diagram is added.
+  // ponytail: hardcoded, python http.server gives no listing when index.html exists.  Add a line here when a diagram is added.
   nav.innerHTML = [
     ['pipeline.mmd', 'overview'],
     ['pipeline-preamble.mmd', 'preamble'],
-    ['pipeline-planning.mmd', 'planning'],
-    ['pipeline-implementTest.mmd', 'implement and test'],
-    ['pipeline-rebaseMerge.mmd', 'rebase and merge'],
-    ['pipeline-exitWorkflow.mmd', 'exit workflow'],
+    ['pipeline-plan.mmd', 'plan'],
+    ['pipeline-reviewPlan.mmd', 'review plan'],
+    ['pipeline-implement.mmd', 'implement'],
+    ['pipeline-taskTests.mmd', 'task tests'],
+    ['pipeline-reviewTests.mmd', 'review task tests'],
+    ['pipeline-rebasePreamble.mmd', 'rebase preamble'],
+    ['pipeline-rebase.mmd', 'rebase'],
+    ['pipeline-suite.mmd', 'full suite'],
+    ['pipeline-merge.mmd', 'merge'],
+    ['pipeline-mergeSucceededExit.mmd', 'merge succeeded exit'],
+    ['pipeline-failuresExit.mmd', 'failures exit'],
+    ['pipeline-reportOnlyExit.mmd', 'report only exit'],
   ].map(([href, label]) =>
     `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   let last = null

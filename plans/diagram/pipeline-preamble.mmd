@@ -43,9 +43,9 @@ flowchart TB
 %% report-only tail; run-failed gets the full tail. That choice is drawn there,
 %% not here.
 %% The active task and initialized worktree this pipeline emits are the input to
-%% the planning pipeline.
+%% the plan pipeline.
 
-  TASK_NUMBER_INPUT["Input: { }"] --> IS_TASK_NUMBER_VALID
+  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
   IS_TASK_NUMBER_VALID{"is task number valid?"} --> IS_TASK_NUMBER_VALID_YES["YES"]
   IS_TASK_NUMBER_VALID --> IS_TASK_NUMBER_VALID_NO["NO"]
   IS_TASK_NUMBER_VALID_NO -- "exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> EXIT_WORKFLOW
@@ -75,36 +75,25 @@ flowchart TB
   IS_PREVIOUS_RUN_RESUMABLE_YES --> UPDATE_AUTO_GENERATED_DOCS
   IS_WORKTREE_SAFE_TO_USE_YES --> UPDATE_AUTO_GENERATED_DOCS["update auto generated docs"]
   UPDATE_AUTO_GENERATED_DOCS --> INIT_SUBMODULES_RECURSIVELY["init submodules recursively"]
-  INIT_SUBMODULES_RECURSIVELY --> ACTIVE_TASK_WORKTREE_OUTPUT["Output"]
-  ACTIVE_TASK_WORKTREE_OUTPUT --> ACTIVE_TASK_WORKTREE_RECEIPT["Receipt: { }"]
-  ACTIVE_TASK_WORKTREE_RECEIPT --> IS_ACTIVE_TASK_RECEIPT_VALID{"is the active task receipt structure valid?"}
-  IS_ACTIVE_TASK_RECEIPT_VALID --> IS_ACTIVE_TASK_RECEIPT_VALID_YES["YES"]
-  IS_ACTIVE_TASK_RECEIPT_VALID --> IS_ACTIVE_TASK_RECEIPT_VALID_NO["NO"]
-  IS_ACTIVE_TASK_RECEIPT_VALID_YES --> ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED["Output"]
-  ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED --> ACTIVE_TASK_WORKTREE_RECEIPT_TRUSTED["Receipt: { }"]
-  IS_ACTIVE_TASK_RECEIPT_VALID_NO -- "exit type: run-failed<br/>exit note: the active task<br/>receipt is malformed" --> VALIDATOR_FAILURE_OUTPUT
+  INIT_SUBMODULES_RECURSIVELY --> PLAN_PIPELINE["plan pipeline"]
 
-  VALIDATOR_FAILURE_OUTPUT["Output"] --> VALIDATOR_FAILURE_RECEIPT["Receipt: { }"]
-  VALIDATOR_FAILURE_RECEIPT --> EXIT_WORKFLOW
+  EXIT_WORKFLOW["report only exit"]
 
-  EXIT_WORKFLOW["exit workflow"] --> EXIT_OUTPUT["Output"]
-  EXIT_OUTPUT --> EXIT_RECEIPT["Receipt: { }"]
-
-  %% pass/nopass: green is the branch that keeps heading for the receipt,
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
   %% red is the branch that ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
-  classDef receipt fill:#ffffff,stroke:#333333,color:#000000
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef verdict fill:#4a4a4a,stroke:#8a8a8a,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class IS_TASK_NUMBER_VALID,IS_TASK_ACTIVE,IS_TASK_BLOCKED,DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE,IS_ACTIVE_TASK_RECEIPT_VALID decision
+  class IS_TASK_NUMBER_VALID,IS_TASK_ACTIVE,IS_TASK_BLOCKED,DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE decision
   class MARK_TASK_ACTIVE,CREATE_WORKTREE,AUTO_GENERATE_DOCS,RESET_WORKTREE,UPDATE_AUTO_GENERATED_DOCS,INIT_SUBMODULES_RECURSIVELY script
-  class IS_TASK_NUMBER_VALID_YES,IS_TASK_ACTIVE_NO,IS_TASK_BLOCKED_NO,DOES_WORKTREE_EXIST_YES,DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_YES,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_YES,IS_PREVIOUS_RUN_RESUMABLE_NO,IS_ACTIVE_TASK_RECEIPT_VALID_YES pass
-  class IS_TASK_NUMBER_VALID_NO,IS_TASK_ACTIVE_YES,IS_TASK_BLOCKED_YES,IS_ACTIVE_TASK_RECEIPT_VALID_NO nopass
+  class IS_TASK_NUMBER_VALID_YES,IS_TASK_ACTIVE_NO,IS_TASK_BLOCKED_NO,DOES_WORKTREE_EXIST_YES,DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_YES,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_YES,IS_PREVIOUS_RUN_RESUMABLE_NO pass
+  class IS_TASK_NUMBER_VALID_NO,IS_TASK_ACTIVE_YES,IS_TASK_BLOCKED_YES nopass
+  class PLAN_PIPELINE pipeline
   class EXIT_WORKFLOW fail
-  class TASK_NUMBER_INPUT,ACTIVE_TASK_WORKTREE_OUTPUT_TRUSTED,EXIT_OUTPUT,ACTIVE_TASK_WORKTREE_OUTPUT,VALIDATOR_FAILURE_OUTPUT output
-  class ACTIVE_TASK_WORKTREE_RECEIPT,EXIT_RECEIPT,ACTIVE_TASK_WORKTREE_RECEIPT_TRUSTED,VALIDATOR_FAILURE_RECEIPT receipt
+  class TASK_NUMBER_INPUT output

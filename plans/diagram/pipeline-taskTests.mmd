@@ -1,0 +1,65 @@
+flowchart TB
+%% TASK TESTS PIPELINE. Split from pipeline-implementTest.mmd.
+%% Input: committed work from the implement pipeline.
+%% One job: get the task's own tests green.
+%% Starts at "run task tests". Ends green, with the run back in the implement
+%% pipeline, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every read and write of tasks.json is atomic.
+%%   2. Never progress past a test run until every task test passes.
+%%   3. A repair is never tested until it is committed, which is why a failure
+%%      re-enters the implement pipeline and not this one.
+%%   4. Every box that touches the working tree operates on every repository
+%%      layer, deepest submodule first, root last. Boxes that only read or write
+%%      tasks.json do not.
+%%   5. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%% Box definitions where the name alone is not enough:
+%%   do the task tests pass?      - the test run alone decides this; codex judges
+%%                                  the tests, the tests judge the work.
+%%   amend tasks.json entry       - the retry is not a bare retry. The implementor
+%%                                  reads the task entry, so the failing tests are
+%%                                  written into it or the next attempt repeats
+%%                                  the same mistake. This box also raises the
+%%                                  failure counter by one.
+%% Exit types this pipeline can produce:
+%%   tests-red          - task tests still failing after 2 attempts
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The green implementation this pipeline emits is the input to the review task
+%% tests pipeline.
+
+  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> RUN_TASK_TESTS
+  RUN_TASK_TESTS["Try: run task tests"] --> DO_TASK_TESTS_PASS{"do the task tests pass?"}
+  DO_TASK_TESTS_PASS --> DO_TASK_TESTS_PASS_YES["YES"]
+  DO_TASK_TESTS_PASS --> DO_TASK_TESTS_PASS_NO["NO"]
+
+  DO_TASK_TESTS_PASS_NO --> AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
+  AMEND_ENTRY_WITH_FAILING_TESTS --> ARE_2_TEST_FAILURES_DONE{"2 test failures done?"}
+  ARE_2_TEST_FAILURES_DONE --> ARE_2_TEST_FAILURES_DONE_NO["NO"]
+  ARE_2_TEST_FAILURES_DONE --> ARE_2_TEST_FAILURES_DONE_YES["YES"]
+  ARE_2_TEST_FAILURES_DONE_NO -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
+  ARE_2_TEST_FAILURES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 attempts" --> EXIT_WORKFLOW
+
+  DO_TASK_TESTS_PASS_YES --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
+
+  EXIT_WORKFLOW["failures exit"]
+
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
+  %% red is the branch that reimplements or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DO_TASK_TESTS_PASS,ARE_2_TEST_FAILURES_DONE decision
+  class RUN_TASK_TESTS,AMEND_ENTRY_WITH_FAILING_TESTS script
+  class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE pipeline
+  class DO_TASK_TESTS_PASS_YES,ARE_2_TEST_FAILURES_DONE_NO pass
+  class DO_TASK_TESTS_PASS_NO,ARE_2_TEST_FAILURES_DONE_YES nopass
+  class EXIT_WORKFLOW fail
+  class COMMITTED_WORK_INPUT output

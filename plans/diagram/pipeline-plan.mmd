@@ -1,0 +1,34 @@
+flowchart TB
+%% PLAN PIPELINE. Split from pipeline-planning.mmd.
+%% Input: an active task and an initialized worktree from the preamble pipeline.
+%% One job: turn the tasks.json entry into a plan file.
+%% Starts at "plan the task". Ends with a draft plan.
+%% Rules that apply everywhere, not steps:
+%%   1. Every read and write of tasks.json is atomic.
+%%   2. The planner reads the tasks.json entry, nothing else. That is why the
+%%      review plan pipeline writes codex's notes into the entry before it sends
+%%      the run back here: a bare retry would repeat the first plan's mistakes.
+%%   3. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%% Exit types this pipeline can produce:
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The draft plan this pipeline emits is the input to the review plan pipeline.
+%% The review plan pipeline re-enters here when codex does not accept the plan.
+
+  ACTIVE_TASK_WORKTREE_INPUT["Input: { brief, codexNotes? }"] --> PLAN_THE_TASK
+  PLAN_THE_TASK["plan the task"] --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
+  PLAN_THE_TASK -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class PLAN_THE_TASK agent
+  class REVIEW_PLAN_PIPELINE pipeline
+  class AGENT_ERRORED nopass
+  class REPORT_ONLY_EXIT fail
+  class ACTIVE_TASK_WORKTREE_INPUT output

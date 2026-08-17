@@ -1,0 +1,61 @@
+flowchart TB
+%% MERGE PIPELINE. Split from pipeline-rebaseMerge.mmd.
+%% Input: a green, rebased worktree from the full suite pipeline, with the source
+%% repo lock already held by the rebase preamble pipeline.
+%% One job: land the task's work on the target branch.
+%% Starts at "merge worktrees and submodules". Ends with a merge receipt, or with
+%% an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every git interaction goes through a script. Never prose.
+%%   2. Never fast-forward. Every task branch lands as a merge commit.
+%%   3. The merge operates on every repository layer, deepest submodule first,
+%%      root last.
+%%   4. The source repo lock is already held and stays held until the exit
+%%      workflow releases it. Every box here refreshes its heartbeat.
+%%   5. A merge retry re-enters the rebase pipeline, not the rebase preamble
+%%      pipeline: re-acquiring the same owner token is a no-op, and the retry
+%%      exists because the target branch tip moved.
+%%   6. A script that fails operationally, as opposed to returning a verdict,
+%%      exits the run as run-failed. The task is already active and a worktree
+%%      already exists here, so the exit workflow always runs in full.
+%% Exit types this pipeline can produce:
+%%   merge-failed       - the merge did not land twice
+%%   run-failed         - a script failed operationally
+%% run-failed is deliberately not drawn as an edge out of every box. It can leave
+%% ANY green box, so drawing it would add one edge per box and hide the flow.
+%% The merge-failed exit leaves the worktree in place. The work is committed, so
+%% the next invocation of this task picks it up.
+%% The merge receipt this pipeline emits - the merge commit hashes and the set of
+%% modified files - is the input to the exit workflow's success tail.
+
+  GREEN_WORKTREE_INPUT["Input: { worktree, target branch }"] --> MERGE_WORKTREES
+  MERGE_WORKTREES["Try: merge worktrees and submodules,<br/>no fast-forward"] --> DID_MERGE_LAND{"did the merge land?"}
+  DID_MERGE_LAND --> DID_MERGE_LAND_YES["YES"]
+  DID_MERGE_LAND --> DID_MERGE_LAND_NO["NO"]
+
+  DID_MERGE_LAND_NO --> ARE_2_MERGE_FAILURES_DONE{"2 merge failures done?"}
+  ARE_2_MERGE_FAILURES_DONE --> ARE_2_MERGE_FAILURES_DONE_NO["NO"]
+  ARE_2_MERGE_FAILURES_DONE --> ARE_2_MERGE_FAILURES_DONE_YES["YES"]
+  ARE_2_MERGE_FAILURES_DONE_NO -- "the target branch tip moved" --> REBASE_PIPELINE["rebase pipeline"]
+  ARE_2_MERGE_FAILURES_DONE_YES -- "exit type: merge-failed<br/>exit note: merge failed.<br/>worktree preserved." --> EXIT_WORKFLOW
+
+  DID_MERGE_LAND_YES --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
+
+  EXIT_WORKFLOW["failures exit"]
+
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
+  %% red is the branch that retries or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DID_MERGE_LAND,ARE_2_MERGE_FAILURES_DONE decision
+  class MERGE_WORKTREES script
+  class REBASE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class DID_MERGE_LAND_YES,ARE_2_MERGE_FAILURES_DONE_NO pass
+  class DID_MERGE_LAND_NO,ARE_2_MERGE_FAILURES_DONE_YES nopass
+  class EXIT_WORKFLOW fail
+  class GREEN_WORKTREE_INPUT output
