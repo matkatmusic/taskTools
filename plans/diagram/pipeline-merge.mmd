@@ -10,6 +10,18 @@ flowchart TB
 %%   2. Never fast-forward. Every task branch lands as a merge commit.
 %%   3. The merge operates on every repository layer, deepest submodule first,
 %%      root last.
+%%   3a. A multi-repo merge is NOT one yes-or-no event. A submodule merge can land
+%%      and the root merge then fail. That is partial publication, not "the merge
+%%      did not land": some of the task's work is already on a target branch and
+%%      cannot be un-published. So the merge writes a per-layer receipt BEFORE the
+%%      verdict is read - one entry per layer, keyed by occurrence id, each with its
+%%      own status (merged, root-merged-but-not-closed, submodule-conflicted,
+%%      parent-conflicted, merge-record-missing) and its own commit hash. See
+%%      mergeTaskWorktree.ts and MergeTaskWalkReport.
+%%   3b. The retry reconciles against that receipt: a layer already recorded as
+%%      merged is skipped, never merged twice. This also covers a merge whose result
+%%      is lost, per the reconciliation rule - read the receipt and the world first,
+%%      never blindly retry.
 %%   4. The source repo lock is already held and stays held until the exit
 %%      workflow releases it. Every box here refreshes its heartbeat.
 %%   5. A merge retry re-enters the rebase pipeline, not the rebase preamble
@@ -29,14 +41,15 @@ flowchart TB
 %% modified files - is the input to the exit workflow's success tail.
 
   GREEN_WORKTREE_INPUT["Input: { worktree, target branch }"] --> MERGE_WORKTREES
-  MERGE_WORKTREES["Try: merge worktrees and submodules,<br/>no fast-forward"] --> DID_MERGE_LAND{"did the merge land?"}
-  DID_MERGE_LAND --> DID_MERGE_LAND_YES["YES"]
-  DID_MERGE_LAND --> DID_MERGE_LAND_NO["NO"]
+  MERGE_WORKTREES["Try: merge worktrees and submodules,<br/>no fast-forward"] --> RECORD_LAYER_RECEIPTS["record the per-layer merge receipt"]
+  RECORD_LAYER_RECEIPTS --> DID_EVERY_LAYER_LAND{"did EVERY layer land?"}
+  DID_EVERY_LAYER_LAND --> DID_MERGE_LAND_YES["YES"]
+  DID_EVERY_LAYER_LAND --> DID_MERGE_LAND_NO["NO"]
 
-  DID_MERGE_LAND_NO --> ARE_2_MERGE_FAILURES_DONE{"2 merge failures done?"}
+  DID_MERGE_LAND_NO --> ARE_2_MERGE_FAILURES_DONE{"2 merge attempts done?"}
   ARE_2_MERGE_FAILURES_DONE --> ARE_2_MERGE_FAILURES_DONE_NO["NO"]
   ARE_2_MERGE_FAILURES_DONE --> ARE_2_MERGE_FAILURES_DONE_YES["YES"]
-  ARE_2_MERGE_FAILURES_DONE_NO -- "the target branch tip moved" --> REBASE_PIPELINE["rebase pipeline"]
+  ARE_2_MERGE_FAILURES_DONE_NO -- "the target branch tip moved.<br/>layers already landed are read from<br/>the receipt and NOT merged again" --> REBASE_PIPELINE["rebase pipeline"]
   ARE_2_MERGE_FAILURES_DONE_YES -- "exit type: merge-failed<br/>exit note: merge failed.<br/>worktree preserved." --> EXIT_WORKFLOW
 
   DID_MERGE_LAND_YES --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
@@ -52,8 +65,8 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class DID_MERGE_LAND,ARE_2_MERGE_FAILURES_DONE decision
-  class MERGE_WORKTREES script
+  class DID_EVERY_LAYER_LAND,ARE_2_MERGE_FAILURES_DONE decision
+  class MERGE_WORKTREES,RECORD_LAYER_RECEIPTS script
   class REBASE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
   class DID_MERGE_LAND_YES,ARE_2_MERGE_FAILURES_DONE_NO pass
   class DID_MERGE_LAND_NO,ARE_2_MERGE_FAILURES_DONE_YES nopass

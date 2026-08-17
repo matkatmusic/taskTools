@@ -4,15 +4,18 @@ flowchart TB
 %% is marked active.
 %% One job: say why the run did not start. Ends at [stop].
 %% Rules that apply everywhere, not steps:
-%%   1. Nothing is written to tasks.json. All three exit types here happen before
+%%   1. Nothing is written to tasks.json. All four exit types here happen before
 %%      "mark the task active", so there is no run record to write to.
 %%   2. already-active must not touch the run it finds. That run belongs to
 %%      another invocation, and writing to it would corrupt a live run.
-%%   3. Nothing is held yet, so there is nothing to release.
+%%   3. closing must not touch it either. Another run merged that task and is
+%%      still archiving it. See pipeline-mergeSucceededExit.mmd.
+%%   4. Nothing is held yet, so there is nothing to release.
 %% Exit types that reach this tail:
-%%   invalid-number     - not in tasks.json or completedTasks.json
+%%   invalid-number     - not in tasks.json. completedTasks.json is NOT consulted.
 %%   already-active     - a previous run left the task active
 %%   blocked            - an open blocker remains
+%%   closing            - the task merged already and is waiting to be archived
 
   EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exit type, exit note }"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
   REPORT_EXIT_TYPE_NO_WRITE --> STOP["stop"]

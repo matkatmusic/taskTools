@@ -15,10 +15,16 @@ flowchart TB
 %%      its archive lands. "mark task inactive" ends the run but does NOT reopen
 %%      the task: a task whose newest ended run exited completed, and which is
 %%      still in tasks.json, is closing, and a second invocation must refuse it.
-%%   6. A script that fails operationally exits the run as run-failed. A failure
-%%      after "mark task inactive" lands in the failures exit, which reopens the
-%%      run, overwrites exit type completed with run-failed, and re-ends it.
-%%      See pipeline-failuresExit.mmd.
+%%   6. "write exit type completed" is the point of no return, and it is written
+%%      FIRST, before anything is released or closed. Every box after it is cleanup
+%%      of work that already landed. A failure in any of them lands in the failures
+%%      exit, which records cleanup-incomplete and leaves completed untouched. It
+%%      never reopens the task for implementation. See pipeline-failuresExit.mmd.
+%%   7. That is why the order is: record the hashes, write completed, then release
+%%      and archive. A run that dies anywhere after box 2 leaves a task that is
+%%      inactive, completed and still in tasks.json - which is exactly the "closing"
+%%      state the preamble refuses, and the recorded hashes are enough to finish the
+%%      archive later. See pipeline-preambleStatusCheck.mmd.
 %% Exit type this tail produces:
 %%   completed          - archived to completedTasks.json
 

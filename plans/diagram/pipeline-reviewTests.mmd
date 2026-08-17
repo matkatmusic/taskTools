@@ -10,7 +10,16 @@ flowchart TB
 %%   2. Codex gets two reviews. On the second flagging the pipeline aborts.
 %%   3. Green tests are not the same as good tests. The test run decides whether
 %%      the work is correct; this pipeline decides whether the tests prove it.
-%%   4. A script that fails operationally, as opposed to returning a verdict,
+%%   4. To decide that, the reviewer needs more than the tests. Reading tests alone
+%%      cannot catch the two failures that matter most:
+%%        - tests that pass against the wrong implementation. Needs the
+%%          implementation diff, so the reviewer can see what the tests assert
+%%          against.
+%%        - tests that were already there, presented as this task's coverage. Needs
+%%          the pre-existing test files, so new tests can be told from old ones.
+%%      So the input also carries the executed test command and its results: a test
+%%      the reviewer believes ran may not have run at all.
+%%   5. A script that fails operationally, as opposed to returning a verdict,
 %%      exits the run as run-failed. The task is already active and a worktree
 %%      already exists here, so the exit workflow always runs in full.
 %% Box definitions where the name alone is not enough:
@@ -27,7 +36,7 @@ flowchart TB
 %% The finished implementation this pipeline emits is the input to the rebase
 %% preamble pipeline.
 
-  GREEN_IMPLEMENTATION_INPUT["Input: { plan, tasks.json entry,<br/>task test files }"] --> CODEX_REVIEWS_TESTS
+  GREEN_IMPLEMENTATION_INPUT["Input: { plan, tasks.json entry,<br/>task test files, implementation diff,<br/>test command, test results,<br/>pre-existing test files }"] --> CODEX_REVIEWS_TESTS
   CODEX_REVIEWS_TESTS["codex reviews the tests"] --> ARE_TESTS_FLAGGED{"are the tests flagged?"}
   ARE_TESTS_FLAGGED --> ARE_TESTS_FLAGGED_NO["NO"]
   ARE_TESTS_FLAGGED --> ARE_TESTS_FLAGGED_YES["YES"]

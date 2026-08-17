@@ -15,7 +15,15 @@ flowchart TB
 %%      it needs something it was not given - an answer, or a file the entry did
 %%      not list. It goes back to document generation in UPDATE mode so the docs
 %%      are rebuilt to cover it, then the planner runs again.
-%%   4. A script that fails operationally exits the run as run-failed. The task is
+%%   4. The clarify request itself is written into the tasks.json entry before the
+%%      loop turns, for the same reason codex's notes are: the planner reads the
+%%      entry and the docs and nothing else. A bare "rebuild the docs" tells the
+%%      document generation pipeline nothing about WHAT was missing, so it would
+%%      rebuild the same docs and the planner would ask the same question forever.
+%%   5. The loop is capped at 2 clarify rounds, like every other loop in the
+%%      pipeline. There is no user to answer, so a third round cannot learn
+%%      anything a second did not. The cap counts rounds within THIS run only.
+%%   6. A script that fails operationally exits the run as run-failed. The task is
 %%      already active and a worktree already exists here, so the failures exit
 %%      runs in full.
 %% Box definitions where the name alone is not enough:
@@ -23,6 +31,8 @@ flowchart TB
 %%                                   ERROR is agent() returning null or garbage.
 %% Exit types this pipeline can produce:
 %%   agent-failed       - an agent returned nothing usable
+%%   clarify-stuck      - the planner asked twice for something the docs cannot
+%%                        supply
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
 %% ANY green box, so drawing it would add one edge per box and hide the flow.
@@ -36,24 +46,32 @@ flowchart TB
   WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_ERROR["ERROR"]
 
   PLANNER_RETURNED_PLAN --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
-  PLANNER_RETURNED_CLARIFY -- "docs mode: UPDATE" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
   PLANNER_RETURNED_ERROR -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+
+  PLANNER_RETURNED_CLARIFY --> ARE_2_CLARIFY_ROUNDS_DONE{"2 clarify rounds done?"}
+  ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_NO["NO"]
+  ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_YES["YES"]
+  ARE_2_CLARIFY_ROUNDS_DONE_NO --> WRITE_CLARIFY_REQUEST["write the clarify request<br/>into the tasks.json entry"]
+  WRITE_CLARIFY_REQUEST -- "docs mode: UPDATE" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+  ARE_2_CLARIFY_ROUNDS_DONE_YES -- "exit type: clarify-stuck<br/>exit note: the planner asked twice for<br/>something the docs cannot supply.<br/>worktree preserved." --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["failures exit"]
 
   %% pass/nopass: green is the branch that keeps heading for the next pipeline,
   %% red is the branch that ends in an exit.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class WHAT_DID_THE_PLANNER_RETURN decision
+  class WHAT_DID_THE_PLANNER_RETURN,ARE_2_CLARIFY_ROUNDS_DONE decision
   class PLAN_THE_TASK agent
+  class WRITE_CLARIFY_REQUEST script
   class REVIEW_PLAN_PIPELINE,DOCUMENT_GENERATION_PIPELINE pipeline
-  class PLANNER_RETURNED_PLAN,PLANNER_RETURNED_CLARIFY pass
-  class PLANNER_RETURNED_ERROR nopass
+  class PLANNER_RETURNED_PLAN,PLANNER_RETURNED_CLARIFY,ARE_2_CLARIFY_ROUNDS_DONE_NO pass
+  class PLANNER_RETURNED_ERROR,ARE_2_CLARIFY_ROUNDS_DONE_YES nopass
   class EXIT_WORKFLOW fail
   class DOCS_INPUT output
