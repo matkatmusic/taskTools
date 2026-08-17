@@ -9,6 +9,9 @@ import { generateRunId } from "../prepareTasks.ts";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
 
+const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
+const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // ponytail: one task at a time for now — multiple tasks come later.
     const [taskNumber] = parseTaskNumberArgument(argsValue);
@@ -18,13 +21,25 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
         return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
     }
 
-    return `Say: 'stopped at ${L(preambleResult.step)}'\n`;
+    // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
+    const workflowCall = JSON.stringify({
+        scriptPath: TASK_WORKFLOW_PATH,
+        args: { task: taskNumber, agentPromptEmitterPath: AGENT_PROMPT_EMITTER_PATH },
+    });
+
+    return `WORKFLOW: ${workflowCall}
+
+execute \`Workflow(WORKFLOW)\`
+
+Its ${L("PLAN_THE_TASK")} box launches the planner in a subagent, which builds its own prompt. The plan file never enters your context.
+
+Say: 'stopped at ${L("PLAN_THE_TASK")}'
+`;
 };
 
 /* Retired until the boxes after LAST_BUILT_BOX are wired up again — the v1.5 body:
 
 const SCRIPTS_DIR = fileURLToPath(new URL("./", import.meta.url)).replace(/\/$/, "");
-const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
 const RESOLVE_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 

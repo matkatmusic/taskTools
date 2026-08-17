@@ -103,38 +103,7 @@ const realDecisions = (what) => {
 /*
   Structure validators, spliced from their TypeScript source by scripts/tackle-tasks/generateTaskWorkflow.ts.
 */
-const SECTION_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-function isPlanProblem(result                    )                        {
-    return "problem" in result;
-}
-
-function validatePlanShape(value         , expectedTaskNumber        )                     {
-    if (typeof value !== "object" || value === null) return { problem: "plan is not an object" };
-    const plan = value                           ;
-    if (plan.task !== expectedTaskNumber) {
-        return { problem: `plan task ${JSON.stringify(plan.task)} does not match expected task ${expectedTaskNumber}` };
-    }
-    if (!Number.isInteger(plan.revision) || (plan.revision          ) < 1) {
-        return { problem: "plan revision must be a positive integer" };
-    }
-    if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
-        return { problem: "plan sections must be a non-empty array" };
-    }
-    const seenIds = new Set        ();
-    for (const section of plan.sections) {
-        if (typeof section !== "object" || section === null) return { problem: "plan section is not an object" };
-        const { id, title, body } = section                           ;
-        if (typeof id !== "string" || !SECTION_ID_PATTERN.test(id)) {
-            return { problem: `plan section id is not valid kebab-case: ${JSON.stringify(id)}` };
-        }
-        if (seenIds.has(id)) return { problem: `plan has a duplicate section id: ${id}` };
-        seenIds.add(id);
-        if (typeof title !== "string") return { problem: `plan section "${id}" is missing a string title` };
-        if (typeof body !== "string") return { problem: `plan section "${id}" is missing a string body` };
-    }
-    return { task: plan.task          , revision: plan.revision          , sections: plan.sections                  };
-}
+// GENERATED VALIDATORS
 
 /*
   Output -> Receipt -> structure check -> Output -> the same receipt, now trusted.
