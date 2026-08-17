@@ -1,0 +1,57 @@
+flowchart TB
+%% PREAMBLE STATUS CHECK. Split from pipeline-preamble.mmd. Starts at the task number.
+%% One job: decide whether this run is allowed to have the task, and take it.
+%% Ends with the task marked active, or with an exit.
+%% Rules that apply everywhere, not steps:
+%%   1. Every read and write of tasks.json is atomic.
+%%   2. A task stays unavailable to another run from "mark the task active" until its
+%%      archive lands. "is the task active?" and "mark the task active" are drawn as two
+%%      boxes but are one atomic read-modify-write of tasks.json under rule 1: nothing can
+%%      make the task active between the two.
+%%   3. All three exits here happen BEFORE "mark the task active", so there is no
+%%      run record to write to and nothing is held. All three take the report only
+%%      exit. already-active must not touch the run it finds: that run belongs to
+%%      another invocation.
+%%   4. A script that fails operationally exits the run as run-failed. Before
+%%      "mark the task active" that takes the report only exit; after it, the
+%%      failures exit. Neither is drawn as an edge: it can leave ANY green box.
+%% Exit types this pipeline can produce:
+%%   invalid-number     - not in tasks.json
+%%   blocked            - an open blocker remains
+%%   already-active     - a previous run left the task active
+%%   run-failed         - a script failed operationally
+%% The active task this pipeline emits is the input to the worktree check pipeline.
+
+  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
+  IS_TASK_NUMBER_VALID{"is task number valid?"} --> IS_TASK_NUMBER_VALID_YES["YES"]
+  IS_TASK_NUMBER_VALID --> IS_TASK_NUMBER_VALID_NO["NO"]
+  IS_TASK_NUMBER_VALID_NO -- "exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> REPORT_ONLY_EXIT
+  IS_TASK_NUMBER_VALID_YES --> IS_TASK_BLOCKED{"is task blocked?"}
+  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_YES["YES"]
+  IS_TASK_BLOCKED --> IS_TASK_BLOCKED_NO["NO"]
+  IS_TASK_BLOCKED_YES -- "exit type: blocked<br/>exit note: an open blocker remains" --> REPORT_ONLY_EXIT
+  IS_TASK_BLOCKED_NO --> IS_TASK_ACTIVE{"is the task active?"}
+  IS_TASK_ACTIVE --> IS_TASK_ACTIVE_YES["YES"]
+  IS_TASK_ACTIVE --> IS_TASK_ACTIVE_NO["NO"]
+  IS_TASK_ACTIVE_YES -- "exit type: already-active<br/>exit note: a previous run<br/>left the task active" --> REPORT_ONLY_EXIT
+  IS_TASK_ACTIVE_NO --> MARK_TASK_ACTIVE["Try: mark the task active in tasks.json"]
+  MARK_TASK_ACTIVE --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
+
+  REPORT_ONLY_EXIT["report only exit"]
+
+  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
+  %% red is the branch that ends in an exit.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class IS_TASK_NUMBER_VALID,IS_TASK_BLOCKED,IS_TASK_ACTIVE decision
+  class MARK_TASK_ACTIVE script
+  class WORKTREE_CHECK_PIPELINE pipeline
+  class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO pass
+  class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES nopass
+  class REPORT_ONLY_EXIT fail
+  class TASK_NUMBER_INPUT output

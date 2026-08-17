@@ -1,0 +1,38 @@
+flowchart TB
+%% DOCUMENT GENERATION. Split from pipeline-preamble.mmd.
+%% Input: a worktree and a docs mode, from the worktree check pipeline.
+%% One job: make sure the auto generated docs in the worktree match the code.
+%% The planner reads them, so they are built before planning, not after.
+%% Ends with docs the planner can read.
+%% Rules that apply everywhere, not steps:
+%%   1. The caller picks the mode, this pipeline does not work it out. A new or
+%%      reset worktree arrives as AUTOGEN, a resumed one as UPDATE.
+%%   2. The docs are generated into the worktree and never committed. They are
+%%      deleted on the merge succeeded exit, before the worktree is removed.
+%%   3. A script that fails operationally exits the run as run-failed. The task is
+%%      already active, so that takes the failures exit. It is not drawn as an
+%%      edge: it can leave ANY green box.
+%% Exit types this pipeline can produce:
+%%   run-failed         - a script failed operationally
+%% The docs this pipeline emits are the input to the plan pipeline.
+%% The plan pipeline re-enters here in UPDATE mode when the planner asks for
+%% something the docs do not cover.
+
+  WORKTREE_DOCS_MODE_INPUT["Input: { worktree, docs mode }"] --> WHAT_IS_DOCS_MODE
+  WHAT_IS_DOCS_MODE{"what is the docs mode?"} --> DOCS_MODE_AUTOGEN["AUTOGEN"]
+  WHAT_IS_DOCS_MODE --> DOCS_MODE_UPDATE["UPDATE"]
+  DOCS_MODE_AUTOGEN --> AUTO_GENERATE_DOCS["auto generate docs"]
+  DOCS_MODE_UPDATE --> UPDATE_AUTO_GENERATED_DOCS["update auto generated docs"]
+  AUTO_GENERATE_DOCS --> PLAN_PIPELINE["plan pipeline"]
+  UPDATE_AUTO_GENERATED_DOCS --> PLAN_PIPELINE
+
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef verdict fill:#4a4a4a,stroke:#8a8a8a,color:#ffffff
+  class WHAT_IS_DOCS_MODE decision
+  class AUTO_GENERATE_DOCS,UPDATE_AUTO_GENERATED_DOCS script
+  class PLAN_PIPELINE pipeline
+  class DOCS_MODE_AUTOGEN,DOCS_MODE_UPDATE verdict
+  class WORKTREE_DOCS_MODE_INPUT output
