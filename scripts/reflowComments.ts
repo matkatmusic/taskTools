@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { applyQuota } from "./reflowQuota.ts";
 
-const COMMENT = /^(\s*)\/\/ ?(.*)$/;
+const COMMENT = /^(\s*)(\/\/|%%) ?(.*)$/; // `%%` is mermaid's line comment
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
 const PARAGRAPH_MARK = /^ponytail:/; // joined like prose, but exempt from the word cap
 const DIVIDER = /^[-=*_#]{3,}/; // `---- section ----`: hand-formatted, passed through verbatim
@@ -37,9 +37,9 @@ function looksLikeCode(body: string): boolean {
   );
 }
 
-// A blank `//` or a directive begins a new comment instead of poisoning the run above it.
+// A directive begins a new comment instead of poisoning the run above it.
 const startsNewRun = (body: string) =>
-  body === "" || DIVIDER.test(body) || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body);
+  DIVIDER.test(body) || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body);
 
 // Two spaces after a sentence-ending line, one space otherwise.
 function joinBodies(bodies: string[]): string {
@@ -113,18 +113,18 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
     }
     const head = lines[i].match(COMMENT);
     // A bare `//` or a `---- section ----` rule separates comments, it never starts one.
-    if (!head || head[2].trim() === "" || DIVIDER.test(head[2].trim())) {
+    if (!head || head[3].trim() === "" || DIVIDER.test(head[3].trim())) {
       out.push(lines[i]);
       i += 1;
       continue;
     }
-    const [, indent] = head;
+    const [, indent, marker] = head;
     let end = i;
-    const bodies: string[] = [head[2].trim()];
+    const bodies: string[] = [head[3].trim()];
     while (end + 1 < lines.length) {
       const next = lines[end + 1].match(COMMENT);
-      if (!next || next[1] !== indent || startsNewRun(next[2].trim())) break;
-      bodies.push(next[2].trim());
+      if (!next || next[1] !== indent || next[2] !== marker || startsNewRun(next[3].trim())) break;
+      if (next[3].trim() !== "") bodies.push(next[3].trim());
       end += 1;
     }
     if (runIsProse(bodies)) {
@@ -136,7 +136,7 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
       if (joined || (capped && words >= WORD_LIMIT)) {
         runs.push({ start: i + 1, end: end + 1, line: out.length + 1, words, joined, capped });
       }
-      out.push(`${indent}// ${text}`);
+      out.push(`${indent}${marker} ${text}`);
     } else {
       out.push(...lines.slice(i, end + 1));
     }

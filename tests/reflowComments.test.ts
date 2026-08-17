@@ -73,9 +73,9 @@ test("a bare // splits paragraphs instead of rejecting the whole block", () => {
   assert.deepEqual(runs.map((r) => [r.start, r.end, r.line]), [[1, 2, 1], [4, 5, 3]]);
 });
 
-test("a bare // between single-line comments joins nothing", () => {
+test("a bare // is absorbed, so sentences split across it rejoin", () => {
   const source = ["// alone", "//", "// also alone"].join("\n");
-  assert.deepEqual(reflowSource(source), { text: source, runs: [] });
+  assert.equal(reflowSource(source).text, "// alone also alone");
 });
 
 test("a ponytail: note is joined like prose but never flagged for truncation", () => {
@@ -166,6 +166,16 @@ test("prose ending in a semicolon or paren is not mistaken for code", () => {
 test("single-line comments, blank lines, and directives are untouched", () => {
   const source = ["// eslint-disable-next-line no-console", "// because reasons", "", "// lone comment"].join("\n");
   assert.deepEqual(reflowSource(source), { text: source, runs: [] });
+});
+
+test("mermaid %% comments are joined and keep their marker", () => {
+  const source = ["%% one idea", "%% split over two lines"].join("\n");
+  assert.equal(reflowSource(source).text, "%% one idea split over two lines");
+});
+
+test("a %% run does not absorb an adjacent // run", () => {
+  const source = ["%% mermaid note", "// code note"].join("\n");
+  assert.equal(reflowSource(source).text, source);
 });
 
 test("describeReflows reports every rewritten line plus the over-cap ones", () => {
