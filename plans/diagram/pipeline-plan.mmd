@@ -1,43 +1,23 @@
 flowchart TB
 %% PLAN PIPELINE. Split from pipeline-planning.mmd.
-%% Input: a task entry and the auto generated docs, from the document generation
-%% pipeline.
+%% ---
+%% Input: a task entry and the auto generated docs.
+%% ---
 %% One job: turn the tasks.json entry into a plan file.
-%% Starts at "plan the task". Ends with a draft plan, back in document
-%% generation, or with an exit.
-%% Rules that apply everywhere, not steps:
-%%   1. Every read and write of tasks.json is atomic.
-%%   2. The planner reads the tasks.json entry and the docs, nothing else. That is
-%%      why the review plan pipeline writes codex's notes into the entry before it
-%%      sends the run back here: a bare retry would repeat the first plan's
-%%      mistakes.
-%%   3. A subagent cannot ask the user anything. CLARIFY is how the planner says
-%%      it needs something it was not given - an answer, or a file the entry did
-%%      not list. It goes back to document generation in UPDATE mode so the docs
-%%      are rebuilt to cover it, then the planner runs again.
-%%   4. The clarify request itself is written into the tasks.json entry before the
-%%      loop turns, for the same reason codex's notes are: the planner reads the
-%%      entry and the docs and nothing else. A bare "rebuild the docs" tells the
-%%      document generation pipeline nothing about WHAT was missing, so it would
-%%      rebuild the same docs and the planner would ask the same question forever.
-%%   5. The loop is capped at 2 clarify rounds, like every other loop in the
-%%      pipeline. There is no user to answer, so a third round cannot learn
-%%      anything a second did not. The cap counts rounds within THIS run only.
-%%   6. A script that fails operationally exits the run as run-failed. The task is
-%%      already active and a worktree already exists here, so the failures exit
-%%      runs in full.
-%% Box definitions where the name alone is not enough:
-%%   what did the planner return?  - three outcomes: PLAN, CLARIFY, ERROR.
-%%                                   ERROR is agent() returning null or garbage.
+%% ---
+%% CLARIFY is capped at 2 rounds, counted within this run only.
+%% ---
+%% The clarify request is written into the tasks.json entry first.
+%% ---
+%% Without it, document generation cannot know what to rebuild.
+%% ---
+%% A script that fails operationally exits the run as run-failed.
+%% ---
 %% Exit types this pipeline can produce:
-%%   agent-failed       - an agent returned nothing usable
-%%   clarify-stuck      - the planner asked twice for something the docs cannot
-%%                        supply
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge out of every box. It can leave
-%% ANY green box, so drawing it would add one edge per box and hide the flow.
-%% The draft plan this pipeline emits is the input to the review plan pipeline.
-%% The review plan pipeline re-enters here when codex does not accept the plan.
+%% ---
+%% agent-failed - an agent returned nothing usable
+%% ---
+%% clarify-stuck - the planner asked twice for what the docs cannot supply
 
   DOCS_INPUT["Input: { brief, docs, codexNotes? }"] --> PLAN_THE_TASK
   PLAN_THE_TASK["plan the task"] --> WHAT_DID_THE_PLANNER_RETURN{"what did the planner return?"}
@@ -52,13 +32,14 @@ flowchart TB
   ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_NO["NO"]
   ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_YES["YES"]
   ARE_2_CLARIFY_ROUNDS_DONE_NO --> WRITE_CLARIFY_REQUEST["write the clarify request<br/>into the tasks.json entry"]
-  WRITE_CLARIFY_REQUEST -- "docs mode: UPDATE" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+  WRITE_CLARIFY_REQUEST -- "docs mode: UPDATE<br/>clarify request" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
   ARE_2_CLARIFY_ROUNDS_DONE_YES -- "exit type: clarify-stuck<br/>exit note: the planner asked twice for<br/>something the docs cannot supply.<br/>worktree preserved." --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["failures exit"]
 
-  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
-  %% red is the branch that ends in an exit.
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red ends in an exit.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a

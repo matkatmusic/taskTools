@@ -1,32 +1,36 @@
 flowchart TB
-%% REBASE PIPELINE. Split from pipeline-rebaseMerge.mmd.
-%% Input: a finished implementation, with the source repo lock already held by
-%% the rebase preamble pipeline.
-%% One job: get the task's commits sitting on top of the target branch.
-%% Starts at "rebase onto the target branch". Ends rebased, or with an exit.
-%% Rules that apply everywhere, not steps:
-%%   1. Every git interaction goes through a script. Never prose.
-%%   2. A repair is never replayed until it is committed, so the conflict cycle
-%%      always runs fix -> commit -> continue, never fix -> continue.
-%%   3. "commit if needed" commits nothing when the worktree is clean.
-%%   4. Every box that touches the working tree operates on every repository
-%%      layer, deepest submodule first, root last.
-%%   5. The source repo lock is already held and stays held until the exit
-%%      workflow releases it. Every box here refreshes its heartbeat.
-%%   6. A script that fails operationally, as opposed to returning a verdict,
-%%      exits the run as run-failed. The task is already active and a worktree
-%%      already exists here, so the exit workflow always runs in full.
-%% Exit types this pipeline can produce:
-%%   agent-failed       - an agent returned nothing usable
-%%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge out of every box. It can leave
-%% ANY green box, so drawing it would add one edge per box and hide the flow.
-%% The rebased worktree this pipeline emits is the input to the full suite
-%% pipeline. The merge pipeline re-enters here when a merge does not land.
+%% REBASE PIPELINE.
+%% ---
+%% Input: a finished implementation.
+%% ---
+%% Job: put the task's commits on top of the target branch.
+%% ---
+%% A conflict fix runs fix, then commit, then continue.
+%% ---
+%% Never fix then continue without committing first.
+%% ---
+%% The source lock is already held here.
+%% ---
+%% Every box refreshes the lock's heartbeat.
+%% ---
+%% Walks every repository layer, deepest submodule first.
+%% ---
+%% The receipt names layers already landed by the merge.
+%% ---
+%% A landed layer is public. Rebasing it would rewrite it.
+%% ---
+%% So this pipeline skips any layer the receipt marks landed.
+%% ---
+%% Merge re-enters here only when nothing landed.
+%% ---
+%% So the receipt is normally empty, but check, don't assume.
+%% ---
+%% Exit types: agent-failed, rebase-stuck, run-failed.
+%% ---
+%% Output feeds the full suite pipeline.
 
-  SOURCE_REPO_LOCKED_INPUT["Input: { worktree, target branch }"] --> REBASE_ONTO_TARGET_BRANCH
-  REBASE_ONTO_TARGET_BRANCH["Try: rebase onto the target branch"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
+  SOURCE_REPO_LOCKED_INPUT["Input: { worktree, target branch,<br/>merge receipt }"] --> REBASE_ONTO_TARGET_BRANCH
+  REBASE_ONTO_TARGET_BRANCH["Try: rebase onto the target branch.<br/>skip every layer the receipt<br/>records as already landed"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
   DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_YES["YES"]
   DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_NO["NO"]
 
@@ -49,8 +53,9 @@ flowchart TB
 
   EXIT_WORKFLOW["failures exit"]
 
-  %% pass/nopass: green is the branch that keeps heading for the next pipeline,
-  %% red is the branch that goes back round the conflict cycle.
+  %% pass/nopass: green heads to the next pipeline.
+  %% ---
+  %% Red goes back round the conflict cycle.
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a

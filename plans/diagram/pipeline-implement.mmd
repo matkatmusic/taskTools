@@ -1,32 +1,25 @@
 flowchart TB
 %% IMPLEMENT PIPELINE. Split from pipeline-implementTest.mmd.
+%% ---
 %% Input: an accepted plan from the review plan pipeline.
+%% ---
 %% One job: write the code and commit it.
-%% Starts at "implement task". Ends with committed work.
-%% Rules that apply everywhere, not steps:
-%%   1. Every git interaction goes through a script. Never prose.
-%%   2. Every read and write of tasks.json is atomic.
-%%   3. Never update a test that was not created in this task's worktree,
-%%      unless that test is broken or asserts nothing.
-%%   4. "commit if needed" commits nothing when the worktree is clean.
-%%   5. The implementor reads the tasks.json entry, so a pipeline that sends the
-%%      run back here writes what went wrong into the entry first. A bare retry
-%%      would repeat the same mistake.
-%%   6. Every box that touches the working tree operates on every repository
-%%      layer, deepest submodule first, root last.
-%%   7. A script that fails operationally, as opposed to returning a verdict,
-%%      exits the run as run-failed. The task is already active and a worktree
-%%      already exists here, so the exit workflow always runs in full.
-%%   8. The source repo lock is NOT taken here. The rebase preamble pipeline
-%%      takes it, much later.
+%% ---
+%% Never update a test not created in this task's worktree, unless it is broken or asserts nothing.
+%% ---
+%% Every box touching the working tree operates deepest submodule first, root last.
+%% ---
+%% "commit if needed" excludes generated doc artifacts from the commit, via .gitignore plus the skip-worktree bit set by configureGeneratedArtifactIsolation.
+%% ---
+%% `git add -A` is safe because of that, not by accident.
+%% ---
+%% A script that fails operationally exits the run as run-failed.
+%% ---
 %% Exit types this pipeline can produce:
-%%   agent-failed       - an agent returned nothing usable
-%%   run-failed         - a script failed operationally
-%% run-failed is deliberately not drawn as an edge out of every box. It can leave
-%% ANY green box, so drawing it would add one edge per box and hide the flow.
-%% The committed work this pipeline emits is the input to the task tests
-%% pipeline. Two pipelines re-enter here after amending the tasks.json entry:
-%% the task tests pipeline and the review task tests pipeline.
+%% ---
+%% agent-failed - an agent returned nothing usable
+%% ---
+%% run-failed - a script failed operationally
 
   ACCEPTED_PLAN_INPUT["Input: { plan, tasks.json entry }"] --> IMPLEMENT_TASK
   IMPLEMENT_TASK["implement task"] --> COMMIT_IF_NEEDED["commit if needed"]

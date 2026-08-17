@@ -1,21 +1,21 @@
 flowchart TB
-%% REPORT ONLY EXIT. Split from pipeline-exitWorkflow.mmd.
-%% Input: an exit type and exit note from the preamble pipeline, before the task
-%% is marked active.
-%% One job: say why the run did not start. Ends at [stop].
-%% Rules that apply everywhere, not steps:
-%%   1. Nothing is written to tasks.json. All four exit types here happen before
-%%      "mark the task active", so there is no run record to write to.
-%%   2. already-active must not touch the run it finds. That run belongs to
-%%      another invocation, and writing to it would corrupt a live run.
-%%   3. closing must not touch it either. Another run merged that task and is
-%%      still archiving it. See pipeline-mergeSucceededExit.mmd.
-%%   4. Nothing is held yet, so there is nothing to release.
+%% REPORT ONLY EXIT. Input: an exit type and note from before the task was active.
+%% ---
+%% Nothing is written to tasks.json; there is no run record yet.
+%% ---
+%% already-active and closing must not touch the run they find; it belongs to another invocation.
+%% ---
 %% Exit types that reach this tail:
-%%   invalid-number     - not in tasks.json. completedTasks.json is NOT consulted.
-%%   already-active     - a previous run left the task active
-%%   blocked            - an open blocker remains
-%%   closing            - the task merged already and is waiting to be archived
+%% ---
+%%   invalid-number  - not in tasks.json, completedTasks.json not consulted
+%% ---
+%%   already-active  - a previous run left the task active
+%% ---
+%%   blocked         - an open blocker remains
+%% ---
+%%   closing         - the task merged already, waiting to be archived
+%% ---
+%%   run-failed      - a script failed before the task was marked active
 
   EXIT_TYPE_NOTE_NO_WRITE_INPUT["Input: { exit type, exit note }"] --> REPORT_EXIT_TYPE_NO_WRITE["report the exit type and note"]
   REPORT_EXIT_TYPE_NO_WRITE --> STOP["stop"]

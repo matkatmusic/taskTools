@@ -1,24 +1,29 @@
 flowchart TB
 %% DOCUMENT GENERATION. Split from pipeline-preamble.mmd.
-%% Input: a worktree and a docs mode, from the worktree check pipeline.
-%% One job: make sure the auto generated docs in the worktree match the code.
-%% The planner reads them, so they are built before planning, not after.
-%% Ends with docs the planner can read.
-%% Rules that apply everywhere, not steps:
-%%   1. The caller picks the mode, this pipeline does not work it out. A new or
-%%      reset worktree arrives as AUTOGEN, a resumed one as UPDATE.
-%%   2. The docs are generated into the worktree and never committed. They are
-%%      deleted on the merge succeeded exit, before the worktree is removed.
-%%   3. A script that fails operationally exits the run as run-failed. The task is
-%%      already active, so that takes the failures exit. It is not drawn as an
-%%      edge: it can leave ANY green box.
+%% ---
+%% Input: worktree, docs mode, clarify request, from the plan pipeline.
+%% ---
+%% One job: keep the auto generated docs in the worktree matching the code.
+%% ---
+%% UPDATE mode reads the clarify request and the tasks.json entry.
+%% ---
+%% The docs must grow to cover what the clarify request names.
+%% ---
+%% The docs are never committed.
+%% ---
+%% Their paths live in GENERATED_ARTIFACT_PATTERNS and in .gitignore.
+%% ---
+%% configureGeneratedArtifactIsolation marks any tracked copy skip-worktree.
+%% ---
+%% That is what makes a later `git add -A` safe.
+%% ---
+%% See writeTaskBrief.ts for both.
+%% ---
 %% Exit types this pipeline can produce:
-%%   run-failed         - a script failed operationally
-%% The docs this pipeline emits are the input to the plan pipeline.
-%% The plan pipeline re-enters here in UPDATE mode when the planner asks for
-%% something the docs do not cover.
+%% ---
+%% run-failed - a script failed operationally
 
-  WORKTREE_DOCS_MODE_INPUT["Input: { worktree, docs mode }"] --> WHAT_IS_DOCS_MODE
+  WORKTREE_DOCS_MODE_INPUT["Input: { worktree, docs mode, clarify request? }"] --> WHAT_IS_DOCS_MODE
   WHAT_IS_DOCS_MODE{"what is the docs mode?"} --> DOCS_MODE_AUTOGEN["AUTOGEN"]
   WHAT_IS_DOCS_MODE --> DOCS_MODE_UPDATE["UPDATE"]
   DOCS_MODE_AUTOGEN --> AUTO_GENERATE_DOCS["auto generate docs"]
