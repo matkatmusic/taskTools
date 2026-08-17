@@ -17,6 +17,7 @@ flowchart TB
 %%      exits the run as run-failed. The task is already active and a worktree
 %%      already exists here, so the exit workflow always runs in full.
 %% Exit types this pipeline can produce:
+%%   agent-failed       - an agent returned nothing usable
 %%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
@@ -44,7 +45,7 @@ flowchart TB
   DID_REBASE_REPORT_CONFLICTS_NO --> SUITE_PIPELINE
   IS_REBASE_FINISHED_YES --> SUITE_PIPELINE["full suite pipeline"]
 
-  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["failures exit"]
 
@@ -59,7 +60,7 @@ flowchart TB
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW,REPORT_ONLY_EXIT fail
+  class EXIT_WORKFLOW fail
   class DID_REBASE_REPORT_CONFLICTS,IS_REBASE_FINISHED,ARE_2_CONFLICT_FIXES_DONE decision
   class REBASE_ONTO_TARGET_BRANCH,COMMIT_IF_NEEDED,CONTINUE_REBASE script
   class FIX_CONFLICTS agent

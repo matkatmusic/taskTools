@@ -19,6 +19,7 @@ flowchart TB
 %%                                  fixes are written into it or the next attempt
 %%                                  repeats the same mistake.
 %% Exit types this pipeline can produce:
+%%   agent-failed       - an agent returned nothing usable
 %%   tests-flagged      - codex flagged the tests twice
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
@@ -40,7 +41,7 @@ flowchart TB
 
   ARE_TESTS_FLAGGED_NO --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
 
-  CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+  CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["failures exit"]
 
@@ -61,5 +62,5 @@ flowchart TB
   class ARE_TESTS_FLAGGED_NO,ARE_2_TEST_REVIEWS_DONE_NO pass
   class ARE_TESTS_FLAGGED_YES,ARE_2_TEST_REVIEWS_DONE_YES nopass
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW,REPORT_ONLY_EXIT fail
+  class EXIT_WORKFLOW fail
   class GREEN_IMPLEMENTATION_INPUT output

@@ -33,6 +33,7 @@ flowchart TB
 %%   rebase-stuck       - the rebase did not advance after 2 conflict fixes
 %%   suite-red          - full suite still failing after 2 fix attempts
 %%   merge-failed       - the merge did not land twice
+%%   agent-failed       - an agent returned nothing usable
 %%   run-failed         - a script failed operationally
 
   EXIT_TYPE_NOTE_INPUT["Input: { exit type, exit note }"] --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]

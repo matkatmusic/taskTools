@@ -18,6 +18,7 @@ flowchart TB
 %%                                  the first one's mistakes. This box also
 %%                                  raises the review counter by one.
 %% Exit types this pipeline can produce:
+%%   agent-failed       - an agent returned nothing usable
 %%   plan-scrapped      - codex did not accept the plan in two reviews
 %%   run-failed         - a script failed operationally
 %% run-failed is deliberately not drawn as an edge out of every box. It can leave
@@ -41,7 +42,7 @@ flowchart TB
   ARE_2_REVIEWS_DONE_NO -- "replan against the amended entry" --> PLAN_PIPELINE["plan pipeline"]
   ARE_2_REVIEWS_DONE_YES -- "exit type: plan-scrapped<br/>exit note: codex did not accept<br/>the plan in two reviews" --> EXIT_WORKFLOW
 
-  CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED["agent() errored"] --> REPORT_ONLY_EXIT["report only exit"]
+  CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
 
   EXIT_WORKFLOW["failures exit"]
 
@@ -62,5 +63,5 @@ flowchart TB
   class VERDICT_ACCEPT,ARE_2_REVIEWS_DONE_NO pass
   class VERDICT_AMEND,VERDICT_SCRAP,ARE_2_REVIEWS_DONE_YES nopass
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW,REPORT_ONLY_EXIT fail
+  class EXIT_WORKFLOW fail
   class DRAFT_PLAN_INPUT output
