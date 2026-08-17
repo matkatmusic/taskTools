@@ -1,25 +1,17 @@
-// Writes plans/diagram/pipeline-output-<N>.md: the emitted body, annotated with its source lines.
-//
-// N is the 1-based position of the scripts/tracePipelinePaths.json fixture whose block matches.
-//
-// Usage: node scripts/tackle-tasks/emitPipelineOutput.ts <taskNumber> [projectRoot] [--path <name>]
+// Renders the skill body and the plan agent prompt for one preamble path.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
 import { skillBody } from "./SkillBodyEmitter.ts";
-import { traceTaskPipeline, readNamedPaths } from "../tracePipeline.ts";
-import { isTaskNumberValid } from "./isTaskNumberValid.ts";
-import { isTaskBlocked } from "./isTaskBlocked.ts";
+import { emitAgentPrompt } from "./AgentPromptEmitter.ts";
+import { generateTaskDocs } from "./generateTaskDocs.ts";
+import { currentBranchName } from "../repositoryBranches.ts";
 import { isTaskActive } from "./isTaskActive.ts";
-import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
-import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
-import { isNotesFileContained } from "./isTaskRunResumable.ts";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { recordImplementationNotes } from "./recordImplementationNotes.ts";
 import { markTaskInactive } from "./markTaskInactive.ts";
-import { getCurrentTaskRun, readTaskRunState } from "./taskRunState.ts";
 import { removeWorktreeAndBranch } from "../mergeTaskWorktrees.ts";
 import { releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory } from "../prepareTasks.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
@@ -31,53 +23,27 @@ const WORKFLOW_PATH = join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow
 const OUTPUT_DIR = join(REPO_ROOT, "plans/diagram/output renders");
 
 // ---------------------------------------------------------------------------
-// Preamble decisions, derived read-only: nothing below mutates tasks.json or the worktree.
+// The decisions the workflow walks. The preamble no longer runs here, so these start green.
 // ---------------------------------------------------------------------------
 
 type Decisions = Record<string, unknown>;
 
-function derivePreambleDecisions(taskNumber: number, projectRoot: string): Decisions {
-    const decisions: Decisions = {
+// A happy path. Edit one field to render any other route through the diagrams.
+function defaultDecisions(taskNumber: number): Decisions {
+    return {
         taskNumber,
-        taskNumberValid: isTaskNumberValid(taskNumber, projectRoot).valid,
-        taskActive: false,
-        taskBlocked: false,
-        worktreeExists: false,
-        worktreeSafe: false,
-        previousWorkResumable: false,
+        plannerOutcome: ["PLAN"],
+        planVerdict: ["ACCEPT"],
+        taskTestsPass: [true],
+        testsFlagged: [false],
+        lockAcquired: [true],
+        rebaseConflicts: [false],
+        rebaseFinished: [true],
+        suitePasses: [true],
+        fenceHeld: true,
+        publicationState: ["ALL LANDED"],
     };
-    if (!decisions.taskNumberValid) return decisions;
-
-    const currentRun = getCurrentTaskRun(taskNumber, projectRoot);
-    decisions.taskActive = currentRun !== null && currentRun.exitType === null;
-    if (decisions.taskActive) return decisions;
-
-    decisions.taskBlocked = isTaskBlocked(taskNumber, projectRoot).blocked;
-    if (decisions.taskBlocked) return decisions;
-
-    const worktree = doesTaskWorktreeExist(taskNumber, projectRoot);
-    decisions.worktreeExists = worktree.exists;
-    if (!worktree.exists || worktree.worktree === null) return decisions;
-
-    decisions.worktreeSafe = checkTaskWorktreeSafe(taskNumber, worktree.worktree).safe;
-    if (decisions.worktreeSafe) return decisions;
-
-    // Read-only twin of isTaskRunResumable: the newest ended run left notes inside the worktree.
-    const endedRuns = readTaskRunState(taskNumber, projectRoot).history.filter((run) => run.endedAt !== null);
-    const notesFile = endedRuns[endedRuns.length - 1]?.implementationNotesFile ?? null;
-    decisions.previousWorkResumable = notesFile !== null && isNotesFileContained(worktree.worktree, notesFile);
-    return decisions;
 }
-
-// Downstream keys cannot be predicted from a task number, so a fixture supplies them.
-function withDownstreamDefaults(preamble: Decisions): Decisions {
-    const base = readNamedPaths()["safe-existing-worktree"] as unknown as Decisions;
-    return { ...base, ...preamble };
-}
-
-// ---------------------------------------------------------------------------
-// Run the real workflow for this codepath, then match its block against the fixtures.
-// ---------------------------------------------------------------------------
 
 async function runWorkflow(fake: Decisions): Promise<string[]> {
     const source = readFileSync(WORKFLOW_PATH, "utf8").replace("export const meta", "const meta");
@@ -86,20 +52,9 @@ async function runWorkflow(fake: Decisions): Promise<string[]> {
         ["args", "log", "agent", "phase"],
         { filename: WORKFLOW_PATH, importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
     ) as (a: unknown, l: () => void, g: unknown, p: unknown) => Promise<string[]>;
-    return fn({ fake }, () => {}, async () => {
+    return fn({ fake, task: fake.taskNumber }, () => {}, async () => {
         throw new Error("emitPipelineOutput: the workflow must not launch an agent");
     }, () => {});
-}
-
-// Every fixture carries taskNumber 42, so the real number is substituted before comparing.
-export function matchPathNumber(trace: string[], taskNumber: number): { number: number; name: string } {
-    const wanted = JSON.stringify(trace);
-    const entries = Object.entries(readNamedPaths());
-    const index = entries.findIndex(
-        ([, decisions]) => JSON.stringify(traceTaskPipeline({ ...decisions, taskNumber })) === wanted,
-    );
-    if (index === -1) throw new Error("emitPipelineOutput: the workflow block matches no known fixture");
-    return { number: index + 1, name: entries[index][0] };
 }
 
 // ---------------------------------------------------------------------------
@@ -122,11 +77,27 @@ export function annotatedBody(taskNumber: number, projectRoot: string): string {
         .join("\n");
 }
 
-function render(taskNumber: number, projectRoot: string, path: { number: number; name: string }, trace: string[]): string {
-    return `<!-- PATH ${path.number} — ${path.name}   |   input: [${taskNumber}]
+// ---------------------------------------------------------------------------
+// The plan agent's prompt, exactly as its subagent receives it from the workflow.
+// ---------------------------------------------------------------------------
 
-     Pipeline block printed by skills/tackle-tasks/tackle-tasks.workflow.js for this codepath,
-     matched against scripts/tracePipelinePaths.json to give the path number above:
+export function planAgentPrompt(taskNumber: number, projectRoot: string): string {
+    const worktree = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
+    // A path that stages no worktree has no brief, so there is no prompt to show.
+    if (!existsSync(worktree)) return "(this path stages no worktree, so no plan prompt exists yet)";
+    return emitAgentPrompt(taskNumber, "plan", {
+        worktree,
+        projectRoot,
+        sourceBranch: currentBranchName(projectRoot),
+        // No role reads runId, so a literal keeps this off the run-identity path.
+        runId: "inspect",
+    });
+}
+
+function render(taskNumber: number, projectRoot: string, pathName: string, trace: string[]): string {
+    return `<!-- ${pathName}   |   input: [${taskNumber}]
+
+     Pipeline block printed by skills/tackle-tasks/tackle-tasks.workflow.js for this codepath.
 
 ${trace.map((line) => `       ${line}`).join("\n")}
 
@@ -134,15 +105,25 @@ ${trace.map((line) => `       ${line}`).join("\n")}
      stripping them leaves the body byte-faithful. Craft this into what SHOULD print for this path.
 -->
 
-${annotatedBody(taskNumber, projectRoot)}`;
+${annotatedBody(taskNumber, projectRoot)}
+
+<!--
+  PLAN AGENT PROMPT
+
+  AgentPromptEmitter.ts role "plan", verbatim. Only its subagent sees this in a real run.
+-->
+
+\`\`\`
+${planAgentPrompt(taskNumber, projectRoot)}
+\`\`\`
+`;
 }
 
-export async function writePipelineOutput(taskNumber: number, projectRoot: string): Promise<string> {
-    const decisions = withDownstreamDefaults(derivePreambleDecisions(taskNumber, projectRoot));
-    const trace = await runWorkflow(decisions);
-    const path = matchPathNumber(trace, taskNumber);
-    const file = join(OUTPUT_DIR, `pipeline-output-${path.number}.md`);
-    writeFileSync(file, render(taskNumber, projectRoot, path, trace));
+export async function writePipelineOutput(taskNumber: number, projectRoot: string, pathName: string): Promise<string> {
+    const trace = await runWorkflow(defaultDecisions(taskNumber));
+    const file = join(OUTPUT_DIR, `pipeline-output-task-${taskNumber}-${pathName}.md`);
+    mkdirSync(OUTPUT_DIR, { recursive: true });
+    writeFileSync(file, render(taskNumber, projectRoot, pathName, trace));
     return file;
 }
 
@@ -162,6 +143,8 @@ function stagePath(pathName: string, taskNumber: number, projectRoot: string): v
     const stageRunId = `stage-${taskNumber}`;
     isTaskActive(taskNumber, stageRunId, projectRoot);
     const created = createTaskWorktree(taskNumber, stageRunId, projectRoot);
+    // The preamble's docs box, staged too: without the brief the plan prompt cannot be built.
+    generateTaskDocs(taskNumber, created.worktree, projectRoot);
 
     if (pathName === "unsafe-resumable-worktree") {
         const notesFile = join(created.worktree, "plans", `implementation-notes-${taskNumber}.md`);
@@ -217,7 +200,7 @@ if (process.argv[1]?.endsWith("emitPipelineOutput.ts")) {
     const tasksSnapshot = readFileSync(resolveTaskFiles(projectRoot).tasksPath);
     try {
         stagePath(pathName, taskNumber, projectRoot);
-        const file = await writePipelineOutput(taskNumber, projectRoot);
+        const file = await writePipelineOutput(taskNumber, projectRoot, pathName);
         process.stdout.write(`${file}\n`);
         const worktreePath = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
         if (existsSync(worktreePath)) process.stdout.write(`worktree: ${worktreePath}\n`);
