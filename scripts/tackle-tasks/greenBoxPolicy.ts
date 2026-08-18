@@ -66,6 +66,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "occurrences",
     "planArtifacts",
     "preparedTask",
+    "promptSections",
     "recordPlanReview",
     "sourceRepoLock",
     "stepPipeline",

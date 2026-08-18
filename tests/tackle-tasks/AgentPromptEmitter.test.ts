@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     amendTestsPrompt,
-    fixConflictsPrompt,
     fixSuitePrompt,
     fixTestsPrompt,
     loadPreparedTask,
@@ -56,13 +55,36 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
     return { projectRoot, worktree, task };
 }
 
+// A repository stopped mid-merge on a real unmerged path; fix-conflicts derives its file list from git.
+function makeConflictedRepo(): string {
+    const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+    const repo = mkdtempSync(join(tmpdir(), "agent-prompt-conflict-"));
+    git("init", "--quiet", "--initial-branch=main");
+    git("config", "user.email", "t@t.t");
+    git("config", "user.name", "t");
+    writeFileSync(join(repo, "thing.ts"), "one\n");
+    git("add", "thing.ts");
+    git("commit", "--quiet", "-m", "base");
+    git("checkout", "--quiet", "-b", "other");
+    writeFileSync(join(repo, "thing.ts"), "two\n");
+    git("commit", "--quiet", "-am", "other side");
+    git("checkout", "--quiet", "main");
+    writeFileSync(join(repo, "thing.ts"), "three\n");
+    git("commit", "--quiet", "-am", "main side");
+    try {
+        git("merge", "other");
+    } catch {
+        // A conflicting merge exits nonzero; that stopped state is exactly the fixture.
+    }
+    return repo;
+}
+
 // Every eight-role prompt, built from one shared fixture, for tests that check a property over all of them.
 function allRolePrompts(task: PreparedTask): Record<string, string> {
     return {
         plan: planPrompt(task),
         "review-plan": planReviewPrompt(task),
         implement: implementPrompt(task, "", "npx tsc --noEmit", 3),
-        "fix-conflicts": fixConflictsPrompt("/repo", ["src/thing.ts"]),
         "fix-suite": fixSuitePrompt("/repo", "", "1 failing", []),
         "fix-tests": fixTestsPrompt("/repo", "", "1 failing", [], task.number),
         "review-tests": reviewTestsPrompt(task),
@@ -295,7 +317,6 @@ for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
     "review-plan": (task: PreparedTask) => planReviewPrompt(task),
     implement: (task: PreparedTask) => implementPrompt(task, "a note", "npx tsc --noEmit", 3),
-    "fix-conflicts": () => fixConflictsPrompt("/repo", ["src/thing.ts"]),
     "fix-suite": () => fixSuitePrompt("/repo", "root-layer", "1 failing", ["vendor"]),
     "fix-tests": (task: PreparedTask) => fixTestsPrompt("/repo", "root-layer", "1 failing", ["vendor"], task.number),
     "review-tests": (task: PreparedTask) => reviewTestsPrompt(task),
@@ -369,7 +390,7 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
         ["implement", {}],
         ["review-tests", {}],
         ["amend-tests", { notes: "n", createdTestFiles: [], testFiles: [] }],
-        ["fix-conflicts", { checkoutPath: worktree, conflictedFilePaths: [] }],
+        ["fix-conflicts", { checkoutPath: makeConflictedRepo() }],
         ["fix-suite", { checkoutPath: worktree, occurrenceId: "", testOutput: "x", forbiddenPaths: [] }],
         ["fix-tests", { checkoutPath: worktree, occurrenceId: "", testOutput: "x", forbiddenPaths: [] }],
     ];
@@ -463,11 +484,6 @@ test("test_amendTestsPrompt_returnsExactlyAmended", () => {
     assert.equal(/\{task:/i.test(prompt), false);
 });
 
-test("test_fixConflictsPrompt_returnsExactlyResolvedAndUnresolvedPaths", () => {
-    const prompt = fixConflictsPrompt("/repo", ["a"]);
-    assert.match(prompt, /\{resolved: true, unresolvedPaths: \[\]\}/);
-    assert.match(prompt, /\{resolved: false, unresolvedPaths:/);
-});
 
 test("test_fixSuitePrompt_returnsExactlyFixed", () => {
     const prompt = fixSuitePrompt("/repo", "", "x", []);
@@ -528,13 +544,6 @@ test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOc
 
 
 
-test("test_fixConflictsPrompt_putsTheConflictedPathsAfterTheDataMarker", () => {
-    const sentinel = "src/SENTINEL_CONFLICT_PATH_4dw1.ts";
-    const prompt = fixConflictsPrompt("/repo", [sentinel]);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 test("test_fixSuitePrompt_putsTheFailureOutputAfterTheDataMarker", () => {
     const sentinel = "SENTINEL_FIX_SUITE_FAILURE_OUTPUT_5xr8";
@@ -628,14 +637,6 @@ test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
 
 
 
-test("test_fixConflictsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    // Before the fix, checkoutPath was spliced inline five separate times.
-    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FC_e1";
-    const conflictedPath = "src/SENTINEL_CONFLICT_PATH_e2.ts";
-    const prompt = fixConflictsPrompt(checkoutPath, [conflictedPath]);
-    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, conflictedPath]);
-    assertNoInstructionAfterFinalData(prompt);
-});
 
 test("test_fixSuitePrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
     // Before the fix, subject/checkoutPath were spliced inline four separate times.
