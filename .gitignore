@@ -15,3 +15,4 @@ plans/implementation-diff-*.patch
 .claude/skills/run-task-tests
 .claude/skills/rebase-worktree
 .claude/skills/continue-rebase
+.claude/skills/run-step
