@@ -18,7 +18,7 @@ import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
 import { markTaskInactive } from "./markTaskInactive.ts";
 import { releaseSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
-import { loadPreparedTask, type PreparedTask } from "./AgentPromptEmitter.ts";
+import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 import { generateRunId, releaseTaskWorktreeLease } from "../prepareTasks.ts";
 import type { Plan } from "./planArtifacts.ts";
 
