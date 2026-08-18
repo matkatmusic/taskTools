@@ -11,13 +11,13 @@ import {
     fixConflictsPrompt,
     fixSuitePrompt,
     fixTestsPrompt,
-    implementPrompt,
     loadPreparedTask,
     reviewTestsPrompt,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
 import { planReviewPrompt } from "../../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
 import { planPrompt } from "../../scripts/tackle-tasks/PlannerBodyEmitter.ts";
+import { implementPrompt } from "../../scripts/tackle-tasks/ImplementBodyEmitter.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 
@@ -31,17 +31,17 @@ const fakeTask: PreparedTask = {
     reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
     reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
     testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
-    notesFile: "/tmp/fake-worktree/plans/task-99-implementation-notes.md",
+    notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
     files: ["src/thing.ts"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    testFilePaths: [],
     tests: "node --test tests/thing.test.ts",
     codexReviewNotes: "",
     repoRoot: "/tmp/fake-worktree",
     taskStateRoot: "/tmp/fake-worktree",
 };
 
-// Sets up a project root with a task record, and a brief file already written into the
-// worktree (loadPreparedTask is read-only now — it never creates the brief itself).
+// Sets up a project root with a task record, and a brief file already written into the worktree (loadPreparedTask is read-only now — it never creates the brief itself).
 function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; task: PreparedTask } {
     const projectRoot = mkdtempSync(join(tmpdir(), "agent-prompt-emitter-"));
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([
@@ -109,10 +109,7 @@ test("test_noPromptContainsAGitCommand", () => {
     const { task } = makeFixture(43);
     const prompts = allRolePrompts(task);
 
-    // One regex catches every actual git-invocation shape v1_1 used to run: `git -C`, `git add`,
-    // `git commit`, etc. Rule 1 says the commit box owns committing, so none may survive here.
-    // A prose mention naming a git subcommand only to forbid running it (kept verbatim per the
-    // plan's mapping table, e.g. "do not run `git rebase --continue`") never matches this shape.
+    // One regex catches every actual git-invocation shape v1_1 used to run: `git -C`, `git add`, `git commit`, etc. Rule 1 says the commit box owns committing, so none may survive here.  A prose mention naming a git subcommand only to forbid running it (kept verbatim per the plan's mapping table, e.g. "do not run `git rebase --continue`") never matches this shape.
     const gitCommandPattern = /\bgit\s+(-C\b|add\b|commit\b|push\b|checkout\b|reset\b|merge\b|rm\b)/;
 
     for (const [role, prompt] of Object.entries(prompts)) {
@@ -132,11 +129,7 @@ test("test_amendTestsPrompt_distinguishesCreatedTestsFromModifiedForeignOnes", (
 });
 
 // ---------------------------------------------------------------------------
-// Phase 10 audit finding 6 — amendTestsPrompt must derive the pre-existing list from
-// testFiles minus createdTestFiles (never trust the caller's subtraction), and must resolve
-// every occurrence-tagged path to a real absolute path in the worktree, including inside a
-// nested submodule occurrence. A real submodule and a real `git worktree add` are used
-// throughout, per global rule 9 — no mock, no standalone repo standing in for a linked worktree.
+// Phase 10 audit finding 6 — amendTestsPrompt must derive the pre-existing list from testFiles minus createdTestFiles (never trust the caller's subtraction), and must resolve every occurrence-tagged path to a real absolute path in the worktree, including inside a nested submodule occurrence. A real submodule and a real `git worktree add` are used throughout, per global rule 9 — no mock, no standalone repo standing in for a linked worktree.
 // ---------------------------------------------------------------------------
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -167,8 +160,7 @@ function makeSourceRepoWithSubmodule(): string {
 
 let nextOccurrenceGroupId = 9001;
 
-// A real linked worktree (root + submodule checked out via `git worktree add`), with tasks.json
-// and the brief already in place so loadPreparedTask succeeds.
+// A real linked worktree (root + submodule checked out via `git worktree add`), with tasks.json and the brief already in place so loadPreparedTask succeeds.
 function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: PreparedTask } {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = nextOccurrenceGroupId++;
@@ -188,8 +180,7 @@ function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: 
     return { rootOrigin, worktree, task };
 }
 
-// Writes and commits a real file at relativePath inside checkoutPath, so occurrence resolution
-// has something real on disk to point at (not just a string it happens to compute correctly).
+// Writes and commits a real file at relativePath inside checkoutPath, so occurrence resolution has something real on disk to point at (not just a string it happens to compute correctly).
 function commitRealFile(checkoutPath: string, relativePath: string, contents: string): void {
     mkdirSync(join(checkoutPath, join(relativePath, "..")), { recursive: true });
     writeFileSync(join(checkoutPath, relativePath), contents);
@@ -197,9 +188,7 @@ function commitRealFile(checkoutPath: string, relativePath: string, contents: st
     git(checkoutPath, "commit", "-q", "-m", `add ${relativePath}`);
 }
 
-// Parses every "- taggedPath => absolutePath" edit-path line out of one DATA section of a
-// rendered amend-tests prompt, so assertions test what the agent actually receives rather than
-// a path recomputed independently in the test.
+// Parses every "- taggedPath => absolutePath" edit-path line out of one DATA section of a rendered amend-tests prompt, so assertions test what the agent actually receives rather than a path recomputed independently in the test.
 function parseEmittedTestFileEntries(section: string): Array<{ taggedPath: string; absolutePath: string }> {
     return section.split("\n")
         .map((line) => line.trim())
@@ -211,10 +200,7 @@ function parseEmittedTestFileEntries(section: string): Array<{ taggedPath: strin
 }
 
 test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
-    // Setup: testFiles (every runnable changed test) contains both the created test and a
-    // separately modified pre-existing one, as runTaskTests.ts actually returns them. Both are
-    // real, committed files at the worktree root, and a third real file lives in the child
-    // submodule occurrence.
+    // Setup: testFiles (every runnable changed test) contains both the created test and a separately modified pre-existing one, as runTaskTests.ts actually returns them. Both are real, committed files at the worktree root, and a third real file lives in the child submodule occurrence.
     const { task } = makeOccurrenceFixture();
     const created = "tests/created.test.ts";
     const modified = "tests/modified.test.ts";
@@ -226,8 +212,7 @@ test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
 
     const prompt = amendTestsPrompt(task, "fix it", [created], [created, modified, childTagged]);
 
-    // Verification: the created test appears only in CREATED_TEST_FILES, never restated in
-    // TEST_FILES as a pre-existing test subject to the broken-or-empty restriction.
+    // Verification: the created test appears only in CREATED_TEST_FILES, never restated in TEST_FILES as a pre-existing test subject to the broken-or-empty restriction.
     const data = prompt.slice(prompt.indexOf("---- DATA ----"));
     const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
     const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
@@ -236,8 +221,7 @@ test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
     assert.match(preExistingSection, /tests\/modified\.test\.ts/);
     assert.match(preExistingSection, /child::tests\/child\.test\.ts/);
 
-    // Verification: every emitted edit path, in both categories, is a real, readable file that
-    // resolves inside the checkout its own tag names — never a nonexistent joined string.
+    // Verification: every emitted edit path, in both categories, is a real, readable file that resolves inside the checkout its own tag names — never a nonexistent joined string.
     const entries = [...parseEmittedTestFileEntries(createdSection), ...parseEmittedTestFileEntries(preExistingSection)];
     assert.equal(entries.length, 3);
     for (const { taggedPath, absolutePath } of entries) {
@@ -259,8 +243,7 @@ test("test_amendTestsPrompt_resolvesANestedOccurrenceTestFileToAnAbsolutePathIns
 
     const prompt = amendTestsPrompt(task, "fix it", [], [taggedPath]);
 
-    // Verification: the emitted path is absolute, points at the real file inside the child
-    // submodule's checkout in THIS worktree (not the raw tagged string), and is directly openable.
+    // Verification: the emitted path is absolute, points at the real file inside the child submodule's checkout in THIS worktree (not the raw tagged string), and is directly openable.
     const data = prompt.slice(prompt.indexOf("---- DATA ----"));
     const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
     const [entry] = parseEmittedTestFileEntries(preExistingSection);
@@ -280,8 +263,7 @@ test("test_amendTestsPrompt_resolvesARootOccurrenceTestFileToAnAbsolutePathAtThe
 
     const prompt = amendTestsPrompt(task, "fix it", [rootPath], []);
 
-    // Verification: resolves under the worktree root itself, not the child submodule, and points
-    // at the real file.
+    // Verification: resolves under the worktree root itself, not the child submodule, and points at the real file.
     const data = prompt.slice(prompt.indexOf("---- DATA ----"));
     const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
     const [entry] = parseEmittedTestFileEntries(createdSection);
@@ -333,13 +315,11 @@ for (const [role, buildPrompt] of Object.entries({
 }
 
 // ---------------------------------------------------------------------------
-// Finding 6 — loadPreparedTask must be read-only: it derives/validates the brief path
-// but never writes it, and fails explicitly when the brief is missing.
+// Finding 6 — loadPreparedTask must be read-only: it derives/validates the brief path but never writes it, and fails explicitly when the brief is missing.
 // ---------------------------------------------------------------------------
 
 test("test_loadPreparedTask_doesNotRewriteTheBriefFile", () => {
-    // Setup: a fixture whose brief file holds sentinel content that generateTaskBriefContents would
-    // never produce (it does not know about this exact sentence).
+    // Setup: a fixture whose brief file holds sentinel content that generateTaskBriefContents would never produce (it does not know about this exact sentence).
     const { worktree, task } = makeFixture(50);
     const before = readFileSync(task.briefFile, "utf8");
 
@@ -364,8 +344,7 @@ test("test_agentPromptEmitter_failsExplicitlyWhenTheBriefIsMissing", () => {
     // Test action: run the CLI for a role that loads the prepared task.
     const result = spawnSync("node", [cliPath, "51", "plan"], { input: payload, encoding: "utf8" });
 
-    // Verification: it fails loudly instead of silently writing the brief and succeeding. The
-    // old code called writeTaskBrief() here, would have exited 0, and left a brief on disk.
+    // Verification: it fails loudly instead of silently writing the brief and succeeding. The old code called writeTaskBrief() here, would have exited 0, and left a brief on disk.
     assert.notEqual(result.status, 0);
     assert.equal(existsSync(join(projectRoot, "plans", "brief-51.md")), false);
 });
@@ -407,15 +386,13 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
         assert.equal(result.status, 0, `role "${role}" exited nonzero: ${result.stderr}`);
     }
 
-    // Verification: no file bytes or paths changed. The old code would have rewritten
-    // plans/brief-52.md on every role that plans/reviews/implements/amends.
+    // Verification: no file bytes or paths changed. The old code would have rewritten plans/brief-52.md on every role that plans/reviews/implements/amends.
     const after = snapshotTree(worktree);
     assert.deepEqual(after, before);
 });
 
 // ---------------------------------------------------------------------------
-// Finding 7 — every role's return instruction is exactly the Phase 9 table shape; the old
-// v1.1 fields (task, status, planFile, question, missingFiles, summary) are gone.
+// Finding 7 — every role's return instruction is exactly the Phase 9 table shape; the old v1.1 fields (task, status, planFile, question, missingFiles, summary) are gone.
 // ---------------------------------------------------------------------------
 
 test("test_planPrompt_pointsAtTheReturnShapeTemplate", () => {
@@ -461,8 +438,7 @@ test("test_planReviewPrompt_keepsTheHeredocAndItsCommandsInOneRunnableBlock", ()
     const prompt = planReviewPrompt(fakeTask);
     const fence = prompt.slice(prompt.indexOf("````sh"), prompt.lastIndexOf("````"));
     assert.match(fence, /REVIEW_PROMPT=\$\(cat <<'REVIEWEOF'/);
-    // -o keeps codex's banner out of the answer; </dev/null stops it blocking on stdin forever.
-    // --output-schema is what makes codex emit bare JSON instead of a fenced block with prose.
+    // -o keeps codex's banner out of the answer; </dev/null stops it blocking on stdin forever.  --output-schema is what makes codex emit bare JSON instead of a fenced block with prose.
     assert.match(fence, /codex exec -s read-only --output-schema \S+review-plan-schema\.json -o "\$REVIEW_FILE" "\$REVIEW_PROMPT" <\/dev\/null/);
     for (const line of fence.split("\n").filter((l) => /^\s*(codex exec|\|\| claude -p)/.test(l))) {
         assert.match(line, /<\/dev\/null/, `reviewer command can hang on stdin: ${line}`);
@@ -482,17 +458,9 @@ test("test_planReviewPrompt_citesBothTemplatesInsteadOfInliningTheirJson", () =>
     assert.equal(prompt.includes("<why this will not regress the same way>"), false);
 });
 
-test("test_implementPrompt_returnContractDropsTheOldTaskAndSummaryFields", () => {
-    // Old code returned {task, implemented, implementationNotesFile, remaining[, summary]}.
-    const prompt = implementPrompt(fakeTask, "", "npx tsc --noEmit", 3);
-    assert.equal(/\{task:/i.test(prompt), false);
-    assert.equal(/summary/i.test(prompt), false);
-    assert.match(prompt, /\{implemented: (true|false), implementationNotesFile: notesFile, remaining:/);
-});
 
 test("test_reviewTestsPrompt_returnsExactlyFlaggedAndReviewer", () => {
-    // Old code returned {task, flagged, reviewer}; task must be gone. The return contract
-    // now sits before the final DATA section (finding 9), not at the string's end.
+    // Old code returned {task, flagged, reviewer}; task must be gone. The return contract now sits before the final DATA section (finding 9), not at the string's end.
     const prompt = reviewTestsPrompt(fakeTask);
     assert.match(prompt, /Return \{flagged, reviewer\}\.\n/);
     assert.equal(/\{task:/i.test(prompt), false);
@@ -525,20 +493,17 @@ test("test_fixTestsPrompt_returnsExactlyFixed", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Finding 8 — fix-suite/fix-tests may only edit the occurrence-appropriate owned source
-// paths; the whole checkout is never the edit boundary.
+// Finding 8 — fix-suite/fix-tests may only edit the occurrence-appropriate owned source paths; the whole checkout is never the edit boundary.
 // ---------------------------------------------------------------------------
 
 test("test_fixSuitePrompt_namesTheOwnedPathAsTheCompleteEditAllowlist", () => {
-    // Old code named no specific path at all — it granted "the source code inside checkoutPath
-    // that the failing test covers", so this exact listing would not exist against old code.
+    // Old code named no specific path at all — it granted "the source code inside checkoutPath that the failing test covers", so this exact listing would not exist against old code.
     const prompt = fixSuitePrompt("/repo", "", "1 failing", [], ["src/owned.ts"]);
     assert.match(prompt, /OWNED_SOURCE_PATHS \(the complete edit allowlist, relative to CHECKOUT_PATH\) =\n {2}- src\/owned\.ts/);
 });
 
 test("test_fixSuitePrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
-    // Old wording ("EDIT the source code inside ${checkoutPath} that the failing test covers")
-    // implicitly authorized any file under the checkout; that phrase must be gone.
+    // Old wording ("EDIT the source code inside ${checkoutPath} that the failing test covers") implicitly authorized any file under the checkout; that phrase must be gone.
     const prompt = fixSuitePrompt("/repo", "", "1 failing", [], ["src/owned.ts"]);
     assert.equal(/EDIT the source code inside/.test(prompt), false);
 });
@@ -554,8 +519,7 @@ test("test_fixTestsPrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
 });
 
 test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOccurrencePaths", () => {
-    // Integration with occurrences.ts's real owned-path derivation, per the finding's guidance
-    // to pass occurrence-appropriate owned source paths in.
+    // Integration with occurrences.ts's real owned-path derivation, per the finding's guidance to pass occurrence-appropriate owned source paths in.
     const occurrences: Occurrence[] = [
         { occurrenceId: "", checkoutPath: "/repo", depth: 0, baseRef: "main" },
         { occurrenceId: "vendor/lib", checkoutPath: "/repo/vendor/lib", depth: 1, baseRef: "main" },
@@ -570,8 +534,7 @@ test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOc
 });
 
 // ---------------------------------------------------------------------------
-// Finding 9 — every builder puts static instructions and the return contract first, and
-// appends all runtime/bulk data after a final "---- DATA ----" marker.
+// Finding 9 — every builder puts static instructions and the return contract first, and appends all runtime/bulk data after a final "---- DATA ----" marker.
 // ---------------------------------------------------------------------------
 
 test("test_reviewTestsPrompt_putsBriefFileAfterTheNestedDataMarker", () => {
@@ -583,13 +546,6 @@ test("test_reviewTestsPrompt_putsBriefFileAfterTheNestedDataMarker", () => {
     assert.ok(prompt.indexOf(sentinel) > markerIndex);
 });
 
-test("test_implementPrompt_putsTheNoteAfterTheDataMarker", () => {
-    const sentinel = "SENTINEL_IMPLEMENT_NOTE_7cq2";
-    const prompt = implementPrompt(fakeTask, sentinel, "npx tsc --noEmit", 3);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 test("test_fixConflictsPrompt_putsTheConflictedPathsAfterTheDataMarker", () => {
     const sentinel = "src/SENTINEL_CONFLICT_PATH_4dw1.ts";
@@ -656,9 +612,7 @@ function assertSentinelsOnlyAfterFinalData(prompt: string, sentinels: string[]) 
     }
 }
 
-// A nested codex review carries its own DATA section because codex receives only the question
-// string; that data cannot move to the outer final section. It must still come last within the
-// question, so assert it against the first marker rather than the last.
+// A nested codex review carries its own DATA section because codex receives only the question string; that data cannot move to the outer final section. It must still come last within the question, so assert it against the first marker rather than the last.
 function assertNestedSentinelsOnlyAfterNestedData(prompt: string, sentinels: string[]) {
     const nestedIndex = prompt.indexOf("---- DATA ----");
     assert.notEqual(nestedIndex, -1, "prompt has no nested DATA marker");
@@ -705,28 +659,6 @@ test("test_reviewTestsPrompt_putsTheTestReviewFileOutputPathOnlyAfterTheFinalDat
     assertNestedSentinelsOnlyAfterNestedData(prompt, [String(task.number), task.briefFile, task.planFile]);
 });
 
-test("test_implementPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    // Before the fix, the typecheck command was spliced inline via `run(${rootedTypecheck})`
-    // at three call sites, and maxFixRounds via `${maxFixRounds}` at three more.
-    const task: PreparedTask = {
-        ...fakeTask,
-        number: 445566,
-        planFile: "/tmp/SENTINEL_PLANFILE_IMPL_d1/plan.json",
-        notesFile: "/tmp/SENTINEL_NOTESFILE_IMPL_d2/notes.md",
-        files: ["SENTINEL_FILE_IMPL_d3.ts"],
-        tests: "SENTINEL_TESTS_IMPL_d4",
-        repoRoot: "/tmp/SENTINEL_REPOROOT_IMPL_d5",
-    };
-    const note = "SENTINEL_NOTE_IMPL_d6";
-    const typecheckCommand = "SENTINEL_TYPECHECK_IMPL_d7";
-    const maxFixRounds = 918273;
-    const prompt = implementPrompt(task, note, typecheckCommand, maxFixRounds);
-    assertSentinelsOnlyAfterFinalData(prompt, [
-        String(task.number), task.planFile, task.notesFile, task.files[0], task.tests as string,
-        task.repoRoot, note, typecheckCommand, String(maxFixRounds),
-    ]);
-    assertNoInstructionAfterFinalData(prompt);
-});
 
 test("test_fixConflictsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
     // Before the fix, checkoutPath was spliced inline five separate times.
