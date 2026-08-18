@@ -6,6 +6,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/viewTaskHook.ts\""
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/readFileHook.ts\""
           }
         ]
       }
@@ -28,6 +32,15 @@
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts\"",
             "statusMessage": "Running related tests...",
             "enabled": true
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/readFileHook.ts\""
           }
         ]
       }
