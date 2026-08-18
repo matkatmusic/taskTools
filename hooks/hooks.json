@@ -21,6 +21,10 @@
           },
           {
             "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
+          },
+          {
+            "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/rebaseWorktreeHook.ts\""
           },
           {
@@ -81,6 +85,10 @@
           {
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runTaskTestsHook.ts\""
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
           },
           {
             "type": "command",
