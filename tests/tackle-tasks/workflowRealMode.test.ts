@@ -21,6 +21,13 @@ const ARGS = {
     runId: "run-abc",
 };
 
+// Every prompt delivers its payload on one quoted heredoc, so nothing a shell sees can expand.
+const payloadOf = (prompt: string): Record<string, unknown> => {
+    const match = /<<'TTPAYLOAD'\n([\s\S]*?)\nTTPAYLOAD/.exec(prompt);
+    assert.ok(match, "prompt carries no TTPAYLOAD heredoc");
+    return JSON.parse(match[1]!) as Record<string, unknown>;
+};
+
 type AgentCall = { prompt: string; label: string; schema: { required: string[] } };
 type Responder = (visit: number) => unknown;
 
@@ -36,7 +43,20 @@ const HAPPY_RESULTS: Record<string, unknown> = {
     "continue-rebase": { finished: true },
     "run-full-suite": { passed: true },
     "fix-suite": { fixed: true },
+    "lock-source-repo": { acquired: true, heldByOwner: null },
+    "check-fence": { inside: true, violations: [] },
+    "merge-worktrees": { state: "ALL LANDED" },
 };
+
+// The exit tail writes the incoming exit type back when nothing landed, so the stub echoes it.
+const finishRunResult = (prompt: string): unknown => ({
+    exitType: payloadOf(prompt).exitType,
+    workLanded: false,
+    publicationState: "NONE LANDED",
+    leaseReleased: true,
+    lockReleased: true,
+    closureNote: null,
+});
 
 // trace comes from log(), not the return value, so an unwired box still leaves its trace behind.
 type RealRun = { trace: string[]; calls: AgentCall[]; error: Error | null };
@@ -51,7 +71,7 @@ const runReal = async (overrides: Record<string, unknown | Responder> = {}): Pro
         const role = options.label.slice(0, options.label.lastIndexOf(":"));
         calls.push({ prompt, label: options.label, schema: options.schema });
         visits[role] = (visits[role] ?? 0) + 1;
-        if (!(role in overrides)) return HAPPY_RESULTS[role];
+        if (!(role in overrides)) return role === "finish-run" ? finishRunResult(prompt) : HAPPY_RESULTS[role];
         const responder = overrides[role];
         return typeof responder === "function" ? (responder as Responder)(visits[role]!) : responder;
     };
@@ -85,13 +105,6 @@ const callFor = (run: RealRun, role: string): AgentCall => {
     return call;
 };
 
-// Every prompt delivers its payload on one quoted heredoc, so nothing a shell sees can expand.
-const payloadOf = (prompt: string): Record<string, unknown> => {
-    const match = /<<'TTPAYLOAD'\n([\s\S]*?)\nTTPAYLOAD/.exec(prompt);
-    assert.ok(match, "prompt carries no TTPAYLOAD heredoc");
-    return JSON.parse(match[1]!) as Record<string, unknown>;
-};
-
 const countOf = (trace: string[], line: string): number =>
     trace.filter((entry) => entry.trim() === line).length;
 
@@ -104,19 +117,26 @@ const exitTypeOf = (trace: string[]): string => {
 // How far real mode reaches
 // --------------------------------------------------------------------------
 
-test("test_realMode_stopsAtTheFirstUnwiredDecisionBoxNamingIt", async () => {
-    // Setup: every agent answers happily, so the run walks straight to the rebase preamble.
+test("test_realMode_walksEveryBoxToTheMergeSucceededExit", async () => {
+    // Setup: every agent answers happily, so the run walks the whole diagram.
     const run = await runReal();
 
-    // Verification: LOCK_SOURCE_REPO has no script yet, so the run throws instead of guessing.
-    assert.match(run.error!.message, /\[C\] box not wired yet — LOCK_SOURCE_REPO/);
+    // Verification: no box is unwired, and every box is dispatched once, in diagram order.
+    assert.equal(run.error, null);
     assert.deepEqual(run.calls.map((call) => call.label), [
         `plan:${TASK}`,
         `review-plan:${TASK}`,
         `implement:${TASK}`,
         `run-task-tests:${TASK}`,
         `review-tests:${TASK}`,
+        `lock-source-repo:${TASK}`,
+        `rebase-worktree:${TASK}`,
+        `run-full-suite:${TASK}`,
+        `check-fence:${TASK}`,
+        `merge-worktrees:${TASK}`,
+        `finish-run:${TASK}`,
     ]);
+    assert.equal(exitTypeOf(run.trace), "completed");
 });
 
 // --------------------------------------------------------------------------
@@ -129,6 +149,9 @@ const REACHABLE_BOXES: { role: string; required: string[] }[] = [
     { role: "implement", required: ["implemented"] },
     { role: "run-task-tests", required: ["passed"] },
     { role: "review-tests", required: ["flagged"] },
+    { role: "lock-source-repo", required: ["acquired"] },
+    { role: "check-fence", required: ["inside"] },
+    { role: "merge-worktrees", required: ["state"] },
 ];
 
 for (const { role, required } of REACHABLE_BOXES) {
@@ -163,7 +186,7 @@ test("test_realMode_readsThePlannerOutcomeFromTheAgentResult", async () => {
     // Verification: result.outcome drove both clarify rounds, and the run went on to review the plan.
     assert.equal(countOf(run.trace, "what did the planner return?: CLARIFY"), 2);
     assert.equal(countOf(run.trace, "what did the planner return?: PLAN"), 1);
-    assert.match(run.error!.message, /LOCK_SOURCE_REPO/);
+    assert.equal(run.error, null);
 });
 
 test("test_realMode_exitsClarifyStuckOnTheThirdClarifyFromTheAgentResult", async () => {
@@ -209,16 +232,19 @@ test("test_realMode_readsTheTestReviewFlagFromTheAgentResult", async () => {
     // Setup: codex flags the tests on the first two reviews, then accepts them.
     const run = await runReal({ "review-tests": (visit: number) => ({ flagged: visit < 3 }) });
 
-    // Verification: result.flagged drove two amend rounds and then let the run reach the lock box.
+    // Verification: result.flagged drove two amend rounds and then let the run reach the merge.
     assert.equal(countOf(run.trace, "amend tasks.json entry with codex's notes and fixes"), 2);
-    assert.match(run.error!.message, /LOCK_SOURCE_REPO/);
+    assert.equal(run.error, null);
 });
 
 // --------------------------------------------------------------------------
 // The dotted "agent() errored" edge, which FAKE mode fakes and real mode reads
 // --------------------------------------------------------------------------
 
-for (const { role } of REACHABLE_BOXES) {
+const AGENT_BOXES = REACHABLE_BOXES.slice(0, 5);
+const SCRIPT_BOXES = REACHABLE_BOXES.slice(5);
+
+for (const { role } of AGENT_BOXES) {
     test(`test_realMode_treatsANullResultFrom_${role.replace(/-/g, "_")}_AsTheAgentErroredEdge`, async () => {
         // Setup: the harness loses that box's result, which reaches the workflow as null.
         const run = await runReal({ [role]: null });
@@ -228,5 +254,17 @@ for (const { role } of REACHABLE_BOXES) {
         assert.equal(countOf(run.trace, "agent() errored"), 1);
         assert.equal(exitTypeOf(run.trace), "AGENT-FAILED");
         assert.equal(run.calls.filter((call) => call.label === `${role}:${TASK}`).length, 1);
+    });
+}
+
+for (const { role } of SCRIPT_BOXES) {
+    test(`test_realMode_endsRunFailedWhenTheGreenBox_${role.replace(/-/g, "_")}_ReturnsNothing`, async () => {
+        // Setup: a green box performed by an agent loses its result.
+        const run = await runReal({ [role]: null });
+
+        // Verification: a green box draws no dotted edge; an operational failure is run-failed.
+        assert.equal(run.error, null);
+        assert.equal(countOf(run.trace, "agent() errored"), 0);
+        assert.equal(exitTypeOf(run.trace), "RUN-FAILED");
     });
 }

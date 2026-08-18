@@ -10,6 +10,7 @@ export type SuiteFixReceipt = {
 };
 
 const SUITE_FIX_OUTPUT_PATH = fileURLToPath(new URL("../../plans/fix-suite-output-template.json", import.meta.url));
+const COMMIT_TASK_WORK_PATH = fileURLToPath(new URL("./commitTaskWork.ts", import.meta.url));
 
 // Double-quoted for the read-file hook's parser; deduped so an owned test file is not listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
@@ -23,9 +24,18 @@ function failingSuiteOutput(t: PreparedTask): string {
     return fullSuite.output;
 }
 
-export function suiteFixPrompt(t: PreparedTask): string {
+export function suiteFixPrompt(t: PreparedTask, runId: string, sourceBranch: string): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const output = failingSuiteOutput(t);
+    // Serialized, never interpolated field-by-field, and delivered on quoted-heredoc stdin.
+    const commitPayload = JSON.stringify({
+        projectRoot: t.taskStateRoot,
+        worktreePath: t.repoRoot,
+        taskNumber: t.number,
+        runId,
+        stepId: "fix-suite",
+        rootSourceBranch: sourceBranch,
+    });
     return `Invoke the skill \`/ponytail:ponytail ultra\` first.
 
 ## YOUR JOB
@@ -64,8 +74,15 @@ If fixing the cause needs an edit outside this list, make no edit at all and ret
 3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${root}\`.
 4. Repeat until every listed failure is addressed.
 
-Leave every edit unstaged and uncommitted.
-A later box stages and commits every touched layer.
+## COMMIT YOUR WORK
+
+Never stage or commit anything by hand. As your final step, run this with Bash, exactly as written:
+node ${COMMIT_TASK_WORK_PATH} <<'TTCOMMIT'
+${commitPayload}
+TTCOMMIT
+
+It prints one JSON object. If it fails, say so plainly and return nothing else.
+That is an operational failure, and this run's operator owns it.
 
 Never run the full suite yourself. A later box runs it and judges the result.
 
@@ -77,7 +94,7 @@ You are forbidden from doing any of the following actions:
 - edit any path not listed under WHAT YOU MAY EDIT;
 - add scope or a refactor no listed failure calls for;
 - run the full suite;
-- stage or commit anything;
+- stage or commit anything by hand;
 - force-push or hard-reset anything you did not create;
 - return \`fixed: true\` while any listed failure is unaddressed.
 

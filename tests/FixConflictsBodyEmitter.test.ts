@@ -36,7 +36,7 @@ function makeConflictedRepo(fileName = "thing.ts"): string {
 test("test_fixConflictsPrompt_derivesTheConflictedPathsFromGitNotFromTheCaller", () => {
     // The caller passed an empty list for this box, so the emitter must find the paths itself.
     const repo = makeConflictedRepo("conflicted.ts");
-    const prompt = fixConflictsPrompt(repo);
+    const prompt = fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main");
     assert.ok(prompt.includes(`${repo}/conflicted.ts`), "prompt is missing the conflicted path");
 });
 
@@ -44,7 +44,7 @@ test("test_fixConflictsPrompt_listsOnlyUnmergedPathsAndNotEveryChangedFile", () 
     // A dirty-but-merged file is not a conflict, and granting it would widen the edit fence.
     const repo = makeConflictedRepo("conflicted.ts");
     writeFileSync(join(repo, "untouched.ts"), "edited but never conflicted\n");
-    const prompt = fixConflictsPrompt(repo);
+    const prompt = fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main");
     assert.equal(prompt.includes("untouched.ts"), false);
 });
 
@@ -52,12 +52,12 @@ test("test_fixConflictsPrompt_throwsWhenNoRebaseIsStopped", () => {
     // Running this box with a clean tree is a caller error, not a prompt with an empty list.
     const repo = mkdtempSync(join(tmpdir(), "fix-conflicts-clean-"));
     git(repo, "init", "--quiet", "--initial-branch=main");
-    assert.throws(() => fixConflictsPrompt(repo), /no unmerged paths/);
+    assert.throws(() => fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main"), /no unmerged paths/);
 });
 
 test("test_fixConflictsPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () => {
     // The old prompt returned its shape from a trailing DATA block full of ALL_CAPS placeholders.
-    const prompt = fixConflictsPrompt(makeConflictedRepo());
+    const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/\b(CHECKOUT_PATH|CONFLICTED_PATHS)\b/.test(prompt), false);
     assert.match(prompt, /fix-conflicts-output-template\.json/);
@@ -65,5 +65,14 @@ test("test_fixConflictsPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () =
 
 test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {
     // A later box advances the rebase; an agent that continues it strands the caller.
-    assert.match(fixConflictsPrompt(makeConflictedRepo()), /Never run `git rebase --continue` or `git rebase --abort`/);
+    const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
+    assert.match(prompt, /Never run `git rebase --continue` or `git rebase --abort`/);
+});
+
+test("test_fixConflictsPrompt_tellsTheAgentToCommitViaTheScriptAsItsFinalStep", () => {
+    // Rule 1 folded the commit into this box's own prompt instead of a separate committer box.
+    const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
+    assert.match(prompt, /node \S*commitTaskWork\.ts <<'TTCOMMIT'/);
+    assert.equal(prompt.includes("Leave every edit unstaged and uncommitted"), false);
+    assert.match(prompt, /stage or commit anything by hand/);
 });

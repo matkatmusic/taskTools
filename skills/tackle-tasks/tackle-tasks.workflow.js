@@ -126,7 +126,7 @@ const LABELS = {
 }
 
 /*
-  The same lookup tracePipeline.ts exports, so a trace and a run cannot word a box differently.
+  The same lookup mmdGraph.ts exports, so a diagram and a run cannot word a box differently.
 */
 const L = (id) => {
   const label = LABELS[id]
@@ -213,6 +213,8 @@ function validatePlanShape(value         , expectedTaskNumber        )          
                   
                             
                                      
+                                       
+                                            
                           
                         
                       
@@ -260,6 +262,8 @@ function createPipelineContext(config                )                  {
         depth: 0,
         sourceLockHeld: false,
         agentVisits: new Map(),
+        planExtra: {},
+        implementExtra: {},
         clarifyRounds: 0,
         planReviews: 0,
         testFixes: 0,
@@ -316,21 +320,6 @@ function attempt   (outcomes     , index        )    {
 
 function isFake(ctx                 )          {
     return ctx.fake !== null && ctx.fake !== undefined;
-}
-
-/*
-  A [C] box. Throws naming its diagram box, because the sandbox cannot run its script.
-*/
-function notWired(box        )        {
-    throw new Error(`tackle-tasks workflow: [C] box not wired yet — ${box}`);
-}
-
-/*
-  A [C] decision. Real mode throws; fake mode reads the fixture, so a path walks offline.
-*/
-function decide(ctx                 , box        , field        , index        )          {
-    if (!isFake(ctx)) return notWired(box);
-    return attempt((ctx.fake                             )[field]             , index);
 }
 
 /*
@@ -450,6 +439,40 @@ const RUN_FULL_SUITE_RESULT = {
     properties: { passed: { type: "boolean" } },
 };
 
+const CHECK_FENCE_RESULT = {
+    type: "object",
+    required: ["inside"],
+    properties: {
+        inside: { type: "boolean" },
+        violations: { type: "array", items: { type: "string" } },
+    },
+};
+
+const MERGE_WORKTREES_RESULT = {
+    type: "object",
+    required: ["state"],
+    properties: { state: { type: "string", enum: ["ALL LANDED", "SOME LANDED", "NONE LANDED"] } },
+};
+
+const LOCK_SOURCE_REPO_RESULT = {
+    type: "object",
+    required: ["acquired"],
+    properties: { acquired: { type: "boolean" }, heldByOwner: { type: ["string", "null"] } },
+};
+
+const FINISH_RUN_RESULT = {
+    type: "object",
+    required: ["exitType", "workLanded"],
+    properties: {
+        exitType: { type: "string" },
+        workLanded: { type: "boolean" },
+        publicationState: { type: ["string", "null"] },
+        leaseReleased: { type: "boolean" },
+        lockReleased: { type: "boolean" },
+        closureNote: { type: ["string", "null"] },
+    },
+};
+
 const FIX_SUITE_RESULT = {
     type: "object",
     required: ["fixed"],
@@ -468,21 +491,36 @@ function toFailures(exitType        , exitNote        , workLanded          )   
 }
 
 /*
+  Performs a whole exit tail in one agent, because the sandbox cannot run its scripts.
+*/
+async function runExitTail(ctx                 , exitType        , exitNote        )                   {
+    if (isFake(ctx)) return null;
+    const prompt = emitterPrompt(ctx, "finish-run", { exitType, exitNote });
+    const receipt = await ctx.agent(prompt, { label: `finish-run:${ctx.task}`, schema: FINISH_RUN_RESULT });
+    if (receipt === null) throw new Error("tackle-tasks workflow: the exit tail returned nothing usable");
+    return receipt;
+}
+
+/*
   plans/diagram/pipeline-failuresExit.mmd. Every box is [C].
 */
-function failuresExit(
+async function failuresExit(
     ctx                 ,
     exitType        ,
     exitNote        ,
     workLanded          ,
-)                                                                        {
+)                                                                                 {
     banner(ctx, "failures exit");
+    const receipt = await runExitTail(ctx, exitType, exitNote)                                                    ;
+    // Real mode reads git's answer; fake mode keeps the caller's, so a fixture path is unchanged.
+    const landed = receipt === null ? workLanded === true : receipt.workLanded;
+    const finalExitType = receipt === null ? exitType : receipt.exitType;
     // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
     step(ctx, ctx.L("READ_PUBLICATION_STATE"));
-    step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(workLanded));
+    step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(landed));
     // Paragraph 86: landed work discards the incoming exit type, run-failed included.
-    if (workLanded) step(ctx, ctx.L("WRITE_PUBLICATION_OUTCOME"));
-    else step(ctx, ctx.L("WRITE_EXIT_TYPE_AND_NOTE"), exitType.toUpperCase());
+    if (landed) step(ctx, ctx.L("WRITE_PUBLICATION_OUTCOME"));
+    else step(ctx, ctx.L("WRITE_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
     step(ctx, ctx.L("RECORD_MODIFIED_FILES_FAILURE"));
     // Paragraphs 89 and 90: the lease and the source lock are independent ownership checks.
     step(ctx, ctx.L("DOES_RUN_HOLD_LEASE"), "YES");
@@ -492,9 +530,9 @@ function failuresExit(
     if (ctx.sourceLockHeld) step(ctx, ctx.L("RELEASE_SOURCE_LOCK"));
     // Paragraph 91: mark inactive last, after every release and every write.
     step(ctx, ctx.L("MARK_TASK_INACTIVE_FAILURE"));
-    step(ctx, ctx.L("REPORT_EXIT_TYPE_AND_NOTE"), exitType.toUpperCase());
+    step(ctx, ctx.L("REPORT_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
     step(ctx, ctx.L("STOP"));
-    return { task: ctx.task, exitType, exitNote, trace: ctx.trace };
+    return { task: ctx.task, exitType: finalExitType, exitNote, trace: ctx.trace };
 }
 
 /*
@@ -504,10 +542,11 @@ function failuresExit(
 /*
   plans/diagram/pipeline-mergeSucceededExit.mmd. Every box is [C].
 */
-function mergeSucceededExit(
+async function mergeSucceededExit(
     ctx                 ,
-)                                                                        {
+)                                                                                 {
     banner(ctx, "merge succeeded exit");
+    await runExitTail(ctx, "completed", "");
     step(ctx, ctx.L("MERGE_RECEIPT_INPUT"));
     step(ctx, ctx.L("RECORD_MERGE_COMMIT_HASHES"));
     // Paragraph 79: completed is the point of no return, written before any release.
@@ -537,7 +576,9 @@ async function planPipeline(ctx                 )                           {
     step(ctx, ctx.L("DOCS_INPUT"));
 
     // Paragraph 23 [S]: turn the tasks.json entry into a plan, reading the entry and docs only.
-    const result = await runAgent(ctx, ctx.L("PLAN_THE_TASK"), "PLANNER", "plan", PLAN_RESULT);
+    const extra = ctx.planExtra;
+    ctx.planExtra = {};
+    const result = await runAgent(ctx, ctx.L("PLAN_THE_TASK"), "PLANNER", "plan", PLAN_RESULT, extra);
 
     // Paragraph 26: nothing usable back, and the task is active, so the failures exit runs.
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
@@ -568,6 +609,7 @@ async function planPipeline(ctx                 )                           {
     ctx.clarifyRounds += 1;
     // Paragraph 28: the planner reads only the entry and the docs, so write it there.
     step(ctx, ctx.L("WRITE_CLARIFY_REQUEST"));
+    ctx.planExtra.clarifyRequest = (result                               ).clarifyRequest ?? "";
     ctx.depth += 1;
     return { next: "document-generation" };
 }
@@ -583,6 +625,7 @@ async function documentGenerationPipeline(ctx                 )                 
     step(ctx, ctx.L("WHAT_IS_DOCS_MODE"), "UPDATE");
     // Paragraph 21: UPDATE docs read the clarify request and grow to cover what it names.
     step(ctx, ctx.L("UPDATE_AUTO_GENERATED_DOCS"));
+    ctx.planExtra.updateDocs = true;
     return { next: "plan" };
 }
 
@@ -616,6 +659,7 @@ async function reviewPlanPipeline(ctx                 )                         
 
     // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
     step(ctx, ctx.L("UPDATE_TASK_ENTRY"));
+    ctx.planExtra.planReview = result;
     ctx.planReviews += 1;
 
     const reviewsDone = ctx.planReviews >= MAX_ATTEMPTS;
@@ -639,7 +683,9 @@ async function implementPipeline(ctx                 )                          
     step(ctx, ctx.L("ACCEPTED_PLAN_INPUT"));
 
     // Paragraph 36 [S]: implement the accepted plan, treating the worktree as project root.
-    const result = await runAgent(ctx, ctx.L("IMPLEMENT_TASK"), "IMPLEMENTER", "implement", IMPLEMENT_RESULT);
+    const extra = ctx.implementExtra;
+    ctx.implementExtra = {};
+    const result = await runAgent(ctx, ctx.L("IMPLEMENT_TASK"), "IMPLEMENTER", "implement", IMPLEMENT_RESULT, extra);
 
     // Paragraph 37.
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
@@ -685,6 +731,7 @@ async function taskTestsPipeline(ctx                 )                          
 
     // Paragraph 43: a repair is never tested until committed, so re-enter implement.
     step(ctx, ctx.L("AMEND_ENTRY_WITH_FAILING_TESTS"));
+    ctx.implementExtra.amendFailingTests = true;
     ctx.testFixes += 1;
     ctx.depth += 1;
     return { next: "implement" };
@@ -721,6 +768,7 @@ async function reviewTestsPipeline(ctx                 )                        
 
     // Paragraph 49: write codex's notes and fixes into the entry, then reimplement.
     step(ctx, ctx.L("AMEND_ENTRY_WITH_CODEX_NOTES"));
+    ctx.implementExtra.testReview = result;
     ctx.testReviews += 1;
     ctx.depth += 1;
     return { next: "implement" };
@@ -745,7 +793,14 @@ async function rebasePreamblePipeline(ctx                 )                     
 
     // Paragraph 51: the lock owner is runId:taskNumber, never runId alone.
     step(ctx, ctx.L("LOCK_SOURCE_REPO"));
-    const acquired = decide(ctx, "LOCK_SOURCE_REPO", "lockAcquired", ctx.lockIndex);
+    const lockReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "lock-source-repo"), {
+        label: `lock-source-repo:${ctx.task}`,
+        schema: LOCK_SOURCE_REPO_RESULT,
+    });
+    if (!isFake(ctx) && lockReceipt === null) return toFailures("run-failed", "the source repo lock box returned nothing usable");
+    const acquired = isFake(ctx)
+        ? attempt((ctx.fake                             ).lockAcquired, ctx.lockIndex)
+        : (lockReceipt                         ).acquired;
     ctx.lockIndex += 1;
     step(ctx, ctx.L("WAS_LOCK_ACQUIRED"), yesNo(acquired));
 
@@ -873,9 +928,14 @@ async function suitePipeline(ctx                 )                           {
     }
 
     // Paragraph 67: the fence gate runs once, after the fix loop and before the merge.
+    const fenceReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "check-fence"), {
+        label: `check-fence:${ctx.task}`,
+        schema: CHECK_FENCE_RESULT,
+    });
+    if (!isFake(ctx) && fenceReceipt === null) return toFailures("run-failed", "the fence check box returned nothing usable");
     const fenceHeld = isFake(ctx)
         ? (ctx.fake                           ).fenceHeld
-        : notWired("DID_CHANGES_STAY_INSIDE_FENCE");
+        : (fenceReceipt                       ).inside;
     // Paragraph 68: it re-derives the diff and never accepts a fence from a caller.
     step(ctx, ctx.L("DID_CHANGES_STAY_INSIDE_FENCE"), yesNo(fenceHeld));
     if (!fenceHeld) {
@@ -899,12 +959,20 @@ async function mergePipeline(ctx                 )                           {
     banner(ctx, "merge");
     step(ctx, ctx.L("GREEN_WORKTREE_INPUT"));
 
+    const mergeReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "merge-worktrees"), {
+        label: `merge-worktrees:${ctx.task}`,
+        schema: MERGE_WORKTREES_RESULT,
+    });
+    if (!isFake(ctx) && mergeReceipt === null) return toFailures("run-failed", "the merge box returned nothing usable");
+
     // Paragraphs 70 and 71: no fast-forward, and each layer writes its merge ref as it lands.
     step(ctx, ctx.L("MERGE_WORKTREES"));
 
     // Paragraph 72: a read-only reconciliation over those refs, never a returned boolean.
     step(ctx, ctx.L("READ_PUBLICATION_STATE"));
-    const state = decide(ctx, "WHAT_IS_PUBLICATION_STATE", "publicationState", ctx.publicationIndex);
+    const state = isFake(ctx)
+        ? attempt((ctx.fake                            ).publicationState, ctx.publicationIndex)
+        : (mergeReceipt                     ).state;
     ctx.publicationIndex += 1;
     // Paragraph 73: merged, no-op and root-merged-but-not-closed are LANDED; conflicted is not.
     step(ctx, ctx.L("WHAT_IS_PUBLICATION_STATE"), state          );
@@ -967,12 +1035,12 @@ async function runTaskPipeline(ctx                 , start         )            
 
         if (result.done) {
             ctx.phase("Exit");
-            failuresExit(ctx, result.exitType, result.exitNote, result.workLanded);
+            await failuresExit(ctx, result.exitType, result.exitNote, result.workLanded);
             return ctx.trace;
         }
         if (result.next === "merge-succeeded") {
             ctx.phase("Exit");
-            mergeSucceededExit(ctx);
+            await mergeSucceededExit(ctx);
             return ctx.trace;
         }
         current = result.next;

@@ -8,7 +8,8 @@ import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../taskFiles.ts
 export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
-    | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed";
+    | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed"
+    | "clarify-stuck" | "agent-failed" | "partially-published";
 
 // F2: `stepId` names the logical step that produced this commit. Merge-kind commits omit it.
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };
@@ -66,6 +67,8 @@ export type TaskRunRecord = {
     sourceTipsAtRebase?: SourceTipReceipt[];
     rebaseStepReceipt?: RebaseStepReceipt;
     stepResults?: StepResultReceipt[];
+    // A repair flag, not an exit type: work landed but the run could not finish cleanly.
+    cleanupIncomplete?: boolean;
 };
 
 export type TaskRunState = {

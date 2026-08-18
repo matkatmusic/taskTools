@@ -1,7 +1,7 @@
 // One diagram at a time: give a pipeline its inputs, check which endpoint of that diagram it leaves by.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { L } from "../../scripts/tracePipeline.ts";
+import { L } from "../../scripts/mmdGraph.ts";
 import {
     createPipelineContext,
     documentGenerationPipeline,

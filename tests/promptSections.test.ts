@@ -80,9 +80,9 @@ test("test_everyPromptUsesTheSharedAbsolutePathsSectionVerbatim", () => {
     const repo = makeConflictedRepo();
     const prompts = [
         planPrompt(fakeTask),
-        implementPrompt(fakeTask, "npx tsc --noEmit", 3),
-        fixConflictsPrompt(repo),
-        suiteFixPrompt({ ...fakeTask, taskStateRoot: makeRedSuiteRoot() }),
+        implementPrompt(fakeTask, "npx tsc --noEmit", 3, "run-1", "main"),
+        fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main"),
+        suiteFixPrompt({ ...fakeTask, taskStateRoot: makeRedSuiteRoot() }, "run-1", "main"),
     ];
     const roots = [fakeTask.repoRoot, fakeTask.repoRoot, repo, fakeTask.repoRoot];
     prompts.forEach((prompt, index) => {

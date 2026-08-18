@@ -56,7 +56,7 @@ export const meta = {
 // GENERATED LABELS
 
 /*
-  The same lookup tracePipeline.ts exports, so a trace and a run cannot word a box differently.
+  The same lookup mmdGraph.ts exports, so a diagram and a run cannot word a box differently.
 */
 const L = (id) => {
   const label = LABELS[id]

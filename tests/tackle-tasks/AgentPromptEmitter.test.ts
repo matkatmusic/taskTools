@@ -102,7 +102,7 @@ function allRolePrompts(task: PreparedTask): Record<string, string> {
     return {
         plan: planPrompt(task),
         "review-plan": planReviewPrompt(task),
-        implement: implementPrompt(task, "npx tsc --noEmit", 3),
+        implement: implementPrompt(task, "npx tsc --noEmit", 3, "run-1", "main"),
         "review-tests": reviewTestsPrompt(task, "main"),
     };
 }
@@ -233,7 +233,7 @@ test("test_planPrompt_omitsTheNotesSectionWhenThereAreNone", () => {
 for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
     "review-plan": (task: PreparedTask) => planReviewPrompt(task),
-    implement: (task: PreparedTask) => implementPrompt(task, "npx tsc --noEmit", 3),
+    implement: (task: PreparedTask) => implementPrompt(task, "npx tsc --noEmit", 3, "run-1", "main"),
     "review-tests": (task: PreparedTask) => reviewTestsPrompt(task, "main"),
 })) {
     test(`test_${role.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}Prompt_leavesNoUnresolvedInterpolation`, () => {
@@ -290,7 +290,10 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
                 const full = join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
                 // review-tests writes this one generated artifact for the read-only reviewer to open.
-                else if (!/\/plans\/implementation-diff-\d+\.patch$/.test(full)) out[full] = readFileSync(full, "utf8");
+                else if (/\/plans\/implementation-diff-\d+\.patch$/.test(full)) continue;
+                // git's own background maintenance creates and removes this; no role writes it.
+                else if (/\/\.git\/objects\/maintenance\.lock$/.test(full)) continue;
+                else out[full] = readFileSync(full, "utf8");
             }
         };
         walk(root);
