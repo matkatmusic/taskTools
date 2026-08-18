@@ -13,6 +13,8 @@ export type PreparedTask = {
     briefFile: string;
     planFile: string;
     reviewFile: string;
+    // Where the review CLI writes its JSON answer; codex-review.json is already a generated-artifact pattern.
+    reviewOutputFile: string;
     testReviewFile: string;
     notesFile: string;
     files: string[];
@@ -44,6 +46,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         briefFile,
         planFile: `${worktree}/plans/plan.json`,
         reviewFile: `${worktree}/plans/codex-review.json`,
+        reviewOutputFile: `${worktree}/plans/codex-review.json`,
         testReviewFile: `${worktree}/plans/test-review.json`,
         notesFile: `${worktree}/plans/task-${taskNumber}-implementation-notes.md`,
         files,

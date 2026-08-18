@@ -8,16 +8,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     amendTestsPrompt,
-    codexReviewInstructions,
     fixConflictsPrompt,
     fixSuitePrompt,
     fixTestsPrompt,
     implementPrompt,
     loadPreparedTask,
-    reviewPlanPrompt,
     reviewTestsPrompt,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
+import { planReviewPrompt } from "../../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
 import { planPrompt } from "../../scripts/tackle-tasks/PlannerBodyEmitter.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
@@ -30,6 +29,7 @@ const fakeTask: PreparedTask = {
     briefFile: "/tmp/fake-worktree/plans/brief-99.md",
     planFile: "/tmp/fake-worktree/plans/plan.json",
     reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
+    reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
     testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
     notesFile: "/tmp/fake-worktree/plans/task-99-implementation-notes.md",
     files: ["src/thing.ts"],
@@ -60,7 +60,7 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
 function allRolePrompts(task: PreparedTask): Record<string, string> {
     return {
         plan: planPrompt(task),
-        "review-plan": reviewPlanPrompt(task),
+        "review-plan": planReviewPrompt(task),
         implement: implementPrompt(task, "", "npx tsc --noEmit", 3),
         "fix-conflicts": fixConflictsPrompt("/repo", ["src/thing.ts"]),
         "fix-suite": fixSuitePrompt("/repo", "", "1 failing", []),
@@ -83,17 +83,12 @@ test("test_agentPromptEmitter_exitsNonZeroOnAnUnknownRole", () => {
 });
 
 test("test_agentPromptEmitter_emitsTheSameCodexFallbackChainForBothReviewRoles", () => {
-    // Setup: two different review questions routed through the one shared helper.
-    const planReview = codexReviewInstructions("review the plan", "the plan");
-    const testsReview = codexReviewInstructions("review the tests", "the tests");
-
-    // Verification: the fallback commands and their surrounding rules are identical in shape,
-    // independent of the embedded question text.
-    for (const chain of [planReview, testsReview]) {
+    // Setup: both review roles now carry their own copy of the chain, so assert they still agree.
+    const { task } = makeFixture(47);
+    for (const chain of [planReviewPrompt(task), reviewTestsPrompt(task)]) {
         assert.match(chain, /codex exec -s read-only/);
         assert.match(chain, /claude -p .* --tools "Read" --model fable --effort medium/);
         assert.match(chain, /claude -p .* --tools "Read" --model claude-opus-4-8 --effort high/);
-        assert.match(chain, /Never report a fallback review as codex\./);
     }
 });
 
@@ -321,7 +316,7 @@ test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
 
 for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
-    "review-plan": (task: PreparedTask) => reviewPlanPrompt(task),
+    "review-plan": (task: PreparedTask) => planReviewPrompt(task),
     implement: (task: PreparedTask) => implementPrompt(task, "a note", "npx tsc --noEmit", 3),
     "fix-conflicts": () => fixConflictsPrompt("/repo", ["src/thing.ts"]),
     "fix-suite": () => fixSuitePrompt("/repo", "root-layer", "1 failing", ["vendor"]),
@@ -430,12 +425,61 @@ test("test_planPrompt_pointsAtTheReturnShapeTemplate", () => {
     assert.match(prompt, /plan-output-template\.json/);
     assert.ok(!prompt.includes("planWritten"));
 });
-test("test_reviewPlanPrompt_returnsExactlyReviewWrittenAndReviewer", () => {
-    // Old code returned {task, reviewWritten, reviewer}; task must be gone. The return
-    // contract now sits before the final DATA section (finding 9), not at the string's end.
-    const prompt = reviewPlanPrompt(fakeTask);
-    assert.match(prompt, /Return \{reviewWritten: true, reviewer\}\.\n/);
-    assert.equal(/\{task:/i.test(prompt), false);
+test("test_planReviewPrompt_returnsWhatTheRulingScriptPrinted", () => {
+    // The script owns the verdict; the agent must not decide one itself.
+    const prompt = planReviewPrompt(fakeTask);
+    assert.match(prompt, /recordPlanReview\.ts/);
+    assert.match(prompt, /never decide a verdict yourself/);
+    assert.equal(prompt.includes("reviewWritten"), false);
+    // The reviewer writes its answer here, and the ruling script reads it back from the same path.
+    assert.match(prompt, new RegExp(`REVIEW_FILE=${fakeTask.reviewOutputFile}`));
+});
+
+test("test_planReviewPrompt_emitsOneQuestionEveryReviewerCanUse", () => {
+    // /read-file is a Claude skill codex cannot invoke, so the question itself names paths instead.
+    const prompt = planReviewPrompt(fakeTask);
+    const question = prompt.slice(prompt.indexOf("REVIEWEOF'"), prompt.indexOf("\nREVIEWEOF\n"));
+    assert.equal(question.includes("/read-file"), false);
+    assert.match(question, new RegExp(`- ${fakeTask.planFile}`));
+    // The error example is spliced from its template, so the prompt cannot drift from the schema.
+    const errorTemplate = readFileSync(
+        fileURLToPath(new URL("../../plans/review-plan-error-template.json", import.meta.url)), "utf8",
+    );
+    assert.ok(question.includes(errorTemplate.trim()), "missing-file example is not the template verbatim");
+    const schema = JSON.parse(readFileSync(
+        fileURLToPath(new URL("../../plans/review-plan-schema.json", import.meta.url)), "utf8",
+    ));
+    // Every field the schema requires must be present, or codex rejects the error response.
+    assert.deepEqual(Object.keys(JSON.parse(errorTemplate)).sort(), [...schema.required].sort());
+    // One question serves all three commands, so its body may only be emitted once.
+    assert.equal(prompt.split("## HOW TO JUDGE THE PLAN").length - 1, 1);
+    assert.equal(prompt.split("REVIEW_PROMPT=").length - 1, 1);
+});
+
+test("test_planReviewPrompt_keepsTheHeredocAndItsCommandsInOneRunnableBlock", () => {
+    // A shell variable dies with its Bash call, so the assignment must sit inside the fence it feeds.
+    const prompt = planReviewPrompt(fakeTask);
+    const fence = prompt.slice(prompt.indexOf("````sh"), prompt.lastIndexOf("````"));
+    assert.match(fence, /REVIEW_PROMPT=\$\(cat <<'REVIEWEOF'/);
+    // -o keeps codex's banner out of the answer; </dev/null stops it blocking on stdin forever.
+    // --output-schema is what makes codex emit bare JSON instead of a fenced block with prose.
+    assert.match(fence, /codex exec -s read-only --output-schema \S+review-plan-schema\.json -o "\$REVIEW_FILE" "\$REVIEW_PROMPT" <\/dev\/null/);
+    for (const line of fence.split("\n").filter((l) => /^\s*(codex exec|\|\| claude -p)/.test(l))) {
+        assert.match(line, /<\/dev\/null/, `reviewer command can hang on stdin: ${line}`);
+    }
+    assert.match(fence, /recordPlanReview\.ts/);
+    // Four backticks, so a fenced block inside the question cannot close the wrapper early.
+    assert.match(fence, /REVIEWEOF\n\)/);
+});
+
+test("test_planReviewPrompt_citesBothTemplatesInsteadOfInliningTheirJson", () => {
+    // Two shapes at two layers: the CLI reviewer returns issues/fixes, the subagent returns the verdict.
+    const prompt = planReviewPrompt(fakeTask);
+    assert.match(prompt, /review-plan-template\.json/);
+    assert.match(prompt, /review-plan-output-template\.json/);
+    // Field names appear in the missing-file example; the template's placeholder prose must not.
+    assert.equal(prompt.includes("<the id of the plan section this issue is in"), false);
+    assert.equal(prompt.includes("<why this will not regress the same way>"), false);
 });
 
 test("test_implementPrompt_returnContractDropsTheOldTaskAndSummaryFields", () => {
@@ -529,15 +573,6 @@ test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOc
 // Finding 9 — every builder puts static instructions and the return contract first, and
 // appends all runtime/bulk data after a final "---- DATA ----" marker.
 // ---------------------------------------------------------------------------
-
-test("test_reviewPlanPrompt_putsOwnedFilesAfterTheNestedDataMarker", () => {
-    const sentinel = "SENTINEL_REVIEW_PLAN_OWNED_8b1z";
-    const task: PreparedTask = { ...fakeTask, files: [sentinel] };
-    const prompt = reviewPlanPrompt(task);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 test("test_reviewTestsPrompt_putsBriefFileAfterTheNestedDataMarker", () => {
     const sentinel = "/tmp/SENTINEL_REVIEW_TESTS_BRIEF_2ke9/plans/brief-99.md";
@@ -641,21 +676,19 @@ function assertNoInstructionAfterFinalData(prompt: string) {
     assert.equal(/You are forbidden/.test(after), false, "a forbidden-actions clause appears after the final DATA section");
 }
 
-test("test_reviewPlanPrompt_putsTheReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
-    // This is the exact defect the remediation feedback named: reviewFile used to be
-    // interpolated in an outer instruction line appended AFTER the codex block.
+test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () => {
+    // Codex only gets the question string, so every path it must read is interpolated into it.
     const task: PreparedTask = {
         ...fakeTask,
-        number: 918274,
-        reviewFile: "/tmp/SENTINEL_REVIEWFILE_RP_b1/codex-review.json",
         briefFile: "/tmp/SENTINEL_BRIEF_RP_b2/brief.md",
         planFile: "/tmp/SENTINEL_PLANFILE_RP_b3/plan.json",
-        files: ["SENTINEL_FILE_RP_b4.ts"],
+        ownedFilePaths: ["/tmp/SENTINEL_OWNED_RP_b4/thing.ts"],
     };
-    const prompt = reviewPlanPrompt(task);
-    assertSentinelsOnlyAfterFinalData(prompt, [String(task.number), task.reviewFile]);
-    assertNoInstructionAfterFinalData(prompt);
-    assertNestedSentinelsOnlyAfterNestedData(prompt, [task.briefFile, task.planFile, task.files[0]]);
+    const prompt = planReviewPrompt(task);
+    for (const path of [task.briefFile, task.planFile, task.ownedFilePaths[0]]) {
+        assert.ok(prompt.includes(path), `prompt is missing ${path}`);
+    }
+    assert.equal(prompt.includes("---- DATA ----"), false);
 });
 
 test("test_reviewTestsPrompt_putsTheTestReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
