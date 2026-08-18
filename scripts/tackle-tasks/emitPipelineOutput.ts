@@ -12,6 +12,7 @@ import { isTaskActive } from "./isTaskActive.ts";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { recordImplementationNotes } from "./recordImplementationNotes.ts";
 import { markTaskInactive } from "./markTaskInactive.ts";
+import { getCurrentTaskRun, getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { removeWorktreeAndBranch } from "../mergeTaskWorktrees.ts";
 import { releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory } from "../prepareTasks.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
@@ -120,6 +121,36 @@ export const HAPPY_PATH_ROLES = ["plan", "review-plan", "implement", "review-tes
 // fix-conflicts reads its file list from git, so it renders only where a rebase actually stopped.
 const CONFLICT_ROLE = "fix-conflicts";
 
+// fix-suite reads the failing output from task run state, so it renders only where a red suite is recorded.
+const SUITE_RED_ROLES = ["run-full-suite", "fix-suite"];
+
+// The smallest thing a node --test run prints when one test fails, so the prompt renders against real shape.
+const SAMPLE_SUITE_FAILURE = `\u2716 test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory (3.1ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  + [ 'RunFullSuiteBodyEmitter' ]
+  - []
+      at TestContext.<anonymous> (tests/greenBoxPolicy.test.ts:41:12)
+# tests 218
+# pass 217
+# fail 1`;
+
+// Written here, not in stagePath: stagePath ends its run, and an ended run has no record to read.
+function recordARedFullSuite(taskNumber: number, projectRoot: string): void {
+    isTaskActive(taskNumber, `stage-${taskNumber}`, projectRoot);
+    // isTaskActive names the run itself, so the id is read back rather than assumed.
+    const runId = getCurrentTaskRun(taskNumber, projectRoot)!.runId;
+    updateCurrentTaskRun(taskNumber, runId, {
+        fullSuite: {
+            stepId: "run the full suite",
+            layers: [{ occurrenceId: "", passed: false }],
+            passed: false,
+            output: SAMPLE_SUITE_FAILURE,
+            checkedAt: getLocalIsoTimestamp(),
+        },
+    }, projectRoot);
+}
+
 // One file per role, byte-pure, so a real run's logged prompt diffs against it cleanly.
 export function writeAgentPrompts(taskNumber: number, projectRoot: string, pathName: string): string[] {
     const worktree = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
@@ -130,7 +161,11 @@ export function writeAgentPrompts(taskNumber: number, projectRoot: string, pathN
     // Staged here, not in stagePath: the workflow trace resets the task branch and would undo the rebase.
     const conflicted = pathName === "rebase-conflict";
     if (conflicted) stopARebaseOnConflict(taskNumber, worktree, projectRoot);
-    const roles: string[] = conflicted ? [...HAPPY_PATH_ROLES, CONFLICT_ROLE] : [...HAPPY_PATH_ROLES];
+    const suiteRed = pathName === "suite-red";
+    if (suiteRed) recordARedFullSuite(taskNumber, projectRoot);
+    const roles: string[] = [...HAPPY_PATH_ROLES];
+    if (conflicted) roles.push(CONFLICT_ROLE);
+    if (suiteRed) roles.push(...SUITE_RED_ROLES);
     return roles.map((role) => {
         const file = join(directory, `${role}.md`);
         writeFileSync(file, emitAgentPrompt(taskNumber, role, {
@@ -176,7 +211,7 @@ export async function writePipelineOutput(taskNumber: number, projectRoot: strin
 export const STAGEABLE_PATHS = [
     "worktree-does-not-exist", "safe-existing-worktree",
     "unsafe-unresumable-worktree", "unsafe-resumable-worktree",
-    "rebase-conflict",
+    "rebase-conflict", "suite-red",
 ] as const;
 
 function stagePath(pathName: string, taskNumber: number, projectRoot: string): void {
@@ -195,7 +230,7 @@ function stagePath(pathName: string, taskNumber: number, projectRoot: string): v
         recordImplementationNotes(taskNumber, created.worktree, notesFile, stageRunId, projectRoot);
     }
     // A detached HEAD is the smallest thing checkTaskWorktreeSafe calls unsafe.
-    if (pathName !== "safe-existing-worktree" && pathName !== "rebase-conflict") {
+    if (pathName !== "safe-existing-worktree" && pathName !== "rebase-conflict" && pathName !== "suite-red") {
         execFileSync("git", ["-C", created.worktree, "checkout", "--detach", "--quiet"]);
     }
 

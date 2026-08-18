@@ -56,6 +56,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "PlanningPipelineEmitter",
     "PreambleDataEmitter",
     "RebaseMergePipelineEmitter",
+    "RunFullSuiteBodyEmitter",
     "SkillBodyEmitter",
     "SuiteFixBodyEmitter",
     "WorkflowResultCodes",
