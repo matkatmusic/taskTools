@@ -117,18 +117,26 @@ export function annotatedBody(taskNumber: number, projectRoot: string): string {
 // The four agent boxes a run reaches when every block succeeds, in visit order.
 export const HAPPY_PATH_ROLES = ["plan", "review-plan", "implement", "review-tests"] as const;
 
+// fix-conflicts reads its file list from git, so it renders only where a rebase actually stopped.
+const CONFLICT_ROLE = "fix-conflicts";
+
 // One file per role, byte-pure, so a real run's logged prompt diffs against it cleanly.
-export function writeAgentPrompts(taskNumber: number, projectRoot: string): string[] {
+export function writeAgentPrompts(taskNumber: number, projectRoot: string, pathName: string): string[] {
     const worktree = join(resolveTaskWorktreeConventionDirectory(projectRoot), `task-${taskNumber}`);
     // A path that stages no worktree has no brief, so there is no prompt to write.
     if (!existsSync(worktree)) return [];
     const directory = join(OUTPUT_DIR, String(taskNumber));
     mkdirSync(directory, { recursive: true });
-    return HAPPY_PATH_ROLES.map((role) => {
+    // Staged here, not in stagePath: the workflow trace resets the task branch and would undo the rebase.
+    const conflicted = pathName === "rebase-conflict";
+    if (conflicted) stopARebaseOnConflict(taskNumber, worktree, projectRoot);
+    const roles: string[] = conflicted ? [...HAPPY_PATH_ROLES, CONFLICT_ROLE] : [...HAPPY_PATH_ROLES];
+    return roles.map((role) => {
         const file = join(directory, `${role}.md`);
         writeFileSync(file, emitAgentPrompt(taskNumber, role, {
             worktree,
             projectRoot,
+            checkoutPath: worktree,
             sourceBranch: currentBranchName(projectRoot),
             // No role reads runId, so a literal keeps this off the run-identity path.
             runId: "inspect",
@@ -157,7 +165,7 @@ export async function writePipelineOutput(taskNumber: number, projectRoot: strin
     const file = join(OUTPUT_DIR, `pipeline-output-task-${taskNumber}-${pathName}.md`);
     mkdirSync(OUTPUT_DIR, { recursive: true });
     writeFileSync(file, render(taskNumber, projectRoot, pathName, trace));
-    return [file, ...writeAgentPrompts(taskNumber, projectRoot)];
+    return [file, ...writeAgentPrompts(taskNumber, projectRoot, pathName)];
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +176,7 @@ export async function writePipelineOutput(taskNumber: number, projectRoot: strin
 export const STAGEABLE_PATHS = [
     "worktree-does-not-exist", "safe-existing-worktree",
     "unsafe-unresumable-worktree", "unsafe-resumable-worktree",
+    "rebase-conflict",
 ] as const;
 
 function stagePath(pathName: string, taskNumber: number, projectRoot: string): void {
@@ -186,13 +195,33 @@ function stagePath(pathName: string, taskNumber: number, projectRoot: string): v
         recordImplementationNotes(taskNumber, created.worktree, notesFile, stageRunId, projectRoot);
     }
     // A detached HEAD is the smallest thing checkTaskWorktreeSafe calls unsafe.
-    if (pathName !== "safe-existing-worktree") {
+    if (pathName !== "safe-existing-worktree" && pathName !== "rebase-conflict") {
         execFileSync("git", ["-C", created.worktree, "checkout", "--detach", "--quiet"]);
     }
 
     markTaskInactive({ taskNumber, runId: stageRunId, projectRoot });
     // A run that ended releases its lease; leaving it would stop the next run establishing one.
     releaseTaskWorktreeLease({ worktreePath: created.worktree, runId: stageRunId });
+}
+
+// Both sides touch the same line of the same new file, which is the smallest thing a rebase stops on.
+function stopARebaseOnConflict(taskNumber: number, worktree: string, projectRoot: string): void {
+    const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
+    const sourceBranch = currentBranchName(projectRoot);
+    const conflictFile = "conflict-fixture.md";
+    writeFileSync(join(worktree, conflictFile), "task side\n");
+    git("add", conflictFile);
+    git("commit", "--quiet", "--no-verify", "-m", "conflict fixture: task side");
+    git("checkout", "--quiet", "-b", "conflict-fixture-target", sourceBranch);
+    writeFileSync(join(worktree, conflictFile), "target side\n");
+    git("add", conflictFile);
+    git("commit", "--quiet", "--no-verify", "-m", "conflict fixture: target side");
+    git("checkout", "--quiet", taskBranchName(taskNumber));
+    try {
+        git("rebase", "conflict-fixture-target");
+    } catch {
+        // A rebase that stops on markers exits nonzero; that stopped state is the whole point.
+    }
 }
 
 // Everything a run of this script can leave behind, removed newest-artifact-first.
@@ -204,6 +233,9 @@ function teardown(taskNumber: number, projectRoot: string, tasksSnapshot: Buffer
     // Restored first: a throwing worktree removal must not strand the task marked active.
     writeFileSync(resolveTaskFiles(projectRoot).tasksPath, tasksSnapshot);
     rmSync(`${worktreePath}.lease`, { force: true });
+    // The rebase-conflict stage leaves this behind; it lives in the shared repo, not the worktree.
+    const fixtureBranch = execFileSync("git", ["-C", projectRoot, "branch", "--list", "conflict-fixture-target"], { encoding: "utf8" }).trim();
+    if (fixtureBranch !== "") execFileSync("git", ["-C", projectRoot, "branch", "-D", "conflict-fixture-target"], { stdio: "ignore" });
     rmSync(taskWorktreeCreateJournalPath(worktreePath), { force: true });
     if (existsSync(worktreePath)) removeWorktreeAndBranch(projectRoot, worktreePath, branch);
 }

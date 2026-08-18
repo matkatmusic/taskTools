@@ -6,6 +6,7 @@ import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
 import { planPrompt } from "./PlannerBodyEmitter.ts";
 import { implementPrompt } from "./ImplementBodyEmitter.ts";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
+import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -36,51 +37,6 @@ export type AgentPromptEmitterPayload = {
 // ---------------------------------------------------------------------------
 
 const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
-
-// ---------------------------------------------------------------------------
-// fix-conflicts — from mergeConflictBrief, git add lines dropped. Keeps "no git rebase --continue"; "advance the rebase" does that now.
-// ---------------------------------------------------------------------------
-
-export function fixConflictsPrompt(checkoutPath: string, conflictedFilePaths: string[]): string {
-    return `A rebase in CHECKOUT_PATH (see DATA below) is stopped on live conflict markers, not
-aborted. Resolve exactly the conflicted paths listed in CONFLICTED_PATHS below — that is
-the complete list, do not search the repository for more.
-
-Carry out every step below, in order, from top to bottom.
-A line reading \`return {...}\` means stop and report exactly those fields.
-
-You may READ anything, anywhere in the tree — callers, callees, tests, other layers.
-You may EDIT any file in any layer — resolving a conflict often means updating a call
-site, and a call site can live in a different repository.
-
-for each path in CONFLICTED_PATHS below:
-    open CHECKOUT_PATH/path
-    resolve every <<<<<<< / ======= / >>>>>>> block, keeping BOTH sides' intent
-    remove the conflict markers
-    leave it unstaged and uncommitted — "commit if needed" stages and commits every touched layer next
-
-if resolving a conflict required editing a file in a DIFFERENT repository than CHECKOUT_PATH:
-    edit it there too, and leave that edit uncommitted as well
-
-Do not run \`git rebase --continue\` or \`git rebase --abort\` in CHECKOUT_PATH yourself — the caller drives that after you return.
-
-if every listed path has no remaining conflict markers:
-    return {resolved: true, unresolvedPaths: []}
-else:
-    return {resolved: false, unresolvedPaths: the paths still containing conflict markers}
-
-You are forbidden to weaken, delete, or stub out code to make a conflict
-disappear; to force-push or hard-reset anything you did not create; to run
-\`git rebase --continue\` or \`git rebase --abort\` yourself; to stage or commit
-anything yourself; or to leave a required edit in a different repository unmade.
-Returning resolved false is a correct outcome when a conflict genuinely cannot
-be resolved, not a failure.
-
----- DATA ----
-CHECKOUT_PATH = ${checkoutPath}
-CONFLICTED_PATHS =
-${conflictedFilePaths.length === 0 ? "  (none)" : conflictedFilePaths.map((p) => `  - ${p}`).join("\n")}`;
-}
 
 // ---------------------------------------------------------------------------
 // fix-suite / fix-tests — from rebaseFixBrief, minus test-editing and self-commit. Edits source only, never tests (diagram rule 4).
@@ -225,7 +181,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
                 typeof payload.maxFixRounds === "number" ? payload.maxFixRounds : 3,
             );
         case "fix-conflicts":
-            return fixConflictsPrompt(payload.checkoutPath as string, Array.isArray(payload.conflictedFilePaths) ? payload.conflictedFilePaths as string[] : []);
+            return fixConflictsPrompt(payload.checkoutPath as string);
         // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
         case "fix-suite":
             return fixSuitePrompt(

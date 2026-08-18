@@ -65,7 +65,7 @@ test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", (
 
 test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
     // This box judges what the tests assert; running them is the task-tests pipeline's job.
-    assert.match(reviewTestsPrompt(fakeTask), /Never run a test, and never run the suite\./);
+    assert.match(reviewTestsPrompt(fakeTask), /Never run a test, and never run the full suite\./);
 });
 
 test("test_reviewTestsPrompt_citesTheOutputTemplateAndCarriesOneQuestionOnly", () => {

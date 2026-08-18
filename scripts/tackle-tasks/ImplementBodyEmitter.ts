@@ -2,6 +2,7 @@
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
+import { absolutePathsSection } from "./promptSections.ts";
 
 // Its own copy, so this file never imports the dispatch hub and the imports stay one-way.
 const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
@@ -48,11 +49,7 @@ An empty \`codexNotes\` means the section stands as written.
 If a section's \`codexNotes\` is not empty, a reviewer wrote a required fix for that section.
 When a \`codexNotes\` field is not empty, do what the field says while you implement that section. 
 
-## ALWAYS USE ABSOLUTE PATHS
-
-For every filesystem tool call, use the absolute path under \`${t.repoRoot}\`.
-Never resolve a repo-relative path against your ambient working directory, and never read or edit the same relative path in another checkout.
-Every shell command must run inside \`${t.repoRoot}\`.
+${absolutePathsSection(t.repoRoot)}
 
 ## WHAT YOU MAY EDIT
 

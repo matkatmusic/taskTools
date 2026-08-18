@@ -19,6 +19,7 @@ import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
 import { markTaskInactive } from "./markTaskInactive.ts";
 import { releaseSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
+import { absolutePathsSection } from "./promptSections.ts";
 import { generateRunId, releaseTaskWorktreeLease } from "../prepareTasks.ts";
 import type { Plan } from "./planArtifacts.ts";
 
@@ -221,11 +222,7 @@ and the return shape you must produce into your context:
 /read-file ${readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md"), PLAN_OUTPUT_PATH])}
 \`\`\`
 
-## ALWAYS USE ABSOLUTE PATHS
-
-For every filesystem tool call, use the absolute path under \`${t.repoRoot}\`.
-Never resolve a repo-relative task path against your ambient working directory,
-and never read or edit the same relative path in another checkout.
+${absolutePathsSection(t.repoRoot)}
 
 Read the owned files — a plan that guesses at their contents will be rejected.
 Follow \`~/.claude/guides/planning.md\` and write the plan as JSON to exactly \`${t.planFile}\`
