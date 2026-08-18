@@ -201,6 +201,12 @@ const FIX_CONFLICTS_RESULT = {
   },
 }
 
+const RUN_FULL_SUITE_RESULT = {
+  type: 'object',
+  required: ['passed'],
+  properties: { passed: { type: 'boolean' } },
+}
+
 const FIX_SUITE_RESULT = {
   type: 'object',
   required: ['fixed'],
@@ -606,9 +612,11 @@ const suitePipeline = async () => {
   step(L.REBASED_WORKTREE_INPUT)
 
   for (;;) {
-    // Paragraph 62: the full suite is what proves the task broke nothing else.
-    step(L.RUN_FULL_SUITE)
-    const passes = decide('RUN_FULL_SUITE', 'suitePasses', suiteIndex)
+    // Paragraph 62 [S]: the sandbox cannot run a suite, so an agent invokes the run-full-suite skill.
+    const suiteRun = await runAgent(L.RUN_FULL_SUITE, 'SUITE_RUNNER', 'run-full-suite', RUN_FULL_SUITE_RESULT)
+    if (suiteRun === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    const passes = isFake() ? attempt(FAKE.suitePasses, suiteIndex) : suiteRun.passed
     suiteIndex += 1
     step(L.DO_ALL_TESTS_PASS, yesNo(passes))
     if (passes) break
@@ -630,7 +638,6 @@ const suitePipeline = async () => {
       'SUITE_FIXER',
       'fix-suite',
       FIX_SUITE_RESULT,
-      { checkoutPath: WORKTREE, testOutput: '', forbiddenPaths: [] },
     )
 
     // Paragraph 65.

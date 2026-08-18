@@ -12,28 +12,15 @@ const task: PreparedTask = {
     tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: "/project",
 };
 
-test("test_runFullSuitePrompt_carriesAValidStdinPayloadForRunFullSuite", () => {
-    // The sandbox cannot run a script, so the whole box is the commands the agent runs.
+test("test_runFullSuitePrompt_passesEveryHookArgumentQuotedAndInOrder", () => {
+    // The hook refuses any count but five, and a worktree path with spaces needs the quotes.
     const prompt = runFullSuitePrompt(task, "r1", "main");
-    const payload = prompt.match(/<<'TTPAYLOAD'[^\n]*\n(.*)\nTTPAYLOAD/)?.[1];
-    assert.ok(payload, "prompt is missing the heredoc payload");
-    assert.deepEqual(JSON.parse(payload), {
-        taskNumber: 35, expectedRunId: "r1", worktreePath: "/wt",
-        sourceBranch: "main", stepId: "run the full suite", projectRoot: "/project",
-    });
+    assert.match(prompt, /\/run-full-suite "35" "r1" "\/wt" "main" "\/project"/);
 });
 
-test("test_runFullSuitePrompt_sendsTheRunToAGitignoredFileAndReadsTheVerdictBackFromIt", () => {
-    // Reading the run's stdout directly hands back stepId, layers and 8000 chars of output too.
+test("test_runFullSuitePrompt_leavesTheVerdictToTheSkillAndAsksForItVerbatim", () => {
+    // This box derives nothing in prose; the skill decides, the agent relays.
     const prompt = runFullSuitePrompt(task, "r1", "main");
-    assert.match(prompt, /SUITE_FILE=\/wt\/plans\/full-suite-35\.json/);
-    assert.match(prompt, /node \/.*\/runFullSuite\.ts <<'TTPAYLOAD' >"\$SUITE_FILE"/);
-    assert.match(prompt, /node \/.*\/runFullSuite\.ts verdict "\$SUITE_FILE"/);
-});
-
-test("test_runFullSuitePrompt_leavesTheVerdictToTheScriptAndAsksForItVerbatim", () => {
-    // This box derives nothing in prose; runFullSuite.ts decides, the agent relays.
-    const prompt = runFullSuitePrompt(task, "r1", "main");
-    assert.match(prompt, /Return the second command's output verbatim\./);
+    assert.match(prompt, /Return the skill's output verbatim\./);
     assert.equal(prompt.includes("---- DATA ----"), false);
 });
