@@ -14,11 +14,11 @@ import {
     fixTestsPrompt,
     implementPrompt,
     loadPreparedTask,
-    planPrompt,
     reviewPlanPrompt,
     reviewTestsPrompt,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
+import { planPrompt } from "../../scripts/tackle-tasks/PlannerBodyEmitter.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 

@@ -1,0 +1,4 @@
+{
+  "outcome": "<PLAN if you wrote the plan file, CLARIFY if the docs cannot supply something you need, ERROR if you could not proceed>",
+  "clarifyRequest": "<only when outcome is CLARIFY: exactly what the docs did not supply. Empty otherwise.>"
+}
