@@ -20,6 +20,9 @@ const repairCounters = [
 // The three exit types the preamble owns, so the workflow must never name them.
 const preambleExitTypes = ["invalid-number", "already-active", "blocked"];
 
+// The spliced pipelines quote with ", the template with ', so neither style may hide a name.
+const namesExitType = (exitType: string) => new RegExp(`["']${exitType}["']`).test(workflowSource);
+
 test("test_workflow_declaresMetaAsTheFirstStatement", () => {
     // Setup: drop leading blank lines and comments, which are not statements.
     const firstStatement = workflowSource
@@ -65,12 +68,12 @@ test("test_workflow_referencesEveryExitTypeFromTheDiagram", () => {
     // Verification: the workflow names every exit type the preamble does not own.
     for (const exitType of exitTypes) {
         if (preambleExitTypes.includes(exitType as string)) continue;
-        assert.ok(workflowSource.includes(`'${exitType}'`), `workflow never names exit type ${exitType}`);
+        assert.ok(namesExitType(exitType as string), `workflow never names exit type ${exitType}`);
     }
 
     // Verification: a preamble exit belongs to runPreamble, so the workflow must never write one.
     for (const exitType of preambleExitTypes) {
-        assert.equal(workflowSource.includes(`'${exitType}'`), false, `workflow names preamble exit type ${exitType}`);
+        assert.equal(namesExitType(exitType), false, `workflow names preamble exit type ${exitType}`);
     }
 });
 

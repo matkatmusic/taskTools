@@ -1,188 +1,3 @@
-export const meta = {
-  name: 'tackle-task',
-  description: 'Drive one active task from planning to merge, per plans/diagram/pipeline-*.mmd',
-  phases: [
-    { title: 'Plan', detail: 'write the plan, review it, replan or clarify' },
-    { title: 'Implement', detail: 'implement, commit, run the task tests, review them' },
-    { title: 'Rebase and merge', detail: 'lock the source repo, rebase, run the full suite, merge' },
-    { title: 'Exit', detail: 'record the outcome, release what is held, report' },
-  ],
-}
-
-/*
-  meta comes first: the harness reads it as a pure literal.
-*/
-
-/*
-  Drives paragraphs 18 to 97 of plans/tackle-tasks-v1_5-prompt.md.
-*/
-
-/*
-  Paragraphs 1 to 17 already ran in PreambleDataEmitter.ts:runPreamble, at skill-invocation time.
-*/
-
-/*
-  So this file starts from an active task, an initialized worktree, and a written brief.
-*/
-
-/*
-  WIRED: the 6 [S] paragraphs 23, 30, 36, 45, 58, 63, as real agent() calls.
-*/
-
-/*
-  NOT WIRED: the 90 [C] paragraphs. The sandbox cannot run a command, so each throws.
-*/
-
-/*
-  FAKE MODE: args.fake supplies every [C] decision, so a path walks offline with no repository.
-*/
-
-/*
-  Paragraph 18: resumption is worktree-level, so there is no resume entry point here.
-*/
-
-/*
-  Paragraph 19: the preamble initializes submodules on every path, before this file runs.
-*/
-
-// ---------------------------------------------------------------------------
-// Diagram labels, spliced from plans/diagram/*.mmd by generateTaskWorkflow.ts
-// ---------------------------------------------------------------------------
-
-/*
-  Every label below is its node's text. A typo fails the build, never a run.
-*/
-
-const LABELS = {
-  ACCEPTED_PLAN_INPUT: "Input: { plan, tasks.json entry }",
-  AGENT_ERRORED: "agent() errored",
-  AMEND_ENTRY_WITH_CODEX_NOTES: "amend tasks.json entry with codex's notes and fixes",
-  AMEND_ENTRY_WITH_FAILING_TESTS: "amend tasks.json entry with the failing tests",
-  ARCHIVE_TASK: "move task to completedTasks.json and update tasks blocked by it",
-  ARE_2_CLARIFY_ROUNDS_DONE: "2 clarify rounds done?",
-  ARE_2_CONFLICT_FIXES_DONE: "2 conflict fixes done?",
-  ARE_2_MERGE_ATTEMPTS_DONE: "2 merge attempts done?",
-  ARE_2_REVIEWS_DONE: "2 codex reviews done?",
-  ARE_2_SUITE_FIXES_DONE: "2 suite fix attempts done?",
-  ARE_2_TEST_FIXES_DONE: "have 2 fixes already been attempted?",
-  ARE_2_TEST_REVIEWS_DONE: "2 codex test reviews done?",
-  ARE_TESTS_FLAGGED: "are the tests flagged?",
-  BUILD_CLOSURE_NOTE: "build the closure note from the recorded run",
-  CLEAN_UP_WORKTREES: "clean up worktrees, leases, persistence refs and source lock",
-  CODEX_REVIEWS_PLAN: "codex reviews the plan",
-  CODEX_REVIEWS_TESTS: "codex reviews the tests",
-  COMMITTED_WORK_INPUT: "Input: { worktree, task test files }",
-  COMMIT_IF_NEEDED: "commit if needed",
-  CONTINUE_REBASE: "continue the rebase",
-  DID_ANY_WORK_LAND: "did ANY of this task's work land?",
-  DID_CHANGES_STAY_INSIDE_FENCE: "did every change stay inside the task's file fence?",
-  DID_REBASE_REPORT_CONFLICTS: "did the rebase report conflicts?",
-  DOCS_INPUT: "Input: { brief, docs, codexNotes? }",
-  DOES_RUN_HOLD_LEASE: "does this run still hold the worktree lease?",
-  DOES_RUN_HOLD_SOURCE_LOCK: "does this run still hold the source repo lock?",
-  DO_ALL_TESTS_PASS: "do all tests pass?",
-  DO_TASK_TESTS_PASS: "do the task tests pass?",
-  DRAFT_PLAN_INPUT: "Input: { tasks.json entry, plan }",
-  FINISHED_IMPLEMENTATION_INPUT: "Input: { runId, taskNumber }",
-  FIX_CONFLICTS: "fix conflicts",
-  FIX_THE_CODEBASE_FOR_SUITE: "fix the codebase so the full suite passes",
-  GREEN_IMPLEMENTATION_INPUT: "Input: { plan, tasks.json entry, task test files, implementation diff, test command, test results, pre-existing test files }",
-  GREEN_WORKTREE_INPUT: "Input: { worktree, target branch, merge receipt so far }",
-  HAVE_15_MINUTES_PASSED: "have 15 minutes passed?",
-  IMPLEMENT_TASK: "implement task",
-  IS_REBASE_FINISHED: "is the rebase finished?",
-  LOCK_SOURCE_REPO: "Try: lock the source repo",
-  MARK_TASK_INACTIVE_FAILURE: "mark task inactive in tasks.json",
-  MARK_TASK_INACTIVE_SUCCESS: "mark task inactive in tasks.json",
-  MERGE_RECEIPT_INPUT: "Input: { merge commit hashes, modified files }",
-  MERGE_WORKTREES: "Try: merge worktrees and submodules, no fast-forward. Each layer that lands writes its merge ref AS it lands",
-  PLAN_THE_TASK: "plan the task",
-  READ_PUBLICATION_STATE: "read the publication state from the layer merge refs",
-  REBASED_WORKTREE_INPUT: "Input: { worktree }",
-  REBASE_ONTO_TARGET_BRANCH: "rebase onto the target branch. skip every layer the receipt records as already landed",
-  RECORD_MERGE_COMMIT_HASHES: "record merge commit hashes to tasks.json",
-  RECORD_MODIFIED_FILES_FAILURE: "record modified files to tasks.json",
-  RECORD_MODIFIED_FILES_SUCCESS: "record modified files to tasks.json",
-  RELEASE_SOURCE_LOCK: "release the source repo lock",
-  RELEASE_WORKTREE_LEASE: "release the worktree lease, keep the worktree",
-  REPORT_CLOSURE_NOTE: "report the closure note",
-  REPORT_EXIT_TYPE_AND_NOTE: "report the run's exit type and note",
-  RUN_FULL_SUITE: "run the full suite",
-  RUN_TASK_TESTS: "run task tests",
-  SOURCE_REPO_LOCKED_INPUT: "Input: { worktree, target branch, merge receipt }",
-  STOP: "stop",
-  UPDATE_AUTO_GENERATED_DOCS: "update auto generated docs",
-  UPDATE_TASK_ENTRY: "update tasks.json entry",
-  WAS_LOCK_ACQUIRED: "acquired?",
-  WHAT_DID_THE_PLANNER_RETURN: "what did the planner return?",
-  WHAT_IS_DOCS_MODE: "what is the docs mode?",
-  WHAT_IS_PUBLICATION_STATE: "what is the publication state?",
-  WHAT_IS_REVIEW_VERDICT: "what is the review verdict?",
-  WORKTREE_DOCS_MODE_INPUT: "Input: { worktree, docs mode, clarify request? }",
-  WRITE_CLARIFY_REQUEST: "write the clarify request into the tasks.json entry",
-  WRITE_EXIT_TYPE_AND_NOTE: "write exit type and exit notes to tasks.json",
-  WRITE_EXIT_TYPE_COMPLETED: "write exit type completed to tasks.json",
-  WRITE_PUBLICATION_OUTCOME: "write the publication outcome: keep completed if it is there, else write partially-published. NEVER run-failed. add cleanup-incomplete and the note",
-}
-
-/*
-  The same lookup tracePipeline.ts exports, so a trace and a run cannot word a box differently.
-*/
-const L = (id) => {
-  const label = LABELS[id]
-  if (label === undefined) throw new Error(`tackle-tasks workflow: no diagram node named "${id}"`)
-  return label
-}
-
-// ---------------------------------------------------------------------------
-// Plan-file validators, spliced from planArtifacts.ts by generateTaskWorkflow.ts
-// ---------------------------------------------------------------------------
-
-/*
-  The v1.5 diagrams dropped the receipt-validity boxes, so nothing calls these yet.
-*/
-
-const SECTION_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-function isPlanProblem(result                    )                        {
-    return "problem" in result;
-}
-
-function validatePlanShape(value         , expectedTaskNumber        )                     {
-    if (typeof value !== "object" || value === null) return { problem: "plan is not an object" };
-    const plan = value                           ;
-    if (plan.task !== expectedTaskNumber) {
-        return { problem: `plan task ${JSON.stringify(plan.task)} does not match expected task ${expectedTaskNumber}` };
-    }
-    if (!Number.isInteger(plan.revision) || (plan.revision          ) < 1) {
-        return { problem: "plan revision must be a positive integer" };
-    }
-    if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
-        return { problem: "plan sections must be a non-empty array" };
-    }
-    const seenIds = new Set        ();
-    for (const section of plan.sections) {
-        if (typeof section !== "object" || section === null) return { problem: "plan section is not an object" };
-        const { id, title, body } = section                           ;
-        if (typeof id !== "string" || !SECTION_ID_PATTERN.test(id)) {
-            return { problem: `plan section id is not valid kebab-case: ${JSON.stringify(id)}` };
-        }
-        if (seenIds.has(id)) return { problem: `plan has a duplicate section id: ${id}` };
-        seenIds.add(id);
-        if (typeof title !== "string") return { problem: `plan section "${id}" is missing a string title` };
-        if (typeof body !== "string") return { problem: `plan section "${id}" is missing a string body` };
-    }
-    return { task: plan.task          , revision: plan.revision          , sections: plan.sections                  };
-}
-
-// ---------------------------------------------------------------------------
-// Pipelines, spliced whole from pipelines.ts by generateTaskWorkflow.ts
-// ---------------------------------------------------------------------------
-
-/*
-  One function per diagram. A test imports pipelines.ts and drives any one of them alone.
-*/
-
 /*
   One exported function per plans/diagram/pipeline-<name>.mmd, so a diagram can be tested alone.
 
@@ -194,56 +9,56 @@ function validatePlanShape(value         , expectedTaskNumber        )          
 */
 
 // The harness globals the workflow sandbox provides, and the label lookup the diagrams supply.
-                              
-                 
-                    
-                     
-                        
-                         
-                  
-                                                     
-                              
-                                                                                             
-                                
-                                   
-  
+export type PipelineConfig = {
+    task: number;
+    emitter: string;
+    worktree: string;
+    projectRoot: string;
+    sourceBranch: string;
+    runId: string;
+    fake: Record<string, unknown> | null | undefined;
+    L: (id: string) => string;
+    agent: (prompt: string, options: { label: string; schema: unknown }) => Promise<unknown>;
+    log: (line: string) => void;
+    phase: (title: string) => void;
+};
 
-                                                
-                    
-                  
-                            
-                                     
-                          
-                        
-                      
-                        
-                          
-                       
-                          
-                         
-                         
-                       
-                         
-                      
-                           
-                          
-                       
-                             
-  
+export type PipelineContext = PipelineConfig & {
+    trace: string[];
+    depth: number;
+    sourceLockHeld: boolean;
+    agentVisits: Map<string, number>;
+    clarifyRounds: number;
+    planReviews: number;
+    testFixes: number;
+    testReviews: number;
+    conflictFixes: number;
+    suiteFixes: number;
+    mergeAttempts: number;
+    plannerIndex: number;
+    verdictIndex: number;
+    testsIndex: number;
+    flaggedIndex: number;
+    lockIndex: number;
+    conflictsIndex: number;
+    finishedIndex: number;
+    suiteIndex: number;
+    publicationIndex: number;
+};
 
 // Where a pipeline sends the run: on to another pipeline, or out through an exit tail.
-                             
-                                        
-                                                                              
+export type PipelineOutcome =
+    | { next: string; done?: undefined }
+    | { done: true; exitType: string; exitNote: string; workLanded: boolean };
 
-const MAX_ATTEMPTS = 2;
+export const MAX_ATTEMPTS = 2;
 
 const INDENT = "  ";
 
 const AGENT_FAILED_NOTE = "the agent returned nothing usable";
 
 // Every counter starts at zero, because none of them is written to tasks.json.
-function createPipelineContext(config                )                  {
+export function createPipelineContext(config: PipelineConfig): PipelineContext {
     return {
         task: config.task,
         emitter: config.emitter,
@@ -286,7 +101,7 @@ function createPipelineContext(config                )                  {
 /*
   One diagram box, indented one level per repeat of a loop.
 */
-function step(ctx                 , label        , suffix         )         {
+export function step(ctx: PipelineContext, label: string, suffix?: string): string {
     const line = INDENT.repeat(ctx.depth) + (suffix === undefined ? label : `${label}: ${suffix}`);
     ctx.trace.push(line);
     ctx.log(line);
@@ -296,47 +111,47 @@ function step(ctx                 , label        , suffix         )         {
 /*
   A sub-pipeline boundary, one per plans/diagram/pipeline-<name>.mmd file. Never indented.
 */
-function banner(ctx                 , name        )         {
+export function banner(ctx: PipelineContext, name: string): string {
     const line = `--------- ${name} ---------`;
     ctx.trace.push(line);
     ctx.log(line);
     return line;
 }
 
-function yesNo(value         )         {
+export function yesNo(value: unknown): string {
     return value ? "YES" : "NO";
 }
 
 /*
   Reads one attempt's outcome; past the end of the list the last entry repeats.
 */
-function attempt   (outcomes     , index        )    {
-    return outcomes[Math.min(index, outcomes.length - 1)]     ;
+export function attempt<T>(outcomes: T[], index: number): T {
+    return outcomes[Math.min(index, outcomes.length - 1)] as T;
 }
 
-function isFake(ctx                 )          {
+export function isFake(ctx: PipelineContext): boolean {
     return ctx.fake !== null && ctx.fake !== undefined;
 }
 
 /*
   A [C] box. Throws naming its diagram box, because the sandbox cannot run its script.
 */
-function notWired(box        )        {
+export function notWired(box: string): never {
     throw new Error(`tackle-tasks workflow: [C] box not wired yet — ${box}`);
 }
 
 /*
   A [C] decision. Real mode throws; fake mode reads the fixture, so a path walks offline.
 */
-function decide(ctx                 , box        , field        , index        )          {
+export function decide(ctx: PipelineContext, box: string, field: string, index: number): unknown {
     if (!isFake(ctx)) return notWired(box);
-    return attempt((ctx.fake                             )[field]             , index);
+    return attempt((ctx.fake as Record<string, unknown[]>)[field] as unknown[], index);
 }
 
 /*
   The whole prompt for an [S] box, per workflow-only-context-injection.md section 3.
 */
-function emitterPrompt(ctx                 , role        , extra                          )         {
+export function emitterPrompt(ctx: PipelineContext, role: string, extra?: Record<string, unknown>): string {
     // Serialized, never interpolated, and delivered on quoted-heredoc stdin.
     const payload = JSON.stringify(Object.assign(
         { worktree: ctx.worktree, projectRoot: ctx.projectRoot, sourceBranch: ctx.sourceBranch, runId: ctx.runId },
@@ -353,19 +168,19 @@ Follow the printed instructions.`;
 /*
   An [S] box. A null result is the diagram's dotted "agent() errored" edge.
 */
-async function runAgent(
-    ctx                 ,
-    label        ,
-    box        ,
-    role        ,
-    schema         ,
-    extra                          ,
-)                   {
+export async function runAgent(
+    ctx: PipelineContext,
+    label: string,
+    box: string,
+    role: string,
+    schema: unknown,
+    extra?: Record<string, unknown>,
+): Promise<unknown> {
     step(ctx, `<-- AGENT --> ${label}`);
     const visit = ctx.agentVisits.get(box) ?? 0;
     ctx.agentVisits.set(box, visit + 1);
     if (isFake(ctx)) {
-        const errors = (ctx.fake                                             ).agentErrors ?? {};
+        const errors = (ctx.fake as Record<string, Record<string, boolean[]>>).agentErrors ?? {};
         const errored = attempt(errors[box] ?? [false], visit);
         if (errored) step(ctx, ctx.L("AGENT_ERRORED"));
         return errored ? null : {};
@@ -387,7 +202,7 @@ async function runAgent(
 // Return shapes for the 10 agent boxes
 // ---------------------------------------------------------------------------
 
-const PLAN_RESULT = {
+export const PLAN_RESULT = {
     type: "object",
     required: ["outcome"],
     properties: {
@@ -396,7 +211,7 @@ const PLAN_RESULT = {
     },
 };
 
-const REVIEW_PLAN_RESULT = {
+export const REVIEW_PLAN_RESULT = {
     type: "object",
     required: ["verdict"],
     properties: {
@@ -405,19 +220,19 @@ const REVIEW_PLAN_RESULT = {
     },
 };
 
-const IMPLEMENT_RESULT = {
+export const IMPLEMENT_RESULT = {
     type: "object",
     required: ["implemented"],
     properties: { implemented: { type: "boolean" }, notes: { type: "string" } },
 };
 
-const REVIEW_TESTS_RESULT = {
+export const REVIEW_TESTS_RESULT = {
     type: "object",
     required: ["flagged"],
     properties: { flagged: { type: "boolean" }, notes: { type: "string" } },
 };
 
-const FIX_CONFLICTS_RESULT = {
+export const FIX_CONFLICTS_RESULT = {
     type: "object",
     required: ["resolved"],
     properties: {
@@ -426,31 +241,31 @@ const FIX_CONFLICTS_RESULT = {
     },
 };
 
-const REBASE_WORKTREE_RESULT = {
+export const REBASE_WORKTREE_RESULT = {
     type: "object",
     required: ["conflicted"],
     properties: { conflicted: { type: "boolean" } },
 };
 
-const CONTINUE_REBASE_RESULT = {
+export const CONTINUE_REBASE_RESULT = {
     type: "object",
     required: ["finished"],
     properties: { finished: { type: "boolean" } },
 };
 
-const RUN_TASK_TESTS_RESULT = {
+export const RUN_TASK_TESTS_RESULT = {
     type: "object",
     required: ["passed"],
     properties: { passed: { type: "boolean" } },
 };
 
-const RUN_FULL_SUITE_RESULT = {
+export const RUN_FULL_SUITE_RESULT = {
     type: "object",
     required: ["passed"],
     properties: { passed: { type: "boolean" } },
 };
 
-const FIX_SUITE_RESULT = {
+export const FIX_SUITE_RESULT = {
     type: "object",
     required: ["fixed"],
     properties: { fixed: { type: "boolean" }, notes: { type: "string" } },
@@ -463,19 +278,19 @@ const FIX_SUITE_RESULT = {
 /*
   Every exit below the preamble takes the failures tail, because the task is already active.
 */
-function toFailures(exitType        , exitNote        , workLanded          )                  {
+export function toFailures(exitType: string, exitNote: string, workLanded?: boolean): PipelineOutcome {
     return { done: true, exitType, exitNote, workLanded: workLanded === true };
 }
 
 /*
   plans/diagram/pipeline-failuresExit.mmd. Every box is [C].
 */
-function failuresExit(
-    ctx                 ,
-    exitType        ,
-    exitNote        ,
-    workLanded          ,
-)                                                                        {
+export function failuresExit(
+    ctx: PipelineContext,
+    exitType: string,
+    exitNote: string,
+    workLanded?: boolean,
+): { task: number; exitType: string; exitNote: string; trace: string[] } {
     banner(ctx, "failures exit");
     // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
     step(ctx, ctx.L("READ_PUBLICATION_STATE"));
@@ -504,9 +319,9 @@ function failuresExit(
 /*
   plans/diagram/pipeline-mergeSucceededExit.mmd. Every box is [C].
 */
-function mergeSucceededExit(
-    ctx                 ,
-)                                                                        {
+export function mergeSucceededExit(
+    ctx: PipelineContext,
+): { task: number; exitType: string; exitNote: string; trace: string[] } {
     banner(ctx, "merge succeeded exit");
     step(ctx, ctx.L("MERGE_RECEIPT_INPUT"));
     step(ctx, ctx.L("RECORD_MERGE_COMMIT_HASHES"));
@@ -531,7 +346,7 @@ function mergeSucceededExit(
 // Plan — plans/diagram/pipeline-plan.mmd, paragraphs 23 to 29
 // ---------------------------------------------------------------------------
 
-async function planPipeline(ctx                 )                           {
+export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "plan");
     ctx.phase("Plan");
     step(ctx, ctx.L("DOCS_INPUT"));
@@ -543,8 +358,8 @@ async function planPipeline(ctx                 )                           {
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     const outcome = isFake(ctx)
-        ? attempt((ctx.fake                            ).plannerOutcome, ctx.plannerIndex)
-        : (result                       ).outcome;
+        ? attempt((ctx.fake as Record<string, string[]>).plannerOutcome, ctx.plannerIndex)
+        : (result as { outcome: string }).outcome;
     ctx.plannerIndex += 1;
     step(ctx, ctx.L("WHAT_DID_THE_PLANNER_RETURN"), outcome);
 
@@ -576,7 +391,7 @@ async function planPipeline(ctx                 )                           {
 // Document generation — plans/diagram/pipeline-documentGeneration.mmd, paragraphs 20 to 22
 // ---------------------------------------------------------------------------
 
-async function documentGenerationPipeline(ctx                 )                           {
+export async function documentGenerationPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "document generation");
     step(ctx, ctx.L("WORKTREE_DOCS_MODE_INPUT"));
     // A clarify round always re-enters in UPDATE mode; AUTOGEN belongs to the preamble.
@@ -590,7 +405,7 @@ async function documentGenerationPipeline(ctx                 )                 
 // Review plan — plans/diagram/pipeline-reviewPlan.mmd, paragraphs 30 to 35
 // ---------------------------------------------------------------------------
 
-async function reviewPlanPipeline(ctx                 )                           {
+export async function reviewPlanPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "review plan");
     step(ctx, ctx.L("DRAFT_PLAN_INPUT"));
 
@@ -601,14 +416,14 @@ async function reviewPlanPipeline(ctx                 )                         
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     const verdict = isFake(ctx)
-        ? attempt((ctx.fake                            ).planVerdict, ctx.verdictIndex)
-        : (result                       ).verdict;
+        ? attempt((ctx.fake as Record<string, string[]>).planVerdict, ctx.verdictIndex)
+        : (result as { verdict: string }).verdict;
     ctx.verdictIndex += 1;
     step(ctx, ctx.L("WHAT_IS_REVIEW_VERDICT"), verdict);
 
     // The reviewer never read the plan, so this is an operational failure, not a plan defect.
     if (verdict === "ERROR") {
-        return toFailures("run-failed", (result                      ).notes ?? "the plan review could not run");
+        return toFailures("run-failed", (result as { notes?: string }).notes ?? "the plan review could not run");
     }
 
     // Paragraph 32. AMEND_THEN_ACCEPT skips a second review: the fixes are already in the plan.
@@ -633,7 +448,7 @@ async function reviewPlanPipeline(ctx                 )                         
 // Implement — plans/diagram/pipeline-implement.mmd, paragraphs 36 to 40
 // ---------------------------------------------------------------------------
 
-async function implementPipeline(ctx                 )                           {
+export async function implementPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "implement");
     ctx.phase("Implement");
     step(ctx, ctx.L("ACCEPTED_PLAN_INPUT"));
@@ -661,7 +476,7 @@ async function implementPipeline(ctx                 )                          
 // Task tests — plans/diagram/pipeline-taskTests.mmd, paragraphs 41 to 44
 // ---------------------------------------------------------------------------
 
-async function taskTestsPipeline(ctx                 )                           {
+export async function taskTestsPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "task tests");
     step(ctx, ctx.L("COMMITTED_WORK_INPUT"));
 
@@ -670,8 +485,8 @@ async function taskTestsPipeline(ctx                 )                          
     if (testRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     const testsPass = isFake(ctx)
-        ? attempt((ctx.fake                             ).taskTestsPass, ctx.testsIndex)
-        : (testRun                       ).passed;
+        ? attempt((ctx.fake as Record<string, boolean[]>).taskTestsPass, ctx.testsIndex)
+        : (testRun as { passed: boolean }).passed;
     ctx.testsIndex += 1;
     step(ctx, ctx.L("DO_TASK_TESTS_PASS"), yesNo(testsPass));
     if (testsPass) return { next: "review-tests" };
@@ -694,7 +509,7 @@ async function taskTestsPipeline(ctx                 )                          
 // Review task tests — plans/diagram/pipeline-reviewTests.mmd, paragraphs 45 to 50
 // ---------------------------------------------------------------------------
 
-async function reviewTestsPipeline(ctx                 )                           {
+export async function reviewTestsPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "review task tests");
     step(ctx, ctx.L("GREEN_IMPLEMENTATION_INPUT"));
 
@@ -705,8 +520,8 @@ async function reviewTestsPipeline(ctx                 )                        
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     const flagged = isFake(ctx)
-        ? attempt((ctx.fake                             ).testsFlagged, ctx.flaggedIndex)
-        : (result                        ).flagged;
+        ? attempt((ctx.fake as Record<string, boolean[]>).testsFlagged, ctx.flaggedIndex)
+        : (result as { flagged: boolean }).flagged;
     ctx.flaggedIndex += 1;
     step(ctx, ctx.L("ARE_TESTS_FLAGGED"), yesNo(flagged));
 
@@ -738,7 +553,7 @@ async function reviewTestsPipeline(ctx                 )                        
 // Rebase preamble — plans/diagram/pipeline-rebasePreamble.mmd, paragraphs 51 to 55
 // ---------------------------------------------------------------------------
 
-async function rebasePreamblePipeline(ctx                 )                           {
+export async function rebasePreamblePipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "rebase preamble");
     ctx.phase("Rebase and merge");
     step(ctx, ctx.L("FINISHED_IMPLEMENTATION_INPUT"));
@@ -771,7 +586,7 @@ async function rebasePreamblePipeline(ctx                 )                     
 // Rebase — plans/diagram/pipeline-rebase.mmd, paragraphs 56 to 61
 // ---------------------------------------------------------------------------
 
-async function rebasePipeline(ctx                 )                           {
+export async function rebasePipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "rebase");
     step(ctx, ctx.L("SOURCE_REPO_LOCKED_INPUT"));
 
@@ -781,8 +596,8 @@ async function rebasePipeline(ctx                 )                           {
         if (rebaseRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
         const conflicted = isFake(ctx)
-            ? attempt((ctx.fake                             ).rebaseConflicts, ctx.conflictsIndex)
-            : (rebaseRun                           ).conflicted;
+            ? attempt((ctx.fake as Record<string, boolean[]>).rebaseConflicts, ctx.conflictsIndex)
+            : (rebaseRun as { conflicted: boolean }).conflicted;
         ctx.conflictsIndex += 1;
         step(ctx, ctx.L("DID_REBASE_REPORT_CONFLICTS"), yesNo(conflicted));
         if (!conflicted) return { next: "suite" };
@@ -812,8 +627,8 @@ async function rebasePipeline(ctx                 )                           {
         if (continueRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
         const finished = isFake(ctx)
-            ? attempt((ctx.fake                             ).rebaseFinished, ctx.finishedIndex)
-            : (continueRun                         ).finished;
+            ? attempt((ctx.fake as Record<string, boolean[]>).rebaseFinished, ctx.finishedIndex)
+            : (continueRun as { finished: boolean }).finished;
         ctx.finishedIndex += 1;
         step(ctx, ctx.L("IS_REBASE_FINISHED"), yesNo(finished));
         if (finished) return { next: "suite" };
@@ -826,7 +641,7 @@ async function rebasePipeline(ctx                 )                           {
 // Full suite — plans/diagram/pipeline-suite.mmd, paragraphs 62 to 69
 // ---------------------------------------------------------------------------
 
-async function suitePipeline(ctx                 )                           {
+export async function suitePipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "full suite");
     step(ctx, ctx.L("REBASED_WORKTREE_INPUT"));
 
@@ -836,8 +651,8 @@ async function suitePipeline(ctx                 )                           {
         if (suiteRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
         const passes = isFake(ctx)
-            ? attempt((ctx.fake                             ).suitePasses, ctx.suiteIndex)
-            : (suiteRun                       ).passed;
+            ? attempt((ctx.fake as Record<string, boolean[]>).suitePasses, ctx.suiteIndex)
+            : (suiteRun as { passed: boolean }).passed;
         ctx.suiteIndex += 1;
         step(ctx, ctx.L("DO_ALL_TESTS_PASS"), yesNo(passes));
         if (passes) break;
@@ -874,7 +689,7 @@ async function suitePipeline(ctx                 )                           {
 
     // Paragraph 67: the fence gate runs once, after the fix loop and before the merge.
     const fenceHeld = isFake(ctx)
-        ? (ctx.fake                           ).fenceHeld
+        ? (ctx.fake as Record<string, boolean>).fenceHeld
         : notWired("DID_CHANGES_STAY_INSIDE_FENCE");
     // Paragraph 68: it re-derives the diff and never accepts a fence from a caller.
     step(ctx, ctx.L("DID_CHANGES_STAY_INSIDE_FENCE"), yesNo(fenceHeld));
@@ -895,7 +710,7 @@ async function suitePipeline(ctx                 )                           {
 // Merge — plans/diagram/pipeline-merge.mmd, paragraphs 70 to 78
 // ---------------------------------------------------------------------------
 
-async function mergePipeline(ctx                 )                           {
+export async function mergePipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
     banner(ctx, "merge");
     step(ctx, ctx.L("GREEN_WORKTREE_INPUT"));
 
@@ -907,7 +722,7 @@ async function mergePipeline(ctx                 )                           {
     const state = decide(ctx, "WHAT_IS_PUBLICATION_STATE", "publicationState", ctx.publicationIndex);
     ctx.publicationIndex += 1;
     // Paragraph 73: merged, no-op and root-merged-but-not-closed are LANDED; conflicted is not.
-    step(ctx, ctx.L("WHAT_IS_PUBLICATION_STATE"), state          );
+    step(ctx, ctx.L("WHAT_IS_PUBLICATION_STATE"), state as string);
 
     // Paragraph 74.
     if (state === "ALL LANDED") return { next: "merge-succeeded" };
@@ -944,7 +759,7 @@ async function mergePipeline(ctx                 )                           {
 /*
   The diagrams have back-edges, so the pipelines are a state machine, not a chain.
 */
-const PIPELINES                                                                     = {
+export const PIPELINES: Record<string, (ctx: PipelineContext) => Promise<PipelineOutcome>> = {
     "plan": planPipeline,
     "document-generation": documentGenerationPipeline,
     "review-plan": reviewPlanPipeline,
@@ -957,13 +772,13 @@ const PIPELINES                                                                 
     "merge": mergePipeline,
 };
 
-async function runTaskPipeline(ctx                 , start         )                    {
+export async function runTaskPipeline(ctx: PipelineContext, start?: string): Promise<string[]> {
     ctx.trace.push(`Run start: Task Num [${ctx.task}]`);
-    ctx.log(ctx.trace[0]          );
+    ctx.log(ctx.trace[0] as string);
 
     let current = start ?? "plan";
     for (;;) {
-        const result = await (PIPELINES[current]                                                      )(ctx);
+        const result = await (PIPELINES[current] as (ctx: PipelineContext) => Promise<PipelineOutcome>)(ctx);
 
         if (result.done) {
             ctx.phase("Exit");
@@ -978,21 +793,3 @@ async function runTaskPipeline(ctx                 , start         )            
         current = result.next;
     }
 }
-
-// ---------------------------------------------------------------------------
-// Launch
-// ---------------------------------------------------------------------------
-
-return runTaskPipeline(createPipelineContext({
-  task: args.task,
-  emitter: args.agentPromptEmitterPath,
-  worktree: args.worktree,
-  projectRoot: args.projectRoot,
-  sourceBranch: args.sourceBranch,
-  runId: args.runId,
-  fake: args && typeof args === 'object' ? args.fake : null,
-  L,
-  agent,
-  log,
-  phase,
-}))

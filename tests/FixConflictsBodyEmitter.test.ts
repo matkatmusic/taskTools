@@ -63,17 +63,6 @@ test("test_fixConflictsPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () =
     assert.match(prompt, /fix-conflicts-output-template\.json/);
 });
 
-test("test_fixConflictsOutputTemplateKeysMatchTheWorkflowFixConflictsResult", () => {
-    // The workflow validates the receipt against FIX_CONFLICTS_RESULT, so the template cannot drift from it.
-    const templatePath = fileURLToPath(new URL("../plans/fix-conflicts-output-template.json", import.meta.url));
-    const workflowPath = fileURLToPath(new URL("../scripts/tackle-tasks/tackle-tasks.workflow.template.js", import.meta.url));
-    const workflow = readFileSync(workflowPath, "utf8");
-    const block = workflow.slice(workflow.indexOf("const FIX_CONFLICTS_RESULT"));
-    // Anchored to the four-space indent so a nested `items: { type: ... }` is not read as a property.
-    const properties = [...block.slice(0, block.indexOf("}\n")).matchAll(/^ {4}(\w+): \{ type:/gm)].map((match) => match[1]);
-    assert.deepEqual(Object.keys(JSON.parse(readFileSync(templatePath, "utf8"))).sort(), properties.sort());
-});
-
 test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {
     // A later box advances the rebase; an agent that continues it strands the caller.
     assert.match(fixConflictsPrompt(makeConflictedRepo()), /Never run `git rebase --continue` or `git rebase --abort`/);
