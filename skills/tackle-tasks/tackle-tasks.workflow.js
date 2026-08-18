@@ -82,7 +82,7 @@ const L = {
   CODEX_REVIEWS_TESTS: "codex reviews the tests",
   COMMITTED_WORK_INPUT: "Input: { worktree, task test files }",
   COMMIT_IF_NEEDED: "commit if needed",
-  CONTINUE_REBASE: "Try: continue the rebase",
+  CONTINUE_REBASE: "continue the rebase",
   DID_ANY_WORK_LAND: "did ANY of this task's work land?",
   DID_CHANGES_STAY_INSIDE_FENCE: "did every change stay inside the task's file fence?",
   DID_REBASE_REPORT_CONFLICTS: "did the rebase report conflicts?",
@@ -108,7 +108,7 @@ const L = {
   PLAN_THE_TASK: "plan the task",
   READ_PUBLICATION_STATE: "read the publication state from the layer merge refs",
   REBASED_WORKTREE_INPUT: "Input: { worktree }",
-  REBASE_ONTO_TARGET_BRANCH: "Try: rebase onto the target branch. skip every layer the receipt records as already landed",
+  REBASE_ONTO_TARGET_BRANCH: "rebase onto the target branch. skip every layer the receipt records as already landed",
   RECORD_MERGE_COMMIT_HASHES: "record merge commit hashes to tasks.json",
   RECORD_MODIFIED_FILES_FAILURE: "record modified files to tasks.json",
   RECORD_MODIFIED_FILES_SUCCESS: "record modified files to tasks.json",
@@ -117,7 +117,7 @@ const L = {
   REPORT_CLOSURE_NOTE: "report the closure note",
   REPORT_EXIT_TYPE_AND_NOTE: "report the run's exit type and note",
   RUN_FULL_SUITE: "run the full suite",
-  RUN_TASK_TESTS: "Try: run task tests",
+  RUN_TASK_TESTS: "run task tests",
   SOURCE_REPO_LOCKED_INPUT: "Input: { worktree, target branch, merge receipt }",
   STOP: "stop",
   UPDATE_AUTO_GENERATED_DOCS: "update auto generated docs",
@@ -269,6 +269,24 @@ const FIX_CONFLICTS_RESULT = {
     resolved: { type: 'boolean' },
     unresolvedPaths: { type: 'array', items: { type: 'string' } },
   },
+}
+
+const REBASE_WORKTREE_RESULT = {
+  type: 'object',
+  required: ['conflicted'],
+  properties: { conflicted: { type: 'boolean' } },
+}
+
+const CONTINUE_REBASE_RESULT = {
+  type: 'object',
+  required: ['finished'],
+  properties: { finished: { type: 'boolean' } },
+}
+
+const RUN_TASK_TESTS_RESULT = {
+  type: 'object',
+  required: ['passed'],
+  properties: { passed: { type: 'boolean' } },
 }
 
 const RUN_FULL_SUITE_RESULT = {
@@ -561,9 +579,11 @@ const taskTestsPipeline = async () => {
   banner('task tests')
   step(L.COMMITTED_WORK_INPUT)
 
-  // Paragraph 41: run only this task's tests; the full suite belongs to the rebase phase.
-  step(L.RUN_TASK_TESTS)
-  const testsPass = decide('RUN_TASK_TESTS', 'taskTestsPass', testsIndex)
+  // Paragraph 41 [S]: the sandbox cannot run a test file, so an agent invokes the run-task-tests skill.
+  const testRun = await runAgent(L.RUN_TASK_TESTS, 'TEST_RUNNER', 'run-task-tests', RUN_TASK_TESTS_RESULT)
+  if (testRun === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+  const testsPass = isFake() ? attempt(FAKE.taskTestsPass, testsIndex) : testRun.passed
   testsIndex += 1
   step(L.DO_TASK_TESTS_PASS, yesNo(testsPass))
   if (testsPass) return { next: 'review-tests' }
@@ -666,9 +686,11 @@ const rebasePipeline = async () => {
   step(L.SOURCE_REPO_LOCKED_INPUT)
 
   for (;;) {
-    // Paragraphs 56 and 57: deepest layer first, skipping every layer the receipt calls landed.
-    step(L.REBASE_ONTO_TARGET_BRANCH)
-    const conflicted = decide('REBASE_ONTO_TARGET_BRANCH', 'rebaseConflicts', conflictsIndex)
+    // Paragraphs 56 and 57 [S]: the sandbox cannot run a rebase, so an agent invokes the rebase-worktree skill.
+    const rebaseRun = await runAgent(L.REBASE_ONTO_TARGET_BRANCH, 'REBASER', 'rebase-worktree', REBASE_WORKTREE_RESULT)
+    if (rebaseRun === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    const conflicted = isFake() ? attempt(FAKE.rebaseConflicts, conflictsIndex) : rebaseRun.conflicted
     conflictsIndex += 1
     step(L.DID_REBASE_REPORT_CONFLICTS, yesNo(conflicted))
     if (!conflicted) return { next: 'suite' }
@@ -694,8 +716,10 @@ const rebasePipeline = async () => {
 
     // Paragraph 60: always fix, then commit, then continue — never fix then continue.
     step(L.COMMIT_IF_NEEDED)
-    step(L.CONTINUE_REBASE)
-    const finished = decide('CONTINUE_REBASE', 'rebaseFinished', finishedIndex)
+    const continueRun = await runAgent(L.CONTINUE_REBASE, 'REBASE_ADVANCER', 'continue-rebase', CONTINUE_REBASE_RESULT)
+    if (continueRun === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    const finished = isFake() ? attempt(FAKE.rebaseFinished, finishedIndex) : continueRun.finished
     finishedIndex += 1
     step(L.IS_REBASE_FINISHED, yesNo(finished))
     if (finished) return { next: 'suite' }
