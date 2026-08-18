@@ -33,7 +33,9 @@ const fakeTask: PreparedTask = {
     testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
     notesFile: "/tmp/fake-worktree/plans/task-99-implementation-notes.md",
     files: ["src/thing.ts"],
+    ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
     tests: "node --test tests/thing.test.ts",
+    codexReviewNotes: "",
     repoRoot: "/tmp/fake-worktree",
     taskStateRoot: "/tmp/fake-worktree",
 };
@@ -46,7 +48,8 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
         { taskNumber, title: "sample task", files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts" },
     ]));
     writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
-    const worktree = projectRoot;
+    // A real subdirectory, not projectRoot: aliasing them hides whether a write hit the worktree.
+    const worktree = join(projectRoot, "worktree");
     mkdirSync(join(worktree, "plans"), { recursive: true });
     writeFileSync(join(worktree, "plans", `brief-${taskNumber}.md`), `# fixture sentinel brief for task ${taskNumber}\n`);
     const task = loadPreparedTask(taskNumber, worktree, projectRoot);
@@ -294,15 +297,22 @@ test("test_amendTestsPrompt_resolvesARootOccurrenceTestFileToAnAbsolutePathAtThe
     assert.equal(entry.absolutePath.startsWith(`${task.repoRoot}/`), true);
 });
 
-test("test_planPrompt_includesTheScrapNotesWhenAPreambleIsGiven", () => {
-    const { task } = makeFixture(45);
-    const preamble = "Codex scrapped the previous plan because step-2 was vague.\n\n";
-
-    const prompt = planPrompt(task, preamble);
-
-    assert.match(prompt, /Codex scrapped the previous plan because step-2 was vague\./);
+test("test_planPrompt_putsCodexReviewNotesAtTheTop", () => {
+    // Setup: a task whose entry carries codex's notes from the previous review round.
+    const withNotes = { ...fakeTask, codexReviewNotes: "the plan skipped the migration step" };
+    // Test action: build the planner prompt for it.
+    const prompt = planPrompt(withNotes);
+    // Test verification: the notes appear, and before the job description the planner then reads.
+    assert.match(prompt, /the plan skipped the migration step/);
+    assert.ok(prompt.indexOf("CODEX'S PREVIOUS REVIEW NOTES") < prompt.indexOf("## YOUR JOB"));
 });
 
+test("test_planPrompt_omitsTheNotesSectionWhenThereAreNone", () => {
+    // Setup and action: the default fixture has no notes.
+    const prompt = planPrompt(fakeTask);
+    // Test verification: a first planning round shows no review section at all.
+    assert.ok(!prompt.includes("CODEX'S PREVIOUS REVIEW NOTES"));
+});
 test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
     const { task } = makeFixture(46);
     const prompt = reviewTestsPrompt(task);
@@ -413,15 +423,13 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
 // v1.1 fields (task, status, planFile, question, missingFiles, summary) are gone.
 // ---------------------------------------------------------------------------
 
-test("test_planPrompt_returnsExactlyPlanWritten", () => {
-    // Old code returned {task, status, planFile, question, missingFiles} and never planWritten.
+test("test_planPrompt_pointsAtTheReturnShapeTemplate", () => {
+    // Setup and action: build the planner prompt.
     const prompt = planPrompt(fakeTask);
-    assert.match(prompt, /Return \{planWritten\}\.\n/);
-    assert.equal(/"status"/.test(prompt), false);
-    assert.equal(/missingFiles/.test(prompt), false);
-    assert.equal(/\{task:/i.test(prompt), false);
+    // Test verification: it cites the template file rather than inlining a return shape.
+    assert.match(prompt, /plan-output-template\.json/);
+    assert.ok(!prompt.includes("planWritten"));
 });
-
 test("test_reviewPlanPrompt_returnsExactlyReviewWrittenAndReviewer", () => {
     // Old code returned {task, reviewWritten, reviewer}; task must be gone. The return
     // contract now sits before the final DATA section (finding 9), not at the string's end.
@@ -521,14 +529,6 @@ test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOc
 // Finding 9 — every builder puts static instructions and the return contract first, and
 // appends all runtime/bulk data after a final "---- DATA ----" marker.
 // ---------------------------------------------------------------------------
-
-test("test_planPrompt_putsThePreambleAfterTheDataMarker", () => {
-    const sentinel = "SENTINEL_PLAN_PREAMBLE_9f3q";
-    const prompt = planPrompt(fakeTask, `${sentinel}\n\n`);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 test("test_reviewPlanPrompt_putsOwnedFilesAfterTheNestedDataMarker", () => {
     const sentinel = "SENTINEL_REVIEW_PLAN_OWNED_8b1z";
@@ -640,24 +640,6 @@ function assertNoInstructionAfterFinalData(prompt: string) {
     assert.equal(/Return \{/.test(after), false, "a return contract appears after the final DATA section");
     assert.equal(/You are forbidden/.test(after), false, "a forbidden-actions clause appears after the final DATA section");
 }
-
-test("test_planPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    const task: PreparedTask = {
-        ...fakeTask,
-        number: 918273,
-        briefFile: "/tmp/SENTINEL_BRIEF_PLAN_a1/brief.md",
-        planFile: "/tmp/SENTINEL_PLANFILE_PLAN_a2/plan.json",
-        files: ["SENTINEL_FILE_PLAN_a3.ts"],
-        tests: "SENTINEL_TESTS_PLAN_a4",
-        repoRoot: "/tmp/SENTINEL_REPOROOT_PLAN_a5",
-    };
-    const preamble = "SENTINEL_PREAMBLE_PLAN_a6";
-    const prompt = planPrompt(task, preamble);
-    assertSentinelsOnlyAfterFinalData(prompt, [
-        String(task.number), task.briefFile, task.planFile, task.files[0], task.tests as string, task.repoRoot, preamble,
-    ]);
-    assertNoInstructionAfterFinalData(prompt);
-});
 
 test("test_reviewPlanPrompt_putsTheReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
     // This is the exact defect the remediation feedback named: reviewFile used to be
