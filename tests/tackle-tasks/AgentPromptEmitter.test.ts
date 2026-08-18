@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     amendTestsPrompt,
-    fixSuitePrompt,
     fixTestsPrompt,
     loadPreparedTask,
     type PreparedTask,
@@ -43,8 +42,17 @@ const fakeTask: PreparedTask = {
 // Sets up a project root with a task record, and a brief file already written into the worktree (loadPreparedTask is read-only now — it never creates the brief itself).
 function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; task: PreparedTask } {
     const projectRoot = mkdtempSync(join(tmpdir(), "agent-prompt-emitter-"));
+    // A recorded red suite, so the fix-suite role has the failing output it derives from state.
+    const run = {
+        runId: "run-1", startedAt: "2026-08-18T00:00:00", endedAt: null, exitType: null, exitNote: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null,
+        fullSuite: { stepId: "run the full suite", layers: [{ occurrenceId: "", passed: false }], passed: false, output: "1 failing", checkedAt: "2026-08-18T00:00:00" },
+    };
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([
-        { taskNumber, title: "sample task", files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts" },
+        {
+            taskNumber, title: "sample task", files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts",
+            run: { active: true, worktree: null, leaseRunId: null, history: [run] },
+        },
     ]));
     writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
     // A real subdirectory, not projectRoot: aliasing them hides whether a write hit the worktree.
@@ -85,7 +93,6 @@ function allRolePrompts(task: PreparedTask): Record<string, string> {
         plan: planPrompt(task),
         "review-plan": planReviewPrompt(task),
         implement: implementPrompt(task, "", "npx tsc --noEmit", 3),
-        "fix-suite": fixSuitePrompt("/repo", "", "1 failing", []),
         "fix-tests": fixTestsPrompt("/repo", "", "1 failing", [], task.number),
         "review-tests": reviewTestsPrompt(task),
         "amend-tests": amendTestsPrompt(task, "notes", ["tests/created.test.ts"], ["tests/foreign.test.ts"]),
@@ -112,12 +119,6 @@ test("test_agentPromptEmitter_emitsTheSameCodexFallbackChainForBothReviewRoles",
         assert.match(chain, /claude -p .* --tools "Read" --model fable --effort medium/);
         assert.match(chain, /claude -p .* --tools "Read" --model claude-opus-4-8 --effort high/);
     }
-});
-
-test("test_fixSuitePrompt_forbidsEditingTests", () => {
-    const prompt = fixSuitePrompt("/repo", "", "1 failing", []);
-    assert.match(prompt, /never the test itself/);
-    assert.match(prompt, /forbidden.*to edit a test file at all/s);
 });
 
 test("test_fixTestsPrompt_forbidsEditingTests", () => {
@@ -317,7 +318,6 @@ for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
     "review-plan": (task: PreparedTask) => planReviewPrompt(task),
     implement: (task: PreparedTask) => implementPrompt(task, "a note", "npx tsc --noEmit", 3),
-    "fix-suite": () => fixSuitePrompt("/repo", "root-layer", "1 failing", ["vendor"]),
     "fix-tests": (task: PreparedTask) => fixTestsPrompt("/repo", "root-layer", "1 failing", ["vendor"], task.number),
     "review-tests": (task: PreparedTask) => reviewTestsPrompt(task),
     "amend-tests": (task: PreparedTask) => amendTestsPrompt(task, "notes", ["tests/created.test.ts"], ["tests/foreign.test.ts"]),
@@ -391,7 +391,8 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
         ["review-tests", {}],
         ["amend-tests", { notes: "n", createdTestFiles: [], testFiles: [] }],
         ["fix-conflicts", { checkoutPath: makeConflictedRepo() }],
-        ["fix-suite", { checkoutPath: worktree, occurrenceId: "", testOutput: "x", forbiddenPaths: [] }],
+        ["run-full-suite", {}],
+        ["fix-suite", {}],
         ["fix-tests", { checkoutPath: worktree, occurrenceId: "", testOutput: "x", forbiddenPaths: [] }],
     ];
 
@@ -485,12 +486,6 @@ test("test_amendTestsPrompt_returnsExactlyAmended", () => {
 });
 
 
-test("test_fixSuitePrompt_returnsExactlyFixed", () => {
-    const prompt = fixSuitePrompt("/repo", "", "x", []);
-    assert.match(prompt, /\{fixed: true\}/);
-    assert.match(prompt, /\{fixed: false\}/);
-});
-
 test("test_fixTestsPrompt_returnsExactlyFixed", () => {
     const prompt = fixTestsPrompt("/repo", "", "x", [], 1);
     assert.match(prompt, /\{fixed: true\}/);
@@ -500,18 +495,6 @@ test("test_fixTestsPrompt_returnsExactlyFixed", () => {
 // ---------------------------------------------------------------------------
 // Finding 8 — fix-suite/fix-tests may only edit the occurrence-appropriate owned source paths; the whole checkout is never the edit boundary.
 // ---------------------------------------------------------------------------
-
-test("test_fixSuitePrompt_namesTheOwnedPathAsTheCompleteEditAllowlist", () => {
-    // Old code named no specific path at all — it granted "the source code inside checkoutPath that the failing test covers", so this exact listing would not exist against old code.
-    const prompt = fixSuitePrompt("/repo", "", "1 failing", [], ["src/owned.ts"]);
-    assert.match(prompt, /OWNED_SOURCE_PATHS \(the complete edit allowlist, relative to CHECKOUT_PATH\) =\n {2}- src\/owned\.ts/);
-});
-
-test("test_fixSuitePrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
-    // Old wording ("EDIT the source code inside ${checkoutPath} that the failing test covers") implicitly authorized any file under the checkout; that phrase must be gone.
-    const prompt = fixSuitePrompt("/repo", "", "1 failing", [], ["src/owned.ts"]);
-    assert.equal(/EDIT the source code inside/.test(prompt), false);
-});
 
 test("test_fixTestsPrompt_namesTheOwnedPathAsTheCompleteEditAllowlist", () => {
     const prompt = fixTestsPrompt("/repo", "", "1 failing", [], 42, ["src/owned.ts"]);
@@ -523,35 +506,12 @@ test("test_fixTestsPrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
     assert.equal(/EDIT the source code inside/.test(prompt), false);
 });
 
-test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOccurrencePaths", () => {
-    // Integration with occurrences.ts's real owned-path derivation, per the finding's guidance to pass occurrence-appropriate owned source paths in.
-    const occurrences: Occurrence[] = [
-        { occurrenceId: "", checkoutPath: "/repo", depth: 0, baseRef: "main" },
-        { occurrenceId: "vendor/lib", checkoutPath: "/repo/vendor/lib", depth: 1, baseRef: "main" },
-    ];
-    const owned = buildOwnedOccurrencePaths(["src/thing.ts", "vendor/lib/src/other.ts"], occurrences);
-
-    // Root-layer prompt: only the root-owned path is in scope for this layer's fix.
-    const rootOwned = owned.filter((p) => !p.startsWith("vendor/lib::"));
-    const prompt = fixSuitePrompt("/repo", "", "1 failing", ["vendor/lib"], rootOwned);
-    assert.match(prompt, /- src\/thing\.ts/);
-    assert.equal(prompt.includes("vendor/lib::"), false);
-});
-
 // ---------------------------------------------------------------------------
 // Finding 9 — every builder puts static instructions and the return contract first, and appends all runtime/bulk data after a final "---- DATA ----" marker.
 // ---------------------------------------------------------------------------
 
 
 
-
-test("test_fixSuitePrompt_putsTheFailureOutputAfterTheDataMarker", () => {
-    const sentinel = "SENTINEL_FIX_SUITE_FAILURE_OUTPUT_5xr8";
-    const prompt = fixSuitePrompt("/repo", "", sentinel, []);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 test("test_fixTestsPrompt_putsTheFailureOutputAfterTheDataMarker", () => {
     const sentinel = "SENTINEL_FIX_TESTS_FAILURE_OUTPUT_6yt3";
@@ -637,18 +597,6 @@ test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
 
 
 
-
-test("test_fixSuitePrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    // Before the fix, subject/checkoutPath were spliced inline four separate times.
-    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FS_f1";
-    const occurrenceId = "SENTINEL_LAYER_FS_f2";
-    const testOutput = "SENTINEL_FAILUREOUTPUT_FS_f3";
-    const forbiddenPath = "SENTINEL_FORBIDDEN_FS_f4";
-    const ownedPath = "SENTINEL_OWNED_FS_f5.ts";
-    const prompt = fixSuitePrompt(checkoutPath, occurrenceId, testOutput, [forbiddenPath], [ownedPath]);
-    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, occurrenceId, testOutput, forbiddenPath, ownedPath]);
-    assertNoInstructionAfterFinalData(prompt);
-});
 
 test("test_fixTestsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
     const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FT_g1";

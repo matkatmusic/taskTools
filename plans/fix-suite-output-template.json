@@ -1,0 +1,4 @@
+{
+  "fixed": "<true only when your edits address every failure listed in the failing suite output. false otherwise.>",
+  "notes": "<what you changed and why. When fixed is false, name the failure you could not repair and what stopped you.>"
+}

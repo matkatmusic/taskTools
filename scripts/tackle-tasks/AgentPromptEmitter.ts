@@ -7,6 +7,8 @@ import { planPrompt } from "./PlannerBodyEmitter.ts";
 import { implementPrompt } from "./ImplementBodyEmitter.ts";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
+import { suiteFixPrompt } from "./SuiteFixBodyEmitter.ts";
+import { runFullSuitePrompt } from "./RunFullSuiteBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -84,11 +86,6 @@ FORBIDDEN_PATHS (other layers, out of scope even though on disk under CHECKOUT_P
 ${forbiddenPaths.length === 0 ? "(none)" : forbiddenPaths.join(", ")}
 FAILURE_OUTPUT (from the test run) =
 ${testOutput}`;
-}
-
-export function fixSuitePrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[], ownedSourcePaths: string[] = []): string {
-    const layer = occurrenceId === "" ? "root" : occurrenceId;
-    return fixCodebasePrompt(`The full suite for layer "${layer}"`, checkoutPath, testOutput, forbiddenPaths, ownedSourcePaths);
 }
 
 export function fixTestsPrompt(checkoutPath: string, occurrenceId: string, testOutput: string, forbiddenPaths: string[], taskNumber: number, ownedSourcePaths: string[] = []): string {
@@ -183,14 +180,10 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         case "fix-conflicts":
             return fixConflictsPrompt(payload.checkoutPath as string);
         // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
+        case "run-full-suite":
+            return runFullSuitePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "fix-suite":
-            return fixSuitePrompt(
-                payload.checkoutPath as string,
-                typeof payload.occurrenceId === "string" ? payload.occurrenceId : "",
-                typeof payload.testOutput === "string" ? payload.testOutput : "",
-                Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
-                loadPreparedTask(taskNumber, worktree, projectRoot).files,
-            );
+            return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         case "fix-tests":
             return fixTestsPrompt(
                 payload.checkoutPath as string,

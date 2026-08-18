@@ -5,6 +5,7 @@ import { absolutePathsSection } from "../scripts/tackle-tasks/promptSections.ts"
 import { fixConflictsPrompt } from "../scripts/tackle-tasks/FixConflictsBodyEmitter.ts";
 import { implementPrompt } from "../scripts/tackle-tasks/ImplementBodyEmitter.ts";
 import { planPrompt } from "../scripts/tackle-tasks/PlannerBodyEmitter.ts";
+import { suiteFixPrompt } from "../scripts/tackle-tasks/SuiteFixBodyEmitter.ts";
 import type { PreparedTask } from "../scripts/tackle-tasks/preparedTask.ts";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -52,6 +53,21 @@ function makeConflictedRepo(): string {
     return repo;
 }
 
+// A project root recording one red suite, because fix-suite derives its failing output from state.
+function makeRedSuiteRoot(): string {
+    const root = mkdtempSync(join(tmpdir(), "prompt-sections-suite-"));
+    const run = {
+        runId: "r1", startedAt: "2026-08-18T00:00:00", endedAt: null, exitType: null, exitNote: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null,
+        fullSuite: { stepId: "run the full suite", layers: [{ occurrenceId: "", passed: false }], passed: false, output: "1 failing", checkedAt: "2026-08-18T00:00:00" },
+    };
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{
+        taskNumber: 99, files: ["src/thing.ts"],
+        run: { active: true, worktree: null, leaseRunId: null, history: [run] },
+    }]));
+    return root;
+}
+
 test("test_absolutePathsSection_namesTheRootInEveryRuleThatNeedsIt", () => {
     // A section that omits the root cannot warn about the ambient checkout it shadows.
     const section = absolutePathsSection("/tmp/SENTINEL_ROOT_ps1");
@@ -66,8 +82,9 @@ test("test_everyPromptUsesTheSharedAbsolutePathsSectionVerbatim", () => {
         planPrompt(fakeTask),
         implementPrompt(fakeTask, "", "npx tsc --noEmit", 3),
         fixConflictsPrompt(repo),
+        suiteFixPrompt({ ...fakeTask, taskStateRoot: makeRedSuiteRoot() }),
     ];
-    const roots = [fakeTask.repoRoot, fakeTask.repoRoot, repo];
+    const roots = [fakeTask.repoRoot, fakeTask.repoRoot, repo, fakeTask.repoRoot];
     prompts.forEach((prompt, index) => {
         assert.ok(prompt.includes(absolutePathsSection(roots[index])), `prompt ${index} does not carry the shared section`);
     });

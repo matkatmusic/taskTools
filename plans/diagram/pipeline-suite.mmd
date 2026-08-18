@@ -7,6 +7,10 @@ flowchart TB
 %% ---
 %% Rules not shown in the graph:
 %% ---
+%% The workflow sandbox cannot run a script, so this box is an agent box.
+%% ---
+%% The agent runs runFullSuite.ts with Bash and hands back the verdict.
+%% ---
 %% The fence gate runs once, after the fix loop and before the merge.
 %% ---
 %% It re-derives the diff itself and never trusts an agent's self-report.
@@ -28,7 +32,7 @@ flowchart TB
 %% Exit types: agent-failed, suite-red, fence-violation, run-failed.
 
   REBASED_WORKTREE_INPUT["Input: { worktree }"] --> RUN_FULL_SUITE
-  RUN_FULL_SUITE["Try: run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
+  RUN_FULL_SUITE["run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
   DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_YES["YES"]
   DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_NO["NO"]
 
@@ -47,6 +51,7 @@ flowchart TB
   DID_CHANGES_STAY_INSIDE_FENCE_NO -- "exit type: fence-violation<br/>exit note: a repair edited files the<br/>task does not own. nothing merged.<br/>worktree preserved." --> EXIT_WORKFLOW
 
   FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  RUN_FULL_SUITE -.-> AGENT_ERRORED
 
   EXIT_WORKFLOW["failures exit"]
 
@@ -62,8 +67,8 @@ flowchart TB
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class DO_ALL_TESTS_PASS,ARE_2_SUITE_FIXES_DONE,DID_CHANGES_STAY_INSIDE_FENCE decision
-  class RUN_FULL_SUITE,COMMIT_IF_NEEDED script
-  class FIX_THE_CODEBASE_FOR_SUITE agent
+  class COMMIT_IF_NEEDED script
+  class RUN_FULL_SUITE,FIX_THE_CODEBASE_FOR_SUITE agent
   class MERGE_PIPELINE pipeline
   class DO_ALL_TESTS_PASS_YES,ARE_2_SUITE_FIXES_DONE_NO,DID_CHANGES_STAY_INSIDE_FENCE_YES pass
   class DO_ALL_TESTS_PASS_NO,ARE_2_SUITE_FIXES_DONE_YES,DID_CHANGES_STAY_INSIDE_FENCE_NO nopass
