@@ -6,3 +6,7 @@ plans/plan.json
 plans/codex-review.json
 plans/test-review.json
 plans/implementation-notes-*.md
+
+# symlink so the plugin skill is discoverable in this checkout
+.claude/skills/read-file
+.claude/skills/check-time
