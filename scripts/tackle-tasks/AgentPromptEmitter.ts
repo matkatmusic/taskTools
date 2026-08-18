@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
+import { planPrompt } from "./PlannerBodyEmitter.ts";
 
 function readStdin(): string {
     try {
@@ -33,7 +34,11 @@ export type PreparedTask = {
     testReviewFile: string;
     notesFile: string;
     files: string[];
+    // The same files as absolute paths, so a prompt can name them without rebuilding the join.
+    ownedFilePaths: string[];
     tests: string | null;
+    // Written into the task entry by UPDATE_TASK_ENTRY; empty until a replan has been asked for.
+    codexReviewNotes: string;
     repoRoot: string;
     taskStateRoot: string;
 };
@@ -41,11 +46,6 @@ export type PreparedTask = {
 // ---------------------------------------------------------------------------
 // Shared prompt-building helpers.
 // ---------------------------------------------------------------------------
-
-const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
-example test the user wrote: put it into the plan's verification section as the concrete
-check to run, expanded with a few extra cases covering the individual functions/subparts
-it touches. Otherwise do not require TDD; write ordinary verification commands instead.`;
 
 const TDD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
 example test the user wrote: write that test first, then expand it to also cover the
@@ -72,6 +72,8 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     if (!existsSync(briefFile)) {
         fail(`brief not found at ${briefFile} — the docs box must write it before this role runs; this emitter is read-only and never creates it`);
     }
+    const files: string[] = Array.isArray((task as any).files) ? (task as any).files : [];
+    const root = worktree.replace(/\/+$/, "");
     return {
         number: taskNumber,
         briefFile,
@@ -79,8 +81,10 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         reviewFile: `${worktree}/plans/codex-review.json`,
         testReviewFile: `${worktree}/plans/test-review.json`,
         notesFile: `${worktree}/plans/task-${taskNumber}-implementation-notes.md`,
-        files: Array.isArray((task as any).files) ? (task as any).files : [],
+        files,
+        ownedFilePaths: files.map((file) => `${root}/${file}`),
         tests: typeof (task as any).tests === "string" ? (task as any).tests : null,
+        codexReviewNotes: typeof (task as any).codexReviewNotes === "string" ? (task as any).codexReviewNotes : "",
         repoRoot: worktree,
         taskStateRoot: projectRoot,
     };
@@ -115,67 +119,6 @@ Whichever reviewer answers, never run any command other than the ones above.
 Report which reviewer actually produced the verdict you return: reviewer
 "codex" if the codex command answered, reviewer "claude" if you had to fall
 back. Never report a fallback review as codex.`;
-}
-
-// ---------------------------------------------------------------------------
-// plan — copied from plannerBrief; writes plan.json per plans/plan-format.md and accepts an optional preamble carrying codex's scrap notes.
-// ---------------------------------------------------------------------------
-
-export function planPrompt(t: PreparedTask, preamble = ""): string {
-    return `Invoke /ponytail:ponytail ultra.
-Read the brief file at ${t.briefFile} by its absolute path.
-Owned files are listed under OWNED FILES below, as repo-relative path => absolute path in ${t.repoRoot}.
-
-For every filesystem tool call, use the absolute path under ${t.repoRoot}.
-Never resolve a repo-relative task path against your ambient working directory,
-and never read or edit the same relative path in another checkout.
-
-Read the owned files — a plan that guesses at their contents will be rejected.
-Follow ~/.claude/guides/planning.md and write the plan as JSON to exactly
-${t.planFile}
-Do not change any source file — this is planning only, not implementation.
-
-Write the plan per plans/plan-format.md:
-{"task": ${t.number}, "revision": 1, "sections": [{"id": "...", "title": "...", "body": "markdown"}]}
-Each section id is stable, lowercase, kebab-case, and unique within the plan — codex
-addresses feedback by id, and a renamed id orphans that feedback. "sections" order is
-the plan order; nothing else encodes sequence. Each body is markdown, following
-~/.claude/guides/planning.md — how and in what order, not why. Test-first per
-~/.claude/guides/tdd.md.
-
-If PREAMBLE below is non-empty, it is codex's reason for scrapping the previous plan —
-address it in the sections you write.
-
-The plan must be exact enough that the implementer makes no discovery of its own:
-- Name every edit by file path and line number, with the current text and what it becomes.
-- Account for every owned file: either its exact edit list, or the reason it needs no edit.
-- Resolve every question while planning. Write no conditional instruction — no
-  "re-check", no "verify before editing", no "if the live file disagrees", no
-  "trust the live file". If you could not settle something, that is
-  needs-clarification, not a fallback sentence in the plan.
-- Quote only text you actually read. Never describe an excerpt the brief does not contain.
-- State the verification that proves the change worked, as commands with expected results.
-- ${TESTS_FIELD_INSTRUCTION}
-
-If the plan would need to edit a file outside the absolute owned paths below, or to READ
-a file outside them to write an exact plan, or if the task is unclear or no longer
-applies to the codebase, do not write the plan file — return planWritten: false. Otherwise
-write the plan file exactly at ${t.planFile} and return planWritten: true.
-
-Return {planWritten}.
-You are forbidden to edit any file other than ${t.planFile}; to read a task source
-file outside the absolute owned paths; to leave a decision for the implementer; or to
-write a plan step whose exact target you did not read. The brief file and the plan file
-named above, plus ~/.claude/guides/planning.md, are the only non-source read exceptions.
-
----- OWNED FILES (repo-relative => absolute in ${t.repoRoot}) ----
-${ownedPathMap(t)}
-
----- TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) ----
-${t.tests ?? "(none)"}
-
----- PREAMBLE (codex's reason for scrapping the previous plan, empty if none) ----
-${preamble || "(none)"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +473,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
     const projectRoot = payload.projectRoot;
     switch (role) {
         case "plan":
-            return planPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), typeof payload.preamble === "string" ? payload.preamble : "");
+            return planPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         case "review-plan":
             return reviewPlanPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         case "implement":

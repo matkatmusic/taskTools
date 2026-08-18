@@ -1,4 +1,4 @@
-// Injects a file into context for /read-file <path>, typed as a prompt (UserPromptSubmit)
+// Injects files into context for /read-file <path...>, typed as a prompt (UserPromptSubmit)
 // or invoked as the read-file skill by an agent (PostToolUse on the Skill tool).
 import { existsSync, readFileSync } from "node:fs";
 
@@ -14,16 +14,18 @@ const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() 
 const input = payload.tool_input ?? {};
 const skill = String(input.skill ?? "").replace(/^[\w-]+:/, "");
 
-const path = prompt.startsWith("/read-file ")
-  ? prompt.slice("/read-file".length).trim()
+const args = prompt.startsWith("/read-file ")
+  ? prompt.slice("/read-file".length)
   : skill === "read-file"
-    ? String(input.args ?? "").trim()
+    ? String(input.args ?? "")
     : "";
-if (!path) process.exit(0);
+// Quoted runs stay whole, so a path with spaces survives.
+const paths = (args.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(token => token.replace(/^(["'])(.*)\1$/s, "$2"));
+if (paths.length === 0) process.exit(0);
 
-const reason = existsSync(path)
-  ? `Contents of ${path}:\n\n${readFileSync(path, "utf8")}`
-  : `read-file: no file at ${path}`;
+const reason = paths
+  .map(path => `==== ${path} ====\n${existsSync(path) ? readFileSync(path, "utf8") : `read-file: no file at ${path}`}`)
+  .join("\n\n");
 
 // Echoed from the payload: a name that disagrees with the firing event gets the output dropped.
 process.stdout.write(JSON.stringify({
