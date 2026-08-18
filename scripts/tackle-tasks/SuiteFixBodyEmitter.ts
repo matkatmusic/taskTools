@@ -30,9 +30,9 @@ export function suiteFixPrompt(t: PreparedTask): string {
 
 ## YOUR JOB
 
-The full test suite in the worktree \`${root}\` is red.
 Fix the cause of every failure listed under FAILING SUITE OUTPUT, and change nothing else.
 
+The full test suite in the worktree \`${root}\` is red.
 You are repairing the codebase, never the suite.
 A test that fails is reporting a real defect until you have proved otherwise.
 

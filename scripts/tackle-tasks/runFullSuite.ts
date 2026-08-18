@@ -79,17 +79,7 @@ export type RunFullSuiteCliInput = {
     projectRoot: string;
 };
 
-// The verdict the "do all tests pass?" decision reads, narrowed from a result file this script wrote.
-export function decideFullSuiteVerdict(resultFilePath: string): { passed: boolean } {
-    const result = JSON.parse(readFileSync(resultFilePath, "utf8")) as RunFullSuiteOutput;
-    return { passed: result.passed };
-}
-
 if (process.argv[1]?.endsWith("runFullSuite.ts")) {
-    if (process.argv[2] === "verdict") {
-        process.stdout.write(`${JSON.stringify(decideFullSuiteVerdict(process.argv[3]))}\n`);
-        process.exit(0);
-    }
     const input = JSON.parse(readFileSync(0, "utf8")) as RunFullSuiteCliInput;
     const output = runFullSuite(
         input.taskNumber, input.expectedRunId, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot,
