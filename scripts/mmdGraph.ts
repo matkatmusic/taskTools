@@ -1,9 +1,9 @@
-// Parses the plans/diagram/*.mmd flowcharts into a graph and lists every path through it.
-// The diagrams are the single source of truth; nothing here invents wording.
+// Parses the plans/diagram/*.mmd flowcharts into a graph and lists every path through it.  The diagrams are the single source of truth; nothing here invents wording.
 
 export type MmdNode = { id: string; label: string };
 export type MmdEdge = { from: string; to: string; label?: string };
-export type MmdGraph = { nodes: Map<string, string>; edges: MmdEdge[] };
+// labelled holds every id declared with a shape, so a label equal to its id is not mistaken for none.
+export type MmdGraph = { nodes: Map<string, string>; edges: MmdEdge[]; labelled: Set<string> };
 
 const SKIP = /^\s*(%%|flowchart\b|graph\b|classDef\b|class\b|subgraph\b|end\b|linkStyle\b|style\b|$)/;
 
@@ -20,6 +20,7 @@ function labelOf(shape: string | undefined, id: string): string {
 export function parseMmd(text: string): MmdGraph {
   const nodes = new Map<string, string>();
   const edges: MmdEdge[] = [];
+  const labelled = new Set<string>();
 
   for (const line of text.split("\n")) {
     if (SKIP.test(line)) continue;
@@ -32,6 +33,7 @@ export function parseMmd(text: string): MmdGraph {
       if (!n) break;
       const [, id, shape] = n;
       if (shape || !nodes.has(id)) nodes.set(id, labelOf(shape, id));
+      if (shape) labelled.add(id);
       if (prev) edges.push({ from: prev, to: id, label: pendingLabel });
       prev = id;
       pendingLabel = undefined;
@@ -43,10 +45,12 @@ export function parseMmd(text: string): MmdGraph {
       rest = rest.slice(a[0].length);
     }
   }
-  return { nodes, edges };
+  return { nodes, edges, labelled };
 }
 
-/** Every root-to-sink walk that uses no edge more than `maxEdgeUses` times. */
+/*
+  Every root-to-sink walk that uses no edge more than `maxEdgeUses` times.
+*/
 export function enumeratePaths(g: MmdGraph, maxEdgeUses = 2, cap = 200_000): string[][] {
   const out = new Map<string, MmdEdge[]>();
   const hasIncoming = new Set<string>();

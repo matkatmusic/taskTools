@@ -1,9 +1,9 @@
 /*
-  Walks the split diagrams in plans/diagram for one set of decision outcomes and names every box it visits, in order. Nothing here touches a repository — it is the diagram made runnable, so a path can be read end to end without running a task.
+  Names every box one set of decision outcomes visits, in order. Touches no repository.
 
-  The walk starts at the plan pipeline. Paragraphs 1 to 17 are the preamble, and they run as code in PreambleDataEmitter.ts before the workflow is launched, so no trace covers them.
+  The walk starts at the plan pipeline. PreambleDataEmitter.ts runs the preamble beforehand.
 
-  Every step's wording comes from the diagrams themselves, not from a hand-written copy. See mmdGraph.ts for the parser and L(id) below for the lookup that keeps this file honest.
+  Every step's wording comes from the diagrams. See mmdGraph.ts and L(id) below.
 */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -49,17 +49,21 @@ export const L = (id: string): string => {
     return label.replaceAll("\n", " ");
 };
 
-// The six orange boxes. Each has one dotted "agent() errored" edge, and no retry.
+// The orange boxes. Each has one dotted "agent() errored" edge, and no retry.
 export type AgentBoxName =
     | "PLANNER"
     | "PLAN_REVIEWER"
     | "IMPLEMENTER"
+    | "TEST_RUNNER"
     | "TEST_REVIEWER"
+    | "REBASER"
     | "CONFLICT_FIXER"
+    | "REBASE_ADVANCER"
+    | "SUITE_RUNNER"
     | "SUITE_FIXER";
 
 export type PlannerOutcome = "PLAN" | "CLARIFY" | "ERROR";
-export type PlanVerdict = "ACCEPT" | "AMEND" | "SCRAP";
+export type PlanVerdict = "ACCEPT" | "AMEND_THEN_ACCEPT" | "AMEND" | "SCRAP" | "ERROR";
 export type PublicationState = "ALL LANDED" | "NONE LANDED" | "SOME LANDED";
 
 // Loop decisions hold one entry per attempt: taskTestsPass [false, true] fails once, then passes.
@@ -204,7 +208,10 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             const verdict = attempt(decisions.planVerdict, verdictIndex);
             verdictIndex += 1;
             push(`${L("WHAT_IS_REVIEW_VERDICT")}: ${verdict}`);
-            if (verdict === "ACCEPT") {
+            // ERROR means the reviewer never read the plan, so no ruling was possible.
+            if (verdict === "ERROR") return failuresExit("RUN-FAILED");
+            // AMEND_THEN_ACCEPT already wrote codex's fixes into the plan, so implement reads them.
+            if (verdict === "ACCEPT" || verdict === "AMEND_THEN_ACCEPT") {
                 current = "implement";
                 continue;
             }
@@ -230,7 +237,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
         if (current === "task-tests") {
             banner("task tests");
             push(L("COMMITTED_WORK_INPUT"));
-            push(L("RUN_TASK_TESTS"));
+            if (!agentBox("RUN_TASK_TESTS", "TEST_RUNNER")) return failuresExit("AGENT-FAILED");
             const testsPass = attempt(decisions.taskTestsPass, testsIndex);
             testsIndex += 1;
             push(`${L("DO_TASK_TESTS_PASS")}: ${yesNo(testsPass)}`);
@@ -291,7 +298,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             banner("rebase");
             push(L("SOURCE_REPO_LOCKED_INPUT"));
             for (;;) {
-                push(L("REBASE_ONTO_TARGET_BRANCH"));
+                if (!agentBox("REBASE_ONTO_TARGET_BRANCH", "REBASER")) return failuresExit("AGENT-FAILED");
                 const conflicted = attempt(decisions.rebaseConflicts, conflictsIndex);
                 conflictsIndex += 1;
                 push(`${L("DID_REBASE_REPORT_CONFLICTS")}: ${yesNo(conflicted)}`);
@@ -303,7 +310,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
                 if (!agentBox("FIX_CONFLICTS", "CONFLICT_FIXER")) return failuresExit("AGENT-FAILED");
                 conflictFixes += 1;
                 push(L("COMMIT_IF_NEEDED"));
-                push(L("CONTINUE_REBASE"));
+                if (!agentBox("CONTINUE_REBASE", "REBASE_ADVANCER")) return failuresExit("AGENT-FAILED");
                 const finished = attempt(decisions.rebaseFinished, finishedIndex);
                 finishedIndex += 1;
                 push(`${L("IS_REBASE_FINISHED")}: ${yesNo(finished)}`);
@@ -318,7 +325,7 @@ export function traceTaskPipeline(decisions: PipelineDecisions): string[] {
             banner("full suite");
             push(L("REBASED_WORKTREE_INPUT"));
             for (;;) {
-                push(L("RUN_FULL_SUITE"));
+                if (!agentBox("RUN_FULL_SUITE", "SUITE_RUNNER")) return failuresExit("AGENT-FAILED");
                 const passes = attempt(decisions.suitePasses, suiteIndex);
                 suiteIndex += 1;
                 push(`${L("DO_ALL_TESTS_PASS")}: ${yesNo(passes)}`);

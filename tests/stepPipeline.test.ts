@@ -1,4 +1,4 @@
-// stepPipeline.ts drives tracePipeline.ts from keypresses. Replay mode makes that testable without a terminal: the same sequence must always produce the same trace, and echo itself back.
+// stepPipeline.ts drives tracePipeline.ts from keypresses; replay mode makes it testable without a terminal.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,8 +9,8 @@ const SCRIPT = fileURLToPath(new URL("../scripts/tackle-tasks/stepPipeline.ts", 
 const replay = (sequence: string): string =>
     execFileSync("node", [SCRIPT, "42", "--replay", sequence], { encoding: "utf8" });
 
-// Answers, in the order the walk asks them: valid, unblocked, inactive, no worktree, then agents.
-const HAPPY_PATH = "ynnnrrarnrnyyofyyy";
+// Answers, in the order the walk asks them: planner, verdict, tests, review, lock, rebase, suite, fence, publication.
+const HAPPY_PATH = "npnannynnynnnyya";
 
 test("test_stepPipeline_walksAWholeRunAndEchoesTheSequenceBack", () => {
     const output = replay(HAPPY_PATH);
@@ -19,11 +19,6 @@ test("test_stepPipeline_walksAWholeRunAndEchoesTheSequenceBack", () => {
     assert.match(output, new RegExp(`use sequence ${HAPPY_PATH} to replay`));
 });
 
-test("test_stepPipeline_retriesAnAgentBoxWhoseResultTheHarnessLost", () => {
-    const output = replay("ynnn0rrarnrnyyofyyy");
-    assert.match(output, /<-- AGENT --> plan the task\ndid the agent return a result\?: NO\nretry the box\n<-- AGENT --> plan the task/);
-});
-
 test("test_stepPipeline_exitsNonZeroOnAReplayKeyTheBoxDoesNotOffer", () => {
-    assert.throws(() => replay("yq"), /status 1|Command failed/);
+    assert.throws(() => replay("nq"), /status 1|Command failed/);
 });

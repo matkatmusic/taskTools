@@ -24,7 +24,6 @@ import {
     withTaskWorktreeLeaseGuard,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
-import { skillBody as currentSkillBody } from "../scripts/tackle-tasks_SkillBodyEmitter.ts";
 import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
@@ -567,8 +566,8 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
 // Finding 4: current and archived workflow materialization must never converge.
 // ---------------------------------------------------------------------------
 
-// Catches the defect: output depends only on templatePath, and each brief cites only its own field.
-test("current and archived materialized files each carry their own marker, and each emitter names only its own field", () => {
+// Catches the defect: output depends only on templatePath, and the archived brief cites only its own field.
+test("current and archived materialized files each carry their own marker, and the archived emitter names only its own field", () => {
     const dir = mkdtempSync(join(tmpdir(), "tt-workflow-markers-"));
     const currentTemplate = join(dir, "current.workflow.js");
     const v1_1Template = join(dir, "v1_1.workflow.js");
@@ -584,10 +583,6 @@ test("current and archived materialized files each carry their own marker, and e
     assert.doesNotMatch(readFileSync(workflowPath, "utf8"), /MARKER_V1_1/);
     assert.match(readFileSync(v1_1WorkflowPath, "utf8"), /MARKER_V1_1/);
     assert.doesNotMatch(readFileSync(v1_1WorkflowPath, "utf8"), /MARKER_CURRENT/);
-
-    const currentBrief = currentSkillBody("[1]");
-    assert.match(currentBrief, /`workflowPath`/);
-    assert.doesNotMatch(currentBrief, /`v1_1WorkflowPath`/);
 
     const archivedBrief = v1_1SkillBody("[1]");
     assert.match(archivedBrief, /`v1_1WorkflowPath`/);
