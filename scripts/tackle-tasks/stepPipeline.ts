@@ -1,8 +1,6 @@
-// Walks the pipeline one decision box at a time, asking you the outcome of each, then prints the trace and a replay string. Nothing here touches a repository: it drives tracePipeline.ts only.
-//
-// Usage: node scripts/tackle-tasks/stepPipeline.ts <taskNumber> [--replay <sequence>] [--malformed <receipt>]
+// Walks the pipeline one decision at a time, then prints the trace and a replay string.
 import { readSync } from "node:fs";
-import { traceTaskPipeline, L, type AgentBoxName, type PipelineDecisions, type ReceiptName } from "../tracePipeline.ts";
+import { traceTaskPipeline, L, type AgentBoxName, type PipelineDecisions } from "../tracePipeline.ts";
 
 // One keypress per decision, so a whole walk replays as a short string.
 type Choice<T> = { key: string; value: T; shown: string };
@@ -11,46 +9,34 @@ const YES_NO: Choice<boolean>[] = [
     { key: "y", value: true, shown: "YES" },
     { key: "n", value: false, shown: "NO" },
 ];
-const VERDICT: Choice<"accept" | "amend" | "scrap">[] = [
-    { key: "a", value: "accept", shown: "ACCEPT" },
-    { key: "m", value: "amend", shown: "AMEND" },
-    { key: "s", value: "scrap", shown: "SCRAP" },
+const PLANNER_OUTCOME: Choice<"PLAN" | "CLARIFY" | "ERROR">[] = [
+    { key: "p", value: "PLAN", shown: "PLAN" },
+    { key: "c", value: "CLARIFY", shown: "CLARIFY" },
+    { key: "e", value: "ERROR", shown: "ERROR" },
 ];
-const REBASE: Choice<"ok" | "conflict">[] = [
-    { key: "o", value: "ok", shown: "no conflicts" },
-    { key: "c", value: "conflict", shown: "conflicts" },
+const VERDICT: Choice<"ACCEPT" | "AMEND" | "SCRAP">[] = [
+    { key: "a", value: "ACCEPT", shown: "ACCEPT" },
+    { key: "m", value: "AMEND", shown: "AMEND" },
+    { key: "s", value: "SCRAP", shown: "SCRAP" },
 ];
-const ADVANCE: Choice<"finished" | "conflicts">[] = [
-    { key: "f", value: "finished", shown: "finished" },
-    { key: "c", value: "conflicts", shown: "conflicts" },
-];
-// An agent box has exactly two outcomes: it hands back its receipt, or the harness loses it.
-const AGENT_RESULT: Choice<boolean>[] = [
-    { key: "r", value: true, shown: "receipt" },
-    { key: "0", value: false, shown: "null" },
+const PUBLICATION_STATE: Choice<"ALL LANDED" | "NONE LANDED" | "SOME LANDED">[] = [
+    { key: "a", value: "ALL LANDED", shown: "ALL LANDED" },
+    { key: "n", value: "NONE LANDED", shown: "NONE LANDED" },
+    { key: "s", value: "SOME LANDED", shown: "SOME LANDED" },
 ];
 
-// The diagram box behind each decision field, so every prompt is worded by the diagram.
+// The diagram box behind each boolean decision field, so every prompt is worded by the diagram.
 const BOOLEAN_NODES: Record<string, string> = {
-    taskNumberValid: "IS_TASK_NUMBER_VALID",
-    taskBlocked: "IS_TASK_BLOCKED",
-    taskActive: "IS_TASK_ACTIVE",
-    worktreeExists: "DOES_WORKTREE_EXIST",
-    worktreeSafe: "IS_WORKTREE_SAFE_TO_USE",
-    previousWorkResumable: "IS_PREVIOUS_RUN_RESUMABLE",
+    taskTestsPass: "DO_TASK_TESTS_PASS",
+    testsFlagged: "ARE_TESTS_FLAGGED",
+    lockAcquired: "WAS_LOCK_ACQUIRED",
+    rebaseConflicts: "DID_REBASE_REPORT_CONFLICTS",
+    rebaseFinished: "IS_REBASE_FINISHED",
+    suitePasses: "DO_ALL_TESTS_PASS",
     fenceHeld: "DID_CHANGES_STAY_INSIDE_FENCE",
-    taskTestsFail: "DO_TASK_TESTS_FAIL",
-    codexTestsFlagged: "ARE_TESTS_FLAGGED",
-    sourceRepoFree: "CAN_SOURCE_REPO_BE_LOCKED",
-    lockSucceeds: "DID_LOCKING_SOURCE_REPO_SUCCEED",
-    fullSuitePasses: "DO_ALL_TESTS_PASS",
-    mergeLands: "DID_MERGE_LAND",
 };
-// The fields the tracer reads as a list, one entry per attempt, rather than once.
-const LIST_FIELDS = new Set([
-    "codexPlanVerdict", "taskTestsFail", "codexTestsFlagged", "sourceRepoFree",
-    "lockSucceeds", "rebase", "rebaseAdvance", "fullSuitePasses", "mergeLands",
-]);
+// The boolean fields the tracer reads as a list, one entry per attempt, rather than once.
+const LIST_FIELDS = new Set(["taskTestsPass", "testsFlagged", "lockAcquired", "rebaseConflicts", "rebaseFinished", "suitePasses"]);
 
 // Reads one keypress without waiting for enter, so a walk feels like stepping, not typing.
 function readKey(): string {
@@ -63,7 +49,7 @@ function readKey(): string {
     readSync(0, buffer, 0, 1, null);
     process.stdin.setRawMode(false);
     const key = buffer.toString("utf8");
-    if (key === "") {
+    if (key === "") {
         process.stdout.write("\n");
         process.exit(130);
     }
@@ -111,24 +97,23 @@ function askedList<T>(ask: Ask, nodeId: string, choices: Choice<T>[]): T[] {
 }
 
 // Every field traceTaskPipeline reads becomes a question the first time it is read.
-function askedDecisions(taskNumber: number, malformedReceipt: ReceiptName | undefined, ask: Ask): PipelineDecisions {
+function askedDecisions(taskNumber: number, ask: Ask): PipelineDecisions {
     // The tracer reads a field more than once per box, so each field keeps the answer it was given.
     const answered = new Map<string, unknown>();
     const once = <T,>(property: string, produce: () => T): T => {
         if (!answered.has(property)) answered.set(property, produce());
         return answered.get(property) as T;
     };
-    const agentBoxes = new Proxy({} as Record<AgentBoxName, boolean[]>, {
-        get: (_target, box: string) => once(`agent:${box}`, () => askedList(ask, `DID_${box}_RETURN_A_RESULT`, AGENT_RESULT)),
+    const agentErrors = new Proxy({} as Record<AgentBoxName, boolean[]>, {
+        get: (_target, box: string) => once(`agent:${box}`, () => askedList(ask, "AGENT_ERRORED", YES_NO)),
     });
     return new Proxy({} as PipelineDecisions, {
         get(_target, property: string) {
             if (property === "taskNumber") return taskNumber;
-            if (property === "malformedReceipt") return malformedReceipt;
-            if (property === "agentReturnsResult") return agentBoxes;
-            if (property === "codexPlanVerdict") return once(property, () => askedList(ask, "WHAT_IS_REVIEW_VERDICT", VERDICT));
-            if (property === "rebase") return once(property, () => askedList(ask, "DID_REBASE_REPORT_CONFLICTS", REBASE));
-            if (property === "rebaseAdvance") return once(property, () => askedList(ask, "IS_REBASE_FINISHED", ADVANCE));
+            if (property === "agentErrors") return agentErrors;
+            if (property === "plannerOutcome") return once(property, () => askedList(ask, "WHAT_DID_THE_PLANNER_RETURN", PLANNER_OUTCOME));
+            if (property === "planVerdict") return once(property, () => askedList(ask, "WHAT_IS_REVIEW_VERDICT", VERDICT));
+            if (property === "publicationState") return once(property, () => askedList(ask, "WHAT_IS_PUBLICATION_STATE", PUBLICATION_STATE));
             const node = BOOLEAN_NODES[property];
             if (node === undefined) return undefined;
             if (LIST_FIELDS.has(property)) return once(property, () => askedList(ask, node, YES_NO));
@@ -145,14 +130,13 @@ if (process.argv[1]?.endsWith("stepPipeline.ts")) {
     };
     const taskNumber = Number(commandArguments[0]);
     if (!Number.isInteger(taskNumber)) {
-        process.stderr.write("usage: node stepPipeline.ts <taskNumber> [--replay <sequence>] [--malformed <receipt>]\n");
+        process.stderr.write("usage: node stepPipeline.ts <taskNumber> [--replay <sequence>]\n");
         process.exit(1);
     }
 
     const replay = [...(valueAfter("--replay") ?? "")];
     const recorded: string[] = [];
-    const malformed = valueAfter("--malformed") as ReceiptName | undefined;
-    const trace = traceTaskPipeline(askedDecisions(taskNumber, malformed, makeAsk(replay, recorded)));
+    const trace = traceTaskPipeline(askedDecisions(taskNumber, makeAsk(replay, recorded)));
 
     process.stdout.write(`\n${trace.join("\n")}\n`);
     process.stdout.write(`\nuse sequence ${recorded.join("")} to replay\n`);

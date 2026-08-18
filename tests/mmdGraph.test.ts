@@ -49,7 +49,7 @@ for (const file of diagramFiles) {
 
   test(`${file}: every node carries a label from the diagram`, () => {
     const g = parseMmd(readFileSync(join(DIAGRAM_DIR, file), "utf8"));
-    const unlabeled = [...g.nodes].filter(([id, label]) => id === label).map(([id]) => id);
+    const unlabeled = [...g.nodes.keys()].filter((id) => !g.labelled.has(id));
     assert.deepEqual(unlabeled, [], `nodes with no label text: ${unlabeled.join(", ")}`);
   });
 

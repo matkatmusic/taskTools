@@ -1,423 +1,298 @@
-// Behavioural checks for skills/tackle-tasks/tackle-tasks.workflow.js.
-// The workflow cannot be imported, so it is compiled in its sandbox shape and driven with a
-// stub agent. Each test overrides only the boxes it is about; every other box answers happily.
-// Run: node --test tests/tackle-tasks/workflowBehavior.test.ts
+// Retry caps and exit types of the tackle-tasks workflow, stated directly and read off its trace.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { compileFunction } from "node:vm";
+import { compileFunction, constants as vmConstants } from "node:vm";
+import type { PipelineDecisions } from "../../scripts/tracePipeline.ts";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const workflowPath = join(repoRoot, "skills", "tackle-tasks", "tackle-tasks.workflow.js");
-const workflowSource = readFileSync(workflowPath, "utf8").replace("export const meta", "const meta");
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const WORKFLOW_PATH = join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
+const WORKFLOW_SOURCE = readFileSync(WORKFLOW_PATH, "utf8").replace("export const meta", "const meta");
 
 const TASK = 169;
 
-const workflowArgs = {
-    task: TASK,
-    projectRoot: "/abs/repo",
-    sourceBranch: "master",
-    runId: "run-abc",
-    scriptsDir: "/abs/repo/scripts/tackle-tasks",
-    agentPromptEmitterPath: "/abs/repo/scripts/tackle-tasks/AgentPromptEmitter.ts",
+// Every decision answers happily, so a test overrides only the field it is about.
+const HAPPY: PipelineDecisions = {
+    taskNumber: TASK,
+    plannerOutcome: ["PLAN"],
+    planVerdict: ["ACCEPT"],
+    taskTestsPass: [true],
+    testsFlagged: [false],
+    lockAcquired: [true],
+    rebaseConflicts: [false],
+    rebaseFinished: [true],
+    suitePasses: [true],
+    fenceHeld: true,
+    publicationState: ["ALL LANDED"],
 };
 
-type AgentOptions = { label: string; phase?: string; schema?: object };
-type StubAgent = (prompt: string, options: AgentOptions) => Promise<unknown>;
-
-// The box name is everything before the trailing ":<taskNumber>" in the label.
-const boxOf = (label: string) => label.slice(0, label.lastIndexOf(":"));
-
-// Every prompt carries its stdin payload inside one quoted heredoc.
-const payloadOf = (prompt: string) => {
-    const match = /<<'TASK_PAYLOAD'\n([\s\S]*?)\nTASK_PAYLOAD/.exec(prompt);
-    assert.ok(match, "prompt carries no TASK_PAYLOAD heredoc");
-    return JSON.parse(match[1]) as Record<string, unknown>;
-};
-
-// A run that reaches "completed" when nothing is overridden.
-const happyResponses: Record<string, unknown> = {
-    isTaskNumberValid: { valid: true, reason: null },
-    isTaskOpen: { open: true, closeInProgress: false },
-    isTaskActive: { status: "claimed", heldByRunId: null },
-    isTaskBlocked: { blocked: false, blockers: [] },
-    doesTaskWorktreeExist: { exists: false, worktree: null },
-    createTaskWorktree: { worktree: "/abs/repo/.worktrees/task-169", branch: "task-169" },
-    resetTaskWorktree: { worktree: "/abs/repo/.worktrees/task-169", branch: "task-169" },
-    isTaskRunResumable: { resumable: false, implementationNotesFile: null, leaseEstablished: true },
-    checkTaskWorktreeSafe: { safe: true, problems: [] },
-    generateTaskDocs: { briefFile: "plans/brief-169.md" },
-    updateTaskDocs: { briefFile: "plans/brief-169.md" },
-    initTaskSubmodules: { initialized: true },
-    plan: { planWritten: true },
-    validatePlanFile: { valid: true, problem: null, sectionIds: ["one"] },
-    "review-plan": { reviewWritten: true, reviewer: "codex" },
-    validateCodexReview: { valid: true, problem: null, verdict: "amend", scrapNotes: null },
-    applyPlanAmendments: { status: "applied", revision: 2, problem: null },
-    implement: { implemented: true, implementationNotesFile: "plans/notes.md", remaining: [] },
-    recordImplementationNotes: { implementationNotesFile: "plans/notes.md" },
-    commitTaskWork: { commits: [] },
-    runTaskTests: {
-        stepId: "task-tests:1", passed: true, testFiles: [], createdTestFiles: [],
-        deletedTestFiles: [], missingTests: false, output: "",
-    },
-    "review-tests": { flagged: false, reviewer: "codex" },
-    "amend-tests": { amended: true },
-    "fix-tests": { fixed: true },
-    "fix-suite": { fixed: true },
-    "fix-conflicts": { resolved: true, unresolvedPaths: [] },
-    rebaseTaskWorktree: {
-        lock: "acquired", heldByOwner: null, recoveryCommand: null, conflicted: false,
-        stoppedAt: null, conflictedFilePaths: [], failureReason: null,
-    },
-    advanceTaskRebase: {
-        finished: true, conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null,
-    },
-    runFullSuite: { stepId: "full-suite:1", passed: true, layers: [], output: "" },
-    checkTaskFileFence: { inside: true, violations: [] },
-    mergeTaskWorktree: { merged: true, commits: [], failureReason: null },
-    recordMergeCommits: { commits: [] },
-    writeTaskExitNotes: { exitType: "completed", exitNote: "" },
-    recordTaskModifiedFiles: { modifiedFiles: [] },
-    markTaskInactive: { active: false, endedAt: "2026-08-13T00:00:00.000Z" },
-    releaseTaskRunHolds: { leaseReleased: true, leaseRetained: false, lockReleased: true },
-    cleanupTaskWorktree: { removed: true, retainedArtifacts: [] },
-    buildClosureNote: { closureNote: "done" },
-    closeTaskRun: { closed: [TASK], skipped: [], ambiguous: [], unblocked: [] },
-    reconcileStep: { status: "not-completed", result: null, note: "nothing landed" },
-};
-
-type RunRecord = {
-    result: { task: number; exitType: string; exitNote: string; chainRan: boolean };
-    calls: string[];
-    payloads: { box: string; payload: Record<string, unknown> }[];
-    countOf: (box: string) => number;
-};
-
-// `overrides` maps a box name to a function of its visit number (1-based), so a test can make
-// the same box answer differently on its first and second visit.
-const runWorkflow = async (
-    overrides: Record<string, (visit: number, payload: Record<string, unknown>) => unknown> = {},
-    argsOverride: Record<string, unknown> = {},
-): Promise<RunRecord> => {
-    const calls: string[] = [];
-    const payloads: { box: string; payload: Record<string, unknown> }[] = [];
-    const visits: Record<string, number> = {};
-
-    const stubAgent: StubAgent = async (prompt, options) => {
-        const box = boxOf(options.label);
-        const payload = payloadOf(prompt);
-        calls.push(box);
-        payloads.push({ box, payload });
-        visits[box] = (visits[box] ?? 0) + 1;
-        if (overrides[box]) return overrides[box](visits[box], payload);
-        assert.ok(box in happyResponses, `no stub response for box ${box}`);
-        return happyResponses[box];
-    };
-
+// FAKE mode supplies every [C] decision, so the run walks offline and never calls agent().
+const runFake = async (overrides: Partial<PipelineDecisions> = {}): Promise<string[]> => {
+    const fake = { ...HAPPY, ...overrides };
     const compiled = compileFunction(
-        `return (async () => { 'use strict'\n${workflowSource}\n })()`,
-        ["args", "log", "agent"],
-        { filename: workflowPath },
-    ) as (a: string, l: (m: string) => void, g: StubAgent) => Promise<RunRecord["result"]>;
-
-    const result = await compiled(
-        JSON.stringify({ ...workflowArgs, ...argsOverride }), () => {}, stubAgent,
-    );
-    return { result, calls, payloads, countOf: (box) => calls.filter((name) => name === box).length };
+        `return (async () => { 'use strict'\n${WORKFLOW_SOURCE} })()`,
+        ["args", "log", "agent", "phase"],
+        { filename: WORKFLOW_PATH, importModuleDynamically: vmConstants.USE_MAIN_CONTEXT_DEFAULT_LOADER },
+    ) as (
+        args: unknown,
+        log: (...values: unknown[]) => void,
+        agent: unknown,
+        phase: unknown,
+    ) => Promise<string[]>;
+    return compiled({ fake, task: fake.taskNumber }, () => {}, async () => {
+        throw new Error("real agent() must never be called in fake mode");
+    }, () => {});
 };
 
-test("test_workflow_reachesCompletedOnTheHappyPath", async () => {
-    // Setup: every box answers happily, so this proves the stub map and the diagram wiring agree.
-    const run = await runWorkflow();
+// Indentation marks loop depth, so every count here compares trimmed lines.
+const countOf = (trace: string[], line: string): number =>
+    trace.filter((entry) => entry.trim() === line).length;
 
-    // Verification: the success chain ran to the archive box.
-    assert.equal(run.result.exitType, "completed");
-    assert.equal(run.countOf("closeTaskRun"), 1);
+// One visit to an orange box, whatever depth the loop had reached.
+const countAgent = (trace: string[], label: string): number =>
+    countOf(trace, `<-- AGENT --> ${label}`);
+
+const indexOfLine = (trace: string[], line: string): number =>
+    trace.findIndex((entry) => entry.trim() === line);
+
+const exitTypeOf = (trace: string[]): string => {
+    const reported = trace.find((entry) => entry.trim().startsWith("report the run's exit type and note: "));
+    return reported === undefined ? "completed" : reported.trim().split(": ")[1]!;
+};
+
+// --------------------------------------------------------------------------
+// The happy path
+// --------------------------------------------------------------------------
+
+test("test_workflow_reachesTheMergeSucceededExitWhenEveryDecisionIsHappy", async () => {
+    // Setup: nothing overridden, so every decision takes its pass edge.
+    const trace = await runFake();
+
+    // Verification: the success tail ran, and no failures tail did.
+    assert.equal(exitTypeOf(trace), "completed");
+    assert.equal(countOf(trace, "write exit type completed to tasks.json"), 1);
+    assert.equal(countOf(trace, "move task to completedTasks.json and update tasks blocked by it"), 1);
+    assert.equal(countOf(trace, "--------- failures exit ---------"), 0);
+    assert.equal(trace[trace.length - 1], "stop");
+});
+
+test("test_workflow_visitsEachAgentBoxOnceOnTheHappyPath", async () => {
+    // Setup: the happy path touches six of the ten orange boxes, each exactly once.
+    const trace = await runFake();
+
+    // Verification: no repair box runs when nothing needs repairing.
+    assert.equal(countAgent(trace, "plan the task"), 1);
+    assert.equal(countAgent(trace, "codex reviews the plan"), 1);
+    assert.equal(countAgent(trace, "implement task"), 1);
+    assert.equal(countAgent(trace, "run task tests"), 1);
+    assert.equal(countAgent(trace, "codex reviews the tests"), 1);
+    assert.equal(countAgent(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 1);
+    assert.equal(countAgent(trace, "run the full suite"), 1);
+    assert.equal(countAgent(trace, "fix conflicts"), 0);
+    assert.equal(countAgent(trace, "continue the rebase"), 0);
+    assert.equal(countAgent(trace, "fix the codebase so the full suite passes"), 0);
 });
 
 // --------------------------------------------------------------------------
-// Finding 5 — the plan-scrap counter
+// Retry caps — MAX_ATTEMPTS is 2 fix attempts, which allows 3 runs
 // --------------------------------------------------------------------------
 
-test("test_workflow_exitsPlanScrappedOnTheSecondInvalidPlanWithoutAThirdPlannerVisit", async () => {
-    // Setup: the plan file never validates, so every planning round is a scrap.
-    const run = await runWorkflow({
-        validatePlanFile: () => ({ valid: false, problem: "no sections", sectionIds: [] }),
-    });
+test("test_workflow_stopsClarifyingAfterTwoRoundsAndPlansAThirdTime", async () => {
+    // Setup: the planner asks for clarification every time.
+    const trace = await runFake({ plannerOutcome: ["CLARIFY"] });
 
-    // Verification: two planner visits, then the exit — never a third.
-    assert.equal(run.countOf("plan"), 2);
-    assert.equal(run.result.exitType, "plan-scrapped");
-    assert.equal(run.result.exitNote, "codex scrapped the plan twice");
+    // Verification: two clarify rounds spent, so the third planner visit is the last one.
+    assert.equal(countAgent(trace, "plan the task"), 3);
+    assert.equal(countOf(trace, "write the clarify request into the tasks.json entry"), 2);
+    assert.equal(exitTypeOf(trace), "CLARIFY-STUCK");
 });
 
-test("test_workflow_exitsPlanScrappedOnTheSecondScrapVerdict", async () => {
-    // Setup: codex scraps the plan every round.
-    const run = await runWorkflow({
-        validateCodexReview: () => ({ valid: true, problem: null, verdict: "scrap", scrapNotes: "start again" }),
-    });
+test("test_workflow_countsAPlanReviewBeforeAskingTheCapSoTwoReviewsEndIt", async () => {
+    // The plan-review counter increments BEFORE its check, unlike every other counter.
+    const trace = await runFake({ planVerdict: ["AMEND"] });
 
-    // Verification: the second scrap ends it, and the first one fed its notes back as a preamble.
-    assert.equal(run.countOf("plan"), 2);
-    assert.equal(run.result.exitType, "plan-scrapped");
-    const plannerPayloads = run.payloads.filter((entry) => entry.box === "plan");
-    assert.equal(plannerPayloads[0].payload.preamble, "");
-    assert.equal(plannerPayloads[1].payload.preamble, "start again");
+    // Verification: two reviews and two plans, never a third of either.
+    assert.equal(countAgent(trace, "codex reviews the plan"), 2);
+    assert.equal(countAgent(trace, "plan the task"), 2);
+    assert.equal(exitTypeOf(trace), "PLAN-SCRAPPED");
 });
 
-// --------------------------------------------------------------------------
-// Finding 2 — reconciling the proved-safe rerun
-// --------------------------------------------------------------------------
+test("test_workflow_treatsAScrapVerdictExactlyAsItTreatsAnAmendVerdict", async () => {
+    // Both verdicts route through the same replan edge, so both spend the same cap.
+    const amended = await runFake({ planVerdict: ["AMEND"] });
+    const scrapped = await runFake({ planVerdict: ["SCRAP"] });
 
-test("test_workflow_reconcilesTheProvedSafeRerunWhenItsResultIsAlsoLost", async () => {
-    // Setup: the claim loses its result, reconciliation proves nothing landed, the rerun
-    // lands the claim but loses its result too.
-    const run = await runWorkflow({
-        isTaskActive: () => null,
-        reconcileStep: (visit) => (visit === 1
-            ? { status: "not-completed", result: null, note: "no claim on record" }
-            : { status: "completed", result: { status: "claimed", heldByRunId: null }, note: null }),
-    });
-
-    // Verification: two reconciliations, exactly two claim attempts, and the run carried on.
-    assert.equal(run.countOf("isTaskActive"), 2);
-    assert.equal(run.countOf("reconcileStep"), 2);
-    assert.equal(run.result.exitType, "completed");
+    // Verification: same box counts and same exit, differing only in the recorded verdict.
+    assert.equal(countAgent(scrapped, "codex reviews the plan"), countAgent(amended, "codex reviews the plan"));
+    assert.equal(exitTypeOf(scrapped), "PLAN-SCRAPPED");
+    assert.equal(countOf(scrapped, "what is the review verdict?: SCRAP"), 2);
 });
 
-test("test_workflow_neverRunsAMutatingBoxAThirdTime", async () => {
-    // Setup: both results are lost and reconciliation proves nothing landed either time.
-    const run = await runWorkflow({
-        isTaskActive: () => null,
-        reconcileStep: () => ({ status: "not-completed", result: null, note: "no claim on record" }),
-    });
+test("test_workflow_stopsFixingTaskTestsAfterTwoAttemptsAndRunsThemAThirdTime", async () => {
+    // Setup: the task tests never go green.
+    const trace = await runFake({ taskTestsPass: [false] });
 
-    // Verification: two attempts, two reconciliations, then run-failed — no third mutation.
-    assert.equal(run.countOf("isTaskActive"), 2);
-    assert.equal(run.countOf("reconcileStep"), 2);
-    assert.equal(run.result.exitType, "run-failed");
-    // The claim never landed, so there is no run record to write to.
-    assert.equal(run.result.chainRan, false);
+    // Verification: the counter is read before the amend, so the first failure does not spend it.
+    assert.equal(countAgent(trace, "run task tests"), 3);
+    assert.equal(countAgent(trace, "implement task"), 3);
+    assert.equal(countOf(trace, "amend tasks.json entry with the failing tests"), 2);
+    assert.equal(exitTypeOf(trace), "TESTS-RED");
 });
 
-test("test_workflow_usesTheAmbiguousNoteOfTheSecondReconciliation", async () => {
-    // Setup: the second reconciliation cannot decide what happened.
-    const run = await runWorkflow({
-        commitTaskWork: () => null,
-        reconcileStep: (visit) => (visit === 1
-            ? { status: "not-completed", result: null, note: "no commit at HEAD" }
-            : { status: "ambiguous", result: null, note: "HEAD moved but no hash on record" }),
-    });
+test("test_workflow_stopsReviewingTaskTestsAfterTwoFlaggedRoundsAndReviewsAThirdTime", async () => {
+    // Setup: codex flags the tests every round.
+    const trace = await runFake({ testsFlagged: [true] });
 
-    // Verification: the exit note repeats what could not be determined, word for word.
-    assert.equal(run.result.exitType, "run-failed");
-    assert.match(run.result.exitNote, /HEAD moved but no hash on record/);
-    // The claim landed, so the whole exit chain runs.
-    assert.equal(run.result.chainRan, true);
-    assert.equal(run.countOf("releaseTaskRunHolds"), 1);
+    // Verification: three reviews, two amendments, then the flagged exit.
+    assert.equal(countAgent(trace, "codex reviews the tests"), 3);
+    assert.equal(countOf(trace, "amend tasks.json entry with codex's notes and fixes"), 2);
+    assert.equal(exitTypeOf(trace), "TESTS-FLAGGED");
 });
 
-// --------------------------------------------------------------------------
-// Finding 3 — a yellow box is dispatched exactly once
-// --------------------------------------------------------------------------
+test("test_workflow_stopsFixingConflictsAfterTwoAttemptsAndRebasesAThirdTime", async () => {
+    // Setup: every rebase conflicts and no continue ever finishes it.
+    const trace = await runFake({ rebaseConflicts: [true], rebaseFinished: [false] });
 
-test("test_workflow_dispatchesTheImplementRoleExactlyOnceWhenItsResultIsLost", async () => {
-    // Setup: implement edits the worktree, then its result is lost.
-    const run = await runWorkflow({ implement: () => null });
-
-    // Verification: no re-spawn, and the claimed run is finalized through the exit chain.
-    assert.equal(run.countOf("implement"), 1);
-    assert.equal(run.result.exitType, "run-failed");
-    assert.equal(run.result.chainRan, true);
-    assert.equal(run.countOf("releaseTaskRunHolds"), 1);
+    // Verification: two conflict fixes spent, and the third rebase run is the last one.
+    assert.equal(countAgent(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 3);
+    assert.equal(countAgent(trace, "fix conflicts"), 2);
+    assert.equal(countAgent(trace, "continue the rebase"), 2);
+    assert.equal(exitTypeOf(trace), "REBASE-STUCK");
 });
 
-test("test_workflow_dispatchesARepairRoleExactlyOnceWhenItsResultIsLost", async () => {
-    // Setup: the task tests are red, so the fix-tests repair role runs, and loses its result.
-    const run = await runWorkflow({
-        runTaskTests: () => ({
-            stepId: "task-tests:1", passed: false, testFiles: [], createdTestFiles: [],
-            deletedTestFiles: [], missingTests: false, output: "1 failing",
-        }),
-        "fix-tests": () => null,
-    });
+test("test_workflow_stopsFixingTheSuiteAfterTwoAttemptsAndRunsItAThirdTime", async () => {
+    // Setup: the full suite stays red.
+    const trace = await runFake({ suitePasses: [false] });
 
-    // Verification: the repair role ran once, never twice.
-    assert.equal(run.countOf("fix-tests"), 1);
-    assert.equal(run.result.exitType, "run-failed");
-    assert.equal(run.result.chainRan, true);
+    // Verification: three suite runs, two repair runs, then the red exit.
+    assert.equal(countAgent(trace, "run the full suite"), 3);
+    assert.equal(countAgent(trace, "fix the codebase so the full suite passes"), 2);
+    assert.equal(exitTypeOf(trace), "SUITE-RED");
 });
 
-test("test_workflow_neverReconcilesAYellowBox", async () => {
-    // Setup: a lost role result must not enter the green-box reconciliation path.
-    const run = await runWorkflow({ "amend-tests": () => null, "review-tests": () => ({ flagged: true, reviewer: "codex" }) });
+test("test_workflow_stopsRetryingTheMergeAfterTwoAttemptsAndMergesAThirdTime", async () => {
+    // Setup: nothing ever lands, so the merge keeps sending the run back to rebase.
+    const trace = await runFake({ publicationState: ["NONE LANDED"] });
 
-    // Verification: no reconciliation was attempted for the role.
-    assert.equal(run.countOf("amend-tests"), 1);
-    assert.equal(run.countOf("reconcileStep"), 0);
+    // Verification: three merge passes, and each retry re-entered rebase, never the rebase preamble.
+    assert.equal(countOf(trace, "--------- merge ---------"), 3);
+    assert.equal(countOf(trace, "--------- rebase ---------"), 3);
+    assert.equal(countOf(trace, "--------- rebase preamble ---------"), 1);
+    assert.equal(exitTypeOf(trace), "MERGE-FAILED");
+});
+
+test("test_workflow_neverResetsTheSuiteFixCounterWhenAMergeRetryRerunsTheSuite", async () => {
+    // Setup: one suite repair, then a failed merge that sends the run back through the suite.
+    const trace = await runFake({ suitePasses: [false, true, false, true], publicationState: ["NONE LANDED", "ALL LANDED"] });
+
+    // Verification: the second pass through the suite spends the counter it inherited, not a fresh one.
+    assert.equal(countAgent(trace, "fix the codebase so the full suite passes"), 2);
+    assert.equal(countOf(trace, "2 suite fix attempts done?: YES"), 0);
+    assert.equal(exitTypeOf(trace), "completed");
 });
 
 // --------------------------------------------------------------------------
-// Finding 4 — an operational failure carries its stderr into the exit note
+// The five review verdicts of plans/diagram/pipeline-reviewPlan.mmd
 // --------------------------------------------------------------------------
 
-test("test_workflow_recordsTheStderrOfAMutatingBoxThatFailsOperationally", async () => {
-    // Setup: the commit box exits non-zero after the claim landed.
-    const run = await runWorkflow({
-        commitTaskWork: () => { throw new Error("SENTINEL_COMMIT_STDERR"); },
-    });
+test("test_workflow_sendsAmendThenAcceptStraightToImplementWithoutUpdatingTheEntry", async () => {
+    // The script already wrote codex's fixes into the plan, so there is nothing to replan.
+    const trace = await runFake({ planVerdict: ["AMEND_THEN_ACCEPT"] });
 
-    // Verification: the sentinel reaches both the workflow result and the stored exit note.
-    assert.equal(run.result.exitType, "run-failed");
-    assert.match(run.result.exitNote, /SENTINEL_COMMIT_STDERR/);
-    const exitNotes = run.payloads.find((entry) => entry.box === "writeTaskExitNotes");
-    assert.ok(exitNotes);
-    assert.match(String(exitNotes.payload.exitNote), /SENTINEL_COMMIT_STDERR/);
-    // The chain still releases what the run holds.
-    assert.equal(run.countOf("releaseTaskRunHolds"), 1);
+    // Verification: one review, one plan, and no replan edge taken.
+    assert.equal(countAgent(trace, "codex reviews the plan"), 1);
+    assert.equal(countAgent(trace, "plan the task"), 1);
+    assert.equal(countOf(trace, "update tasks.json entry"), 0);
+    assert.equal(exitTypeOf(trace), "completed");
 });
 
-test("test_workflow_neverReconcilesAnOperationalFailure", async () => {
-    // Setup: a non-zero exit is not a lost result, so reconciliation must not run.
-    const run = await runWorkflow({
-        commitTaskWork: () => { throw new Error("SENTINEL_COMMIT_STDERR"); },
-    });
+test("test_workflow_treatsAnErrorVerdictAsAnOperationalFailureNotAPlanDefect", async () => {
+    // The reviewer never read the plan, so no ruling was possible and no cap is spent.
+    const trace = await runFake({ planVerdict: ["ERROR"] });
 
-    // Verification: the box ran once and no reconciliation was attempted.
-    assert.equal(run.countOf("commitTaskWork"), 1);
-    assert.equal(run.countOf("reconcileStep"), 0);
-});
-
-test("test_workflow_reportsAPreClaimOperationalFailureWithoutTouchingTasksJson", async () => {
-    // Setup: a read-only box exits non-zero before there is any run to write to.
-    const run = await runWorkflow({
-        isTaskNumberValid: () => { throw new Error("SENTINEL_PREFLIGHT_STDERR"); },
-    });
-
-    // Verification: the stderr survives, and no exit-chain box ran.
-    assert.equal(run.result.exitType, "run-failed");
-    assert.match(run.result.exitNote, /SENTINEL_PREFLIGHT_STDERR/);
-    assert.equal(run.result.chainRan, false);
-    assert.equal(run.countOf("writeTaskExitNotes"), 0);
-    assert.equal(run.countOf("markTaskInactive"), 0);
-});
-
-test("test_workflow_doesNotRetryAReadOnlyBoxThatFailsOperationally", async () => {
-    // Setup: a non-zero exit is a verdict about the world, not a lost message.
-    const run = await runWorkflow({
-        isTaskNumberValid: () => { throw new Error("SENTINEL_PREFLIGHT_STDERR"); },
-    });
-
-    // Verification: one attempt only, even though a lost result would have earned three.
-    assert.equal(run.countOf("isTaskNumberValid"), 1);
-});
-
-test("test_workflow_retriesAReadOnlyBoxThatLosesItsResult", async () => {
-    // Setup: re-reading the world changes nothing, so a lost read-only result is re-spawned.
-    const run = await runWorkflow({
-        isTaskNumberValid: (visit) => (visit < 3 ? null : { valid: true, reason: null }),
-    });
-
-    // Verification: three attempts, and the run carried on.
-    assert.equal(run.countOf("isTaskNumberValid"), 3);
-    assert.equal(run.result.exitType, "completed");
+    // Verification: run-failed, and the replan edge was never taken.
+    assert.equal(exitTypeOf(trace), "RUN-FAILED");
+    assert.equal(countOf(trace, "update tasks.json entry"), 0);
+    assert.equal(countAgent(trace, "plan the task"), 1);
 });
 
 // --------------------------------------------------------------------------
-// Finding 7 — preflight keeps the two diagnostics apart
+// The dotted "agent() errored" edge, on all ten orange boxes
 // --------------------------------------------------------------------------
 
-test("test_workflow_namesThePartialCloseWhenTheTaskIsInBothFiles", async () => {
-    // Setup: a close that stopped halfway leaves the task in tasks.json and completedTasks.json.
-    const run = await runWorkflow({
-        isTaskOpen: () => ({ open: false, closeInProgress: true }),
-    });
+// Each entry names the decisions that reach the box, and the box's label in the trace.
+const AGENT_BOX_REACH: { box: string; label: string; reach: Partial<PipelineDecisions> }[] = [
+    { box: "PLANNER", label: "plan the task", reach: {} },
+    { box: "PLAN_REVIEWER", label: "codex reviews the plan", reach: {} },
+    { box: "IMPLEMENTER", label: "implement task", reach: {} },
+    { box: "TEST_RUNNER", label: "run task tests", reach: {} },
+    { box: "TEST_REVIEWER", label: "codex reviews the tests", reach: {} },
+    { box: "REBASER", label: "rebase onto the target branch. skip every layer the receipt records as already landed", reach: {} },
+    { box: "CONFLICT_FIXER", label: "fix conflicts", reach: { rebaseConflicts: [true] } },
+    { box: "REBASE_ADVANCER", label: "continue the rebase", reach: { rebaseConflicts: [true] } },
+    { box: "SUITE_RUNNER", label: "run the full suite", reach: {} },
+    { box: "SUITE_FIXER", label: "fix the codebase so the full suite passes", reach: { suitePasses: [false] } },
+];
 
-    // Verification: the note names the partial close, and nothing was written to tasks.json.
-    assert.equal(run.result.exitType, "not-open");
-    assert.match(run.result.exitNote, /a previous close did not finish/);
-    assert.equal(run.result.chainRan, false);
-    assert.equal(run.countOf("writeTaskExitNotes"), 0);
+for (const { box, label, reach } of AGENT_BOX_REACH) {
+    test(`test_workflow_exitsAgentFailedWhen${box}ReturnsNothing`, async () => {
+        // Setup: the harness loses that one box's result on its first visit.
+        const trace = await runFake({ ...reach, agentErrors: { [box]: [true] } as PipelineDecisions["agentErrors"] });
+
+        // Verification: the dotted edge is drawn once, the box is never retried, and the run ends.
+        assert.equal(countOf(trace, "agent() errored"), 1);
+        assert.equal(countAgent(trace, label), 1);
+        assert.equal(exitTypeOf(trace), "AGENT-FAILED");
+    });
+}
+
+// --------------------------------------------------------------------------
+// The failures tail reconciles the exit type against what actually landed
+// --------------------------------------------------------------------------
+
+test("test_workflow_discardsTheIncomingExitTypeWhenSomeLayersAlreadyLanded", async () => {
+    // Setup: a partial publication, which is the one exit that carries landed work.
+    const trace = await runFake({ publicationState: ["SOME LANDED"] });
+
+    // Verification: the tail writes the publication outcome instead of the incoming exit type.
+    assert.equal(countOf(trace, "did ANY of this task's work land?: YES"), 1);
+    assert.equal(countOf(trace, "write the publication outcome: keep completed if it is there, else write partially-published. NEVER run-failed. add cleanup-incomplete and the note"), 1);
+    assert.equal(countOf(trace, "write exit type and exit notes to tasks.json: PARTIALLY-PUBLISHED"), 0);
+    assert.equal(exitTypeOf(trace), "PARTIALLY-PUBLISHED");
 });
 
-test("test_workflow_saysAlreadyCompletedWhenTheTaskIsOnlyArchived", async () => {
-    // Setup: an ordinary completed task, absent from tasks.json.
-    const run = await runWorkflow({
-        isTaskOpen: () => ({ open: false, closeInProgress: false }),
-    });
+test("test_workflow_writesTheIncomingExitTypeWhenNothingLanded", async () => {
+    // Setup: a fence violation, which merges nothing at all.
+    const trace = await runFake({ fenceHeld: false });
 
-    // Verification: the plain note, distinct from the partial-close one.
-    assert.equal(run.result.exitType, "not-open");
-    assert.equal(run.result.exitNote, "task is already completed");
-});
-
-test("test_workflow_namesTheArchivalCloseWhenTheClaimReportsClosing", async () => {
-    // Setup: the task is closing, so the claim is refused for a different reason.
-    const run = await runWorkflow({
-        isTaskActive: () => ({ status: "closing", heldByRunId: null }),
-    });
-
-    // Verification: the note says archival, not a held claim, and no exit-chain box ran.
-    assert.equal(run.result.exitType, "already-active");
-    assert.match(run.result.exitNote, /being archived/);
-    assert.equal(run.result.chainRan, false);
-    assert.equal(run.countOf("writeTaskExitNotes"), 0);
-});
-
-test("test_workflow_namesTheHeldClaimWhenTheClaimIsRefused", async () => {
-    // Setup: a previous run left the claim held.
-    const run = await runWorkflow({
-        isTaskActive: () => ({ status: "refused", heldByRunId: "run-old" }),
-    });
-
-    // Verification: the held-claim note, distinct from the closing one.
-    assert.equal(run.result.exitType, "already-active");
-    assert.equal(run.result.exitNote, "a previous run left the claim held");
+    // Verification: nothing landed, so the incoming exit type is written verbatim.
+    assert.equal(countOf(trace, "did ANY of this task's work land?: NO"), 1);
+    assert.equal(countOf(trace, "write exit type and exit notes to tasks.json: FENCE-VIOLATION"), 1);
+    assert.equal(exitTypeOf(trace), "FENCE-VIOLATION");
 });
 
 // --------------------------------------------------------------------------
-// Finding 1 — ownership is established on every existing-worktree path
+// The source repo lock is released by whichever tail runs, and only if held
 // --------------------------------------------------------------------------
 
-test("test_workflow_establishesTheLeaseBeforeWritingToASafeExistingWorktree", async () => {
-    // Setup: a retained worktree from an ended run, structurally safe.
-    const run = await runWorkflow({
-        doesTaskWorktreeExist: () => ({ exists: true, worktree: "/abs/repo/.worktrees/task-169" }),
-        checkTaskWorktreeSafe: () => ({ safe: true, problems: [] }),
-    });
+test("test_workflow_releasesNoSourceLockWhenTheRunFailedBeforeTakingOne", async () => {
+    // Setup: the lock never came free, so the run holds nothing to release.
+    const trace = await runFake({ lockAcquired: [false] });
 
-    // Verification: the lease box ran, and it ran before the first box that writes to the worktree.
-    assert.equal(run.countOf("isTaskRunResumable"), 1);
-    assert.ok(run.calls.indexOf("isTaskRunResumable") < run.calls.indexOf("updateTaskDocs"));
-    assert.equal(run.result.exitType, "completed");
+    // Verification: the tail answers NO and skips the release box.
+    assert.equal(countOf(trace, "does this run still hold the source repo lock?: NO"), 1);
+    assert.equal(countOf(trace, "release the source repo lock"), 0);
+    assert.equal(exitTypeOf(trace), "RUN-FAILED");
 });
 
-test("test_workflow_refusesAnExistingWorktreeWhoseLeaseAnotherLiveRunOwns", async () => {
-    // Setup: the lease could be neither adopted nor acquired.
-    const run = await runWorkflow({
-        doesTaskWorktreeExist: () => ({ exists: true, worktree: "/abs/repo/.worktrees/task-169" }),
-        isTaskRunResumable: () => ({ resumable: false, implementationNotesFile: null, leaseEstablished: false }),
-    });
+test("test_workflow_releasesTheSourceLockOnAFailureTakenAfterItWasAcquired", async () => {
+    // Setup: the suite stays red, which fails with the lock already held.
+    const trace = await runFake({ suitePasses: [false] });
 
-    // Verification: the run stops before any box writes to that worktree.
-    assert.equal(run.result.exitType, "run-failed");
-    assert.match(run.result.exitNote, /lease is held by a live run/);
-    assert.equal(run.countOf("updateTaskDocs"), 0);
-    assert.equal(run.countOf("generateTaskDocs"), 0);
-});
-
-test("test_workflow_establishesTheLeaseBeforeResettingAnUnsafeWorktree", async () => {
-    // Setup: an unsafe, unresumable worktree still needs its lease established before the reset.
-    const run = await runWorkflow({
-        doesTaskWorktreeExist: () => ({ exists: true, worktree: "/abs/repo/.worktrees/task-169" }),
-        checkTaskWorktreeSafe: () => ({ safe: false, problems: ["detached head"] }),
-        isTaskRunResumable: () => ({ resumable: false, implementationNotesFile: null, leaseEstablished: true }),
-    });
-
-    // Verification: the reset happened, and ownership came first.
-    assert.equal(run.countOf("resetTaskWorktree"), 1);
-    assert.ok(run.calls.indexOf("isTaskRunResumable") < run.calls.indexOf("resetTaskWorktree"));
+    // Verification: the tail answers YES and releases before marking the task inactive.
+    assert.equal(countOf(trace, "does this run still hold the source repo lock?: YES"), 1);
+    assert.equal(countOf(trace, "release the source repo lock"), 1);
+    assert.ok(indexOfLine(trace, "release the source repo lock") < indexOfLine(trace, "mark task inactive in tasks.json"));
 });

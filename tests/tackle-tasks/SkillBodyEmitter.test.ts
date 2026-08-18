@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts and skills/tackle-tasks/resolve.workflow.js.  Run: node --test tests/tackle-tasks/SkillBodyEmitter.test.ts
+// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts.  Run: node --test tests/tackle-tasks/SkillBodyEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -6,14 +6,12 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { compileFunction } from "node:vm";
 import { after } from "node:test";
 import { skillBody } from "../../scripts/tackle-tasks/SkillBodyEmitter.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../../scripts/prepareTasks.ts";
 
 const emitterPath = fileURLToPath(new URL("../../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../../skills/tackle-tasks/SKILL.md", import.meta.url));
-const resolveWorkflowPath = fileURLToPath(new URL("../../skills/tackle-tasks/resolve.workflow.js", import.meta.url));
 
 const temporaryDirectories: string[] = [];
 after(() => {
@@ -35,27 +33,6 @@ const makeTargetRepository = (taskNumbers: number[] = [1]): string => {
     git("add", ".taskTools");
     git("commit", "-m", "initial");
     return root;
-};
-
-// Runs resolve.workflow.js for real, with the harness globals stubbed, and records every agent call.
-const runResolveWorkflow = async (
-    workflowArguments: Record<string, unknown>,
-    agentResults: unknown[],
-): Promise<{ result: unknown; prompts: string[]; schemas: unknown[] }> => {
-    const prompts: string[] = [];
-    const schemas: unknown[] = [];
-    const stubAgent = async (prompt: string, options: { schema?: unknown }) => {
-        prompts.push(prompt);
-        schemas.push(options.schema);
-        return agentResults[prompts.length - 1] ?? null;
-    };
-    const compiled = compileFunction(
-        `return (async () => { 'use strict'\n${readFileSync(resolveWorkflowPath, "utf8").replace("export const meta", "const meta")}\n })()`,
-        ["args", "log", "agent"],
-        { filename: resolveWorkflowPath },
-    ) as (a: string, l: (m: string) => void, g: typeof stubAgent) => Promise<unknown>;
-    const result = await compiled(JSON.stringify(workflowArguments), () => {}, stubAgent);
-    return { result, prompts, schemas };
 };
 
 test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => {
@@ -127,54 +104,4 @@ test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
 
     assert.doesNotMatch(brief, /resolveTaskRun\.ts/);
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
-});
-
-test("test_resolveWorkflow_namesTheResolverScriptOnlyInsideTheAgentPromptAndReturnsItsResult", async () => {
-    // Setup: a resolver result the workflow must pass through untouched.
-    const resolved = { taskNumbers: [1, 2], projectRoot: "/abs/repo", sourceBranch: "master", runId: "abc" };
-
-    // Test action: run the real workflow with a stub agent.
-    const run = await runResolveWorkflow({ argsValue: "[1,2]", scriptsDir: "/abs/scripts/tackle-tasks" }, [resolved]);
-
-    // Verification: the script is named in the prompt, the schema is enforced, the result passes through.
-    assert.equal(run.prompts.length, 1);
-    assert.match(run.prompts[0], /node "\/abs\/scripts\/tackle-tasks\/resolveTaskRun\.ts" <<'RESOLVE_PAYLOAD'/);
-    assert.match(run.prompts[0], /\{"args":"\[1,2\]"\}/);
-    assert.deepEqual((run.schemas[0] as { required: string[] }).required, [
-        "taskNumbers", "projectRoot", "sourceBranch", "runId",
-    ]);
-    assert.deepEqual(run.result, resolved);
-});
-
-test("test_resolveWorkflow_respawnsTheReadOnlyResolverUpToThreeTimes", async () => {
-    // Setup: the harness loses the first two results, then returns one.
-    const resolved = { taskNumbers: [1], projectRoot: "/abs/repo", sourceBranch: "master", runId: "abc" };
-
-    // Test action: two lost spawns followed by a real answer.
-    const run = await runResolveWorkflow({ argsValue: "[1]", scriptsDir: "/abs/scripts" }, [null, null, resolved]);
-
-    // Verification: three attempts, and the third answer wins.
-    assert.equal(run.prompts.length, 3);
-    assert.deepEqual(run.result, resolved);
-});
-
-test("test_resolveWorkflow_failsAfterThreeLostSpawns", async () => {
-    // A fourth silent attempt would hide a broken resolver, so the workflow must stop instead.
-    await assert.rejects(
-        () => runResolveWorkflow({ argsValue: "[1]", scriptsDir: "/abs/scripts" }, []),
-        /no result after 3 attempts/,
-    );
-});
-
-test("test_resolveWorkflow_runsTheResolverInsideAnAgentUnderAPureLiteralMeta", () => {
-    // Setup: the resolver workflow source.
-    const source = readFileSync(resolveWorkflowPath, "utf8");
-    const metaLiteral = source.slice(0, source.indexOf("\n}\n") + 3);
-
-    // Verification: meta comes first and interpolates nothing; the script itself runs only inside agent().
-    assert.ok(source.startsWith("export const meta = {"));
-    assert.doesNotMatch(metaLiteral, /\$\{/);
-    assert.doesNotMatch(source, /\brequire\(|^import\b|\bprocess\./m);
-    assert.match(source, /agent\(/);
-    assert.match(source, /RESOLVE_PAYLOAD/);
 });
