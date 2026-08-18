@@ -116,7 +116,7 @@ const L = {
   RELEASE_WORKTREE_LEASE: "release the worktree lease, keep the worktree",
   REPORT_CLOSURE_NOTE: "report the closure note",
   REPORT_EXIT_TYPE_AND_NOTE: "report the run's exit type and note",
-  RUN_FULL_SUITE: "Try: run the full suite",
+  RUN_FULL_SUITE: "run the full suite",
   RUN_TASK_TESTS: "Try: run task tests",
   SOURCE_REPO_LOCKED_INPUT: "Input: { worktree, target branch, merge receipt }",
   STOP: "stop",
@@ -245,7 +245,7 @@ const REVIEW_PLAN_RESULT = {
   type: 'object',
   required: ['verdict'],
   properties: {
-    verdict: { type: 'string', enum: ['ACCEPT', 'AMEND', 'SCRAP'] },
+    verdict: { type: 'string', enum: ['ACCEPT', 'AMEND_THEN_ACCEPT', 'AMEND', 'SCRAP', 'ERROR'] },
     notes: { type: 'string' },
   },
 }
@@ -269,6 +269,12 @@ const FIX_CONFLICTS_RESULT = {
     resolved: { type: 'boolean' },
     unresolvedPaths: { type: 'array', items: { type: 'string' } },
   },
+}
+
+const RUN_FULL_SUITE_RESULT = {
+  type: 'object',
+  required: ['passed'],
+  properties: { passed: { type: 'boolean' } },
 }
 
 const FIX_SUITE_RESULT = {
@@ -498,8 +504,11 @@ const reviewPlanPipeline = async () => {
   verdictIndex += 1
   step(L.WHAT_IS_REVIEW_VERDICT, verdict)
 
-  // Paragraph 32.
-  if (verdict === 'ACCEPT') return { next: 'implement' }
+  // The reviewer never read the plan, so this is an operational failure, not a plan defect.
+  if (verdict === 'ERROR') return toFailures('run-failed', result.notes ?? 'the plan review could not run')
+
+  // Paragraph 32. AMEND_THEN_ACCEPT skips a second review: the fixes are already in the plan.
+  if (verdict === 'ACCEPT' || verdict === 'AMEND_THEN_ACCEPT') return { next: 'implement' }
 
   // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
   step(L.UPDATE_TASK_ENTRY)
@@ -704,9 +713,11 @@ const suitePipeline = async () => {
   step(L.REBASED_WORKTREE_INPUT)
 
   for (;;) {
-    // Paragraph 62: the full suite is what proves the task broke nothing else.
-    step(L.RUN_FULL_SUITE)
-    const passes = decide('RUN_FULL_SUITE', 'suitePasses', suiteIndex)
+    // Paragraph 62 [S]: the sandbox cannot run a suite, so an agent invokes the run-full-suite skill.
+    const suiteRun = await runAgent(L.RUN_FULL_SUITE, 'SUITE_RUNNER', 'run-full-suite', RUN_FULL_SUITE_RESULT)
+    if (suiteRun === null) return toFailures('agent-failed', AGENT_FAILED_NOTE)
+
+    const passes = isFake() ? attempt(FAKE.suitePasses, suiteIndex) : suiteRun.passed
     suiteIndex += 1
     step(L.DO_ALL_TESTS_PASS, yesNo(passes))
     if (passes) break
@@ -728,7 +739,6 @@ const suitePipeline = async () => {
       'SUITE_FIXER',
       'fix-suite',
       FIX_SUITE_RESULT,
-      { checkoutPath: WORKTREE, testOutput: '', forbiddenPaths: [] },
     )
 
     // Paragraph 65.

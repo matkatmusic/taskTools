@@ -10,3 +10,4 @@ plans/implementation-notes-*.md
 # symlink so the plugin skill is discoverable in this checkout
 .claude/skills/read-file
 .claude/skills/check-time
+.claude/skills/run-full-suite
