@@ -11,3 +11,7 @@ plans/implementation-notes-*.md
 .claude/skills/read-file
 .claude/skills/check-time
 .claude/skills/run-full-suite
+plans/implementation-diff-*.patch
+.claude/skills/run-task-tests
+.claude/skills/rebase-worktree
+.claude/skills/continue-rebase

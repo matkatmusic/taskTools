@@ -136,11 +136,31 @@ const SAMPLE_SUITE_FAILURE = `\u2716 test_greenBoxPolicy_namesEveryScriptInTheSc
 # fail 1`;
 
 // Written here, not in stagePath: stagePath ends its run, and an ended run has no record to read.
-function recordARedFullSuite(taskNumber: number, projectRoot: string): void {
+function recordRun(taskNumber: number, projectRoot: string, changes: Parameters<typeof updateCurrentTaskRun>[2]): void {
     isTaskActive(taskNumber, `stage-${taskNumber}`, projectRoot);
     // isTaskActive names the run itself, so the id is read back rather than assumed.
     const runId = getCurrentTaskRun(taskNumber, projectRoot)!.runId;
-    updateCurrentTaskRun(taskNumber, runId, {
+    updateCurrentTaskRun(taskNumber, runId, changes, projectRoot);
+}
+
+// review-tests derives its diff and its pre-existing tests from this, so every path records it.
+function recordATaskTestRun(taskNumber: number, projectRoot: string): void {
+    recordRun(taskNumber, projectRoot, {
+        taskTests: {
+            stepId: "run task tests",
+            testFiles: ["tests/thing.test.ts"],
+            createdTestFiles: ["tests/thing.test.ts"],
+            deletedTestFiles: [],
+            missingTests: false,
+            passed: true,
+            output: "# tests 1\n# pass 1\n# fail 0",
+            checkedAt: getLocalIsoTimestamp(),
+        },
+    });
+}
+
+function recordARedFullSuite(taskNumber: number, projectRoot: string): void {
+    recordRun(taskNumber, projectRoot, {
         fullSuite: {
             stepId: "run the full suite",
             layers: [{ occurrenceId: "", passed: false }],
@@ -148,7 +168,7 @@ function recordARedFullSuite(taskNumber: number, projectRoot: string): void {
             output: SAMPLE_SUITE_FAILURE,
             checkedAt: getLocalIsoTimestamp(),
         },
-    }, projectRoot);
+    });
 }
 
 // One file per role, byte-pure, so a real run's logged prompt diffs against it cleanly.
@@ -159,6 +179,7 @@ export function writeAgentPrompts(taskNumber: number, projectRoot: string, pathN
     const directory = join(OUTPUT_DIR, String(taskNumber));
     mkdirSync(directory, { recursive: true });
     // Staged here, not in stagePath: the workflow trace resets the task branch and would undo the rebase.
+    recordATaskTestRun(taskNumber, projectRoot);
     const conflicted = pathName === "rebase-conflict";
     if (conflicted) stopARebaseOnConflict(taskNumber, worktree, projectRoot);
     const suiteRed = pathName === "suite-red";

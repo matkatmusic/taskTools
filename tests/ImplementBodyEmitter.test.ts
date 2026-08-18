@@ -26,7 +26,7 @@ const fakeTask: PreparedTask = {
 
 test("test_implementPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () => {
     // The old prompt returned {implemented, implementationNotesFile, remaining} from a trailing DATA block.
-    const prompt = implementPrompt(fakeTask, "", "npx tsc --noEmit", 3);
+    const prompt = implementPrompt(fakeTask, "npx tsc --noEmit", 3);
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/implementationNotesFile|remaining/.test(prompt), false);
     assert.match(prompt, /implement-output-template\.json/);
@@ -44,22 +44,23 @@ test("test_implementOutputTemplateKeysMatchTheWorkflowImplementResult", () => {
 
 test("test_implementPrompt_tellsTheImplementerToObeyTheSectionCodexNotes", () => {
     // recordPlanReview writes a required fix into each section's codexNotes; nothing else reads it.
-    const prompt = implementPrompt(fakeTask, "", "npx tsc --noEmit", 3);
+    const prompt = implementPrompt(fakeTask, "npx tsc --noEmit", 3);
     assert.match(prompt, /codexNotes/);
 });
 
-test("test_implementPrompt_putsTheNoteInItsOwnSectionAndOmitsItWhenEmpty", () => {
+test("test_implementPrompt_takesTheNoteFromTheEntryAndOmitsTheSectionWhenItIsEmpty", () => {
+    // The amend boxes write codexReviewNotes on the entry; a note the caller passes is a note the caller can lose.
     const sentinel = "SENTINEL_IMPLEMENT_NOTE_7cq2";
-    const prompt = implementPrompt(fakeTask, sentinel, "npx tsc --noEmit", 3);
+    const prompt = implementPrompt({ ...fakeTask, codexReviewNotes: sentinel }, "npx tsc --noEmit", 3);
     assert.match(prompt, /## NOTE FOR THIS RUN\n\nSENTINEL_IMPLEMENT_NOTE_7cq2\n/);
-    assert.equal(implementPrompt(fakeTask, "", "npx tsc --noEmit", 3).includes("NOTE FOR THIS RUN"), false);
+    assert.equal(implementPrompt(fakeTask, "npx tsc --noEmit", 3).includes("NOTE FOR THIS RUN"), false);
 });
 
 test("test_implementPrompt_readFileListNamesAnOwnedTestFileOnlyOnce", () => {
     // An owned test file is also its own paired test, so the read-file list would otherwise repeat it.
     const owned = "/tmp/fake-worktree/tests/thing.test.ts";
     const task: PreparedTask = { ...fakeTask, ownedFilePaths: [owned], testFilePaths: [owned] };
-    const readFileLine = implementPrompt(task, "", "npx tsc --noEmit", 3).split("\n").find((line) => line.startsWith("/read-file "));
+    const readFileLine = implementPrompt(task, "npx tsc --noEmit", 3).split("\n").find((line) => line.startsWith("/read-file "));
     assert.equal(readFileLine?.split(`"${owned}"`).length, 2);
 });
 
@@ -74,12 +75,11 @@ test("test_implementPrompt_interpolatesEveryRuntimeValueAndUsesNoAllCapsPlacehol
         files: ["SENTINEL_FILE_IMPL_d3.ts"],
         repoRoot: "/tmp/SENTINEL_REPOROOT_IMPL_d5",
     };
-    const note = "SENTINEL_NOTE_IMPL_d6";
     const typecheckCommand = "SENTINEL_TYPECHECK_IMPL_d7";
     const maxFixRounds = 918273;
-    const prompt = implementPrompt(task, note, typecheckCommand, maxFixRounds);
+    const prompt = implementPrompt({ ...task, codexReviewNotes: "SENTINEL_NOTE_IMPL_d6" }, typecheckCommand, maxFixRounds);
     for (const sentinel of [String(task.number), task.briefFile, task.planFile, task.notesFile,
-        task.files[0], task.repoRoot, note, typecheckCommand, String(maxFixRounds)]) {
+        task.files[0], task.repoRoot, "SENTINEL_NOTE_IMPL_d6", typecheckCommand, String(maxFixRounds)]) {
         assert.ok(prompt.includes(sentinel), `prompt is missing ${sentinel}`);
     }
     assert.equal(prompt.includes("---- DATA ----"), false);

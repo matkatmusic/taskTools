@@ -18,8 +18,10 @@ const ownedPathMap = (t: PreparedTask) => t.files
     .map((file) => `- \`${file}\` => \`${t.repoRoot.replace(/\/+$/, "")}/${file}\``)
     .join("\n");
 
-export function implementPrompt(t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number): string {
+export function implementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
     const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`;
+    // Read from the entry, never accepted from the caller: the amend boxes write it there before a reimplement.
+    const note = t.codexReviewNotes;
     const runNote = note.trim() === "" ? "" : `
 ## NOTE FOR THIS RUN
 

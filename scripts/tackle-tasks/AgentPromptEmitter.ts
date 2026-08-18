@@ -9,6 +9,9 @@ import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
 import { suiteFixPrompt } from "./SuiteFixBodyEmitter.ts";
 import { runFullSuitePrompt } from "./RunFullSuiteBodyEmitter.ts";
+import { runTaskTestsPrompt } from "./RunTaskTestsBodyEmitter.ts";
+import { rebaseWorktreePrompt } from "./RebaseWorktreeBodyEmitter.ts";
+import { continueRebasePrompt } from "./ContinueRebaseBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -39,6 +42,8 @@ export type AgentPromptEmitterPayload = {
 // ---------------------------------------------------------------------------
 
 const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
+
+/* Retired: the v1.5 diagrams replaced these agent boxes with green script boxes, so nothing dispatches them.
 
 // ---------------------------------------------------------------------------
 // fix-suite / fix-tests — from rebaseFixBrief, minus test-editing and self-commit. Edits source only, never tests (diagram rule 4).
@@ -151,6 +156,8 @@ REVIEWER_NOTES =
 ${notes}`;
 }
 
+*/
+
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
@@ -173,35 +180,24 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         case "implement":
             return implementPrompt(
                 loadPreparedTask(taskNumber, worktree, projectRoot),
-                typeof payload.note === "string" ? payload.note : "",
                 typeof payload.typecheckCommand === "string" ? payload.typecheckCommand : "npx tsc --noEmit",
                 typeof payload.maxFixRounds === "number" ? payload.maxFixRounds : 3,
             );
         case "fix-conflicts":
             return fixConflictsPrompt(payload.checkoutPath as string);
         // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
+        case "rebase-worktree":
+            return rebaseWorktreePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
+        case "continue-rebase":
+            return continueRebasePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
+        case "run-task-tests":
+            return runTaskTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "run-full-suite":
             return runFullSuitePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "fix-suite":
             return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
-        case "fix-tests":
-            return fixTestsPrompt(
-                payload.checkoutPath as string,
-                typeof payload.occurrenceId === "string" ? payload.occurrenceId : "",
-                typeof payload.testOutput === "string" ? payload.testOutput : "",
-                Array.isArray(payload.forbiddenPaths) ? payload.forbiddenPaths as string[] : [],
-                taskNumber,
-                loadPreparedTask(taskNumber, worktree, projectRoot).files,
-            );
         case "review-tests":
-            return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
-        case "amend-tests":
-            return amendTestsPrompt(
-                loadPreparedTask(taskNumber, worktree, projectRoot),
-                typeof payload.notes === "string" ? payload.notes : "",
-                Array.isArray(payload.createdTestFiles) ? payload.createdTestFiles as string[] : [],
-                Array.isArray(payload.testFiles) ? payload.testFiles as string[] : [],
-            );
+            return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.sourceBranch);
         default:
             throw new Error(`unknown role "${role}"`);
     }

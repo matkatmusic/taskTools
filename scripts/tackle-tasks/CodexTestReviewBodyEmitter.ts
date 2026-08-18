@@ -1,7 +1,10 @@
 // Sole home of the test-review prompt, the "codex reviews the tests" box in plans/diagram/pipeline-reviewTests.mmd.
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
+import { getCurrentTaskRun } from "./taskRunState.ts";
 
 // The receipt that box hands back.
 export type TestReviewReceipt = {
@@ -13,11 +16,32 @@ const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../plans/review-tes
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../plans/review-tests-schema.json", import.meta.url));
 const REVIEW_TESTS_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../plans/review-tests-error-template.json", import.meta.url));
 const REVIEW_TESTS_OUTPUT_TEMPLATE_PATH = fileURLToPath(new URL("../../plans/review-tests-output-template.json", import.meta.url));
+const DECIDE_REVIEW_SCRIPT = fileURLToPath(new URL("./decideTestReview.ts", import.meta.url));
+
+// A generated artifact, matching plans/implementation-diff-*.patch in .gitignore.
+const diffFile = (t: PreparedTask, root: string) => `${root}/plans/implementation-diff-${t.number}.patch`;
+
+// The reviewer is read-only and cannot run git, so the diff it judges against is written out for it.
+function writeImplementationDiff(t: PreparedTask, root: string, sourceBranch: string): string {
+    const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    const mergeBase = git("merge-base", sourceBranch, "HEAD").trim();
+    const path = diffFile(t, root);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, git("diff", `${mergeBase}..HEAD`));
+    return path;
+}
+
+// Derived here, never accepted from the caller: the run that judged the task tests recorded all of this.
+function taskTestRun(t: PreparedTask) {
+    const taskTests = getCurrentTaskRun(t.number, t.taskStateRoot)?.taskTests;
+    if (!taskTests) throw new Error(`review-tests: task ${t.number} has no recorded task-test run; this box runs only after "run task tests"`);
+    return taskTests;
+}
 
 // Every reviewer opens these itself, so one question serves codex and the claude fallbacks alike.
-const reviewedPaths = (t: PreparedTask) => [t.briefFile, t.planFile, ...t.testFilePaths, REVIEW_TESTS_TEMPLATE_PATH];
+const reviewedPaths = (t: PreparedTask, diffPath: string) => [t.briefFile, t.planFile, ...t.testFilePaths, diffPath, REVIEW_TESTS_TEMPLATE_PATH];
 
-function reviewTestsQuestion(t: PreparedTask): string {
+function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
     return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}. 
 You write no file. 
 Your sandbox is read-only, so any attempt to write one fails.
@@ -43,7 +67,25 @@ Leave \`"issues"\` and \`"testsThatHoldUp"\` empty.
 
 ## WHAT YOU READ
 
-${reviewedPaths(t).map((path) => `- ${path}`).join("\n")}
+${reviewedPaths(t, diffPath).map((path) => `- ${path}`).join("\n")}
+
+\`${diffPath}\` is what this task changed. Judge each test against that diff, never against the whole file it sits in.
+
+## TESTS THIS TASK DID NOT CREATE
+
+${preExistingTestFiles.length === 0 ? "- (none)" : preExistingTestFiles.map((path) => `- ${path}`).join("\n")}
+
+A test in that list existed before this task. 
+Flag it only when this task's diff broke it, never for asserting something this task did not ask for.
+
+## WHAT ALREADY RAN
+
+The task tests ran as \`${testCommand}\`, and printed this:
+\`\`\`
+${testOutput}
+\`\`\`
+That is the evidence the tests execute. 
+You are still judging what they assert, not whether they pass.
 
 ## NEVER RUN THE TESTS
 
@@ -90,7 +132,12 @@ The command that runs you captures that message to \`${t.testReviewFile}\`, so d
 `;
 }
 
-export function reviewTestsPrompt(t: PreparedTask): string {
+export function reviewTestsPrompt(t: PreparedTask, sourceBranch: string): string {
+    const root = t.repoRoot.replace(/\/+$/, "");
+    const taskTests = taskTestRun(t);
+    // testFiles is every changed test; createdTestFiles is a subset. Derive pre-existing here.
+    const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
+    const diffPath = writeImplementationDiff(t, root, sourceBranch);
     return `You are spawning a review agent running in the CLI. 
 You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape. 
 The command runs a reviewing agent against this task's test files. 
@@ -110,14 +157,14 @@ It takes a few minutes; wait for it rather than abandoning it.
 
 \`\`\`\`sh
 REVIEW_PROMPT=$(cat <<'REVIEWEOF'
-${reviewTestsQuestion(t)}
+${reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test command recorded)", taskTests.output)}
 REVIEWEOF
 )
 REVIEW_FILE=${t.testReviewFile}
 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
-cat "$REVIEW_FILE"
+node ${DECIDE_REVIEW_SCRIPT} <"$REVIEW_FILE"
 \`\`\`\`
 
 The \`||\` chain is the fallback. 
@@ -127,5 +174,5 @@ A non-zero exit means that reviewer was unavailable, not that the tests are bad,
 
 Use the exact JSON shape given by \`${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}\`, which the read-file skill put into your context. 
 Replace every <...> with a real value. 
-Copy what the command printed; never decide for yourself whether a test is good.`;
+Copy what the node command printed; never decide a verdict yourself.`;
 }

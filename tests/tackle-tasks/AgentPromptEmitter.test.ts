@@ -7,8 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-    amendTestsPrompt,
-    fixTestsPrompt,
     loadPreparedTask,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
@@ -45,7 +43,11 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
     // A recorded red suite, so the fix-suite role has the failing output it derives from state.
     const run = {
         runId: "run-1", startedAt: "2026-08-18T00:00:00", endedAt: null, exitType: null, exitNote: null,
-        modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null,
+        taskTests: {
+            stepId: "run task tests", testFiles: ["tests/thing.test.ts"], createdTestFiles: ["tests/thing.test.ts"],
+            deletedTestFiles: [], missingTests: false, passed: true, output: "1 passing", checkedAt: "2026-08-18T00:00:00",
+        },
         fullSuite: { stepId: "run the full suite", layers: [{ occurrenceId: "", passed: false }], passed: false, output: "1 failing", checkedAt: "2026-08-18T00:00:00" },
     };
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([
@@ -59,6 +61,14 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
     const worktree = join(projectRoot, "worktree");
     mkdirSync(join(worktree, "plans"), { recursive: true });
     writeFileSync(join(worktree, "plans", `brief-${taskNumber}.md`), `# fixture sentinel brief for task ${taskNumber}\n`);
+    // A branched repo, because review-tests derives this task's diff against the source branch.
+    const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
+    git("init", "--quiet", "--initial-branch=main");
+    git("config", "user.email", "t@t.t");
+    git("config", "user.name", "t");
+    git("commit", "--quiet", "--allow-empty", "-m", "base");
+    git("checkout", "--quiet", "-b", `task-${taskNumber}`);
+    git("commit", "--quiet", "--allow-empty", "-m", "task work");
     const task = loadPreparedTask(taskNumber, worktree, projectRoot);
     return { projectRoot, worktree, task };
 }
@@ -92,10 +102,8 @@ function allRolePrompts(task: PreparedTask): Record<string, string> {
     return {
         plan: planPrompt(task),
         "review-plan": planReviewPrompt(task),
-        implement: implementPrompt(task, "", "npx tsc --noEmit", 3),
-        "fix-tests": fixTestsPrompt("/repo", "", "1 failing", [], task.number),
-        "review-tests": reviewTestsPrompt(task),
-        "amend-tests": amendTestsPrompt(task, "notes", ["tests/created.test.ts"], ["tests/foreign.test.ts"]),
+        implement: implementPrompt(task, "npx tsc --noEmit", 3),
+        "review-tests": reviewTestsPrompt(task, "main"),
     };
 }
 
@@ -114,17 +122,11 @@ test("test_agentPromptEmitter_exitsNonZeroOnAnUnknownRole", () => {
 test("test_agentPromptEmitter_emitsTheSameCodexFallbackChainForBothReviewRoles", () => {
     // Setup: both review roles now carry their own copy of the chain, so assert they still agree.
     const { task } = makeFixture(47);
-    for (const chain of [planReviewPrompt(task), reviewTestsPrompt(task)]) {
+    for (const chain of [planReviewPrompt(task), reviewTestsPrompt(task, "main")]) {
         assert.match(chain, /codex exec -s read-only/);
         assert.match(chain, /claude -p .* --tools "Read" --model fable --effort medium/);
         assert.match(chain, /claude -p .* --tools "Read" --model claude-opus-4-8 --effort high/);
     }
-});
-
-test("test_fixTestsPrompt_forbidsEditingTests", () => {
-    const prompt = fixTestsPrompt("/repo", "", "1 failing", [], 42);
-    assert.match(prompt, /never the test itself/);
-    assert.match(prompt, /forbidden.*to edit a test file at all/s);
 });
 
 test("test_noPromptContainsAGitCommand", () => {
@@ -138,17 +140,6 @@ test("test_noPromptContainsAGitCommand", () => {
     for (const [role, prompt] of Object.entries(prompts)) {
         assert.equal(gitCommandPattern.test(prompt), false, `role "${role}" contains a git command`);
     }
-});
-
-test("test_amendTestsPrompt_distinguishesCreatedTestsFromModifiedForeignOnes", () => {
-    const { task } = makeFixture(44);
-    const prompt = amendTestsPrompt(task, "fix it", ["tests/created.test.ts"], ["tests/foreign.test.ts"]);
-
-    // Created tests are freely editable; the foreign one only under the broken-or-empty exception.
-    assert.match(prompt, /may freely edit them/);
-    assert.match(prompt, /CREATED_TEST_FILES \(freely editable\) =\n {2}- tests\/created\.test\.ts/);
-    assert.match(prompt, /broken or asserts nothing applies to every one of these/);
-    assert.match(prompt, /TEST_FILES \(pre-existing, broken-or-empty exception only\) =\n {2}- tests\/foreign\.test\.ts/);
 });
 
 // ---------------------------------------------------------------------------
@@ -222,81 +213,6 @@ function parseEmittedTestFileEntries(section: string): Array<{ taggedPath: strin
         });
 }
 
-test("test_amendTestsPrompt_theCreatedAndPreExistingListsAreDisjoint", () => {
-    // Setup: testFiles (every runnable changed test) contains both the created test and a separately modified pre-existing one, as runTaskTests.ts actually returns them. Both are real, committed files at the worktree root, and a third real file lives in the child submodule occurrence.
-    const { task } = makeOccurrenceFixture();
-    const created = "tests/created.test.ts";
-    const modified = "tests/modified.test.ts";
-    const childPath = "tests/child.test.ts";
-    const childTagged = buildOccurrencePath("child", childPath);
-    commitRealFile(task.repoRoot, created, "// created\n");
-    commitRealFile(task.repoRoot, modified, "// modified\n");
-    commitRealFile(join(task.repoRoot, "child"), childPath, "// child\n");
-
-    const prompt = amendTestsPrompt(task, "fix it", [created], [created, modified, childTagged]);
-
-    // Verification: the created test appears only in CREATED_TEST_FILES, never restated in TEST_FILES as a pre-existing test subject to the broken-or-empty restriction.
-    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
-    const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
-    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
-    assert.match(createdSection, /tests\/created\.test\.ts/);
-    assert.doesNotMatch(preExistingSection, /- tests\/created\.test\.ts =>/);
-    assert.match(preExistingSection, /tests\/modified\.test\.ts/);
-    assert.match(preExistingSection, /child::tests\/child\.test\.ts/);
-
-    // Verification: every emitted edit path, in both categories, is a real, readable file that resolves inside the checkout its own tag names — never a nonexistent joined string.
-    const entries = [...parseEmittedTestFileEntries(createdSection), ...parseEmittedTestFileEntries(preExistingSection)];
-    assert.equal(entries.length, 3);
-    for (const { taggedPath, absolutePath } of entries) {
-        const expectedCheckout = taggedPath.startsWith("child::") ? join(task.repoRoot, "child") : task.repoRoot;
-        assert.ok(existsSync(absolutePath), `${absolutePath} does not exist`);
-        assert.equal(statSync(absolutePath).isFile(), true, `${absolutePath} is not a regular file`);
-        assert.doesNotThrow(() => readFileSync(absolutePath, "utf8"), `${absolutePath} could not be read`);
-        assert.equal(absolutePath.startsWith(`${expectedCheckout}/`), true, `${absolutePath} is not inside ${expectedCheckout}`);
-    }
-});
-
-test("test_amendTestsPrompt_resolvesANestedOccurrenceTestFileToAnAbsolutePathInsideItsCheckout", () => {
-    // Setup: a real submodule occurrence "child" and a real, committed test file inside it,
-    // tagged the same way runTaskTests.ts tags a change inside that submodule.
-    const { task } = makeOccurrenceFixture();
-    const childPath = "tests/child.test.ts";
-    const taggedPath = buildOccurrencePath("child", childPath);
-    commitRealFile(join(task.repoRoot, "child"), childPath, "// child\n");
-
-    const prompt = amendTestsPrompt(task, "fix it", [], [taggedPath]);
-
-    // Verification: the emitted path is absolute, points at the real file inside the child submodule's checkout in THIS worktree (not the raw tagged string), and is directly openable.
-    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
-    const preExistingSection = data.slice(data.indexOf("TEST_FILES (pre-existing"), data.indexOf("REVIEWER_NOTES"));
-    const [entry] = parseEmittedTestFileEntries(preExistingSection);
-    const expectedCheckout = join(task.repoRoot, "child");
-    assert.equal(entry.taggedPath, taggedPath);
-    assert.ok(existsSync(entry.absolutePath), `${entry.absolutePath} does not exist`);
-    assert.equal(statSync(entry.absolutePath).isFile(), true);
-    assert.doesNotThrow(() => readFileSync(entry.absolutePath, "utf8"));
-    assert.equal(entry.absolutePath.startsWith(`${expectedCheckout}/`), true);
-});
-
-test("test_amendTestsPrompt_resolvesARootOccurrenceTestFileToAnAbsolutePathAtTheWorktreeRoot", () => {
-    // Setup: a plain (untagged) test path, the root occurrence's shape, as a real committed file.
-    const { task } = makeOccurrenceFixture();
-    const rootPath = "tests/root.test.ts";
-    commitRealFile(task.repoRoot, rootPath, "// root\n");
-
-    const prompt = amendTestsPrompt(task, "fix it", [rootPath], []);
-
-    // Verification: resolves under the worktree root itself, not the child submodule, and points at the real file.
-    const data = prompt.slice(prompt.indexOf("---- DATA ----"));
-    const createdSection = data.slice(data.indexOf("CREATED_TEST_FILES"), data.indexOf("TEST_FILES (pre-existing"));
-    const [entry] = parseEmittedTestFileEntries(createdSection);
-    assert.equal(entry.taggedPath, rootPath);
-    assert.ok(existsSync(entry.absolutePath), `${entry.absolutePath} does not exist`);
-    assert.equal(statSync(entry.absolutePath).isFile(), true);
-    assert.doesNotThrow(() => readFileSync(entry.absolutePath, "utf8"));
-    assert.equal(entry.absolutePath.startsWith(`${task.repoRoot}/`), true);
-});
-
 test("test_planPrompt_putsCodexReviewNotesAtTheTop", () => {
     // Setup: a task whose entry carries codex's notes from the previous review round.
     const withNotes = { ...fakeTask, codexReviewNotes: "the plan skipped the migration step" };
@@ -317,10 +233,8 @@ test("test_planPrompt_omitsTheNotesSectionWhenThereAreNone", () => {
 for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
     "review-plan": (task: PreparedTask) => planReviewPrompt(task),
-    implement: (task: PreparedTask) => implementPrompt(task, "a note", "npx tsc --noEmit", 3),
-    "fix-tests": (task: PreparedTask) => fixTestsPrompt("/repo", "root-layer", "1 failing", ["vendor"], task.number),
-    "review-tests": (task: PreparedTask) => reviewTestsPrompt(task),
-    "amend-tests": (task: PreparedTask) => amendTestsPrompt(task, "notes", ["tests/created.test.ts"], ["tests/foreign.test.ts"]),
+    implement: (task: PreparedTask) => implementPrompt(task, "npx tsc --noEmit", 3),
+    "review-tests": (task: PreparedTask) => reviewTestsPrompt(task, "main"),
 })) {
     test(`test_${role.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}Prompt_leavesNoUnresolvedInterpolation`, () => {
         const { task } = makeFixture();
@@ -375,7 +289,8 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
             for (const entry of readdirSync(dir, { withFileTypes: true })) {
                 const full = join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
-                else out[full] = readFileSync(full, "utf8");
+                // review-tests writes this one generated artifact for the read-only reviewer to open.
+                else if (!/\/plans\/implementation-diff-\d+\.patch$/.test(full)) out[full] = readFileSync(full, "utf8");
             }
         };
         walk(root);
@@ -389,11 +304,12 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
         ["review-plan", {}],
         ["implement", {}],
         ["review-tests", {}],
-        ["amend-tests", { notes: "n", createdTestFiles: [], testFiles: [] }],
         ["fix-conflicts", { checkoutPath: makeConflictedRepo() }],
+        ["run-task-tests", {}],
+        ["rebase-worktree", {}],
+        ["continue-rebase", {}],
         ["run-full-suite", {}],
         ["fix-suite", {}],
-        ["fix-tests", { checkoutPath: worktree, occurrenceId: "", testOutput: "x", forbiddenPaths: [] }],
     ];
 
     // Test action: invoke every CLI role classified read-only against this one worktree.
@@ -477,34 +393,10 @@ test("test_planReviewPrompt_citesBothTemplatesInsteadOfInliningTheirJson", () =>
 
 
 
-test("test_amendTestsPrompt_returnsExactlyAmended", () => {
-    // Old code returned {task, amended}; task must be gone.
-    const prompt = amendTestsPrompt(fakeTask, "n", [], []);
-    assert.match(prompt, /\{amended: true\}/);
-    assert.match(prompt, /\{amended: false\}/);
-    assert.equal(/\{task:/i.test(prompt), false);
-});
-
-
-test("test_fixTestsPrompt_returnsExactlyFixed", () => {
-    const prompt = fixTestsPrompt("/repo", "", "x", [], 1);
-    assert.match(prompt, /\{fixed: true\}/);
-    assert.match(prompt, /\{fixed: false\}/);
-});
 
 // ---------------------------------------------------------------------------
 // Finding 8 — fix-suite/fix-tests may only edit the occurrence-appropriate owned source paths; the whole checkout is never the edit boundary.
 // ---------------------------------------------------------------------------
-
-test("test_fixTestsPrompt_namesTheOwnedPathAsTheCompleteEditAllowlist", () => {
-    const prompt = fixTestsPrompt("/repo", "", "1 failing", [], 42, ["src/owned.ts"]);
-    assert.match(prompt, /OWNED_SOURCE_PATHS \(the complete edit allowlist, relative to CHECKOUT_PATH\) =\n {2}- src\/owned\.ts/);
-});
-
-test("test_fixTestsPrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
-    const prompt = fixTestsPrompt("/repo", "", "1 failing", [], 42, ["src/owned.ts"]);
-    assert.equal(/EDIT the source code inside/.test(prompt), false);
-});
 
 // ---------------------------------------------------------------------------
 // Finding 9 — every builder puts static instructions and the return contract first, and appends all runtime/bulk data after a final "---- DATA ----" marker.
@@ -512,22 +404,6 @@ test("test_fixTestsPrompt_doesNotGrantTheWholeCheckoutAsAnEditBoundary", () => {
 
 
 
-
-test("test_fixTestsPrompt_putsTheFailureOutputAfterTheDataMarker", () => {
-    const sentinel = "SENTINEL_FIX_TESTS_FAILURE_OUTPUT_6yt3";
-    const prompt = fixTestsPrompt("/repo", "", sentinel, [], 1);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
-
-test("test_amendTestsPrompt_putsTheReviewerNotesAfterTheDataMarker", () => {
-    const sentinel = "SENTINEL_AMEND_NOTES_1qz7";
-    const prompt = amendTestsPrompt(fakeTask, sentinel, [], []);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 // ---------------------------------------------------------------------------
 // Remediation feedback finding 9 — a final "---- DATA ----" block existed, but several
@@ -598,24 +474,3 @@ test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
 
 
 
-test("test_fixTestsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    const checkoutPath = "/tmp/SENTINEL_CHECKOUTPATH_FT_g1";
-    const occurrenceId = "SENTINEL_LAYER_FT_g2";
-    const testOutput = "SENTINEL_FAILUREOUTPUT_FT_g3";
-    const forbiddenPath = "SENTINEL_FORBIDDEN_FT_g4";
-    const ownedPath = "SENTINEL_OWNED_FT_g5.ts";
-    const prompt = fixTestsPrompt(checkoutPath, occurrenceId, testOutput, [forbiddenPath], 918273, [ownedPath]);
-    assertSentinelsOnlyAfterFinalData(prompt, [checkoutPath, occurrenceId, testOutput, forbiddenPath, ownedPath, "918273"]);
-    assertNoInstructionAfterFinalData(prompt);
-});
-
-test("test_amendTestsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {
-    // Before the fix, testReviewFile was spliced inline in "Read ${t.testReviewFile}, ...".
-    const task: PreparedTask = { ...fakeTask, testReviewFile: "/tmp/SENTINEL_TESTREVIEWFILE_AT_h1/test-review.json" };
-    const notes = "SENTINEL_NOTES_AT_h2";
-    const createdTestFile = "SENTINEL_CREATED_AT_h3.test.ts";
-    const testFile = "SENTINEL_FOREIGN_AT_h4.test.ts";
-    const prompt = amendTestsPrompt(task, notes, [createdTestFile], [testFile]);
-    assertSentinelsOnlyAfterFinalData(prompt, [task.testReviewFile, notes, createdTestFile, testFile]);
-    assertNoInstructionAfterFinalData(prompt);
-});

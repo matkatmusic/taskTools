@@ -80,7 +80,7 @@ test("test_everyPromptUsesTheSharedAbsolutePathsSectionVerbatim", () => {
     const repo = makeConflictedRepo();
     const prompts = [
         planPrompt(fakeTask),
-        implementPrompt(fakeTask, "", "npx tsc --noEmit", 3),
+        implementPrompt(fakeTask, "npx tsc --noEmit", 3),
         fixConflictsPrompt(repo),
         suiteFixPrompt({ ...fakeTask, taskStateRoot: makeRedSuiteRoot() }),
     ];
