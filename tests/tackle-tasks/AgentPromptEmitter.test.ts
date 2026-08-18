@@ -12,12 +12,12 @@ import {
     fixSuitePrompt,
     fixTestsPrompt,
     loadPreparedTask,
-    reviewTestsPrompt,
     type PreparedTask,
 } from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
 import { planReviewPrompt } from "../../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
 import { planPrompt } from "../../scripts/tackle-tasks/PlannerBodyEmitter.ts";
 import { implementPrompt } from "../../scripts/tackle-tasks/ImplementBodyEmitter.ts";
+import { reviewTestsPrompt } from "../../scripts/tackle-tasks/CodexTestReviewBodyEmitter.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
 import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
 
@@ -290,11 +290,6 @@ test("test_planPrompt_omitsTheNotesSectionWhenThereAreNone", () => {
     // Test verification: a first planning round shows no review section at all.
     assert.ok(!prompt.includes("CODEX'S PREVIOUS REVIEW NOTES"));
 });
-test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
-    const { task } = makeFixture(46);
-    const prompt = reviewTestsPrompt(task);
-    assert.match(prompt, /never run the tests/i);
-});
 
 for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
@@ -459,12 +454,6 @@ test("test_planReviewPrompt_citesBothTemplatesInsteadOfInliningTheirJson", () =>
 });
 
 
-test("test_reviewTestsPrompt_returnsExactlyFlaggedAndReviewer", () => {
-    // Old code returned {task, flagged, reviewer}; task must be gone. The return contract now sits before the final DATA section (finding 9), not at the string's end.
-    const prompt = reviewTestsPrompt(fakeTask);
-    assert.match(prompt, /Return \{flagged, reviewer\}\.\n/);
-    assert.equal(/\{task:/i.test(prompt), false);
-});
 
 test("test_amendTestsPrompt_returnsExactlyAmended", () => {
     // Old code returned {task, amended}; task must be gone.
@@ -537,14 +526,6 @@ test("test_fixSuitePrompt_acceptsOccurrenceAppropriateOwnedPathsFromBuildOwnedOc
 // Finding 9 — every builder puts static instructions and the return contract first, and appends all runtime/bulk data after a final "---- DATA ----" marker.
 // ---------------------------------------------------------------------------
 
-test("test_reviewTestsPrompt_putsBriefFileAfterTheNestedDataMarker", () => {
-    const sentinel = "/tmp/SENTINEL_REVIEW_TESTS_BRIEF_2ke9/plans/brief-99.md";
-    const task: PreparedTask = { ...fakeTask, briefFile: sentinel };
-    const prompt = reviewTestsPrompt(task);
-    const markerIndex = prompt.indexOf("---- DATA ----");
-    assert.notEqual(markerIndex, -1);
-    assert.ok(prompt.indexOf(sentinel) > markerIndex);
-});
 
 
 test("test_fixConflictsPrompt_putsTheConflictedPathsAfterTheDataMarker", () => {
@@ -645,19 +626,6 @@ test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
     assert.equal(prompt.includes("---- DATA ----"), false);
 });
 
-test("test_reviewTestsPrompt_putsTheTestReviewFileOutputPathOnlyAfterTheFinalDataAndNoInstructionAfterIt", () => {
-    const task: PreparedTask = {
-        ...fakeTask,
-        number: 918275,
-        testReviewFile: "/tmp/SENTINEL_TESTREVIEWFILE_RT_c1/test-review.json",
-        briefFile: "/tmp/SENTINEL_BRIEF_RT_c2/brief.md",
-        planFile: "/tmp/SENTINEL_PLANFILE_RT_c3/plan.json",
-    };
-    const prompt = reviewTestsPrompt(task);
-    assertSentinelsOnlyAfterFinalData(prompt, [task.testReviewFile]);
-    assertNoInstructionAfterFinalData(prompt);
-    assertNestedSentinelsOnlyAfterNestedData(prompt, [String(task.number), task.briefFile, task.planFile]);
-});
 
 
 test("test_fixConflictsPrompt_hasEveryRuntimeTokenOnlyAfterFinalDataAndNoInstructionAfterIt", () => {

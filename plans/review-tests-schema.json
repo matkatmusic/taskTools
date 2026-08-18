@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "missingFiles", "message", "issues", "testsThatHoldUp"],
+  "properties": {
+    "outcome": { "type": "string", "enum": ["OK", "ERROR"] },
+    "missingFiles": { "type": "array", "items": { "type": "string" } },
+    "message": { "type": "string" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["testFile", "testName", "evidence", "problem", "fix"],
+        "properties": {
+          "testFile": { "type": "string" },
+          "testName": { "type": "string" },
+          "evidence": { "type": "string" },
+          "problem": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    },
+    "testsThatHoldUp": { "type": "array", "items": { "type": "string" } }
+  }
+}

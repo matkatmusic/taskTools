@@ -1,0 +1,19 @@
+{
+  "outcome": "<OK when you reviewed the tests, ERROR when a required input file was missing or unreadable>",
+  "missingFiles": [
+    "<only when outcome is ERROR: the exact paths you could not read. Empty otherwise.>"
+  ],
+  "message": "<only when outcome is ERROR: why the review did not happen. Empty otherwise.>",
+  "issues": [
+    {
+      "testFile": "<repo-relative path of the test file holding this test>",
+      "testName": "<the test's name, exactly as the file spells it>",
+      "evidence": "<repo-relative path and the line numbers you read, as tests/thing.test.ts:12-40>",
+      "problem": "<what the test asserts, and why the brief or plan does not call for it>",
+      "fix": "<the concrete change to make to that test, written as an instruction>"
+    }
+  ],
+  "testsThatHoldUp": [
+    "<test name> — verified against tests/thing.test.ts:12-40"
+  ]
+}

@@ -5,6 +5,7 @@ import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence 
 import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
 import { planPrompt } from "./PlannerBodyEmitter.ts";
 import { implementPrompt } from "./ImplementBodyEmitter.ts";
+import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -35,53 +36,6 @@ export type AgentPromptEmitterPayload = {
 // ---------------------------------------------------------------------------
 
 const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
-
-const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
-
-// ---------------------------------------------------------------------------
-// review-tests — copied from verifierBrief's command scaffolding, with a new review question. Never run the tests.
-// ---------------------------------------------------------------------------
-
-function reviewTestsQuestion(t: PreparedTask): string {
-    return `Review the tests for this task against what the task asked for. Read only BRIEF_FILE,
-PLAN_FILE, and the task's own test files, listed in DATA below. Do not edit anything, and
-never run the tests — you are judging what they assert, not whether they pass.
-
-Flag a test only when it is wrong about what the task asked for: it asserts something the
-brief or plan does not call for, or it asserts nothing. Do not flag a test merely because
-you would have written it differently.
-
-Return your verdict as JSON: {"flagged": true|false, "notes": "..."}
-
----- DATA ----
-TASK_NUMBER = ${t.number}
-BRIEF_FILE = ${t.briefFile}
-PLAN_FILE = ${t.planFile}`;
-}
-
-export function reviewTestsPrompt(t: PreparedTask): string {
-    return `Never edit any file, and never run the tests — this agent only reviews what they assert.
-
-Write the reviewer's JSON verdict to exactly this absolute path: TEST_REVIEW_FILE (see final DATA section).
-
-Return {flagged, reviewer}.
-
-Review the tests by running exactly this one command:
-
-PROMPT=${shellQuote(reviewTestsQuestion(t))}
-codex exec -s read-only "$PROMPT" \\
-  || claude -p "$PROMPT" --tools "Read" --model fable --effort medium \\
-  || claude -p "$PROMPT" --tools "Read" --model claude-opus-4-8 --effort high
-
-The || chain is the fallback. A non-zero exit means that reviewer is unavailable — not a
-verdict — so the next one runs. Whatever answers, treat its output as the review. Report
-reviewer "codex" if the codex command answered, "claude" if a fallback did.
-Never report a fallback review as codex.
-
----- DATA ----
-TASK_NUMBER = ${t.number}
-TEST_REVIEW_FILE = ${t.testReviewFile}`;
-}
 
 // ---------------------------------------------------------------------------
 // fix-conflicts — from mergeConflictBrief, git add lines dropped. Keeps "no git rebase --continue"; "advance the rebase" does that now.
