@@ -1,9 +1,10 @@
 // Emits yellow-box prompts for tackle-tasks agent roles (read-only per greenBoxPolicy.ts); see workflow-only-context-injection.md §2/§6.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
 import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
 import { planPrompt } from "./PlannerBodyEmitter.ts";
+import { implementPrompt } from "./ImplementBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -33,18 +34,9 @@ export type AgentPromptEmitterPayload = {
 // Shared prompt-building helpers.
 // ---------------------------------------------------------------------------
 
-const TDD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
-example test the user wrote: write that test first, then expand it to also cover the
-individual functions/subparts you build, before writing the implementation. Otherwise
-skip TDD entirely and just write the code.`;
-
 const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
 
 const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
-
-const ownedPathMap = (t: PreparedTask) => t.files
-    .map((file) => `  - ${file} => ${worktreePath(t, file)}`)
-    .join("\n");
 
 // ---------------------------------------------------------------------------
 // review-tests — copied from verifierBrief's command scaffolding, with a new review question. Never run the tests.
@@ -89,104 +81,6 @@ Never report a fallback review as codex.
 ---- DATA ----
 TASK_NUMBER = ${t.number}
 TEST_REVIEW_FILE = ${t.testReviewFile}`;
-}
-
-// ---------------------------------------------------------------------------
-// implement — copied from workerBrief, with its commit steps dropped. The commit box owns committing (rule 1).
-// ---------------------------------------------------------------------------
-
-export function implementPrompt(t: PreparedTask, note: string, typecheckCommand: string, maxFixRounds: number): string {
-    const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`;
-    const testCommandWrapper = `(cd -- ${shellQuote(t.repoRoot)} && <test command>)`;
-    return `You are implementing EXACTLY ONE pre-planned task, task #TASK_NUMBER (see DATA below).
-
-Carry out every step below, in order, from top to bottom.
-A line reading \`name = value\` means record that value and use it later.
-A line reading \`run(...)\` means actually execute that command now.
-A line reading \`return {...}\` means stop and report exactly those fields.
-
-taskWorktree = TASK_WORKTREE (see DATA below)
-ownedFiles = OWNED_FILES (see DATA below)
-ownedPaths (the only editable source/test paths) = OWNED_PATHS (see DATA below)
-plan = PLAN_FILE (see DATA below)
-notesFile = NOTES_FILE (see DATA below)
-timeBudget = 10 minutes
-note = NOTE (see DATA below; "(none)" means no note)
-typecheckCommand = TYPECHECK_COMMAND (see DATA below)
-testCommandWrapper = TEST_COMMAND_WRAPPER (see DATA below)
-maxFixRounds = MAX_FIX_ROUNDS (see DATA below)
-
-${TDD_INSTRUCTION}
-
-Treat taskWorktree as the project root for jot:implement. Every repo-relative
-path in the plan means its absolute path under taskWorktree. Use absolute paths
-for Read/Edit/Search. Never edit the corresponding path in the ambient checkout.
-
-use jot:implement plan, writing its implementation-notes log to exactly notesFile
-
-if the plan is impossible as written:
-    return {implemented: false, implementationNotesFile: notesFile, remaining: []}
-
-implement every step of the plan, editing only ownedPaths
-
-typecheck = run(typecheckCommand)
-if typecheck reported errors in ownedPaths:
-    fix them using their absolute taskWorktree paths
-
-if the file scripts/relatedTests.ts exists under taskWorktree:
-    tests = run it from taskWorktree to discover the tests covering ownedFiles
-else:
-    tests = the absolute test paths under taskWorktree belonging to ownedFiles
-// never run the full suite; that is the close-tasks gate, not yours
-
-results = run every test command as testCommandWrapper
-fixRound = 0
-while any test failed and fixRound is less than maxFixRounds:
-    fixRound = fixRound + 1
-    fix the cause
-    typecheck = run(typecheckCommand)
-    results = run every test command as testCommandWrapper
-
-if any test still failed after maxFixRounds fix rounds:
-    return {implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
-
-if typecheck is clean and every test passed:
-    return {implemented: true, implementationNotesFile: notesFile, remaining: []}
-else if part of the plan is implemented:
-    return {implemented: false, implementationNotesFile: notesFile, remaining: the plan steps not yet done, plus any failing test names}
-else:
-    return {implemented: false, implementationNotesFile: notesFile, remaining: the failing test names}
-
-if you reach timeBudget before finishing:
-    return {implemented: false, implementationNotesFile: notesFile, remaining: the not-yet-done plan steps}
-
-You are forbidden to touch anything outside ownedPaths excluding notesFile; to
-add scope or refactors the plan does not call for; to redecide anything the
-plan already decided; to run the full suite; to stage or commit anything
-yourself — a later step owns committing; to attempt more than maxFixRounds fix
-rounds; or to return implemented true with a failing test. Any test file created
-or modified must be listed in ownedFiles; otherwise return implemented false
-without editing it.
-
-You are forbidden to use an ambient-cwd-relative filesystem path or run any git
-command yourself. Every shell command other than a filesystem tool call must
-explicitly run inside taskWorktree.
-
----- DATA ----
-TASK_NUMBER = ${t.number}
-TASK_WORKTREE = ${t.repoRoot}
-OWNED_FILES = ${t.files.join(", ")}
-OWNED_PATHS (repo-relative => absolute in TASK_WORKTREE) =
-${ownedPathMap(t)}
-PLAN_FILE = ${t.planFile}
-NOTES_FILE = ${t.notesFile}
-NOTE (context passed in for this run) =
-${note || "(none)"}
-TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) =
-${t.tests ?? "(none)"}
-TYPECHECK_COMMAND (run from TASK_WORKTREE) = ${rootedTypecheck}
-TEST_COMMAND_WRAPPER (wrap each test command as) = ${testCommandWrapper}
-MAX_FIX_ROUNDS = ${maxFixRounds}`;
 }
 
 // ---------------------------------------------------------------------------
