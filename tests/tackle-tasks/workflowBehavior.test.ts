@@ -5,7 +5,35 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
-import type { PipelineDecisions } from "../../scripts/tracePipeline.ts";
+
+type AgentBoxName =
+    | "PLANNER"
+    | "PLAN_REVIEWER"
+    | "IMPLEMENTER"
+    | "TEST_RUNNER"
+    | "TEST_REVIEWER"
+    | "REBASER"
+    | "CONFLICT_FIXER"
+    | "REBASE_ADVANCER"
+    | "SUITE_RUNNER"
+    | "SUITE_FIXER";
+
+// Loop decisions hold one entry per attempt: taskTestsPass [false, true] fails once, then passes.
+type PipelineDecisions = {
+    taskNumber: number;
+    plannerOutcome: ("PLAN" | "CLARIFY" | "ERROR")[];
+    planVerdict: ("ACCEPT" | "AMEND_THEN_ACCEPT" | "AMEND" | "SCRAP" | "ERROR")[];
+    taskTestsPass: boolean[];
+    testsFlagged: boolean[];
+    lockAcquired: boolean[];
+    rebaseConflicts: boolean[];
+    rebaseFinished: boolean[];
+    suitePasses: boolean[];
+    fenceHeld: boolean;
+    publicationState: ("ALL LANDED" | "NONE LANDED" | "SOME LANDED")[];
+    // One entry per visit to an agent box; true means the harness lost that agent's result.
+    agentErrors?: Partial<Record<AgentBoxName, boolean[]>>;
+};
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKFLOW_PATH = join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");

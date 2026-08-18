@@ -28,6 +28,8 @@ export type PipelineContext = PipelineConfig & {
     depth: number;
     sourceLockHeld: boolean;
     agentVisits: Map<string, number>;
+    planExtra: Record<string, unknown>;
+    implementExtra: Record<string, unknown>;
     clarifyRounds: number;
     planReviews: number;
     testFixes: number;
@@ -75,6 +77,8 @@ export function createPipelineContext(config: PipelineConfig): PipelineContext {
         depth: 0,
         sourceLockHeld: false,
         agentVisits: new Map(),
+        planExtra: {},
+        implementExtra: {},
         clarifyRounds: 0,
         planReviews: 0,
         testFixes: 0,
@@ -131,21 +135,6 @@ export function attempt<T>(outcomes: T[], index: number): T {
 
 export function isFake(ctx: PipelineContext): boolean {
     return ctx.fake !== null && ctx.fake !== undefined;
-}
-
-/*
-  A [C] box. Throws naming its diagram box, because the sandbox cannot run its script.
-*/
-export function notWired(box: string): never {
-    throw new Error(`tackle-tasks workflow: [C] box not wired yet — ${box}`);
-}
-
-/*
-  A [C] decision. Real mode throws; fake mode reads the fixture, so a path walks offline.
-*/
-export function decide(ctx: PipelineContext, box: string, field: string, index: number): unknown {
-    if (!isFake(ctx)) return notWired(box);
-    return attempt((ctx.fake as Record<string, unknown[]>)[field] as unknown[], index);
 }
 
 /*
@@ -265,6 +254,40 @@ export const RUN_FULL_SUITE_RESULT = {
     properties: { passed: { type: "boolean" } },
 };
 
+export const CHECK_FENCE_RESULT = {
+    type: "object",
+    required: ["inside"],
+    properties: {
+        inside: { type: "boolean" },
+        violations: { type: "array", items: { type: "string" } },
+    },
+};
+
+export const MERGE_WORKTREES_RESULT = {
+    type: "object",
+    required: ["state"],
+    properties: { state: { type: "string", enum: ["ALL LANDED", "SOME LANDED", "NONE LANDED"] } },
+};
+
+export const LOCK_SOURCE_REPO_RESULT = {
+    type: "object",
+    required: ["acquired"],
+    properties: { acquired: { type: "boolean" }, heldByOwner: { type: ["string", "null"] } },
+};
+
+export const FINISH_RUN_RESULT = {
+    type: "object",
+    required: ["exitType", "workLanded"],
+    properties: {
+        exitType: { type: "string" },
+        workLanded: { type: "boolean" },
+        publicationState: { type: ["string", "null"] },
+        leaseReleased: { type: "boolean" },
+        lockReleased: { type: "boolean" },
+        closureNote: { type: ["string", "null"] },
+    },
+};
+
 export const FIX_SUITE_RESULT = {
     type: "object",
     required: ["fixed"],
@@ -283,21 +306,36 @@ export function toFailures(exitType: string, exitNote: string, workLanded?: bool
 }
 
 /*
+  Performs a whole exit tail in one agent, because the sandbox cannot run its scripts.
+*/
+export async function runExitTail(ctx: PipelineContext, exitType: string, exitNote: string): Promise<unknown> {
+    if (isFake(ctx)) return null;
+    const prompt = emitterPrompt(ctx, "finish-run", { exitType, exitNote });
+    const receipt = await ctx.agent(prompt, { label: `finish-run:${ctx.task}`, schema: FINISH_RUN_RESULT });
+    if (receipt === null) throw new Error("tackle-tasks workflow: the exit tail returned nothing usable");
+    return receipt;
+}
+
+/*
   plans/diagram/pipeline-failuresExit.mmd. Every box is [C].
 */
-export function failuresExit(
+export async function failuresExit(
     ctx: PipelineContext,
     exitType: string,
     exitNote: string,
     workLanded?: boolean,
-): { task: number; exitType: string; exitNote: string; trace: string[] } {
+): Promise<{ task: number; exitType: string; exitNote: string; trace: string[] }> {
     banner(ctx, "failures exit");
+    const receipt = await runExitTail(ctx, exitType, exitNote) as { exitType: string; workLanded: boolean } | null;
+    // Real mode reads git's answer; fake mode keeps the caller's, so a fixture path is unchanged.
+    const landed = receipt === null ? workLanded === true : receipt.workLanded;
+    const finalExitType = receipt === null ? exitType : receipt.exitType;
     // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
     step(ctx, ctx.L("READ_PUBLICATION_STATE"));
-    step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(workLanded));
+    step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(landed));
     // Paragraph 86: landed work discards the incoming exit type, run-failed included.
-    if (workLanded) step(ctx, ctx.L("WRITE_PUBLICATION_OUTCOME"));
-    else step(ctx, ctx.L("WRITE_EXIT_TYPE_AND_NOTE"), exitType.toUpperCase());
+    if (landed) step(ctx, ctx.L("WRITE_PUBLICATION_OUTCOME"));
+    else step(ctx, ctx.L("WRITE_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
     step(ctx, ctx.L("RECORD_MODIFIED_FILES_FAILURE"));
     // Paragraphs 89 and 90: the lease and the source lock are independent ownership checks.
     step(ctx, ctx.L("DOES_RUN_HOLD_LEASE"), "YES");
@@ -307,9 +345,9 @@ export function failuresExit(
     if (ctx.sourceLockHeld) step(ctx, ctx.L("RELEASE_SOURCE_LOCK"));
     // Paragraph 91: mark inactive last, after every release and every write.
     step(ctx, ctx.L("MARK_TASK_INACTIVE_FAILURE"));
-    step(ctx, ctx.L("REPORT_EXIT_TYPE_AND_NOTE"), exitType.toUpperCase());
+    step(ctx, ctx.L("REPORT_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
     step(ctx, ctx.L("STOP"));
-    return { task: ctx.task, exitType, exitNote, trace: ctx.trace };
+    return { task: ctx.task, exitType: finalExitType, exitNote, trace: ctx.trace };
 }
 
 /*
@@ -319,10 +357,11 @@ export function failuresExit(
 /*
   plans/diagram/pipeline-mergeSucceededExit.mmd. Every box is [C].
 */
-export function mergeSucceededExit(
+export async function mergeSucceededExit(
     ctx: PipelineContext,
-): { task: number; exitType: string; exitNote: string; trace: string[] } {
+): Promise<{ task: number; exitType: string; exitNote: string; trace: string[] }> {
     banner(ctx, "merge succeeded exit");
+    await runExitTail(ctx, "completed", "");
     step(ctx, ctx.L("MERGE_RECEIPT_INPUT"));
     step(ctx, ctx.L("RECORD_MERGE_COMMIT_HASHES"));
     // Paragraph 79: completed is the point of no return, written before any release.
@@ -352,7 +391,9 @@ export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcom
     step(ctx, ctx.L("DOCS_INPUT"));
 
     // Paragraph 23 [S]: turn the tasks.json entry into a plan, reading the entry and docs only.
-    const result = await runAgent(ctx, ctx.L("PLAN_THE_TASK"), "PLANNER", "plan", PLAN_RESULT);
+    const extra = ctx.planExtra;
+    ctx.planExtra = {};
+    const result = await runAgent(ctx, ctx.L("PLAN_THE_TASK"), "PLANNER", "plan", PLAN_RESULT, extra);
 
     // Paragraph 26: nothing usable back, and the task is active, so the failures exit runs.
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
@@ -383,6 +424,7 @@ export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcom
     ctx.clarifyRounds += 1;
     // Paragraph 28: the planner reads only the entry and the docs, so write it there.
     step(ctx, ctx.L("WRITE_CLARIFY_REQUEST"));
+    ctx.planExtra.clarifyRequest = (result as { clarifyRequest?: string }).clarifyRequest ?? "";
     ctx.depth += 1;
     return { next: "document-generation" };
 }
@@ -398,6 +440,7 @@ export async function documentGenerationPipeline(ctx: PipelineContext): Promise<
     step(ctx, ctx.L("WHAT_IS_DOCS_MODE"), "UPDATE");
     // Paragraph 21: UPDATE docs read the clarify request and grow to cover what it names.
     step(ctx, ctx.L("UPDATE_AUTO_GENERATED_DOCS"));
+    ctx.planExtra.updateDocs = true;
     return { next: "plan" };
 }
 
@@ -431,6 +474,7 @@ export async function reviewPlanPipeline(ctx: PipelineContext): Promise<Pipeline
 
     // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
     step(ctx, ctx.L("UPDATE_TASK_ENTRY"));
+    ctx.planExtra.planReview = result;
     ctx.planReviews += 1;
 
     const reviewsDone = ctx.planReviews >= MAX_ATTEMPTS;
@@ -454,7 +498,9 @@ export async function implementPipeline(ctx: PipelineContext): Promise<PipelineO
     step(ctx, ctx.L("ACCEPTED_PLAN_INPUT"));
 
     // Paragraph 36 [S]: implement the accepted plan, treating the worktree as project root.
-    const result = await runAgent(ctx, ctx.L("IMPLEMENT_TASK"), "IMPLEMENTER", "implement", IMPLEMENT_RESULT);
+    const extra = ctx.implementExtra;
+    ctx.implementExtra = {};
+    const result = await runAgent(ctx, ctx.L("IMPLEMENT_TASK"), "IMPLEMENTER", "implement", IMPLEMENT_RESULT, extra);
 
     // Paragraph 37.
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
@@ -500,6 +546,7 @@ export async function taskTestsPipeline(ctx: PipelineContext): Promise<PipelineO
 
     // Paragraph 43: a repair is never tested until committed, so re-enter implement.
     step(ctx, ctx.L("AMEND_ENTRY_WITH_FAILING_TESTS"));
+    ctx.implementExtra.amendFailingTests = true;
     ctx.testFixes += 1;
     ctx.depth += 1;
     return { next: "implement" };
@@ -536,6 +583,7 @@ export async function reviewTestsPipeline(ctx: PipelineContext): Promise<Pipelin
 
     // Paragraph 49: write codex's notes and fixes into the entry, then reimplement.
     step(ctx, ctx.L("AMEND_ENTRY_WITH_CODEX_NOTES"));
+    ctx.implementExtra.testReview = result;
     ctx.testReviews += 1;
     ctx.depth += 1;
     return { next: "implement" };
@@ -560,7 +608,14 @@ export async function rebasePreamblePipeline(ctx: PipelineContext): Promise<Pipe
 
     // Paragraph 51: the lock owner is runId:taskNumber, never runId alone.
     step(ctx, ctx.L("LOCK_SOURCE_REPO"));
-    const acquired = decide(ctx, "LOCK_SOURCE_REPO", "lockAcquired", ctx.lockIndex);
+    const lockReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "lock-source-repo"), {
+        label: `lock-source-repo:${ctx.task}`,
+        schema: LOCK_SOURCE_REPO_RESULT,
+    });
+    if (!isFake(ctx) && lockReceipt === null) return toFailures("run-failed", "the source repo lock box returned nothing usable");
+    const acquired = isFake(ctx)
+        ? attempt((ctx.fake as Record<string, boolean[]>).lockAcquired, ctx.lockIndex)
+        : (lockReceipt as { acquired: boolean }).acquired;
     ctx.lockIndex += 1;
     step(ctx, ctx.L("WAS_LOCK_ACQUIRED"), yesNo(acquired));
 
@@ -688,9 +743,14 @@ export async function suitePipeline(ctx: PipelineContext): Promise<PipelineOutco
     }
 
     // Paragraph 67: the fence gate runs once, after the fix loop and before the merge.
+    const fenceReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "check-fence"), {
+        label: `check-fence:${ctx.task}`,
+        schema: CHECK_FENCE_RESULT,
+    });
+    if (!isFake(ctx) && fenceReceipt === null) return toFailures("run-failed", "the fence check box returned nothing usable");
     const fenceHeld = isFake(ctx)
         ? (ctx.fake as Record<string, boolean>).fenceHeld
-        : notWired("DID_CHANGES_STAY_INSIDE_FENCE");
+        : (fenceReceipt as { inside: boolean }).inside;
     // Paragraph 68: it re-derives the diff and never accepts a fence from a caller.
     step(ctx, ctx.L("DID_CHANGES_STAY_INSIDE_FENCE"), yesNo(fenceHeld));
     if (!fenceHeld) {
@@ -714,12 +774,20 @@ export async function mergePipeline(ctx: PipelineContext): Promise<PipelineOutco
     banner(ctx, "merge");
     step(ctx, ctx.L("GREEN_WORKTREE_INPUT"));
 
+    const mergeReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "merge-worktrees"), {
+        label: `merge-worktrees:${ctx.task}`,
+        schema: MERGE_WORKTREES_RESULT,
+    });
+    if (!isFake(ctx) && mergeReceipt === null) return toFailures("run-failed", "the merge box returned nothing usable");
+
     // Paragraphs 70 and 71: no fast-forward, and each layer writes its merge ref as it lands.
     step(ctx, ctx.L("MERGE_WORKTREES"));
 
     // Paragraph 72: a read-only reconciliation over those refs, never a returned boolean.
     step(ctx, ctx.L("READ_PUBLICATION_STATE"));
-    const state = decide(ctx, "WHAT_IS_PUBLICATION_STATE", "publicationState", ctx.publicationIndex);
+    const state = isFake(ctx)
+        ? attempt((ctx.fake as Record<string, string[]>).publicationState, ctx.publicationIndex)
+        : (mergeReceipt as { state: string }).state;
     ctx.publicationIndex += 1;
     // Paragraph 73: merged, no-op and root-merged-but-not-closed are LANDED; conflicted is not.
     step(ctx, ctx.L("WHAT_IS_PUBLICATION_STATE"), state as string);
@@ -782,12 +850,12 @@ export async function runTaskPipeline(ctx: PipelineContext, start?: string): Pro
 
         if (result.done) {
             ctx.phase("Exit");
-            failuresExit(ctx, result.exitType, result.exitNote, result.workLanded);
+            await failuresExit(ctx, result.exitType, result.exitNote, result.workLanded);
             return ctx.trace;
         }
         if (result.next === "merge-succeeded") {
             ctx.phase("Exit");
-            mergeSucceededExit(ctx);
+            await mergeSucceededExit(ctx);
             return ctx.trace;
         }
         current = result.next;

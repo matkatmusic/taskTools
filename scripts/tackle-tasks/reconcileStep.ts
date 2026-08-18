@@ -541,6 +541,37 @@ function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
     return ambiguous(`the archive for task ${input.taskNumber} carries no closeTaskRun receipt for step "${input.stepId}"`);
 }
 
+// The tail ends the run, so its own completion is what proves it ran.
+function reconcileFinishTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
+    const state = readStateOrNull(input.taskNumber, input.projectRoot);
+    const record = state === null ? null : findRunRecord(state, input.runId);
+    if (record === null) return ambiguous(`no run record for ${input.runId}`);
+    if (record.exitType === null) return notCompleted("the run has no exit type yet");
+    if (state?.active !== false || record.endedAt === null) return notCompleted("the run has not been ended");
+    return completed({ exitType: record.exitType, exitNote: record.exitNote ?? "" });
+}
+
+// The lock file names its owner, so ownership is the whole answer.
+function reconcileLockSourceRepo(input: ReconcileStepInput): ReconcileStepOutput {
+    const owner = buildLockOwner(input.runId, input.taskNumber);
+    const lock = readSourceRepoLock(input.projectRoot);
+    if (lock === null) return notCompleted("no source repo lock is held");
+    if (lock.owner !== owner) return notCompleted(`the source repo lock is held by ${lock.owner}`);
+    return completed({ acquired: true, heldByOwner: null });
+}
+
+// The request lands in the entry, so the entry itself is the proof.
+function reconcileWriteClarifyRequest(input: ReconcileStepInput): ReconcileStepOutput {
+    const clarifyRequest = readString(input.stepInput, "clarifyRequest");
+    if (clarifyRequest === null) return ambiguous("the step input carried no clarifyRequest");
+    const { tasksPath } = resolveTaskFiles(input.projectRoot);
+    const entry = (readTaskFile(tasksPath) as { taskNumber: number; clarifyRequest?: string }[])
+        .find((task) => task.taskNumber === input.taskNumber);
+    if (entry === undefined) return ambiguous(`task ${input.taskNumber} is not in tasks.json`);
+    if (entry.clarifyRequest !== clarifyRequest.trim()) return notCompleted("the entry holds a different clarify request");
+    return completed({ written: true, clarifyRequest: entry.clarifyRequest });
+}
+
 const HANDLERS: Record<string, Handler> = {
     advanceTaskRebase: (input) => reconcileRebase(input, true),
     applyPlanAmendments: reconcileApplyPlanAmendments,
@@ -549,9 +580,11 @@ const HANDLERS: Record<string, Handler> = {
     closeTaskRun: reconcileCloseTaskRun,
     commitTaskWork: reconcileCommitTaskWork,
     createTaskWorktree: reconcileCreateTaskWorktree,
+    finishTaskRun: reconcileFinishTaskRun,
     generateTaskDocs: reconcileTaskDocs,
     initTaskSubmodules: reconcileInitTaskSubmodules,
     isTaskRunResumable: reconcileIsTaskRunResumable,
+    lockSourceRepo: reconcileLockSourceRepo,
     markTaskInactive: reconcileMarkTaskInactive,
     mergeTaskWorktree: reconcileMergeTaskWorktree,
     rebaseTaskWorktree: (input) => reconcileRebase(input, false),
@@ -563,6 +596,7 @@ const HANDLERS: Record<string, Handler> = {
     runFullSuite: reconcileRunFullSuite,
     runTaskTests: reconcileRunTaskTests,
     updateTaskDocs: reconcileTaskDocs,
+    writeClarifyRequest: reconcileWriteClarifyRequest,
     writeTaskExitNotes: reconcileWriteTaskExitNotes,
 };
 

@@ -10,21 +10,31 @@ export type ConflictFixReceipt = {
 };
 
 const FIX_CONFLICTS_OUTPUT_PATH = fileURLToPath(new URL("../../plans/fix-conflicts-output-template.json", import.meta.url));
+const COMMIT_TASK_WORK_PATH = fileURLToPath(new URL("./commitTaskWork.ts", import.meta.url));
 
 // Double-quoted for the read-file hook's parser; deduped so a path is never listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 
-// Derived here, never accepted from the caller: a list the caller supplies is a list the caller can leave empty.
+// Derived here, never accepted from the caller, who could otherwise supply an empty list.
 function conflictedPaths(checkoutPath: string): string[] {
     const output = execFileSync("git", ["-C", checkoutPath, "diff", "--name-only", "--diff-filter=U", "-z"], { encoding: "utf8" });
     return output.split("\0").filter((line) => line.length > 0);
 }
 
-export function fixConflictsPrompt(checkoutPath: string): string {
+export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, projectRoot: string, runId: string, sourceBranch: string): string {
     const root = checkoutPath.replace(/\/+$/, "");
     const paths = conflictedPaths(checkoutPath);
     if (paths.length === 0) throw new Error(`fix-conflicts: no unmerged paths in ${root}; this box runs only on a stopped rebase`);
     const absolutePaths = paths.map((path) => `${root}/${path}`);
+    // Serialized, never interpolated field-by-field, and delivered on quoted-heredoc stdin.
+    const commitPayload = JSON.stringify({
+        projectRoot,
+        worktreePath: checkoutPath,
+        taskNumber,
+        runId,
+        stepId: "fix-conflicts",
+        rootSourceBranch: sourceBranch,
+    });
     return `## YOUR JOB
 
 A rebase inside \`${root}\` is stopped on live conflict markers. 
@@ -62,8 +72,15 @@ For each file listed above:
 2. Combine the two sides so both sides' intent survives.
 3. Delete the three marker lines.
 
-Leave every edit unstaged and uncommitted. 
-A later box stages and commits every touched layer.
+## COMMIT YOUR WORK
+
+Never stage or commit anything by hand. As your final step, run this with Bash, exactly as written:
+node ${COMMIT_TASK_WORK_PATH} <<'TTCOMMIT'
+${commitPayload}
+TTCOMMIT
+
+It prints one JSON object. If it fails, say so plainly and return nothing else.
+That is an operational failure, and this run's operator owns it.
 
 ## DO NOT DRIVE THE REBASE
 
@@ -78,7 +95,7 @@ You are forbidden from doing any of the following actions:
 - edit a file that is not listed above and is not a call site a listed conflict forces you to update;
 - force-push or hard-reset anything you did not create;
 - run \`git rebase --continue\` or \`git rebase --abort\`;
-- stage or commit anything;
+- stage or commit anything by hand;
 - leave a required edit in another repository unmade.
 
 Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.

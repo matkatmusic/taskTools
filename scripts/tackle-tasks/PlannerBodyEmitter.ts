@@ -1,4 +1,4 @@
-// The planner phase of tackle-tasks, one function per box in plans/diagram/pipeline-preamble.mmd.  Every box name in a trailing comment is the box's label in that diagram, verbatim.  Every function below is a thin wrapper around an already-tested export; none of them open tasks.json themselves, and each re-derives what it needs from the task number.
+// Planner phase: one function per pipeline-preamble.mmd box. Trailing comments are the box's diagram label, verbatim.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -22,6 +22,7 @@ import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
 import { generateRunId, releaseTaskWorktreeLease } from "../prepareTasks.ts";
 import type { Plan } from "./planArtifacts.ts";
+import type { PlanReview } from "./recordPlanReview.ts";
 
 // The receipt the "plan the task" agent box hands back: the plan file it drafted.
 export type PlanFileReceipt = Plan;
@@ -38,7 +39,7 @@ type WorktreePresence = [withWorktree: TaskNum, withoutWorktree: TaskNum];
 type WorktreeSafety = [unsafe: TaskNum, safe: TaskNum];
 type WorktreeResumability = [unresumable: TaskNum, resumable: TaskNum];
 
-// The run identity every box shares. One runId per invocation, not per task, so the source-repo lock owner "runId:taskNumber" stays unique per task.
+// Run identity every box shares: one runId per invocation, keeping each task's lock owner unique.
 export type RunContext = { runId: string; projectRoot: string; sourceBranch: string };
 
 export type ExitInfo = { exitType: string; exitNote: string };
@@ -182,6 +183,50 @@ const PLAN_OUTPUT_PATH = fileURLToPath(new URL("../../plans/plan-output-template
 // Resolved here because the read-file hook stats the raw string and never expands a tilde.
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 
+const WRITE_CLARIFY_REQUEST_PATH = fileURLToPath(new URL("./writeClarifyRequest.ts", import.meta.url));
+const RECORD_PLAN_REVIEW_PATH = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
+const UPDATE_TASK_DOCS_PATH = fileURLToPath(new URL("./updateTaskDocs.ts", import.meta.url));
+
+// Its own copy, so this file never imports the dispatch hub.
+const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
+
+// Set only by the box that ran, telling the next agent to run the matching script first.
+export type PlanPromptExtra = {
+    clarifyRequest?: string;
+    planReview?: PlanReview;
+    updateDocs?: true;
+};
+
+const clarifyRequestBlock = (t: PreparedTask, clarifyRequest: string): string => {
+    const payload = JSON.stringify({ projectRoot: t.taskStateRoot, taskNumber: t.number, clarifyRequest });
+    return `Run this first, before doing anything else, exactly as written:
+node ${WRITE_CLARIFY_REQUEST_PATH} <<'TTCLARIFY'
+${payload}
+TTCLARIFY
+
+`;
+};
+
+const planReviewBlock = (t: PreparedTask, planReview: PlanReview): string => {
+    const payload = JSON.stringify(planReview);
+    return `Run this first, before doing anything else, exactly as written:
+node ${RECORD_PLAN_REVIEW_PATH} ${shellQuote(t.taskStateRoot)} ${shellQuote(t.planFile)} ${t.number} <<'TTREVIEW'
+${payload}
+TTREVIEW
+
+`;
+};
+
+const updateDocsBlock = (t: PreparedTask): string => {
+    const payload = JSON.stringify({ taskNumber: t.number, worktreePath: t.repoRoot, projectRoot: t.taskStateRoot });
+    return `Run this first, before doing anything else, exactly as written:
+node ${UPDATE_TASK_DOCS_PATH} <<'TTDOCS'
+${payload}
+TTDOCS
+
+`;
+};
+
 // The template is valid JSON, so the task number is set here rather than left for the agent.
 const planShape = (t: PreparedTask) => {
     const shape = JSON.parse(readFileSync(PLAN_TEMPLATE_PATH, "utf8"));
@@ -193,7 +238,11 @@ const planShape = (t: PreparedTask) => {
 // plan — writes plan.json in the shape of plans/plan-template.json, spliced in below.
 // ---------------------------------------------------------------------------
 
-export function planPrompt(t: PreparedTask): string {
+export function planPrompt(t: PreparedTask, extra?: PlanPromptExtra): string {
+    const leadingBlocks =
+        (extra?.clarifyRequest !== undefined ? clarifyRequestBlock(t, extra.clarifyRequest) : "") +
+        (extra?.planReview !== undefined ? planReviewBlock(t, extra.planReview) : "") +
+        (extra?.updateDocs ? updateDocsBlock(t) : "");
     const codexNotes = t.codexReviewNotes.trim() === "" ? "" : `
 ## CODEX'S PREVIOUS REVIEW NOTES
 
@@ -203,7 +252,7 @@ ${t.codexReviewNotes.trim()}
 
 Address every point above in the sections you write.
 `;
-    return `Invoke the skill \`/ponytail:ponytail ultra\` first.
+    return `${leadingBlocks}Invoke the skill \`/ponytail:ponytail ultra\` first.
 ${codexNotes}
 ## YOUR JOB
 
@@ -338,7 +387,7 @@ if (process.argv[1]?.endsWith("PlannerBodyEmitter.ts")) {
         projectRoot: string;
         sourceBranch?: string;
     };
-    // Never defaulted to cwd: the source lock lives in projectRoot/.git, and a linked worktree's .git is a file, so a wrong root fails only at the last box of an exit.
+    // Never defaults to cwd: a wrong root fails silently until the run's last exit box.
     const projectRoot = input.projectRoot;
     const ctx: RunContext = {
         runId: input.runId ?? generateRunId(),

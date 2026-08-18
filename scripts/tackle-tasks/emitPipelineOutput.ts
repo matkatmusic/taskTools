@@ -16,7 +16,7 @@ import { getCurrentTaskRun, getLocalIsoTimestamp, updateCurrentTaskRun } from ".
 import { removeWorktreeAndBranch } from "../mergeTaskWorktrees.ts";
 import { releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory } from "../prepareTasks.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
-import { L } from "../tracePipeline.ts";
+import { L } from "../mmdGraph.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const EMITTER_PATH = fileURLToPath(new URL("./SkillBodyEmitter.ts", import.meta.url));

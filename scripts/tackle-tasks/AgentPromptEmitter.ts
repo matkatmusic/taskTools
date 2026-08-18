@@ -3,8 +3,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
 import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
-import { planPrompt } from "./PlannerBodyEmitter.ts";
-import { implementPrompt } from "./ImplementBodyEmitter.ts";
+import { planPrompt, type PlanPromptExtra } from "./PlannerBodyEmitter.ts";
+import { implementPrompt, type ImplementPromptExtra } from "./ImplementBodyEmitter.ts";
+import type { PlanReview } from "./recordPlanReview.ts";
+import type { TestReview } from "./decideTestReview.ts";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
 import { suiteFixPrompt } from "./SuiteFixBodyEmitter.ts";
@@ -12,6 +14,8 @@ import { runFullSuitePrompt } from "./RunFullSuiteBodyEmitter.ts";
 import { runTaskTestsPrompt } from "./RunTaskTestsBodyEmitter.ts";
 import { rebaseWorktreePrompt } from "./RebaseWorktreeBodyEmitter.ts";
 import { continueRebasePrompt } from "./ContinueRebaseBodyEmitter.ts";
+import { finishRunPrompt } from "./FinishRunBodyEmitter.ts";
+import { lockSourceRepoPrompt } from "./LockSourceRepoBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
@@ -173,18 +177,32 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
     const worktree = payload.worktree;
     const projectRoot = payload.projectRoot;
     switch (role) {
-        case "plan":
-            return planPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
+        case "plan": {
+            const planExtra: PlanPromptExtra = {
+                clarifyRequest: typeof payload.clarifyRequest === "string" ? payload.clarifyRequest : undefined,
+                planReview: payload.planReview as PlanReview | undefined,
+                updateDocs: payload.updateDocs === true ? true : undefined,
+            };
+            return planPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), planExtra);
+        }
         case "review-plan":
             return planReviewPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
-        case "implement":
+        case "implement": {
+            const implementExtra: ImplementPromptExtra = {
+                amendFailingTests: payload.amendFailingTests === true ? true : undefined,
+                testReview: payload.testReview as TestReview | undefined,
+            };
             return implementPrompt(
                 loadPreparedTask(taskNumber, worktree, projectRoot),
                 typeof payload.typecheckCommand === "string" ? payload.typecheckCommand : "npx tsc --noEmit",
                 typeof payload.maxFixRounds === "number" ? payload.maxFixRounds : 3,
+                payload.runId,
+                payload.sourceBranch,
+                implementExtra,
             );
+        }
         case "fix-conflicts":
-            return fixConflictsPrompt(payload.checkoutPath as string);
+            return fixConflictsPrompt(payload.checkoutPath as string, taskNumber, projectRoot, payload.runId, payload.sourceBranch);
         // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
         case "rebase-worktree":
             return rebaseWorktreePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
@@ -195,9 +213,23 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         case "run-full-suite":
             return runFullSuitePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "fix-suite":
-            return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
+            return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "review-tests":
             return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.sourceBranch);
+        // The lock box runs as one script, so this prompt carries no task brief.
+        case "lock-source-repo":
+            return lockSourceRepoPrompt({ taskNumber, runId: payload.runId, projectRoot });
+        // The exit tails run as one script, so this prompt carries no task brief.
+        case "finish-run":
+            return finishRunPrompt({
+                taskNumber,
+                runId: payload.runId,
+                projectRoot,
+                worktree,
+                sourceBranch: payload.sourceBranch,
+                exitType: payload.exitType as string,
+                exitNote: payload.exitNote as string,
+            });
         default:
             throw new Error(`unknown role "${role}"`);
     }

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
+import type { TestReview } from "./decideTestReview.ts";
 
 // Its own copy, so this file never imports the dispatch hub and the imports stay one-way.
 const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
@@ -11,15 +12,53 @@ const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 
 const IMPLEMENT_OUTPUT_PATH = fileURLToPath(new URL("../../plans/implement-output-template.json", import.meta.url));
+const COMMIT_TASK_WORK_PATH = fileURLToPath(new URL("./commitTaskWork.ts", import.meta.url));
+const AMEND_FAILING_TESTS_PATH = fileURLToPath(new URL("./amendEntryWithFailingTests.ts", import.meta.url));
+const AMEND_CODEX_NOTES_PATH = fileURLToPath(new URL("./amendEntryWithCodexNotes.ts", import.meta.url));
 // Resolved here because the read-file hook stats the raw string and never expands a tilde.
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
+
+// Set only by the box that ran, telling the next agent to run the matching script first.
+export type ImplementPromptExtra = {
+    amendFailingTests?: true;
+    testReview?: TestReview;
+};
+
+// No stdin: the script's whole input is its two argv values.
+const amendFailingTestsBlock = (t: PreparedTask): string =>
+    `Run this first, before doing anything else, exactly as written:
+node ${AMEND_FAILING_TESTS_PATH} ${shellQuote(t.taskStateRoot)} ${t.number}
+
+`;
+
+const testReviewBlock = (t: PreparedTask, testReview: TestReview): string => {
+    const payload = JSON.stringify(testReview);
+    return `Run this first, before doing anything else, exactly as written:
+node ${AMEND_CODEX_NOTES_PATH} ${shellQuote(t.taskStateRoot)} ${t.number} <<'TTNOTES'
+${payload}
+TTNOTES
+
+`;
+};
 
 const ownedPathMap = (t: PreparedTask) => t.files
     .map((file) => `- \`${file}\` => \`${t.repoRoot.replace(/\/+$/, "")}/${file}\``)
     .join("\n");
 
-export function implementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
+export function implementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number, runId: string, sourceBranch: string, extra?: ImplementPromptExtra): string {
+    const leadingBlocks =
+        (extra?.amendFailingTests ? amendFailingTestsBlock(t) : "") +
+        (extra?.testReview !== undefined ? testReviewBlock(t, extra.testReview) : "");
     const rootedTypecheck = `(cd -- ${shellQuote(t.repoRoot)} && ${typecheckCommand})`;
+    // Serialized, never interpolated field-by-field, and delivered on quoted-heredoc stdin.
+    const commitPayload = JSON.stringify({
+        projectRoot: t.taskStateRoot,
+        worktreePath: t.repoRoot,
+        taskNumber: t.number,
+        runId,
+        stepId: "implement",
+        rootSourceBranch: sourceBranch,
+    });
     // Read from the entry, never accepted from the caller: the amend boxes write it there before a reimplement.
     const note = t.codexReviewNotes;
     const runNote = note.trim() === "" ? "" : `
@@ -27,7 +66,7 @@ export function implementPrompt(t: PreparedTask, typecheckCommand: string, maxFi
 
 ${note.trim()}
 `;
-    return `Invoke the skill \`/ponytail:ponytail ultra\` first.
+    return `${leadingBlocks}Invoke the skill \`/ponytail:ponytail ultra\` first.
 ${runNote}
 ## YOUR JOB
 
@@ -96,12 +135,22 @@ You are forbidden from doing any of the following actions:
 - add scope or a refactor the plan does not call for;
 - redecide anything the plan already decided;
 - run the full suite;
-- stage or commit anything — a later box owns committing;
+- stage or commit anything by hand;
 - run any git command;
 - attempt more than ${maxFixRounds} fix rounds;
 - return \`implemented: true\` while a test fails or the typecheck reports an error.
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
+
+## COMMIT YOUR WORK
+
+Never stage or commit anything by hand. As your final step, run this with Bash, exactly as written:
+node ${COMMIT_TASK_WORK_PATH} <<'TTCOMMIT'
+${commitPayload}
+TTCOMMIT
+
+It prints one JSON object. If it fails, say so plainly and return nothing else.
+That is an operational failure, and this run's operator owns it.
 
 ## WHAT TO RETURN
 

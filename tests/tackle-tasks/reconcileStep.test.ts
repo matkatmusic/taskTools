@@ -1234,6 +1234,83 @@ test("test_reconcileStep_reportsNotCompletedWhenExitNotesPlainlyWereNotWritten",
 // Every mutating workflow script mapped to the name(s) of its real fault-injection case(s) above.
 // A script with no entry, or an entry naming a test that was never actually declared with `test(...)`
 // in this file, fails test_reconcileStep_hasANamedFaultInjectionCaseForEveryMutatingRow below.
+test("test_reconcileStep_recognizesAFinishedRunAfterALostResult", () => {
+    // Setup: the tail already wrote an exit type and ended the run, then its result was lost.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-finish-"));
+    buildEndedCompletedRun(root, 71, "run-finish", "a".repeat(40));
+
+    const output = reconcileStep(baseInput({
+        script: "finishTaskRun", taskNumber: 71, runId: "run-finish", projectRoot: root,
+    }));
+
+    assert.equal(output.status, "completed");
+    assert.equal((output.result as { exitType: string }).exitType, "completed");
+});
+
+test("test_reconcileStep_reportsNotCompletedWhenTheRunHasNoExitTypeYet", () => {
+    // Setup: the run is active and the tail never wrote anything.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-finish-open-"));
+    writeTasksJson(root, [{ taskNumber: 72, title: "t" }]);
+    assert.equal(claimTask(72, "run-open", root).status, "claimed");
+
+    const output = reconcileStep(baseInput({
+        script: "finishTaskRun", taskNumber: 72, runId: "run-open", projectRoot: root,
+    }));
+
+    assert.equal(output.status, "not-completed");
+});
+
+test("test_reconcileStep_recognizesAHeldSourceLockAfterALostResult", () => {
+    // Setup: the lock box took the lock under this run's owner, then its result was lost.
+    const root = makeCommittedRepo("reconcileStep-lock-");
+    assert.equal(acquireSourceRepoLock(root, buildLockOwner("run-lock", 73)).status, "acquired");
+
+    const output = reconcileStep(baseInput({
+        script: "lockSourceRepo", taskNumber: 73, runId: "run-lock", projectRoot: root,
+    }));
+
+    assert.equal(output.status, "completed");
+    assert.equal((output.result as { acquired: boolean }).acquired, true);
+});
+
+test("test_reconcileStep_reportsNotCompletedWhenAnotherRunHoldsTheSourceLock", () => {
+    // Setup: a rival run owns the lock, so this run never acquired it.
+    const root = makeCommittedRepo("reconcileStep-lock-rival-");
+    assert.equal(acquireSourceRepoLock(root, buildLockOwner("run-rival", 74)).status, "acquired");
+
+    const output = reconcileStep(baseInput({
+        script: "lockSourceRepo", taskNumber: 74, runId: "run-lock", projectRoot: root,
+    }));
+
+    assert.equal(output.status, "not-completed");
+});
+
+test("test_reconcileStep_recognizesAWrittenClarifyRequestAfterALostResult", () => {
+    // Setup: the entry already holds the request the lost box was asked to write.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-clarify-"));
+    writeTasksJson(root, [{ taskNumber: 75, title: "t", clarifyRequest: "WHICH_DATABASE" }]);
+
+    const output = reconcileStep(baseInput({
+        script: "writeClarifyRequest", taskNumber: 75, projectRoot: root,
+        stepInput: { clarifyRequest: "WHICH_DATABASE" },
+    }));
+
+    assert.equal(output.status, "completed");
+});
+
+test("test_reconcileStep_reportsNotCompletedWhenTheEntryHoldsADifferentClarifyRequest", () => {
+    // Setup: the entry holds an older request, so this box's write never landed.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-clarify-stale-"));
+    writeTasksJson(root, [{ taskNumber: 76, title: "t", clarifyRequest: "AN_OLDER_QUESTION" }]);
+
+    const output = reconcileStep(baseInput({
+        script: "writeClarifyRequest", taskNumber: 76, projectRoot: root,
+        stepInput: { clarifyRequest: "WHICH_DATABASE" },
+    }));
+
+    assert.equal(output.status, "not-completed");
+});
+
 const FAULT_INJECTION_CASES: Record<string, string[]> = {
     advanceTaskRebase: ["test_reconcileStep_recognizesAFinishedAdvanceAfterALostResult"],
     applyPlanAmendments: ["test_reconcileStep_recognizesAnAlreadyAppliedAmendment"],
@@ -1253,6 +1330,14 @@ const FAULT_INJECTION_CASES: Record<string, string[]> = {
         "test_reconcileStep_classifiesAValidRelativeNotesFileAsContainedForBothHandlers",
         "test_reconcileStep_recognizesAnEstablishedLeaseAfterALostResultWithNoNotes",
     ],
+    finishTaskRun: [
+        "test_reconcileStep_recognizesAFinishedRunAfterALostResult",
+        "test_reconcileStep_reportsNotCompletedWhenTheRunHasNoExitTypeYet",
+    ],
+    lockSourceRepo: [
+        "test_reconcileStep_recognizesAHeldSourceLockAfterALostResult",
+        "test_reconcileStep_reportsNotCompletedWhenAnotherRunHoldsTheSourceLock",
+    ],
     markTaskInactive: ["test_reconcileStep_recognizesAnInactiveMarkAfterALostResult"],
     mergeTaskWorktree: ["test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef"],
     rebaseTaskWorktree: ["test_reconcileStep_recognizesAFinishedRebaseAfterALostResult"],
@@ -1264,6 +1349,10 @@ const FAULT_INJECTION_CASES: Record<string, string[]> = {
     runFullSuite: ["test_reconcileStep_recognizesAStoredFullSuiteDecisionAfterALostResult"],
     runTaskTests: ["test_reconcileStep_returnsAStoredTaskTestDecisionWithoutRunningTestsAgain"],
     updateTaskDocs: ["test_reconcileStep_recognizesAnUpdatedBriefAfterALostResult"],
+    writeClarifyRequest: [
+        "test_reconcileStep_recognizesAWrittenClarifyRequestAfterALostResult",
+        "test_reconcileStep_reportsNotCompletedWhenTheEntryHoldsADifferentClarifyRequest",
+    ],
     writeTaskExitNotes: ["test_reconcileStep_recognizesWrittenExitNotesAfterALostResult"],
 };
 

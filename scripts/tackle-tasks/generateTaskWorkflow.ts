@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { fileURLToPath } from "node:url";
-import { L } from "../tracePipeline.ts";
+import { L } from "../mmdGraph.ts";
 
 const TEMPLATE_PATH = fileURLToPath(new URL("./tackle-tasks.workflow.template.js", import.meta.url));
 const PLAN_ARTIFACTS_PATH = fileURLToPath(new URL("./planArtifacts.ts", import.meta.url));

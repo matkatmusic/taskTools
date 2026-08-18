@@ -1,5 +1,6 @@
-// Parses plans/diagram/*.mmd flowcharts into a graph and lists every path through it.
-
+// Parses plans/diagram/*.mmd flowcharts into a graph, lists every path, and names every box.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 /*
   The diagrams are the single source of truth; nothing here invents wording.
 */
@@ -88,3 +89,44 @@ export function enumeratePaths(g: MmdGraph, maxEdgeUses = 2, cap = 200_000): str
   for (const r of roots) walk(r, [r]);
   return paths;
 }
+
+// Every diagram the pipeline walks. Order is the order a run visits them.
+export const DIAGRAM_FILES = [
+  "pipeline-preambleStatusCheck.mmd",
+  "pipeline-worktreeCheck.mmd",
+  "pipeline-documentGeneration.mmd",
+  "pipeline-plan.mmd",
+  "pipeline-reviewPlan.mmd",
+  "pipeline-implement.mmd",
+  "pipeline-taskTests.mmd",
+  "pipeline-reviewTests.mmd",
+  "pipeline-rebasePreamble.mmd",
+  "pipeline-rebase.mmd",
+  "pipeline-suite.mmd",
+  "pipeline-merge.mmd",
+  "pipeline-mergeSucceededExit.mmd",
+  "pipeline-failuresExit.mmd",
+  "pipeline-reportOnlyExit.mmd",
+  "pipeline.mmd",
+];
+
+// Built at module load: every diagram node id mapped to its label. Conflicting labels throw.
+export const nodeLabels = new Map<string, string>();
+for (const file of DIAGRAM_FILES) {
+  const path = fileURLToPath(new URL(`../plans/diagram/${file}`, import.meta.url));
+  const { nodes } = parseMmd(readFileSync(path, "utf8"));
+  for (const [id, label] of nodes) {
+    const existing = nodeLabels.get(id);
+    if (existing !== undefined && existing !== label) {
+      throw new Error(`mmdGraph: node "${id}" has conflicting labels across diagrams: ${JSON.stringify(existing)} vs ${JSON.stringify(label)}`);
+    }
+    nodeLabels.set(id, label);
+  }
+}
+
+// A diagram node label, on one line. Throws immediately on a typo'd id.
+export const L = (id: string): string => {
+  const label = nodeLabels.get(id);
+  if (label === undefined) throw new Error(`mmdGraph: no diagram node named "${id}"`);
+  return label.replaceAll("\n", " ");
+};
