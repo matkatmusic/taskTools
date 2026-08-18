@@ -175,7 +175,7 @@ const REVIEW_PLAN_RESULT = {
   type: 'object',
   required: ['verdict'],
   properties: {
-    verdict: { type: 'string', enum: ['ACCEPT', 'AMEND', 'SCRAP'] },
+    verdict: { type: 'string', enum: ['ACCEPT', 'AMEND_THEN_ACCEPT', 'AMEND', 'SCRAP', 'ERROR'] },
     notes: { type: 'string' },
   },
 }
@@ -397,8 +397,11 @@ const reviewPlanPipeline = async () => {
   verdictIndex += 1
   step(L.WHAT_IS_REVIEW_VERDICT, verdict)
 
-  // Paragraph 32.
-  if (verdict === 'ACCEPT') return { next: 'implement' }
+  // The reviewer never read the plan, so this is an operational failure, not a plan defect.
+  if (verdict === 'ERROR') return toFailures('run-failed', result.notes ?? 'the plan review could not run')
+
+  // Paragraph 32. AMEND_THEN_ACCEPT skips a second review: the fixes are already in the plan.
+  if (verdict === 'ACCEPT' || verdict === 'AMEND_THEN_ACCEPT') return { next: 'implement' }
 
   // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
   step(L.UPDATE_TASK_ENTRY)

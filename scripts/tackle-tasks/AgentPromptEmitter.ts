@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
+import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
 import { planPrompt } from "./PlannerBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
@@ -46,79 +47,6 @@ const ownedPathMap = (t: PreparedTask) => t.files
     .join("\n");
 
 // ---------------------------------------------------------------------------
-// Shared codex command + fallback chain, v1_1 lines 160-200. Both review roles call this to avoid drift.
-// ---------------------------------------------------------------------------
-
-export function codexReviewInstructions(question: string, subjectLabel: string): string {
-    const prompt = JSON.stringify(question);
-    const command = `codex exec -s read-only ${prompt}`;
-    const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`;
-    const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model claude-opus-4-8 --effort high`;
-    return `Review ${subjectLabel} for the task named by TASK_NUMBER in the DATA section by running exactly this command:
-
-${command}
-
-If that command exits with an error code, codex is unavailable — not a
-verdict. Unavailability looks like a non-zero exit with no usable verdict at
-all: overloaded api, usage exceeded, not logged in, rate limited, or no codex
-binary on PATH. In that case run this command instead, and treat its output
-exactly as you would codex's:
-
-${fableFallbackCommand}
-if that command also exits with an error code, run this command instead, and treat its output exactly as you would codex's:
-
-${opusFallbackCommand}
-
-Whichever reviewer answers, never run any command other than the ones above.
-
-Report which reviewer actually produced the verdict you return: reviewer
-"codex" if the codex command answered, reviewer "claude" if you had to fall
-back. Never report a fallback review as codex.`;
-}
-
-// ---------------------------------------------------------------------------
-// review-plan — copied from codexPrompt + verifierBrief; returns codex-review.json instead of APPROVED/REJECTED prose.
-// ---------------------------------------------------------------------------
-
-function reviewPlanQuestion(t: PreparedTask): string {
-    return `Review an implementation plan. Read only BRIEF_FILE and PLAN_FILE, listed in DATA
-below. Do not edit anything.
-
-Decide whether the plan is good enough to hand to an implementer: it stays within the
-task's owned files, listed in OWNED_FILES below, it gives concrete steps rather than open
-design questions, and someone could follow it without having to decide anything the plan
-should have already decided.
-
-Return your verdict as JSON matching plans/plan-format.md's codex-review.json:
-{"verdict": "amend"|"scrap", "notes": "...", "amendments": [...]}
-Use "scrap" (with notes, no amendments) when the plan cannot be fixed by amending
-sections in place. Use "amend" (with at least one amendment) otherwise. Every
-amendment names an existing section id — {"op": "replace", "id": "...", "body": "..."}
-rewrites a section, {"op": "insert", "after": "...", "id": "...", "title": "...", "body": "..."}
-adds one after an existing id, {"op": "remove", "id": "..."} drops one. Never invent an
-id an "amend" verdict cannot point back to a real section it is amending.
-
----- DATA ----
-BRIEF_FILE = ${t.briefFile}
-PLAN_FILE = ${t.planFile}
-OWNED_FILES = ${t.files.join(", ")}`;
-}
-
-export function reviewPlanPrompt(t: PreparedTask): string {
-    return `Never edit any file — this agent only reviews the plan, it never applies fixes to it.
-
-Write the reviewer's JSON verdict to exactly this absolute path: REVIEW_FILE (see final DATA section).
-
-Return {reviewWritten: true, reviewer}.
-
-${codexReviewInstructions(reviewPlanQuestion(t), "the plan")}
-
----- DATA ----
-TASK_NUMBER = ${t.number}
-REVIEW_FILE = ${t.reviewFile}`;
-}
-
-// ---------------------------------------------------------------------------
 // review-tests — copied from verifierBrief's command scaffolding, with a new review question. Never run the tests.
 // ---------------------------------------------------------------------------
 
@@ -146,7 +74,17 @@ Write the reviewer's JSON verdict to exactly this absolute path: TEST_REVIEW_FIL
 
 Return {flagged, reviewer}.
 
-${codexReviewInstructions(reviewTestsQuestion(t), "the tests")}
+Review the tests by running exactly this one command:
+
+PROMPT=${shellQuote(reviewTestsQuestion(t))}
+codex exec -s read-only "$PROMPT" \\
+  || claude -p "$PROMPT" --tools "Read" --model fable --effort medium \\
+  || claude -p "$PROMPT" --tools "Read" --model claude-opus-4-8 --effort high
+
+The || chain is the fallback. A non-zero exit means that reviewer is unavailable — not a
+verdict — so the next one runs. Whatever answers, treat its output as the review. Report
+reviewer "codex" if the codex command answered, "claude" if a fallback did.
+Never report a fallback review as codex.
 
 ---- DATA ----
 TASK_NUMBER = ${t.number}
@@ -430,7 +368,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         case "plan":
             return planPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         case "review-plan":
-            return reviewPlanPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
+            return planReviewPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         case "implement":
             return implementPrompt(
                 loadPreparedTask(taskNumber, worktree, projectRoot),

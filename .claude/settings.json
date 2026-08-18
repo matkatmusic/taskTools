@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"/Users/matkatmusicllc/Programming/taskTools-86/scripts/readFileHook.ts\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"/Users/matkatmusicllc/Programming/taskTools-86/scripts/readFileHook.ts\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "verdict": "<copy the verdict the node command printed: ACCEPT, AMEND_THEN_ACCEPT, AMEND, SCRAP or ERROR>",
+  "notes": "<copy the notes the node command printed, verbatim. Empty string when it printed an empty one.>"
+}

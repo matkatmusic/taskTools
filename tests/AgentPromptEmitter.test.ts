@@ -47,5 +47,5 @@ test("test_eachRoleLogsUnderItsOwnName", () => {
     execFileSync("node", [EMITTER, "35", "review-plan"], { input: payload, encoding: "utf8" });
 
     const directory = join(projectRoot, "plans/diagram/output renders/35/runs", runId);
-    assert.match(readFileSync(join(directory, "review-plan.md"), "utf8"), /REVIEW_FILE/);
+    assert.match(readFileSync(join(directory, "review-plan.md"), "utf8"), /codex exec -s read-only/);
 });
