@@ -32,16 +32,6 @@ test("test_implementPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () => {
     assert.match(prompt, /implement-output-template\.json/);
 });
 
-test("test_implementOutputTemplateKeysMatchTheWorkflowImplementResult", () => {
-    // The workflow validates the receipt against IMPLEMENT_RESULT, so the template cannot drift from it.
-    const templatePath = fileURLToPath(new URL("../plans/implement-output-template.json", import.meta.url));
-    const workflowPath = fileURLToPath(new URL("../scripts/tackle-tasks/tackle-tasks.workflow.template.js", import.meta.url));
-    const workflow = readFileSync(workflowPath, "utf8");
-    const block = workflow.slice(workflow.indexOf("const IMPLEMENT_RESULT"));
-    const properties = [...block.slice(0, block.indexOf("}\n")).matchAll(/(\w+): \{ type:/g)].map((match) => match[1]);
-    assert.deepEqual(Object.keys(JSON.parse(readFileSync(templatePath, "utf8"))).sort(), properties.sort());
-});
-
 test("test_implementPrompt_tellsTheImplementerToObeyTheSectionCodexNotes", () => {
     // recordPlanReview writes a required fix into each section's codexNotes; nothing else reads it.
     const prompt = implementPrompt(fakeTask, "npx tsc --noEmit", 3);

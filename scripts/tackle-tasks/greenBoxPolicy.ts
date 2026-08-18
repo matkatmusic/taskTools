@@ -71,6 +71,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "greenBoxPolicy",
     "inputPaths",
     "occurrences",
+    "pipelines",
     "planArtifacts",
     "preparedTask",
     "promptSections",

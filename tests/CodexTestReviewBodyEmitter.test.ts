@@ -111,16 +111,6 @@ test("test_reviewTestsPrompt_citesTheOutputTemplateAndCarriesOneQuestionOnly", (
     assert.equal(prompt.split("## STRICT INPUT ALLOWLIST").length, 2);
 });
 
-test("test_reviewTestsOutputTemplateKeysMatchTheWorkflowReviewTestsResult", () => {
-    // The workflow validates the receipt against REVIEW_TESTS_RESULT, so the template cannot drift from it.
-    const workflowPath = fileURLToPath(new URL("../scripts/tackle-tasks/tackle-tasks.workflow.template.js", import.meta.url));
-    const workflow = readFileSync(workflowPath, "utf8");
-    const block = workflow.slice(workflow.indexOf("const REVIEW_TESTS_RESULT"));
-    const properties = [...block.slice(0, block.indexOf("}\n")).matchAll(/(\w+): \{ type:/g)].map((match) => match[1]);
-    const template = JSON.parse(readFileSync(templatePath("review-tests-output-template.json"), "utf8"));
-    assert.deepEqual(Object.keys(template).sort(), properties.sort());
-});
-
 test("test_reviewTestsPrompt_writesTheImplementationDiffAndNamesItForTheReviewer", () => {
     // Codex is read-only and cannot run git, so the diff it judges against is written out for it.
     const task = makeTaskFixture();

@@ -1,8 +1,12 @@
-// Parses the plans/diagram/*.mmd flowcharts into a graph and lists every path through it.  The diagrams are the single source of truth; nothing here invents wording.
+// Parses plans/diagram/*.mmd flowcharts into a graph and lists every path through it.
+
+/*
+  The diagrams are the single source of truth; nothing here invents wording.
+*/
 
 export type MmdNode = { id: string; label: string };
 export type MmdEdge = { from: string; to: string; label?: string };
-// labelled holds every id declared with a shape, so a label equal to its id is not mistaken for none.
+// labelled holds every id declared with a shape, so id-equals-label is not read as none.
 export type MmdGraph = { nodes: Map<string, string>; edges: MmdEdge[]; labelled: Set<string> };
 
 const SKIP = /^\s*(%%|flowchart\b|graph\b|classDef\b|class\b|subgraph\b|end\b|linkStyle\b|style\b|$)/;
