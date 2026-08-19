@@ -32,10 +32,13 @@ function splicedPipelines(): string {
     return stripped.replace(/^export /gm, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// Every diagram node the sources name as L("SOMETHING"), so a typo fails the build, not a run.
+// Every diagram node the sources name, by L("X") or by a runStep/decideStep box id, so a typo fails the build.
 function splicedLabels(sources: string[]): string {
     const ids = [...new Set(
-        sources.flatMap((source) => [...source.matchAll(/\bL\("([A-Z][A-Z0-9_]*)"\)/g)].map((match) => match[1]!)),
+        sources.flatMap((source) => [
+            ...[...source.matchAll(/\bL\("([A-Z][A-Z0-9_]*)"\)/g)].map((match) => match[1]!),
+            ...[...source.matchAll(/\b(?:runStep|decideStep)\(ctx, "([A-Z][A-Z0-9_]*)"/g)].map((match) => match[1]!),
+        ]),
     )].sort();
     if (ids.length === 0) throw new Error("generateTaskWorkflow: the sources name no L(\"<NODE_ID>\") labels");
     const entries = ids.map((id) => `  ${id}: ${JSON.stringify(L(id))},`).join("\n");

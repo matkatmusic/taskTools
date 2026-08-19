@@ -1,7 +1,9 @@
 // Real mode: the lines FAKE mode never runs, driven by a stub agent that returns real result shapes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
@@ -58,8 +60,24 @@ const finishRunResult = (prompt: string): unknown => ({
     closureNote: null,
 });
 
+const hookPath = join(REPO_ROOT, "scripts/runStepHook.ts");
+
+// The retry counters the hook reads live in tasks.json, so real mode gets a real one on disk.
+const rootWithNoAttempts = (): string => {
+    const root = mkdtempSync(join(tmpdir(), "workflowRealMode-"));
+    const record = {
+        runId: ARGS.runId, startedAt: "2026-08-01T00:00:00-07:00", endedAt: null,
+        exitType: null, exitNote: null, modifiedFiles: [], commits: [],
+        implementationNotesFile: null, taskTests: null, fullSuite: null, attempts: {},
+    };
+    const run = { active: true, worktree: null, leaseRunId: null, history: [record] };
+    writeFileSync(join(root, "tasks.json"), `${JSON.stringify([{ taskNumber: TASK, title: "t", run }], null, 2)}\n`);
+    writeFileSync(join(root, "completedTasks.json"), "[]\n");
+    return root;
+};
+
 // trace comes from log(), not the return value, so an unwired box still leaves its trace behind.
-type RealRun = { trace: string[]; calls: AgentCall[]; error: Error | null };
+type RealRun = { trace: string[]; calls: AgentCall[]; error: Error | null; projectRoot: string };
 
 // No args.fake, so isFake() is false and every result-reading line runs for real.
 const runReal = async (overrides: Record<string, unknown | Responder> = {}): Promise<RealRun> => {
@@ -67,9 +85,21 @@ const runReal = async (overrides: Record<string, unknown | Responder> = {}): Pro
     const trace: string[] = [];
     const visits: Record<string, number> = {};
 
+    const projectRoot = rootWithNoAttempts();
+
     const stubAgent = async (prompt: string, options: { label: string; schema: { required: string[] } }) => {
         const role = options.label.slice(0, options.label.lastIndexOf(":"));
         calls.push({ prompt, label: options.label, schema: options.schema });
+        // A cap decision reads tasks.json, so the real hook answers it.
+        const decide = prompt.match(/^\/run-step .*--decide.*$/m);
+        if (decide !== null) {
+            const answered = spawnSync("node", [hookPath], {
+                input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: decide[0] }),
+                encoding: "utf8",
+            });
+            return JSON.parse(JSON.parse(answered.stdout).hookSpecificOutput.additionalContext);
+        }
+        if (role === "run-step") return { ok: true };
         visits[role] = (visits[role] ?? 0) + 1;
         if (!(role in overrides)) return role === "finish-run" ? finishRunResult(prompt) : HAPPY_RESULTS[role];
         const responder = overrides[role];
@@ -92,10 +122,10 @@ const runReal = async (overrides: Record<string, unknown | Responder> = {}): Pro
     };
 
     try {
-        await compiled(ARGS, log, stubAgent, () => {});
-        return { trace, calls, error: null };
+        await compiled({ ...ARGS, projectRoot }, log, stubAgent, () => {});
+        return { trace, calls, error: null, projectRoot };
     } catch (error) {
-        return { trace, calls, error: error as Error };
+        return { trace, calls, error: error as Error, projectRoot };
     }
 };
 
@@ -121,9 +151,9 @@ test("test_realMode_walksEveryBoxToTheMergeSucceededExit", async () => {
     // Setup: every agent answers happily, so the run walks the whole diagram.
     const run = await runReal();
 
-    // Verification: no box is unwired, and every box is dispatched once, in diagram order.
+    // Verification: no agent box is unwired, and every one is dispatched once, in diagram order.
     assert.equal(run.error, null);
-    assert.deepEqual(run.calls.map((call) => call.label), [
+    assert.deepEqual(run.calls.map((call) => call.label).filter((label) => !label.startsWith("run-step:")), [
         `plan:${TASK}`,
         `review-plan:${TASK}`,
         `implement:${TASK}`,
@@ -136,6 +166,9 @@ test("test_realMode_walksEveryBoxToTheMergeSucceededExit", async () => {
         `merge-worktrees:${TASK}`,
         `finish-run:${TASK}`,
     ]);
+
+    // Verification: the green boxes are dispatched now, rather than only traced.
+    assert.ok(run.calls.some((call) => call.label === `run-step:${TASK}`));
     assert.equal(exitTypeOf(run.trace), "completed");
 });
 
@@ -157,7 +190,8 @@ const REACHABLE_BOXES: { role: string; required: string[] }[] = [
 for (const { role, required } of REACHABLE_BOXES) {
     test(`test_realMode_handsThe_${role.replace(/-/g, "_")}_BoxItsEmitterCommandPayloadLabelAndSchema`, async () => {
         // Setup: one green run, which visits every reachable box once.
-        const call = callFor(await runReal(), role);
+        const run = await runReal();
+        const call = callFor(run, role);
 
         // Verification: the emitter is invoked by path, with the task number and this box's role.
         assert.ok(call.prompt.startsWith(`Run this with Bash:\nnode ${ARGS.agentPromptEmitterPath} ${TASK} ${role} <<'TTPAYLOAD'\n`));
@@ -166,7 +200,7 @@ for (const { role, required } of REACHABLE_BOXES) {
         assert.doesNotMatch(call.prompt, /`/);
         assert.deepEqual(payloadOf(call.prompt), {
             worktree: ARGS.worktree,
-            projectRoot: ARGS.projectRoot,
+            projectRoot: run.projectRoot,
             sourceBranch: ARGS.sourceBranch,
             runId: ARGS.runId,
         });

@@ -25,13 +25,15 @@ import { markTaskInactive } from "../../scripts/tackle-tasks/markTaskInactive.ts
 import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
 import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
 import { isTaskRunResumable } from "../../scripts/tackle-tasks/isTaskRunResumable.ts";
+import { amendEntryWithCodexNotes } from "../../scripts/tackle-tasks/amendEntryWithCodexNotes.ts";
+import { amendEntryWithFailingTests } from "../../scripts/tackle-tasks/amendEntryWithFailingTests.ts";
+import { recordPlanReview } from "../../scripts/tackle-tasks/recordPlanReview.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
 import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
 import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
 import { git, makeCommittedRepo, addSubmodule } from "./support/gitFixtures.ts";
 
-// Every test in this file registers itself here, so the coverage assertion below checks against
-// real test names it can see were actually declared - not a hand-copied list that can go stale.
+// Every test in this file registers itself here, so the coverage assertion below checks against real test names it can see were actually declared - not a hand-copied list that can go stale.
 const registeredCaseNames = new Set<string>();
 function test(name: string, fn: () => void | Promise<void>): void {
     registeredCaseNames.add(name);
@@ -52,8 +54,7 @@ function writeTasksJson(projectRoot: string, tasks: unknown[]): void {
     if (!existsSync(completedTasksPath)) writeFileSync(completedTasksPath, "[]\n");
 }
 
-// Builds a real ended, completed run under `runId` (via the same production functions the
-// workflow uses) and returns the durable `run` state an archived record retains it under.
+// Builds a real ended, completed run under `runId` (via the same production functions the workflow uses) and returns the durable `run` state an archived record retains it under.
 function buildEndedCompletedRun(root: string, taskNumber: number, runId: string, hash: string) {
     writeTasksJson(root, [{ taskNumber, title: "t" }]);
     assert.equal(claimTask(taskNumber, runId, root).status, "claimed");
@@ -88,10 +89,7 @@ test("test_reconcileStep_recognizesACompletedArchiveAfterALostResult", () => {
 });
 
 test("test_reconcileStep_reportsNotCompletedForAnArchivePresentInBothTaskFiles", () => {
-    // Setup: hand-write the task into BOTH tasks.json and completedTasks.json - the
-    // half-finished-archive shape a failure between the two writes would leave. The archived
-    // record retains run-a's own ended, completed run.history entry, so this is provably the
-    // SAME run's durable record, not merely a same-numbered task.
+    // Setup: hand-write the task into BOTH tasks.json and completedTasks.json - the half-finished-archive shape a failure between the two writes would leave. The archived record retains run-a's own ended, completed run.history entry, so this is provably the SAME run's durable record, not merely a same-numbered task.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-both-"));
     const state = buildEndedCompletedRun(root, 1, "run-a", "abc123");
     const { tasksPath, completedTasksPath } = resolveTaskFiles(root);
@@ -109,11 +107,7 @@ test("test_reconcileStep_reportsNotCompletedForAnArchivePresentInBothTaskFiles",
     assert.equal(result.status, "not-completed");
 });
 
-// Before the [a4 4] fix, readStateOrNull() always returned null once a task was archived (it
-// only reads tasks.json), so `expected` was always null, the commit comparison was skipped
-// entirely, and ANY archive with the same task number reported "completed" regardless of which
-// run produced it. This test fails against that old behavior because run-b's archive would be
-// reported completed for run-a.
+// Before the [a4 4] fix, readStateOrNull() always returned null once a task was archived (it only reads tasks.json), so `expected` was always null, the commit comparison was skipped entirely, and ANY archive with the same task number reported "completed" regardless of which run produced it. This test fails against that old behavior because run-b's archive would be reported completed for run-a.
 test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveFromTheWrongRun", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-close-wrongrun-"));
     const state = buildEndedCompletedRun(root, 1, "run-b", "abc123");
@@ -130,9 +124,7 @@ test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveFromTheWrongRun
     assert.equal(result.status, "ambiguous");
 });
 
-// Before the fix, the archive's closureNote was never read at all - only presence/absence and
-// (for completed-only, via a different code path) hashes mattered. This test fails against that
-// old behavior because a mismatched note would still report "completed".
+// Before the fix, the archive's closureNote was never read at all - only presence/absence and (for completed-only, via a different code path) hashes mattered. This test fails against that old behavior because a mismatched note would still report "completed".
 test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveWithTheWrongClosureNote", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-close-wrongnote-"));
     const state = buildEndedCompletedRun(root, 1, "run-a", "abc123");
@@ -149,9 +141,7 @@ test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveWithTheWrongClo
     assert.equal(result.status, "ambiguous");
 });
 
-// Before the fix, `expected` came from readStateOrNull() (always null post-archive) rather than
-// the archive's own retained hashes, so a wrong-hash archive was also reported "completed". This
-// test fails against that old behavior for the same reason.
+// Before the fix, `expected` came from readStateOrNull() (always null post-archive) rather than the archive's own retained hashes, so a wrong-hash archive was also reported "completed". This test fails against that old behavior for the same reason.
 test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveWithTheWrongCommitHashes", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-close-wronghash-"));
     const state = buildEndedCompletedRun(root, 1, "run-a", "abc123");
@@ -168,10 +158,7 @@ test("test_reconcileStep_reportsAmbiguousForACompletedOnlyArchiveWithTheWrongCom
     assert.equal(result.status, "ambiguous");
 });
 
-// Before the fix, the both-files path returned "not-completed" purely from tasks.json/
-// completedTasks.json presence, without ever proving the archive belongs to THIS run. This test
-// fails against that old behavior because a different run's same-numbered archive would still be
-// reported "not-completed" (telling the workflow a safe rerun exists) instead of "ambiguous".
+// Before the fix, the both-files path returned "not-completed" purely from tasks.json/ completedTasks.json presence, without ever proving the archive belongs to THIS run. This test fails against that old behavior because a different run's same-numbered archive would still be reported "not-completed" (telling the workflow a safe rerun exists) instead of "ambiguous".
 test("test_reconcileStep_reportsAmbiguousForABothFilesArchiveFromTheWrongRun", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-both-wrongrun-"));
     const state = buildEndedCompletedRun(root, 1, "run-b", "abc123");
@@ -190,9 +177,7 @@ test("test_reconcileStep_reportsAmbiguousForABothFilesArchiveFromTheWrongRun", (
     assert.equal(result.status, "ambiguous");
 });
 
-// A malformed archive (commitHashes not even an array) must never be treated as proof of
-// anything, regardless of run/note. This fails against the old behavior, which never validated
-// shape for the completed-only path at all.
+// A malformed archive (commitHashes not even an array) must never be treated as proof of anything, regardless of run/note. This fails against the old behavior, which never validated shape for the completed-only path at all.
 test("test_reconcileStep_reportsAmbiguousForAMalformedCompletedOnlyArchive", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-close-malformed-"));
     const state = buildEndedCompletedRun(root, 1, "run-a", "abc123");
@@ -232,9 +217,7 @@ test("test_reconcileStep_recognizesAnAlreadyAppliedAmendment", () => {
 });
 
 test("test_reconcileStep_returnsAStoredTaskTestDecisionWithoutRunningTestsAgain", () => {
-    // Setup: a claimed run with a stored taskTests decision for a known stepId. No worktree
-    // exists at all here, so nothing could have executed a test process during reconciliation -
-    // the decision must come entirely from task.run.
+    // Setup: a claimed run with a stored taskTests decision for a known stepId. No worktree exists at all here, so nothing could have executed a test process during reconciliation - the decision must come entirely from task.run.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-tests-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
     const claimOutcome = claimTask(1, "run-a", root);
@@ -284,9 +267,7 @@ test("test_reconcileStep_recognizesACreatedWorktreeAndAdoptedLease", () => {
 });
 
 test("test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef", () => {
-    // Setup: a real linked worktree with a real submodule occurrence, but no real rebase/merge -
-    // instead the persistence refs a landed merge would have left are set directly with a real
-    // `git update-ref`, in every source occurrence (root and submodule).
+    // Setup: a real linked worktree with a real submodule occurrence, but no real rebase/merge - instead the persistence refs a landed merge would have left are set directly with a real `git update-ref`, in every source occurrence (root and submodule).
     const childOrigin = makeCommittedRepo("reconcileStep-merge-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-merge-root-", "main");
     addSubmodule(root, childOrigin, "child");
@@ -312,8 +293,7 @@ test("test_reconcileStep_recognizesALandedMergeFromItsPersistenceRef", () => {
 });
 
 test("test_reconcileStep_recognizesACompletedCleanup", () => {
-    // Setup: a real linked worktree with a real submodule, cleaned up for real - acquiring the
-    // source lock first, exactly like cleanupTaskWorktree.test.ts does.
+    // Setup: a real linked worktree with a real submodule, cleaned up for real - acquiring the source lock first, exactly like cleanupTaskWorktree.test.ts does.
     const childOrigin = makeCommittedRepo("reconcileStep-cleanup-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-cleanup-root-", "main");
     addSubmodule(root, childOrigin, "child");
@@ -336,9 +316,7 @@ test("test_reconcileStep_recognizesACompletedCleanup", () => {
 });
 
 test("test_reconcileStep_reportsAmbiguousRatherThanGuessing", () => {
-    // Setup: a claimed run whose modifiedFiles record is empty, and whose worktree is gone -
-    // the two facts that alone cannot distinguish "nothing ever changed" from "clean-up erased
-    // the evidence".
+    // Setup: a claimed run whose modifiedFiles record is empty, and whose worktree is gone - the two facts that alone cannot distinguish "nothing ever changed" from "clean-up erased the evidence".
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-ambiguous-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
     const claimOutcome = claimTask(1, "run-a", root);
@@ -354,8 +332,7 @@ test("test_reconcileStep_reportsAmbiguousRatherThanGuessing", () => {
     assert.notEqual(result.note, null);
 });
 
-// F10: `initialized` is reconstructed only from a durable receipt the real box wrote - never
-// guessed from live submodule status. Both reachable booleans are covered.
+// F10: `initialized` is reconstructed only from a durable receipt the real box wrote - never guessed from live submodule status. Both reachable booleans are covered.
 test("test_reconcileStep_reconstructsInitSubmodulesReceiptForBothInitializedStates", () => {
     // Case A: no .gitmodules at all - the real box reports initialized:false unconditionally.
     const noSubmodules = makeCommittedRepo("reconcileStep-init-nosub-");
@@ -392,8 +369,7 @@ test("test_reconcileStep_reconstructsInitSubmodulesReceiptForBothInitializedStat
 });
 
 test("test_reconcileStep_reportsNotCompletedWhenCleanupLeftArtifactsInsideASubmodule", () => {
-    // Setup: a real source repo with a real submodule and a real linked worktree, cleaned up for
-    // real so the ROOT looks finished (no worktree, no root refs, no lease).
+    // Setup: a real source repo with a real submodule and a real linked worktree, cleaned up for real so the ROOT looks finished (no worktree, no root refs, no lease).
     const childOrigin = makeCommittedRepo("reconcileStep-cleanup-leak-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-cleanup-leak-root-", "main");
     addSubmodule(root, childOrigin, "child");
@@ -404,8 +380,7 @@ test("test_reconcileStep_reportsNotCompletedWhenCleanupLeftArtifactsInsideASubmo
     const realOutput = cleanupTaskWorktree({ projectRoot: root, worktreePath, taskNumber: groupId, runId: "run-a" });
     assert.equal(realOutput.removed, true);
 
-    // Plant a persistence ref directly in the SUBMODULE's own source checkout - the layer a
-    // handler that only inspects input.projectRoot (the root) can never see.
+    // Plant a persistence ref directly in the SUBMODULE's own source checkout - the layer a handler that only inspects input.projectRoot (the root) can never see.
     const branch = taskBranchName(groupId);
     git(join(root, "child"), "update-ref", `refs/taskTools/merge-intents/${branch}`, git(join(root, "child"), "rev-parse", "HEAD"));
 
@@ -430,8 +405,7 @@ test("test_reconcileStep_recognizesACompletedCommitWhenOneLayerHadNothingToCommi
     assert.equal(claimOutcome.status, "claimed");
     const created = createTaskWorktree(1, "run-a", root);
 
-    // Dirty ONLY the root layer. The submodule stays clean, so the real commitTaskWork skips it
-    // and appends no record entry for it - a legitimate, fewer-entries-than-occurrences result.
+    // Dirty ONLY the root layer. The submodule stays clean, so the real commitTaskWork skips it and appends no record entry for it - a legitimate, fewer-entries-than-occurrences result.
     writeFileSync(join(created.worktree, "root-only.txt"), "root change\n");
     const commitOutput = commitTaskWork({
         projectRoot: root, worktreePath: created.worktree, taskNumber: 1, runId: "run-a",
@@ -452,8 +426,7 @@ test("test_reconcileStep_recognizesACompletedCommitWhenOneLayerHadNothingToCommi
     assert.equal(commits.length, 1);
     assert.equal(commits[0].occurrenceId, "");
 
-    // Verification: the genuine incomplete case still reports not-completed - dirty a layer and
-    // reconcile without committing.
+    // Verification: the genuine incomplete case still reports not-completed - dirty a layer and reconcile without committing.
     writeFileSync(join(created.worktree, "root-only-2.txt"), "another root change\n");
     const incomplete = reconcileStep(baseInput({
         script: "commitTaskWork", taskNumber: 1, runId: "run-a", projectRoot: root,
@@ -462,10 +435,7 @@ test("test_reconcileStep_recognizesACompletedCommitWhenOneLayerHadNothingToCommi
     assert.equal(incomplete.status, "not-completed");
 });
 
-// Before the fix, a recorded commit with no stepId at all (the legacy shape a commit made
-// before F2 fencing existed would have) matched ANY requested step. This test fails against
-// that old behavior: it would report "completed" for stepId "step-current" even though no
-// commit in the record actually carries it.
+// Before the fix, a recorded commit with no stepId at all (the legacy shape a commit made before F2 fencing existed would have) matched ANY requested step. This test fails against that old behavior: it would report "completed" for stepId "step-current" even though no commit in the record actually carries it.
 test("test_reconcileStep_doesNotCompleteAStepFromACommitRecordedWithNoStepId", () => {
     const root = makeCommittedRepo("reconcileStep-commit-nostepid-", "main");
     writeTasksJson(root, [{ taskNumber: 1, title: "t", files: [] }]);
@@ -485,8 +455,7 @@ test("test_reconcileStep_doesNotCompleteAStepFromACommitRecordedWithNoStepId", (
 });
 
 test("test_reconcileStep_refusesToReconcileAReadOnlyBox", () => {
-    // Setup: a read-only box has nothing for reconciliation to reconstruct - asking for one is a
-    // workflow bug, not a verdict.
+    // Setup: a read-only box has nothing for reconciliation to reconstruct - asking for one is a workflow bug, not a verdict.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-readonly-"));
 
     assert.throws(() => reconcileStep(baseInput({
@@ -494,16 +463,9 @@ test("test_reconcileStep_refusesToReconcileAReadOnlyBox", () => {
     })));
 });
 
-// F1: the read-only classifier must not guess "not-completed" (safe to blindly rerun) when a
-// retained creation journal disagrees with the live physical lease - a rerun of createTaskWorktree
-// would refuse in that case, so blindly retrying is not actually safe.
+// F1: the read-only classifier must not guess "not-completed" (safe to blindly rerun) when a retained creation journal disagrees with the live physical lease - a rerun of createTaskWorktree would refuse in that case, so blindly retrying is not actually safe.
 test("test_reconcileStep_reportsAmbiguousWhenACreateJournalNamesAnOwnerTheLeaseNoLongerMatches", () => {
-    // Setup: a real, completed creation under run-a, then a journal is hand-written back (a
-    // retained journal from an earlier attempt), and the physical lease is separately overwritten
-    // to name a live third run. Before the fix, reconcileCreateTaskWorktree never looked at the
-    // journal at all: it would see task state still says leaseRunId "run-a" (untouched) and the
-    // worktree is still structurally fine, and would incorrectly report "not-completed" - telling
-    // the workflow a blind rerun is safe when it is not.
+    // Setup: a real, completed creation under run-a, then a journal is hand-written back (a retained journal from an earlier attempt), and the physical lease is separately overwritten to name a live third run. Before the fix, reconcileCreateTaskWorktree never looked at the journal at all: it would see task state still says leaseRunId "run-a" (untouched) and the worktree is still structurally fine, and would incorrectly report "not-completed" - telling the workflow a blind rerun is safe when it is not.
     const childOrigin = makeCommittedRepo("reconcileStep-journal-conflict-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-journal-conflict-root-", "main");
     addSubmodule(root, childOrigin, "vendor");
@@ -528,14 +490,9 @@ test("test_reconcileStep_reportsAmbiguousWhenACreateJournalNamesAnOwnerTheLeaseN
     assert.ok(existsSync(journalPath));
 });
 
-// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the classifier never
-// compared the retained journal's runId with the requested runId, so a reconcile call for run B
-// could report a completed journal owned by run A as "completed" for run B. Before the fix this
-// test's assert.equal(status, "ambiguous") would fail: it would report "completed" and hand back
-// run-a's worktree/branch to a reconciliation call made on behalf of run-b.
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the classifier never compared the retained journal's runId with the requested runId, so a reconcile call for run B could report a completed journal owned by run A as "completed" for run B. Before the fix this test's assert.equal(status, "ambiguous") would fail: it would report "completed" and hand back run-a's worktree/branch to a reconciliation call made on behalf of run-b.
 test("test_reconcileStep_reportsAmbiguousRatherThanCompletingAnotherRunsRetainedCreateJournal", () => {
-    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written
-    // back to simulate death right before its own unlink - a completed retained journal for run-a.
+    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written back to simulate death right before its own unlink - a completed retained journal for run-a.
     const childOrigin = makeCommittedRepo("reconcileStep-journal-otherrun-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-journal-otherrun-root-", "main");
     addSubmodule(root, childOrigin, "vendor");
@@ -553,8 +510,7 @@ test("test_reconcileStep_reportsAmbiguousRatherThanCompletingAnotherRunsRetained
         script: "createTaskWorktree", taskNumber: 1, runId: "run-b", projectRoot: root,
     }));
 
-    // Verification: run-a's completed journal is not handed to run-b as its own completion, and
-    // nothing is destroyed by the read-only classification.
+    // Verification: run-a's completed journal is not handed to run-b as its own completion, and nothing is destroyed by the read-only classification.
     assert.equal(result.status, "ambiguous");
     assert.ok(existsSync(created.worktree));
     assert.ok(existsSync(journalPath));
@@ -562,13 +518,9 @@ test("test_reconcileStep_reportsAmbiguousRatherThanCompletingAnotherRunsRetained
     assert.equal(journal.runId, "run-a");
 });
 
-// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching the
-// journal was accepted as proof of a finished creation without also requiring the physical lease
-// to name that run. Before the fix this test's assert.equal(status, "ambiguous") would fail: it
-// would report "completed" from task state alone even though no physical lease exists.
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching the journal was accepted as proof of a finished creation without also requiring the physical lease to name that run. Before the fix this test's assert.equal(status, "ambiguous") would fail: it would report "completed" from task state alone even though no physical lease exists.
 test("test_reconcileStep_reportsAmbiguousWhenTaskStateMatchesTheCreateJournalButThePhysicalLeaseIsMissing", () => {
-    // Setup: a real worktree/branch exist and task state is recorded to match the journal, but
-    // the physical lease file is then removed - task state claims a lease that does not exist.
+    // Setup: a real worktree/branch exist and task state is recorded to match the journal, but the physical lease file is then removed - task state claims a lease that does not exist.
     const childOrigin = makeCommittedRepo("reconcileStep-journal-nolease-child-", "child-main");
     const root = makeCommittedRepo("reconcileStep-journal-nolease-root-", "main");
     addSubmodule(root, childOrigin, "vendor");
@@ -595,9 +547,7 @@ test("test_reconcileStep_reportsAmbiguousWhenTaskStateMatchesTheCreateJournalBut
     assert.ok(existsSync(journalPath));
 });
 
-// F5: one real worktree/notes fixture per shape, reconciled by both isTaskRunResumable's and
-// recordImplementationNotes's handlers, proving they classify every fixture consistently with
-// the shared containment predicate the real production scripts use.
+// F5: one real worktree/notes fixture per shape, reconciled by both isTaskRunResumable's and recordImplementationNotes's handlers, proving they classify every fixture consistently with the shared containment predicate the real production scripts use.
 function endedRunRecord(runId: string, implementationNotesFile: string | null): unknown {
     return {
         runId, startedAt: "2026-08-01T00:00:00-07:00", endedAt: "2026-08-01T00:05:00-07:00",
@@ -613,9 +563,7 @@ function activeRunRecord(runId: string, implementationNotesFile: string | null):
     };
 }
 
-// The active run (run-new) already carries notesValue as its OWN implementationNotesFile too, so
-// the same fixture doubles for reconcileRecordImplementationNotes (which reads the exact-runId
-// record) as well as reconcileIsTaskRunResumable (which reads the newest ENDED run's record).
+// The active run (run-new) already carries notesValue as its OWN implementationNotesFile too, so the same fixture doubles for reconcileRecordImplementationNotes (which reads the exact-runId record) as well as reconcileIsTaskRunResumable (which reads the newest ENDED run's record).
 function buildNotesReconciliationFixture(worktreePath: string, notesValue: string): string {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-notes-"));
     writeTasksJson(root, [{
@@ -678,10 +626,7 @@ test("test_reconcileStep_rejectsADotDotEscapeConsistentlyForBothHandlers", () =>
 });
 
 test("test_reconcileStep_rejectsAnAbsoluteOutsidePathConsistentlyForBothHandlers", () => {
-    // Setup: the recorded path is absolute and points entirely outside the worktree. Before the
-    // fix, reconcileRecordImplementationNotes only string-compared the stored path against
-    // intended and never checked containment at all, so it reported completed regardless of
-    // where the path actually pointed.
+    // Setup: the recorded path is absolute and points entirely outside the worktree. Before the fix, reconcileRecordImplementationNotes only string-compared the stored path against intended and never checked containment at all, so it reported completed regardless of where the path actually pointed.
     const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-notes-wt-"));
     const outsideDir = mkdtempSync(join(tmpdir(), "reconcileStep-notes-outside-"));
     const outsideFile = join(outsideDir, "notes.md");
@@ -756,10 +701,7 @@ test("test_reconcileStep_rejectsADirectoryConsistentlyForBothHandlers", () => {
 });
 
 test("test_reconcileStep_rejectsANotesFileDeletedAfterTheMutationConsistentlyForBothHandlers", () => {
-    // Setup: the run record names a notes file that is now gone from disk - simulating a
-    // successful mutation whose file was deleted afterward. Before the fix,
-    // reconcileRecordImplementationNotes only compared the stored string against intended and
-    // never checked the file still existed, so it reported completed on the stale record alone.
+    // Setup: the run record names a notes file that is now gone from disk - simulating a successful mutation whose file was deleted afterward. Before the fix, reconcileRecordImplementationNotes only compared the stored string against intended and never checked the file still existed, so it reported completed on the stale record alone.
     const worktreePath = mkdtempSync(join(tmpdir(), "reconcileStep-notes-wt-"));
     writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "run-new", pid: 1, createdAt: 1 }));
     const root = buildNotesReconciliationFixture(worktreePath, "plans/notes.md");
@@ -778,9 +720,7 @@ test("test_reconcileStep_rejectsANotesFileDeletedAfterTheMutationConsistentlyFor
     assert.equal(recorded.status, "ambiguous");
 });
 
-// [Finding 10] Real, per-row fault-injection cases: run the actual mutating script, discard its
-// returned value, reconcile, and compare the reconstructed result/status against the script's own
-// declared Output type field-for-field.
+// [Finding 10] Real, per-row fault-injection cases: run the actual mutating script, discard its returned value, reconcile, and compare the reconstructed result/status against the script's own declared Output type field-for-field.
 
 test("test_reconcileStep_recognizesAnActiveClaimAfterALostResult", () => {
     // Setup: a real claim, via the actual isTaskActive script.
@@ -1103,8 +1043,7 @@ test("test_reconcileStep_recognizesAHoldNotOwnedByThisRunIsNotOursToRelease", ()
     assert.deepEqual(result.result, realOutput);
 });
 
-// F10: no receipt for this stepId - the box never reached its durable write, so reconciliation
-// reports not-completed (a rerun is safe/idempotent) rather than inventing an unknown value.
+// F10: no receipt for this stepId - the box never reached its durable write, so reconciliation reports not-completed (a rerun is safe/idempotent) rather than inventing an unknown value.
 test("test_reconcileStep_reportsNotCompletedForReleaseHoldsWithNoReceipt", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-release-noreceipt-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
@@ -1167,9 +1106,7 @@ test("test_reconcileStep_recognizesWrittenExitNotesAfterALostResult", () => {
     assert.deepEqual(result.result, realOutput);
 });
 
-// Finding 1 (phase10-audit.md): the box now establishes lease ownership BEFORE deciding
-// resumability, so a lost result must be reconciled the same way even when there are no notes to
-// resume from — that "safe, no notes" path is exactly what the finding says used to strand ownership.
+// Finding 1 (phase10-audit.md): the box now establishes lease ownership BEFORE deciding resumability, so a lost result must be reconciled the same way even when there are no notes to resume from — that "safe, no notes" path is exactly what the finding says used to strand ownership.
 test("test_reconcileStep_recognizesAnEstablishedLeaseAfterALostResultWithNoNotes", () => {
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-lease-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
@@ -1198,8 +1135,7 @@ test("test_reconcileStep_recognizesAnEstablishedLeaseAfterALostResultWithNoNotes
 });
 
 test("test_reconcileStep_reportsNotCompletedWhenTheLeaseIsNotYetEstablished", () => {
-    // Setup: the box never ran (or ran and failed to establish ownership) - the physical lease
-    // still names a run other than the one being reconciled for.
+    // Setup: the box never ran (or ran and failed to establish ownership) - the physical lease still names a run other than the one being reconciled for.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-resumable-noLease-"));
     writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
     assert.equal(claimTask(1, "run-old", root).status, "claimed");
@@ -1231,9 +1167,7 @@ test("test_reconcileStep_reportsNotCompletedWhenExitNotesPlainlyWereNotWritten",
     assert.equal(result.status, "not-completed");
 });
 
-// Every mutating workflow script mapped to the name(s) of its real fault-injection case(s) above.
-// A script with no entry, or an entry naming a test that was never actually declared with `test(...)`
-// in this file, fails test_reconcileStep_hasANamedFaultInjectionCaseForEveryMutatingRow below.
+// Every mutating workflow script mapped to the name(s) of its real fault-injection case(s) above.  A script with no entry, or an entry naming a test that was never actually declared with `test(...)` in this file, fails test_reconcileStep_hasANamedFaultInjectionCaseForEveryMutatingRow below.
 test("test_reconcileStep_recognizesAFinishedRunAfterALostResult", () => {
     // Setup: the tail already wrote an exit type and ended the run, then its result was lost.
     const root = mkdtempSync(join(tmpdir(), "reconcileStep-finish-"));
@@ -1311,8 +1245,138 @@ test("test_reconcileStep_reportsNotCompletedWhenTheEntryHoldsADifferentClarifyRe
     assert.equal(output.status, "not-completed");
 });
 
+test("test_reconcileStep_recognizesAmendedCodexNotesAfterALostResult", () => {
+    // Setup: a real tasks.json entry and a real flagged test review.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-amendcodex-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    const review = {
+        outcome: "OK" as const, missingFiles: [], message: "", testsThatHoldUp: [],
+        issues: [{ testFile: "a.test.ts", testName: "does x", evidence: "e", problem: "p", fix: "f" }],
+    };
+
+    // Test action: amend for real, then discard the returned value.
+    const realOutput = amendEntryWithCodexNotes({ projectRoot: root, taskNumber: 1, review });
+
+    const result = reconcileStep(baseInput({
+        script: "amendEntryWithCodexNotes", taskNumber: 1, projectRoot: root,
+        stepInput: { review },
+    }));
+
+    // Verification: the reconstructed result matches AmendEntryOutput field-for-field.
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.result, realOutput);
+
+    // Verification: an entry holding different notes reports not-completed.
+    writeTasksJson(root, [{ taskNumber: 1, title: "t", codexReviewNotes: "stale notes" }]);
+    const stale = reconcileStep(baseInput({
+        script: "amendEntryWithCodexNotes", taskNumber: 1, projectRoot: root,
+        stepInput: { review },
+    }));
+    assert.equal(stale.status, "not-completed");
+});
+
+test("test_reconcileStep_recognizesAmendedFailingTestsNotesAfterALostResult", () => {
+    // Setup: a claimed run with a stored red taskTests decision.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-amendfailing-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    assert.equal(claimTask(1, "run-a", root).status, "claimed");
+    updateCurrentTaskRun(1, "run-a", {
+        taskTests: {
+            stepId: "tests-step-1", testFiles: ["a.test.ts"], createdTestFiles: [], deletedTestFiles: [],
+            missingTests: false, passed: false, output: "1 failing", checkedAt: "2026-08-01T00:00:00-07:00",
+        },
+    }, root);
+
+    // Test action: amend for real, then discard the returned value.
+    const realOutput = amendEntryWithFailingTests({ projectRoot: root, taskNumber: 1 });
+
+    const result = reconcileStep(baseInput({
+        script: "amendEntryWithFailingTests", taskNumber: 1, runId: "run-a", projectRoot: root,
+    }));
+
+    // Verification: the reconstructed result matches AmendEntryOutput field-for-field.
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.result, realOutput);
+
+    // Verification: an entry holding different notes reports not-completed - run state stays preserved.
+    const { tasksPath } = resolveTaskFiles(root);
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    tasks[0].codexReviewNotes = "stale notes";
+    writeFileSync(tasksPath, `${JSON.stringify(tasks, null, 2)}\n`);
+    const stale = reconcileStep(baseInput({
+        script: "amendEntryWithFailingTests", taskNumber: 1, runId: "run-a", projectRoot: root,
+    }));
+    assert.equal(stale.status, "not-completed");
+});
+
+test("test_reconcileStep_recognizesRecordedPlanReviewFixesAfterALostResult", () => {
+    // Setup: a real plan file with a real section a single-fix review targets.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-planreview-fix-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    const planFilePath = join(root, "plan.json");
+    writeFileSync(planFilePath, JSON.stringify({ revision: 1, sections: [{ id: "s1", title: "Section 1" }] }));
+    const review = {
+        outcome: "OK" as const, missingFiles: [], message: "", issues: [], sectionsThatHoldUp: [],
+        fixes: [{ sectionId: "s1", fix: "do the thing", durableBecause: "because reasons" }],
+    };
+
+    // Test action: record for real, then discard the returned value.
+    const realOutput = recordPlanReview({ projectRoot: root, planFilePath, taskNumber: 1, review });
+
+    const result = reconcileStep(baseInput({
+        script: "recordPlanReview", taskNumber: 1, projectRoot: root,
+        stepInput: { planFilePath, review },
+    }));
+
+    // Verification: the reconstructed result matches RecordPlanReviewOutput field-for-field.
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.result, realOutput);
+
+    // Verification: an ERROR-outcome review writes nothing, so a rerun is always safe.
+    const errorReview = {
+        outcome: "ERROR" as const, missingFiles: ["plan.md"], message: "no plan found",
+        issues: [], fixes: [], sectionsThatHoldUp: [],
+    };
+    const errored = reconcileStep(baseInput({
+        script: "recordPlanReview", taskNumber: 1, projectRoot: root,
+        stepInput: { planFilePath, review: errorReview },
+    }));
+    assert.equal(errored.status, "not-completed");
+});
+
+test("test_reconcileStep_recognizesRecordedPlanReviewNotesAfterALostResult", () => {
+    // Setup: a real plan file and a review with enough fixes to require a re-review.
+    const root = mkdtempSync(join(tmpdir(), "reconcileStep-planreview-notes-"));
+    writeTasksJson(root, [{ taskNumber: 1, title: "t" }]);
+    const planFilePath = join(root, "plan.json");
+    writeFileSync(planFilePath, JSON.stringify({
+        revision: 1, sections: [{ id: "s1", title: "Section 1" }, { id: "s2", title: "Section 2" }],
+    }));
+    const review = {
+        outcome: "OK" as const, missingFiles: [], message: "", issues: [], sectionsThatHoldUp: [],
+        fixes: [
+            { sectionId: "s1", fix: "fix one", durableBecause: "reason one" },
+            { sectionId: "s2", fix: "fix two", durableBecause: "reason two" },
+        ],
+    };
+
+    // Test action: record for real, then discard the returned value.
+    const realOutput = recordPlanReview({ projectRoot: root, planFilePath, taskNumber: 1, review });
+
+    const result = reconcileStep(baseInput({
+        script: "recordPlanReview", taskNumber: 1, projectRoot: root,
+        stepInput: { planFilePath, review },
+    }));
+
+    // Verification: the reconstructed result matches RecordPlanReviewOutput field-for-field.
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.result, realOutput);
+});
+
 const FAULT_INJECTION_CASES: Record<string, string[]> = {
     advanceTaskRebase: ["test_reconcileStep_recognizesAFinishedAdvanceAfterALostResult"],
+    amendEntryWithCodexNotes: ["test_reconcileStep_recognizesAmendedCodexNotesAfterALostResult"],
+    amendEntryWithFailingTests: ["test_reconcileStep_recognizesAmendedFailingTestsNotesAfterALostResult"],
     applyPlanAmendments: ["test_reconcileStep_recognizesAnAlreadyAppliedAmendment"],
     isTaskActive: ["test_reconcileStep_recognizesAnActiveClaimAfterALostResult"],
     cleanupTaskWorktree: ["test_reconcileStep_recognizesACompletedCleanup"],
@@ -1343,6 +1407,10 @@ const FAULT_INJECTION_CASES: Record<string, string[]> = {
     rebaseTaskWorktree: ["test_reconcileStep_recognizesAFinishedRebaseAfterALostResult"],
     recordImplementationNotes: ["test_reconcileStep_classifiesAValidRelativeNotesFileAsContainedForBothHandlers"],
     recordMergeCommits: ["test_reconcileStep_recognizesRecordedMergeCommitsAfterALostResult"],
+    recordPlanReview: [
+        "test_reconcileStep_recognizesRecordedPlanReviewFixesAfterALostResult",
+        "test_reconcileStep_recognizesRecordedPlanReviewNotesAfterALostResult",
+    ],
     recordTaskModifiedFiles: ["test_reconcileStep_recognizesRecordedModifiedFilesAfterALostResult"],
     releaseTaskRunHolds: ["test_reconcileStep_recognizesReleasedHoldsAfterALostResult"],
     resetTaskWorktree: ["test_reconcileStep_recognizesAResetWorktreeAfterALostResult"],

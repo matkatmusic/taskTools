@@ -66,3 +66,58 @@ test("test_greenBoxPolicy_classifiesEveryReadOnlyBoxFromTheDiagram", () => {
         assert.equal(getGreenBoxCategory(scriptName), "read-only", scriptName);
     }
 });
+
+test("test_greenBoxPolicy_classifiesEveryScriptRunStepHookDispatchesAsMutating", () => {
+    // Setup: these scripts write tasks.json or plan.json when the hook dispatches their box.
+    const dispatchedMutatingScripts = ["amendEntryWithCodexNotes", "amendEntryWithFailingTests", "recordPlanReview"];
+    for (const scriptName of dispatchedMutatingScripts) {
+        // Test action: look up the category the hook's dispatch needs to see.
+        const category = getGreenBoxCategory(scriptName);
+        // Verification: each script is classified as mutating.
+        assert.equal(category, "mutating", scriptName);
+    }
+});
+
+test("test_greenBoxPolicy_classifiesReadPublicationStateAsReadOnly", () => {
+    // Setup: readPublicationState only reads merge refs, per its own file comment.
+    const category = getGreenBoxCategory("readPublicationState");
+    // Verification: it is classified as read-only.
+    assert.equal(category, "read-only");
+});
+
+test("test_greenBoxPolicy_removesRunStepHookDispatchedScriptsFromNonDispatchedList", () => {
+    // Setup: these four scripts are imported and called by runStepHook.ts's STEP_TABLE.
+    const dispatchedScripts = [
+        "amendEntryWithCodexNotes", "amendEntryWithFailingTests", "readPublicationState", "recordPlanReview",
+    ];
+    for (const scriptName of dispatchedScripts) {
+        // Test action: check whether the script is still marked as never dispatched.
+        const stillNonDispatched = NON_DISPATCHED_SCRIPTS.includes(scriptName);
+        // Verification: a dispatched script is not in NON_DISPATCHED_SCRIPTS.
+        assert.equal(stillNonDispatched, false, scriptName);
+    }
+});
+
+test("test_greenBoxPolicy_keepsScriptsRunStepHookDoesNotDispatchInNonDispatchedList", () => {
+    // Setup: sourceRepoLock is a dependency of lockSourceRepo.ts, not the hook's own import.
+    const stillNonDispatchedScripts = ["sourceRepoLock", "decideTestReview"];
+    for (const scriptName of stillNonDispatchedScripts) {
+        // Test action: check the script is still marked as never dispatched.
+        const stillNonDispatched = NON_DISPATCHED_SCRIPTS.includes(scriptName);
+        // Verification: it remains in NON_DISPATCHED_SCRIPTS, and lookup still throws for it.
+        assert.equal(stillNonDispatched, true, scriptName);
+        assert.throws(() => getGreenBoxCategory(scriptName));
+    }
+});
+
+test("test_greenBoxPolicy_keepsPolicyAndNonDispatchedListDisjoint", () => {
+    // Setup: the moved names must not appear in both places at once.
+    const movedScripts = ["amendEntryWithCodexNotes", "amendEntryWithFailingTests", "readPublicationState", "recordPlanReview"];
+    for (const scriptName of movedScripts) {
+        // Test action: check the script is a policy key.
+        const isPolicyKey = scriptName in GREEN_BOX_POLICY;
+        // Verification: a policy key is never also listed as non-dispatched.
+        assert.equal(isPolicyKey, true, scriptName);
+        assert.equal(NON_DISPATCHED_SCRIPTS.includes(scriptName), false, scriptName);
+    }
+});

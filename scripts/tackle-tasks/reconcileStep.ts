@@ -1,26 +1,22 @@
-// Diagram rule 11: a mutating box whose result is lost is never blindly retried and never assumed
-// failed. This module reads the world and decides whether the step already happened.
-// plans/tackle-tasks-v1_5-plan.md Phase 8.
-//
-// Every check here is read-only, which is what makes reconciliation itself retryable. A "completed"
-// verdict reconstructs the lost box's stdout in `result` so the workflow takes the correct edge
-// without rerunning the mutation. "not-completed" is returned only where rerunning the step is
-// idempotent from the observed state. "ambiguous" is the only path to run-failed.
+// Diagram rule 11: a mutating box whose result is lost is never blindly retried and never assumed failed. This module reads the world and decides whether the step already happened.  plans/tackle-tasks-v1_5-plan.md Phase 8.  Every check here is read-only, which is what makes reconciliation itself retryable. A "completed" verdict reconstructs the lost box's stdout in `result` so the workflow takes the correct edge without rerunning the mutation. "not-completed" is returned only where rerunning the step is idempotent from the observed state. "ambiguous" is the only path to run-failed.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { validateArchivedRun, type ArchivedTaskRecord } from "../closeTasks.ts";
 import { collectRetainedTaskArtifacts, findRecordedMergedCommit } from "../mergeTaskWorktrees.ts";
+import { efficacyPercentage, Ruling, rulingByFixCount, rulingByPercentage } from "../planReviewRuling.ts";
 import {
     loadRepositoryManifest, readTaskWorktreeLeaseOwner, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath,
 } from "../prepareTasks.ts";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { checkTaskWorktreeSafe } from "./checkTaskWorktreeSafe.ts";
 import { taskBranchName, taskWorktreeCreateJournalPath, type TaskWorktreeCreateJournal } from "./createTaskWorktree.ts";
+import { decideTestReview, type TestReview } from "./decideTestReview.ts";
 import { getGreenBoxCategory } from "./greenBoxPolicy.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { isNotesFileContained } from "./isTaskRunResumable.ts";
 import { buildOccurrencePath, buildWorktreeOccurrences, getOccurrencesDeepestFirst } from "./occurrences.ts";
+import { type PlanReview, type PlanReviewFix } from "./recordPlanReview.ts";
 import { buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "./taskRunState.ts";
 import { GENERATED_ARTIFACT_PATTERNS, generateTaskBriefContents } from "./writeTaskBrief.ts";
@@ -33,8 +29,7 @@ export type ReconcileStepOutput = {
     note: string | null;
 };
 
-// `stepInput` is the exact stdin object the lost box received. Two handlers need one extra
-// observation the workflow made before the call: applyPlanAmendments needs `revisionBefore`.
+// `stepInput` is the exact stdin object the lost box received. Two handlers need one extra observation the workflow made before the call: applyPlanAmendments needs `revisionBefore`.
 export type ReconcileStepInput = {
     script: string;
     stepId: string;
@@ -101,8 +96,7 @@ function readString(stepInput: Record<string, unknown>, field: string): string |
     return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-// The handlers. One per row of the Phase 8 reconciliation table; every mutating workflow script
-// in greenBoxPolicy has an entry here, which test_greenBoxPolicy_hasAReconciliationHandlerFor... asserts.
+// The handlers. One per row of the Phase 8 reconciliation table; every mutating workflow script in greenBoxPolicy has an entry here, which test_greenBoxPolicy_hasAReconciliationHandlerFor... asserts.
 type Handler = (input: ReconcileStepInput) => ReconcileStepOutput;
 
 function reconcileIsTaskActive(input: ReconcileStepInput): ReconcileStepOutput {
@@ -115,18 +109,7 @@ function reconcileIsTaskActive(input: ReconcileStepInput): ReconcileStepOutput {
     return notCompleted(`task ${input.taskNumber} is not active under ${input.runId}`);
 }
 
-// F1: a retained journal is the durable intent record from a call that died before it could
-// finish or roll back itself. Deleting it (or removing the worktree/branch it owns) is a
-// mutation, so this stays read-only: it only classifies whether a rerun of createTaskWorktree -
-// which self-heals a retained journal it finds - is now proved safe. Never inferred from the
-// conventional path alone: a journal must name this task/path/branch, and a physical lease
-// naming a third run (neither the journal's run nor absent) makes rerunning unsafe (the real
-// function would throw), so that is ambiguous, not not-completed. A journal naming a run other
-// than the one this reconciliation call is for is equally unsafe to rerun for THIS run (the real
-// function now refuses it too) - never adopted as this run's completion, never treated as safe to
-// roll back either. Completion requires BOTH task state and the physical lease to name the
-// journal's run; task state matching with no physical lease is an unproven inconsistency, not
-// proof of a safe rerun.
+// F1: a retained journal is the durable intent record from a call that died before it could finish or roll back itself. Deleting it (or removing the worktree/branch it owns) is a mutation, so this stays read-only: it only classifies whether a rerun of createTaskWorktree - which self-heals a retained journal it finds - is now proved safe. Never inferred from the conventional path alone: a journal must name this task/path/branch, and a physical lease naming a third run (neither the journal's run nor absent) makes rerunning unsafe (the real function would throw), so that is ambiguous, not not-completed. A journal naming a run other than the one this reconciliation call is for is equally unsafe to rerun for THIS run (the real function now refuses it too) - never adopted as this run's completion, never treated as safe to roll back either. Completion requires BOTH task state and the physical lease to name the journal's run; task state matching with no physical lease is an unproven inconsistency, not proof of a safe rerun.
 function classifyRetainedCreateJournal(
     taskNumber: number, runId: string, branch: string, expectedWorktreePath: string, journalPath: string, state: TaskRunState,
 ): ReconcileStepOutput | null {
@@ -184,16 +167,11 @@ function reconcileCreateTaskWorktree(input: ReconcileStepInput): ReconcileStepOu
     return completed({ worktree: worktreePath, branch });
 }
 
-// Finding 1 (phase10-audit.md): the real box now establishes lease ownership first, independent
-// of the notes verdict, so reconciliation must prove ownership first too. Ownership is proved
-// the same way every other handler here proves it: both lease records name this run. Without
-// that, we cannot tell "the box never ran" from "the box ran but a rival run holds the lease" -
-// both leave the lease unproved, so both stay not-completed, never guessed at.
+// Finding 1 (phase10-audit.md): the real box now establishes lease ownership first, independent of the notes verdict, so reconciliation must prove ownership first too. Ownership is proved the same way every other handler here proves it: both lease records name this run. Without that, we cannot tell "the box never ran" from "the box ran but a rival run holds the lease" - both leave the lease unproved, so both stay not-completed, never guessed at.
 function reconcileIsTaskRunResumable(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     if (state === null) return ambiguous("the task is not in tasks.json, so prior notes cannot be read");
-    // F5: the original worktree path, not an inferred one - the mutation's containment contract
-    // is only recomputed correctly against the exact path the lost box was given.
+    // F5: the original worktree path, not an inferred one - the mutation's containment contract is only recomputed correctly against the exact path the lost box was given.
     const worktreePath = readString(input.stepInput, "worktreePath");
     if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
     if (state.leaseRunId !== input.runId || !physicalLeaseNames(worktreePath, input.runId)) {
@@ -201,9 +179,7 @@ function reconcileIsTaskRunResumable(input: ReconcileStepInput): ReconcileStepOu
     }
     const endedRuns = state.history.filter((run) => run.endedAt !== null);
     const notesFile = endedRuns[endedRuns.length - 1]?.implementationNotesFile ?? null;
-    // A false verdict writes nothing beyond the lease already proved above, so recomputing it is
-    // the rest of the reconciliation. The shared predicate rejects a "../" escape, an
-    // absolute-outside path, a symlink escape and a directory the same way the real box does.
+    // A false verdict writes nothing beyond the lease already proved above, so recomputing it is the rest of the reconciliation. The shared predicate rejects a "../" escape, an absolute-outside path, a symlink escape and a directory the same way the real box does.
     if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
         return completed({ resumable: false, implementationNotesFile: null, leaseEstablished: true });
     }
@@ -246,9 +222,7 @@ function reconcileTaskDocs(input: ReconcileStepInput): ReconcileStepOutput {
     return completed({ briefFile });
 }
 
-// F10: `initialized` is not derivable from live state alone — a fully-populated worktree is
-// indistinguishable between "this call populated them" and "they already were". The real box
-// persists its exact answer before stdout; reconciliation only ever replays that receipt.
+// F10: `initialized` is not derivable from live state alone — a fully-populated worktree is indistinguishable between "this call populated them" and "they already were". The real box persists its exact answer before stdout; reconciliation only ever replays that receipt.
 function reconcileInitTaskSubmodules(input: ReconcileStepInput): ReconcileStepOutput {
     const worktreePath = readString(input.stepInput, "worktreePath");
     if (worktreePath === null) return ambiguous("the step input carried no worktreePath");
@@ -257,8 +231,7 @@ function reconcileInitTaskSubmodules(input: ReconcileStepInput): ReconcileStepOu
     if (record === null) return ambiguous(`no run record for ${input.runId}`);
     const receipt = record.stepResults?.find((entry) => entry.stepId === input.stepId && entry.script === "initTaskSubmodules");
     if (receipt !== undefined) return completed(receipt.result as Record<string, unknown>);
-    // No receipt: the box never reached its durable write. initTaskSubmodules only ever
-    // initializes uninitialized submodules, a naturally idempotent operation, so a rerun is safe.
+    // No receipt: the box never reached its durable write. initTaskSubmodules only ever initializes uninitialized submodules, a naturally idempotent operation, so a rerun is safe.
     return notCompleted(`no initTaskSubmodules receipt for step "${input.stepId}" was found`);
 }
 
@@ -271,10 +244,7 @@ function reconcileRecordImplementationNotes(input: ReconcileStepInput): Reconcil
     const record = state === null ? null : findRunRecord(state, input.runId);
     if (record === null) return ambiguous(`no run record for ${input.runId}`);
     if (record.implementationNotesFile !== intended) return notCompleted("the run record names a different notes file");
-    // F5: the record matching intended is not enough on its own - the real mutator only ever
-    // wrote that string after this same containment check passed, so recompute it now rather
-    // than trust the stored string blindly (a "../" escape, symlink escape, or a path deleted
-    // after the mutation would otherwise be reconstructed as success).
+    // F5: the record matching intended is not enough on its own - the real mutator only ever wrote that string after this same containment check passed, so recompute it now rather than trust the stored string blindly (a "../" escape, symlink escape, or a path deleted after the mutation would otherwise be reconstructed as success).
     if (!isNotesFileContained(worktreePath, intended)) {
         return ambiguous(`"${intended}" no longer resolves to a contained regular file inside ${worktreePath}`);
     }
@@ -311,21 +281,15 @@ function reconcileCommitTaskWork(input: ReconcileStepInput): ReconcileStepOutput
     const record = state === null ? null : findRunRecord(state, input.runId);
     if (record === null) return ambiguous(`no run record for ${input.runId}`);
     const occurrences = getOccurrencesDeepestFirst(worktreePath, input.projectRoot, rootSourceBranch);
-    // commitTaskWork skips a layer that is already clean, so a layer with no record entry proves
-    // nothing. Uncommitted work is the only state that proves the box did not finish.
+    // commitTaskWork skips a layer that is already clean, so a layer with no record entry proves nothing. Uncommitted work is the only state that proves the box did not finish.
     const dirty = occurrences.filter((occurrence) => tryGit(occurrence.checkoutPath, "status", "--porcelain") !== "");
     if (dirty.length > 0) {
         return notCompleted(`${dirty.map((o) => o.occurrenceId || "root").join(", ")} still has uncommitted work`);
     }
-    // F2: scope strictly to this logical step's own commits. A prior step's commits still
-    // sitting unstranded at HEAD must never be handed back as proof that a LATER step finished;
-    // rerunning commitTaskWork is what recovers a landed-but-unrecorded commit, not this check.
-    // A commit recorded with no stepId (or a different one) never counts toward this step -
-    // there is no legacy wildcard.
+    // F2: scope strictly to this logical step's own commits. A prior step's commits still sitting unstranded at HEAD must never be handed back as proof that a LATER step finished; rerunning commitTaskWork is what recovers a landed-but-unrecorded commit, not this check.  A commit recorded with no stepId (or a different one) never counts toward this step - there is no legacy wildcard.
     const derived = record.commits.filter((commit) => commit.kind !== "merge" && commit.stepId === input.stepId);
     if (derived.length === 0) return notCompleted(`the run record holds no commit for step "${input.stepId}"`);
-    // A derived commit that is no longer at its layer's HEAD is the repairable partial state:
-    // rerunning commitTaskWork appends the existing hash rather than creating a second commit.
+    // A derived commit that is no longer at its layer's HEAD is the repairable partial state: rerunning commitTaskWork appends the existing hash rather than creating a second commit.
     const stranded = derived.filter((commit) => {
         const occurrence = occurrences.find((candidate) => candidate.occurrenceId === commit.occurrenceId);
         return occurrence === undefined || tryGit(occurrence.checkoutPath, "rev-parse", "HEAD") !== commit.hash;
@@ -356,15 +320,7 @@ function reconcileRunFullSuite(input: ReconcileStepInput): ReconcileStepOutput {
     });
 }
 
-// F3: a step-result receipt is written for EVERY returned outcome of rebaseTaskWorktree /
-// advanceTaskRebase (clean finish, conflict, or test failure), not only a clean finish. When its
-// live-state evidence still matches, it is replayed exactly — including a live in-progress rebase
-// this exact step produced, which must never be mistaken for proof that rerunning the mutation is
-// safe. With no matching receipt, a live rebase is genuinely undecidable: the box may have died
-// before it ever returned, or it may have returned a conflict and died before appending the
-// receipt. Those two histories leave identical state, and rerunning the second one repeats a
-// mutation against a live partial rebase, so that case is ambiguous. Only a clean idle worktree
-// with no receipt proves nothing is left to reconstruct and a rerun is idempotent.
+// F3: a step-result receipt is written for EVERY returned outcome of rebaseTaskWorktree / advanceTaskRebase (clean finish, conflict, or test failure), not only a clean finish. When its live-state evidence still matches, it is replayed exactly — including a live in-progress rebase this exact step produced, which must never be mistaken for proof that rerunning the mutation is safe. With no matching receipt, a live rebase is genuinely undecidable: the box may have died before it ever returned, or it may have returned a conflict and died before appending the receipt. Those two histories leave identical state, and rerunning the second one repeats a mutation against a live partial rebase, so that case is ambiguous. Only a clean idle worktree with no receipt proves nothing is left to reconstruct and a rerun is idempotent.
 function reconcileRebase(input: ReconcileStepInput, forAdvance: boolean): ReconcileStepOutput {
     const worktreePath = readString(input.stepInput, "worktreePath");
     const rootSourceBranch = readString(input.stepInput, "rootSourceBranch");
@@ -490,10 +446,7 @@ function reconcileMarkTaskInactive(input: ReconcileStepInput): ReconcileStepOutp
     return completed({ active: false, endedAt: record.endedAt });
 }
 
-// F10: leaseReleased/lockReleased are not derivable from live state alone once this run no
-// longer holds them — an absent lock/lease looks identical whether this call released it or
-// never held it. The real box persists its exact answer before stdout; reconciliation only ever
-// replays that receipt, and is honest (`ambiguous`) rather than guessing when there is none.
+// F10: leaseReleased/lockReleased are not derivable from live state alone once this run no longer holds them — an absent lock/lease looks identical whether this call released it or never held it. The real box persists its exact answer before stdout; reconciliation only ever replays that receipt, and is honest (`ambiguous`) rather than guessing when there is none.
 function reconcileReleaseTaskRunHolds(input: ReconcileStepInput): ReconcileStepOutput {
     const state = readStateOrNull(input.taskNumber, input.projectRoot);
     const record = state === null ? null : findRunRecord(state, input.runId);
@@ -503,16 +456,11 @@ function reconcileReleaseTaskRunHolds(input: ReconcileStepInput): ReconcileStepO
 
     const lockHeld = readSourceRepoLock(input.projectRoot)?.owner === buildLockOwner(input.runId, input.taskNumber);
     if (lockHeld) return notCompleted("this run still owns the source lock");
-    // No receipt and this run holds nothing more to release: releaseTaskRunHolds only ever
-    // touches holds it owns, so a rerun is idempotent and safe.
+    // No receipt and this run holds nothing more to release: releaseTaskRunHolds only ever touches holds it owns, so a rerun is idempotent and safe.
     return notCompleted(`no releaseTaskRunHolds receipt for step "${input.stepId}" was found`);
 }
 
-// F/a4-4: once close succeeds the task is gone from tasks.json, so readStateOrNull() can never
-// recover the run that produced an archive - the archive's own retained `run.history` is the
-// only durable evidence left. validateArchivedRun (shared with closeTasks.ts's closeTaskRun so
-// the two cannot drift) proves the archive names this exact runId, closure note, and
-// chronological commit hashes before either verdict below is returned.
+// F/a4-4: once close succeeds the task is gone from tasks.json, so readStateOrNull() can never recover the run that produced an archive - the archive's own retained `run.history` is the only durable evidence left. validateArchivedRun (shared with closeTasks.ts's closeTaskRun so the two cannot drift) proves the archive names this exact runId, closure note, and chronological commit hashes before either verdict below is returned.
 function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
     const closureNote = readString(input.stepInput, "closureNote");
     if (closureNote === null) return ambiguous("the step input carried no closureNote");
@@ -529,13 +477,9 @@ function reconcileCloseTaskRun(input: ReconcileStepInput): ReconcileStepOutput {
     if (endedRun === null) {
         return ambiguous(`the archive for task ${input.taskNumber} does not carry run ${input.runId}'s durable record`);
     }
-    // [a4 3]: present in both files, proved same-run, is a half-finished archive - rerunning
-    // idempotent closeTasks upserts the archive and finishes the removal from tasks.json.
+    // [a4 3]: present in both files, proved same-run, is a half-finished archive - rerunning idempotent closeTasks upserts the archive and finishes the removal from tasks.json.
     if (stillOpen) return notCompleted("the archive is present in both task files");
-    // F10: `unblocked` cannot be recomputed after the fact - the blockedBy entries it removed are
-    // gone. closeTaskRun persists its exact real result into the archived record's run.history
-    // before stdout; only that receipt is ever reproduced. No receipt is honest ambiguity, never
-    // an invented empty array.
+    // F10: `unblocked` cannot be recomputed after the fact - the blockedBy entries it removed are gone. closeTaskRun persists its exact real result into the archived record's run.history before stdout; only that receipt is ever reproduced. No receipt is honest ambiguity, never an invented empty array.
     const receipt = endedRun.stepResults?.find((entry) => entry.stepId === input.stepId && entry.script === "closeTaskRun");
     if (receipt !== undefined) return completed(receipt.result as Record<string, unknown>);
     return ambiguous(`the archive for task ${input.taskNumber} carries no closeTaskRun receipt for step "${input.stepId}"`);
@@ -572,8 +516,83 @@ function reconcileWriteClarifyRequest(input: ReconcileStepInput): ReconcileStepO
     return completed({ written: true, clarifyRequest: entry.clarifyRequest });
 }
 
+// The notes derive deterministically from decideTestReview, so recomputing them is the whole check.
+function reconcileAmendEntryWithCodexNotes(input: ReconcileStepInput): ReconcileStepOutput {
+    const review = input.stepInput.review as TestReview | undefined;
+    if (review === undefined) return ambiguous("the step input carried no review");
+    const notes = `A reviewer flagged the task tests. Apply every fix below.\n\n${decideTestReview(review).notes}`;
+    const { tasksPath } = resolveTaskFiles(input.projectRoot);
+    const entry = (readTaskFile(tasksPath) as { taskNumber: number; codexReviewNotes?: string }[])
+        .find((task) => task.taskNumber === input.taskNumber);
+    if (entry === undefined) return ambiguous(`task ${input.taskNumber} is not in tasks.json`);
+    if (entry.codexReviewNotes !== notes) return notCompleted("the entry holds different codex review notes");
+    return completed({ amended: true, notes: entry.codexReviewNotes });
+}
+
+// taskTests is derived here, exactly like the real box derives it, never taken from stepInput.
+function reconcileAmendEntryWithFailingTests(input: ReconcileStepInput): ReconcileStepOutput {
+    const state = readStateOrNull(input.taskNumber, input.projectRoot);
+    const taskTests = state === null ? null : findRunRecord(state, input.runId)?.taskTests ?? null;
+    if (taskTests === null) return ambiguous(`no recorded task-test run for task ${input.taskNumber} under ${input.runId}`);
+    const notes = `The task tests failed. Fix the cause, and change no test.\n\n${taskTests.output}`;
+    const { tasksPath } = resolveTaskFiles(input.projectRoot);
+    const entry = (readTaskFile(tasksPath) as { taskNumber: number; codexReviewNotes?: string }[])
+        .find((task) => task.taskNumber === input.taskNumber);
+    if (entry === undefined) return ambiguous(`task ${input.taskNumber} is not in tasks.json`);
+    if (entry.codexReviewNotes !== notes) return notCompleted("the entry holds different codex review notes");
+    return completed({ amended: true, notes: entry.codexReviewNotes });
+}
+
+// Duplicated from recordPlanReview.ts, which does not export them.
+const PLAN_REVIEW_PERCENTAGE_SCALE_MINIMUM_SECTIONS = 12;
+const PLAN_REVIEW_VERDICTS = ["ACCEPT", "AMEND_THEN_ACCEPT", "AMEND", "SCRAP"] as const;
+const planReviewFixNote = (fix: PlanReviewFix) => `${fix.fix}\n\nDurable because: ${fix.durableBecause}`;
+
+// ACCEPTED_AS_IS and ERROR write nothing, so a rerun is idempotent. Other rulings write the plan or the tasks.json entry.
+function reconcileRecordPlanReview(input: ReconcileStepInput): ReconcileStepOutput {
+    const planFilePath = readString(input.stepInput, "planFilePath");
+    const review = input.stepInput.review as PlanReview | undefined;
+    if (planFilePath === null) return ambiguous("the step input carried no planFilePath");
+    if (review === undefined) return ambiguous("the step input carried no review");
+    if (review.outcome === "ERROR") {
+        return notCompleted("an ERROR-outcome review writes nothing; rerunning recordPlanReview is idempotent");
+    }
+    if (!existsSync(planFilePath)) return ambiguous("the plan file is gone");
+    let plan: { sections: { id: string; codexNotes?: string }[] };
+    try {
+        plan = JSON.parse(readFileSync(planFilePath, "utf8"));
+    } catch {
+        return ambiguous("the plan file does not parse");
+    }
+    const fixes = review.fixes;
+    const sectionCount = plan.sections.length;
+    const ruling = sectionCount >= PLAN_REVIEW_PERCENTAGE_SCALE_MINIMUM_SECTIONS
+        ? rulingByPercentage(efficacyPercentage(sectionCount, fixes.length))
+        : rulingByFixCount(fixes.length);
+    const notes = fixes.map((fix) => `[${fix.sectionId}] ${planReviewFixNote(fix)}`).join("\n\n");
+
+    if (ruling === Ruling.ACCEPTED_AS_IS) {
+        return notCompleted("an ACCEPTED_AS_IS ruling writes nothing; rerunning recordPlanReview is idempotent");
+    }
+    if (ruling === Ruling.APPLY_FIX_THEN_ACCEPT) {
+        const applied = fixes.every((fix) =>
+            plan.sections.find((section) => section.id === fix.sectionId)?.codexNotes === planReviewFixNote(fix));
+        if (!applied) return notCompleted("the plan sections do not yet carry every fix's notes");
+        return completed({ verdict: PLAN_REVIEW_VERDICTS[ruling], notes });
+    }
+
+    const { tasksPath } = resolveTaskFiles(input.projectRoot);
+    const entry = (readTaskFile(tasksPath) as { taskNumber: number; codexReviewNotes?: string }[])
+        .find((task) => task.taskNumber === input.taskNumber);
+    if (entry === undefined) return ambiguous(`task ${input.taskNumber} is not in tasks.json`);
+    if (entry.codexReviewNotes !== notes) return notCompleted("the entry holds different codex review notes");
+    return completed({ verdict: PLAN_REVIEW_VERDICTS[ruling], notes });
+}
+
 const HANDLERS: Record<string, Handler> = {
     advanceTaskRebase: (input) => reconcileRebase(input, true),
+    amendEntryWithCodexNotes: reconcileAmendEntryWithCodexNotes,
+    amendEntryWithFailingTests: reconcileAmendEntryWithFailingTests,
     applyPlanAmendments: reconcileApplyPlanAmendments,
     isTaskActive: reconcileIsTaskActive,
     cleanupTaskWorktree: reconcileCleanupTaskWorktree,
@@ -590,6 +609,7 @@ const HANDLERS: Record<string, Handler> = {
     rebaseTaskWorktree: (input) => reconcileRebase(input, false),
     recordImplementationNotes: reconcileRecordImplementationNotes,
     recordMergeCommits: reconcileRecordMergeCommits,
+    recordPlanReview: reconcileRecordPlanReview,
     recordTaskModifiedFiles: reconcileRecordTaskModifiedFiles,
     releaseTaskRunHolds: reconcileReleaseTaskRunHolds,
     resetTaskWorktree: reconcileResetTaskWorktree,

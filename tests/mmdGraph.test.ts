@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { parseMmd, enumeratePaths, stepAfter } from "../scripts/mmdGraph.ts";
+import { parseMmd, enumeratePaths, stepAfter, pipelineGraph } from "../scripts/mmdGraph.ts";
 
 const DIAGRAM_DIR = join(import.meta.dirname, "..", "plans", "diagram");
 const diagramFiles = readdirSync(DIAGRAM_DIR).filter((f) => f.endsWith(".mmd")).sort();
@@ -121,4 +121,39 @@ test("test_stepAfter_hopsThroughADecisionOutcomeToTheRealNextNode", () => {
   // Verification step: the outcome nodes are hopped through, not returned.
   assert.equal(stepAfter(g, "D", "YES"), "GOOD");
   assert.equal(stepAfter(g, "D", "NO"), "BAD");
+});
+
+test("test_stepAfter_countsDistinctSuccessorsSoADuplicatedEdgeNeedsNoOutcome", () => {
+  // Setup: two diagrams both draw A --> B, so the merged graph holds that edge twice.
+  const merged = parseMmd(`flowchart TB
+  A["run it"] --> B["run it again"]
+  A --> B
+  class A,B script`);
+
+  // Test action: ask what follows A without naming an outcome.
+  // Verification: one distinct successor is followed, rather than demanded as an arm label.
+  assert.equal(stepAfter(merged, "A"), "B");
+});
+
+test("test_stepAfter_entersTheDiagramAPipelineNodeNames", () => {
+  // Setup: the real merged graph. In pipeline-rebasePreamble.mmd the lock's YES arm
+  // leads to REBASE_PIPELINE, which is the name of pipeline-rebase.mmd, not a runnable node.
+  // Test action: follow that decision's YES arm.
+  const next = stepAfter(pipelineGraph, "WAS_LOCK_ACQUIRED", "YES");
+
+  // Verification: the walk lands on the entry node of pipeline-rebase.mmd.
+  assert.equal(next, "SOURCE_REPO_LOCKED_INPUT");
+});
+
+test("test_stepAfter_entersTheTwoPipelinesWhoseNameDoesNotMatchTheirFile", () => {
+  // Setup: EXIT_WORKFLOW_SUCCESS names pipeline-mergeSucceededExit.mmd, and PREAMBLE_PIPELINE
+  // names pipeline-preambleStatusCheck.mmd. Neither follows the strip-and-camel-case rule.
+  // Test action + Verification: each still lands on its own diagram's entry node.
+  assert.equal(stepAfter(pipelineGraph, "MERGE_SUCCESS"), "MERGE_RECEIPT_INPUT");
+
+  const toPreamble = parseMmd(`flowchart TB
+  X["start"] --> PREAMBLE_PIPELINE["preamble status check pipeline"]
+  class X script
+  class PREAMBLE_PIPELINE pipeline`);
+  assert.equal(stepAfter(toPreamble, "X"), "TASK_NUMBER_INPUT");
 });

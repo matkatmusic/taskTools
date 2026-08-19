@@ -7,7 +7,9 @@ import { buildClosureNote } from "./tackle-tasks/buildClosureNote.ts";
 import { cleanupTaskWorktree } from "./tackle-tasks/cleanupTaskWorktree.ts";
 import { closeTaskRun } from "./tackle-tasks/closeTaskRun.ts";
 import { commitTaskWork } from "./tackle-tasks/commitTaskWork.ts";
-import { taskBranchName } from "./tackle-tasks/createTaskWorktree.ts";
+import { createTaskWorktree, taskBranchName } from "./tackle-tasks/createTaskWorktree.ts";
+import { generateTaskDocs } from "./tackle-tasks/generateTaskDocs.ts";
+import { initTaskSubmodules } from "./tackle-tasks/initTaskSubmodules.ts";
 import { lockSourceRepo } from "./tackle-tasks/lockSourceRepo.ts";
 import { markTaskInactive } from "./tackle-tasks/markTaskInactive.ts";
 import { mergeTaskWorktree } from "./tackle-tasks/mergeTaskWorktree.ts";
@@ -16,10 +18,11 @@ import { recordMergeCommits } from "./tackle-tasks/recordMergeCommits.ts";
 import { recordPlanReview } from "./tackle-tasks/recordPlanReview.ts";
 import { recordTaskModifiedFiles } from "./tackle-tasks/recordTaskModifiedFiles.ts";
 import { releaseTaskRunHolds } from "./tackle-tasks/releaseTaskRunHolds.ts";
+import { resetTaskWorktree } from "./tackle-tasks/resetTaskWorktree.ts";
 import { updateTaskDocs } from "./tackle-tasks/updateTaskDocs.ts";
 import { writeClarifyRequest } from "./tackle-tasks/writeClarifyRequest.ts";
 import { writeTaskExitNotes } from "./tackle-tasks/writeTaskExitNotes.ts";
-import type { TaskCommit } from "./tackle-tasks/taskRunState.ts";
+import { MAX_ATTEMPTS, claimTask, getAttemptCount, raiseAttemptCount, type TaskCommit } from "./tackle-tasks/taskRunState.ts";
 
 // The five arguments every green box receives, and the only inputs a row may derive from.
 type TaskRunIdentity = {
@@ -39,8 +42,7 @@ type StepTableRow = {
 };
 
 /*
-  A receipt a row asks for but no earlier box produced is a wiring mistake, not a missing
-  value, so it throws here rather than reaching a script as undefined.
+  A receipt a row asks for but no earlier box produced is a wiring mistake, not a missing value, so it throws here rather than reaching a script as undefined.
 */
 function readReceipt(receipts: BoxReceipts, boxId: string): Record<string, unknown> {
     const receipt = receipts[boxId];
@@ -74,6 +76,10 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             stepId: "ARCHIVE_TASK",
         }) as unknown as Record<string, unknown>,
     },
+    AUTO_GENERATE_DOCS: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => generateTaskDocs(identity.taskNumber, identity.worktree, identity.projectRoot),
+    },
     BUILD_CLOSURE_NOTE: {
         allowedExtraFieldNames: [],
         runBoxScript: (identity) => buildClosureNote({
@@ -102,6 +108,20 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             rootSourceBranch: identity.sourceBranch,
         }),
     },
+    CREATE_WORKTREE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => createTaskWorktree(identity.taskNumber, identity.runId, identity.projectRoot),
+    },
+    INIT_SUBMODULES_RECURSIVELY: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => initTaskSubmodules({
+            worktreePath: identity.worktree,
+            taskNumber: identity.taskNumber,
+            runId: identity.runId,
+            projectRoot: identity.projectRoot,
+            stepId: "INIT_SUBMODULES_RECURSIVELY",
+        }),
+    },
     // Polls for the lock and can wait minutes; lockSourceRepo.ts owns that bound.
     LOCK_SOURCE_REPO: {
         allowedExtraFieldNames: [],
@@ -110,6 +130,10 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             runId: identity.runId,
             projectRoot: identity.projectRoot,
         }) as unknown as Promise<Record<string, unknown>>,
+    },
+    MARK_TASK_ACTIVE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => claimTask(identity.taskNumber, identity.runId, identity.projectRoot) as unknown as Record<string, unknown>,
     },
     MARK_TASK_INACTIVE_FAILURE: {
         allowedExtraFieldNames: [],
@@ -196,6 +220,10 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             stepId: "RELEASE_WORKTREE_LEASE",
         }),
     },
+    RESET_WORKTREE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => resetTaskWorktree(identity.taskNumber, identity.runId, identity.projectRoot),
+    },
     UPDATE_AUTO_GENERATED_DOCS: {
         allowedExtraFieldNames: [],
         runBoxScript: (identity) => updateTaskDocs(identity.taskNumber, identity.worktree, identity.projectRoot),
@@ -252,14 +280,45 @@ const STEP_TABLE: Record<string, StepTableRow> = {
     },
 };
 
+/*
+  Each ARE_2_*_DONE decision guards one retry. Every site in the diagram has the same shape:
+  read the count, stop when it reaches the cap, otherwise start another attempt. So a NO is
+  what raises the count -- a NO means the next attempt is beginning.
+*/
+const ATTEMPT_COUNTERS: Record<string, string> = {
+    ARE_2_CLARIFY_ROUNDS_DONE: "clarifyRounds",
+    ARE_2_CONFLICT_FIXES_DONE: "conflictFixes",
+    ARE_2_MERGE_ATTEMPTS_DONE: "mergeAttempts",
+    ARE_2_REVIEWS_DONE: "planReviews",
+    ARE_2_SUITE_FIXES_DONE: "suiteFixes",
+    ARE_2_TEST_FIXES_DONE: "testFixes",
+    ARE_2_TEST_REVIEWS_DONE: "testReviews",
+};
+
+// The plan review is the one decision that counts the review that just ran, so it raises first.
+const RAISES_BEFORE_CHECKING = "ARE_2_REVIEWS_DONE";
+
+function decideStep(identity: TaskRunIdentity, decisionId: string): Record<string, unknown> {
+    const counter = ATTEMPT_COUNTERS[decisionId];
+    if (!counter) return { ok: false, note: `no evaluator for decision ${decisionId}` };
+    if (decisionId === RAISES_BEFORE_CHECKING) {
+        const raised = raiseAttemptCount(identity.taskNumber, identity.runId, counter, identity.projectRoot);
+        return { ok: true, outcome: raised >= MAX_ATTEMPTS ? "YES" : "NO" };
+    }
+    if (getAttemptCount(identity.taskNumber, counter, identity.projectRoot) >= MAX_ATTEMPTS) {
+        return { ok: true, outcome: "YES" };
+    }
+    raiseAttemptCount(identity.taskNumber, identity.runId, counter, identity.projectRoot);
+    return { ok: true, outcome: "NO" };
+}
+
 async function runStepBoxes(identity: TaskRunIdentity, boxIds: string[], extraFields: Record<string, unknown>): Promise<Record<string, unknown>> {
     // Every box's output, keyed by box id, so a later row can read one that ran earlier.
     const receipts: BoxReceipts = {};
     for (const boxId of boxIds) {
         if (!STEP_TABLE[boxId]) return { ok: false, failedBoxId: boxId, note: `unknown box id: ${boxId}`, receipts };
     }
-    // Extra fields reach every box in the call, so one box declaring a field sanctions it for
-    // the call. A field no named box declares is still refused, which is what keeps the fence.
+    // Extra fields reach every box in the call, so one box declaring a field sanctions it for the call. A field no named box declares is still refused, which is what keeps the fence.
     const declaredFieldNames = boxIds.flatMap((boxId) => (STEP_TABLE[boxId] as StepTableRow).allowedExtraFieldNames);
     for (const fieldName of Object.keys(extraFields)) {
         if (declaredFieldNames.includes(fieldName)) continue;
@@ -272,10 +331,7 @@ async function runStepBoxes(identity: TaskRunIdentity, boxIds: string[], extraFi
 }
 
 /*
-  Runs the named box, then follows the diagram to the next one, and keeps going while
-  the diagram's next node is another box this table can run. It stops on anything else
-  -- an agent box, a pipeline head, a decision, or the workflow's own output boxes --
-  and names that node, because only the caller can carry the run past it.
+  Runs the named box, then follows the diagram to the next one, and keeps going while the diagram's next node is another box this table can run. It stops on anything else -- an agent box, a pipeline head, a decision, or the workflow's own output boxes -- and names that node, because only the caller can carry the run past it.
 */
 async function walkFromStep(identity: TaskRunIdentity, startBoxId: string, extraFields: Record<string, unknown>): Promise<Record<string, unknown>> {
     const receipts: BoxReceipts = {};
@@ -307,8 +363,10 @@ const args = prompt.startsWith("/run-step ")
     : skill === "run-step"
         ? String(input.args ?? "")
         : "";
+// Extra fields ride a quoted heredoc, as emitterPrompt does: a value holding an apostrophe would otherwise split mid-token and be read as a box id.
+const heredoc = args.match(/<<'TTPAYLOAD'\n([\s\S]*?)\nTTPAYLOAD/);
 // Quoted runs stay whole, so a worktree path with spaces survives.
-const tokens = (args.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(token => token.replace(/^(["'])(.*)\1$/s, "$2"));
+const tokens = (args.replace(/<<'TTPAYLOAD'[\s\S]*$/, "").match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(token => token.replace(/^(["'])(.*)\1$/s, "$2"));
 if (tokens.length === 0) process.exit(0);
 
 const inject = (reason: string) => process.stdout.write(JSON.stringify({
@@ -329,17 +387,16 @@ const identity: TaskRunIdentity = {
     projectRoot: String(tokens[4]),
 };
 
-// A trailing token that opens with a brace is the extra fields, never a box id.
-const trailing = tokens[tokens.length - 1] as string;
-const carriesExtraFields = trailing.startsWith("{");
-const extraFields = carriesExtraFields ? JSON.parse(trailing) : {};
-const boxIds = tokens.slice(5, carriesExtraFields ? -1 : undefined);
+const extraFields = heredoc ? JSON.parse(heredoc[1] as string) : {};
+const boxIds = tokens.slice(5);
 
 let result: Record<string, unknown>;
 try {
-    result = boxIds[0] === "--walk"
-        ? await walkFromStep(identity, String(boxIds[1]), extraFields)
-        : await runStepBoxes(identity, boxIds, extraFields);
+    result = boxIds[0] === "--decide"
+        ? decideStep(identity, String(boxIds[1]))
+        : boxIds[0] === "--walk"
+            ? await walkFromStep(identity, String(boxIds[1]), extraFields)
+            : await runStepBoxes(identity, boxIds, extraFields);
 } catch (error) {
     result = { ok: false, failedBoxId: boxIds[0], note: String((error as Error)?.message ?? error) };
 }

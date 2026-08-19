@@ -58,12 +58,25 @@ export function parseMmd(text: string): MmdGraph {
   return { nodes, edges, labelled, classes };
 }
 
+// The diagram a `pipeline` node names. Two ids do not follow the strip-and-camel-case rule.
+const PIPELINE_FILE_EXCEPTIONS: Record<string, string> = {
+  PREAMBLE_PIPELINE: "pipeline-preambleStatusCheck.mmd",
+  EXIT_WORKFLOW_SUCCESS: "pipeline-mergeSucceededExit.mmd",
+};
+
+function pipelineFileFor(id: string): string {
+  const exception = PIPELINE_FILE_EXCEPTIONS[id];
+  if (exception !== undefined) return exception;
+  const stem = id.replace(/_PIPELINE$/, "").toLowerCase().replace(/_(.)/g, (_, c) => (c as string).toUpperCase());
+  return `pipeline-${stem}.mmd`;
+}
+
 /*
   The one node that follows `nodeId`. A decision needs the `outcome` its evaluator
   returned; the YES/NO node carrying that outcome is hopped through, not returned.
 */
 export function stepAfter(g: MmdGraph, nodeId: string, outcome?: string): string {
-  const children = g.edges.filter((e) => e.from === nodeId).map((e) => e.to);
+  const children = [...new Set(g.edges.filter((e) => e.from === nodeId).map((e) => e.to))];
   if (children.length === 0) throw new Error(`mmdGraph: "${nodeId}" has no next node`);
   const target = children.length === 1
     ? children[0]!
@@ -71,6 +84,7 @@ export function stepAfter(g: MmdGraph, nodeId: string, outcome?: string): string
   if (!target) throw new Error(`mmdGraph: "${nodeId}" has no arm labelled ${JSON.stringify(outcome)}`);
   const kind = g.classes.get(target);
   if (kind === "pass" || kind === "nopass") return stepAfter(g, target);
+  if (kind === "pipeline") return diagramEntryNodes.get(pipelineFileFor(target)) as string;
   return target;
 }
 
@@ -135,9 +149,13 @@ export const DIAGRAM_FILES = [
 export const nodeLabels = new Map<string, string>();
 // The same diagrams as one graph, which is what stepAfter walks for the /run-step loop.
 export const pipelineGraph: MmdGraph = { nodes: nodeLabels, edges: [], labelled: new Set(), classes: new Map() };
+// Each diagram's single root, which is where a jump into that pipeline lands.
+export const diagramEntryNodes = new Map<string, string>();
 for (const file of DIAGRAM_FILES) {
   const path = fileURLToPath(new URL(`../plans/diagram/${file}`, import.meta.url));
   const { nodes, edges, classes } = parseMmd(readFileSync(path, "utf8"));
+  const incoming = new Set(edges.map((e) => e.to));
+  diagramEntryNodes.set(file, [...nodes.keys()].filter((id) => !incoming.has(id))[0] as string);
   pipelineGraph.edges.push(...edges);
   for (const [id, kind] of classes) pipelineGraph.classes.set(id, kind);
   for (const [id, label] of nodes) {

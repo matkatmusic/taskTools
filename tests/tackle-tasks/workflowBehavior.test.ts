@@ -1,7 +1,9 @@
 // Retry caps and exit types of the tackle-tasks workflow, stated directly and read off its trace.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
@@ -56,7 +58,23 @@ const HAPPY: PipelineDecisions = {
     publicationState: ["ALL LANDED"],
 };
 
-// FAKE mode supplies every [C] decision, so the run walks offline and never calls agent().
+const hookPath = fileURLToPath(new URL("../../scripts/runStepHook.ts", import.meta.url));
+
+// The retry counters the hook reads live in tasks.json, so fake mode gets a real one on disk.
+const rootWithNoAttempts = (taskNumber: number): string => {
+    const root = mkdtempSync(join(tmpdir(), "workflowBehavior-"));
+    const record = {
+        runId: "run-abc", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null,
+        exitType: null, exitNote: null, modifiedFiles: [], commits: [],
+        implementationNotesFile: null, taskTests: null, fullSuite: null, attempts: {},
+    };
+    const run = { active: true, worktree: null, leaseRunId: null, history: [record] };
+    writeFileSync(join(root, "tasks.json"), `${JSON.stringify([{ taskNumber, title: "t", run }], null, 2)}\n`);
+    writeFileSync(join(root, "completedTasks.json"), "[]\n");
+    return root;
+};
+
+// FAKE mode supplies every [C] decision, so the run walks offline and only a decision calls agent().
 const runFake = async (overrides: Partial<PipelineDecisions> = {}): Promise<string[]> => {
     const fake = { ...HAPPY, ...overrides };
     const compiled = compileFunction(
@@ -69,9 +87,21 @@ const runFake = async (overrides: Partial<PipelineDecisions> = {}): Promise<stri
         agent: unknown,
         phase: unknown,
     ) => Promise<string[]>;
-    return compiled({ fake, task: fake.taskNumber }, () => {}, async () => {
-        throw new Error("real agent() must never be called in fake mode");
-    }, () => {});
+    const projectRoot = rootWithNoAttempts(fake.taskNumber);
+    return compiled(
+        { fake, task: fake.taskNumber, projectRoot, runId: "run-abc", sourceBranch: "master", worktree: "/abs/repo/.worktrees/task-1" },
+        () => {},
+        async (prompt: string) => {
+            const command = prompt.match(/^\/run-step .*--decide.*$/m);
+            if (command === null) throw new Error("real agent() must never be called in fake mode");
+            const answered = spawnSync("node", [hookPath], {
+                input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: command[0] }),
+                encoding: "utf8",
+            });
+            return JSON.parse(JSON.parse(answered.stdout).hookSpecificOutput.additionalContext);
+        },
+        () => {},
+    );
 };
 
 // Indentation marks loop depth, so every count here compares trimmed lines.
