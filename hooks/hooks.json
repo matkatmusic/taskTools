@@ -13,18 +13,15 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runFullSuiteHook.ts\"",
-            "timeout": 900
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runFullSuiteHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runTaskTestsHook.ts\"",
-            "timeout": 600
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runTaskTestsHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
-            "timeout": 960
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
           },
           {
             "type": "command",
@@ -32,8 +29,7 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/continueRebaseHook.ts\"",
-            "timeout": 900
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/continueRebaseHook.ts\""
           }
         ]
       },
@@ -84,18 +80,15 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runFullSuiteHook.ts\"",
-            "timeout": 900
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runFullSuiteHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runTaskTestsHook.ts\"",
-            "timeout": 600
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runTaskTestsHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
-            "timeout": 960
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
           },
           {
             "type": "command",
@@ -103,8 +96,7 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/continueRebaseHook.ts\"",
-            "timeout": 900
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/continueRebaseHook.ts\""
           }
         ]
       }
