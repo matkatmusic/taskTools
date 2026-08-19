@@ -8,9 +8,11 @@ import { fileURLToPath } from "node:url";
 export type MmdNode = { id: string; label: string };
 export type MmdEdge = { from: string; to: string; label?: string };
 // labelled holds every id declared with a shape, so id-equals-label is not read as none.
-export type MmdGraph = { nodes: Map<string, string>; edges: MmdEdge[]; labelled: Set<string> };
+// classes holds every id named on a `class A,B kind` line, which is what the step loop dispatches on.
+export type MmdGraph = { nodes: Map<string, string>; edges: MmdEdge[]; labelled: Set<string>; classes: Map<string, string> };
 
 const SKIP = /^\s*(%%|flowchart\b|graph\b|classDef\b|class\b|subgraph\b|end\b|linkStyle\b|style\b|$)/;
+const CLASS_LINE = /^\s*class\s+([A-Za-z0-9_,\s]+?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 
 const NODE = /^([A-Za-z_][A-Za-z0-9_]*)\s*(\["[^"]*"\]|\[[^\]]*\]|\{"[^"]*"\}|\{[^}]*\}|\("[^"]*"\)|\([^)]*\))?/;
 const ARROW = /^\s*(?:--\s*"([^"]*)"\s*)?(-->|-\.->)\s*/;
@@ -26,8 +28,11 @@ export function parseMmd(text: string): MmdGraph {
   const nodes = new Map<string, string>();
   const edges: MmdEdge[] = [];
   const labelled = new Set<string>();
+  const classes = new Map<string, string>();
 
   for (const line of text.split("\n")) {
+    const classLine = CLASS_LINE.exec(line);
+    if (classLine) for (const id of classLine[1]!.split(",")) classes.set(id.trim(), classLine[2]!);
     if (SKIP.test(line)) continue;
     let rest = line.trim();
     let prev: string | null = null;
@@ -50,7 +55,23 @@ export function parseMmd(text: string): MmdGraph {
       rest = rest.slice(a[0].length);
     }
   }
-  return { nodes, edges, labelled };
+  return { nodes, edges, labelled, classes };
+}
+
+/*
+  The one node that follows `nodeId`. A decision needs the `outcome` its evaluator
+  returned; the YES/NO node carrying that outcome is hopped through, not returned.
+*/
+export function stepAfter(g: MmdGraph, nodeId: string, outcome?: string): string {
+  const children = g.edges.filter((e) => e.from === nodeId).map((e) => e.to);
+  if (children.length === 0) throw new Error(`mmdGraph: "${nodeId}" has no next node`);
+  const target = children.length === 1
+    ? children[0]!
+    : children.find((id) => g.nodes.get(id) === outcome);
+  if (!target) throw new Error(`mmdGraph: "${nodeId}" has no arm labelled ${JSON.stringify(outcome)}`);
+  const kind = g.classes.get(target);
+  if (kind === "pass" || kind === "nopass") return stepAfter(g, target);
+  return target;
 }
 
 /*
@@ -112,9 +133,13 @@ export const DIAGRAM_FILES = [
 
 // Built at module load: every diagram node id mapped to its label. Conflicting labels throw.
 export const nodeLabels = new Map<string, string>();
+// The same diagrams as one graph, which is what stepAfter walks for the /run-step loop.
+export const pipelineGraph: MmdGraph = { nodes: nodeLabels, edges: [], labelled: new Set(), classes: new Map() };
 for (const file of DIAGRAM_FILES) {
   const path = fileURLToPath(new URL(`../plans/diagram/${file}`, import.meta.url));
-  const { nodes } = parseMmd(readFileSync(path, "utf8"));
+  const { nodes, edges, classes } = parseMmd(readFileSync(path, "utf8"));
+  pipelineGraph.edges.push(...edges);
+  for (const [id, kind] of classes) pipelineGraph.classes.set(id, kind);
   for (const [id, label] of nodes) {
     const existing = nodeLabels.get(id);
     if (existing !== undefined && existing !== label) {

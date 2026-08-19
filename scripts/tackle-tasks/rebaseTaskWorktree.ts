@@ -42,8 +42,8 @@ export type RebaseTaskWorktreeOutput = {
     failureReason: string | null;
 };
 
-const POLL_INTERVAL_MS = 10_000;
-const WAIT_TIMEOUT_MS = 2 * 60_000;
+const POLL_INTERVAL_MS = 5_000;
+const WAIT_TIMEOUT_MS = 15 * 60_000;
 
 export type BoundedLockWaitOptions = {
     pollIntervalMs?: number;

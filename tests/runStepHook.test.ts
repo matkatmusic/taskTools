@@ -236,3 +236,43 @@ test("test_runStepHook_passesADeclaredExtraFieldThroughToTheScript", () => {
     // were passed to the script rather than dropped.
     assert.equal(readTaskRunState(1, projectRoot).history[0].exitType, "suite-red");
 });
+
+test("test_runStepHook_walksTheDiagramFromOneStartingBoxUntilAnAgentBoxStopsIt", () => {
+    // Setup: an ended, completed run on an active task. The diagram chains
+    // BUILD_CLOSURE_NOTE -> MARK_TASK_INACTIVE_SUCCESS -> ARCHIVE_TASK -> REPORT_CLOSURE_NOTE,
+    // and only the last of those is the workflow's own output, so the walk must stop there.
+    const projectRoot = makeProjectRoot({ active: true, worktree: null, leaseRunId: null, history: [endedRunRecord()] });
+
+    // Test action: name only the first box, behind --walk, and let the hook find the rest.
+    const result = runHook({
+        hook_event_name: "UserPromptSubmit",
+        prompt: stepPrompt(projectRoot, "--walk", "BUILD_CLOSURE_NOTE"),
+    });
+
+    // Verification: all three script boxes ran without being named, and the walk
+    // reports the node it stopped on rather than trying to run it.
+    const injected = injectedResult(result.stdout);
+    assert.equal(injected.ok, true);
+    assert.equal(injected.stoppedAt, "REPORT_CLOSURE_NOTE");
+    assert.deepEqual(Object.keys(injected.receipts as object), ["BUILD_CLOSURE_NOTE", "MARK_TASK_INACTIVE_SUCCESS", "ARCHIVE_TASK"]);
+    assert.equal(JSON.parse(readFileSync(join(projectRoot, "completedTasks.json"), "utf8")).length, 1);
+});
+
+test("test_runStepHook_stopsTheWalkAtADecisionItCannotAnswer", () => {
+    // Setup: an active task. LOCK_SOURCE_REPO is followed in the diagram by the
+    // WAS_LOCK_ACQUIRED decision, and the hook holds no evaluator for any decision.
+    const projectRoot = activeTaskRoot();
+    mkdirSync(join(projectRoot, ".git"), { recursive: true });
+
+    // Test action: walk from that box.
+    const result = runHook({
+        hook_event_name: "UserPromptSubmit",
+        prompt: stepPrompt(projectRoot, "--walk", "LOCK_SOURCE_REPO"),
+    });
+
+    // Verification: the box ran, and the walk handed the decision back rather than guessing an arm.
+    const injected = injectedResult(result.stdout);
+    assert.equal(injected.ok, true);
+    assert.equal(injected.stoppedAt, "WAS_LOCK_ACQUIRED");
+    assert.deepEqual(Object.keys(injected.receipts as object), ["LOCK_SOURCE_REPO"]);
+});

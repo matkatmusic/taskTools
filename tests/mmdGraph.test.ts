@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { parseMmd, enumeratePaths } from "../scripts/mmdGraph.ts";
+import { parseMmd, enumeratePaths, stepAfter } from "../scripts/mmdGraph.ts";
 
 const DIAGRAM_DIR = join(import.meta.dirname, "..", "plans", "diagram");
 const diagramFiles = readdirSync(DIAGRAM_DIR).filter((f) => f.endsWith(".mmd")).sort();
@@ -72,3 +72,53 @@ for (const file of diagramFiles) {
     }
   });
 }
+
+test("test_parseMmd_capturesNodeClasses", () => {
+  // Setup: a diagram whose class lines name two scripts, one decision, and one agent.
+  const text = `flowchart TB
+  A["run it"] --> B{"did it work?"}
+  B --> C["ask the agent"]
+  C --> D["run it again"]
+  classDef script fill:#000
+  class A,D script
+  class B decision
+  class C agent`;
+
+  // Test action: parse it.
+  const g = parseMmd(text);
+
+  // Verification step: every classed node reports the class the diagram gave it.
+  assert.equal(g.classes.get("A"), "script");
+  assert.equal(g.classes.get("D"), "script");
+  assert.equal(g.classes.get("B"), "decision");
+  assert.equal(g.classes.get("C"), "agent");
+});
+
+test("test_stepAfter_followsAScriptToItsOneNextNode", () => {
+  // Setup: two scripts joined by a single arrow.
+  const g = parseMmd(`flowchart TB
+  A["run it"] --> B["run it again"]
+  class A,B script`);
+
+  // Test action: ask what follows the first script.
+  // Verification step: the walker names the second script.
+  assert.equal(stepAfter(g, "A"), "B");
+});
+
+test("test_stepAfter_hopsThroughADecisionOutcomeToTheRealNextNode", () => {
+  // Setup: a decision whose YES and NO arms each pass through an outcome node.
+  const g = parseMmd(`flowchart TB
+  D{"did it work?"} --> D_YES["YES"]
+  D --> D_NO["NO"]
+  D_YES --> GOOD["carry on"]
+  D_NO --> BAD["give up"]
+  class D decision
+  class D_YES pass
+  class D_NO nopass
+  class GOOD,BAD script`);
+
+  // Test action: ask what follows the decision for each outcome.
+  // Verification step: the outcome nodes are hopped through, not returned.
+  assert.equal(stepAfter(g, "D", "YES"), "GOOD");
+  assert.equal(stepAfter(g, "D", "NO"), "BAD");
+});

@@ -1,5 +1,6 @@
 // Runs green pipeline script boxes for /run-step, typed as a prompt or invoked as the skill by an agent.
 import { readFileSync } from "node:fs";
+import { pipelineGraph, stepAfter } from "./mmdGraph.ts";
 import { amendEntryWithCodexNotes } from "./tackle-tasks/amendEntryWithCodexNotes.ts";
 import { amendEntryWithFailingTests } from "./tackle-tasks/amendEntryWithFailingTests.ts";
 import { buildClosureNote } from "./tackle-tasks/buildClosureNote.ts";
@@ -270,6 +271,25 @@ async function runStepBoxes(identity: TaskRunIdentity, boxIds: string[], extraFi
     return { ok: true, receipts };
 }
 
+/*
+  Runs the named box, then follows the diagram to the next one, and keeps going while
+  the diagram's next node is another box this table can run. It stops on anything else
+  -- an agent box, a pipeline head, a decision, or the workflow's own output boxes --
+  and names that node, because only the caller can carry the run past it.
+*/
+async function walkFromStep(identity: TaskRunIdentity, startBoxId: string, extraFields: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const receipts: BoxReceipts = {};
+    let thisStep = startBoxId;
+    while (true) {
+        const row = STEP_TABLE[thisStep];
+        if (!row) return { ok: false, failedBoxId: thisStep, note: `unknown box id: ${thisStep}`, receipts };
+        receipts[thisStep] = await row.runBoxScript(identity, extraFields, receipts);
+        const nextStep = stepAfter(pipelineGraph, thisStep);
+        if (!STEP_TABLE[nextStep]) return { ok: true, stoppedAt: nextStep, receipts };
+        thisStep = nextStep;
+    }
+}
+
 let payload: { hook_event_name?: unknown; prompt?: unknown; tool_input?: Record<string, unknown> };
 try {
     payload = JSON.parse(readFileSync(0, "utf8"));
@@ -317,7 +337,9 @@ const boxIds = tokens.slice(5, carriesExtraFields ? -1 : undefined);
 
 let result: Record<string, unknown>;
 try {
-    result = await runStepBoxes(identity, boxIds, extraFields);
+    result = boxIds[0] === "--walk"
+        ? await walkFromStep(identity, String(boxIds[1]), extraFields)
+        : await runStepBoxes(identity, boxIds, extraFields);
 } catch (error) {
     result = { ok: false, failedBoxId: boxIds[0], note: String((error as Error)?.message ?? error) };
 }
