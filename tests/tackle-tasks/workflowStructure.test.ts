@@ -13,8 +13,10 @@ const diagramPath = join(repoRoot, "plans", "diagram", "pipeline.mmd");
 const workflowSource = readFileSync(workflowPath, "utf8");
 
 // Every counter the diagrams cap, one per loop that can repeat.
-const repairCounters = [
-    "clarifyRounds", "planReviews", "testFixes", "testReviews", "conflictFixes", "suiteFixes", "mergeAttempts",
+// The hook owns each cap now, so the workflow names the decision, not the counter.
+const repairDecisions = [
+    "ARE_2_CLARIFY_ROUNDS_DONE", "ARE_2_REVIEWS_DONE", "ARE_2_TEST_FIXES_DONE", "ARE_2_TEST_REVIEWS_DONE",
+    "ARE_2_CONFLICT_FIXES_DONE", "ARE_2_SUITE_FIXES_DONE", "ARE_2_MERGE_ATTEMPTS_DONE",
 ];
 
 // The three exit types the preamble owns, so the workflow must never name them.
@@ -78,14 +80,15 @@ test("test_workflow_referencesEveryExitTypeFromTheDiagram", () => {
 });
 
 test("test_workflow_capsEveryRetryLoopAtTwoAttempts", () => {
-    // Setup: one shared cap, so no loop can drift to a different number of attempts.
-    assert.ok(workflowSource.includes("const MAX_ATTEMPTS = 2"));
+    // Setup: one shared cap, beside the counters it caps, so no loop can drift to another number.
+    const counterSource = readFileSync(join(repoRoot, "scripts", "tackle-tasks", "taskRunState.ts"), "utf8");
+    assert.ok(counterSource.includes("export const MAX_ATTEMPTS = 2"));
 
-    // Verification: every repair counter is checked against that cap.
-    for (const counter of repairCounters) {
+    // Verification: every repair loop asks the hook for its cap decision.
+    for (const decision of repairDecisions) {
         assert.ok(
-            workflowSource.includes(`${counter} >= MAX_ATTEMPTS`),
-            `${counter} is not capped at MAX_ATTEMPTS`,
+            workflowSource.includes(`decideStep(ctx, "${decision}")`),
+            `${decision} is not asked`,
         );
     }
 

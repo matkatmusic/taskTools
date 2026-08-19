@@ -30,13 +30,6 @@ export type PipelineContext = PipelineConfig & {
     agentVisits: Map<string, number>;
     planExtra: Record<string, unknown>;
     implementExtra: Record<string, unknown>;
-    clarifyRounds: number;
-    planReviews: number;
-    testFixes: number;
-    testReviews: number;
-    conflictFixes: number;
-    suiteFixes: number;
-    mergeAttempts: number;
     plannerIndex: number;
     verdictIndex: number;
     testsIndex: number;
@@ -79,13 +72,6 @@ export function createPipelineContext(config: PipelineConfig): PipelineContext {
         agentVisits: new Map(),
         planExtra: {},
         implementExtra: {},
-        clarifyRounds: 0,
-        planReviews: 0,
-        testFixes: 0,
-        testReviews: 0,
-        conflictFixes: 0,
-        suiteFixes: 0,
-        mergeAttempts: 0,
         plannerIndex: 0,
         verdictIndex: 0,
         testsIndex: 0,
@@ -180,6 +166,39 @@ export async function runAgent(
 }
 
 /*
+  The whole prompt for a [C] box. Extra fields ride a quoted heredoc, as emitterPrompt does,
+  because a value holding an apostrophe would otherwise split mid-token and be read as a box id.
+*/
+export function runStepPrompt(ctx: PipelineContext, boxId: string, extraFields?: Record<string, unknown>): string {
+    const head = `/run-step "${ctx.task}" "${ctx.runId}" "${ctx.worktree}" "${ctx.sourceBranch}" "${ctx.projectRoot}" "${boxId}"`;
+    const payload = extraFields === undefined ? "" : ` <<'TTPAYLOAD'\n${JSON.stringify(extraFields)}\nTTPAYLOAD`;
+    return `Type this, exactly as written, as your next message, and send nothing else:
+${head}${payload}
+A hook answers it with one JSON object. Return that object, unchanged, as your result.`;
+}
+
+/*
+  A decision the hook owns. The counters it reads live in tasks.json, which the sandbox
+  cannot open, so an agent types the skill and hands back the arm to follow.
+*/
+export async function decideStep(ctx: PipelineContext, decisionId: string): Promise<string> {
+    const prompt = `Type this, exactly as written, as your next message, and send nothing else:
+/run-step "${ctx.task}" "${ctx.runId}" "${ctx.worktree}" "${ctx.sourceBranch}" "${ctx.projectRoot}" "--decide" "${decisionId}"
+A hook answers it with one JSON object. Return that object, unchanged, as your result.`;
+    const result = await ctx.agent(prompt, { label: `run-step:${ctx.task}`, schema: RUN_STEP_RESULT });
+    return (result as { outcome: string }).outcome;
+}
+
+/*
+  A [C] box. The sandbox cannot run a script, so an agent types the skill that does.
+*/
+export async function runStep(ctx: PipelineContext, boxId: string, extraFields?: Record<string, unknown>, suffix?: string): Promise<unknown> {
+    step(ctx, ctx.L(boxId), suffix);
+    if (isFake(ctx)) return {};
+    return await ctx.agent(runStepPrompt(ctx, boxId, extraFields), { label: `run-step:${ctx.task}`, schema: RUN_STEP_RESULT });
+}
+
+/*
   Paragraph 3: an operational script failure ends the run as run-failed, from any green box.
 */
 
@@ -190,6 +209,19 @@ export async function runAgent(
 // ---------------------------------------------------------------------------
 // Return shapes for the 10 agent boxes
 // ---------------------------------------------------------------------------
+
+export const RUN_STEP_RESULT = {
+    type: "object",
+    required: ["ok"],
+    properties: {
+        ok: { type: "boolean" },
+        failedBoxId: { type: "string" },
+        note: { type: "string" },
+        stoppedAt: { type: "string" },
+        outcome: { type: "string" },
+        receipts: { type: "object" },
+    },
+};
 
 export const PLAN_RESULT = {
     type: "object",
@@ -331,20 +363,20 @@ export async function failuresExit(
     const landed = receipt === null ? workLanded === true : receipt.workLanded;
     const finalExitType = receipt === null ? exitType : receipt.exitType;
     // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
-    step(ctx, ctx.L("READ_PUBLICATION_STATE"));
+    await runStep(ctx, "READ_PUBLICATION_STATE");
     step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(landed));
     // Paragraph 86: landed work discards the incoming exit type, run-failed included.
-    if (landed) step(ctx, ctx.L("WRITE_PUBLICATION_OUTCOME"));
-    else step(ctx, ctx.L("WRITE_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
-    step(ctx, ctx.L("RECORD_MODIFIED_FILES_FAILURE"));
+    if (landed) await runStep(ctx, "WRITE_PUBLICATION_OUTCOME", { exitType: finalExitType, exitNote });
+    else await runStep(ctx, "WRITE_EXIT_TYPE_AND_NOTE", { exitType: finalExitType, exitNote }, finalExitType.toUpperCase());
+    await runStep(ctx, "RECORD_MODIFIED_FILES_FAILURE");
     // Paragraphs 89 and 90: the lease and the source lock are independent ownership checks.
     step(ctx, ctx.L("DOES_RUN_HOLD_LEASE"), "YES");
     // Paragraph 93: the worktree is never removed here, only its lease released.
-    step(ctx, ctx.L("RELEASE_WORKTREE_LEASE"));
+    await runStep(ctx, "RELEASE_WORKTREE_LEASE");
     step(ctx, ctx.L("DOES_RUN_HOLD_SOURCE_LOCK"), yesNo(ctx.sourceLockHeld));
-    if (ctx.sourceLockHeld) step(ctx, ctx.L("RELEASE_SOURCE_LOCK"));
+    if (ctx.sourceLockHeld) await runStep(ctx, "RELEASE_SOURCE_LOCK");
     // Paragraph 91: mark inactive last, after every release and every write.
-    step(ctx, ctx.L("MARK_TASK_INACTIVE_FAILURE"));
+    await runStep(ctx, "MARK_TASK_INACTIVE_FAILURE");
     step(ctx, ctx.L("REPORT_EXIT_TYPE_AND_NOTE"), finalExitType.toUpperCase());
     step(ctx, ctx.L("STOP"));
     return { task: ctx.task, exitType: finalExitType, exitNote, trace: ctx.trace };
@@ -363,15 +395,15 @@ export async function mergeSucceededExit(
     banner(ctx, "merge succeeded exit");
     await runExitTail(ctx, "completed", "");
     step(ctx, ctx.L("MERGE_RECEIPT_INPUT"));
-    step(ctx, ctx.L("RECORD_MERGE_COMMIT_HASHES"));
+    await runStep(ctx, "RECORD_MERGE_COMMIT_HASHES");
     // Paragraph 79: completed is the point of no return, written before any release.
-    step(ctx, ctx.L("WRITE_EXIT_TYPE_COMPLETED"));
-    step(ctx, ctx.L("RECORD_MODIFIED_FILES_SUCCESS"));
+    await runStep(ctx, "WRITE_EXIT_TYPE_COMPLETED", { exitNote: "" });
+    await runStep(ctx, "RECORD_MODIFIED_FILES_SUCCESS");
     // Paragraph 81: the only box releasing both the source lock and the worktree lease.
-    step(ctx, ctx.L("CLEAN_UP_WORKTREES"));
-    step(ctx, ctx.L("BUILD_CLOSURE_NOTE"));
-    step(ctx, ctx.L("MARK_TASK_INACTIVE_SUCCESS"));
-    step(ctx, ctx.L("ARCHIVE_TASK"));
+    await runStep(ctx, "CLEAN_UP_WORKTREES");
+    await runStep(ctx, "BUILD_CLOSURE_NOTE");
+    await runStep(ctx, "MARK_TASK_INACTIVE_SUCCESS");
+    await runStep(ctx, "ARCHIVE_TASK");
     step(ctx, ctx.L("REPORT_CLOSURE_NOTE"));
     step(ctx, ctx.L("STOP"));
     return { task: ctx.task, exitType: "completed", exitNote: "", trace: ctx.trace };
@@ -409,7 +441,7 @@ export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcom
     if (outcome === "PLAN") return { next: "review-plan" };
 
     // Paragraph 27: CLARIFY is how a planner asks for what it was never given.
-    const roundsDone = ctx.clarifyRounds >= MAX_ATTEMPTS;
+    const roundsDone = await decideStep(ctx, "ARE_2_CLARIFY_ROUNDS_DONE") === "YES";
     // Capped at 2 rounds: no user answers, so a third ask learns nothing new.
     step(ctx, ctx.L("ARE_2_CLARIFY_ROUNDS_DONE"), yesNo(roundsDone));
 
@@ -420,11 +452,10 @@ export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcom
             "the planner asked twice for something the docs cannot supply. worktree preserved.",
         );
     }
-
-    ctx.clarifyRounds += 1;
     // Paragraph 28: the planner reads only the entry and the docs, so write it there.
-    step(ctx, ctx.L("WRITE_CLARIFY_REQUEST"));
-    ctx.planExtra.clarifyRequest = (result as { clarifyRequest?: string }).clarifyRequest ?? "";
+    const clarifyRequest = (result as { clarifyRequest?: string }).clarifyRequest ?? "";
+    await runStep(ctx, "WRITE_CLARIFY_REQUEST", { clarifyRequest });
+    ctx.planExtra.clarifyRequest = clarifyRequest;
     ctx.depth += 1;
     return { next: "document-generation" };
 }
@@ -439,7 +470,7 @@ export async function documentGenerationPipeline(ctx: PipelineContext): Promise<
     // A clarify round always re-enters in UPDATE mode; AUTOGEN belongs to the preamble.
     step(ctx, ctx.L("WHAT_IS_DOCS_MODE"), "UPDATE");
     // Paragraph 21: UPDATE docs read the clarify request and grow to cover what it names.
-    step(ctx, ctx.L("UPDATE_AUTO_GENERATED_DOCS"));
+    await runStep(ctx, "UPDATE_AUTO_GENERATED_DOCS");
     ctx.planExtra.updateDocs = true;
     return { next: "plan" };
 }
@@ -473,11 +504,10 @@ export async function reviewPlanPipeline(ctx: PipelineContext): Promise<Pipeline
     if (verdict === "ACCEPT" || verdict === "AMEND_THEN_ACCEPT") return { next: "implement" };
 
     // Paragraph 33: the planner reads the entry, so codex's notes go into it before replanning.
-    step(ctx, ctx.L("UPDATE_TASK_ENTRY"));
+    await runStep(ctx, "UPDATE_TASK_ENTRY", { planReview: result });
     ctx.planExtra.planReview = result;
-    ctx.planReviews += 1;
 
-    const reviewsDone = ctx.planReviews >= MAX_ATTEMPTS;
+    const reviewsDone = await decideStep(ctx, "ARE_2_REVIEWS_DONE") === "YES";
     step(ctx, ctx.L("ARE_2_REVIEWS_DONE"), yesNo(reviewsDone));
 
     // Paragraph 35: the task cannot be planned as written and needs dividing.
@@ -506,7 +536,7 @@ export async function implementPipeline(ctx: PipelineContext): Promise<PipelineO
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     // Paragraph 38: commit dirty work, commit nothing clean; later steps rebase and would lose it.
-    step(ctx, ctx.L("COMMIT_IF_NEEDED"));
+    await runStep(ctx, "COMMIT_IF_NEEDED");
     return { next: "task-tests" };
 }
 
@@ -538,16 +568,15 @@ export async function taskTestsPipeline(ctx: PipelineContext): Promise<PipelineO
     if (testsPass) return { next: "review-tests" };
 
     // Paragraph 42: ask the counter BEFORE amending, or the first failure spends it.
-    const fixesDone = ctx.testFixes >= MAX_ATTEMPTS;
+    const fixesDone = await decideStep(ctx, "ARE_2_TEST_FIXES_DONE") === "YES";
     step(ctx, ctx.L("ARE_2_TEST_FIXES_DONE"), yesNo(fixesDone));
 
     // Paragraph 44.
     if (fixesDone) return toFailures("tests-red", "task tests still failing after 2 fix attempts");
 
     // Paragraph 43: a repair is never tested until committed, so re-enter implement.
-    step(ctx, ctx.L("AMEND_ENTRY_WITH_FAILING_TESTS"));
+    await runStep(ctx, "AMEND_ENTRY_WITH_FAILING_TESTS");
     ctx.implementExtra.amendFailingTests = true;
-    ctx.testFixes += 1;
     ctx.depth += 1;
     return { next: "implement" };
 }
@@ -575,16 +604,15 @@ export async function reviewTestsPipeline(ctx: PipelineContext): Promise<Pipelin
     // Paragraph 48.
     if (!flagged) return { next: "rebase-preamble" };
 
-    const reviewsDone = ctx.testReviews >= MAX_ATTEMPTS;
+    const reviewsDone = await decideStep(ctx, "ARE_2_TEST_REVIEWS_DONE") === "YES";
     step(ctx, ctx.L("ARE_2_TEST_REVIEWS_DONE"), yesNo(reviewsDone));
 
     // Paragraph 50.
     if (reviewsDone) return toFailures("tests-flagged", "task tests failed codex review");
 
     // Paragraph 49: write codex's notes and fixes into the entry, then reimplement.
-    step(ctx, ctx.L("AMEND_ENTRY_WITH_CODEX_NOTES"));
+    await runStep(ctx, "AMEND_ENTRY_WITH_CODEX_NOTES", { testReview: result });
     ctx.implementExtra.testReview = result;
-    ctx.testReviews += 1;
     ctx.depth += 1;
     return { next: "implement" };
 }
@@ -607,7 +635,7 @@ export async function rebasePreamblePipeline(ctx: PipelineContext): Promise<Pipe
     step(ctx, ctx.L("FINISHED_IMPLEMENTATION_INPUT"));
 
     // Paragraph 51: the lock owner is runId:taskNumber, never runId alone.
-    step(ctx, ctx.L("LOCK_SOURCE_REPO"));
+    await runStep(ctx, "LOCK_SOURCE_REPO");
     const lockReceipt = isFake(ctx) ? null : await ctx.agent(emitterPrompt(ctx, "lock-source-repo"), {
         label: `lock-source-repo:${ctx.task}`,
         schema: LOCK_SOURCE_REPO_RESULT,
@@ -657,7 +685,7 @@ export async function rebasePipeline(ctx: PipelineContext): Promise<PipelineOutc
         step(ctx, ctx.L("DID_REBASE_REPORT_CONFLICTS"), yesNo(conflicted));
         if (!conflicted) return { next: "suite" };
 
-        const fixesDone = ctx.conflictFixes >= MAX_ATTEMPTS;
+        const fixesDone = await decideStep(ctx, "ARE_2_CONFLICT_FIXES_DONE") === "YES";
         step(ctx, ctx.L("ARE_2_CONFLICT_FIXES_DONE"), yesNo(fixesDone));
 
         // Paragraph 61.
@@ -674,10 +702,8 @@ export async function rebasePipeline(ctx: PipelineContext): Promise<PipelineOutc
         // Paragraph 59.
         if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
-        ctx.conflictFixes += 1;
-
         // Paragraph 60: always fix, then commit, then continue — never fix then continue.
-        step(ctx, ctx.L("COMMIT_IF_NEEDED"));
+        await runStep(ctx, "COMMIT_IF_NEEDED");
         const continueRun = await runAgent(ctx, ctx.L("CONTINUE_REBASE"), "REBASE_ADVANCER", "continue-rebase", CONTINUE_REBASE_RESULT);
         if (continueRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
@@ -712,7 +738,7 @@ export async function suitePipeline(ctx: PipelineContext): Promise<PipelineOutco
         step(ctx, ctx.L("DO_ALL_TESTS_PASS"), yesNo(passes));
         if (passes) break;
 
-        const fixesDone = ctx.suiteFixes >= MAX_ATTEMPTS;
+        const fixesDone = await decideStep(ctx, "ARE_2_SUITE_FIXES_DONE") === "YES";
         step(ctx, ctx.L("ARE_2_SUITE_FIXES_DONE"), yesNo(fixesDone));
 
         // Paragraph 66.
@@ -735,10 +761,8 @@ export async function suitePipeline(ctx: PipelineContext): Promise<PipelineOutco
         // Paragraph 65.
         if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
-        ctx.suiteFixes += 1;
-
         // Paragraph 64: commit the repair before rerunning, so it is fix, commit, run.
-        step(ctx, ctx.L("COMMIT_IF_NEEDED"));
+        await runStep(ctx, "COMMIT_IF_NEEDED");
         ctx.depth += 1;
     }
 
@@ -781,10 +805,10 @@ export async function mergePipeline(ctx: PipelineContext): Promise<PipelineOutco
     if (!isFake(ctx) && mergeReceipt === null) return toFailures("run-failed", "the merge box returned nothing usable");
 
     // Paragraphs 70 and 71: no fast-forward, and each layer writes its merge ref as it lands.
-    step(ctx, ctx.L("MERGE_WORKTREES"));
+    await runStep(ctx, "MERGE_WORKTREES");
 
     // Paragraph 72: a read-only reconciliation over those refs, never a returned boolean.
-    step(ctx, ctx.L("READ_PUBLICATION_STATE"));
+    await runStep(ctx, "READ_PUBLICATION_STATE");
     const state = isFake(ctx)
         ? attempt((ctx.fake as Record<string, string[]>).publicationState, ctx.publicationIndex)
         : (mergeReceipt as { state: string }).state;
@@ -804,13 +828,11 @@ export async function mergePipeline(ctx: PipelineContext): Promise<PipelineOutco
         );
     }
 
-    const attemptsDone = ctx.mergeAttempts >= MAX_ATTEMPTS;
+    const attemptsDone = await decideStep(ctx, "ARE_2_MERGE_ATTEMPTS_DONE") === "YES";
     step(ctx, ctx.L("ARE_2_MERGE_ATTEMPTS_DONE"), yesNo(attemptsDone));
 
     // Paragraph 76.
     if (attemptsDone) return toFailures("merge-failed", "nothing landed after 2 attempts. worktree preserved.");
-
-    ctx.mergeAttempts += 1;
     ctx.depth += 1;
     // Paragraph 75: re-enter rebase, not the rebase preamble; the target branch tip moved.
     return { next: "rebase" };
