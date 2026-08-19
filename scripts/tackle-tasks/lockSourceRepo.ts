@@ -1,8 +1,7 @@
-// "lock the source repo" — pipeline-rebasePreamble.mmd. Polls, then gives up at the 15-minute cap.
+// "lock the source repo" — pipeline-rebasePreamble.mmd. Tries once; the workflow owns the retry loop.
 import { readFileSync } from "node:fs";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { acquireSourceRepoLockBounded } from "./rebaseTaskWorktree.ts";
-import { buildLockOwner } from "./sourceRepoLock.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 
 export type LockSourceRepoInput = {
     taskNumber: number;
@@ -19,8 +18,12 @@ export type LockSourceRepoOutput = {
 export async function lockSourceRepo(input: LockSourceRepoInput): Promise<LockSourceRepoOutput> {
     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
     const owner = buildLockOwner(input.runId, input.taskNumber);
-    const result = await acquireSourceRepoLockBounded(projectRoot, owner);
-    return { acquired: result.lock === "acquired", heldByOwner: result.heldByOwner };
+    // A hook runs this box, so it never waits: WAS_LOCK_ACQUIRED sends the run round again.
+    const outcome = acquireSourceRepoLock(projectRoot, owner);
+    if (outcome.status === "acquired" || outcome.status === "already-held-by-me") {
+        return { acquired: true, heldByOwner: null };
+    }
+    return { acquired: false, heldByOwner: outcome.owner };
 }
 
 if (process.argv[1]?.endsWith("lockSourceRepo.ts")) {
