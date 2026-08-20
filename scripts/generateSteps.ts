@@ -11,6 +11,7 @@ export type StepConfigEntry = { box: string; script: string; template: string; n
 // Keyed by diagram file name, so two diagrams may name the same box without sharing a script.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
+export type BlockTemplate = { input: unknown; output: unknown };
 
 const DIAGRAM_KEYWORDS = /^(flowchart|graph|subgraph|end|classDef|class|style|direction|click)\b/;
 
@@ -62,13 +63,44 @@ function buildStubScript(box: string, diagramFile: string): string {
         + `if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url))) console.log(JSON.stringify(main(process.argv[2] ?? "")));\n`;
 }
 
-// The seed names only what every block must produce. An author narrows it by editing the file.
+// The seed output matches what buildStubScript prints, so a new block is green before anyone edits it.
 function buildStubTemplate(box: string): string {
     const template = {
         input: {},
-        output: { box, signal: "continue" },
+        output: { box, signal: "continue", note: `${box}.ts for ${box}`, input: "" },
     };
     return `${JSON.stringify(template, null, 4)}\n`;
+}
+
+// A new block's input contract is whatever the block before it produces, so copy that rather than guess.
+function seedInputTemplatesFromPredecessors(config: StepConfig, newTemplatePaths: Set<string>): void {
+    const outputByStepKey = new Map<string, unknown>();
+    for (const [diagramFile, entries] of Object.entries(config)) {
+        for (const entry of entries) {
+            const template = JSON.parse(readFileSync(join(PROJECT_ROOT, entry.template), "utf8")) as BlockTemplate;
+            outputByStepKey.set(`${diagramFile}::${entry.box}`, template.output);
+        }
+    }
+    for (const [diagramFile, entries] of Object.entries(config)) {
+        for (const entry of entries) {
+            for (const target of entry.next) {
+                const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
+                const targetPath = getTemplatePathForStepKey(config, targetKey);
+                if (!targetPath || !newTemplatePaths.has(targetPath)) {
+                    continue;
+                }
+                const targetFile = join(PROJECT_ROOT, targetPath);
+                const targetTemplate = JSON.parse(readFileSync(targetFile, "utf8")) as BlockTemplate;
+                targetTemplate.input = outputByStepKey.get(`${diagramFile}::${entry.box}`);
+                writeFileSync(targetFile, `${JSON.stringify(targetTemplate, null, 4)}\n`);
+            }
+        }
+    }
+}
+
+function getTemplatePathForStepKey(config: StepConfig, stepKey: string): string | undefined {
+    const [diagramFile = "", box = ""] = stepKey.split("::");
+    return config[diagramFile]?.find(entry => entry.box === box)?.template;
 }
 
 // A seam into another diagram is hand-written, so regenerating from the arrows must not drop it.
@@ -92,6 +124,7 @@ function getDiagramFileNames(diagramFolder: string): string[] {
 
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string): StepConfig {
     const seamsByStepKey = getSeamsFromPreviousConfig(configPath);
+    const newTemplatePaths = new Set<string>();
     const config: StepConfig = {};
     for (const diagramFile of getDiagramFileNames(diagramFolder)) {
         const stepsDirectory = join(stepsRoot, basename(diagramFile, ".mmd"));
@@ -107,6 +140,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
             }
             if (!existsSync(templatePath)) {
                 writeFileSync(templatePath, buildStubTemplate(box));
+                newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
             }
             const seams = seamsByStepKey[`${diagramFile}::${box}`] ?? [];
             entries.push({
@@ -118,6 +152,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         }
         config[diagramFile] = entries;
     }
+    seedInputTemplatesFromPredecessors(config, newTemplatePaths);
     writeFileSync(configPath, `${JSON.stringify(config, null, 4)}\n`);
     return config;
 }

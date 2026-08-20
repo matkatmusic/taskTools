@@ -14,8 +14,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     return getValueKind(value) === "object";
 }
 
-// Every key the template names must be present with the same kind of value. Extra keys are allowed, so a
-// block may add detail without every template that mentions it having to change.
+// The template is the source of truth: the key sets must be equal, and every value must be the same kind.
 export function getTemplateShapeMismatches(template: unknown, actual: unknown, path = ""): string[] {
     const templateKind = getValueKind(template);
     const actualKind = getValueKind(actual);
@@ -26,13 +25,19 @@ export function getTemplateShapeMismatches(template: unknown, actual: unknown, p
     }
 
     if (isPlainObject(template) && isPlainObject(actual)) {
+        const prefix = path ? `${path}.` : "";
         const mismatches: string[] = [];
         for (const [key, templateValue] of Object.entries(template)) {
             if (!(key in actual)) {
-                mismatches.push(`${path ? `${path}.` : ""}${key} is missing`);
+                mismatches.push(`${prefix}${key} is missing`);
                 continue;
             }
-            mismatches.push(...getTemplateShapeMismatches(templateValue, actual[key], `${path ? `${path}.` : ""}${key}`));
+            mismatches.push(...getTemplateShapeMismatches(templateValue, actual[key], `${prefix}${key}`));
+        }
+        for (const key of Object.keys(actual)) {
+            if (!(key in template)) {
+                mismatches.push(`${prefix}${key} is not in the template`);
+            }
         }
         return mismatches;
     }

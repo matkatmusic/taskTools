@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -118,7 +118,7 @@ test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
 test("test_generateSteps_writesATemplateForABoxWithNone", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const template = JSON.parse(readFileSync(join(stepsRoot, "one/NEW_BOX.template.json"), "utf8"));
-    assert.deepEqual(template, { input: {}, output: { box: "NEW_BOX", signal: "continue" } });
+    assert.deepEqual(template, { input: {}, output: { box: "NEW_BOX", signal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" } });
 });
 
 test("test_generateSteps_recordsTheTemplatePathBesideTheScript", () => {
@@ -131,4 +131,22 @@ test("test_generateSteps_leavesAnExistingTemplateAlone", () => {
     writeFileSync(join(stepsRoot, "one/A.template.json"), `{"input":{"box":"CALLER"},"output":{"box":"A","signal":"stop"}}`);
     run();
     assert.deepEqual(JSON.parse(readFileSync(join(stepsRoot, "one/A.template.json"), "utf8")).input, { box: "CALLER" });
+});
+
+test("test_generateSteps_seedsANewInputTemplateFromThePredecessorsOutput", () => {
+    const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    const bTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/B.template.json"), "utf8"));
+    const aTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/A.template.json"), "utf8"));
+    assert.deepEqual(bTemplate.input, aTemplate.output);
+});
+
+test("test_generateSteps_seedsANewInputTemplateAcrossASeam", () => {
+    const { config, configPath, stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    SWEEP --> DONE\n" });
+    config["one.mmd"]![1]!.next = ["two.mmd::SWEEP"];
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+    rmSync(join(stepsRoot, "two/SWEEP.template.json"));
+    run();
+    const sweepTemplate = JSON.parse(readFileSync(join(stepsRoot, "two/SWEEP.template.json"), "utf8"));
+    const bTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/B.template.json"), "utf8"));
+    assert.deepEqual(sweepTemplate.input, bTemplate.output);
 });

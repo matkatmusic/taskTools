@@ -45,3 +45,22 @@ for (const [diagramFile, entries] of Object.entries(config)) {
         });
     }
 }
+
+// The edge contract: what a block hands on must be exactly what the next block says it takes.
+for (const [diagramFile, entries] of Object.entries(config)) {
+    for (const entry of entries) {
+        for (const target of entry.next) {
+            const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
+            const [targetDiagram = "", targetBox = ""] = targetKey.split("::");
+            const targetEntry = config[targetDiagram]?.find(candidate => candidate.box === targetBox);
+
+            test(`test_stepEdge_${entry.box}_to_${targetBox}_agreesOnTheShape`, () => {
+                assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
+                const producedTemplate = readBlockTemplate(entry.template);
+                const acceptedTemplate = readBlockTemplate(targetEntry!.template);
+                const mismatches = getTemplateShapeMismatches(acceptedTemplate.input, producedTemplate.output);
+                assert.deepEqual(mismatches, [], `${targetBox} input does not match ${entry.box} output:\n${mismatches.join("\n")}`);
+            });
+        }
+    }
+}
