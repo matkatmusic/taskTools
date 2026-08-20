@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxesInDiagram, generateSteps } from "../scripts/generateSteps.ts";
+import { boxesInDiagram, edgesInDiagram, generateSteps } from "../scripts/generateSteps.ts";
 
 // Builds a diagram folder from {fileName: contents} and generates against it.
 function generateFrom(diagrams: Record<string, string>) {
@@ -15,7 +15,7 @@ function generateFrom(diagrams: Record<string, string>) {
     mkdirSync(diagramFolder);
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
     const run = () => generateSteps(diagramFolder, stepsRoot, configPath);
-    return { config: run(), run, diagramFolder, stepsRoot, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
+    return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
 }
 
 test("test_boxesInDiagram_findsBothSidesOfAnArrow", () => {
@@ -54,14 +54,15 @@ test("test_generateSteps_givesEachDiagramItsOwnScriptFolder", () => {
 test("test_generateSteps_writesAStubForABoxWithNoScript", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const stub = readFileSync(join(stepsRoot, "one/NEW_BOX.ts"), "utf8");
-    assert.match(stub, /export function main\(\): void/);
-    assert.match(stub, /realpathSync\(process\.argv\[1\]!\) === realpathSync\(fileURLToPath\(import\.meta\.url\)\)\) main\(\);/);
+    assert.match(stub, /export function main\(input: string\): Record<string, unknown>/);
+    assert.match(stub, /signal: "continue"/);
+    assert.match(stub, /realpathSync\(process\.argv\[1\]!\) === realpathSync\(fileURLToPath\(import\.meta\.url\)\)\)/);
 });
 
-test("test_generateSteps_writesAStubThatEchoesItsFileNameAndBox", () => {
+test("test_generateSteps_writesAStubThatPrintsItsBoxAndSignal", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const printed = execFileSync("node", ["--no-inspect", join(stepsRoot, "one/NEW_BOX.ts")], { encoding: "utf8" });
-    assert.equal(printed, "NEW_BOX.ts for NEW_BOX\n");
+    assert.deepEqual(JSON.parse(printed), { box: "NEW_BOX", signal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" });
 });
 
 test("test_generateSteps_leavesAnExistingScriptAlone", () => {
@@ -79,5 +80,37 @@ test("test_generateSteps_dropsABoxTheDiagramNoLongerNames", () => {
 
 test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     const { readConfig } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script"]);
+    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "next"]);
+});
+
+test("test_edgesInDiagram_recordsWhatEachBoxPointsAt", () => {
+    assert.deepEqual(edgesInDiagram("flowchart TD\n    A --> B --> C\n").next, { A: ["B"], B: ["C"], C: [] });
+});
+
+test("test_edgesInDiagram_ignoresAnEdgeLabel", () => {
+    assert.deepEqual(edgesInDiagram("flowchart TD\n    A -->|yes| B\n").next, { A: ["B"], B: [] });
+});
+
+test("test_generateSteps_writesTheNextBoxFromTheArrows", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.next), [["B"], []]);
+});
+
+test("test_generateSteps_keepsAHandWrittenSeamIntoAnotherDiagram", () => {
+    const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    SWEEP --> DONE\n" });
+    config["one.mmd"]![1]!.next = ["two.mmd::SWEEP"];
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+    assert.deepEqual(run()["one.mmd"]![1]!.next, ["two.mmd::SWEEP"]);
+});
+
+test("test_generateSteps_dropsASameDiagramNextTheArrowsNoLongerName", () => {
+    const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> C\n");
+    assert.deepEqual(run()["one.mmd"]![0]!.next, ["C"]);
+});
+
+test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
+    const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
+    const printed = execFileSync("node", ["--no-inspect", join(stepsRoot, "one/NEW_BOX.ts"), "the input"], { encoding: "utf8" });
+    assert.equal(JSON.parse(printed).input, "the input");
 });
