@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxesInDiagram, edgesInDiagram, generateSteps } from "../scripts/generateSteps.ts";
+import { generateSteps, getBoxesInDiagram, getEdgesInDiagram } from "../scripts/generateSteps.ts";
 
 // Builds a diagram folder from {fileName: contents} and generates against it.
 function generateFrom(diagrams: Record<string, string>) {
@@ -18,20 +18,20 @@ function generateFrom(diagrams: Record<string, string>) {
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
 }
 
-test("test_boxesInDiagram_findsBothSidesOfAnArrow", () => {
-    assert.deepEqual(boxesInDiagram("flowchart TD\n    A[first] --> B[second]\n"), ["A", "B"]);
+test("test_getBoxesInDiagram_findsBothSidesOfAnArrow", () => {
+    assert.deepEqual(getBoxesInDiagram("flowchart TD\n    A[first] --> B[second]\n"), ["A", "B"]);
 });
 
-test("test_boxesInDiagram_namesABoxOnceWhenItAppearsTwice", () => {
-    assert.deepEqual(boxesInDiagram("flowchart TD\n    A --> B\n    B --> C\n"), ["A", "B", "C"]);
+test("test_getBoxesInDiagram_namesABoxOnceWhenItAppearsTwice", () => {
+    assert.deepEqual(getBoxesInDiagram("flowchart TD\n    A --> B\n    B --> C\n"), ["A", "B", "C"]);
 });
 
-test("test_boxesInDiagram_ignoresCommentsAndDiagramKeywords", () => {
-    assert.deepEqual(boxesInDiagram("%% a note\nflowchart TD\n    direction LR\n    A --> B %% trailing\n"), ["A", "B"]);
+test("test_getBoxesInDiagram_ignoresCommentsAndDiagramKeywords", () => {
+    assert.deepEqual(getBoxesInDiagram("%% a note\nflowchart TD\n    direction LR\n    A --> B %% trailing\n"), ["A", "B"]);
 });
 
-test("test_boxesInDiagram_stripsRoundAndCurlyLabels", () => {
-    assert.deepEqual(boxesInDiagram("flowchart TD\n    A(round) --> B{diamond}\n"), ["A", "B"]);
+test("test_getBoxesInDiagram_stripsRoundAndCurlyLabels", () => {
+    assert.deepEqual(getBoxesInDiagram("flowchart TD\n    A(round) --> B{diamond}\n"), ["A", "B"]);
 });
 
 test("test_generateSteps_keysTheConfigByDiagramFileName", () => {
@@ -83,12 +83,12 @@ test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "next"]);
 });
 
-test("test_edgesInDiagram_recordsWhatEachBoxPointsAt", () => {
-    assert.deepEqual(edgesInDiagram("flowchart TD\n    A --> B --> C\n").next, { A: ["B"], B: ["C"], C: [] });
+test("test_getEdgesInDiagram_recordsWhatEachBoxPointsAt", () => {
+    assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A --> B --> C\n").next, { A: ["B"], B: ["C"], C: [] });
 });
 
-test("test_edgesInDiagram_ignoresAnEdgeLabel", () => {
-    assert.deepEqual(edgesInDiagram("flowchart TD\n    A -->|yes| B\n").next, { A: ["B"], B: [] });
+test("test_getEdgesInDiagram_ignoresAnEdgeLabel", () => {
+    assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A -->|yes| B\n").next, { A: ["B"], B: [] });
 });
 
 test("test_generateSteps_writesTheNextBoxFromTheArrows", () => {

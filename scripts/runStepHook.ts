@@ -5,35 +5,68 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-// The override exists so a test writes to its own temp log instead of the run's.
+const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
+// The overrides exist so a test writes to its own temp files instead of the run's.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(PROJECT_ROOT, "plans/diagrams/runs/run-log.md");
-const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/steps.json");
+const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
 
 type StepConfigEntry = { box: string; script: string; next: string[] };
 type StepConfig = Record<string, StepConfigEntry[]>;
 type Step = StepConfigEntry & { diagram: string };
+type StepRun = {
+    ok: boolean;
+    box: string;
+    command: string;
+    exitCode: number | null;
+    stdout: string;
+    result: Record<string, unknown> | null;
+};
+type WalkResult = {
+    ok: boolean;
+    ran: string[];
+    stoppedAt: string;
+    why: string;
+    output: unknown;
+};
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
-const STEPS = new Map<string, Step>();
-for (const [diagram, entries] of Object.entries(JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig)) {
-    for (const entry of entries) STEPS.set(`${diagram}::${entry.box}`, { ...entry, diagram });
+function buildStepsByKey(configFile: string): Map<string, Step> {
+    const config = JSON.parse(readFileSync(configFile, "utf8")) as StepConfig;
+    const stepsByKey = new Map<string, Step>();
+    for (const [diagram, entries] of Object.entries(config)) {
+        for (const entry of entries) {
+            stepsByKey.set(`${diagram}::${entry.box}`, { ...entry, diagram });
+        }
+    }
+    return stepsByKey;
 }
+
+const STEPS_BY_KEY = buildStepsByKey(CONFIG_FILE);
 
 // A bare box id names its own diagram; one with :: names another.
-function keyFor(reference: string, fromDiagram: string): string {
-    return reference.includes("::") ? reference : `${fromDiagram}::${reference}`;
+function getStepKey(boxReference: string, fromDiagram: string): string {
+    if (boxReference.includes("::")) {
+        return boxReference;
+    }
+    return `${fromDiagram}::${boxReference}`;
 }
 
-function keysNamingBox(box: string): string[] {
-    return [...STEPS.keys()].filter(key => key.slice(key.indexOf("::") + 2) === box);
+function getStepKeysNamingBox(boxId: string): string[] {
+    const matchingKeys: string[] = [];
+    for (const stepKey of STEPS_BY_KEY.keys()) {
+        const boxPart = stepKey.slice(stepKey.indexOf("::") + 2);
+        if (boxPart === boxId) {
+            matchingKeys.push(stepKey);
+        }
+    }
+    return matchingKeys;
 }
 
-const FENCE = "=".repeat(36);
-
-function logStepOutput(blockId: string, invocation: string, command: string, commandOutput: string, output: unknown): void {
+function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown): void {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
-    const block = `${"=".repeat(7)} ${blockId} ${"=".repeat(6)}\n`
-        + `Source ${CONFIG_FILE === join(PROJECT_ROOT, "scripts/steps.json") ? "scripts/steps.json" : CONFIG_FILE}: ${blockId}\n`
+    const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
+    const logBlock = `${"=".repeat(7)} ${boxId} ${"=".repeat(6)}\n`
+        + `Source ${sourceLabel}: ${boxId}\n`
         + `input: ${JSON.stringify({ invocation })}\n`
         + `====== command ======\n`
         + `${command}\n`
@@ -42,57 +75,95 @@ function logStepOutput(blockId: string, invocation: string, command: string, com
         + `${commandOutput}\n`
         + `====== end command output ======\n`
         + `output: ${JSON.stringify(output)}\n`
-        + `${FENCE}\n`;
+        + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
-    appendFileSync(LOG_FILE, block);
+    appendFileSync(LOG_FILE, logBlock);
 }
 
-type StepRun = { ok: boolean; box: string; command: string; exitCode: number | null; stdout: string; result: Record<string, unknown> | null };
-
 // Single quotes for the log line only: the spawn itself passes an argument list, never a shell string.
-function shellQuoted(argument: string): string {
+function getShellQuotedArgument(argument: string): string {
     return `'${argument.replaceAll("'", `'\\''`)}'`;
 }
 
-function runOneStep(step: Step, input: string, invocation: string): StepRun {
-    const argv = input ? ["--no-inspect", step.script, input] : ["--no-inspect", step.script];
-    // Logged whole so the line in run-log.md is one you can paste into a terminal.
-    const command = `node --no-inspect ${step.script}${input ? ` ${shellQuoted(input)}` : ""}`;
-    const spawned = spawnSync("node", argv, { cwd: PROJECT_ROOT, encoding: "utf8" });
-    const stdout = `${spawned.stdout ?? ""}${spawned.stderr ?? ""}`.trimEnd();
-    let result: Record<string, unknown> | null = null;
+// A step's result is the last line it printed, so trailing chatter above it is allowed.
+function parseStepResult(commandOutput: string): Record<string, unknown> | null {
+    const lastLine = commandOutput.split("\n").at(-1) ?? "";
     try {
-        result = JSON.parse(stdout.split("\n").at(-1) ?? "");
+        return JSON.parse(lastLine);
     } catch {
-        result = null;
+        return null;
     }
-    const run = { ok: spawned.status === 0, box: step.box, command, exitCode: spawned.status, stdout, result };
-    logStepOutput(step.box, invocation, command, stdout, run);
-    return run;
+}
+
+function runStepScript(step: Step, input: string, invocation: string): StepRun {
+    const nodeArguments = ["--no-inspect", step.script];
+    if (input) {
+        nodeArguments.push(input);
+    }
+    // Logged whole so the line in run-log.md is one you can paste into a terminal.
+    const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
+    const command = `node --no-inspect ${step.script}${quotedInput}`;
+    const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8" });
+    const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
+    const stepRun = {
+        ok: spawnResult.status === 0,
+        box: step.box,
+        command,
+        exitCode: spawnResult.status,
+        stdout: commandOutput,
+        result: parseStepResult(commandOutput),
+    };
+    appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun);
+    return stepRun;
+}
+
+function buildWalkResult(ok: boolean, boxesRun: string[], stoppedAt: string, why: string, output: unknown): WalkResult {
+    return { ok, ran: boxesRun, stoppedAt, why, output };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
-function walkFrom(startKey: string, startInput: string, invocation: string): Record<string, unknown> {
-    const ran: string[] = [];
-    let key = startKey;
+function walkFromStep(startStepKey: string, startInput: string, invocation: string): WalkResult {
+    const boxesRun: string[] = [];
+    let stepKey = startStepKey;
     let input = startInput;
     while (true) {
-        const step = STEPS.get(key)!;
-        const run = runOneStep(step, input, invocation);
-        ran.push(key);
-        if (!run.ok) return { ok: false, ran, stoppedAt: key, why: `exited ${run.exitCode}`, output: run.stdout };
-        if (!run.result) return { ok: false, ran, stoppedAt: key, why: "printed no result object", output: run.stdout };
-        const signal = run.result.signal;
-        if (signal !== "stop" && signal !== "continue") return { ok: false, ran, stoppedAt: key, why: `signal must be "stop" or "continue", not ${JSON.stringify(signal)}`, output: run.result };
-        if (signal === "stop") return { ok: true, ran, stoppedAt: key, why: "signal stop", output: run.result };
-        if (step.next.length === 0) return { ok: false, ran, stoppedAt: key, why: `${key} has an empty next; say where it goes next in steps.json`, output: run.result };
+        const step = STEPS_BY_KEY.get(stepKey)!;
+        const stepRun = runStepScript(step, input, invocation);
+        boxesRun.push(stepKey);
+
+        if (!stepRun.ok) {
+            return buildWalkResult(false, boxesRun, stepKey, `exited ${stepRun.exitCode}`, stepRun.stdout);
+        }
+        if (!stepRun.result) {
+            return buildWalkResult(false, boxesRun, stepKey, "printed no result object", stepRun.stdout);
+        }
+
+        const signal = stepRun.result.signal;
+        if (signal !== "stop" && signal !== "continue") {
+            return buildWalkResult(false, boxesRun, stepKey, `signal must be "stop" or "continue", not ${JSON.stringify(signal)}`, stepRun.result);
+        }
+        if (signal === "stop") {
+            return buildWalkResult(true, boxesRun, stepKey, "signal stop", stepRun.result);
+        }
+        if (step.next.length === 0) {
+            return buildWalkResult(false, boxesRun, stepKey, `${stepKey} has an empty next; say where it goes next in steps.json`, stepRun.result);
+        }
+
         // A box with one successor may leave next out of its output; a decision box must name its choice.
-        const chosen = run.result.next ?? (step.next.length === 1 ? step.next[0] : undefined);
-        if (chosen === undefined) return { ok: false, ran, stoppedAt: key, why: `${key} points at ${step.next.join(", ")}; its output must name one in next`, output: run.result };
-        if (!step.next.includes(String(chosen))) return { ok: false, ran, stoppedAt: key, why: `next ${JSON.stringify(chosen)} is not one of ${step.next.join(", ")}`, output: run.result };
-        const nextKey = keyFor(String(chosen), step.diagram);
-        if (!STEPS.has(nextKey)) return { ok: false, ran, stoppedAt: key, why: `next box ${nextKey} is not in the config`, output: run.result };
-        key = nextKey;
+        const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
+        const chosenNextBox = stepRun.result.next ?? onlySuccessor;
+        if (chosenNextBox === undefined) {
+            return buildWalkResult(false, boxesRun, stepKey, `${stepKey} points at ${step.next.join(", ")}; its output must name one in next`, stepRun.result);
+        }
+        if (!step.next.includes(String(chosenNextBox))) {
+            return buildWalkResult(false, boxesRun, stepKey, `next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`, stepRun.result);
+        }
+
+        const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
+        if (!STEPS_BY_KEY.has(nextStepKey)) {
+            return buildWalkResult(false, boxesRun, stepKey, `next box ${nextStepKey} is not in the config`, stepRun.result);
+        }
+        stepKey = nextStepKey;
         // Only the first box gets the caller's input; what a later box receives is task #2.
         input = "";
     }
@@ -106,27 +177,38 @@ try {
 }
 
 // Plugin skills reach the hook namespaced, as /taskTools:run-step.
-const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
-if (!prompt.startsWith("/run-step")) process.exit(0);
+const promptText = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
+if (!promptText.startsWith("/run-step")) {
+    process.exit(0);
+}
 
-const inject = (reason: string) => process.stdout.write(JSON.stringify({
-    // Echoed from the payload: a name that disagrees with the firing event gets the output dropped.
-    hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: reason },
-}) + "\n");
+function injectResult(result: unknown): void {
+    const injected = JSON.stringify({
+        // Echoed from the payload: a name that disagrees with the firing event gets the output dropped.
+        hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: JSON.stringify(result) },
+    });
+    process.stdout.write(`${injected}\n`);
+}
 
-const invocation = prompt.trim();
+const invocation = promptText.trim();
 // The first word after the command names the box; everything after it is the first box's input.
-const [, quotedBlockId = "", startInput = ""] = invocation.slice("/run-step".length).trim().match(/^("[^"]*"|'[^']*'|\S+)\s*([\s\S]*)$/) ?? [];
-const blockId = quotedBlockId.replace(/^(["'])(.*)\1$/s, "$2");
-const startKeys = blockId.includes("::") ? [blockId].filter(key => STEPS.has(key)) : keysNamingBox(blockId);
+const argumentText = invocation.slice("/run-step".length).trim();
+const argumentMatch = argumentText.match(/^("[^"]*"|'[^']*'|\S+)\s*([\s\S]*)$/) ?? [];
+const startBoxId = (argumentMatch[1] ?? "").replace(/^(["'])(.*)\1$/s, "$2");
+const startInput = (argumentMatch[2] ?? "").trim();
+const startStepKeys = startBoxId.includes("::")
+    ? [startBoxId].filter(stepKey => STEPS_BY_KEY.has(stepKey))
+    : getStepKeysNamingBox(startBoxId);
 
-if (startKeys.length === 0) {
-    inject(JSON.stringify({ ok: false, blockId, why: `no block named ${blockId || "<missing>"}; known: ${[...STEPS.keys()].join(", ")}` }));
+if (startStepKeys.length === 0) {
+    const knownKeys = [...STEPS_BY_KEY.keys()].join(", ");
+    injectResult({ ok: false, blockId: startBoxId, why: `no block named ${startBoxId || "<missing>"}; known: ${knownKeys}` });
     process.exit(0);
 }
-if (startKeys.length > 1) {
-    inject(JSON.stringify({ ok: false, blockId, why: `${blockId} is named by more than one diagram: ${startKeys.join(", ")}; start it as diagram.mmd::${blockId}` }));
+if (startStepKeys.length > 1) {
+    const why = `${startBoxId} is named by more than one diagram: ${startStepKeys.join(", ")}; start it as diagram.mmd::${startBoxId}`;
+    injectResult({ ok: false, blockId: startBoxId, why });
     process.exit(0);
 }
 
-inject(JSON.stringify(walkFrom(startKeys[0]!, startInput.trim(), invocation)));
+injectResult(walkFromStep(startStepKeys[0]!, startInput, invocation));
