@@ -38,7 +38,7 @@ test("test_runStepHook_runsTheCommandTheBlockNames", () => {
     assert.deepEqual(result, {
         ok: true,
         blockId: "SAY_HELLO",
-        command: "echo hello from run-step",
+        command: "node --no-inspect scripts/steps/SAY_HELLO.ts",
         exitCode: 0,
         stdout: "hello from run-step",
     });
@@ -64,12 +64,12 @@ test("test_runStepHook_logsTheInvocationTheCommandAndTheOutput", () => {
         "Source scripts/runStepHook.ts: STEP_TABLE.SAY_HELLO",
         `input: {"invocation":"/run-step SAY_HELLO"}`,
         "====== command ======",
-        "echo hello from run-step",
+        "node --no-inspect scripts/steps/SAY_HELLO.ts",
         "====== end command ======",
         "====== command output ======",
         "hello from run-step",
         "====== end command output ======",
-        `output: {"ok":true,"blockId":"SAY_HELLO","command":"echo hello from run-step","exitCode":0,"stdout":"hello from run-step"}`,
+        `output: {"ok":true,"blockId":"SAY_HELLO","command":"node --no-inspect scripts/steps/SAY_HELLO.ts","exitCode":0,"stdout":"hello from run-step"}`,
         "====================================",
         "",
     ].join("\n"));

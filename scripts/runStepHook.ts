@@ -8,12 +8,12 @@ const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // The override exists so a test writes to its own temp log instead of the run's.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(PROJECT_ROOT, "plans/diagrams/runs/run-log.md");
 
-// Keyed by the box ids drawn in plans/diagrams/pipeline.mmd.
-const STEP_TABLE: Record<string, string> = {
-    SAY_HELLO: "echo hello from run-step",
-    STAMP_TIME: "date -u +%Y-%m-%dT%H:%M:%SZ",
-    COUNT_FILES: "git ls-files | wc -l",
-};
+// Box id to script, written by scripts/generateSteps.ts from plans/diagrams/pipeline.mmd.
+type StepConfigEntry = { box: string; script: string };
+const STEP_TABLE: Record<string, string> = Object.fromEntries(
+    (JSON.parse(readFileSync(join(PROJECT_ROOT, "scripts/steps.json"), "utf8")) as StepConfigEntry[])
+        .map(entry => [entry.box, entry.script]),
+);
 
 const FENCE = "=".repeat(36);
 
@@ -52,13 +52,15 @@ const inject = (reason: string) => process.stdout.write(JSON.stringify({
 
 const invocation = prompt.trim();
 const blockId = (invocation.slice("/run-step".length).match(/"[^"]*"|'[^']*'|\S+/) ?? [""])[0].replace(/^(["'])(.*)\1$/s, "$2");
-const command = STEP_TABLE[blockId];
-if (!command) {
+const scriptPath = STEP_TABLE[blockId];
+if (!scriptPath) {
     inject(JSON.stringify({ ok: false, blockId, note: `run-step: no block named ${blockId || "<missing>"}; known: ${Object.keys(STEP_TABLE).join(", ")}` }));
     process.exit(0);
 }
 
-const run = spawnSync(command, { cwd: PROJECT_ROOT, shell: true, encoding: "utf8" });
+// Logged whole so the line in run-log.md is one you can paste into a terminal.
+const command = `node --no-inspect ${scriptPath}`;
+const run = spawnSync("node", ["--no-inspect", scriptPath], { cwd: PROJECT_ROOT, encoding: "utf8" });
 const commandOutput = `${run.stdout ?? ""}${run.stderr ?? ""}`.trimEnd();
 const result = { ok: run.status === 0, blockId, command, exitCode: run.status, stdout: commandOutput };
 logStepOutput(blockId, invocation, command, commandOutput, result);
