@@ -1,6 +1,6 @@
 // Spawns the hook the way Claude Code does: one JSON payload on stdin, one JSON line on stdout.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,12 +9,12 @@ import { test } from "node:test";
 
 const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/runStepHook.ts");
 
-function runHook(prompt: string) {
+function runHook(prompt: string, configFile?: string) {
     const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }),
         encoding: "utf8",
-        env: { ...process.env, RUN_STEP_LOG: logFile },
+        env: { ...process.env, RUN_STEP_LOG: logFile, ...(configFile ? { RUN_STEP_CONFIG: configFile } : {}) },
     });
     const injected = spawned.stdout.trim();
     const result = injected ? JSON.parse(JSON.parse(injected).hookSpecificOutput.additionalContext) : null;
@@ -38,7 +38,7 @@ test("test_runStepHook_runsTheCommandTheBlockNames", () => {
     assert.deepEqual(result, {
         ok: true,
         blockId: "SAY_HELLO",
-        command: "node --no-inspect scripts/steps/SAY_HELLO.ts",
+        command: "node --no-inspect scripts/steps/pipeline/SAY_HELLO.ts",
         exitCode: 0,
         stdout: "hello from run-step",
     });
@@ -64,12 +64,12 @@ test("test_runStepHook_logsTheInvocationTheCommandAndTheOutput", () => {
         "Source scripts/runStepHook.ts: STEP_TABLE.SAY_HELLO",
         `input: {"invocation":"/run-step SAY_HELLO"}`,
         "====== command ======",
-        "node --no-inspect scripts/steps/SAY_HELLO.ts",
+        "node --no-inspect scripts/steps/pipeline/SAY_HELLO.ts",
         "====== end command ======",
         "====== command output ======",
         "hello from run-step",
         "====== end command output ======",
-        `output: {"ok":true,"blockId":"SAY_HELLO","command":"node --no-inspect scripts/steps/SAY_HELLO.ts","exitCode":0,"stdout":"hello from run-step"}`,
+        `output: {"ok":true,"blockId":"SAY_HELLO","command":"node --no-inspect scripts/steps/pipeline/SAY_HELLO.ts","exitCode":0,"stdout":"hello from run-step"}`,
         "====================================",
         "",
     ].join("\n"));
@@ -92,4 +92,24 @@ test("test_runStepHook_appendsOneBlockPerInvocation", () => {
 test("test_runStepHook_writesNothingToTheLogWhenNoBlockRan", () => {
     const { readLog } = runHook("/run-step NOT_A_BLOCK");
     assert.throws(readLog, /ENOENT/);
+});
+
+test("test_runStepHook_refusesABoxTwoDiagramsBothName", () => {
+    const configFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "steps.json");
+    writeFileSync(configFile, JSON.stringify({
+        "one.mmd": [{ box: "SHARED", script: "scripts/steps/one/SHARED.ts" }],
+        "two.mmd": [{ box: "SHARED", script: "scripts/steps/two/SHARED.ts" }],
+    }));
+    const { result } = runHook("/run-step SHARED", configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.note, /named by more than one diagram/);
+});
+
+test("test_runStepHook_readsABoxFromASecondDiagram", () => {
+    const configFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "steps.json");
+    writeFileSync(configFile, JSON.stringify({
+        "one.mmd": [{ box: "SAY_HELLO", script: "scripts/steps/pipeline/SAY_HELLO.ts" }],
+        "two.mmd": [{ box: "ONLY_IN_TWO", script: "scripts/steps/pipeline/STAMP_TIME.ts" }],
+    }));
+    assert.equal(runHook("/run-step ONLY_IN_TWO", configFile).result.ok, true);
 });

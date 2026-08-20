@@ -8,12 +8,15 @@ const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 // The override exists so a test writes to its own temp log instead of the run's.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(PROJECT_ROOT, "plans/diagrams/runs/run-log.md");
 
-// Box id to script, written by scripts/generateSteps.ts from plans/diagrams/pipeline.mmd.
-type StepConfigEntry = { box: string; script: string };
-const STEP_TABLE: Record<string, string> = Object.fromEntries(
-    (JSON.parse(readFileSync(join(PROJECT_ROOT, "scripts/steps.json"), "utf8")) as StepConfigEntry[])
-        .map(entry => [entry.box, entry.script]),
-);
+// Box id to script, written by scripts/generateSteps.ts from every diagram in plans/diagrams.
+type StepConfig = Record<string, { box: string; script: string }[]>;
+const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/steps.json");
+const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+const STEP_TABLE: Record<string, string[]> = {};
+for (const entries of Object.values(config)) {
+    // A box named by two diagrams has two scripts, so the list is kept and the ambiguity reported.
+    for (const entry of entries) STEP_TABLE[entry.box] = [...(STEP_TABLE[entry.box] ?? []), entry.script];
+}
 
 const FENCE = "=".repeat(36);
 
@@ -52,11 +55,16 @@ const inject = (reason: string) => process.stdout.write(JSON.stringify({
 
 const invocation = prompt.trim();
 const blockId = (invocation.slice("/run-step".length).match(/"[^"]*"|'[^']*'|\S+/) ?? [""])[0].replace(/^(["'])(.*)\1$/s, "$2");
-const scriptPath = STEP_TABLE[blockId];
-if (!scriptPath) {
+const scripts = STEP_TABLE[blockId] ?? [];
+if (scripts.length === 0) {
     inject(JSON.stringify({ ok: false, blockId, note: `run-step: no block named ${blockId || "<missing>"}; known: ${Object.keys(STEP_TABLE).join(", ")}` }));
     process.exit(0);
 }
+if (scripts.length > 1) {
+    inject(JSON.stringify({ ok: false, blockId, note: `run-step: ${blockId} is named by more than one diagram: ${scripts.join(", ")}; rename it so the box id is unique` }));
+    process.exit(0);
+}
+const scriptPath = scripts[0]!;
 
 // Logged whole so the line in run-log.md is one you can paste into a terminal.
 const command = `node --no-inspect ${scriptPath}`;
