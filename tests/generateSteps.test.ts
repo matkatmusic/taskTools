@@ -80,7 +80,7 @@ test("test_generateSteps_dropsABoxTheDiagramNoLongerNames", () => {
 
 test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     const { readConfig } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "next"]);
+    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "template", "next"]);
 });
 
 test("test_getEdgesInDiagram_recordsWhatEachBoxPointsAt", () => {
@@ -113,4 +113,22 @@ test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const printed = execFileSync("node", ["--no-inspect", join(stepsRoot, "one/NEW_BOX.ts"), "the input"], { encoding: "utf8" });
     assert.equal(JSON.parse(printed).input, "the input");
+});
+
+test("test_generateSteps_writesATemplateForABoxWithNone", () => {
+    const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
+    const template = JSON.parse(readFileSync(join(stepsRoot, "one/NEW_BOX.template.json"), "utf8"));
+    assert.deepEqual(template, { input: {}, output: { box: "NEW_BOX", signal: "continue" } });
+});
+
+test("test_generateSteps_recordsTheTemplatePathBesideTheScript", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    assert.match(config["one.mmd"]![0]!.template, /steps\/one\/A\.template\.json$/);
+});
+
+test("test_generateSteps_leavesAnExistingTemplateAlone", () => {
+    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    writeFileSync(join(stepsRoot, "one/A.template.json"), `{"input":{"box":"CALLER"},"output":{"box":"A","signal":"stop"}}`);
+    run();
+    assert.deepEqual(JSON.parse(readFileSync(join(stepsRoot, "one/A.template.json"), "utf8")).input, { box: "CALLER" });
 });

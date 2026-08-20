@@ -7,7 +7,7 @@ const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REGENERATE_DELAY_MS = 50;
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" for a hand-written seam.
-export type StepConfigEntry = { box: string; script: string; next: string[] };
+export type StepConfigEntry = { box: string; script: string; template: string; next: string[] };
 // Keyed by diagram file name, so two diagrams may name the same box without sharing a script.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -62,6 +62,15 @@ function buildStubScript(box: string, diagramFile: string): string {
         + `if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url))) console.log(JSON.stringify(main(process.argv[2] ?? "")));\n`;
 }
 
+// The seed names only what every block must produce. An author narrows it by editing the file.
+function buildStubTemplate(box: string): string {
+    const template = {
+        input: {},
+        output: { box, signal: "continue" },
+    };
+    return `${JSON.stringify(template, null, 4)}\n`;
+}
+
 // A seam into another diagram is hand-written, so regenerating from the arrows must not drop it.
 function getSeamsFromPreviousConfig(configPath: string): Record<string, string[]> {
     if (!existsSync(configPath)) {
@@ -91,12 +100,21 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         const entries: StepConfigEntry[] = [];
         for (const box of boxes) {
             const scriptPath = join(stepsDirectory, `${box}.ts`);
-            // An existing script is the author's, so only a missing one gets written.
+            const templatePath = join(stepsDirectory, `${box}.template.json`);
+            // An existing file is the author's, so only a missing one gets written.
             if (!existsSync(scriptPath)) {
                 writeFileSync(scriptPath, buildStubScript(box, diagramFile));
             }
+            if (!existsSync(templatePath)) {
+                writeFileSync(templatePath, buildStubTemplate(box));
+            }
             const seams = seamsByStepKey[`${diagramFile}::${box}`] ?? [];
-            entries.push({ box, script: relative(PROJECT_ROOT, scriptPath), next: [...next[box]!, ...seams] });
+            entries.push({
+                box,
+                script: relative(PROJECT_ROOT, scriptPath),
+                template: relative(PROJECT_ROOT, templatePath),
+                next: [...next[box]!, ...seams],
+            });
         }
         config[diagramFile] = entries;
     }

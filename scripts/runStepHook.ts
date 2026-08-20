@@ -164,8 +164,8 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildWalkResult(false, boxesRun, stepKey, `next box ${nextStepKey} is not in the config`, stepRun.result);
         }
         stepKey = nextStepKey;
-        // Only the first box gets the caller's input; what a later box receives is task #2.
-        input = "";
+        // A box sees only the box before it, so anything further back has to be carried forward by hand.
+        input = JSON.stringify(stepRun.result);
     }
 }
 

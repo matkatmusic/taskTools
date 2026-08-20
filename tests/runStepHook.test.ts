@@ -228,12 +228,39 @@ test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
     assert.match(log, /====== command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n====== end command ======/);
 });
 
-test("test_runStepHook_doesNotPassTheInputPastTheFirstBlock", () => {
+test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "continue", greeting: "hello" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+        ],
+    }));
+    const received = JSON.parse(runHook("/run-step A first-input", configFile).result.output.input);
+    assert.equal(received.box, "A");
+    assert.equal(received.greeting, "hello");
+    assert.equal(received.input, "first-input");
+});
+
+test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "continue" }), next: ["C"] },
+            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+        ],
+    }));
+    const seenByC = JSON.parse(runHook("/run-step A", configFile).result.output.input);
+    assert.equal(seenByC.box, "B");
+    assert.equal(JSON.parse(seenByC.input).box, "A");
+});
+
+test("test_runStepHook_logsTheThreadedOutputAsThePasteableCommand", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
             { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
         ],
     }));
-    assert.equal(runHook("/run-step A first-input", configFile).result.output.input, "");
+    const log = runHook("/run-step A", configFile).readLog();
+    assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","signal":"continue","input":""\}'/);
 });
