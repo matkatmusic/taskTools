@@ -111,6 +111,39 @@ test("test_runStepHook_endsCleanlyWhenATerminalBoxSignalsStop", () => {
     assert.equal(result.why, "signal stop");
 });
 
+// A box with no arrow out of it ends a path, so a walk that reaches it ran the whole path.
+test("test_runStepHook_marksATerminalBoxAsTheEndOfThePath", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+        ],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.isTerminal, true);
+    assert.equal(runHook("/run-step B", configFile).result.isTerminal, true);
+});
+
+test("test_runStepHook_doesNotMarkABoxWithAnArrowOutAsTheEndOfThePath", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: ["B"] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.isTerminal, false);
+});
+
+test("test_runStepHook_carriesUpTheReportABlockWroteForTheUser", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop", report: "two plans need review" }), next: [] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.report, "two plans need review");
+});
+
+test("test_runStepHook_leavesTheReportEmptyWhenNoBlockWroteOne", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.report, "");
+});
+
 test("test_runStepHook_failsWhenTheSignalIsNeitherStopNorContinue", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "maybe" }), next: [] }],

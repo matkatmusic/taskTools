@@ -4,17 +4,30 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { buildWalkResultSchema, buildWorkflowScript, generateWorkflow, getFirstBox } from "../scripts/generateWorkflow.ts";
+import {
+    buildBlockSchemas,
+    buildNextStepsByStep,
+    buildWalkResultSchema,
+    buildWorkflowScript,
+    generateWorkflow,
+    getFirstStep,
+    getStepsReachableFrom,
+} from "../scripts/generateWorkflow.ts";
 import { getSchemaFromTemplate } from "../scripts/templateSchema.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
-function buildProject(blocks: { box: string; output: Record<string, unknown> }[]) {
+function buildProject(blocks: { box: string; output: Record<string, unknown>; next?: string[] }[]) {
     const projectRoot = mkdtempSync(join(tmpdir(), "generate-workflow-"));
     mkdirSync(join(projectRoot, "steps"));
     const entries = blocks.map(block => {
         const template = { input: {}, output: block.output };
         writeFileSync(join(projectRoot, "steps", `${block.box}.template.json`), JSON.stringify(template));
-        return { box: block.box, script: `steps/${block.box}.ts`, template: `steps/${block.box}.template.json`, next: [] };
+        return {
+            box: block.box,
+            script: `steps/${block.box}.ts`,
+            template: `steps/${block.box}.template.json`,
+            next: block.next ?? [],
+        };
     });
     const config: StepConfig = { "one.mmd": entries };
     const configFile = join(projectRoot, "steps.json");
@@ -23,32 +36,58 @@ function buildProject(blocks: { box: string; output: Record<string, unknown> }[]
 }
 
 test("test_buildWalkResultSchema_closesTheEnvelopeTheHookReturns", () => {
-    const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "continue" } }]);
-    const schema = buildWalkResultSchema(config, projectRoot) as Record<string, unknown>;
-    assert.deepEqual(schema.required, ["ok", "ran", "stoppedAt", "why", "output"]);
+    const schema = buildWalkResultSchema();
+    assert.deepEqual(schema.required, ["ok", "ran", "stoppedAt", "why", "isTerminal", "report", "output"]);
     assert.equal(schema.additionalProperties, false);
 });
 
-test("test_buildWalkResultSchema_offersOneOutputShapePerBlock", () => {
+// The envelope is shared, so the block shapes are left out until buildPossibleSchemas picks them.
+test("test_buildWalkResultSchema_leavesTheOutputShapesEmpty", () => {
+    const schema = buildWalkResultSchema() as Record<string, Record<string, Record<string, unknown[]>>>;
+    assert.deepEqual(schema.properties!.output!.anyOf, []);
+});
+
+test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
     const { config, projectRoot } = buildProject([
         { box: "A", output: { box: "A", signal: "continue", files: 0 } },
         { box: "B", output: { box: "B", signal: "stop" } },
     ]);
-    const schema = buildWalkResultSchema(config, projectRoot) as Record<string, Record<string, Record<string, unknown[]>>>;
-    assert.equal(schema.properties!.output!.anyOf!.length, 2);
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
+    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["BLOCK_A_SCHEMA", "BLOCK_B_SCHEMA"]);
 });
 
 // The point of the whole task: the schema is the template, not a hand-written copy of it.
-test("test_buildWalkResultSchema_buildsEachOutputShapeFromThatBlocksTemplate", () => {
+test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
     const output = { box: "A", signal: "continue", files: 0 };
     const { config, projectRoot } = buildProject([{ box: "A", output }]);
-    const schema = buildWalkResultSchema(config, projectRoot) as Record<string, Record<string, Record<string, unknown[]>>>;
-    assert.deepEqual(schema.properties!.output!.anyOf![0], getSchemaFromTemplate(output));
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
+    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(output));
 });
 
-test("test_getFirstBox_namesTheFirstBoxOfTheFirstDiagram", () => {
-    const { config } = buildProject([{ box: "A", output: { box: "A" } }, { box: "B", output: { box: "B" } }]);
-    assert.equal(getFirstBox(config), "A");
+test("test_buildNextStepsByStep_keysEveryBoxByDiagramAndBox", () => {
+    const { config } = buildProject([{ box: "A", output: {}, next: ["B"] }, { box: "B", output: {} }]);
+    assert.deepEqual(buildNextStepsByStep(config), { "one.mmd::A": ["one.mmd::B"], "one.mmd::B": [] });
+});
+
+test("test_getStepsReachableFrom_followsASingleChainToItsEnd", () => {
+    const nextStepsByStep = { A: ["B"], B: ["C"], C: [] };
+    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B", "C"]);
+});
+
+// An agent has to choose at a box with two arrows out, so the run cannot reach past it.
+test("test_getStepsReachableFrom_stopsAtABoxWithTwoArrowsOut", () => {
+    const nextStepsByStep = { A: ["B"], B: ["C", "D"], C: [], D: [] };
+    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B"]);
+});
+
+test("test_getStepsReachableFrom_stopsWhenTheArrowsLoopBack", () => {
+    const nextStepsByStep = { A: ["B"], B: ["A"] };
+    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B"]);
+});
+
+test("test_getFirstStep_namesTheFirstBoxOfTheFirstDiagram", () => {
+    const { config } = buildProject([{ box: "A", output: {} }, { box: "B", output: {} }]);
+    assert.equal(getFirstStep(config), "one.mmd::A");
 });
 
 test("test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt", () => {
@@ -58,16 +97,18 @@ test("test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt", () => {
     assert.match(script, /export const meta = \{\n {4}name: 'run-step',/);
 });
 
-test("test_buildWorkflowScript_asksOneAgentToTypeTheCommandWithTheSchema", () => {
+test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
     const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
     const script = buildWorkflowScript(config, projectRoot);
-    assert.match(script, /\/run-step \$\{startBox\} \$\{startInput\}/);
-    assert.match(script, /schema: WALK_RESULT_SCHEMA/);
+    assert.match(script, /while \(true\) \{/);
+    assert.match(script, /if \(result\.isTerminal\) break/);
+    assert.match(script, /if \(result\.report\) break/);
+    assert.match(script, /if \(!result\.ok\) break/);
 });
 
-test("test_buildWorkflowScript_defaultsTheStartBoxToTheFirstBoxInTheConfig", () => {
+test("test_buildWorkflowScript_startsTheLoopAtTheFirstStepInTheConfig", () => {
     const { config, projectRoot } = buildProject([{ box: "FIRST", output: { box: "FIRST", signal: "stop" } }]);
-    assert.match(buildWorkflowScript(config, projectRoot), /args\?\.box \?\? "FIRST"/);
+    assert.match(buildWorkflowScript(config, projectRoot), /const FIRST_STEP = "one\.mmd::FIRST"/);
 });
 
 test("test_generateWorkflow_writesTheScriptToTheGivenPath", () => {

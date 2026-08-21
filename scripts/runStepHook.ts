@@ -27,6 +27,8 @@ type WalkResult = {
     stoppedAt: string;
     why: string;
     output: unknown;
+    isTerminal: boolean;
+    report: string;
 };
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
@@ -117,8 +119,12 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     return stepRun;
 }
 
+// A box with no arrow out of it ends a path. A block sets report for the user to read.
 function buildWalkResult(ok: boolean, boxesRun: string[], stoppedAt: string, why: string, output: unknown): WalkResult {
-    return { ok, ran: boxesRun, stoppedAt, why, output };
+    const isTerminal = STEPS_BY_KEY.get(stoppedAt)!.next.length === 0;
+    const reportedOutput = output as { report?: unknown } | null;
+    const report = typeof reportedOutput?.report === "string" ? reportedOutput.report : "";
+    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.

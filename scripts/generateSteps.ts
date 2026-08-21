@@ -15,10 +15,11 @@ export type BlockTemplate = { input: unknown; output: unknown };
 
 const DIAGRAM_KEYWORDS = /^(flowchart|graph|subgraph|end|classDef|class|style|direction|click)\b/;
 
-// A box id ends where its label or its edge label starts.
+// A box id ends where its label starts. Mermaid puts an edge label after the arrow or before it.
 function getBoxIdFromArrowSide(arrowSide: string): string {
-    const withoutEdgeLabel = arrowSide.trim().replace(/^\|[^|]*\|/, "").trim();
-    return withoutEdgeLabel.split(/[[({]/)[0]!.trim();
+    const withoutLabelAfterArrow = arrowSide.trim().replace(/^\|[^|]*\|/, "").trim();
+    const withoutLabelBeforeArrow = withoutLabelAfterArrow.replace(/\s--\s.*$/, "").trim();
+    return withoutLabelBeforeArrow.split(/[[({]/)[0]!.trim();
 }
 
 // Every box the diagram names, in order, with the boxes each one points at.
@@ -50,17 +51,19 @@ export function getBoxesInDiagram(diagram: string): string[] {
 }
 
 function buildStubScript(box: string, diagramFile: string): string {
-    return `// ${box}, from ${diagramFile}\n`
-        + `import { realpathSync } from "node:fs";\n`
-        + `import { basename } from "node:path";\n`
-        + `import { fileURLToPath } from "node:url";\n`
-        + `\n`
-        + `export function main(input: string): Record<string, unknown> {\n`
-        + `    return { box: "${box}", signal: "continue", note: \`\${basename(fileURLToPath(import.meta.url))} for ${box}\`, input };\n`
-        + `}\n`
-        + `\n`
-        + `// realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.\n`
-        + `if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url))) console.log(JSON.stringify(main(process.argv[2] ?? "")));\n`;
+    return `// ${box}, from ${diagramFile}
+import { realpathSync } from "node:fs";
+import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export function main(input: string): Record<string, unknown> {
+    return { box: "${box}", signal: "continue", note: \`\${basename(fileURLToPath(import.meta.url))} for ${box}\`, input };
+}
+
+// realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
+if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url))) 
+    console.log(JSON.stringify(main(process.argv[2] ?? "")));
+`;
 }
 
 // The seed output matches what buildStubScript prints, so a new block is green before anyone edits it.
