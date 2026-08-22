@@ -127,7 +127,8 @@ export function buildWorkflowScript(config: StepConfig, projectRoot: string): st
 export const meta = {
     name: 'run-step',
     description: 'Run one diagram block and every block that follows it, through the run-step hook',
-    phases: [{ title: 'Run', detail: 'one agent per pass, until the walk reaches the end of a path' }],
+    // The real titles are diagram file names, named at run time, so this entry is the shape only.
+    phases: [{ title: 'walk', detail: 'one agent per pass, grouped by the diagram it is walking' }],
 }
 
 // One schema per block, built from that block's output template, named after the block.
@@ -162,11 +163,11 @@ function buildPossibleSchemas(stepToStartAt, blockSchemas) {
     return { ...WALK_RESULT_SCHEMA, properties: { ...WALK_RESULT_SCHEMA.properties, output: { anyOf: outputSchemas } } }
 }
 
-phase('Run')
-
 let result = null
 while (true) {
     const stepToStartAt = getNextStep(result)
+    // Grouped by diagram, so crossing a :: seam opens a new group in the progress tree.
+    phase(stepToStartAt.split('::')[0])
     const possibleSchemas = buildPossibleSchemas(stepToStartAt, BLOCK_SCHEMAS)
     result = await agent(stepToStartAt, { label: \`run-step:\${stepToStartAt}\`, schema: possibleSchemas })
     if (result.isTerminal) break
