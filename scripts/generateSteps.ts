@@ -55,9 +55,10 @@ function buildStubScript(box: string, diagramFile: string): string {
 import { realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SIGNAL } from "../../signal.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "${box}", signal: "continue", note: \`\${basename(fileURLToPath(import.meta.url))} for ${box}\`, input };
+    return { box: "${box}", signal: SIGNAL.CONTINUE, note: \`\${basename(fileURLToPath(import.meta.url))} for ${box}\`, input };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

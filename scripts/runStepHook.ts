@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { KNOWN_SIGNALS, SIGNAL, type Signal } from "./signal.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
@@ -29,6 +30,7 @@ type WalkResult = {
     output: unknown;
     isTerminal: boolean;
     report: string;
+    nextStep: string;
 };
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
@@ -119,12 +121,25 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     return stepRun;
 }
 
-// A box with no arrow out of it ends a path. A block sets report for the user to read.
+// Where a fresh run picks up, by the same rule the walk itself follows. Empty when nothing follows.
+function getNextStepAfter(stoppedAt: string, output: unknown): string {
+    const step = STEPS_BY_KEY.get(stoppedAt)!;
+    const namedNext = (output as { next?: unknown } | null)?.next;
+    const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
+    const chosenNextBox = namedNext ?? onlySuccessor;
+    if (chosenNextBox === undefined) {
+        return "";
+    }
+    return getStepKey(String(chosenNextBox), step.diagram);
+}
+
+// A box with no arrow out of it ends a path. A block sets report for the user.
 function buildWalkResult(ok: boolean, boxesRun: string[], stoppedAt: string, why: string, output: unknown): WalkResult {
     const isTerminal = STEPS_BY_KEY.get(stoppedAt)!.next.length === 0;
     const reportedOutput = output as { report?: unknown } | null;
     const report = typeof reportedOutput?.report === "string" ? reportedOutput.report : "";
-    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report };
+    const nextStep = getNextStepAfter(stoppedAt, output);
+    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report, nextStep };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
@@ -144,12 +159,17 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildWalkResult(false, boxesRun, stepKey, "printed no result object", stepRun.stdout);
         }
 
-        const signal = stepRun.result.signal;
-        if (signal !== "stop" && signal !== "continue") {
-            return buildWalkResult(false, boxesRun, stepKey, `signal must be "stop" or "continue", not ${JSON.stringify(signal)}`, stepRun.result);
+        const signal = stepRun.result.signal as Signal;
+        if (!KNOWN_SIGNALS.includes(signal)) {
+            const knownList = KNOWN_SIGNALS.map(known => JSON.stringify(known)).join(", ");
+            return buildWalkResult(false, boxesRun, stepKey, `signal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.signal)}`, stepRun.result);
         }
-        if (signal === "stop") {
+        if (signal === SIGNAL.STOP) {
             return buildWalkResult(true, boxesRun, stepKey, "signal stop", stepRun.result);
+        }
+        // The block printed a prompt instead of data, so an agent takes over here.
+        if (signal === SIGNAL.PROMPT) {
+            return buildWalkResult(true, boxesRun, stepKey, "signal prompt", stepRun.result);
         }
         if (step.next.length === 0) {
             return buildWalkResult(false, boxesRun, stepKey, `${stepKey} has an empty next; say where it goes next in steps.json`, stepRun.result);

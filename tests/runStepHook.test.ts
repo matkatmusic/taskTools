@@ -130,6 +130,51 @@ test("test_runStepHook_doesNotMarkABoxWithAnArrowOutAsTheEndOfThePath", () => {
     assert.equal(runHook("/run-step A", configFile).result.isTerminal, false);
 });
 
+// A block that prints a prompt hands the run to an agent, so the walk stops without ending the path.
+test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "prompt", prompt: "read the plan and answer" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true);
+    assert.equal(result.why, "signal prompt");
+    assert.equal(result.isTerminal, false);
+    assert.deepEqual(result.ran, ["one.mmd::A"]);
+    assert.equal(result.output.prompt, "read the plan and answer");
+});
+
+// The workflow reads nextStep instead of keeping its own copy of the arrows.
+test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "prompt" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+        ],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.nextStep, "one.mmd::B");
+});
+
+test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "prompt", next: "C" }), next: ["B", "C"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+        ],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.nextStep, "one.mmd::C");
+});
+
+test("test_runStepHook_leavesTheNextStepEmptyAtTheEndOfAPath", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.nextStep, "");
+});
+
 test("test_runStepHook_carriesUpTheReportABlockWroteForTheUser", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop", report: "two plans need review" }), next: [] }],
@@ -144,13 +189,13 @@ test("test_runStepHook_leavesTheReportEmptyWhenNoBlockWroteOne", () => {
     assert.equal(runHook("/run-step A", configFile).result.report, "");
 });
 
-test("test_runStepHook_failsWhenTheSignalIsNeitherStopNorContinue", () => {
+test("test_runStepHook_failsWhenTheSignalIsNotOneOfTheThree", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "maybe" }), next: [] }],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /signal must be "stop" or "continue", not "maybe"/);
+    assert.match(result.why, /signal must be one of "continue", "stop", "prompt", not "maybe"/);
 });
 
 test("test_runStepHook_failsWhenADecisionBoxDoesNotNameItsChoice", () => {

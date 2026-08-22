@@ -1,10 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { generateSteps, getBoxesInDiagram, getEdgesInDiagram } from "../scripts/generateSteps.ts";
+
+const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 // Builds a diagram folder from {fileName: contents} and generates against it.
 function generateFrom(diagrams: Record<string, string>) {
@@ -13,6 +16,8 @@ function generateFrom(diagrams: Record<string, string>) {
     const stepsRoot = join(folder, "steps");
     const configPath = join(folder, "steps.json");
     mkdirSync(diagramFolder);
+    // A stub imports SIGNAL from two folders up, so the throwaway project needs that file too.
+    copyFileSync(join(PROJECT_ROOT, "scripts/signal.ts"), join(folder, "signal.ts"));
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
     const run = () => generateSteps(diagramFolder, stepsRoot, configPath);
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
@@ -55,7 +60,7 @@ test("test_generateSteps_writesAStubForABoxWithNoScript", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const stub = readFileSync(join(stepsRoot, "one/NEW_BOX.ts"), "utf8");
     assert.match(stub, /export function main\(input: string\): Record<string, unknown>/);
-    assert.match(stub, /signal: "continue"/);
+    assert.match(stub, /signal: SIGNAL\.CONTINUE/);
     assert.match(stub, /realpathSync\(process\.argv\[1\]!\) === realpathSync\(fileURLToPath\(import\.meta\.url\)\)\)/);
 });
 

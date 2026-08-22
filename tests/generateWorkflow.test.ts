@@ -10,7 +10,6 @@ import {
     buildWalkResultSchema,
     buildWorkflowScript,
     generateWorkflow,
-    getFirstStep,
     getStepsReachableFrom,
 } from "../scripts/generateWorkflow.ts";
 import { getSchemaFromTemplate } from "../scripts/templateSchema.ts";
@@ -37,7 +36,7 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; ne
 
 test("test_buildWalkResultSchema_closesTheEnvelopeTheHookReturns", () => {
     const schema = buildWalkResultSchema();
-    assert.deepEqual(schema.required, ["ok", "ran", "stoppedAt", "why", "isTerminal", "report", "output"]);
+    assert.deepEqual(schema.required, ["ok", "ran", "stoppedAt", "why", "isTerminal", "report", "nextStep", "output"]);
     assert.equal(schema.additionalProperties, false);
 });
 
@@ -85,11 +84,6 @@ test("test_getStepsReachableFrom_stopsWhenTheArrowsLoopBack", () => {
     assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B"]);
 });
 
-test("test_getFirstStep_namesTheFirstBoxOfTheFirstDiagram", () => {
-    const { config } = buildProject([{ box: "A", output: {} }, { box: "B", output: {} }]);
-    assert.equal(getFirstStep(config), "one.mmd::A");
-});
-
 test("test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt", () => {
     const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
     const script = buildWorkflowScript(config, projectRoot);
@@ -106,9 +100,17 @@ test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
     assert.match(script, /if \(!result\.ok\) break/);
 });
 
-test("test_buildWorkflowScript_startsTheLoopAtTheFirstStepInTheConfig", () => {
-    const { config, projectRoot } = buildProject([{ box: "FIRST", output: { box: "FIRST", signal: "stop" } }]);
-    assert.match(buildWorkflowScript(config, projectRoot), /const FIRST_STEP = "one\.mmd::FIRST"/);
+// The caller says where to start, so a diagram edit never needs the workflow regenerated for it.
+test("test_buildWorkflowScript_refusesToRunWithoutAStartStepInArgs", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
+    assert.match(buildWorkflowScript(config, projectRoot), /if \(!args\?\.startStep\)/);
+});
+
+test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
+    const script = buildWorkflowScript(config, projectRoot);
+    assert.match(script, /return result === null \? args\.startStep : result\.nextStep/);
+    assert.doesNotMatch(script, /NEXT_STEPS_BY_STEP/);
 });
 
 test("test_generateWorkflow_writesTheScriptToTheGivenPath", () => {
