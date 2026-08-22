@@ -195,16 +195,21 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     }
 }
 
-let payload: { hook_event_name?: unknown; prompt?: unknown };
+let payload: { hook_event_name?: unknown; prompt?: unknown; tool_input?: Record<string, unknown> };
 try {
     payload = JSON.parse(readFileSync(0, "utf8"));
 } catch {
     process.exit(0);
 }
 
-// Plugin skills reach the hook namespaced, as /taskTools:run-step.
+// Plugin skills reach the hook namespaced, as /taskTools:run-step and taskTools:run-step.
 const promptText = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
-if (!promptText.startsWith("/run-step")) {
+const toolInput = payload.tool_input ?? {};
+const skillName = String(toolInput.skill ?? "").replace(/^[\w-]+:/, "");
+// A person types the whole line. An agent calls the skill, so the name and the args arrive apart.
+const isTypedCommand = promptText.startsWith("/run-step");
+const isSkillCall = skillName === "run-step";
+if (!isTypedCommand && !isSkillCall) {
     process.exit(0);
 }
 
@@ -216,9 +221,12 @@ function injectResult(result: unknown): void {
     process.stdout.write(`${injected}\n`);
 }
 
-const invocation = promptText.trim();
 // The first word after the command names the box; everything after it is the first box's input.
-const argumentText = invocation.slice("/run-step".length).trim();
+const argumentText = isTypedCommand
+    ? promptText.slice("/run-step".length).trim()
+    : String(toolInput.args ?? "").trim();
+// Rebuilt, not echoed, so the line the log prints is paste-runnable from either payload.
+const invocation = `/run-step ${argumentText}`.trim();
 const argumentMatch = argumentText.match(/^("[^"]*"|'[^']*'|\S+)\s*([\s\S]*)$/) ?? [];
 const startBoxId = (argumentMatch[1] ?? "").replace(/^(["'])(.*)\1$/s, "$2");
 const startInput = (argumentMatch[2] ?? "").trim();

@@ -342,3 +342,53 @@ test("test_runStepHook_logsTheThreadedOutputAsThePasteableCommand", () => {
     const log = runHook("/run-step A", configFile).readLog();
     assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","signal":"continue","input":""\}'/);
 });
+
+// PostToolUse names the skill and its args apart. That is how an agent reaches the hook.
+function runSkillHook(skill: string, args: string, configFile?: string) {
+    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill, args } }),
+        encoding: "utf8",
+        env: { ...process.env, RUN_STEP_LOG: logFile, ...(configFile ? { RUN_STEP_CONFIG: configFile } : {}) },
+    });
+    const injected = spawned.stdout.trim();
+    const result = injected ? JSON.parse(JSON.parse(injected).hookSpecificOutput.additionalContext) : null;
+    return { injected, result };
+}
+
+test("test_runStepHook_runsABlockWhenAnAgentCallsTheSkill", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runSkillHook("run-step", "A", configFile).result.ok, true);
+});
+
+test("test_runStepHook_runsABlockWhenAnAgentCallsTheSkillNamespaced", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runSkillHook("taskTools:run-step", "A", configFile).result.ok, true);
+});
+
+test("test_runStepHook_staysSilentWhenAnAgentCallsAnotherSkill", () => {
+    assert.equal(runSkillHook("some-other-skill", "A").injected, "");
+});
+
+test("test_runStepHook_handsTheSkillArgsToTheFirstBlock", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runSkillHook("run-step", `A {"name":"matt"}`, configFile).result.output.input, `{"name":"matt"}`);
+});
+
+test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "run-step", args: "A" } }),
+        encoding: "utf8",
+        env: { ...process.env, RUN_STEP_CONFIG: configFile },
+    });
+    assert.equal(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.hookEventName, "PostToolUse");
+});
