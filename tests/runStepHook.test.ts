@@ -55,12 +55,19 @@ test("test_runStepHook_staysSilentForAPromptThatIsNotACommand", () => {
     assert.equal(runHook("please run SAY_HELLO for me").injected, "");
 });
 
+// This repo ships no sample diagrams, so the bare-name tests bring their own SAY_HELLO.
+function sayHelloConfig() {
+    return configWith(writeStep => ({
+        "pipeline.mmd": [{ box: "SAY_HELLO", script: writeStep("SAY_HELLO", { scriptSignal: "stop" }), next: [] }],
+    }));
+}
+
 test("test_runStepHook_answersANamespacedInvocation", () => {
-    assert.equal(runHook("/taskTools:run-step SAY_HELLO").result.ok, true);
+    assert.equal(runHook("/taskTools:run-step SAY_HELLO", sayHelloConfig()).result.ok, true);
 });
 
 test("test_runStepHook_namesTheKnownBlocksWhenTheBlockIsUnknown", () => {
-    const { result } = runHook("/run-step NOT_A_BLOCK");
+    const { result } = runHook("/run-step NOT_A_BLOCK", sayHelloConfig());
     assert.equal(result.ok, false);
     assert.match(result.errors[0], /no block named NOT_A_BLOCK/);
     assert.match(result.errors[0], /pipeline\.mmd::SAY_HELLO/);
