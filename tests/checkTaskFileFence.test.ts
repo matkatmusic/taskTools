@@ -1,12 +1,12 @@
-// Behavioral checks for scripts/tackle-tasks/checkTaskFileFence.ts. Run: node --test tests/tackle-tasks/checkTaskFileFence.test.ts
+// Behavioral checks for scripts/tackle-tasks/checkTaskFileFence.ts. Run: node --test tests/checkTaskFileFence.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { checkTaskFileFence } from "../../scripts/tackle-tasks/checkTaskFileFence.ts";
-import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { checkTaskFileFence } from "../scripts/tackle-tasks/checkTaskFileFence.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 function makeSourceRepoWithSubmodule(): string {

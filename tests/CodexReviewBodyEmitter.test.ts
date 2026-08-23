@@ -1,6 +1,9 @@
 // Behavioral checks for scripts/tackle-tasks/CodexReviewBodyEmitter.ts. Run: node --test tests/CodexReviewBodyEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { planReviewPrompt } from "../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
 import type { PreparedTask } from "../scripts/tackle-tasks/preparedTask.ts";
 
@@ -41,4 +44,24 @@ test("test_planReviewPrompt_leavesTheVerdictToTheRulingScript", () => {
 
 test("test_planReviewPrompt_leavesNoUnresolvedInterpolation", () => {
     assert.equal(planReviewPrompt(task).includes("${"), false);
+});
+
+test("test_planReviewPrompt_excludesAnOwnedPathThePlanDeclaresItWillCreate", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-createsfiles-"));
+    mkdirSync(join(repoRoot, "plans"));
+    const planFile = join(repoRoot, "plans", "plan.json");
+    writeFileSync(planFile, JSON.stringify({
+        task: 99,
+        revision: 1,
+        createsFiles: ["src/thing.ts"],
+        sections: [{ id: "step-1", title: "Step", body: "b" }],
+    }));
+    const createsTask: PreparedTask = {
+        ...task,
+        planFile,
+        repoRoot,
+        ownedFilePaths: [join(repoRoot, "src/thing.ts")],
+    };
+    const prompt = planReviewPrompt(createsTask);
+    assert.equal(prompt.includes(join(repoRoot, "src/thing.ts")), false);
 });

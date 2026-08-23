@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts.  Run: node --test tests/tackle-tasks/SkillBodyEmitter.test.ts
+// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts.  Run: node --test tests/SkillBodyEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -7,11 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after } from "node:test";
-import { skillBody } from "../../scripts/tackle-tasks/SkillBodyEmitter.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../../scripts/prepareTasks.ts";
+import { skillBody } from "../scripts/tackle-tasks/SkillBodyEmitter.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 
-const emitterPath = fileURLToPath(new URL("../../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
-const skillMdPath = fileURLToPath(new URL("../../skills/tackle-tasks/SKILL.md", import.meta.url));
+const emitterPath = fileURLToPath(new URL("../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
+const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks/SKILL.md", import.meta.url));
 
 const temporaryDirectories: string[] = [];
 after(() => {

@@ -11,6 +11,7 @@ import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
 import { releaseTaskRunHolds } from "./releaseTaskRunHolds.ts";
 import { getCurrentTaskRun, updateCurrentTaskRun } from "./taskRunState.ts";
 import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type FinishTaskRunInput = {
     taskNumber: number;
@@ -94,7 +95,23 @@ export function finishTaskRun(input: FinishTaskRunInput): FinishTaskRunOutput {
     return input.exitType === "completed" ? finishCompletedRun(input) : finishFailedRun(input);
 }
 
+const FINISH_TASK_RUN_SOURCE = "scripts/tackle-tasks/finishTaskRun.ts:94: finishTaskRun";
+
 if (process.argv[1]?.endsWith("finishTaskRun.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as FinishTaskRunInput;
-    process.stdout.write(`${JSON.stringify(finishTaskRun(input))}\n`);
+    const payloadText = readFileSync(0, "utf8");
+    const input = JSON.parse(payloadText) as FinishTaskRunInput & { boxId?: string };
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId: input.runId };
+    const boxId = input.boxId ?? "finishTaskRun";
+    const command = `node ${process.argv[1]} <<'TTFINISH'\n${payloadText}\nTTFINISH`;
+
+    try {
+        const output = finishTaskRun(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: FINISH_TASK_RUN_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: FINISH_TASK_RUN_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

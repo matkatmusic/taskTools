@@ -58,6 +58,7 @@ export function implementPrompt(t: PreparedTask, typecheckCommand: string, maxFi
         runId,
         stepId: "implement",
         rootSourceBranch: sourceBranch,
+        boxId: "COMMIT_IMPLEMENTATION_IF_NEEDED",
     });
     // Read from the entry, never accepted from the caller: the amend boxes write it there before a reimplement.
     const note = t.codexReviewNotes;

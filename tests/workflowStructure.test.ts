@@ -1,12 +1,12 @@
 // Structural checks for skills/tackle-tasks/tackle-tasks.workflow.js.
-// Run: node --test tests/tackle-tasks/workflowStructure.test.ts
+// Run: node --test tests/workflowStructure.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflowPath = join(repoRoot, "skills", "tackle-tasks", "tackle-tasks.workflow.js");
 const diagramPath = join(repoRoot, "plans", "diagram", "pipeline.mmd");
 

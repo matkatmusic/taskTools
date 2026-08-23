@@ -34,6 +34,7 @@ export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, pro
         runId,
         stepId: "fix-conflicts",
         rootSourceBranch: sourceBranch,
+        boxId: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
     });
     return `## YOUR JOB
 

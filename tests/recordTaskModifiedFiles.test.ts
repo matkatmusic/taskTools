@@ -1,14 +1,14 @@
 // Behavioral checks for scripts/tackle-tasks/recordTaskModifiedFiles.ts.
-// Run: node --test tests/tackle-tasks/recordTaskModifiedFiles.test.ts
+// Run: node --test tests/recordTaskModifiedFiles.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordTaskModifiedFiles } from "../../scripts/tackle-tasks/recordTaskModifiedFiles.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
+import { recordTaskModifiedFiles } from "../scripts/tackle-tasks/recordTaskModifiedFiles.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";

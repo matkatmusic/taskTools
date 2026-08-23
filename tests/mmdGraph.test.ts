@@ -155,5 +155,5 @@ test("test_stepAfter_entersTheTwoPipelinesWhoseNameDoesNotMatchTheirFile", () =>
   X["start"] --> PREAMBLE_PIPELINE["preamble status check pipeline"]
   class X script
   class PREAMBLE_PIPELINE pipeline`);
-  assert.equal(stepAfter(toPreamble, "X"), "TASK_NUMBER_INPUT");
+  assert.equal(stepAfter(toPreamble, "X"), "PREAMBLE_TASK_NUMBER_INPUT");
 });

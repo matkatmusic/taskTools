@@ -1,18 +1,18 @@
-// Behavioral checks for scripts/tackle-tasks/rebaseTaskWorktree.ts. Run: node --test tests/tackle-tasks/rebaseTaskWorktree.test.ts
+// Behavioral checks for scripts/tackle-tasks/rebaseTaskWorktree.ts. Run: node --test tests/rebaseTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
-import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
-import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { formatSourceRepoLockRecoveryCommand } from "../../scripts/tackle-tasks/recoverSourceRepoLock.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { rebaseTaskWorktree } from "../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { reconcileStep } from "../scripts/tackle-tasks/reconcileStep.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { formatSourceRepoLockRecoveryCommand } from "../scripts/tackle-tasks/recoverSourceRepoLock.ts";
+import { claimTask, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

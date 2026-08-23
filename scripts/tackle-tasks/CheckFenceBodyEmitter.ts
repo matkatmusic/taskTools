@@ -25,6 +25,7 @@ export function checkFencePrompt(input: CheckFencePromptInput): string {
         taskNumber: input.taskNumber,
         runId: input.runId,
         rootSourceBranch: input.sourceBranch,
+        boxId: "DID_CHANGES_STAY_INSIDE_FENCE",
     });
     return `Run this with Bash, exactly as written:
 node ${CHECK_TASK_FILE_FENCE_PATH} <<'TTFENCE'

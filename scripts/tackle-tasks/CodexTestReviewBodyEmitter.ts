@@ -164,7 +164,7 @@ REVIEW_FILE=${t.testReviewFile}
 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
-node ${DECIDE_REVIEW_SCRIPT} <"$REVIEW_FILE"
+node ${DECIDE_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.number} ARE_TESTS_FLAGGED <"$REVIEW_FILE"
 \`\`\`\`
 
 The \`||\` chain is the fallback. 

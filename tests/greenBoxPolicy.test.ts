@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/greenBoxPolicy.ts. Run: node --test tests/tackle-tasks/greenBoxPolicy.test.ts
+// Behavioral checks for scripts/tackle-tasks/greenBoxPolicy.ts. Run: node --test tests/greenBoxPolicy.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -9,12 +9,12 @@ import {
     NON_DISPATCHED_SCRIPTS,
     getGreenBoxCategory,
     getMutatingWorkflowScripts,
-} from "../../scripts/tackle-tasks/greenBoxPolicy.ts";
-import { getReconciliationHandlerNames } from "../../scripts/tackle-tasks/reconcileStep.ts";
+} from "../scripts/tackle-tasks/greenBoxPolicy.ts";
+import { getReconciliationHandlerNames } from "../scripts/tackle-tasks/reconcileStep.ts";
 
-const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "tackle-tasks");
+const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "tackle-tasks");
 const workflowSourcePath = join(
-    dirname(fileURLToPath(import.meta.url)), "..", "..", "skills", "tackle-tasks", "tackle-tasks.workflow.js",
+    dirname(fileURLToPath(import.meta.url)), "..", "skills", "tackle-tasks", "tackle-tasks.workflow.js",
 );
 
 test("test_greenBoxPolicy_namesEveryScriptInTheScriptsDirectory", () => {

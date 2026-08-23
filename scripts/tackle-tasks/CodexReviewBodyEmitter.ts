@@ -1,10 +1,7 @@
-// The body for the "codex reviews the plan" agent box (plans/diagram/pipeline-reviewPlan.mmd).
-// Sole home of the plan-review prompt: the question codex answers, and the prompt that spawns it.
-//
-// The receipt that box hands back is the review verdict, already a type in planArtifacts.ts.
+// Sole home of the "codex reviews the plan" prompt (plans/diagram/pipeline-reviewPlan.mmd); its receipt is the review verdict, typed in planArtifacts.ts.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { CodexReview } from "./planArtifacts.ts";
+import { isPlanProblem, readAndValidatePlan, type CodexReview } from "./planArtifacts.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
 export type CodexReviewReceipt = CodexReview;
@@ -22,8 +19,14 @@ const REVIEW_PLAN_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../plans/revie
 const REVIEW_PLAN_OUTPUT_TEMPLATE_PATH = fileURLToPath(new URL("../../plans/review-plan-output-template.json", import.meta.url));
 const RECORD_REVIEW_SCRIPT = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
 
-// Every reviewer opens these itself, so one question serves codex and the claude fallbacks alike.
-const reviewedPaths = (t: PreparedTask) => [t.briefFile, t.planFile, ...t.ownedFilePaths, REVIEW_PLAN_TEMPLATE_PATH];
+// Serves codex and claude fallbacks alike; drops a createsFiles path since it doesn't exist yet.
+const reviewedPaths = (t: PreparedTask) => {
+    const plan = readAndValidatePlan(t.planFile, t.number);
+    const root = t.repoRoot.replace(/\/+$/, "");
+    const createdPaths = new Set(isPlanProblem(plan) ? [] : plan.createsFiles.map((file) => `${root}/${file}`));
+    const owned = t.ownedFilePaths.filter((path) => !createdPaths.has(path));
+    return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
+};
 
 function reviewQuestion(t: PreparedTask): string {
     return `You are a read-only review agent tasked with reviewing the implementation plan for task ${t.number}. 
@@ -130,7 +133,7 @@ REVIEW_FILE=${t.reviewOutputFile}
 codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
-node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} <"$REVIEW_FILE"
+node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
 \`\`\`\`
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS

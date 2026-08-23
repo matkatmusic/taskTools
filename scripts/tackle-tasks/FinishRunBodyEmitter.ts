@@ -33,6 +33,8 @@ export function finishRunPrompt(input: FinishRunPromptInput): string {
         sourceBranch: input.sourceBranch,
         exitType: input.exitType,
         exitNote: input.exitNote,
+        // No single diagram box: this runs a whole exit tail. Logged under the script name.
+        boxId: "finishTaskRun",
     });
     return `Run this with Bash, exactly as written:
 node ${FINISH_TASK_RUN_PATH} <<'TTFINISH'

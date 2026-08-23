@@ -37,13 +37,13 @@ flowchart TB
   ARE_2_TEST_REVIEWS_DONE --> ARE_2_TEST_REVIEWS_DONE_YES["YES"]
   ARE_2_TEST_REVIEWS_DONE_NO --> AMEND_ENTRY_WITH_CODEX_NOTES["amend tasks.json entry with<br/>codex's notes and fixes"]
   AMEND_ENTRY_WITH_CODEX_NOTES -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
-  ARE_2_TEST_REVIEWS_DONE_YES -- "exit type: tests-flagged<br/>exit note: task tests failed<br/>codex review" --> EXIT_WORKFLOW
+  ARE_2_TEST_REVIEWS_DONE_YES -- "exit type: tests-flagged<br/>exit note: task tests failed<br/>codex review" --> EXIT_WORKFLOW_REVIEW_TESTS
 
   ARE_TESTS_FLAGGED_NO --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
 
-  CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REVIEW_TESTS
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_REVIEW_TESTS["failures exit"]
 
   %% Green heads for the next pipeline.
   %% ---
@@ -63,5 +63,5 @@ flowchart TB
   class ARE_TESTS_FLAGGED_NO,ARE_2_TEST_REVIEWS_DONE_NO pass
   class ARE_TESTS_FLAGGED_YES,ARE_2_TEST_REVIEWS_DONE_YES nopass
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_REVIEW_TESTS fail
   class GREEN_IMPLEMENTATION_INPUT output

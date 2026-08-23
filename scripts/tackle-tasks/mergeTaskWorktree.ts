@@ -1,10 +1,4 @@
-// "merge worktrees and submodules, no fast-forward" + "did the merge land?" (pipeline.mmd).
-// F3: immediately before merging, while proving lock ownership, re-verifies every source
-// occurrence's base-branch tip against the receipt rebase left behind, and that every source
-// checkout is structurally usable and clean - the lock serializes v1.5 tasks against each
-// other, but ordinary git operations and other skills do not honor it, so a source checkout can
-// move or go dirty while the lock holds, without changing its branch name or leaving it dirty
-// forever (a clean new commit is enough to invalidate what rebase tested against).
+// "merge worktrees and submodules, no fast-forward" + "did the merge land?" (pipeline.mmd).  F3: immediately before merging, while proving lock ownership, re-verifies every source occurrence's base-branch tip against the receipt rebase left behind, and that every source checkout is structurally usable and clean - the lock serializes v1.5 tasks against each other, but ordinary git operations and other skills do not honor it, so a source checkout can move or go dirty while the lock holds, without changing its branch name or leaving it dirty forever (a clean new commit is enough to invalidate what rebase tested against).
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
@@ -14,6 +8,7 @@ import { buildWorktreeOccurrences, mergeWorktreeTaskDeepestFirst } from "./occur
 import { getCurrentTaskRun, type TaskCommit, type SourceTipReceipt } from "./taskRunState.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
 import { type MergeLayerOutcome, type MergeTaskWalkReport } from "../mergeTaskWorktrees.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type MergeTaskWorktreeInput = {
     projectRoot: string;
@@ -45,9 +40,7 @@ function readSourceTipReceipts(taskNumber: number, runId: string, projectRoot: s
     return receipts;
 }
 
-// The root source checkout always carries the tool's own tasks.json/completedTasks.json,
-// mutated directly on disk by every claim/state write in this same run - never "unrelated"
-// dirt, so it must not trip the clean check every active run would otherwise always fail.
+// The root source checkout always carries the tool's own tasks.json/completedTasks.json, mutated directly on disk by every claim/state write in this same run - never "unrelated" dirt, so it must not trip the clean check every active run would otherwise always fail.
 function taskStateIgnorablePaths(checkoutPath: string, projectRoot: string): string[] {
     if (checkoutPath !== projectRoot) return [];
     const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
@@ -58,9 +51,7 @@ function isIgnorableStatusPath(path: string, ignorablePaths: string[]): boolean 
     return ignorablePaths.includes(path);
 }
 
-// NUL-safe: `-z` never quotes or escapes a path, so whitespace and non-ASCII paths parse intact.
-// A rename/copy entry (`R`/`C`) carries a second NUL-terminated "from" path that must be consumed
-// as part of the same entry, not read as an unrelated status line.
+// NUL-safe: `-z` never quotes or escapes a path, so whitespace and non-ASCII paths parse intact.  A rename/copy entry (`R`/`C`) carries a second NUL-terminated "from" path that must be consumed as part of the same entry, not read as an unrelated status line.
 function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
     const output = git(checkoutPath, "status", "--porcelain=v1", "--untracked-files=all", "-z");
     const tokens = output.split("\0").filter((token) => token.length > 0);
@@ -73,8 +64,7 @@ function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
     return paths;
 }
 
-// F3: rev-parses every receipt's baseBranch in its live source checkout and compares against
-// the tip rebase recorded, then confirms the checkout is structurally usable and clean.
+// F3: rev-parses every receipt's baseBranch in its live source checkout and compares against the tip rebase recorded, then confirms the checkout is structurally usable and clean.
 function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[]): void {
     const sourceCheckoutPathByOccurrenceId = new Map<string, string>([["", projectRoot]]);
     for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot)) {
@@ -145,8 +135,23 @@ export function mergeTaskWorktree(input: MergeTaskWorktreeInput): MergeTaskWorkt
     return mapReport(report);
 }
 
+const MERGE_TASK_WORKTREE_SOURCE = "scripts/tackle-tasks/mergeTaskWorktree.ts:125: mergeTaskWorktree";
+
 if (process.argv[1]?.endsWith("mergeTaskWorktree.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as MergeTaskWorktreeInput;
-    const output = mergeTaskWorktree(input);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    const payloadText = readFileSync(0, "utf8");
+    const input = JSON.parse(payloadText) as MergeTaskWorktreeInput & { boxId?: string };
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId: input.runId };
+    const boxId = input.boxId ?? "mergeTaskWorktree";
+    const command = `node ${process.argv[1]} <<'TTMERGE'\n${payloadText}\nTTMERGE`;
+
+    try {
+        const output = mergeTaskWorktree(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: MERGE_TASK_WORKTREE_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: MERGE_TASK_WORKTREE_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

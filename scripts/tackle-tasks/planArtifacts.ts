@@ -1,9 +1,8 @@
-// Plan and codex-review file validation, plus the pure amendment-application rule.
-// No CLI — see plans/plan-format.md and plans/tackle-tasks-v1_5-plan.md §4.
+// Plan and codex-review file validation, plus the pure amendment-application rule.  No CLI — see plans/plan-format.md and plans/tackle-tasks-v1_5-plan.md §4.
 import { readFileSync } from "node:fs";
 
 export type PlanSection = { id: string; title: string; body: string };
-export type Plan = { task: number; revision: number; sections: PlanSection[] };
+export type Plan = { task: number; revision: number; createsFiles: string[]; sections: PlanSection[] };
 export type PlanProblem = { problem: string };
 
 export type PlanAmendment =
@@ -52,6 +51,9 @@ export function validatePlanShape(value: unknown, expectedTaskNumber: number): P
     if (!Number.isInteger(plan.revision) || (plan.revision as number) < 1) {
         return { problem: "plan revision must be a positive integer" };
     }
+    if (!Array.isArray(plan.createsFiles) || plan.createsFiles.some((file) => typeof file !== "string" || file === "")) {
+        return { problem: "plan createsFiles must be an array of non-empty strings" };
+    }
     if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
         return { problem: "plan sections must be a non-empty array" };
     }
@@ -67,7 +69,12 @@ export function validatePlanShape(value: unknown, expectedTaskNumber: number): P
         if (typeof title !== "string") return { problem: `plan section "${id}" is missing a string title` };
         if (typeof body !== "string") return { problem: `plan section "${id}" is missing a string body` };
     }
-    return { task: plan.task as number, revision: plan.revision as number, sections: plan.sections as PlanSection[] };
+    return {
+        task: plan.task as number,
+        revision: plan.revision as number,
+        createsFiles: plan.createsFiles as string[],
+        sections: plan.sections as PlanSection[],
+    };
 }
 
 export function readAndValidatePlan(planFilePath: string, expectedTaskNumber: number): Plan | PlanProblem {

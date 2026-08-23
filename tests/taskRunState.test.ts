@@ -1,5 +1,5 @@
 // Behavioral checks for taskRunState.ts, the only module that reads/writes task.run.
-// Run alone: node --test tests/tackle-tasks/taskRunState.test.ts
+// Run alone: node --test tests/taskRunState.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -13,6 +13,9 @@ import {
     adoptWorktreeLease,
     appendTaskCommits,
     claimTask,
+    getAttemptCount,
+    raiseAttemptCount,
+    MAX_ATTEMPTS,
     endTaskRun,
     getCurrentTaskRun,
     readTaskRunState,
@@ -20,9 +23,9 @@ import {
     transitionWorktreeLease,
     updateCurrentTaskRun,
     type TaskRunRecord,
-} from "../../scripts/tackle-tasks/taskRunState.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { closeTaskRunChecked } from "../../scripts/closeTasks.ts";
+} from "../scripts/tackle-tasks/taskRunState.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { closeTaskRunChecked } from "../scripts/closeTasks.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
@@ -93,7 +96,7 @@ test("test_claimTask_refusesATaskWhoseNewestRunCompletedButIsStillOpen", () => {
 test("test_claimTask_isAtomicUnderConcurrentCallers", async () => {
     // Scenario: many separate processes race to claim the same open task.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
-    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
     const startFile = join(root, "start");
     const resultsDir = mkdtempSync(join(tmpdir(), "taskRunState-results-"));
     const childCount = 12;
@@ -463,7 +466,7 @@ async function runAdoptionInChildAndKillAfter(
     root: string,
     step: "intent" | "lease" | "state",
 ): Promise<void> {
-    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
     const childSource = `
         import { adoptWorktreeLease } from ${JSON.stringify(moduleUrl)};
         adoptWorktreeLease(1, "run-new", ${JSON.stringify(root)});
@@ -787,7 +790,7 @@ async function runAcquisitionInChildAndKillAfter(
     root: string,
     step: "intent" | "lease" | "state",
 ): Promise<void> {
-    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "taskRunState.ts")).href;
     const childSource = `
         import { acquireAbsentWorktreeLease } from ${JSON.stringify(moduleUrl)};
         acquireAbsentWorktreeLease(1, "run-a", ${JSON.stringify(root)});
@@ -901,4 +904,64 @@ test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePr
     assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
     assert.equal(existsSync(`${leasePath}.adopt-intent`), true);
+});
+
+test("test_getAttemptCount_returnsZeroWhenNeverRaised", () => {
+    // Setup: a task with an active run that has no attempts field at all.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: read a counter that has never been raised.
+    const count = getAttemptCount(1, "clarifyRounds", root);
+    // Verification: it reads as zero.
+    assert.equal(count, 0);
+});
+
+test("test_raiseAttemptCount_incrementsAndReturnsTheNewValue", () => {
+    // Setup: a task with an active run.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: raise the same counter twice.
+    const first = raiseAttemptCount(1, "run-a", "testFixes", root);
+    const second = raiseAttemptCount(1, "run-a", "testFixes", root);
+    // Verification: each call returns the counter's new value.
+    assert.equal(first, 1);
+    assert.equal(second, 2);
+});
+
+test("test_raiseAttemptCount_persistsToTasksJson", () => {
+    // Setup: a task with an active run.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: raise a counter, then read it back through getAttemptCount.
+    raiseAttemptCount(1, "run-a", "mergeAttempts", root);
+    const count = getAttemptCount(1, "mergeAttempts", root);
+    // Verification: the raise was written to disk, not just returned in memory.
+    assert.equal(count, 1);
+});
+
+test("test_raiseAttemptCount_tracksEachCounterNameIndependently", () => {
+    // Setup: a task with an active run.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: raise one counter three times and a different counter once.
+    raiseAttemptCount(1, "run-a", "conflictFixes", root);
+    raiseAttemptCount(1, "run-a", "conflictFixes", root);
+    raiseAttemptCount(1, "run-a", "conflictFixes", root);
+    raiseAttemptCount(1, "run-a", "reviews", root);
+    // Verification: the two counters hold separate values.
+    assert.equal(getAttemptCount(1, "conflictFixes", root), 3);
+    assert.equal(getAttemptCount(1, "reviews", root), 1);
+});
+
+test("test_raiseAttemptCount_throwsWhenExpectedRunIdIsNotTheNewestRun", () => {
+    // Setup: a task with an active run under a different runId.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: raising with a stale runId throws.
+    assert.throws(() => raiseAttemptCount(1, "run-stale", "testFixes", root));
+});
+
+test("test_MAX_ATTEMPTS_isTwo", () => {
+    // Verification: the pipeline's retry cap is two.
+    assert.equal(MAX_ATTEMPTS, 2);
 });

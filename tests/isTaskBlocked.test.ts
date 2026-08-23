@@ -1,12 +1,12 @@
 // isTaskBlocked.ts is "is task blocked?" in pipeline.mmd.
-// Run alone: node --test tests/tackle-tasks/isTaskBlocked.test.ts
+// Run alone: node --test tests/isTaskBlocked.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isTaskBlocked } from "../../scripts/tackle-tasks/isTaskBlocked.ts";
+import { isTaskBlocked } from "../scripts/tackle-tasks/isTaskBlocked.ts";
 
 function makeProjectRoot(openTasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "isTaskBlocked-"));
@@ -48,7 +48,7 @@ test("test_isTaskBlocked_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", (
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskBlocked-cwd-"));
     const stdout = execFileSync(
         "node",
-        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskBlocked.ts")],
+        [join(import.meta.dirname, "../scripts/tackle-tasks/isTaskBlocked.ts")],
         { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
     assert.deepEqual(JSON.parse(stdout), { blocked: false, blockers: [], reason: null });

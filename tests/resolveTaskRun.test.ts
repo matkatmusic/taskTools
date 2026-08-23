@@ -1,13 +1,13 @@
 // resolveTaskRun.ts replaces bootstrap's "prepare" front-end. It mutates nothing.
-// Run alone: node --test tests/tackle-tasks/resolveTaskRun.test.ts
+// Run alone: node --test tests/resolveTaskRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskRun, parseTaskNumberArgument } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../../scripts/prepareTasks.ts";
+import { resolveTaskRun, parseTaskNumberArgument } from "../scripts/tackle-tasks/resolveTaskRun.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 function makeProjectRoot(openTasks: unknown[]): string {
@@ -86,6 +86,14 @@ test("test_parseTaskNumberArgument_rejectsUnmatchedTrailingBracket", () => {
     assert.throws(() => parseTaskNumberArgument("1]"), /unmatched bracket/);
 });
 
+test("test_parseTaskNumberArgument_ignoresTextAfterClosingBracket", () => {
+    assert.deepEqual(parseTaskNumberArgument("[1] valid"), [1]);
+});
+
+test("test_parseTaskNumberArgument_ignoresTextAfterClosingBracket", () => {
+    assert.deepEqual(parseTaskNumberArgument("[1] valid"), [1]);
+});
+
 test("test_parseTaskNumberArgument_rejectsInnerBracketToken", () => {
     assert.throws(() => parseTaskNumberArgument("[1, [2]"), /invalid task number "\[2"/);
 });
@@ -99,7 +107,7 @@ test("test_resolveTaskRun_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", 
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "resolveTaskRun-cwd-"));
     const stdout = execFileSync(
         "node",
-        [join(import.meta.dirname, "../../scripts/tackle-tasks/resolveTaskRun.ts")],
+        [join(import.meta.dirname, "../scripts/tackle-tasks/resolveTaskRun.ts")],
         { input: JSON.stringify({ args: "[1]", projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
     const output = JSON.parse(stdout);

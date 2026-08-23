@@ -1,15 +1,15 @@
 // Behavioral checks for generateTaskDocs.ts and updateTaskDocs.ts producing identical briefs.
-// Run alone: node --test tests/tackle-tasks/generateTaskDocs.test.ts
+// Run alone: node --test tests/generateTaskDocs.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateTaskDocs } from "../../scripts/tackle-tasks/generateTaskDocs.ts";
-import { updateTaskDocs } from "../../scripts/tackle-tasks/updateTaskDocs.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
+import { generateTaskDocs } from "../scripts/tackle-tasks/generateTaskDocs.ts";
+import { updateTaskDocs } from "../scripts/tackle-tasks/updateTaskDocs.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../scripts/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

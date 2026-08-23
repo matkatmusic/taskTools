@@ -72,7 +72,9 @@ const LABELS = {
   CODEX_REVIEWS_PLAN: "codex reviews the plan",
   CODEX_REVIEWS_TESTS: "codex reviews the tests",
   COMMITTED_WORK_INPUT: "Input: { worktree, task test files }",
-  COMMIT_IF_NEEDED: "commit if needed",
+  COMMIT_IMPLEMENTATION_IF_NEEDED: "commit if needed",
+  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: "commit if needed",
+  COMMIT_SUITE_FIX_IF_NEEDED: "commit if needed",
   CONTINUE_REBASE: "continue the rebase",
   DID_ANY_WORK_LAND: "did ANY of this task's work land?",
   DID_CHANGES_STAY_INSIDE_FENCE: "did every change stay inside the task's file fence?",
@@ -97,7 +99,8 @@ const LABELS = {
   MERGE_RECEIPT_INPUT: "Input: { merge commit hashes, modified files }",
   MERGE_WORKTREES: "Try: merge worktrees and submodules, no fast-forward. Each layer that lands writes its merge ref AS it lands",
   PLAN_THE_TASK: "plan the task",
-  READ_PUBLICATION_STATE: "read the publication state from the layer merge refs",
+  READ_FAILURES_PUBLICATION_STATE: "read the publication state from the layer merge refs",
+  READ_MERGE_PUBLICATION_STATE: "read the publication state from the layer merge refs",
   REBASED_WORKTREE_INPUT: "Input: { worktree }",
   REBASE_ONTO_TARGET_BRANCH: "rebase onto the target branch. skip every layer the receipt records as already landed",
   RECORD_MERGE_COMMIT_HASHES: "record merge commit hashes to tasks.json",
@@ -157,6 +160,9 @@ function validatePlanShape(value         , expectedTaskNumber        )          
     if (!Number.isInteger(plan.revision) || (plan.revision          ) < 1) {
         return { problem: "plan revision must be a positive integer" };
     }
+    if (!Array.isArray(plan.createsFiles) || plan.createsFiles.some((file) => typeof file !== "string" || file === "")) {
+        return { problem: "plan createsFiles must be an array of non-empty strings" };
+    }
     if (!Array.isArray(plan.sections) || plan.sections.length === 0) {
         return { problem: "plan sections must be a non-empty array" };
     }
@@ -172,7 +178,12 @@ function validatePlanShape(value         , expectedTaskNumber        )          
         if (typeof title !== "string") return { problem: `plan section "${id}" is missing a string title` };
         if (typeof body !== "string") return { problem: `plan section "${id}" is missing a string body` };
     }
-    return { task: plan.task          , revision: plan.revision          , sections: plan.sections                  };
+    return {
+        task: plan.task          ,
+        revision: plan.revision          ,
+        createsFiles: plan.createsFiles            ,
+        sections: plan.sections                 ,
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -351,8 +362,7 @@ async function runAgent(
 }
 
 /*
-  The whole prompt for a [C] box. Extra fields ride a quoted heredoc, as emitterPrompt does,
-  because a value holding an apostrophe would otherwise split mid-token and be read as a box id.
+  The whole prompt for a [C] box; a quoted heredoc keeps an apostrophe from splitting the box id.
 */
 function runStepPrompt(ctx                 , boxId        , extraFields                          )         {
     const head = `/run-step "${ctx.task}" "${ctx.runId}" "${ctx.worktree}" "${ctx.sourceBranch}" "${ctx.projectRoot}" "${boxId}"`;
@@ -363,8 +373,7 @@ A hook answers it with one JSON object. Return that object, unchanged, as your r
 }
 
 /*
-  A decision the hook owns. The counters it reads live in tasks.json, which the sandbox
-  cannot open, so an agent types the skill and hands back the arm to follow.
+  A decision the hook owns; an agent types the skill, which reads tasks.json and returns the arm.
 */
 async function decideStep(ctx                 , decisionId        )                  {
     const prompt = `Type this, exactly as written, as your next message, and send nothing else:
@@ -447,30 +456,6 @@ const FIX_CONFLICTS_RESULT = {
     },
 };
 
-const REBASE_WORKTREE_RESULT = {
-    type: "object",
-    required: ["conflicted"],
-    properties: { conflicted: { type: "boolean" } },
-};
-
-const CONTINUE_REBASE_RESULT = {
-    type: "object",
-    required: ["finished"],
-    properties: { finished: { type: "boolean" } },
-};
-
-const RUN_TASK_TESTS_RESULT = {
-    type: "object",
-    required: ["passed"],
-    properties: { passed: { type: "boolean" } },
-};
-
-const RUN_FULL_SUITE_RESULT = {
-    type: "object",
-    required: ["passed"],
-    properties: { passed: { type: "boolean" } },
-};
-
 const CHECK_FENCE_RESULT = {
     type: "object",
     required: ["inside"],
@@ -548,7 +533,7 @@ async function failuresExit(
     const landed = receipt === null ? workLanded === true : receipt.workLanded;
     const finalExitType = receipt === null ? exitType : receipt.exitType;
     // Paragraph 85: ask git what landed before writing anything, never the incoming exit type.
-    await runStep(ctx, "READ_PUBLICATION_STATE");
+    await runStep(ctx, "READ_FAILURES_PUBLICATION_STATE");
     step(ctx, ctx.L("DID_ANY_WORK_LAND"), yesNo(landed));
     // Paragraph 86: landed work discards the incoming exit type, run-failed included.
     if (landed) await runStep(ctx, "WRITE_PUBLICATION_OUTCOME", { exitType: finalExitType, exitNote });
@@ -721,7 +706,7 @@ async function implementPipeline(ctx                 )                          
     if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
     // Paragraph 38: commit dirty work, commit nothing clean; later steps rebase and would lose it.
-    await runStep(ctx, "COMMIT_IF_NEEDED");
+    await runStep(ctx, "COMMIT_IMPLEMENTATION_IF_NEEDED");
     return { next: "task-tests" };
 }
 
@@ -741,13 +726,17 @@ async function taskTestsPipeline(ctx                 )                          
     banner(ctx, "task tests");
     step(ctx, ctx.L("COMMITTED_WORK_INPUT"));
 
-    // Paragraph 41 [S]: the sandbox cannot run a test file, so an agent invokes the run-task-tests skill.
-    const testRun = await runAgent(ctx, ctx.L("RUN_TASK_TESTS"), "TEST_RUNNER", "run-task-tests", RUN_TASK_TESTS_RESULT);
-    if (testRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
+    // Paragraph 41 [C]: the sandbox cannot run a test file, so an agent types /run-step.
+    const testRun = await runStep(ctx, "RUN_TASK_TESTS");
+    if (!isFake(ctx) && (
+        testRun === null
+        || (testRun                   ).ok === false
+        || (testRun                                          ).receipts?.RUN_TASK_TESTS === undefined
+    )) return toFailures("run-failed", "the task tests box returned nothing usable");
 
     const testsPass = isFake(ctx)
         ? attempt((ctx.fake                             ).taskTestsPass, ctx.testsIndex)
-        : (testRun                       ).passed;
+        : (testRun                                                     ).receipts.RUN_TASK_TESTS.passed;
     ctx.testsIndex += 1;
     step(ctx, ctx.L("DO_TASK_TESTS_PASS"), yesNo(testsPass));
     if (testsPass) return { next: "review-tests" };
@@ -859,13 +848,17 @@ async function rebasePipeline(ctx                 )                           {
     step(ctx, ctx.L("SOURCE_REPO_LOCKED_INPUT"));
 
     for (;;) {
-        // Paragraphs 56 and 57 [S]: the sandbox cannot run a rebase, so an agent invokes the rebase-worktree skill.
-        const rebaseRun = await runAgent(ctx, ctx.L("REBASE_ONTO_TARGET_BRANCH"), "REBASER", "rebase-worktree", REBASE_WORKTREE_RESULT);
-        if (rebaseRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
+        // Paragraphs 56 and 57 [C]: the sandbox cannot run a rebase, so an agent types /run-step.
+        const rebaseRun = await runStep(ctx, "REBASE_ONTO_TARGET_BRANCH");
+        if (!isFake(ctx) && (
+            rebaseRun === null
+            || (rebaseRun                   ).ok === false
+            || (rebaseRun                                          ).receipts?.REBASE_ONTO_TARGET_BRANCH === undefined
+        )) return toFailures("run-failed", "the rebase box returned nothing usable");
 
         const conflicted = isFake(ctx)
             ? attempt((ctx.fake                             ).rebaseConflicts, ctx.conflictsIndex)
-            : (rebaseRun                           ).conflicted;
+            : (rebaseRun                                                         ).receipts.REBASE_ONTO_TARGET_BRANCH.conflicted;
         ctx.conflictsIndex += 1;
         step(ctx, ctx.L("DID_REBASE_REPORT_CONFLICTS"), yesNo(conflicted));
         if (!conflicted) return { next: "suite" };
@@ -888,13 +881,17 @@ async function rebasePipeline(ctx                 )                           {
         if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
         // Paragraph 60: always fix, then commit, then continue — never fix then continue.
-        await runStep(ctx, "COMMIT_IF_NEEDED");
-        const continueRun = await runAgent(ctx, ctx.L("CONTINUE_REBASE"), "REBASE_ADVANCER", "continue-rebase", CONTINUE_REBASE_RESULT);
-        if (continueRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
+        await runStep(ctx, "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED");
+        const continueRun = await runStep(ctx, "CONTINUE_REBASE");
+        if (!isFake(ctx) && (
+            continueRun === null
+            || (continueRun                   ).ok === false
+            || (continueRun                                          ).receipts?.CONTINUE_REBASE === undefined
+        )) return toFailures("run-failed", "the continue-rebase box returned nothing usable");
 
         const finished = isFake(ctx)
             ? attempt((ctx.fake                             ).rebaseFinished, ctx.finishedIndex)
-            : (continueRun                         ).finished;
+            : (continueRun                                                       ).receipts.CONTINUE_REBASE.finished;
         ctx.finishedIndex += 1;
         step(ctx, ctx.L("IS_REBASE_FINISHED"), yesNo(finished));
         if (finished) return { next: "suite" };
@@ -912,13 +909,17 @@ async function suitePipeline(ctx                 )                           {
     step(ctx, ctx.L("REBASED_WORKTREE_INPUT"));
 
     for (;;) {
-        // Paragraph 62 [S]: the sandbox cannot run a suite, so an agent invokes the run-full-suite skill.
-        const suiteRun = await runAgent(ctx, ctx.L("RUN_FULL_SUITE"), "SUITE_RUNNER", "run-full-suite", RUN_FULL_SUITE_RESULT);
-        if (suiteRun === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
+        // Paragraph 62 [C]: the sandbox cannot run a suite, so an agent types /run-step.
+        const suiteRun = await runStep(ctx, "RUN_FULL_SUITE");
+        if (!isFake(ctx) && (
+            suiteRun === null
+            || (suiteRun                   ).ok === false
+            || (suiteRun                                          ).receipts?.RUN_FULL_SUITE === undefined
+        )) return toFailures("run-failed", "the full-suite box returned nothing usable");
 
         const passes = isFake(ctx)
             ? attempt((ctx.fake                             ).suitePasses, ctx.suiteIndex)
-            : (suiteRun                       ).passed;
+            : (suiteRun                                                     ).receipts.RUN_FULL_SUITE.passed;
         ctx.suiteIndex += 1;
         step(ctx, ctx.L("DO_ALL_TESTS_PASS"), yesNo(passes));
         if (passes) break;
@@ -947,7 +948,7 @@ async function suitePipeline(ctx                 )                           {
         if (result === null) return toFailures("agent-failed", AGENT_FAILED_NOTE);
 
         // Paragraph 64: commit the repair before rerunning, so it is fix, commit, run.
-        await runStep(ctx, "COMMIT_IF_NEEDED");
+        await runStep(ctx, "COMMIT_SUITE_FIX_IF_NEEDED");
         ctx.depth += 1;
     }
 
@@ -993,7 +994,7 @@ async function mergePipeline(ctx                 )                           {
     await runStep(ctx, "MERGE_WORKTREES");
 
     // Paragraph 72: a read-only reconciliation over those refs, never a returned boolean.
-    await runStep(ctx, "READ_PUBLICATION_STATE");
+    await runStep(ctx, "READ_MERGE_PUBLICATION_STATE");
     const state = isFake(ctx)
         ? attempt((ctx.fake                            ).publicationState, ctx.publicationIndex)
         : (mergeReceipt                     ).state;

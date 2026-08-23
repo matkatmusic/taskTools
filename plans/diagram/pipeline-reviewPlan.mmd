@@ -38,7 +38,7 @@ flowchart TB
   VERDICT_ACCEPT --> IMPLEMENT_PIPELINE["implement pipeline"]
   VERDICT_AMEND_THEN_ACCEPT --> IMPLEMENT_PIPELINE
 
-  VERDICT_ERROR -- "exit type: run-failed<br/>exit note: the plan review<br/>could not run" --> EXIT_WORKFLOW
+  VERDICT_ERROR -- "exit type: run-failed<br/>exit note: the plan review<br/>could not run" --> EXIT_WORKFLOW_REVIEW_PLAN
 
   VERDICT_AMEND --> UPDATE_TASK_ENTRY
   VERDICT_SCRAP --> UPDATE_TASK_ENTRY
@@ -46,11 +46,11 @@ flowchart TB
   ARE_2_REVIEWS_DONE --> ARE_2_REVIEWS_DONE_NO["NO"]
   ARE_2_REVIEWS_DONE --> ARE_2_REVIEWS_DONE_YES["YES"]
   ARE_2_REVIEWS_DONE_NO -- "replan against the amended entry" --> PLAN_PIPELINE["plan pipeline"]
-  ARE_2_REVIEWS_DONE_YES -- "exit type: plan-scrapped<br/>exit note: codex did not accept<br/>the plan in two reviews" --> EXIT_WORKFLOW
+  ARE_2_REVIEWS_DONE_YES -- "exit type: plan-scrapped<br/>exit note: codex did not accept<br/>the plan in two reviews" --> EXIT_WORKFLOW_REVIEW_PLAN
 
-  CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REVIEW_PLAN
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_REVIEW_PLAN["failures exit"]
 
   %% Green heads for the next pipeline.
   %% ---
@@ -70,5 +70,5 @@ flowchart TB
   class VERDICT_ACCEPT,VERDICT_AMEND_THEN_ACCEPT,ARE_2_REVIEWS_DONE_NO pass
   class VERDICT_AMEND,VERDICT_SCRAP,VERDICT_ERROR,ARE_2_REVIEWS_DONE_YES nopass
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_REVIEW_PLAN fail
   class DRAFT_PLAN_INPUT output

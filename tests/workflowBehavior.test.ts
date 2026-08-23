@@ -8,16 +8,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
 
-type AgentBoxName =
+// Agent-dispatched boxes that can lose their result. Real mode covers the four /run-step boxes.
+type BoxName =
     | "PLANNER"
     | "PLAN_REVIEWER"
     | "IMPLEMENTER"
-    | "TEST_RUNNER"
     | "TEST_REVIEWER"
-    | "REBASER"
     | "CONFLICT_FIXER"
-    | "REBASE_ADVANCER"
-    | "SUITE_RUNNER"
     | "SUITE_FIXER";
 
 // Loop decisions hold one entry per attempt: taskTestsPass [false, true] fails once, then passes.
@@ -33,11 +30,11 @@ type PipelineDecisions = {
     suitePasses: boolean[];
     fenceHeld: boolean;
     publicationState: ("ALL LANDED" | "NONE LANDED" | "SOME LANDED")[];
-    // One entry per visit to an agent box; true means the harness lost that agent's result.
-    agentErrors?: Partial<Record<AgentBoxName, boolean[]>>;
+    // One entry per visit to a box; true means the harness lost that box's result.
+    agentErrors?: Partial<Record<BoxName, boolean[]>>;
 };
 
-const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WORKFLOW_PATH = join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
 const WORKFLOW_SOURCE = readFileSync(WORKFLOW_PATH, "utf8").replace("export const meta", "const meta");
 
@@ -58,7 +55,7 @@ const HAPPY: PipelineDecisions = {
     publicationState: ["ALL LANDED"],
 };
 
-const hookPath = fileURLToPath(new URL("../../scripts/runStepHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/runStepHook.ts", import.meta.url));
 
 // The retry counters the hook reads live in tasks.json, so fake mode gets a real one on disk.
 const rootWithNoAttempts = (taskNumber: number): string => {
@@ -137,19 +134,19 @@ test("test_workflow_reachesTheMergeSucceededExitWhenEveryDecisionIsHappy", async
 });
 
 test("test_workflow_visitsEachAgentBoxOnceOnTheHappyPath", async () => {
-    // Setup: the happy path touches six of the ten orange boxes, each exactly once.
+    // Setup: the happy path touches all ten boxes but the three repair boxes, each exactly once.
     const trace = await runFake();
 
     // Verification: no repair box runs when nothing needs repairing.
     assert.equal(countAgent(trace, "plan the task"), 1);
     assert.equal(countAgent(trace, "codex reviews the plan"), 1);
     assert.equal(countAgent(trace, "implement task"), 1);
-    assert.equal(countAgent(trace, "run task tests"), 1);
+    assert.equal(countOf(trace, "run task tests"), 1);
     assert.equal(countAgent(trace, "codex reviews the tests"), 1);
-    assert.equal(countAgent(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 1);
-    assert.equal(countAgent(trace, "run the full suite"), 1);
+    assert.equal(countOf(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 1);
+    assert.equal(countOf(trace, "run the full suite"), 1);
     assert.equal(countAgent(trace, "fix conflicts"), 0);
-    assert.equal(countAgent(trace, "continue the rebase"), 0);
+    assert.equal(countOf(trace, "continue the rebase"), 0);
     assert.equal(countAgent(trace, "fix the codebase so the full suite passes"), 0);
 });
 
@@ -193,7 +190,7 @@ test("test_workflow_stopsFixingTaskTestsAfterTwoAttemptsAndRunsThemAThirdTime", 
     const trace = await runFake({ taskTestsPass: [false] });
 
     // Verification: the counter is read before the amend, so the first failure does not spend it.
-    assert.equal(countAgent(trace, "run task tests"), 3);
+    assert.equal(countOf(trace, "run task tests"), 3);
     assert.equal(countAgent(trace, "implement task"), 3);
     assert.equal(countOf(trace, "amend tasks.json entry with the failing tests"), 2);
     assert.equal(exitTypeOf(trace), "TESTS-RED");
@@ -214,9 +211,9 @@ test("test_workflow_stopsFixingConflictsAfterTwoAttemptsAndRebasesAThirdTime", a
     const trace = await runFake({ rebaseConflicts: [true], rebaseFinished: [false] });
 
     // Verification: two conflict fixes spent, and the third rebase run is the last one.
-    assert.equal(countAgent(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 3);
+    assert.equal(countOf(trace, "rebase onto the target branch. skip every layer the receipt records as already landed"), 3);
     assert.equal(countAgent(trace, "fix conflicts"), 2);
-    assert.equal(countAgent(trace, "continue the rebase"), 2);
+    assert.equal(countOf(trace, "continue the rebase"), 2);
     assert.equal(exitTypeOf(trace), "REBASE-STUCK");
 });
 
@@ -225,7 +222,7 @@ test("test_workflow_stopsFixingTheSuiteAfterTwoAttemptsAndRunsItAThirdTime", asy
     const trace = await runFake({ suitePasses: [false] });
 
     // Verification: three suite runs, two repair runs, then the red exit.
-    assert.equal(countAgent(trace, "run the full suite"), 3);
+    assert.equal(countOf(trace, "run the full suite"), 3);
     assert.equal(countAgent(trace, "fix the codebase so the full suite passes"), 2);
     assert.equal(exitTypeOf(trace), "SUITE-RED");
 });
@@ -277,20 +274,16 @@ test("test_workflow_treatsAnErrorVerdictAsAnOperationalFailureNotAPlanDefect", a
 });
 
 // --------------------------------------------------------------------------
-// The dotted "agent() errored" edge, on all ten orange boxes
+// The dotted "agent() errored" edge, on all ten boxes
 // --------------------------------------------------------------------------
 
 // Each entry names the decisions that reach the box, and the box's label in the trace.
-const AGENT_BOX_REACH: { box: string; label: string; reach: Partial<PipelineDecisions> }[] = [
+const AGENT_BOX_REACH: { box: BoxName; label: string; reach: Partial<PipelineDecisions> }[] = [
     { box: "PLANNER", label: "plan the task", reach: {} },
     { box: "PLAN_REVIEWER", label: "codex reviews the plan", reach: {} },
     { box: "IMPLEMENTER", label: "implement task", reach: {} },
-    { box: "TEST_RUNNER", label: "run task tests", reach: {} },
     { box: "TEST_REVIEWER", label: "codex reviews the tests", reach: {} },
-    { box: "REBASER", label: "rebase onto the target branch. skip every layer the receipt records as already landed", reach: {} },
     { box: "CONFLICT_FIXER", label: "fix conflicts", reach: { rebaseConflicts: [true] } },
-    { box: "REBASE_ADVANCER", label: "continue the rebase", reach: { rebaseConflicts: [true] } },
-    { box: "SUITE_RUNNER", label: "run the full suite", reach: {} },
     { box: "SUITE_FIXER", label: "fix the codebase so the full suite passes", reach: { suitePasses: [false] } },
 ];
 

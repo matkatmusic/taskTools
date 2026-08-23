@@ -198,7 +198,7 @@ export type PlanPromptExtra = {
 };
 
 const clarifyRequestBlock = (t: PreparedTask, clarifyRequest: string): string => {
-    const payload = JSON.stringify({ projectRoot: t.taskStateRoot, taskNumber: t.number, clarifyRequest });
+    const payload = JSON.stringify({ projectRoot: t.taskStateRoot, taskNumber: t.number, clarifyRequest, boxId: "WRITE_CLARIFY_REQUEST" });
     return `Run this first, before doing anything else, exactly as written:
 node ${WRITE_CLARIFY_REQUEST_PATH} <<'TTCLARIFY'
 ${payload}
@@ -210,7 +210,7 @@ TTCLARIFY
 const planReviewBlock = (t: PreparedTask, planReview: PlanReview): string => {
     const payload = JSON.stringify(planReview);
     return `Run this first, before doing anything else, exactly as written:
-node ${RECORD_PLAN_REVIEW_PATH} ${shellQuote(t.taskStateRoot)} ${shellQuote(t.planFile)} ${t.number} <<'TTREVIEW'
+node ${RECORD_PLAN_REVIEW_PATH} ${shellQuote(t.taskStateRoot)} ${shellQuote(t.planFile)} ${t.number} UPDATE_TASK_ENTRY <<'TTREVIEW'
 ${payload}
 TTREVIEW
 
@@ -218,7 +218,7 @@ TTREVIEW
 };
 
 const updateDocsBlock = (t: PreparedTask): string => {
-    const payload = JSON.stringify({ taskNumber: t.number, worktreePath: t.repoRoot, projectRoot: t.taskStateRoot });
+    const payload = JSON.stringify({ taskNumber: t.number, worktreePath: t.repoRoot, projectRoot: t.taskStateRoot, boxId: "UPDATE_AUTO_GENERATED_DOCS" });
     return `Run this first, before doing anything else, exactly as written:
 node ${UPDATE_TASK_DOCS_PATH} <<'TTDOCS'
 ${payload}
@@ -293,6 +293,7 @@ The plan must be exact enough and comprehensive enough that the implementer make
 - - sort the edits per file as highest line numbers first so edits do not shift the lines of later edits.  
 - - Never say "insert at the end" or "replace the whole file" — show the exact text to remove and insert, and where.
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
+- Fill in \`createsFiles\` with every owned file that does not exist yet on disk. Leave it empty when the plan creates nothing new.
 - Resolve every question while planning. 
 - Write no conditional instruction
 - no "re-check", 

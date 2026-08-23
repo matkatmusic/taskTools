@@ -1,16 +1,16 @@
-// Behavioral checks for initTaskSubmodules.ts. Run alone: node --test tests/tackle-tasks/initTaskSubmodules.test.ts
+// Behavioral checks for initTaskSubmodules.ts. Run alone: node --test tests/initTaskSubmodules.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
-import { claimTask } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { initTaskSubmodules } from "../scripts/tackle-tasks/initTaskSubmodules.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../scripts/taskGroups.ts";
+import { claimTask } from "../scripts/tackle-tasks/taskRunState.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

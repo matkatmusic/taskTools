@@ -14,15 +14,19 @@ import { lockSourceRepo } from "./tackle-tasks/lockSourceRepo.ts";
 import { markTaskInactive } from "./tackle-tasks/markTaskInactive.ts";
 import { mergeTaskWorktree } from "./tackle-tasks/mergeTaskWorktree.ts";
 import { readPublicationState } from "./tackle-tasks/readPublicationState.ts";
+import { advanceTaskRebase } from "./tackle-tasks/advanceTaskRebase.ts";
+import { rebaseTaskWorktree } from "./tackle-tasks/rebaseTaskWorktree.ts";
 import { recordMergeCommits } from "./tackle-tasks/recordMergeCommits.ts";
 import { recordPlanReview } from "./tackle-tasks/recordPlanReview.ts";
 import { recordTaskModifiedFiles } from "./tackle-tasks/recordTaskModifiedFiles.ts";
 import { releaseTaskRunHolds } from "./tackle-tasks/releaseTaskRunHolds.ts";
 import { resetTaskWorktree } from "./tackle-tasks/resetTaskWorktree.ts";
+import { runFullSuite } from "./tackle-tasks/runFullSuite.ts";
+import { runTaskTests } from "./tackle-tasks/runTaskTests.ts";
 import { updateTaskDocs } from "./tackle-tasks/updateTaskDocs.ts";
 import { writeClarifyRequest } from "./tackle-tasks/writeClarifyRequest.ts";
 import { writeTaskExitNotes } from "./tackle-tasks/writeTaskExitNotes.ts";
-import { MAX_ATTEMPTS, claimTask, getAttemptCount, raiseAttemptCount, type TaskCommit } from "./tackle-tasks/taskRunState.ts";
+import { MAX_ATTEMPTS, claimTask, getAttemptCount, getCurrentTaskRun, raiseAttemptCount, type TaskCommit } from "./tackle-tasks/taskRunState.ts";
 
 // The five arguments every green box receives, and the only inputs a row may derive from.
 type TaskRunIdentity = {
@@ -41,9 +45,7 @@ type StepTableRow = {
     runBoxScript: (identity: TaskRunIdentity, extraFields: Record<string, unknown>, receipts: BoxReceipts) => Record<string, unknown> | Promise<Record<string, unknown>>;
 };
 
-/*
-  A receipt a row asks for but no earlier box produced is a wiring mistake, not a missing value, so it throws here rather than reaching a script as undefined.
-*/
+// A receipt no earlier box produced is a wiring mistake, so this throws rather than passing undefined.
 function readReceipt(receipts: BoxReceipts, boxId: string): Record<string, unknown> {
     const receipt = receipts[boxId];
     if (!receipt) throw new Error(`run-step: no receipt from ${boxId}; name it earlier in the same call`);
@@ -97,16 +99,57 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             runId: identity.runId,
         }),
     },
-    COMMIT_IF_NEEDED: {
+    COMMIT_IMPLEMENTATION_IF_NEEDED: {
         allowedExtraFieldNames: [],
         runBoxScript: (identity) => commitTaskWork({
             projectRoot: identity.projectRoot,
             worktreePath: identity.worktree,
             taskNumber: identity.taskNumber,
             runId: identity.runId,
-            stepId: "COMMIT_IF_NEEDED",
+            stepId: "COMMIT_IMPLEMENTATION_IF_NEEDED",
             rootSourceBranch: identity.sourceBranch,
         }),
+    },
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => commitTaskWork({
+            projectRoot: identity.projectRoot,
+            worktreePath: identity.worktree,
+            taskNumber: identity.taskNumber,
+            runId: identity.runId,
+            stepId: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
+            rootSourceBranch: identity.sourceBranch,
+        }),
+    },
+    COMMIT_SUITE_FIX_IF_NEEDED: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => commitTaskWork({
+            projectRoot: identity.projectRoot,
+            worktreePath: identity.worktree,
+            taskNumber: identity.taskNumber,
+            runId: identity.runId,
+            stepId: "COMMIT_SUITE_FIX_IF_NEEDED",
+            rootSourceBranch: identity.sourceBranch,
+        }),
+    },
+    // Derived here, never accepted from the caller: the rebase box recorded where it stopped.
+    CONTINUE_REBASE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => {
+            const stopped = getCurrentTaskRun(identity.taskNumber, identity.projectRoot)
+                ?.stepResults?.findLast((receipt) => receipt.script === "rebaseTaskWorktree")?.result;
+            const stoppedAt = (stopped as { stoppedAt?: { occurrenceId: string; checkoutPath: string } } | undefined)?.stoppedAt;
+            if (!stoppedAt) throw new Error(`CONTINUE_REBASE: task ${identity.taskNumber} has no recorded stopped rebase`);
+            return advanceTaskRebase({
+                projectRoot: identity.projectRoot,
+                worktreePath: identity.worktree,
+                taskNumber: identity.taskNumber,
+                runId: identity.runId,
+                stepId: "CONTINUE_REBASE",
+                rootSourceBranch: identity.sourceBranch,
+                stoppedAt,
+            }) as unknown as Record<string, unknown>;
+        },
     },
     CREATE_WORKTREE: {
         allowedExtraFieldNames: [],
@@ -161,13 +204,32 @@ const STEP_TABLE: Record<string, StepTableRow> = {
             rootSourceBranch: identity.sourceBranch,
         }) as unknown as Record<string, unknown>,
     },
-    READ_PUBLICATION_STATE: {
+    READ_MERGE_PUBLICATION_STATE: {
         allowedExtraFieldNames: [],
         runBoxScript: (identity) => readPublicationState({
             taskNumber: identity.taskNumber,
             projectRoot: identity.projectRoot,
             worktreePath: identity.worktree,
         }) as unknown as Record<string, unknown>,
+    },
+    READ_FAILURES_PUBLICATION_STATE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => readPublicationState({
+            taskNumber: identity.taskNumber,
+            projectRoot: identity.projectRoot,
+            worktreePath: identity.worktree,
+        }) as unknown as Record<string, unknown>,
+    },
+    REBASE_ONTO_TARGET_BRANCH: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => rebaseTaskWorktree({
+            projectRoot: identity.projectRoot,
+            worktreePath: identity.worktree,
+            taskNumber: identity.taskNumber,
+            runId: identity.runId,
+            stepId: "REBASE_ONTO_TARGET_BRANCH",
+            rootSourceBranch: identity.sourceBranch,
+        }) as unknown as Promise<Record<string, unknown>>,
     },
     RECORD_MERGE_COMMIT_HASHES: {
         allowedExtraFieldNames: [],
@@ -223,6 +285,18 @@ const STEP_TABLE: Record<string, StepTableRow> = {
     RESET_WORKTREE: {
         allowedExtraFieldNames: [],
         runBoxScript: (identity) => resetTaskWorktree(identity.taskNumber, identity.runId, identity.projectRoot),
+    },
+    RUN_FULL_SUITE: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => runFullSuite(
+            identity.taskNumber, identity.runId, identity.worktree, identity.sourceBranch, "RUN_FULL_SUITE", identity.projectRoot,
+        ),
+    },
+    RUN_TASK_TESTS: {
+        allowedExtraFieldNames: [],
+        runBoxScript: (identity) => runTaskTests(
+            identity.taskNumber, identity.runId, identity.worktree, identity.sourceBranch, "RUN_TASK_TESTS", identity.projectRoot,
+        ),
     },
     UPDATE_AUTO_GENERATED_DOCS: {
         allowedExtraFieldNames: [],
@@ -281,9 +355,7 @@ const STEP_TABLE: Record<string, StepTableRow> = {
 };
 
 /*
-  Each ARE_2_*_DONE decision guards one retry. Every site in the diagram has the same shape:
-  read the count, stop when it reaches the cap, otherwise start another attempt. So a NO is
-  what raises the count -- a NO means the next attempt is beginning.
+  Each ARE_2_*_DONE decision guards one retry. Every site in the diagram has the same shape: read the count, stop when it reaches the cap, otherwise start another attempt. So a NO is what raises the count -- a NO means the next attempt is beginning.
 */
 const ATTEMPT_COUNTERS: Record<string, string> = {
     ARE_2_CLARIFY_ROUNDS_DONE: "clarifyRounds",
@@ -363,7 +435,7 @@ const args = prompt.startsWith("/run-step ")
     : skill === "run-step"
         ? String(input.args ?? "")
         : "";
-// Extra fields ride a quoted heredoc, as emitterPrompt does: a value holding an apostrophe would otherwise split mid-token and be read as a box id.
+// Extra fields ride a quoted heredoc, like emitterPrompt, so an apostrophe never splits mid-token into a box id.
 const heredoc = args.match(/<<'TTPAYLOAD'\n([\s\S]*?)\nTTPAYLOAD/);
 // Quoted runs stay whole, so a worktree path with spaces survives.
 const tokens = (args.replace(/<<'TTPAYLOAD'[\s\S]*$/, "").match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(token => token.replace(/^(["'])(.*)\1$/s, "$2"));

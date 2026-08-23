@@ -10,9 +10,9 @@ import {
     renderTaskBriefContent,
     resolveTaskWorktreeConventionDirectory,
     writeTaskBriefFile,
-} from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
-import type { TaskRecord } from "../../scripts/taskFiles.ts";
+} from "../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../scripts/taskGroups.ts";
+import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

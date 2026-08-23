@@ -1,13 +1,13 @@
 // F1 regressions: the rebase path must keep the source checkout and the task worktree checkout
 // distinct, fetch base branches from the real local source checkout (never origin, since its
 // commits may be unpushed), and never let discovery ls-tree a source-only OID inside the
-// worktree before that fetch happens. Run: node --test tests/tackle-tasks/f1SourceWorktreeSplit.test.ts
+// worktree before that fetch happens. Run: node --test tests/f1SourceWorktreeSplit.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { addSubmodule, git, makeCommittedRepo, makeLinkedWorktree } from "./support/gitFixtures.ts";
-import { rebaseWorktreeSubmoduleLayersDeepestFirst } from "../../scripts/tackle-tasks/occurrences.ts";
+import { rebaseWorktreeSubmoduleLayersDeepestFirst } from "../scripts/tackle-tasks/occurrences.ts";
 
 function makeCommittedRepoWithTestScript(prefix: string): string {
     const repoPath = makeCommittedRepo(prefix);

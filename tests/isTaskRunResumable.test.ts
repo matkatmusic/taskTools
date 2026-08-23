@@ -1,11 +1,11 @@
-// Behavioral checks for isTaskRunResumable.ts. Run alone: node --test tests/tackle-tasks/isTaskRunResumable.test.ts
+// Behavioral checks for isTaskRunResumable.ts. Run alone: node --test tests/isTaskRunResumable.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isTaskRunResumable } from "../../scripts/tackle-tasks/isTaskRunResumable.ts";
-import type { TaskRunRecord } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { isTaskRunResumable } from "../scripts/tackle-tasks/isTaskRunResumable.ts";
+import type { TaskRunRecord } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function endedRun(overrides: Partial<TaskRunRecord> = {}): TaskRunRecord {
     return {

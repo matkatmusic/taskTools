@@ -4,6 +4,7 @@ import { findRecordedMergedCommit } from "../mergeTaskWorktrees.ts";
 import { taskBranchName } from "./createTaskWorktree.ts";
 import { buildWorktreeOccurrences } from "./occurrences.ts";
 import type { TaskCommit } from "./taskRunState.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type PublicationState = "ALL LANDED" | "SOME LANDED" | "NONE LANDED";
 
@@ -42,7 +43,23 @@ export function readPublicationState(input: ReadPublicationStateInput): ReadPubl
     return { state: "SOME LANDED", landed, notLanded, commits };
 }
 
+const READ_PUBLICATION_STATE_SOURCE = "scripts/tackle-tasks/readPublicationState.ts:25: readPublicationState";
+
 if (process.argv[1]?.endsWith("readPublicationState.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as ReadPublicationStateInput;
-    process.stdout.write(`${JSON.stringify(readPublicationState(input))}\n`);
+    const payloadText = readFileSync(0, "utf8");
+    const input = JSON.parse(payloadText) as ReadPublicationStateInput & { runId?: string; boxId?: string };
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId: input.runId ?? "" };
+    const boxId = input.boxId ?? "readPublicationState";
+    const command = `node ${process.argv[1]} <<'TTREAD'\n${payloadText}\nTTREAD`;
+
+    try {
+        const output = readPublicationState(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: READ_PUBLICATION_STATE_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: READ_PUBLICATION_STATE_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

@@ -1,12 +1,12 @@
 // Behavioral checks for scripts/tackle-tasks/markTaskInactive.ts.
-// Run: node --test tests/tackle-tasks/markTaskInactive.test.ts
+// Run: node --test tests/markTaskInactive.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { markTaskInactive } from "../../scripts/tackle-tasks/markTaskInactive.ts";
-import { readTaskRunState, type TaskRunRecord } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { markTaskInactive } from "../scripts/tackle-tasks/markTaskInactive.ts";
+import { readTaskRunState, type TaskRunRecord } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "markTaskInactive-"));

@@ -1,14 +1,14 @@
-// Behavioral checks for scripts/tackle-tasks/cleanupTaskWorktree.ts. Run: node --test tests/tackle-tasks/cleanupTaskWorktree.test.ts
+// Behavioral checks for scripts/tackle-tasks/cleanupTaskWorktree.ts. Run: node --test tests/cleanupTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanupTaskWorktree } from "../../scripts/tackle-tasks/cleanupTaskWorktree.ts";
-import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { taskBranchName } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { adoptWorktreeLease, claimTask } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
+import { cleanupTaskWorktree } from "../scripts/tackle-tasks/cleanupTaskWorktree.ts";
+import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { taskBranchName } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { adoptWorktreeLease, claimTask } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
 import { git, makeCommittedRepo, addSubmodule } from "./support/gitFixtures.ts";
 
 function makeSourceRepoWithSubmodule(): string {

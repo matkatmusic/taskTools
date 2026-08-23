@@ -1,14 +1,14 @@
 // Behavioral checks for scripts/tackle-tasks/closeTaskRun.ts.
-// Run: node --test tests/tackle-tasks/closeTaskRun.test.ts
+// Run: node --test tests/closeTaskRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { closeTaskRun } from "../../scripts/tackle-tasks/closeTaskRun.ts";
-import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import type { TaskRunRecord, TaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { closeTaskRun } from "../scripts/tackle-tasks/closeTaskRun.ts";
+import { reconcileStep } from "../scripts/tackle-tasks/reconcileStep.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import type { TaskRunRecord, TaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function makeProjectRoot(tasks: unknown[], completed: unknown[] = []): string {
     const root = mkdtempSync(join(tmpdir(), "closeTaskRun-"));

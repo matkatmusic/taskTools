@@ -22,11 +22,11 @@ flowchart TB
 %% run-failed - a script failed operationally
 
   ACCEPTED_PLAN_INPUT["Input: { plan, tasks.json entry }"] --> IMPLEMENT_TASK
-  IMPLEMENT_TASK["implement task"] --> COMMIT_IF_NEEDED["commit if needed"]
-  COMMIT_IF_NEEDED --> TASK_TESTS_PIPELINE["task tests pipeline"]
-  IMPLEMENT_TASK -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  IMPLEMENT_TASK["implement task"] --> COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed"]
+  COMMIT_IMPLEMENTATION_IF_NEEDED --> TASK_TESTS_PIPELINE["task tests pipeline"]
+  IMPLEMENT_TASK -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_IMPLEMENT
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_IMPLEMENT["failures exit"]
 
   classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
@@ -34,9 +34,9 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class COMMIT_IF_NEEDED script
+  class COMMIT_IMPLEMENTATION_IF_NEEDED script
   class TASK_TESTS_PIPELINE pipeline
   class IMPLEMENT_TASK agent
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_IMPLEMENT fail
   class ACCEPTED_PLAN_INPUT output

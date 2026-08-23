@@ -35,6 +35,7 @@ export function suiteFixPrompt(t: PreparedTask, runId: string, sourceBranch: str
         runId,
         stepId: "fix-suite",
         rootSourceBranch: sourceBranch,
+        boxId: "COMMIT_SUITE_FIX_IF_NEEDED",
     });
     return `Invoke the skill \`/ponytail:ponytail ultra\` first.
 

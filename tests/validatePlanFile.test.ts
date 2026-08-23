@@ -1,5 +1,4 @@
-// CLI behavior for validatePlanFile.ts: stdin JSON in, one line of JSON out.
-// Run alone: node --test tests/tackle-tasks/validatePlanFile.test.ts
+// CLI behavior for validatePlanFile.ts: stdin JSON in, one line of JSON out.  Run alone: node --test tests/validatePlanFile.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -7,9 +6,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validatePlanFile } from "../../scripts/tackle-tasks/validatePlanFile.ts";
+import { validatePlanFile } from "../scripts/tackle-tasks/validatePlanFile.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/validatePlanFile.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/validatePlanFile.ts", import.meta.url));
 
 function writeJsonFile(value: unknown): string {
     const dir = mkdtempSync(join(tmpdir(), "validate-plan-file-"));
@@ -28,6 +27,7 @@ test("test_validatePlanFile_reportsValidWithSectionIdsForAWellFormedPlan", () =>
     const planFilePath = writeJsonFile({
         task: 42,
         revision: 1,
+        createsFiles: [],
         sections: [{ id: "problem", title: "Problem", body: "b" }, { id: "step-1", title: "Step", body: "b" }],
     });
     const output = validatePlanFile({ projectRoot: "/repo", planFilePath, taskNumber: 42 });
@@ -46,6 +46,7 @@ test("test_validatePlanFileCli_printsOneLineOfJsonOnStdout", () => {
     const planFilePath = writeJsonFile({
         task: 7,
         revision: 1,
+        createsFiles: [],
         sections: [{ id: "problem", title: "Problem", body: "b" }],
     });
     const output = runCli({ projectRoot: "/repo", planFilePath, taskNumber: 7 });
@@ -56,6 +57,7 @@ test("test_validatePlanFileCli_behavesIdenticallyFromAnUnrelatedCwd", () => {
     const planFilePath = writeJsonFile({
         task: 7,
         revision: 1,
+        createsFiles: [],
         sections: [{ id: "problem", title: "Problem", body: "b" }],
     });
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));
@@ -67,6 +69,7 @@ test("test_validatePlanFileCli_rejectsARelativePlanFilePath", () => {
     const planFilePath = writeJsonFile({
         task: 7,
         revision: 1,
+        createsFiles: [],
         sections: [{ id: "problem", title: "Problem", body: "b" }],
     });
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "unrelated-cwd-"));

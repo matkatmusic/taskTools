@@ -16,7 +16,7 @@ import {
     refreshSourceRepoLock,
     releaseSourceRepoLock,
     type AcquireOutcome,
-} from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+} from "../scripts/tackle-tasks/sourceRepoLock.ts";
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-sourceLock-"));
@@ -24,7 +24,7 @@ function makeProjectRoot(): string {
     return root;
 }
 
-const sourceRepoLockModulePath = fileURLToPath(new URL("../../scripts/tackle-tasks/sourceRepoLock.ts", import.meta.url));
+const sourceRepoLockModulePath = fileURLToPath(new URL("../scripts/tackle-tasks/sourceRepoLock.ts", import.meta.url));
 
 // Runs `functionCall` (an expression referencing the imported lock functions, plus a
 // `waitForFile(path)` busy-wait helper) in its own node process, and resolves with its
@@ -230,7 +230,7 @@ test("test_sourceRepoLock_survivesAcquireAndReleaseInSeparateProcesses", () => {
     // proving durability that a callback-scoped lock like withTaskStateLock cannot provide.
     const root = makeProjectRoot();
     const owner = buildLockOwner("run-13", 130);
-    const modulePath = fileURLToPath(new URL("../../scripts/tackle-tasks/sourceRepoLock.ts", import.meta.url));
+    const modulePath = fileURLToPath(new URL("../scripts/tackle-tasks/sourceRepoLock.ts", import.meta.url));
 
     function runInSeparateProcess(functionCall: string): unknown {
         const script = `

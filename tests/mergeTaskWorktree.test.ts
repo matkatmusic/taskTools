@@ -1,18 +1,18 @@
-// Behavioral checks for scripts/tackle-tasks/mergeTaskWorktree.ts. Run: node --test tests/tackle-tasks/mergeTaskWorktree.test.ts
+// Behavioral checks for scripts/tackle-tasks/mergeTaskWorktree.ts. Run: node --test tests/mergeTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeTaskWorktree } from "../../scripts/tackle-tasks/mergeTaskWorktree.ts";
-import { rebaseTaskWorktree } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
-import { acquireSourceRepoLock, buildLockOwner, releaseSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import { currentBranchName } from "../../scripts/repositoryBranches.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { mergeTaskWorktree } from "../scripts/tackle-tasks/mergeTaskWorktree.ts";
+import { rebaseTaskWorktree } from "../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { acquireSourceRepoLock, buildLockOwner, releaseSourceRepoLock } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { claimTask, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { currentBranchName } from "../scripts/repositoryBranches.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

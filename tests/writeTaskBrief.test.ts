@@ -1,5 +1,5 @@
 // Behavioral checks for writeTaskBrief.ts: pure rendering, idempotent writing, generated-artifact isolation.
-// Run alone: node --test tests/tackle-tasks/writeTaskBrief.test.ts
+// Run alone: node --test tests/writeTaskBrief.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -10,10 +10,10 @@ import {
     configureGeneratedArtifactIsolation,
     generateTaskBriefContents,
     writeTaskBriefToDisk,
-} from "../../scripts/tackle-tasks/writeTaskBrief.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
-import type { TaskRunRecord } from "../../scripts/tackle-tasks/taskRunState.ts";
+} from "../scripts/tackle-tasks/writeTaskBrief.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../scripts/taskGroups.ts";
+import type { TaskRunRecord } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

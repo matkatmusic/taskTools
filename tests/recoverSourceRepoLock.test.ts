@@ -11,13 +11,13 @@ import {
     acquireSourceRepoLock,
     buildLockOwner,
     readSourceRepoLock,
-} from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+} from "../scripts/tackle-tasks/sourceRepoLock.ts";
 import {
     formatSourceRepoLockRecoveryCommand,
     runRecoverSourceRepoLockCli,
-} from "../../scripts/tackle-tasks/recoverSourceRepoLock.ts";
+} from "../scripts/tackle-tasks/recoverSourceRepoLock.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/recoverSourceRepoLock.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/recoverSourceRepoLock.ts", import.meta.url));
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-recoverLock-"));

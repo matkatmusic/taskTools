@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../taskStateLock.ts";
+import { logStepOutput } from "./logStepOutput.ts";
+import { getCurrentTaskRun } from "./taskRunState.ts";
 
 export type WriteClarifyRequestInput = {
     projectRoot: string;
@@ -28,7 +30,23 @@ export function writeClarifyRequest(input: WriteClarifyRequestInput): WriteClari
     return { written: true, clarifyRequest };
 }
 
+const WRITE_CLARIFY_REQUEST_SOURCE = "scripts/tackle-tasks/writeClarifyRequest.ts:17: writeClarifyRequest";
+
 if (process.argv[1]?.endsWith("writeClarifyRequest.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as WriteClarifyRequestInput;
-    process.stdout.write(`${JSON.stringify(writeClarifyRequest(input))}\n`);
+    const stdinText = readFileSync(0, "utf8");
+    const input = JSON.parse(stdinText) as WriteClarifyRequestInput & { boxId?: string };
+    const boxId = input.boxId ?? "WRITE_CLARIFY_REQUEST";
+    const runId = getCurrentTaskRun(input.taskNumber, input.projectRoot)?.runId ?? "unknown-run";
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId };
+    const command = `node ${process.argv[1]} <<'TTCLARIFY'\n${stdinText}\nTTCLARIFY`;
+    try {
+        const output = writeClarifyRequest(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: WRITE_CLARIFY_REQUEST_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: WRITE_CLARIFY_REQUEST_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }
