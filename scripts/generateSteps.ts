@@ -11,7 +11,7 @@ export type StepConfigEntry = { box: string; script: string; template: string; n
 // Keyed by diagram file name, so two diagrams may name the same box without sharing a script.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
-export type BlockTemplate = { input: unknown; output: unknown };
+export type BlockTemplate = { input: unknown; output: unknown; agentOutput?: unknown };
 
 const DIAGRAM_KEYWORDS = /^(flowchart|graph|subgraph|end|classDef|class|style|direction|click)\b/;
 
@@ -122,8 +122,9 @@ function getSeamsFromPreviousConfig(configPath: string): Record<string, string[]
     return seamsByStepKey;
 }
 
+// A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
 function getDiagramFileNames(diagramFolder: string): string[] {
-    return readdirSync(diagramFolder).filter(name => name.endsWith(".mmd")).sort();
+    return readdirSync(diagramFolder).filter(name => name.endsWith(".mmd") && !name.startsWith("_")).sort();
 }
 
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string): StepConfig {

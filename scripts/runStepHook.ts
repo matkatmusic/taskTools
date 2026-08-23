@@ -5,11 +5,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { KNOWN_SIGNALS, SIGNAL, type Signal } from "./signal.ts";
 
+// Registered first so a throw while this file loads still reports, instead of dying silently.
+process.on("uncaughtException", (error: Error) => {
+    const reason = `run-step hook failed: ${error.stack ?? error.message}`;
+    process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
+    process.exit(0);
+});
+
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 // The overrides exist so a test writes to its own temp files instead of the run's.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(PROJECT_ROOT, "plans/diagrams/runs/run-log.md");
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
+// ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
+const STEP_TIMEOUT_MS = 10_000;
 
 type StepConfigEntry = { box: string; script: string; next: string[] };
 type StepConfig = Record<string, StepConfigEntry[]>;
@@ -31,6 +40,7 @@ type WalkResult = {
     isTerminal: boolean;
     report: string;
     nextStep: string;
+    instructions: string;
 };
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
@@ -107,7 +117,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     // Logged whole so the line in run-log.md is one you can paste into a terminal.
     const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
     const command = `node --no-inspect ${step.script}${quotedInput}`;
-    const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8" });
+    const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: STEP_TIMEOUT_MS });
     const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
     const stepRun = {
         ok: spawnResult.status === 0,
@@ -133,13 +143,18 @@ function getNextStepAfter(stoppedAt: string, output: unknown): string {
     return getStepKey(String(chosenNextBox), step.diagram);
 }
 
+// What the caller does. A prompt is the agent's to answer; anything else is data to relay.
+const PROMPT_INSTRUCTIONS = "Follow output.prompt. Return only the object shape that prompt names, and nothing else.";
+const RELAY_INSTRUCTIONS = "Return this whole object unchanged as your answer. Do not rewrite any field.";
+
 // A box with no arrow out of it ends a path. A block sets report for the user.
 function buildWalkResult(ok: boolean, boxesRun: string[], stoppedAt: string, why: string, output: unknown): WalkResult {
     const isTerminal = STEPS_BY_KEY.get(stoppedAt)!.next.length === 0;
-    const reportedOutput = output as { report?: unknown } | null;
+    const reportedOutput = output as { report?: unknown; signal?: unknown } | null;
     const report = typeof reportedOutput?.report === "string" ? reportedOutput.report : "";
     const nextStep = getNextStepAfter(stoppedAt, output);
-    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report, nextStep };
+    const instructions = reportedOutput?.signal === SIGNAL.PROMPT ? PROMPT_INSTRUCTIONS : RELAY_INSTRUCTIONS;
+    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report, nextStep, instructions };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
@@ -153,7 +168,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         boxesRun.push(stepKey);
 
         if (!stepRun.ok) {
-            return buildWalkResult(false, boxesRun, stepKey, `exited ${stepRun.exitCode}`, stepRun.stdout);
+            // ponytail: a null exit code means killed, and the timeout is the only thing that kills a block here.
+            const why = stepRun.exitCode === null ? `did not exit within ${STEP_TIMEOUT_MS}ms` : `exited ${stepRun.exitCode}`;
+            return buildWalkResult(false, boxesRun, stepKey, why, stepRun.stdout);
         }
         if (!stepRun.result) {
             return buildWalkResult(false, boxesRun, stepKey, "printed no result object", stepRun.stdout);
@@ -195,12 +212,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     }
 }
 
-let payload: { hook_event_name?: unknown; prompt?: unknown; tool_input?: Record<string, unknown> };
-try {
-    payload = JSON.parse(readFileSync(0, "utf8"));
-} catch {
-    process.exit(0);
-}
+const payload: { hook_event_name?: unknown; prompt?: unknown; tool_input?: Record<string, unknown> } = JSON.parse(readFileSync(0, "utf8"));
 
 // Plugin skills reach the hook namespaced, as /taskTools:run-step and taskTools:run-step.
 const promptText = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");

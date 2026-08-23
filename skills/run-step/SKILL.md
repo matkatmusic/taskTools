@@ -5,3 +5,6 @@ argument-hint: <blockName> [input]
 ---
 
 do nothing. Don't even respond.
+
+One exception. When the injected result has `output.signal` of `prompt`,
+read `output.prompt` and follow it. Answer in the shape that prompt asks for.
