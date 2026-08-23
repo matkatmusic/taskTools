@@ -21,6 +21,7 @@ export function lockSourceRepoPrompt(input: LockSourceRepoPromptInput): string {
         taskNumber: input.taskNumber,
         runId: input.runId,
         projectRoot: input.projectRoot,
+        boxId: "LOCK_SOURCE_REPO",
     });
     return `Run this with Bash, exactly as written:
 node ${LOCK_SOURCE_REPO_PATH} <<'TTLOCK'

@@ -1,14 +1,14 @@
 // Behavioral checks for scripts/tackle-tasks/runFullSuite.ts.
-// Run: node --test tests/tackle-tasks/runFullSuite.test.ts
+// Run: node --test tests/runFullSuite.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
-import { claimTask, endTaskRun, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+import { runFullSuite } from "../scripts/tackle-tasks/runFullSuite.ts";
+import { claimTask, endTaskRun, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { L } from "../../scripts/mmdGraph.ts";
+import { L } from "../scripts/mmdGraph.ts";
 import {
     createPipelineContext,
     runStep,
@@ -23,11 +23,11 @@ import {
     taskTestsPipeline,
     type PipelineContext,
     type PipelineOutcome,
-} from "../../scripts/tackle-tasks/pipelines.ts";
+} from "../scripts/tackle-tasks/pipelines.ts";
 
 const TASK = 169;
 
-const hookPath = fileURLToPath(new URL("../../scripts/runStepHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/runStepHook.ts", import.meta.url));
 
 // The counters the hook reads live in tasks.json, so fake mode gets a real one on disk.
 const rootWithAttempts = (attempts: Record<string, number>): string => {
@@ -125,7 +125,7 @@ const TEST_CASES: Case[] = [
     { name: "passing task tests go on to the test review", pipeline: taskTestsPipeline, fake: { taskTestsPass: [true] }, endpoint: "next:review-tests" },
     { name: "failing task tests go back to implement", pipeline: taskTestsPipeline, fake: { taskTestsPass: [false] }, endpoint: "next:implement" },
     { name: "failing task tests out of fixes leave tests-red", pipeline: taskTestsPipeline, fake: { taskTestsPass: [false] }, endpoint: "exit:tests-red", counters: { testFixes: 2 } },
-    { name: "a lost test-runner result leaves agent-failed", pipeline: taskTestsPipeline, fake: { taskTestsPass: [true], agentErrors: { TEST_RUNNER: [true] } }, endpoint: "exit:agent-failed" },
+    // A lost RUN_TASK_TESTS receipt: see workflowRealMode.test.ts, fake mode always answers {}.
     { name: "unflagged tests go on to the rebase preamble", pipeline: reviewTestsPipeline, fake: { testsFlagged: [false] }, endpoint: "next:rebase-preamble" },
     { name: "flagged tests go back to implement", pipeline: reviewTestsPipeline, fake: { testsFlagged: [true] }, endpoint: "next:implement" },
     { name: "flagged tests out of reviews leave tests-flagged", pipeline: reviewTestsPipeline, fake: { testsFlagged: [true] }, endpoint: "exit:tests-flagged", counters: { testReviews: 2 } },
@@ -143,15 +143,14 @@ const TAIL_CASES: Case[] = [
     { name: "a clean rebase goes on to the suite", pipeline: rebasePipeline, fake: { rebaseConflicts: [false] }, endpoint: "next:suite" },
     { name: "a conflict fixed and finished goes on to the suite", pipeline: rebasePipeline, fake: { rebaseConflicts: [true], rebaseFinished: [true] }, endpoint: "next:suite" },
     { name: "a rebase out of conflict fixes leaves rebase-stuck", pipeline: rebasePipeline, fake: { rebaseConflicts: [true], rebaseFinished: [true] }, endpoint: "exit:rebase-stuck", counters: { conflictFixes: 2 } },
-    { name: "a lost rebaser result leaves agent-failed", pipeline: rebasePipeline, fake: { rebaseConflicts: [false], agentErrors: { REBASER: [true] } }, endpoint: "exit:agent-failed" },
+    // Lost REBASE_ONTO_TARGET_BRANCH / CONTINUE_REBASE receipts: see workflowRealMode.test.ts.
     { name: "a lost conflict-fixer result leaves agent-failed", pipeline: rebasePipeline, fake: { rebaseConflicts: [true], rebaseFinished: [true], agentErrors: { CONFLICT_FIXER: [true] } }, endpoint: "exit:agent-failed" },
-    { name: "a lost rebase-advancer result leaves agent-failed", pipeline: rebasePipeline, fake: { rebaseConflicts: [true], rebaseFinished: [true], agentErrors: { REBASE_ADVANCER: [true] } }, endpoint: "exit:agent-failed" },
 
     { name: "a green suite inside the fence goes on to the merge", pipeline: suitePipeline, fake: { suitePasses: [true], fenceHeld: true }, endpoint: "next:merge" },
     { name: "a green suite outside the fence leaves fence-violation", pipeline: suitePipeline, fake: { suitePasses: [true], fenceHeld: false }, endpoint: "exit:fence-violation" },
     { name: "a suite fixed then green goes on to the merge", pipeline: suitePipeline, fake: { suitePasses: [false, true], fenceHeld: true }, endpoint: "next:merge" },
     { name: "a suite out of fixes leaves suite-red", pipeline: suitePipeline, fake: { suitePasses: [false], fenceHeld: true }, endpoint: "exit:suite-red", counters: { suiteFixes: 2 } },
-    { name: "a lost suite-runner result leaves agent-failed", pipeline: suitePipeline, fake: { suitePasses: [true], fenceHeld: true, agentErrors: { SUITE_RUNNER: [true] } }, endpoint: "exit:agent-failed" },
+    // A lost RUN_FULL_SUITE receipt is covered in real mode: see workflowRealMode.test.ts.
     { name: "a lost suite-fixer result leaves agent-failed", pipeline: suitePipeline, fake: { suitePasses: [false], fenceHeld: true, agentErrors: { SUITE_FIXER: [true] } }, endpoint: "exit:agent-failed" },
 
     { name: "ALL LANDED goes on to the merge succeeded exit", pipeline: mergePipeline, fake: { publicationState: ["ALL LANDED"] }, endpoint: "next:merge-succeeded" },
@@ -217,8 +216,8 @@ test("test_runStep_tracesTheBoxAndCallsNoAgentInFakeMode", async () => {
     const ctx = contextFor({});
 
     // Test action: run a green box.
-    await runStep(ctx, "COMMIT_IF_NEEDED");
+    await runStep(ctx, "COMMIT_IMPLEMENTATION_IF_NEEDED");
 
     // Verification: the trace carries the box's diagram label, exactly as step() wrote it before.
-    assert.deepEqual(ctx.trace, [L("COMMIT_IF_NEEDED")]);
+    assert.deepEqual(ctx.trace, [L("COMMIT_IMPLEMENTATION_IF_NEEDED")]);
 });

@@ -35,7 +35,7 @@ flowchart TB
 %% ---
 %%   run-failed      - a script failed before the task became active
 
-  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
+  PREAMBLE_TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
   IS_TASK_NUMBER_VALID{"is task number valid?"} --> IS_TASK_NUMBER_VALID_YES["YES"]
   IS_TASK_NUMBER_VALID --> IS_TASK_NUMBER_VALID_NO["NO"]
   IS_TASK_NUMBER_VALID_NO -- "exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> REPORT_ONLY_EXIT
@@ -66,4 +66,4 @@ flowchart TB
   class IS_TASK_NUMBER_VALID_YES,IS_TASK_BLOCKED_NO,IS_TASK_ACTIVE_NO pass
   class IS_TASK_NUMBER_VALID_NO,IS_TASK_BLOCKED_YES,IS_TASK_ACTIVE_YES nopass
   class REPORT_ONLY_EXIT fail
-  class TASK_NUMBER_INPUT output
+  class PREAMBLE_TASK_NUMBER_INPUT output

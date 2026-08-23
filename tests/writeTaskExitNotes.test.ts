@@ -1,5 +1,5 @@
 // Behavioral checks for scripts/tackle-tasks/writeTaskExitNotes.ts.
-// Run: node --test tests/tackle-tasks/writeTaskExitNotes.test.ts
+// Run: node --test tests/writeTaskExitNotes.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -7,10 +7,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeTaskExitNotes } from "../../scripts/tackle-tasks/writeTaskExitNotes.ts";
-import { readTaskRunState, type TaskRunRecord } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { writeTaskExitNotes } from "../scripts/tackle-tasks/writeTaskExitNotes.ts";
+import { readTaskRunState, type TaskRunRecord } from "../scripts/tackle-tasks/taskRunState.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/writeTaskExitNotes.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/writeTaskExitNotes.ts", import.meta.url));
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "writeTaskExitNotes-"));

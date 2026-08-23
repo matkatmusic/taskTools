@@ -1,13 +1,13 @@
 // isTaskActive.ts is "is the task active?" in pipeline-preamble.mmd.
-// Run alone: node --test tests/tackle-tasks/isTaskActive.test.ts
+// Run alone: node --test tests/isTaskActive.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isTaskActive } from "../../scripts/tackle-tasks/isTaskActive.ts";
-import { readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { isTaskActive } from "../scripts/tackle-tasks/isTaskActive.ts";
+import { readTaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function makeProjectRoot(openTasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "isTaskActive-"));
@@ -45,7 +45,7 @@ test("test_isTaskActive_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", ()
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskActive-cwd-"));
     const stdout = execFileSync(
         "node",
-        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskActive.ts")],
+        [join(import.meta.dirname, "../scripts/tackle-tasks/isTaskActive.ts")],
         { input: JSON.stringify({ taskNumber: 1, runId: "run-a", projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
     assert.deepEqual(JSON.parse(stdout), { status: "claimed", heldByRunId: null, reason: null });

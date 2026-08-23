@@ -1,13 +1,13 @@
-// Behavioral checks for resetTaskWorktree.ts. Run alone: node --test tests/tackle-tasks/resetTaskWorktree.test.ts
+// Behavioral checks for resetTaskWorktree.ts. Run alone: node --test tests/resetTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.ts";
-import { claimTask, readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createTaskWorktree } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
+import { resetTaskWorktree } from "../scripts/tackle-tasks/resetTaskWorktree.ts";
+import { claimTask, readTaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createTaskWorktree } from "../scripts/tackle-tasks/createTaskWorktree.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

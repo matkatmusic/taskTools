@@ -26,7 +26,7 @@ test("test_finishRunPrompt_payloadRoundTripsThroughTheHeredoc", () => {
     const prompt = finishRunPrompt(input);
     const heredoc = prompt.match(/<<'TTFINISH'\n([\s\S]*?)\nTTFINISH/);
     assert.ok(heredoc, "TTFINISH heredoc not found");
-    assert.deepEqual(JSON.parse(heredoc[1]), input);
+    assert.deepEqual(JSON.parse(heredoc[1]), { ...input, boxId: "finishTaskRun" });
 });
 
 test("test_finishRunPrompt_containsNoBacktick", () => {

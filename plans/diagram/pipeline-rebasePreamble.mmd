@@ -26,11 +26,11 @@ flowchart TB
   HAVE_15_MINUTES_PASSED --> HAVE_15_MINUTES_PASSED_YES["YES"]
   HAVE_15_MINUTES_PASSED_NO --> WAIT_FOR_LOCK["wait 5s"]
   WAIT_FOR_LOCK --> LOCK_SOURCE_REPO
-  HAVE_15_MINUTES_PASSED_YES -- "exit type: run-failed<br/>exit note: the source repo lock did not<br/>come free within 15 minutes" --> EXIT_WORKFLOW
+  HAVE_15_MINUTES_PASSED_YES -- "exit type: run-failed<br/>exit note: the source repo lock did not<br/>come free within 15 minutes" --> EXIT_WORKFLOW_REBASE_PREAMBLE
 
   WAS_LOCK_ACQUIRED_YES --> REBASE_PIPELINE["rebase pipeline"]
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_REBASE_PREAMBLE["failures exit"]
 
   %% Green heads for the next pipeline.
   %% ---
@@ -47,5 +47,5 @@ flowchart TB
   class WAS_LOCK_ACQUIRED_YES,HAVE_15_MINUTES_PASSED_NO pass
   class WAS_LOCK_ACQUIRED_NO,HAVE_15_MINUTES_PASSED_YES nopass
   class REBASE_PIPELINE pipeline
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_REBASE_PREAMBLE fail
   class FINISHED_IMPLEMENTATION_INPUT output

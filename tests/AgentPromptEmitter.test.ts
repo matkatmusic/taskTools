@@ -1,23 +1,23 @@
-// Behavioral checks for scripts/tackle-tasks/AgentPromptEmitter.ts. Run: node --test tests/tackle-tasks/AgentPromptEmitter.test.ts
-import { test } from "node:test";
+// Behavioral checks for scripts/tackle-tasks/AgentPromptEmitter.ts. Run: node --test tests/AgentPromptEmitter.test.ts
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     loadPreparedTask,
     type PreparedTask,
-} from "../../scripts/tackle-tasks/AgentPromptEmitter.ts";
-import { planReviewPrompt } from "../../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
-import { planPrompt } from "../../scripts/tackle-tasks/PlannerBodyEmitter.ts";
-import { implementPrompt } from "../../scripts/tackle-tasks/ImplementBodyEmitter.ts";
-import { reviewTestsPrompt } from "../../scripts/tackle-tasks/CodexTestReviewBodyEmitter.ts";
-import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+} from "../scripts/tackle-tasks/AgentPromptEmitter.ts";
+import { planReviewPrompt } from "../scripts/tackle-tasks/CodexReviewBodyEmitter.ts";
+import { planPrompt } from "../scripts/tackle-tasks/PlannerBodyEmitter.ts";
+import { implementPrompt } from "../scripts/tackle-tasks/ImplementBodyEmitter.ts";
+import { reviewTestsPrompt } from "../scripts/tackle-tasks/CodexTestReviewBodyEmitter.ts";
+import { buildOccurrencePath, buildOwnedOccurrencePaths, type Occurrence } from "../scripts/tackle-tasks/occurrences.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/AgentPromptEmitter.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/AgentPromptEmitter.ts", import.meta.url));
 
 // A hand-built PreparedTask for pure structural tests that never touch a real worktree.
 const fakeTask: PreparedTask = {
@@ -37,7 +37,7 @@ const fakeTask: PreparedTask = {
     taskStateRoot: "/tmp/fake-worktree",
 };
 
-// Sets up a project root with a task record, and a brief file already written into the worktree (loadPreparedTask is read-only now — it never creates the brief itself).
+// Sets up a project root and worktree with a brief file, since loadPreparedTask is read-only and never creates one.
 function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; task: PreparedTask } {
     const projectRoot = mkdtempSync(join(tmpdir(), "agent-prompt-emitter-"));
     // A recorded red suite, so the fix-suite role has the failing output it derives from state.
@@ -174,7 +174,7 @@ function makeSourceRepoWithSubmodule(): string {
 
 let nextOccurrenceGroupId = 9001;
 
-// A real linked worktree (root + submodule checked out via `git worktree add`), with tasks.json and the brief already in place so loadPreparedTask succeeds.
+// A real linked worktree with tasks.json and the brief already in place, so loadPreparedTask succeeds.
 function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: PreparedTask } {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = nextOccurrenceGroupId++;
@@ -308,10 +308,6 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
         ["implement", {}],
         ["review-tests", {}],
         ["fix-conflicts", { checkoutPath: makeConflictedRepo() }],
-        ["run-task-tests", {}],
-        ["rebase-worktree", {}],
-        ["continue-rebase", {}],
-        ["run-full-suite", {}],
         ["fix-suite", {}],
     ];
 
@@ -356,11 +352,11 @@ test("test_planReviewPrompt_emitsOneQuestionEveryReviewerCanUse", () => {
     assert.match(question, new RegExp(`- ${fakeTask.planFile}`));
     // The error example is spliced from its template, so the prompt cannot drift from the schema.
     const errorTemplate = readFileSync(
-        fileURLToPath(new URL("../../plans/review-plan-error-template.json", import.meta.url)), "utf8",
+        fileURLToPath(new URL("../plans/review-plan-error-template.json", import.meta.url)), "utf8",
     );
     assert.ok(question.includes(errorTemplate.trim()), "missing-file example is not the template verbatim");
     const schema = JSON.parse(readFileSync(
-        fileURLToPath(new URL("../../plans/review-plan-schema.json", import.meta.url)), "utf8",
+        fileURLToPath(new URL("../plans/review-plan-schema.json", import.meta.url)), "utf8",
     ));
     // Every field the schema requires must be present, or codex rejects the error response.
     assert.deepEqual(Object.keys(JSON.parse(errorTemplate)).sort(), [...schema.required].sort());
@@ -474,6 +470,45 @@ test("test_reviewPlanPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
     assert.equal(prompt.includes("---- DATA ----"), false);
 });
 
+const temporaryDirectories: string[] = [];
+after(() => {
+    for (const directory of temporaryDirectories) rmSync(directory, { recursive: true, force: true });
+});
 
+// A project root and a worktree holding the one brief every role refuses to run without.
+const stageTask = (taskNumber: number): { projectRoot: string; worktree: string } => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "AgentPromptEmitter-"));
+    temporaryDirectories.push(projectRoot);
+    mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(projectRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "Staged", files: [] }]));
+    writeFileSync(join(projectRoot, ".taskTools", "completedTasks.json"), JSON.stringify([]));
+    const worktree = join(projectRoot, "worktree");
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", `brief-${taskNumber}.md`), "# staged brief\n");
+    return { projectRoot, worktree };
+};
 
+test("test_emitterLogsTheSamePromptItPrinted", () => {
+    const { projectRoot, worktree } = stageTask(35);
+    const runId = "20260817-135641.444";
+    const payload = JSON.stringify({ worktree, projectRoot, sourceBranch: "master", runId });
 
+    const printed = execFileSync("node", [cliPath, "35", "plan"], { input: payload, encoding: "utf8" });
+
+    // The run log is what a real run leaves behind, appended under the role's own box header.
+    const logged = readFileSync(join(projectRoot, "plans/diagram/output renders/35/runs", runId, "run-log.md"), "utf8");
+    assert.match(logged, /======= PLAN_THE_TASK ======/);
+    assert.ok(logged.includes(printed), "run-log.md does not contain the printed prompt");
+});
+
+test("test_eachRoleLogsUnderItsOwnName", () => {
+    const { projectRoot, worktree } = stageTask(35);
+    const runId = "20260817-140000.000";
+    const payload = JSON.stringify({ worktree, projectRoot, sourceBranch: "master", runId });
+
+    execFileSync("node", [cliPath, "35", "review-plan"], { input: payload, encoding: "utf8" });
+
+    const logged = readFileSync(join(projectRoot, "plans/diagram/output renders/35/runs", runId, "run-log.md"), "utf8");
+    assert.match(logged, /======= CODEX_REVIEWS_PLAN ======/);
+    assert.match(logged, /codex exec -s read-only/);
+});

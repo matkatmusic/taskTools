@@ -1,16 +1,16 @@
-// Behavioral checks for scripts/tackle-tasks/commitTaskWork.ts. Run: node --test tests/tackle-tasks/commitTaskWork.test.ts
+// Behavioral checks for scripts/tackle-tasks/commitTaskWork.ts. Run: node --test tests/commitTaskWork.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commitTaskWork } from "../../scripts/tackle-tasks/commitTaskWork.ts";
-import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { commitTaskWork } from "../scripts/tackle-tasks/commitTaskWork.ts";
+import { reconcileStep } from "../scripts/tackle-tasks/reconcileStep.ts";
+import { claimTask, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

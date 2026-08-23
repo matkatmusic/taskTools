@@ -3,6 +3,7 @@ import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../taskStateLock.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type AmendEntryInput = { projectRoot: string; taskNumber: number };
 export type AmendEntryOutput = { amended: boolean; notes: string };
@@ -26,8 +27,25 @@ export function amendEntryWithFailingTests(input: AmendEntryInput): AmendEntryOu
     return { amended: true, notes };
 }
 
+const AMEND_ENTRY_WITH_FAILING_TESTS_SOURCE = "scripts/tackle-tasks/amendEntryWithFailingTests.ts:11: amendEntryWithFailingTests";
+
 if (process.argv[1]?.endsWith("amendEntryWithFailingTests.ts")) {
-    const [projectRoot, taskNumber] = process.argv.slice(2);
-    const output = amendEntryWithFailingTests({ projectRoot, taskNumber: Number(taskNumber) });
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    const argv = process.argv.slice(2);
+    const [projectRoot, taskNumber] = argv;
+    const N = Number(taskNumber);
+    const input = { projectRoot, taskNumber: N };
+    const identity = { projectRoot, taskNumber: N, runId: getCurrentTaskRun(N, projectRoot)!.runId };
+    const quote = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+    const command = `node ${process.argv[1]} ${argv.map(quote).join(" ")}`;
+
+    try {
+        const output = amendEntryWithFailingTests(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId: "AMEND_ENTRY_WITH_FAILING_TESTS", source: AMEND_ENTRY_WITH_FAILING_TESTS_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId: "AMEND_ENTRY_WITH_FAILING_TESTS", source: AMEND_ENTRY_WITH_FAILING_TESTS_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

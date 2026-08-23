@@ -1,7 +1,4 @@
-// CLI behavior for applyPlanAmendments.ts: validates both files, applies only on an amend
-// verdict, and writes the plan back to disk only when applied. The pure amendment rule
-// itself is covered by tests/tackle-tasks/planArtifacts.test.ts.
-// Run alone: node --test tests/tackle-tasks/applyPlanAmendments.test.ts
+// CLI behavior for applyPlanAmendments.ts: validates both files, applies only on an amend verdict, and writes the plan back to disk only when applied. The pure amendment rule itself is covered by tests/planArtifacts.test.ts.  Run alone: node --test tests/applyPlanAmendments.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -9,15 +6,16 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runApplyPlanAmendmentsCli } from "../../scripts/tackle-tasks/applyPlanAmendments.ts";
-import { readAndValidatePlan, type Plan } from "../../scripts/tackle-tasks/planArtifacts.ts";
+import { runApplyPlanAmendmentsCli } from "../scripts/tackle-tasks/applyPlanAmendments.ts";
+import { readAndValidatePlan, type Plan } from "../scripts/tackle-tasks/planArtifacts.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/applyPlanAmendments.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/applyPlanAmendments.ts", import.meta.url));
 
 function samplePlan(): Plan {
     return {
         task: 42,
         revision: 1,
+        createsFiles: [],
         sections: [
             { id: "problem", title: "Problem", body: "b" },
             { id: "step-1", title: "Step one", body: "b" },

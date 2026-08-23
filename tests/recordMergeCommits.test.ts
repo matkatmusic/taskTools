@@ -1,15 +1,15 @@
-// Behavioral checks for scripts/tackle-tasks/recordMergeCommits.ts. Run: node --test tests/tackle-tasks/recordMergeCommits.test.ts
+// Behavioral checks for scripts/tackle-tasks/recordMergeCommits.ts. Run: node --test tests/recordMergeCommits.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { recordMergeCommits } from "../../scripts/tackle-tasks/recordMergeCommits.ts";
-import { appendTaskCommits, claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { recordMergeCommits } from "../scripts/tackle-tasks/recordMergeCommits.ts";
+import { appendTaskCommits, claimTask, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 
 function tmpMkdir(prefix: string): string {
     return execFileSync("mktemp", ["-d", join(tmpdir(), `${prefix}XXXXXX`)], { encoding: "utf8" }).trim();

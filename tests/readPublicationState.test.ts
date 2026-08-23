@@ -1,9 +1,9 @@
-// readPublicationState classifies the layer merge refs. Run alone: node --test tests/tackle-tasks/readPublicationState.test.ts
+// readPublicationState classifies the layer merge refs. Run alone: node --test tests/readPublicationState.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readPublicationState } from "../../scripts/tackle-tasks/readPublicationState.ts";
-import { taskBranchName } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { buildWorktreeOccurrences } from "../../scripts/tackle-tasks/occurrences.ts";
+import { readPublicationState } from "../scripts/tackle-tasks/readPublicationState.ts";
+import { taskBranchName } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { buildWorktreeOccurrences } from "../scripts/tackle-tasks/occurrences.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 const TASK = 4242;

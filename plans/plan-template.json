@@ -1,6 +1,7 @@
 {
   "task": 0,
   "revision": 1,
+  "createsFiles": ["<repo-relative path, same form as a task's files entries, e.g. \"server.py\"; one entry per file this plan creates that does not exist yet. Delete this placeholder and leave the array empty if the plan creates nothing new.>"],
   "sections": [
     {
       "id": "<stable, lowercase, kebab-case, unique within this plan; codex addresses feedback by this id>",

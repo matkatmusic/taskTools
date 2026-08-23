@@ -122,7 +122,7 @@ type WorktreeLeaseTransitionIntent = {
     newOwnerRunId: string;
 };
 
-// Test-only fault injection, unset in production. See tests/tackle-tasks/taskRunState.test.ts.
+// Test-only fault injection, unset in production. See tests/taskRunState.test.ts.
 const ADOPT_KILL_AFTER_ENV = "TASKRUNSTATE_TEST_ADOPT_KILL_AFTER";
 const ADOPT_FAIL_AT_ENV = "TASKRUNSTATE_TEST_ADOPT_FAIL_AT";
 

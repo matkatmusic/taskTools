@@ -5,6 +5,7 @@ import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoL
 import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type CheckTaskFileFenceInput = {
     projectRoot: string;
@@ -97,8 +98,23 @@ export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFil
     return { inside: violations.length === 0, violations };
 }
 
+const CHECK_TASK_FILE_FENCE_SOURCE = "scripts/tackle-tasks/checkTaskFileFence.ts:76: checkTaskFileFence";
+
 if (process.argv[1]?.endsWith("checkTaskFileFence.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as CheckTaskFileFenceInput;
-    const output = checkTaskFileFence(input);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    const payloadText = readFileSync(0, "utf8");
+    const input = JSON.parse(payloadText) as CheckTaskFileFenceInput & { boxId?: string };
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId: input.runId };
+    const boxId = input.boxId ?? "checkTaskFileFence";
+    const command = `node ${process.argv[1]} <<'TTFENCE'\n${payloadText}\nTTFENCE`;
+
+    try {
+        const output = checkTaskFileFence(input);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: CHECK_TASK_FILE_FENCE_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: CHECK_TASK_FILE_FENCE_SOURCE, input, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

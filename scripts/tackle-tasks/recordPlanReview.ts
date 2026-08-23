@@ -4,6 +4,8 @@ import { efficacyPercentage, Ruling, rulingByFixCount, rulingByPercentage } from
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../taskStateLock.ts";
+import { logStepOutput } from "./logStepOutput.ts";
+import { getCurrentTaskRun } from "./taskRunState.ts";
 
 // Below this, absolute fix counts decide the ruling; at or above it, the efficacy percentage does.
 const PERCENTAGE_SCALE_MINIMUM_SECTIONS = 12;
@@ -74,9 +76,25 @@ export function recordPlanReview(input: RecordPlanReviewInput): RecordPlanReview
     return { verdict: VERDICTS[ruling], notes };
 }
 
+const RECORD_PLAN_REVIEW_SOURCE = "scripts/tackle-tasks/recordPlanReview.ts:37: recordPlanReview";
+
 if (process.argv[1]?.endsWith("recordPlanReview.ts")) {
-    const [projectRoot, planFilePath, taskNumber] = process.argv.slice(2);
-    const review = JSON.parse(readFileSync(0, "utf8")) as PlanReview;
-    const output = recordPlanReview({ projectRoot, planFilePath, taskNumber: Number(taskNumber), review });
-    process.stdout.write(`${JSON.stringify(output)}\n`);
+    const [projectRoot, planFilePath, taskNumber, boxIdArg] = process.argv.slice(2);
+    const boxId = boxIdArg;
+    const N = Number(taskNumber);
+    const stdinText = readFileSync(0, "utf8");
+    const review = JSON.parse(stdinText) as PlanReview;
+    const runId = getCurrentTaskRun(N, projectRoot)?.runId ?? "unknown-run";
+    const identity = { projectRoot, taskNumber: N, runId };
+    const command = `node ${process.argv[1]} ${projectRoot} ${planFilePath} ${taskNumber} ${boxId} <<'TTREVIEW'\n${stdinText}\nTTREVIEW`;
+    try {
+        const output = recordPlanReview({ projectRoot, planFilePath, taskNumber: N, review });
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: RECORD_PLAN_REVIEW_SOURCE, input: review, command, commandOutput, output });
+        process.stdout.write(commandOutput);
+    } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, { boxId, source: RECORD_PLAN_REVIEW_SOURCE, input: review, command, commandOutput: message, output: { error: message } });
+        throw error;
+    }
 }

@@ -1,12 +1,12 @@
 // Behavioral checks for scripts/tackle-tasks/buildClosureNote.ts.
-// Run: node --test tests/tackle-tasks/buildClosureNote.test.ts
+// Run: node --test tests/buildClosureNote.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildClosureNote } from "../../scripts/tackle-tasks/buildClosureNote.ts";
-import type { TaskRunRecord } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { buildClosureNote } from "../scripts/tackle-tasks/buildClosureNote.ts";
+import type { TaskRunRecord } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "buildClosureNote-"));

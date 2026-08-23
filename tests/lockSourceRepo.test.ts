@@ -1,12 +1,12 @@
 // The LOCK_SOURCE_REPO box runs inside a hook, so it tries once and never waits.
-// Run: node --test tests/tackle-tasks/lockSourceRepo.test.ts
+// Run: node --test tests/lockSourceRepo.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lockSourceRepo } from "../../scripts/tackle-tasks/lockSourceRepo.ts";
-import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
+import { lockSourceRepo } from "../scripts/tackle-tasks/lockSourceRepo.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "../scripts/tackle-tasks/sourceRepoLock.ts";
 
 const projectRootWithGit = (): string => {
     const root = mkdtempSync(join(tmpdir(), "lockSourceRepo-"));

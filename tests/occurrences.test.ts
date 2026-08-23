@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/occurrences.ts. Run: node --test tests/tackle-tasks/occurrences.test.ts
+// Behavioral checks for scripts/tackle-tasks/occurrences.ts. Run: node --test tests/occurrences.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -12,9 +12,9 @@ import {
     getOccurrencesDeepestFirst,
     parseOccurrencePath,
     resolveOccurrenceBaseRef,
-} from "../../scripts/tackle-tasks/occurrences.ts";
-import type { Occurrence } from "../../scripts/tackle-tasks/occurrences.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+} from "../scripts/tackle-tasks/occurrences.ts";
+import type { Occurrence } from "../scripts/tackle-tasks/occurrences.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";

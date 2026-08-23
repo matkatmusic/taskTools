@@ -13,6 +13,7 @@ import { updateTaskDocs } from "./updateTaskDocs.ts";
 import { initTaskSubmodules } from "./initTaskSubmodules.ts";
 import { validateActiveTaskReceipt, type ActiveTaskWorktreeReceipt } from "./validateActiveTaskReceipt.ts";
 import { checkResumedWorktreeFence } from "./checkResumedWorktreeFence.ts";
+import { markTaskInactive } from "./markTaskInactive.ts";
 import { WorkflowResultCodes, type WorkflowResultCode } from "./WorkflowResultCodes.ts";
 
 function readStdin(): string {
@@ -94,7 +95,18 @@ export function runPreamble(taskNumber: number, runId: string, projectRoot: stri
         return { code: WorkflowResultCodes.DO_NOT_PROCEED, reason: activeCheck.reason, step: "IS_TASK_ACTIVE", receipt: null, exitType: "already-active", tail: "report-only" };
     }
 
-    // Everything below runs with the task active, so every exit takes the failures tail.
+    // A throw here skips every exit tail, so the claim is released before it propagates.
+    // Without this the task stays active forever and no later run can take it.
+    try {
+        return preambleWithActiveTask(taskNumber, runId, projectRoot);
+    } catch (error) {
+        markTaskInactive({ taskNumber, runId, projectRoot });
+        throw error;
+    }
+}
+
+// Everything here runs with the task active, so every exit takes the failures tail.
+function preambleWithActiveTask(taskNumber: number, runId: string, projectRoot: string): PreambleResult {
     const worktreeCheck = doesTaskWorktreeExist(taskNumber, projectRoot);
     let worktree: string;
     let branch: string;

@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export type LockSourceRepoInput = {
     taskNumber: number;
@@ -26,12 +27,23 @@ export async function lockSourceRepo(input: LockSourceRepoInput): Promise<LockSo
     return { acquired: false, heldByOwner: outcome.owner };
 }
 
+const LOCK_SOURCE_REPO_SOURCE = "scripts/tackle-tasks/lockSourceRepo.ts:19: lockSourceRepo";
+
 if (process.argv[1]?.endsWith("lockSourceRepo.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as LockSourceRepoInput;
+    const payloadText = readFileSync(0, "utf8");
+    const input = JSON.parse(payloadText) as LockSourceRepoInput & { boxId?: string };
+    const identity = { projectRoot: input.projectRoot, taskNumber: input.taskNumber, runId: input.runId };
+    const boxId = input.boxId ?? "lockSourceRepo";
+    const command = `node ${process.argv[1]} <<'TTLOCK'\n${payloadText}\nTTLOCK`;
+
     lockSourceRepo(input).then((output) => {
-        process.stdout.write(`${JSON.stringify(output)}\n`);
+        const commandOutput = `${JSON.stringify(output)}\n`;
+        logStepOutput(identity, { boxId, source: LOCK_SOURCE_REPO_SOURCE, input, command, commandOutput, output });
+        process.stdout.write(commandOutput);
     }).catch((error) => {
-        process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+        const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+        logStepOutput(identity, { boxId, source: LOCK_SOURCE_REPO_SOURCE, input, command, commandOutput: message as string, output: { error: message } });
+        process.stderr.write(`${message}\n`);
         process.exitCode = 1;
     });
 }

@@ -1,12 +1,12 @@
 // isTaskNumberValid.ts is "is task number valid?" in pipeline.mmd.
-// Run alone: node --test tests/tackle-tasks/isTaskNumberValid.test.ts
+// Run alone: node --test tests/isTaskNumberValid.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isTaskNumberValid } from "../../scripts/tackle-tasks/isTaskNumberValid.ts";
+import { isTaskNumberValid } from "../scripts/tackle-tasks/isTaskNumberValid.ts";
 
 function makeProjectRoot(openTasks: unknown[], completedTasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "isTaskNumberValid-"));
@@ -41,7 +41,7 @@ test("test_isTaskNumberValid_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "isTaskNumberValid-cwd-"));
     const stdout = execFileSync(
         "node",
-        [join(import.meta.dirname, "../../scripts/tackle-tasks/isTaskNumberValid.ts")],
+        [join(import.meta.dirname, "../scripts/tackle-tasks/isTaskNumberValid.ts")],
         { input: JSON.stringify({ taskNumber: 1, projectRoot: root }), cwd: unrelatedCwd, encoding: "utf8" },
     );
     assert.deepEqual(JSON.parse(stdout), { valid: true, reason: null });

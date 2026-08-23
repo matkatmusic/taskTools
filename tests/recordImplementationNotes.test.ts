@@ -1,11 +1,11 @@
-// Behavioral checks for recordImplementationNotes.ts. Run alone: node --test tests/tackle-tasks/recordImplementationNotes.test.ts
+// Behavioral checks for recordImplementationNotes.ts. Run alone: node --test tests/recordImplementationNotes.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordImplementationNotes } from "../../scripts/tackle-tasks/recordImplementationNotes.ts";
-import { claimTask, readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
+import { recordImplementationNotes } from "../scripts/tackle-tasks/recordImplementationNotes.ts";
+import { claimTask, readTaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "recordImplementationNotes-"));

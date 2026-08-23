@@ -1,14 +1,14 @@
-// Behavioral checks for finishFailedRun in scripts/tackle-tasks/finishTaskRun.ts.  Run: node --test tests/tackle-tasks/finishTaskRun.test.ts
+// Behavioral checks for finishFailedRun in scripts/tackle-tasks/finishTaskRun.ts.  Run: node --test tests/finishTaskRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { finishFailedRun } from "../../scripts/tackle-tasks/finishTaskRun.ts";
-import { claimTask, readTaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
-import { acquireSourceRepoLock, buildLockOwner } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { taskBranchName } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { buildWorktreeOccurrences } from "../../scripts/tackle-tasks/occurrences.ts";
+import { finishFailedRun } from "../scripts/tackle-tasks/finishTaskRun.ts";
+import { claimTask, readTaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
+import { acquireSourceRepoLock, buildLockOwner } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { taskBranchName } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { buildWorktreeOccurrences } from "../scripts/tackle-tasks/occurrences.ts";
 import { git, makeLayeredSubmoduleFixture } from "./support/gitFixtures.ts";
 
 const TASK_NUMBER = 1;

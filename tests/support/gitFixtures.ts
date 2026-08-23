@@ -15,8 +15,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWorktreeForGroup } from "../../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../../scripts/taskGroups.ts";
+import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../../scripts/taskGroups.ts";
 
 // git >=2.38 blocks file-transport submodule/fetch operations; repo config is ignored in a
 // sandboxed test environment, the env var is not.

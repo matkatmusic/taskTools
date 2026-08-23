@@ -25,11 +25,15 @@ export function mergeWorktreesPrompt(input: MergeWorktreesPromptInput): string {
         taskNumber: input.taskNumber,
         runId: input.runId,
         rootSourceBranch: input.sourceBranch,
+        boxId: "MERGE_WORKTREES",
     });
     const readPayload = JSON.stringify({
         taskNumber: input.taskNumber,
         projectRoot: input.projectRoot,
         worktreePath: input.worktree,
+        // readPublicationState.ts's own input has no runId; the CLI block needs it to log.
+        runId: input.runId,
+        boxId: "READ_MERGE_PUBLICATION_STATE",
     });
     return `Run these two commands with Bash, in this order, exactly as written.
 

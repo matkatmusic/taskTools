@@ -1,67 +1,58 @@
-// Phase 12 end-to-end proof: an agentless driver that walks plans/diagram/pipeline.mmd node for
-// node against a real repository with a real submodule and a real `git worktree add`. Every green
-// box is the real script; every yellow (prose) box is a deterministic fixture callback that
-// writes the artifact a real agent would have written. No agents, no workflow harness.
-// Run alone: node --test tests/tackle-tasks/pipeline.e2e.test.ts
+// Phase 12 end-to-end proof: an agentless driver that walks plans/diagram/pipeline.mmd node for node against a real repository with a real submodule and a real `git worktree add`. Every green box is the real script; every yellow (prose) box is a deterministic fixture callback that writes the artifact a real agent would have written. No agents, no workflow harness.  Run alone: node --test tests/pipeline.e2e.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { resolveTaskRun } from "../../scripts/tackle-tasks/resolveTaskRun.ts";
-import { isTaskNumberValid } from "../../scripts/tackle-tasks/isTaskNumberValid.ts";
-import { isTaskActive } from "../../scripts/tackle-tasks/isTaskActive.ts";
-import { isTaskBlocked } from "../../scripts/tackle-tasks/isTaskBlocked.ts";
-import { doesTaskWorktreeExist } from "../../scripts/tackle-tasks/doesTaskWorktreeExist.ts";
-import { checkTaskWorktreeSafe } from "../../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
-import { isTaskRunResumable } from "../../scripts/tackle-tasks/isTaskRunResumable.ts";
-import { createTaskWorktree, taskBranchName } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { resetTaskWorktree } from "../../scripts/tackle-tasks/resetTaskWorktree.ts";
-import { generateTaskDocs } from "../../scripts/tackle-tasks/generateTaskDocs.ts";
-import { updateTaskDocs } from "../../scripts/tackle-tasks/updateTaskDocs.ts";
-import { initTaskSubmodules } from "../../scripts/tackle-tasks/initTaskSubmodules.ts";
-import { validatePlanFile } from "../../scripts/tackle-tasks/validatePlanFile.ts";
-import { validateCodexReview } from "../../scripts/tackle-tasks/validateCodexReview.ts";
-import { runApplyPlanAmendmentsCli } from "../../scripts/tackle-tasks/applyPlanAmendments.ts";
-import { recordImplementationNotes } from "../../scripts/tackle-tasks/recordImplementationNotes.ts";
-import { commitTaskWork } from "../../scripts/tackle-tasks/commitTaskWork.ts";
-import { runTaskTests } from "../../scripts/tackle-tasks/runTaskTests.ts";
-import { rebaseTaskWorktree, type BoundedLockWaitOptions } from "../../scripts/tackle-tasks/rebaseTaskWorktree.ts";
-import { advanceTaskRebase } from "../../scripts/tackle-tasks/advanceTaskRebase.ts";
-import { runFullSuite } from "../../scripts/tackle-tasks/runFullSuite.ts";
-import { checkTaskFileFence } from "../../scripts/tackle-tasks/checkTaskFileFence.ts";
-import { mergeTaskWorktree, type MergeTaskWorktreeOutput } from "../../scripts/tackle-tasks/mergeTaskWorktree.ts";
-import { recordMergeCommits } from "../../scripts/tackle-tasks/recordMergeCommits.ts";
-import { writeTaskExitNotes } from "../../scripts/tackle-tasks/writeTaskExitNotes.ts";
-import { recordTaskModifiedFiles } from "../../scripts/tackle-tasks/recordTaskModifiedFiles.ts";
-import { markTaskInactive } from "../../scripts/tackle-tasks/markTaskInactive.ts";
-import { cleanupTaskWorktree } from "../../scripts/tackle-tasks/cleanupTaskWorktree.ts";
-import { buildClosureNote } from "../../scripts/tackle-tasks/buildClosureNote.ts";
-import { closeTaskRun } from "../../scripts/tackle-tasks/closeTaskRun.ts";
-import { releaseTaskRunHolds } from "../../scripts/tackle-tasks/releaseTaskRunHolds.ts";
-import { reconcileStep } from "../../scripts/tackle-tasks/reconcileStep.ts";
+import { resolveTaskRun } from "../scripts/tackle-tasks/resolveTaskRun.ts";
+import { isTaskNumberValid } from "../scripts/tackle-tasks/isTaskNumberValid.ts";
+import { isTaskActive } from "../scripts/tackle-tasks/isTaskActive.ts";
+import { isTaskBlocked } from "../scripts/tackle-tasks/isTaskBlocked.ts";
+import { doesTaskWorktreeExist } from "../scripts/tackle-tasks/doesTaskWorktreeExist.ts";
+import { checkTaskWorktreeSafe } from "../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
+import { isTaskRunResumable } from "../scripts/tackle-tasks/isTaskRunResumable.ts";
+import { createTaskWorktree, taskBranchName } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { resetTaskWorktree } from "../scripts/tackle-tasks/resetTaskWorktree.ts";
+import { generateTaskDocs } from "../scripts/tackle-tasks/generateTaskDocs.ts";
+import { updateTaskDocs } from "../scripts/tackle-tasks/updateTaskDocs.ts";
+import { initTaskSubmodules } from "../scripts/tackle-tasks/initTaskSubmodules.ts";
+import { validatePlanFile } from "../scripts/tackle-tasks/validatePlanFile.ts";
+import { validateCodexReview } from "../scripts/tackle-tasks/validateCodexReview.ts";
+import { runApplyPlanAmendmentsCli } from "../scripts/tackle-tasks/applyPlanAmendments.ts";
+import { recordImplementationNotes } from "../scripts/tackle-tasks/recordImplementationNotes.ts";
+import { commitTaskWork } from "../scripts/tackle-tasks/commitTaskWork.ts";
+import { runTaskTests } from "../scripts/tackle-tasks/runTaskTests.ts";
+import { rebaseTaskWorktree, type BoundedLockWaitOptions } from "../scripts/tackle-tasks/rebaseTaskWorktree.ts";
+import { advanceTaskRebase } from "../scripts/tackle-tasks/advanceTaskRebase.ts";
+import { runFullSuite } from "../scripts/tackle-tasks/runFullSuite.ts";
+import { checkTaskFileFence } from "../scripts/tackle-tasks/checkTaskFileFence.ts";
+import { mergeTaskWorktree, type MergeTaskWorktreeOutput } from "../scripts/tackle-tasks/mergeTaskWorktree.ts";
+import { recordMergeCommits } from "../scripts/tackle-tasks/recordMergeCommits.ts";
+import { writeTaskExitNotes } from "../scripts/tackle-tasks/writeTaskExitNotes.ts";
+import { recordTaskModifiedFiles } from "../scripts/tackle-tasks/recordTaskModifiedFiles.ts";
+import { markTaskInactive } from "../scripts/tackle-tasks/markTaskInactive.ts";
+import { cleanupTaskWorktree } from "../scripts/tackle-tasks/cleanupTaskWorktree.ts";
+import { buildClosureNote } from "../scripts/tackle-tasks/buildClosureNote.ts";
+import { closeTaskRun } from "../scripts/tackle-tasks/closeTaskRun.ts";
+import { releaseTaskRunHolds } from "../scripts/tackle-tasks/releaseTaskRunHolds.ts";
+import { reconcileStep } from "../scripts/tackle-tasks/reconcileStep.ts";
 import {
     acquireSourceRepoLock, buildLockOwner, readSourceRepoLock, releaseSourceRepoLock, STALE_HEARTBEAT_MS,
-} from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "../../scripts/tackle-tasks/taskRunState.ts";
-import type { CloseTaskRunOutput } from "../../scripts/closeTasks.ts";
-import { GENERATED_ARTIFACT_PATTERNS } from "../../scripts/tackle-tasks/writeTaskBrief.ts";
-import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+} from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { readTaskRunState, type TaskRunRecord, type TaskRunState } from "../scripts/tackle-tasks/taskRunState.ts";
+import type { CloseTaskRunOutput } from "../scripts/closeTasks.ts";
+import { GENERATED_ARTIFACT_PATTERNS } from "../scripts/tackle-tasks/writeTaskBrief.ts";
+import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../scripts/prepareTasks.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule } from "./support/gitFixtures.ts";
 
-// `node --test` sets NODE_TEST_CONTEXT on this file's process. Both test boxes spawn a nested
-// `node --test`, which reports to its parent runner and exits 0 while it inherits that variable,
-// so a red suite would look green here. The pipeline is never run under a test runner in
-// production; the variable is dropped for the same reason a real invocation never has it.
+// `node --test` sets NODE_TEST_CONTEXT on this file's process. Both test boxes spawn a nested `node --test`, which reports to its parent runner and exits 0 while it inherits that variable, so a red suite would look green here. The pipeline is never run under a test runner in production; the variable is dropped for the same reason a real invocation never has it.
 delete process.env.NODE_TEST_CONTEXT;
 
 // --- the fixture repository -------------------------------------------------------------
-// Every occurrence needs its own discoverable complete-suite command, so root and submodule each
-// get a package.json and a seed test. The seed test reads value.txt, which lets a task turn the
-// full suite red without touching any test file its own test box would run.
+// Every occurrence needs its own discoverable complete-suite command, so root and submodule each get a package.json and a seed test. The seed test reads value.txt, which lets a task turn the full suite red without touching any test file its own test box would run.
 
 const SEED_SUITE_TEST = `import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -156,6 +147,7 @@ const DEFAULT_PROSE_BOXES: ProseBoxes = {
     planTheTask: (context) => writeJsonFile(planFilePathOf(context), {
         task: context.taskNumber,
         revision: 1,
+        createsFiles: [],
         sections: [{ id: "scope", title: "Scope", body: "do the declared work" }],
     }),
     codexReviewsThePlan: (context) => writeJsonFile(reviewFilePathOf(context), {
@@ -260,20 +252,17 @@ type PipelineOutcome = {
 };
 
 const MAX_ATTEMPTS = 2;
-// The diagram re-enters the rebase box for as long as the lock stays warm. This cap is a test
-// harness guard only, so a scenario that never releases the lock fails instead of hanging.
+// The diagram re-enters the rebase box for as long as the lock stays warm. This cap is a test harness guard only, so a scenario that never releases the lock fails instead of hanging.
 const MAX_HELD_LOCK_REENTRIES = 10;
 
 class OperationalFailure extends Error {}
 
-// The rebase helpers run each layer's tests themselves and report the failure as
-// "<failedCheck>: <output>". Phase 8's transition table treats that as a red full suite.
+// The rebase helpers run each layer's tests themselves and report the failure as "<failedCheck>: <output>". Phase 8's transition table treats that as a red full suite.
 function isTestsFailedReason(failureReason: string): boolean {
     return /^(complete-suite|related-tests):/.test(failureReason);
 }
 
-// The driver walks pipeline.mmd node for node. `node` names the diagram node, so the control flow
-// can be read against the diagram directly, and every green box is recorded in `visited`.
+// The driver walks pipeline.mmd node for node. `node` names the diagram node, so the control flow can be read against the diagram directly, and every green box is recorded in `visited`.
 async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
     const { projectRoot, taskNumber } = options;
     const prose: ProseBoxes = { ...DEFAULT_PROSE_BOXES, ...options.prose };
@@ -304,8 +293,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
 
     const contextOf = (): BoxContext => ({ projectRoot, taskNumber, runId, worktreePath: outcome.worktree! });
 
-    // EXIT -> REC -> OFF -> REL. Rule 10 case "claimed, no worktree" reaches it with worktree null,
-    // and recordTaskModifiedFiles then records [].
+    // EXIT -> REC -> OFF -> REL. Rule 10 case "claimed, no worktree" reaches it with worktree null, and recordTaskModifiedFiles then records [].
     function runExitChain(exitType: string, exitNote: string): PipelineOutcome {
         box("writeTaskExitNotes", () => writeTaskExitNotes({ taskNumber, runId, projectRoot, exitType, exitNote }));
         box("recordTaskModifiedFiles", () => recordTaskModifiedFiles({
@@ -392,10 +380,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                 }
                 case "QS": {
                     const safety = box("checkTaskWorktreeSafe", () => checkTaskWorktreeSafe(taskNumber, outcome.worktree!));
-                    // The existing-worktree path always adopts the lease before any docs box, on
-                    // both edges: without it the later clean-up hits an owner mismatch. The
-                    // diagram only draws the resumable question on the unsafe edge, and only that
-                    // edge branches on the answer.
+                    // The existing-worktree path always adopts the lease before any docs box, on both edges: without it the later clean-up hits an owner mismatch. The diagram only draws the resumable question on the unsafe edge, and only that edge branches on the answer.
                     const resumable = box("isTaskRunResumable",
                         () => isTaskRunResumable(taskNumber, outcome.worktree!, runId, projectRoot));
                     outcome.resumable = resumable.resumable;
@@ -519,8 +504,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                         projectRoot, worktreePath: outcome.worktree!, taskNumber, runId,
                         stepId: nextStepId("rebaseTaskWorktree"), rootSourceBranch: sourceBranch,
                     }, options.lockOptions));
-                    // Phase 10: a warm held lock logs the holder and re-enters this box; only a
-                    // recoverable (cold) lock takes the ordinary run-failed exit.
+                    // Phase 10: a warm held lock logs the holder and re-enters this box; only a recoverable (cold) lock takes the ordinary run-failed exit.
                     if (rebase.lock === "held") {
                         heldLockVisits += 1;
                         options.onHeldSourceLock?.(rebase.heldByOwner, heldLockVisits);
@@ -665,8 +649,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                         taskNumber, runId, projectRoot, closureNote: outcome.closureNote!, stepId,
                     };
                     if (options.loseCloseResult === true) {
-                        // Rule 11: the box runs and mutates; its stdout is lost, so the read-only
-                        // reconciliation check decides which edge the run takes.
+                        // Rule 11: the box runs and mutates; its stdout is lost, so the read-only reconciliation check decides which edge the run takes.
                         box("closeTaskRun", () => closeTaskRun(stepInput));
                         const reconciled = box("reconcileStep", () => reconcileStep({
                             script: "closeTaskRun", stepId, taskNumber, runId, projectRoot,
@@ -700,9 +683,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
         return runExitChain("run-failed", note);
     }
 
-    // Rule 10, fourth case: the run already ended, so the chain reopens it, overwrites exit type
-    // completed with run-failed, and re-ends it — that whole transition is writeTaskExitNotes's
-    // reopen mode, so the chain's record/inactivate boxes do not run again on an ended run.
+    // Rule 10, fourth case: the run already ended, so the chain reopens it, overwrites exit type completed with run-failed, and re-ends it — that whole transition is writeTaskExitNotes's reopen mode, so the chain's record/inactivate boxes do not run again on an ended run.
     function reopenEndedRunAsFailed(exitNote: string): PipelineOutcome {
         box("writeTaskExitNotes", () => writeTaskExitNotes({
             taskNumber, runId, projectRoot, exitType: "run-failed", exitNote, reopen: true,
@@ -719,8 +700,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
 
 // --- assertion helpers ----------------------------------------------------------------------
 
-// A completed run is archived out of tasks.json, so its state is read from whichever task file
-// still holds the task.
+// A completed run is archived out of tasks.json, so its state is read from whichever task file still holds the task.
 function runStateOf(projectRoot: string, taskNumber: number): TaskRunState {
     const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
     for (const path of [tasksPath, completedTasksPath]) {
@@ -803,8 +783,7 @@ test("test_pipeline_archivesTheTaskWithEveryCommitIncludingSubmoduleOnes", async
         projectRoot, taskNumber: 2, prose: { implementTask: implementInsideTheFence },
     });
 
-    // Verification: the task is archived, and its recorded commits cover the submodule occurrence
-    // as well as the root, with the published merge commits last.
+    // Verification: the task is archived, and its recorded commits cover the submodule occurrence as well as the root, with the published merge commits last.
     assert.equal(outcome.exitType, "completed", outcome.exitNote);
     assert.deepEqual(outcome.closeOutput?.closed, [2]);
     const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
@@ -820,8 +799,7 @@ test("test_pipeline_archivesTheTaskWithEveryCommitIncludingSubmoduleOnes", async
 });
 
 test("test_pipeline_writesExitTypeAndExitNotesWhenTheSuiteStaysRed", async () => {
-    // Setup: a task whose declared change breaks a seed test its own test box never runs, and a
-    // repair box that never repairs it.
+    // Setup: a task whose declared change breaks a seed test its own test box never runs, and a repair box that never repairs it.
     const projectRoot = makeSourceRepository("pipeline-suite-red");
     seedTask(projectRoot, 3, FENCE_WITH_VALUE(3));
 
@@ -830,8 +808,7 @@ test("test_pipeline_writesExitTypeAndExitNotesWhenTheSuiteStaysRed", async () =>
         projectRoot, taskNumber: 3, prose: { implementTask: implementAndBreakTheSuite },
     });
 
-    // Verification: the run exited suite-red only after two repair attempts, and both fields are
-    // on the record.
+    // Verification: the run exited suite-red only after two repair attempts, and both fields are on the record.
     assert.equal(outcome.exitType, "suite-red", outcome.exitNote);
     const record = newestRun(projectRoot, 3);
     assert.equal(record.exitType, "suite-red");
@@ -898,10 +875,7 @@ const EXIT_SCENARIOS: ExitScenario[] = [
         options: (projectRoot) => ({
             projectRoot, taskNumber: 34,
             prose: {
-                // Three task commits touch the same line the source branch then moves, so every
-                // advance stops on a fresh conflict and the loop really runs out of attempts.
-                // (Committing a conflicted layer is what resolves one replayed commit, so a
-                // single conflicting commit would let the rebase finish.)
+                // Three task commits touch the same line the source branch then moves, so every advance stops on a fresh conflict and the loop really runs out of attempts.  (Committing a conflicted layer is what resolves one replayed commit, so a single conflicting commit would let the rebase finish.)
                 implementTask: (context) => {
                     const notes = implementInsideTheFence(context);
                     for (const line of ["task line one", "task line two"]) {
@@ -929,9 +903,7 @@ const EXIT_SCENARIOS: ExitScenario[] = [
         build: (projectRoot) => seedTask(projectRoot, 36, FENCE_INSIDE(36)),
         options: (projectRoot) => ({
             projectRoot, taskNumber: 36, prose: { implementTask: implementInsideTheFence },
-            // A real merge cannot conflict after a clean rebase while the source tip guard holds,
-            // so the two failed landings are forced. Everything around them is the real pipeline,
-            // including the rebase-and-retry edge between them.
+            // A real merge cannot conflict after a clean rebase while the source tip guard holds, so the two failed landings are forced. Everything around them is the real pipeline, including the rebase-and-retry edge between them.
             forcedMergeOutcomes: [
                 { merged: false, commits: [], failureReason: "submodule-conflicted" },
                 { merged: false, commits: [], failureReason: "submodule-conflicted" },
@@ -987,16 +959,14 @@ test("test_pipeline_leavesTheTaskInactiveAfterEveryExitPathThatWritesState", asy
         assert.equal(runStateOf(projectRoot, scenario.taskNumber).active, false, `task ${scenario.taskNumber} active`);
     }
 
-    // Setup: one repository holding an active run of task 50 and an archived task 51, so the
-    // non-writing exit that is reachable here can be checked against a live neighbouring run.
+    // Setup: one repository holding an active run of task 50 and an archived task 51, so the non-writing exit that is reachable here can be checked against a live neighbouring run.
     const quietRoot = makeSourceRepository("pipeline-non-writing-exits");
     seedTaskFiles(quietRoot, [{ taskNumber: 50, title: "task 50", description: "do it", files: FENCE_INSIDE(50) }]);
     writeJsonAtomically(resolveTaskFiles(quietRoot).completedTasksPath, [{ taskNumber: 51, title: "task 51" }]);
     assert.equal(isTaskActive(50, "run-live", quietRoot).status, "claimed");
     const liveStateBefore = JSON.stringify(readTaskRunState(50, quietRoot));
 
-    // Test action: drive the non-writing exit, once for a number in no file and once for a
-    // number only in completedTasks.json — being archived is not being valid.
+    // Test action: drive the non-writing exit, once for a number in no file and once for a number only in completedTasks.json — being archived is not being valid.
     const invalidNumber = await runPipeline({ projectRoot: quietRoot, taskNumber: 52 });
     const archived = await runPipeline({ projectRoot: quietRoot, taskNumber: 51 });
 
@@ -1047,8 +1017,7 @@ test("test_pipeline_refusesASecondConcurrentRunOfTheSameTask", async () => {
         projectRoot, taskNumber: 11, runId: "run-second", prose: { implementTask: implementInsideTheFence },
     });
 
-    // Verification: the second run is refused at the claim, exits already-active, and writes
-    // nothing to the first run's record.
+    // Verification: the second run is refused at the claim, exits already-active, and writes nothing to the first run's record.
     assert.equal(first.status, "claimed");
     assert.equal(second.claimStatus, "refused");
     assert.equal(second.exitType, "already-active");
@@ -1078,8 +1047,7 @@ test("test_pipeline_refusesASecondClaimBetweenInactivationAndArchive", async () 
 });
 
 test("test_pipeline_reportsRunFailedWhenArchiveFailsAfterInactivation", async () => {
-    // Setup: an archived record for the same task under a different run lands before the archive
-    // box, so closing the open record cannot be reconciled.
+    // Setup: an archived record for the same task under a different run lands before the archive box, so closing the open record cannot be reconciled.
     const projectRoot = makeSourceRepository("pipeline-archive-fails");
     seedTask(projectRoot, 13, FENCE_INSIDE(13));
 
@@ -1093,8 +1061,7 @@ test("test_pipeline_reportsRunFailedWhenArchiveFailsAfterInactivation", async ()
         ]),
     });
 
-    // Verification: rule 10's fourth case — the already-ended record was reopened as run-failed
-    // rather than left claiming it completed, and re-ended.
+    // Verification: rule 10's fourth case — the already-ended record was reopened as run-failed rather than left claiming it completed, and re-ended.
     assert.equal(outcome.exitType, "run-failed", outcome.exitNote);
     const record = newestRun(projectRoot, 13);
     assert.equal(record.exitType, "run-failed");
@@ -1107,8 +1074,7 @@ test("test_pipeline_recognizesACompletedArchiveWhenTheResultIsLost", async () =>
     const projectRoot = makeSourceRepository("pipeline-lost-archive");
     seedTask(projectRoot, 14, FENCE_INSIDE(14));
 
-    // Test action: drive the diagram with the archive result thrown away, so the read-only
-    // reconciliation check has to decide the edge (rule 11).
+    // Test action: drive the diagram with the archive result thrown away, so the read-only reconciliation check has to decide the edge (rule 11).
     const outcome = await runPipeline({
         projectRoot, taskNumber: 14, prose: { implementTask: implementInsideTheFence }, loseCloseResult: true,
     });
@@ -1127,8 +1093,7 @@ test("test_pipeline_recognizesACompletedArchiveWhenTheResultIsLost", async () =>
 });
 
 test("test_pipeline_resumesAPreviousRunAndAdoptsItsWorktreeLease", async () => {
-    // Setup: a first run that recorded real implementation notes, then exited suite-red and left
-    // its safe worktree and its own physical lease behind.
+    // Setup: a first run that recorded real implementation notes, then exited suite-red and left its safe worktree and its own physical lease behind.
     const projectRoot = makeSourceRepository("pipeline-resume");
     seedTask(projectRoot, 15, FENCE_WITH_VALUE(15));
     const first = await runPipeline({
@@ -1153,8 +1118,7 @@ test("test_pipeline_resumesAPreviousRunAndAdoptsItsWorktreeLease", async () => {
         },
     });
 
-    // Verification: it reused the first run's worktree, both leases named the second run before
-    // the docs box, and the run finished completed with every hold released.
+    // Verification: it reused the first run's worktree, both leases named the second run before the docs box, and the run finished completed with every hold released.
     assert.equal(second.worktree, first.worktree);
     assertVisitedInOrder(second.visited, [
         "doesTaskWorktreeExist", "checkTaskWorktreeSafe", "isTaskRunResumable", "updateTaskDocs",
@@ -1180,8 +1144,7 @@ test("test_pipeline_waitsOutAWarmSourceLockHeldByAnotherRunAndThenCompletes", as
     const otherOwner = buildLockOwner("run-other", 77);
     assert.equal(acquireSourceRepoLock(projectRoot, otherOwner).status, "acquired");
 
-    // Test action: drive the diagram. The first real rebase call observes the warm lock; the
-    // held-lock callback releases the other owner, so the next visit can acquire it.
+    // Test action: drive the diagram. The first real rebase call observes the warm lock; the held-lock callback releases the other owner, so the next visit can acquire it.
     let heldVisits = 0;
     const outcome = await runPipeline({
         projectRoot, taskNumber: 19, prose: { implementTask: implementInsideTheFence },
@@ -1218,8 +1181,7 @@ test("test_pipeline_exitsRunFailedWhenTheSourceLockIsColdAndRecoverable", async 
         lockOptions: { pollIntervalMs: 20, timeoutMs: 200 },
     });
 
-    // Verification: a cold lock is run-failed, names the exact stale owner, and is never taken
-    // over — only the maintenance script may remove it.
+    // Verification: a cold lock is run-failed, names the exact stale owner, and is never taken over — only the maintenance script may remove it.
     assert.equal(outcome.exitType, "run-failed");
     assert.ok(outcome.exitNote.includes(staleOwner), `exit note did not name the owner: ${outcome.exitNote}`);
     assert.ok(outcome.exitNote.includes("recoverSourceRepoLock"), `exit note gave no recovery command: ${outcome.exitNote}`);
@@ -1251,8 +1213,7 @@ test("test_pipeline_recordsASecondRunWithoutDestroyingTheFirstRunsHistory", asyn
     assert.equal(history[1].exitType, "completed");
 });
 
-// Two real `createTaskWorktree.ts` CLIs in separate processes, each holding at a barrier file
-// until both have started, so the contended section really overlaps.
+// Two real `createTaskWorktree.ts` CLIs in separate processes, each holding at a barrier file until both have started, so the contended section really overlaps.
 const CONCURRENT_CREATE_RUNNER = `
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { createTaskWorktree } from "SCRIPTS/createTaskWorktree.ts";
@@ -1279,7 +1240,7 @@ test("test_pipeline_runsTwoTaskWorktreeCreationsConcurrentlyWithoutInterference"
     assert.equal(isTaskActive(17, "run-17", projectRoot).status, "claimed");
     assert.equal(isTaskActive(18, "run-18", projectRoot).status, "claimed");
 
-    const scriptsDirectory = join(import.meta.dirname, "..", "..", "scripts", "tackle-tasks");
+    const scriptsDirectory = join(import.meta.dirname, "..", "scripts", "tackle-tasks");
     const runnerPath = join(projectRoot, "concurrent-create-runner.mjs");
     writeFileSync(runnerPath, CONCURRENT_CREATE_RUNNER.replaceAll("SCRIPTS", scriptsDirectory));
     const barrierDirectory = join(projectRoot, "concurrent-barrier");

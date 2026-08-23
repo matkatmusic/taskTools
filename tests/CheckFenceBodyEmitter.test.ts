@@ -30,6 +30,7 @@ test("test_checkFencePrompt_payloadRoundTripsThroughTheHeredoc", () => {
         taskNumber: input.taskNumber,
         runId: input.runId,
         rootSourceBranch: input.sourceBranch,
+        boxId: "DID_CHANGES_STAY_INSIDE_FENCE",
     });
 });
 

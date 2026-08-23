@@ -37,11 +37,14 @@ test("test_mergeWorktreesPrompt_bothPayloadsRoundTripThroughTheirHeredocs", () =
         taskNumber: input.taskNumber,
         runId: input.runId,
         rootSourceBranch: input.sourceBranch,
+        boxId: "MERGE_WORKTREES",
     });
     assert.deepEqual(JSON.parse(readHeredoc[1]), {
         taskNumber: input.taskNumber,
         projectRoot: input.projectRoot,
         worktreePath: input.worktree,
+        runId: input.runId,
+        boxId: "READ_MERGE_PUBLICATION_STATE",
     });
 });
 

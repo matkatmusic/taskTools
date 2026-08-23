@@ -55,7 +55,7 @@ export function taskWorktreeCreateJournalPath(worktreePath: string): string {
 
 // Test-only fault injection, unset in production: forces the physical lease to a different
 // owner just before rollback re-reads it, so tests can exercise the "another owner holds it
-// now" refusal. See tests/tackle-tasks/createTaskWorktree.test.ts.
+// now" refusal. See tests/createTaskWorktree.test.ts.
 const ROLLBACK_CORRUPT_LEASE_ENV = "CREATETASKWORKTREE_TEST_CORRUPT_LEASE_BEFORE_ROLLBACK";
 function corruptLeaseForTest(worktreePath: string): void {
     if (process.env[ROLLBACK_CORRUPT_LEASE_ENV] !== "1") return;

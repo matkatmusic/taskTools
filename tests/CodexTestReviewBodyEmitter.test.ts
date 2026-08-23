@@ -142,7 +142,8 @@ test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
 
 test("test_reviewTestsPrompt_leavesTheFlaggedVerdictToTheRulingScript", () => {
     // The spawning agent used to derive flagged in prose; decideTestReview.ts owns that judgement now.
-    const prompt = reviewTestsPrompt(makeTaskFixture(), SOURCE_BRANCH);
-    assert.match(prompt, /node \S*decideTestReview\.ts <"\$REVIEW_FILE"/);
+    const task = makeTaskFixture();
+    const prompt = reviewTestsPrompt(task, SOURCE_BRANCH);
+    assert.match(prompt, new RegExp(`node \\S*decideTestReview\\.ts ${task.taskStateRoot} ${task.number} ARE_TESTS_FLAGGED <"\\$REVIEW_FILE"`));
     assert.match(prompt, /never decide a verdict yourself/);
 });

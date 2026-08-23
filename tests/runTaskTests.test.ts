@@ -1,14 +1,14 @@
 // Behavioral checks for scripts/tackle-tasks/runTaskTests.ts.
-// Run: node --test tests/tackle-tasks/runTaskTests.test.ts
+// Run: node --test tests/runTaskTests.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTaskTests } from "../../scripts/tackle-tasks/runTaskTests.ts";
-import { claimTask, endTaskRun, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup } from "../../scripts/prepareTasks.ts";
+import { runTaskTests } from "../scripts/tackle-tasks/runTaskTests.ts";
+import { claimTask, endTaskRun, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup } from "../scripts/prepareTasks.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

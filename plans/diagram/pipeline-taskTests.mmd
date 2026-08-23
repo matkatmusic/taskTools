@@ -37,11 +37,11 @@ flowchart TB
   ARE_2_TEST_FIXES_DONE --> ARE_2_TEST_FIXES_DONE_YES["YES"]
   ARE_2_TEST_FIXES_DONE_NO --> AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
   AMEND_ENTRY_WITH_FAILING_TESTS -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
-  ARE_2_TEST_FIXES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW
+  ARE_2_TEST_FIXES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW_TASK_TESTS
 
   DO_TASK_TESTS_PASS_YES --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_TASK_TESTS["failures exit"]
 
   %% Green heads for the next pipeline.
   %% ---
@@ -54,10 +54,9 @@ flowchart TB
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class DO_TASK_TESTS_PASS,ARE_2_TEST_FIXES_DONE decision
-  class AMEND_ENTRY_WITH_FAILING_TESTS script
-  class RUN_TASK_TESTS agent
+  class AMEND_ENTRY_WITH_FAILING_TESTS,RUN_TASK_TESTS script
   class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE pipeline
   class DO_TASK_TESTS_PASS_YES,ARE_2_TEST_FIXES_DONE_NO pass
   class DO_TASK_TESTS_PASS_NO,ARE_2_TEST_FIXES_DONE_YES nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_TASK_TESTS fail
   class COMMITTED_WORK_INPUT output

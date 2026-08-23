@@ -1,7 +1,5 @@
 // Emits yellow-box prompts for tackle-tasks agent roles (read-only per greenBoxPolicy.ts); see workflow-only-context-injection.md §2/§6.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { buildWorktreeOccurrences, parseOccurrencePath, type WorktreeOccurrence } from "./occurrences.ts";
+import { readFileSync } from "node:fs";
 import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
 import { planPrompt, type PlanPromptExtra } from "./PlannerBodyEmitter.ts";
 import { implementPrompt, type ImplementPromptExtra } from "./ImplementBodyEmitter.ts";
@@ -10,13 +8,10 @@ import type { TestReview } from "./decideTestReview.ts";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
 import { suiteFixPrompt } from "./SuiteFixBodyEmitter.ts";
-import { runFullSuitePrompt } from "./RunFullSuiteBodyEmitter.ts";
-import { runTaskTestsPrompt } from "./RunTaskTestsBodyEmitter.ts";
-import { rebaseWorktreePrompt } from "./RebaseWorktreeBodyEmitter.ts";
-import { continueRebasePrompt } from "./ContinueRebaseBodyEmitter.ts";
 import { finishRunPrompt } from "./FinishRunBodyEmitter.ts";
 import { lockSourceRepoPrompt } from "./LockSourceRepoBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
+import { logStepOutput } from "./logStepOutput.ts";
 
 export { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 
@@ -40,12 +35,6 @@ export type AgentPromptEmitterPayload = {
     runId: string;
     [key: string]: unknown;
 };
-
-// ---------------------------------------------------------------------------
-// Shared prompt-building helpers.
-// ---------------------------------------------------------------------------
-
-const worktreePath = (t: PreparedTask, relativePath: string) => `${t.repoRoot.replace(/\/+$/, "")}/${relativePath}`;
 
 /* Retired: the v1.5 diagrams replaced these agent boxes with green script boxes, so nothing dispatches them.
 
@@ -166,12 +155,18 @@ ${notes}`;
 // Dispatch
 // ---------------------------------------------------------------------------
 
-// Saves a real run's prompt beside the generated one for diffing; idempotent, keeping this emitter read-only-safe per greenBoxPolicy.
-function logEmittedPrompt(taskNumber: number, role: string, payload: AgentPromptEmitterPayload, prompt: string): void {
-    const directory = join(payload.projectRoot, "plans/diagram/output renders", String(taskNumber), "runs", payload.runId);
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, `${role}.md`), prompt);
-}
+// Maps a role to its diagram box, for the run log. "finish-run" has no single box.
+const ROLE_TO_BOX_ID: Record<string, string> = {
+    "plan": "PLAN_THE_TASK",
+    "review-plan": "CODEX_REVIEWS_PLAN",
+    "implement": "IMPLEMENT_TASK",
+    "fix-conflicts": "FIX_CONFLICTS",
+    "fix-suite": "FIX_THE_CODEBASE_FOR_SUITE",
+    "review-tests": "CODEX_REVIEWS_TESTS",
+    "lock-source-repo": "LOCK_SOURCE_REPO",
+};
+
+const EMIT_AGENT_PROMPT_SOURCE = "scripts/tackle-tasks/AgentPromptEmitter.ts:171: emitAgentPrompt";
 
 export function emitAgentPrompt(taskNumber: number, role: string, payload: AgentPromptEmitterPayload): string {
     const worktree = payload.worktree;
@@ -203,15 +198,6 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         }
         case "fix-conflicts":
             return fixConflictsPrompt(payload.checkoutPath as string, taskNumber, projectRoot, payload.runId, payload.sourceBranch);
-        // The edit allowlist is the task's own ownership fence, so it is read here, never accepted from the caller.
-        case "rebase-worktree":
-            return rebaseWorktreePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
-        case "continue-rebase":
-            return continueRebasePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
-        case "run-task-tests":
-            return runTaskTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
-        case "run-full-suite":
-            return runFullSuitePrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "fix-suite":
             return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "review-tests":
@@ -248,11 +234,31 @@ if (process.argv[1]?.endsWith("AgentPromptEmitter.ts")) {
     if (!PAYLOAD.sourceBranch) fail('payload missing "sourceBranch"');
     if (!PAYLOAD.runId) fail('payload missing "runId"');
 
+    const identity = { projectRoot: PAYLOAD.projectRoot, taskNumber: N, runId: PAYLOAD.runId };
+    const boxId = ROLE_TO_BOX_ID[ROLE] ?? ROLE;
+    const command = `node ${process.argv[1]} ${N} ${ROLE} <<'TTPAYLOAD'\n${payloadText}\nTTPAYLOAD`;
+
     try {
         const prompt = emitAgentPrompt(N, ROLE, PAYLOAD);
-        logEmittedPrompt(N, ROLE, PAYLOAD, prompt);
+        logStepOutput(identity, {
+            boxId,
+            source: EMIT_AGENT_PROMPT_SOURCE,
+            input: PAYLOAD,
+            command,
+            commandOutput: prompt,
+            output: prompt,
+        });
         process.stdout.write(prompt);
     } catch (error) {
-        fail(String((error as Error)?.message ?? error));
+        const message = String((error as Error)?.message ?? error);
+        logStepOutput(identity, {
+            boxId,
+            source: EMIT_AGENT_PROMPT_SOURCE,
+            input: PAYLOAD,
+            command,
+            commandOutput: message,
+            output: { error: message },
+        });
+        fail(message);
     }
 }

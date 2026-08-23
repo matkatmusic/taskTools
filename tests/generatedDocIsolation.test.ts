@@ -16,7 +16,7 @@ test("test_gitignore_hidesANewlyCreatedPlanJsonFromGitStatus", () => {
     git(repoRoot, "init", "-q");
     git(repoRoot, "config", "user.email", "test@example.com");
     git(repoRoot, "config", "user.name", "Test");
-    copyFileSync(join(import.meta.dirname, "..", "..", ".gitignore"), join(repoRoot, ".gitignore"));
+    copyFileSync(join(import.meta.dirname, "..", ".gitignore"), join(repoRoot, ".gitignore"));
     mkdirSync(join(repoRoot, "plans"), { recursive: true });
     writeFileSync(join(repoRoot, "plans", "task-1-plan.md"), "tracked plan\n");
     git(repoRoot, "add", ".gitignore", "plans/task-1-plan.md");

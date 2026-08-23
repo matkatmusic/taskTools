@@ -1,5 +1,5 @@
 // CLI behavior for validateCodexReview.ts: stdin JSON in, one line of JSON out.
-// Run alone: node --test tests/tackle-tasks/validateCodexReview.test.ts
+// Run alone: node --test tests/validateCodexReview.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -7,9 +7,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateCodexReview } from "../../scripts/tackle-tasks/validateCodexReview.ts";
+import { validateCodexReview } from "../scripts/tackle-tasks/validateCodexReview.ts";
 
-const cliPath = fileURLToPath(new URL("../../scripts/tackle-tasks/validateCodexReview.ts", import.meta.url));
+const cliPath = fileURLToPath(new URL("../scripts/tackle-tasks/validateCodexReview.ts", import.meta.url));
 
 function writeJsonFile(value: unknown): string {
     const dir = mkdtempSync(join(tmpdir(), "validate-codex-review-"));

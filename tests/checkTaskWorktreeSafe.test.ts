@@ -1,11 +1,11 @@
-// Behavioral checks for checkTaskWorktreeSafe.ts. Run alone: node --test tests/tackle-tasks/checkTaskWorktreeSafe.test.ts
+// Behavioral checks for checkTaskWorktreeSafe.ts. Run alone: node --test tests/checkTaskWorktreeSafe.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkTaskWorktreeSafe } from "../../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
+import { checkTaskWorktreeSafe } from "../scripts/tackle-tasks/checkTaskWorktreeSafe.ts";
 import { makeLayeredSubmoduleFixture, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 test("test_checkTaskWorktreeSafe_reportsUnsafeWhenHeadIsOnTheWrongBranch", () => {

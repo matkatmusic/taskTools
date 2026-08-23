@@ -1,5 +1,4 @@
-// Behavioral checks for planArtifacts.ts: plan/review validation and the pure amendment rule.
-// Run alone: node --test tests/tackle-tasks/planArtifacts.test.ts
+// Behavioral checks for planArtifacts.ts: plan/review validation and the pure amendment rule.  Run alone: node --test tests/planArtifacts.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -11,7 +10,7 @@ import {
     readAndValidateReview,
     type Plan,
     type PlanAmendment,
-} from "../../scripts/tackle-tasks/planArtifacts.ts";
+} from "../scripts/tackle-tasks/planArtifacts.ts";
 
 function writeJsonFile(value: unknown): string {
     const dir = mkdtempSync(join(tmpdir(), "plan-artifacts-"));
@@ -24,6 +23,7 @@ function samplePlan(): Plan {
     return {
         task: 169,
         revision: 1,
+        createsFiles: [],
         sections: [
             { id: "problem", title: "Problem", body: "markdown" },
             { id: "step-1", title: "Add the union", body: "markdown" },
@@ -222,7 +222,7 @@ test("test_applyPlanAmendments_rejectsANonKebabInsertedId", () => {
 });
 
 test("test_applyPlanAmendments_rejectsRemovingTheSoleSection", () => {
-    const plan: Plan = { task: 169, revision: 1, sections: [{ id: "only", title: "Only", body: "b" }] };
+    const plan: Plan = { task: 169, revision: 1, createsFiles: [], sections: [{ id: "only", title: "Only", body: "b" }] };
     const result = applyPlanAmendments(plan, [{ op: "remove", id: "only" }]);
     assert.equal(result.status, "rejected");
 });

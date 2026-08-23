@@ -17,15 +17,15 @@ const TASK_NUMBER_TOKEN = /^-?\d+$/;
 
 // M2: accepted grammar is a delimiter-separated list of positive safe integers, optionally
 // wrapped in one matching pair of outer brackets — "[1,2]" and "1 2" both work; "[1" and "1]"
-// do not, and neither does an integer beyond Number.MAX_SAFE_INTEGER.
+// do not, and neither does an integer beyond Number.MAX_SAFE_INTEGER. Text after "]" is ignored. Text after "]" is ignored.
 export function parseTaskNumberArgument(args: string): number[] {
     const trimmed = args.trim();
     const hasLeadingBracket = trimmed.startsWith("[");
-    const hasTrailingBracket = trimmed.endsWith("]");
-    if (hasLeadingBracket !== hasTrailingBracket) {
+    const closingBracket = trimmed.indexOf("]");
+    if (hasLeadingBracket !== (closingBracket !== -1)) {
         throw new Error(`unmatched bracket in "${trimmed}"`);
     }
-    const body = hasLeadingBracket ? trimmed.slice(1, -1) : trimmed;
+    const body = hasLeadingBracket ? trimmed.slice(1, closingBracket) : trimmed;
     const tokens = body.trim().split(/[\s,]+/).filter((t) => t.length > 0);
     if (tokens.length === 0) throw new Error("no task numbers given");
     const numbers: number[] = [];

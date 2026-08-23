@@ -1,16 +1,16 @@
 // Behavioral checks for scripts/tackle-tasks/releaseTaskRunHolds.ts.
-// Run: node --test tests/tackle-tasks/releaseTaskRunHolds.test.ts
+// Run: node --test tests/releaseTaskRunHolds.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { releaseTaskRunHolds } from "../../scripts/tackle-tasks/releaseTaskRunHolds.ts";
-import { acquireTaskWorktreeLease, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
-import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../../scripts/tackle-tasks/sourceRepoLock.ts";
-import { claimTask, getCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { resolveTaskFiles } from "../../scripts/taskFiles.ts";
-import { writeJsonAtomically } from "../../scripts/taskStateLock.ts";
+import { releaseTaskRunHolds } from "../scripts/tackle-tasks/releaseTaskRunHolds.ts";
+import { acquireTaskWorktreeLease, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../scripts/prepareTasks.ts";
+import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/sourceRepoLock.ts";
+import { claimTask, getCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 import { git, makeCommittedRepo } from "./support/gitFixtures.ts";
 
 function makeProjectRoot(): string {

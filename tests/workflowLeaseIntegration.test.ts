@@ -5,11 +5,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { claimTask, endTaskRun, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createTaskWorktree } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { runPreamble } from "../../scripts/tackle-tasks/PreambleDataEmitter.ts";
-import { WorkflowResultCodes } from "../../scripts/tackle-tasks/WorkflowResultCodes.ts";
-import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
+import { claimTask, endTaskRun, updateCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createTaskWorktree } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { runPreamble } from "../scripts/tackle-tasks/PreambleDataEmitter.ts";
+import { WorkflowResultCodes } from "../scripts/tackle-tasks/WorkflowResultCodes.ts";
+import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../scripts/prepareTasks.ts";
 
 const TASK = 92910;
 const OLD_RUN_ID = "run-old-lease";

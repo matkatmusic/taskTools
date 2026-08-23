@@ -22,7 +22,7 @@ test("test_lockSourceRepoPrompt_payloadRoundTripsThroughTheHeredoc", () => {
     const prompt = lockSourceRepoPrompt(input);
     const heredoc = prompt.match(/<<'TTLOCK'\n([\s\S]*?)\nTTLOCK/);
     assert.ok(heredoc, "TTLOCK heredoc not found");
-    assert.deepEqual(JSON.parse(heredoc[1]), input);
+    assert.deepEqual(JSON.parse(heredoc[1]), { ...input, boxId: "LOCK_SOURCE_REPO" });
 });
 
 test("test_lockSourceRepoPrompt_containsNoBacktick", () => {

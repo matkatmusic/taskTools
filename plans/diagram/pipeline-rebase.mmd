@@ -37,10 +37,10 @@ flowchart TB
   DID_REBASE_REPORT_CONFLICTS_YES --> ARE_2_CONFLICT_FIXES_DONE{"2 conflict fixes done?"}
   ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_NO["NO"]
   ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_YES["YES"]
-  ARE_2_CONFLICT_FIXES_DONE_YES -- "exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW
+  ARE_2_CONFLICT_FIXES_DONE_YES -- "exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW_REBASE
   ARE_2_CONFLICT_FIXES_DONE_NO -- "pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
-  FIX_CONFLICTS --> COMMIT_IF_NEEDED["commit if needed"]
-  COMMIT_IF_NEEDED --> CONTINUE_REBASE["continue the rebase"]
+  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed"]
+  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE["continue the rebase"]
   CONTINUE_REBASE --> IS_REBASE_FINISHED{"is the rebase finished?"}
   IS_REBASE_FINISHED --> IS_REBASE_FINISHED_YES["YES"]
   IS_REBASE_FINISHED --> IS_REBASE_FINISHED_NO["NO"]
@@ -49,9 +49,9 @@ flowchart TB
   DID_REBASE_REPORT_CONFLICTS_NO --> SUITE_PIPELINE
   IS_REBASE_FINISHED_YES --> SUITE_PIPELINE["full suite pipeline"]
 
-  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REBASE
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_REBASE["failures exit"]
 
   %% pass/nopass: green heads to the next pipeline.
   %% ---
@@ -65,10 +65,9 @@ flowchart TB
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class AGENT_ERRORED nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_REBASE fail
   class DID_REBASE_REPORT_CONFLICTS,IS_REBASE_FINISHED,ARE_2_CONFLICT_FIXES_DONE decision
-  class COMMIT_IF_NEEDED script
-  class REBASE_ONTO_TARGET_BRANCH,CONTINUE_REBASE agent
+  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,REBASE_ONTO_TARGET_BRANCH,CONTINUE_REBASE script
   class FIX_CONFLICTS agent
   class SUITE_PIPELINE pipeline
   class DID_REBASE_REPORT_CONFLICTS_NO,IS_REBASE_FINISHED_YES,ARE_2_CONFLICT_FIXES_DONE_NO pass

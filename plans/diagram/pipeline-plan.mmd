@@ -26,16 +26,16 @@ flowchart TB
   WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_ERROR["ERROR"]
 
   PLANNER_RETURNED_PLAN --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
-  PLANNER_RETURNED_ERROR -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW
+  PLANNER_RETURNED_ERROR -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_PLAN
 
   PLANNER_RETURNED_CLARIFY --> ARE_2_CLARIFY_ROUNDS_DONE{"2 clarify rounds done?"}
   ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_NO["NO"]
   ARE_2_CLARIFY_ROUNDS_DONE --> ARE_2_CLARIFY_ROUNDS_DONE_YES["YES"]
   ARE_2_CLARIFY_ROUNDS_DONE_NO --> WRITE_CLARIFY_REQUEST["write the clarify request<br/>into the tasks.json entry"]
   WRITE_CLARIFY_REQUEST -- "docs mode: UPDATE<br/>clarify request" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
-  ARE_2_CLARIFY_ROUNDS_DONE_YES -- "exit type: clarify-stuck<br/>exit note: the planner asked twice for<br/>something the docs cannot supply.<br/>worktree preserved." --> EXIT_WORKFLOW
+  ARE_2_CLARIFY_ROUNDS_DONE_YES -- "exit type: clarify-stuck<br/>exit note: the planner asked twice for<br/>something the docs cannot supply.<br/>worktree preserved." --> EXIT_WORKFLOW_PLAN
 
-  EXIT_WORKFLOW["failures exit"]
+  EXIT_WORKFLOW_PLAN["failures exit"]
 
   %% Green heads for the next pipeline.
   %% ---
@@ -54,5 +54,5 @@ flowchart TB
   class REVIEW_PLAN_PIPELINE,DOCUMENT_GENERATION_PIPELINE pipeline
   class PLANNER_RETURNED_PLAN,PLANNER_RETURNED_CLARIFY,ARE_2_CLARIFY_ROUNDS_DONE_NO pass
   class PLANNER_RETURNED_ERROR,ARE_2_CLARIFY_ROUNDS_DONE_YES nopass
-  class EXIT_WORKFLOW fail
+  class EXIT_WORKFLOW_PLAN fail
   class DOCS_INPUT output

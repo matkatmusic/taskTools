@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileFunction, constants as vmConstants } from "node:vm";
 
-const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WORKFLOW_PATH = join(REPO_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
 const WORKFLOW_SOURCE = readFileSync(WORKFLOW_PATH, "utf8").replace("export const meta", "const meta");
 
@@ -32,6 +32,20 @@ const payloadOf = (prompt: string): Record<string, unknown> => {
 
 type AgentCall = { prompt: string; label: string; schema: { required: string[] } };
 type Responder = (visit: number) => unknown;
+
+// A [C] box now runs behind one generic "run-step" label, so a test names the box, not the label.
+const boxIdOf = (call: AgentCall): string | null => {
+    const match = /^\/run-step "[^"]*" "[^"]*" "[^"]*" "[^"]*" "[^"]*" "([A-Z_]+)"/m.exec(call.prompt);
+    return match === null ? null : match[1]!;
+};
+
+// The box id a run-step call carries, mapped back to the role a test overrides it by.
+const RUN_STEP_ROLES: Record<string, string> = {
+    RUN_TASK_TESTS: "run-task-tests",
+    REBASE_ONTO_TARGET_BRANCH: "rebase-worktree",
+    CONTINUE_REBASE: "continue-rebase",
+    RUN_FULL_SUITE: "run-full-suite",
+};
 
 // Every role answers the way a green run answers, so a test overrides only the role it is about.
 const HAPPY_RESULTS: Record<string, unknown> = {
@@ -99,7 +113,18 @@ const runReal = async (overrides: Record<string, unknown | Responder> = {}): Pro
             });
             return JSON.parse(JSON.parse(answered.stdout).hookSpecificOutput.additionalContext);
         }
-        if (role === "run-step") return { ok: true };
+        if (role === "run-step") {
+            const boxId = boxIdOf({ prompt, label: options.label, schema: options.schema });
+            const receiptRole = boxId === null ? undefined : RUN_STEP_ROLES[boxId];
+            if (receiptRole === undefined) return { ok: true };
+            visits[receiptRole] = (visits[receiptRole] ?? 0) + 1;
+            const value = receiptRole in overrides
+                ? (typeof overrides[receiptRole] === "function"
+                    ? (overrides[receiptRole] as Responder)(visits[receiptRole]!)
+                    : overrides[receiptRole])
+                : HAPPY_RESULTS[receiptRole];
+            return value === null ? null : { ok: true, receipts: { [boxId as string]: value } };
+        }
         visits[role] = (visits[role] ?? 0) + 1;
         if (!(role in overrides)) return role === "finish-run" ? finishRunResult(prompt) : HAPPY_RESULTS[role];
         const responder = overrides[role];
@@ -157,11 +182,8 @@ test("test_realMode_walksEveryBoxToTheMergeSucceededExit", async () => {
         `plan:${TASK}`,
         `review-plan:${TASK}`,
         `implement:${TASK}`,
-        `run-task-tests:${TASK}`,
         `review-tests:${TASK}`,
         `lock-source-repo:${TASK}`,
-        `rebase-worktree:${TASK}`,
-        `run-full-suite:${TASK}`,
         `check-fence:${TASK}`,
         `merge-worktrees:${TASK}`,
         `finish-run:${TASK}`,
@@ -180,7 +202,6 @@ const REACHABLE_BOXES: { role: string; required: string[] }[] = [
     { role: "plan", required: ["outcome"] },
     { role: "review-plan", required: ["verdict"] },
     { role: "implement", required: ["implemented"] },
-    { role: "run-task-tests", required: ["passed"] },
     { role: "review-tests", required: ["flagged"] },
     { role: "lock-source-repo", required: ["acquired"] },
     { role: "check-fence", required: ["inside"] },
@@ -258,7 +279,7 @@ test("test_realMode_readsTheTaskTestVerdictFromTheAgentResult", async () => {
 
     // Verification: testRun.passed drove three runs and two repairs, then the red exit.
     assert.equal(exitTypeOf(run.trace), "TESTS-RED");
-    assert.equal(run.calls.filter((call) => call.label === `run-task-tests:${TASK}`).length, 3);
+    assert.equal(run.calls.filter((call) => boxIdOf(call) === "RUN_TASK_TESTS").length, 3);
     assert.equal(run.calls.filter((call) => call.label === `implement:${TASK}`).length, 3);
 });
 
@@ -275,8 +296,8 @@ test("test_realMode_readsTheTestReviewFlagFromTheAgentResult", async () => {
 // The dotted "agent() errored" edge, which FAKE mode fakes and real mode reads
 // --------------------------------------------------------------------------
 
-const AGENT_BOXES = REACHABLE_BOXES.slice(0, 5);
-const SCRIPT_BOXES = REACHABLE_BOXES.slice(5);
+const AGENT_BOXES = REACHABLE_BOXES.slice(0, 4);
+const SCRIPT_BOXES = REACHABLE_BOXES.slice(4);
 
 for (const { role } of AGENT_BOXES) {
     test(`test_realMode_treatsANullResultFrom_${role.replace(/-/g, "_")}_AsTheAgentErroredEdge`, async () => {
@@ -295,6 +316,23 @@ for (const { role } of SCRIPT_BOXES) {
     test(`test_realMode_endsRunFailedWhenTheGreenBox_${role.replace(/-/g, "_")}_ReturnsNothing`, async () => {
         // Setup: a green box performed by an agent loses its result.
         const run = await runReal({ [role]: null });
+
+        // Verification: a green box draws no dotted edge; an operational failure is run-failed.
+        assert.equal(run.error, null);
+        assert.equal(countOf(run.trace, "agent() errored"), 0);
+        assert.equal(exitTypeOf(run.trace), "RUN-FAILED");
+    });
+}
+
+// The four migrated boxes are green [C] boxes too: a missing receipt is a run-failed, not the dotted edge.
+const RUN_STEP_BOX_REACH: Record<string, Record<string, unknown>> = {
+    "continue-rebase": { "rebase-worktree": { conflicted: true } },
+};
+
+for (const role of Object.values(RUN_STEP_ROLES)) {
+    test(`test_realMode_endsRunFailedWhenTheGreenBox_${role.replace(/-/g, "_")}_ReturnsNothing`, async () => {
+        // Setup: the harness loses that box's receipt, which reaches the workflow as a null result.
+        const run = await runReal({ ...RUN_STEP_BOX_REACH[role], [role]: null });
 
         // Verification: a green box draws no dotted edge; an operational failure is run-failed.
         assert.equal(run.error, null);

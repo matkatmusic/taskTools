@@ -1,14 +1,14 @@
-// Behavioral checks for createTaskWorktree.ts. Run alone: node --test tests/tackle-tasks/createTaskWorktree.test.ts
+// Behavioral checks for createTaskWorktree.ts. Run alone: node --test tests/createTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "../../scripts/tackle-tasks/createTaskWorktree.ts";
-import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../scripts/tackle-tasks/taskRunState.ts";
-import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../scripts/prepareTasks.ts";
-import type { TaskGroup } from "../../scripts/taskGroups.ts";
+import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "../scripts/tackle-tasks/createTaskWorktree.ts";
+import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../scripts/tackle-tasks/taskRunState.ts";
+import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../scripts/prepareTasks.ts";
+import type { TaskGroup } from "../scripts/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
