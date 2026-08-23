@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getSchemaFromTemplate } from "../scripts/templateSchema.ts";
+import { getSchemaFromTemplate } from "../scripts/buildRunStepSchemas.ts";
 import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
 
 test("test_getSchemaFromTemplate_closesTheKeySetAndRequiresEveryKey", () => {

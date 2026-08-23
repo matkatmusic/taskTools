@@ -24,13 +24,25 @@ function runHook(prompt: string, configFile?: string) {
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
 function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; next: string[] }[]>) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
+    const outputByBox: Record<string, Record<string, unknown>> = {};
     const writeStep = (box: string, result: Record<string, unknown>) => {
         const scriptPath = join(folder, `${box}.ts`);
         writeFileSync(scriptPath, `console.log(JSON.stringify({ ...${JSON.stringify({ box, ...result })}, input: process.argv[2] ?? "" }));\n`);
+        outputByBox[box] = { box, ...result, input: "" };
         return scriptPath;
     };
     const configFile = join(folder, "steps.json");
-    writeFileSync(configFile, JSON.stringify(build(writeStep, folder)));
+    const config = build(writeStep, folder);
+    // The hook builds the next block's schema from its template, so every entry needs one.
+    for (const entries of Object.values(config)) {
+        for (const entry of entries) {
+            const templatePath = join(folder, `${entry.box}.template.json`);
+            const output = outputByBox[entry.box] ?? { box: entry.box, signal: "stop" };
+            writeFileSync(templatePath, JSON.stringify({ input: {}, output }));
+            (entry as Record<string, unknown>).template = templatePath;
+        }
+    }
+    writeFileSync(configFile, JSON.stringify(config));
     return configFile;
 }
 
@@ -135,6 +147,26 @@ test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
         ],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::B");
+});
+
+// The next agent answers with this schema, so it must describe the next block, not the one that ran.
+test("test_runStepHook_sendsTheNextBlocksSchemaWithTheOutcome", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { signal: "prompt" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    const payloadSchemas = result.outcome.schema.properties.outcome.anyOf[0].properties.payload.anyOf;
+    assert.deepEqual(payloadSchemas.map((schema: { required: string[] }) => schema.required), [["input"]]);
+});
+
+test("test_runStepHook_sendsNoSchemaWhenNothingFollows", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.outcome.schema, null);
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {

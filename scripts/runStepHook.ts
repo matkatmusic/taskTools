@@ -4,7 +4,9 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { KNOWN_SIGNALS, SIGNAL, type Signal } from "./signal.ts";
-import { getPayloadFromOutput } from "./templateSchema.ts";
+// Imported, not copied, so the hook and the workflow generator build the same schema.
+import { buildAgentSchema, getPayloadFromOutput } from "./buildRunStepSchemas.ts";
+import type { StepConfig, StepConfigEntry } from "./generateSteps.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
@@ -21,8 +23,6 @@ const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
 const STEP_TIMEOUT_MS = 10_000;
 
-type StepConfigEntry = { box: string; script: string; next: string[] };
-type StepConfig = Record<string, StepConfigEntry[]>;
 type Step = StepConfigEntry & { diagram: string };
 type StepRun = {
     ok: boolean;
@@ -46,9 +46,10 @@ type WalkResult = {
     outcome: Outcome | null;
 };
 
+const CONFIG = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
-function buildStepsByKey(configFile: string): Map<string, Step> {
-    const config = JSON.parse(readFileSync(configFile, "utf8")) as StepConfig;
+function buildStepsByKey(config: StepConfig): Map<string, Step> {
     const stepsByKey = new Map<string, Step>();
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
@@ -58,7 +59,7 @@ function buildStepsByKey(configFile: string): Map<string, Step> {
     return stepsByKey;
 }
 
-const STEPS_BY_KEY = buildStepsByKey(CONFIG_FILE);
+const STEPS_BY_KEY = buildStepsByKey(CONFIG);
 
 // A bare box id names its own diagram; one with :: names another.
 function getStepKey(boxReference: string, fromDiagram: string): string {
@@ -153,13 +154,14 @@ function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
 // A stop ends the run whatever the graph says, so only a prompt hands a next box back.
 function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>): WalkResult {
     const next = output.signal === SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
+    // Built here from the same templates the generator reads, so the two can never disagree.
+    const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
     const outcome = {
         box: stoppedAt,
         signal: String(output.signal),
         next,
         payload: getPayloadFromOutput(output),
-        // ponytail: the workflow builds its own schema today. Fill this when the hook owns that job.
-        schema: null,
+        schema,
     };
     return { ok: true, ran: boxesRun, errors: [], outcome };
 }
