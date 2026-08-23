@@ -3,7 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
-import { getSchemaFromTemplate } from "./templateSchema.ts";
+import { getPayloadFromOutput, getSchemaFromTemplate } from "./templateSchema.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
@@ -17,8 +17,10 @@ export type BlockSchema = {
 };
 
 export function getBlockSchemaName(box: string): string {
-    return `BLOCK_${box}_SCHEMA`;
+    return `PAYLOAD_${box}_SCHEMA`;
 }
+
+export { getPayloadFromOutput };
 
 // A bare name belongs to the diagram that wrote it; a name holding :: already points across a seam.
 export function getStepKey(target: string, diagram: string): string {
@@ -36,7 +38,7 @@ export function buildBlockSchemas(config: StepConfig, projectRoot: string): Bloc
                 diagram,
                 box: entry.box,
                 name: getBlockSchemaName(entry.box),
-                schema: getSchemaFromTemplate(template.output),
+                schema: getSchemaFromTemplate(getPayloadFromOutput(template.output)),
             });
         }
     }
@@ -102,21 +104,30 @@ export function buildStepsReachableFrom(config: StepConfig): Record<string, stri
     return stepsReachableFrom;
 }
 
-// The hook always returns this envelope. buildPossibleSchemas fills in output, so it starts empty.
+// The hook always returns this envelope. buildPossibleSchemas fills in payload, so it starts empty.
 export function buildWalkResultSchema(): Record<string, unknown> {
+    const outcome = {
+        type: "object",
+        properties: {
+            box: { type: "string" },
+            signal: { type: "string", enum: ["continue", "stop", "prompt"] },
+            next: { type: ["string", "null"] },
+            payload: { anyOf: [] },
+            schema: { type: ["object", "null"] },
+        },
+        required: ["box", "signal", "next", "payload", "schema"],
+        additionalProperties: false,
+    };
     return {
         type: "object",
         properties: {
             ok: { type: "boolean" },
             ran: { type: "array", items: { type: "string" } },
-            stoppedAt: { type: "string" },
-            why: { type: "string" },
-            isTerminal: { type: "boolean" },
-            nextStep: { type: "string" },
-            report: { type: "string" },
-            output: { anyOf: [] },
+            errors: { type: "array", items: { type: "string" } },
+            // A walk that never reached a block has no outcome to report.
+            outcome: { anyOf: [outcome, { type: "null" }] },
         },
-        required: ["ok", "ran", "stoppedAt", "why", "isTerminal", "report", "nextStep", "output"],
+        required: ["ok", "ran", "errors", "outcome"],
         additionalProperties: false,
     };
 }
@@ -170,10 +181,10 @@ export const meta = {
     phases: [{ title: 'walk', detail: 'one agent per pass, grouped by the diagram it is walking' }],
 }
 
-// One schema per block, built from that block's output template, named after the block.
+// One payload schema per block, built from that block's output template, named after the block.
 ${blockSchemaText}
 
-// Every block schema, keyed by diagram then box. buildPossibleSchemas picks from this.
+// Every payload schema, keyed by diagram then box. buildPossibleSchemas picks from this.
 ${blockSchemaMapText}
 
 // One per prompt block: the shape the agent fills in after following that block's prompt.
@@ -182,7 +193,7 @@ ${agentOutputSchemaText}
 // Those same schemas, keyed by full step key. A step missing here is not a prompt block.
 ${agentOutputSchemaMapText}
 
-// The envelope the hook always returns. Only output changes, so buildPossibleSchemas fills it in.
+// The envelope the hook always returns. Only payload changes, so buildPossibleSchemas fills it in.
 const WALK_RESULT_SCHEMA = ${walkResultSchemaText}
 
 // How far one agent can walk from each box before a decision needs making.
@@ -193,52 +204,64 @@ if (!args?.startStep) {
     throw new Error('run-step needs args.startStep, for example "pipeline-plan.mmd::DOCS_INPUT"')
 }
 
-// The hook works out what follows the box it stopped at, so the walk rule lives in one place.
-function getNextStep(result) {
-    return result === null ? args.startStep : result.nextStep
-}
-
-// Only the blocks this agent can actually reach, plus a plain string for stdout a failed block left behind.
-function buildPossibleSchemas(stepToStartAt, blockSchemas) {
-    const outputSchemas = [{ type: 'string' }]
-    const answerSchemas = []
+// Only the blocks this agent can reach, plus a string for stdout a failed block left behind.
+function buildPossibleSchemas(stepToStartAt) {
+    const payloadSchemas = [{ type: 'string' }]
     for (const stepKey of STEPS_REACHABLE_FROM[stepToStartAt]) {
         const [diagram, box] = stepKey.split('::')
-        outputSchemas.push(blockSchemas[diagram][box])
+        payloadSchemas.push(BLOCK_SCHEMAS[diagram][box])
+        // A prompt block lets the agent put its own answer in payload instead.
         if (AGENT_OUTPUT_SCHEMAS[stepKey]) {
-            answerSchemas.push(AGENT_OUTPUT_SCHEMAS[stepKey])
+            payloadSchemas.push(AGENT_OUTPUT_SCHEMAS[stepKey])
         }
     }
-    const walkResult = { ...WALK_RESULT_SCHEMA, properties: { ...WALK_RESULT_SCHEMA.properties, output: { anyOf: outputSchemas } } }
-    // A reachable prompt block means the agent may answer the prompt instead of relaying the envelope.
-    if (answerSchemas.length === 0) {
-        return walkResult
-    }
-    return { anyOf: [walkResult, ...answerSchemas] }
+    const outcome = WALK_RESULT_SCHEMA.properties.outcome.anyOf[0]
+    const filledOutcome = { ...outcome, properties: { ...outcome.properties, payload: { anyOf: payloadSchemas } } }
+    const properties = { ...WALK_RESULT_SCHEMA.properties, outcome: { anyOf: [filledOutcome, { type: 'null' }] } }
+    return { ...WALK_RESULT_SCHEMA, properties }
 }
 
-let result = null
-while (true) {
-    const stepToStartAt = getNextStep(result)
-    // Grouped by diagram, so crossing a :: seam opens a new group in the progress tree.
-    phase(stepToStartAt.split('::')[0])
-    const possibleSchemas = buildPossibleSchemas(stepToStartAt, BLOCK_SCHEMAS)
+function createPromptForAgent(blockToRun) {
     // The envelope belongs to the hook. Saying so stops the agent authoring one of its own.
-    const instruction = [
-        \`run /run-step \${stepToStartAt} and follow instructions.\`,
+    return [
+        \`run /run-step \${blockToRun} and follow instructions.\`,
         'Return the result object the hook gave you, exactly as it gave it to you. Change nothing in it.',
-        'One exception. If that result carries a prompt for you to follow, follow it, then return only your own answer to that prompt.',
+        'One exception. If that result carries a prompt for you to follow, follow it, then return the same object with your answer as outcome.payload.',
     ].join('\\n')
-    result = await agent(instruction, { label: \`run-step:\${stepToStartAt}\`, schema: possibleSchemas })
-    // No nextStep means the agent answered a prompt itself, so there is no envelope to walk on from.
-    if (result.nextStep === undefined) break
-    if (result.isTerminal) break
-    if (result.report) break
-    if (!result.ok) break
 }
 
-// the agent's own answer, the end of a path, something for the user to read, or a walk that could not go on
-return result
+let blockToRun = args.startStep
+// Only ran accumulates across passes. Everything else belongs to the pass that produced it.
+const ran = []
+while (true) {
+    // Grouped by diagram, so crossing a :: seam opens a new group in the progress tree.
+    phase(blockToRun.split('::')[0])
+    const prompt = createPromptForAgent(blockToRun)
+    // The first pass uses the schema built here; later passes use the one the hook sent.
+    const result = await agent(prompt, { label: \`run-step:\${blockToRun}\`, schema: buildPossibleSchemas(blockToRun) })
+
+    // API error. the only shape agent() produces that is not the envelope.
+    if (result === null) {
+        return { ok: false, ran, errors: [\`\${blockToRun}: agent died or was skipped\`], prompt, outcome: null }
+    }
+    ran.push(...result.ran)
+
+    // script exited non-zero, block was unknown, or output came back as a string.
+    if (result.ok === false) {
+        return { ok: false, ran, errors: result.errors, prompt, outcome: result.outcome }
+    }
+
+    // agent never ran /run-step, made up fields, or reworded them; hook threw or returned nothing.
+    if (result.ran.length === 0) {
+        return { ok: false, ran, errors: [\`\${blockToRun}: agent answered without a hook envelope\`], prompt, outcome: null }
+    }
+
+    // nothing follows the block the walk stopped at, so this run is done.
+    if (result.outcome.next === null) {
+        return { ok: true, ran, errors: [], prompt, outcome: result.outcome }
+    }
+    blockToRun = result.outcome.next
+}
 `;
 }
 

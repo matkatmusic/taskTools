@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { KNOWN_SIGNALS, SIGNAL, type Signal } from "./signal.ts";
+import { getPayloadFromOutput } from "./templateSchema.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
@@ -31,16 +32,18 @@ type StepRun = {
     stdout: string;
     result: Record<string, unknown> | null;
 };
+type Outcome = {
+    box: string;
+    signal: string;
+    next: string | null;
+    payload: Record<string, unknown>;
+    schema: Record<string, unknown> | null;
+};
 type WalkResult = {
     ok: boolean;
     ran: string[];
-    stoppedAt: string;
-    why: string;
-    output: unknown;
-    isTerminal: boolean;
-    report: string;
-    nextStep: string;
-    instructions: string;
+    errors: string[];
+    outcome: Outcome | null;
 };
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
@@ -131,30 +134,34 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     return stepRun;
 }
 
-// Where a fresh run picks up, by the same rule the walk itself follows. Empty when nothing follows.
-function getNextStepAfter(stoppedAt: string, output: unknown): string {
+// Where a fresh run picks up, by the same rule the walk itself follows. Null when nothing follows.
+function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): string | null {
     const step = STEPS_BY_KEY.get(stoppedAt)!;
-    const namedNext = (output as { next?: unknown } | null)?.next;
     const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
-    const chosenNextBox = namedNext ?? onlySuccessor;
+    const chosenNextBox = output.next ?? onlySuccessor;
     if (chosenNextBox === undefined) {
-        return "";
+        return null;
     }
     return getStepKey(String(chosenNextBox), step.diagram);
 }
 
-// What the caller does. A prompt is the agent's to answer; anything else is data to relay.
-const PROMPT_INSTRUCTIONS = "Follow output.prompt. Return only the object shape that prompt names, and nothing else.";
-const RELAY_INSTRUCTIONS = "Return this whole object unchanged as your answer. Do not rewrite any field.";
+// A walk that could not finish has no outcome to report, so the reasons stand on their own.
+function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
+    return { ok: false, ran: boxesRun, errors, outcome: null };
+}
 
-// A box with no arrow out of it ends a path. A block sets report for the user.
-function buildWalkResult(ok: boolean, boxesRun: string[], stoppedAt: string, why: string, output: unknown): WalkResult {
-    const isTerminal = STEPS_BY_KEY.get(stoppedAt)!.next.length === 0;
-    const reportedOutput = output as { report?: unknown; signal?: unknown } | null;
-    const report = typeof reportedOutput?.report === "string" ? reportedOutput.report : "";
-    const nextStep = getNextStepAfter(stoppedAt, output);
-    const instructions = reportedOutput?.signal === SIGNAL.PROMPT ? PROMPT_INSTRUCTIONS : RELAY_INSTRUCTIONS;
-    return { ok, ran: boxesRun, stoppedAt, why, output, isTerminal, report, nextStep, instructions };
+// A stop ends the run whatever the graph says, so only a prompt hands a next box back.
+function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>): WalkResult {
+    const next = output.signal === SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
+    const outcome = {
+        box: stoppedAt,
+        signal: String(output.signal),
+        next,
+        payload: getPayloadFromOutput(output),
+        // ponytail: the workflow builds its own schema today. Fill this when the hook owns that job.
+        schema: null,
+    };
+    return { ok: true, ran: boxesRun, errors: [], outcome };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
@@ -170,41 +177,41 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         if (!stepRun.ok) {
             // ponytail: a null exit code means killed, and the timeout is the only thing that kills a block here.
             const why = stepRun.exitCode === null ? `did not exit within ${STEP_TIMEOUT_MS}ms` : `exited ${stepRun.exitCode}`;
-            return buildWalkResult(false, boxesRun, stepKey, why, stepRun.stdout);
+            return buildFailure(boxesRun, [`${stepKey} ${why}`, stepRun.stdout]);
         }
         if (!stepRun.result) {
-            return buildWalkResult(false, boxesRun, stepKey, "printed no result object", stepRun.stdout);
+            return buildFailure(boxesRun, [`${stepKey} printed no result object`, stepRun.stdout]);
         }
 
         const signal = stepRun.result.signal as Signal;
         if (!KNOWN_SIGNALS.includes(signal)) {
             const knownList = KNOWN_SIGNALS.map(known => JSON.stringify(known)).join(", ");
-            return buildWalkResult(false, boxesRun, stepKey, `signal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.signal)}`, stepRun.result);
+            return buildFailure(boxesRun, [`${stepKey} signal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.signal)}`]);
         }
         if (signal === SIGNAL.STOP) {
-            return buildWalkResult(true, boxesRun, stepKey, "signal stop", stepRun.result);
+            return buildSuccess(boxesRun, stepKey, stepRun.result);
         }
         // The block printed a prompt instead of data, so an agent takes over here.
         if (signal === SIGNAL.PROMPT) {
-            return buildWalkResult(true, boxesRun, stepKey, "signal prompt", stepRun.result);
+            return buildSuccess(boxesRun, stepKey, stepRun.result);
         }
         if (step.next.length === 0) {
-            return buildWalkResult(false, boxesRun, stepKey, `${stepKey} has an empty next; say where it goes next in steps.json`, stepRun.result);
+            return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`]);
         }
 
         // A box with one successor may leave next out of its output; a decision box must name its choice.
         const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
         const chosenNextBox = stepRun.result.next ?? onlySuccessor;
         if (chosenNextBox === undefined) {
-            return buildWalkResult(false, boxesRun, stepKey, `${stepKey} points at ${step.next.join(", ")}; its output must name one in next`, stepRun.result);
+            return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`]);
         }
         if (!step.next.includes(String(chosenNextBox))) {
-            return buildWalkResult(false, boxesRun, stepKey, `next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`, stepRun.result);
+            return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`]);
         }
 
         const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
         if (!STEPS_BY_KEY.has(nextStepKey)) {
-            return buildWalkResult(false, boxesRun, stepKey, `next box ${nextStepKey} is not in the config`, stepRun.result);
+            return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
         }
         stepKey = nextStepKey;
         // A box sees only the box before it, so anything further back has to be carried forward by hand.
@@ -248,12 +255,12 @@ const startStepKeys = startBoxId.includes("::")
 
 if (startStepKeys.length === 0) {
     const knownKeys = [...STEPS_BY_KEY.keys()].join(", ");
-    injectResult({ ok: false, blockId: startBoxId, why: `no block named ${startBoxId || "<missing>"}; known: ${knownKeys}` });
+    injectResult(buildFailure([], [`no block named ${startBoxId || "<missing>"}; known: ${knownKeys}`]));
     process.exit(0);
 }
 if (startStepKeys.length > 1) {
     const why = `${startBoxId} is named by more than one diagram: ${startStepKeys.join(", ")}; start it as diagram.mmd::${startBoxId}`;
-    injectResult({ ok: false, blockId: startBoxId, why });
+    injectResult(buildFailure([], [why]));
     process.exit(0);
 }
 

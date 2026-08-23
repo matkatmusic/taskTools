@@ -1,3 +1,16 @@
+// The envelope owns these, so a block's payload is whatever its output declares beyond them.
+const ENVELOPE_OWNED_KEYS = ["box", "signal", "next"];
+
+export function getPayloadFromOutput(output: unknown): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(output as Record<string, unknown>)) {
+        if (!ENVELOPE_OWNED_KEYS.includes(key)) {
+            payload[key] = value;
+        }
+    }
+    return payload;
+}
+
 // Turns a template's example object into a JSON Schema, so an agent's StructuredOutput cannot drift from the template.
 
 // Strict on purpose: the key set is closed and every key is required, matching how templateShape compares.

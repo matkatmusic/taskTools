@@ -10,6 +10,7 @@ import {
     buildWalkResultSchema,
     buildWorkflowScript,
     generateWorkflow,
+    getPayloadFromOutput,
     getStepsReachableFrom,
 } from "../scripts/generateWorkflow.ts";
 import { getSchemaFromTemplate } from "../scripts/templateSchema.ts";
@@ -36,14 +37,20 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; ne
 
 test("test_buildWalkResultSchema_closesTheEnvelopeTheHookReturns", () => {
     const schema = buildWalkResultSchema();
-    assert.deepEqual(schema.required, ["ok", "ran", "stoppedAt", "why", "isTerminal", "report", "nextStep", "output"]);
+    assert.deepEqual(schema.required, ["ok", "ran", "errors", "outcome"]);
     assert.equal(schema.additionalProperties, false);
 });
 
 // The envelope is shared, so the block shapes are left out until buildPossibleSchemas picks them.
-test("test_buildWalkResultSchema_leavesTheOutputShapesEmpty", () => {
-    const schema = buildWalkResultSchema() as Record<string, Record<string, Record<string, unknown[]>>>;
-    assert.deepEqual(schema.properties!.output!.anyOf, []);
+test("test_buildWalkResultSchema_leavesThePayloadShapesEmpty", () => {
+    const schema = buildWalkResultSchema() as Record<string, any>;
+    assert.deepEqual(schema.properties.outcome.anyOf[0].properties.payload.anyOf, []);
+});
+
+// A walk that never reached a block has nothing to report, so outcome has to allow null.
+test("test_buildWalkResultSchema_allowsAnOutcomeOfNull", () => {
+    const schema = buildWalkResultSchema() as Record<string, any>;
+    assert.deepEqual(schema.properties.outcome.anyOf[1], { type: "null" });
 });
 
 test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
@@ -52,7 +59,7 @@ test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
         { box: "B", output: { box: "B", signal: "stop" } },
     ]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["BLOCK_A_SCHEMA", "BLOCK_B_SCHEMA"]);
+    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_A_SCHEMA", "PAYLOAD_B_SCHEMA"]);
 });
 
 // The point of the whole task: the schema is the template, not a hand-written copy of it.
@@ -60,7 +67,12 @@ test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
     const output = { box: "A", signal: "continue", files: 0 };
     const { config, projectRoot } = buildProject([{ box: "A", output }]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(output));
+    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate({ files: 0 }));
+});
+
+// box, signal and next belong to the envelope, so a payload never repeats them.
+test("test_getPayloadFromOutput_dropsTheKeysTheEnvelopeOwns", () => {
+    assert.deepEqual(getPayloadFromOutput({ box: "A", signal: "continue", next: "B", files: 0 }), { files: 0 });
 });
 
 test("test_buildNextStepsByStep_keysEveryBoxByDiagramAndBox", () => {
@@ -95,9 +107,18 @@ test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
     const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
     const script = buildWorkflowScript(config, projectRoot);
     assert.match(script, /while \(true\) \{/);
-    assert.match(script, /if \(result\.isTerminal\) break/);
-    assert.match(script, /if \(result\.report\) break/);
-    assert.match(script, /if \(!result\.ok\) break/);
+    assert.match(script, /if \(result === null\) \{/);
+    assert.match(script, /if \(result\.ok === false\) \{/);
+    assert.match(script, /if \(result\.ran\.length === 0\) \{/);
+    assert.match(script, /if \(result\.outcome\.next === null\) \{/);
+});
+
+// Every return names the prompt that produced it, so a failure says what was asked.
+test("test_buildWorkflowScript_returnsTheEnvelopeAndThePromptThatMadeIt", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
+    const script = buildWorkflowScript(config, projectRoot);
+    assert.match(script, /return \{ ok: true, ran, errors: \[\], prompt, outcome: result\.outcome \}/);
+    assert.doesNotMatch(script, /throw new Error\(`/);
 });
 
 // The caller says where to start, so a diagram edit never needs the workflow regenerated for it.
@@ -109,7 +130,7 @@ test("test_buildWorkflowScript_refusesToRunWithoutAStartStepInArgs", () => {
 test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
     const { config, projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
     const script = buildWorkflowScript(config, projectRoot);
-    assert.match(script, /return result === null \? args\.startStep : result\.nextStep/);
+    assert.match(script, /blockToRun = result\.outcome\.next/);
     assert.doesNotMatch(script, /NEXT_STEPS_BY_STEP/);
 });
 

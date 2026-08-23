@@ -49,8 +49,8 @@ test("test_runStepHook_answersANamespacedInvocation", () => {
 test("test_runStepHook_namesTheKnownBlocksWhenTheBlockIsUnknown", () => {
     const { result } = runHook("/run-step NOT_A_BLOCK");
     assert.equal(result.ok, false);
-    assert.match(result.why, /no block named NOT_A_BLOCK/);
-    assert.match(result.why, /pipeline\.mmd::SAY_HELLO/);
+    assert.match(result.errors[0], /no block named NOT_A_BLOCK/);
+    assert.match(result.errors[0], /pipeline\.mmd::SAY_HELLO/);
 });
 
 test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
@@ -60,7 +60,7 @@ test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
     }));
     const { result } = runHook("/run-step SHARED", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /named by more than one diagram/);
+    assert.match(result.errors[0], /named by more than one diagram/);
 });
 
 test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
@@ -68,7 +68,7 @@ test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
         "one.mmd": [{ box: "SHARED", script: writeStep("ONE", { signal: "stop", from: "one" }), next: [] }],
         "two.mmd": [{ box: "SHARED", script: writeStep("TWO", { signal: "stop", from: "two" }), next: [] }],
     }));
-    assert.equal(runHook("/run-step two.mmd::SHARED", configFile).result.output.from, "two");
+    assert.equal(runHook("/run-step two.mmd::SHARED", configFile).result.outcome.payload.from, "two");
 });
 
 test("test_runStepHook_walksUntilAStepSignalsStop", () => {
@@ -81,8 +81,8 @@ test("test_runStepHook_walksUntilAStepSignalsStop", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::C"]);
-    assert.equal(result.stoppedAt, "one.mmd::C");
-    assert.equal(result.why, "signal stop");
+    assert.equal(result.outcome.box, "one.mmd::C");
+    assert.equal(result.outcome.signal, "stop");
 });
 
 test("test_runStepHook_walksAcrossASeamIntoAnotherDiagram", () => {
@@ -99,7 +99,7 @@ test("test_runStepHook_failsWhenABoxThatWantsToContinueHasAnEmptyNext", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /one\.mmd::A has an empty next; say where it goes next/);
+    assert.match(result.errors[0], /one\.mmd::A has an empty next; say where it goes next/);
 });
 
 test("test_runStepHook_endsCleanlyWhenATerminalBoxSignalsStop", () => {
@@ -108,29 +108,10 @@ test("test_runStepHook_endsCleanlyWhenATerminalBoxSignalsStop", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.why, "signal stop");
+    assert.equal(result.outcome.signal, "stop");
 });
 
-// A box with no arrow out of it ends a path, so a walk that reaches it ran the whole path.
-test("test_runStepHook_marksATerminalBoxAsTheEndOfThePath", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
-        ],
-    }));
-    assert.equal(runHook("/run-step A", configFile).result.isTerminal, true);
-    assert.equal(runHook("/run-step B", configFile).result.isTerminal, true);
-});
-
-test("test_runStepHook_doesNotMarkABoxWithAnArrowOutAsTheEndOfThePath", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: ["B"] }],
-    }));
-    assert.equal(runHook("/run-step A", configFile).result.isTerminal, false);
-});
-
-// A block that prints a prompt hands the run to an agent, so the walk stops without ending the path.
+// A block that prints a prompt hands off to an agent, so the walk stops without ending the path.
 test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
@@ -140,13 +121,12 @@ test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.why, "signal prompt");
-    assert.equal(result.isTerminal, false);
+    assert.equal(result.outcome.signal, "prompt");
     assert.deepEqual(result.ran, ["one.mmd::A"]);
-    assert.equal(result.output.prompt, "read the plan and answer");
+    assert.equal(result.outcome.payload.prompt, "read the plan and answer");
 });
 
-// The workflow reads nextStep instead of keeping its own copy of the arrows.
+// The workflow reads outcome.next instead of keeping its own copy of the arrows.
 test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
@@ -154,7 +134,7 @@ test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
             { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
         ],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.nextStep, "one.mmd::B");
+    assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::B");
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
@@ -165,28 +145,14 @@ test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
             { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
         ],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.nextStep, "one.mmd::C");
+    assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::C");
 });
 
-test("test_runStepHook_leavesTheNextStepEmptyAtTheEndOfAPath", () => {
+test("test_runStepHook_leavesTheNextStepNullAtTheEndOfAPath", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.nextStep, "");
-});
-
-test("test_runStepHook_carriesUpTheReportABlockWroteForTheUser", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop", report: "two plans need review" }), next: [] }],
-    }));
-    assert.equal(runHook("/run-step A", configFile).result.report, "two plans need review");
-});
-
-test("test_runStepHook_leavesTheReportEmptyWhenNoBlockWroteOne", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
-    }));
-    assert.equal(runHook("/run-step A", configFile).result.report, "");
+    assert.equal(runHook("/run-step A", configFile).result.outcome.next, null);
 });
 
 test("test_runStepHook_failsWhenTheSignalIsNotOneOfTheThree", () => {
@@ -195,7 +161,7 @@ test("test_runStepHook_failsWhenTheSignalIsNotOneOfTheThree", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /signal must be one of "continue", "stop", "prompt", not "maybe"/);
+    assert.match(result.errors[0], /signal must be one of "continue", "stop", "prompt", not "maybe"/);
 });
 
 test("test_runStepHook_failsWhenADecisionBoxDoesNotNameItsChoice", () => {
@@ -209,7 +175,7 @@ test("test_runStepHook_failsWhenADecisionBoxDoesNotNameItsChoice", () => {
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
     assert.deepEqual(result.ran, ["one.mmd::A"]);
-    assert.match(result.why, /points at B, C; its output must name one in next/);
+    assert.match(result.errors[0], /points at B, C; its output must name one in next/);
 });
 
 test("test_runStepHook_takesTheBranchTheOutputNames", () => {
@@ -232,7 +198,7 @@ test("test_runStepHook_failsWhenTheChosenBranchIsNotInNext", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /next "ELSEWHERE" is not one of B/);
+    assert.match(result.errors[0], /next "ELSEWHERE" is not one of B/);
 });
 
 test("test_runStepHook_stopsWhenTheNextBoxIsNotInTheConfig", () => {
@@ -241,7 +207,7 @@ test("test_runStepHook_stopsWhenTheNextBoxIsNotInTheConfig", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.why, /gone\.mmd::MISSING is not in the config/);
+    assert.match(result.errors[0], /gone\.mmd::MISSING is not in the config/);
 });
 
 test("test_runStepHook_stopsWhenAStepPrintsNoResultObject", () => {
@@ -252,7 +218,7 @@ test("test_runStepHook_stopsWhenAStepPrintsNoResultObject", () => {
     });
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.equal(result.why, "printed no result object");
+    assert.equal(result.errors[0], "one.mmd::A printed no result object");
 });
 
 test("test_runStepHook_stopsWhenAStepExitsNonZero", () => {
@@ -263,7 +229,7 @@ test("test_runStepHook_stopsWhenAStepExitsNonZero", () => {
     });
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.equal(result.why, "exited 3");
+    assert.equal(result.errors[0], "one.mmd::A exited 3");
 });
 
 test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
@@ -288,14 +254,14 @@ test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook(`/run-step A {"name":"matt"}`, configFile).result.output.input, `{"name":"matt"}`);
+    assert.equal(runHook(`/run-step A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.output.input, "");
+    assert.equal(runHook("/run-step A", configFile).result.outcome.payload.input, "");
 });
 
 test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
@@ -313,7 +279,7 @@ test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
             { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
         ],
     }));
-    const received = JSON.parse(runHook("/run-step A first-input", configFile).result.output.input);
+    const received = JSON.parse(runHook("/run-step A first-input", configFile).result.outcome.payload.input);
     assert.equal(received.box, "A");
     assert.equal(received.greeting, "hello");
     assert.equal(received.input, "first-input");
@@ -327,7 +293,7 @@ test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
             { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
         ],
     }));
-    const seenByC = JSON.parse(runHook("/run-step A", configFile).result.output.input);
+    const seenByC = JSON.parse(runHook("/run-step A", configFile).result.outcome.payload.input);
     assert.equal(seenByC.box, "B");
     assert.equal(JSON.parse(seenByC.input).box, "A");
 });
@@ -378,7 +344,7 @@ test("test_runStepHook_handsTheSkillArgsToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
     }));
-    assert.equal(runSkillHook("run-step", `A {"name":"matt"}`, configFile).result.output.input, `{"name":"matt"}`);
+    assert.equal(runSkillHook("run-step", `A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {
