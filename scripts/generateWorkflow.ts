@@ -13,8 +13,6 @@ export function buildWorkflowScript(): string {
 export const meta = {
     name: 'run-step',
     description: 'Run one diagram block and every block that follows it, through the run-step hook',
-    // The real titles are diagram file names, named at run time, so this entry is the shape only.
-    phases: [{ title: 'walk', detail: 'one agent per pass, grouped by the diagram it is walking' }],
 }
 
 // For the first pass only, so payload is open. Every later pass uses the shape the hook sent.
@@ -25,23 +23,31 @@ if (!args?.startStep) {
     throw new Error('run-step needs args.startStep, for example "pipeline-plan.mmd::DOCS_INPUT"')
 }
 
-function createPromptForAgent(blockToRun) {
+function createPromptForAgent(blockToRun, input) {
     // The envelope belongs to the hook. Saying so stops the agent authoring one of its own.
+    let inputString = JSON.stringify(input)
+    if (inputString === '{}') {
+        inputString = ''
+    }
+    const command = \`/run-step \${blockToRun} \${inputString}\`.trim()
     return [
-        \`run /run-step \${blockToRun} and follow instructions.\`,
-        'Return the result object the hook gave you, exactly as it gave it to you. Change nothing in it.',
-        'One exception. If that result carries a prompt for you to follow, follow it, then return the same object with your answer as outcome.payload.',
+        \`COMMAND: \\\`\${command}\\\`\`,
+        'invoke COMMAND and follow instructions.',
+        'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
+        'The only exception: if outcome.signal is "prompt", follow outcome.payload.prompt and put your answer in outcome.payload.',
     ].join('\\n')
 }
 
 let blockToRun = args.startStep
 let schema = FIRST_PASS_SCHEMA
+// A block sees only the pass before it, so the last payload has to be carried forward by hand.
+let input = {}
 // Only ran accumulates across passes. Everything else belongs to the pass that produced it.
 const ran = []
 while (true) {
     // Grouped by diagram, so crossing a :: seam opens a new group in the progress tree.
     phase(blockToRun.split('::')[0])
-    const prompt = createPromptForAgent(blockToRun)
+    const prompt = createPromptForAgent(blockToRun, input)
     const result = await agent(prompt, { label: \`run-step:\${blockToRun}\`, schema })
 
     // API error. the only shape agent() produces that is not the envelope.
@@ -66,6 +72,7 @@ while (true) {
     }
     blockToRun = result.outcome.next
     schema = result.outcome.schema
+    input = result.outcome.payload
 }
 `;
 }
