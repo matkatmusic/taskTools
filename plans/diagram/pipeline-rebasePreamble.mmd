@@ -19,16 +19,12 @@ flowchart TB
 
   FINISHED_IMPLEMENTATION_INPUT["Input: { runId, taskNumber }"] --> LOCK_SOURCE_REPO
   LOCK_SOURCE_REPO["Try: lock the source repo"] --> WAS_LOCK_ACQUIRED{"acquired?"}
-  WAS_LOCK_ACQUIRED --> WAS_LOCK_ACQUIRED_YES["YES"]
-  WAS_LOCK_ACQUIRED --> WAS_LOCK_ACQUIRED_NO["NO"]
-  WAS_LOCK_ACQUIRED_NO --> HAVE_15_MINUTES_PASSED{"have 15 minutes passed?"}
-  HAVE_15_MINUTES_PASSED --> HAVE_15_MINUTES_PASSED_NO["NO"]
-  HAVE_15_MINUTES_PASSED --> HAVE_15_MINUTES_PASSED_YES["YES"]
-  HAVE_15_MINUTES_PASSED_NO --> WAIT_FOR_LOCK["wait 5s"]
+  WAS_LOCK_ACQUIRED -->|YES| REBASE_PIPELINE["rebase pipeline"]
+  WAS_LOCK_ACQUIRED -->|NO| HAVE_15_MINUTES_PASSED{"have 15 minutes passed?"}
+  HAVE_15_MINUTES_PASSED -->|NO| WAIT_FOR_LOCK["wait 5s"]
+  HAVE_15_MINUTES_PASSED -- "YES<br/>exit type: run-failed<br/>exit note: the source repo lock did not<br/>come free within 15 minutes" --> EXIT_WORKFLOW_REBASE_PREAMBLE
   WAIT_FOR_LOCK --> LOCK_SOURCE_REPO
-  HAVE_15_MINUTES_PASSED_YES -- "exit type: run-failed<br/>exit note: the source repo lock did not<br/>come free within 15 minutes" --> EXIT_WORKFLOW_REBASE_PREAMBLE
 
-  WAS_LOCK_ACQUIRED_YES --> REBASE_PIPELINE["rebase pipeline"]
 
   EXIT_WORKFLOW_REBASE_PREAMBLE["failures exit"]
 
@@ -44,8 +40,6 @@ flowchart TB
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class WAS_LOCK_ACQUIRED,HAVE_15_MINUTES_PASSED decision
   class LOCK_SOURCE_REPO,WAIT_FOR_LOCK script
-  class WAS_LOCK_ACQUIRED_YES,HAVE_15_MINUTES_PASSED_NO pass
-  class WAS_LOCK_ACQUIRED_NO,HAVE_15_MINUTES_PASSED_YES nopass
   class REBASE_PIPELINE pipeline
   class EXIT_WORKFLOW_REBASE_PREAMBLE fail
   class FINISHED_IMPLEMENTATION_INPUT output

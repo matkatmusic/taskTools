@@ -33,22 +33,16 @@ flowchart TB
 
   REBASED_WORKTREE_INPUT["Input: { worktree }"] --> RUN_FULL_SUITE
   RUN_FULL_SUITE["run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
-  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_YES["YES"]
-  DO_ALL_TESTS_PASS --> DO_ALL_TESTS_PASS_NO["NO"]
+  DO_ALL_TESTS_PASS -->|YES| DID_CHANGES_STAY_INSIDE_FENCE{"did every change stay inside<br/>the task's file fence?"}
+  DO_ALL_TESTS_PASS -->|NO| ARE_2_SUITE_FIXES_DONE{"2 suite fix attempts done?"}
 
-  DO_ALL_TESTS_PASS_NO --> ARE_2_SUITE_FIXES_DONE{"2 suite fix attempts done?"}
-  ARE_2_SUITE_FIXES_DONE --> ARE_2_SUITE_FIXES_DONE_NO["NO"]
-  ARE_2_SUITE_FIXES_DONE --> ARE_2_SUITE_FIXES_DONE_YES["YES"]
-  ARE_2_SUITE_FIXES_DONE_NO -- "pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
+  ARE_2_SUITE_FIXES_DONE -- "NO<br/>pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
+  ARE_2_SUITE_FIXES_DONE -- "YES<br/>exit type: suite-red<br/>exit note: full suite still red after<br/>2 fix attempts. merge aborted.<br/>worktree preserved." --> EXIT_WORKFLOW_SUITE
   FIX_THE_CODEBASE_FOR_SUITE --> COMMIT_SUITE_FIX_IF_NEEDED["commit if needed"]
   COMMIT_SUITE_FIX_IF_NEEDED --> RUN_FULL_SUITE
-  ARE_2_SUITE_FIXES_DONE_YES -- "exit type: suite-red<br/>exit note: full suite still red after<br/>2 fix attempts. merge aborted.<br/>worktree preserved." --> EXIT_WORKFLOW_SUITE
 
-  DO_ALL_TESTS_PASS_YES --> DID_CHANGES_STAY_INSIDE_FENCE{"did every change stay inside<br/>the task's file fence?"}
-  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_YES["YES"]
-  DID_CHANGES_STAY_INSIDE_FENCE --> DID_CHANGES_STAY_INSIDE_FENCE_NO["NO"]
-  DID_CHANGES_STAY_INSIDE_FENCE_YES --> MERGE_PIPELINE["merge pipeline"]
-  DID_CHANGES_STAY_INSIDE_FENCE_NO -- "exit type: fence-violation<br/>exit note: a repair edited files the<br/>task does not own. nothing merged.<br/>worktree preserved." --> EXIT_WORKFLOW_SUITE
+  DID_CHANGES_STAY_INSIDE_FENCE -->|YES| MERGE_PIPELINE["merge pipeline"]
+  DID_CHANGES_STAY_INSIDE_FENCE -- "NO<br/>exit type: fence-violation<br/>exit note: a repair edited files the<br/>task does not own. nothing merged.<br/>worktree preserved." --> EXIT_WORKFLOW_SUITE
 
   FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_SUITE
   RUN_FULL_SUITE -.-> AGENT_ERRORED
@@ -70,8 +64,6 @@ flowchart TB
   class COMMIT_SUITE_FIX_IF_NEEDED,RUN_FULL_SUITE script
   class FIX_THE_CODEBASE_FOR_SUITE agent
   class MERGE_PIPELINE pipeline
-  class DO_ALL_TESTS_PASS_YES,ARE_2_SUITE_FIXES_DONE_NO,DID_CHANGES_STAY_INSIDE_FENCE_YES pass
-  class DO_ALL_TESTS_PASS_NO,ARE_2_SUITE_FIXES_DONE_YES,DID_CHANGES_STAY_INSIDE_FENCE_NO nopass
   class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_SUITE fail
   class REBASED_WORKTREE_INPUT output

@@ -57,27 +57,21 @@ flowchart TB
 
   EXIT_TYPE_NOTE_INPUT["Input: { exit type, exit note }"] --> READ_FAILURES_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
   READ_FAILURES_PUBLICATION_STATE --> DID_ANY_WORK_LAND{"did ANY of this task's work land?"}
-  DID_ANY_WORK_LAND --> DID_ANY_WORK_LAND_YES["YES"]
-  DID_ANY_WORK_LAND --> DID_ANY_WORK_LAND_NO["NO"]
+  DID_ANY_WORK_LAND -->|YES| WRITE_PUBLICATION_OUTCOME["write the publication outcome:<br/>keep completed if it is there, else write<br/>partially-published. NEVER run-failed.<br/>add cleanup-incomplete and the note"]
+  DID_ANY_WORK_LAND -->|NO| WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
 
-  DID_ANY_WORK_LAND_YES --> WRITE_PUBLICATION_OUTCOME["write the publication outcome:<br/>keep completed if it is there, else write<br/>partially-published. NEVER run-failed.<br/>add cleanup-incomplete and the note"]
   WRITE_PUBLICATION_OUTCOME --> RECORD_MODIFIED_FILES_FAILURE
 
-  DID_ANY_WORK_LAND_NO --> WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
   WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE
 
   RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"] --> DOES_RUN_HOLD_LEASE{"does this run still hold<br/>the worktree lease?"}
-  DOES_RUN_HOLD_LEASE --> DOES_RUN_HOLD_LEASE_YES["YES"]
-  DOES_RUN_HOLD_LEASE --> DOES_RUN_HOLD_LEASE_NO["NO"]
-  DOES_RUN_HOLD_LEASE_YES --> RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
+  DOES_RUN_HOLD_LEASE -->|YES| RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
+  DOES_RUN_HOLD_LEASE -->|NO| DOES_RUN_HOLD_SOURCE_LOCK
   RELEASE_WORKTREE_LEASE --> DOES_RUN_HOLD_SOURCE_LOCK
-  DOES_RUN_HOLD_LEASE_NO --> DOES_RUN_HOLD_SOURCE_LOCK
 
-  DOES_RUN_HOLD_SOURCE_LOCK{"does this run still hold<br/>the source repo lock?"} --> DOES_RUN_HOLD_SOURCE_LOCK_YES["YES"]
-  DOES_RUN_HOLD_SOURCE_LOCK --> DOES_RUN_HOLD_SOURCE_LOCK_NO["NO"]
-  DOES_RUN_HOLD_SOURCE_LOCK_YES --> RELEASE_SOURCE_LOCK["release the source repo lock"]
+  DOES_RUN_HOLD_SOURCE_LOCK{"does this run still hold<br/>the source repo lock?"} -->|YES| RELEASE_SOURCE_LOCK["release the source repo lock"]
+  DOES_RUN_HOLD_SOURCE_LOCK -->|NO| MARK_TASK_INACTIVE_FAILURE
   RELEASE_SOURCE_LOCK --> MARK_TASK_INACTIVE_FAILURE
-  DOES_RUN_HOLD_SOURCE_LOCK_NO --> MARK_TASK_INACTIVE_FAILURE
 
   MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"] --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
   REPORT_EXIT_TYPE_AND_NOTE --> STOP["stop"]
@@ -88,7 +82,5 @@ flowchart TB
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
   class DOES_RUN_HOLD_LEASE,DOES_RUN_HOLD_SOURCE_LOCK,DID_ANY_WORK_LAND decision
-  class DOES_RUN_HOLD_LEASE_YES,DOES_RUN_HOLD_SOURCE_LOCK_YES,DID_ANY_WORK_LAND_NO pass
-  class DOES_RUN_HOLD_LEASE_NO,DOES_RUN_HOLD_SOURCE_LOCK_NO,DID_ANY_WORK_LAND_YES nopass
   class READ_FAILURES_PUBLICATION_STATE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,RELEASE_WORKTREE_LEASE,RELEASE_SOURCE_LOCK,REPORT_EXIT_TYPE_AND_NOTE,WRITE_PUBLICATION_OUTCOME,STOP script
   class EXIT_TYPE_NOTE_INPUT output

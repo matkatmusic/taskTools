@@ -31,23 +31,17 @@ flowchart TB
 
   SOURCE_REPO_LOCKED_INPUT["Input: { worktree, target branch,<br/>merge receipt }"] --> REBASE_ONTO_TARGET_BRANCH
   REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch.<br/>skip every layer the receipt<br/>records as already landed"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
-  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_YES["YES"]
-  DID_REBASE_REPORT_CONFLICTS --> DID_REBASE_REPORT_CONFLICTS_NO["NO"]
+  DID_REBASE_REPORT_CONFLICTS -->|YES| ARE_2_CONFLICT_FIXES_DONE{"2 conflict fixes done?"}
+  DID_REBASE_REPORT_CONFLICTS -->|NO| SUITE_PIPELINE
 
-  DID_REBASE_REPORT_CONFLICTS_YES --> ARE_2_CONFLICT_FIXES_DONE{"2 conflict fixes done?"}
-  ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_NO["NO"]
-  ARE_2_CONFLICT_FIXES_DONE --> ARE_2_CONFLICT_FIXES_DONE_YES["YES"]
-  ARE_2_CONFLICT_FIXES_DONE_YES -- "exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW_REBASE
-  ARE_2_CONFLICT_FIXES_DONE_NO -- "pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
+  ARE_2_CONFLICT_FIXES_DONE -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
+  ARE_2_CONFLICT_FIXES_DONE -- "YES<br/>exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW_REBASE
   FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed"]
   COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE["continue the rebase"]
   CONTINUE_REBASE --> IS_REBASE_FINISHED{"is the rebase finished?"}
-  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_YES["YES"]
-  IS_REBASE_FINISHED --> IS_REBASE_FINISHED_NO["NO"]
-  IS_REBASE_FINISHED_NO -- "it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
+  IS_REBASE_FINISHED -->|YES| SUITE_PIPELINE["full suite pipeline"]
+  IS_REBASE_FINISHED -- "NO<br/>it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
 
-  DID_REBASE_REPORT_CONFLICTS_NO --> SUITE_PIPELINE
-  IS_REBASE_FINISHED_YES --> SUITE_PIPELINE["full suite pipeline"]
 
   FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REBASE
 
@@ -70,6 +64,4 @@ flowchart TB
   class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,REBASE_ONTO_TARGET_BRANCH,CONTINUE_REBASE script
   class FIX_CONFLICTS agent
   class SUITE_PIPELINE pipeline
-  class DID_REBASE_REPORT_CONFLICTS_NO,IS_REBASE_FINISHED_YES,ARE_2_CONFLICT_FIXES_DONE_NO pass
-  class DID_REBASE_REPORT_CONFLICTS_YES,IS_REBASE_FINISHED_NO,ARE_2_CONFLICT_FIXES_DONE_YES nopass
   class SOURCE_REPO_LOCKED_INPUT output

@@ -29,17 +29,13 @@ flowchart TB
 
   COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> RUN_TASK_TESTS
   RUN_TASK_TESTS["run task tests"] --> DO_TASK_TESTS_PASS{"do the task tests pass?"}
-  DO_TASK_TESTS_PASS --> DO_TASK_TESTS_PASS_YES["YES"]
-  DO_TASK_TESTS_PASS --> DO_TASK_TESTS_PASS_NO["NO"]
+  DO_TASK_TESTS_PASS -->|YES| REVIEW_TESTS_PIPELINE["review task tests pipeline"]
+  DO_TASK_TESTS_PASS -->|NO| ARE_2_TEST_FIXES_DONE{"have 2 fixes already<br/>been attempted?"}
 
-  DO_TASK_TESTS_PASS_NO --> ARE_2_TEST_FIXES_DONE{"have 2 fixes already<br/>been attempted?"}
-  ARE_2_TEST_FIXES_DONE --> ARE_2_TEST_FIXES_DONE_NO["NO"]
-  ARE_2_TEST_FIXES_DONE --> ARE_2_TEST_FIXES_DONE_YES["YES"]
-  ARE_2_TEST_FIXES_DONE_NO --> AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
+  ARE_2_TEST_FIXES_DONE -->|NO| AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
+  ARE_2_TEST_FIXES_DONE -- "YES<br/>exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW_TASK_TESTS
   AMEND_ENTRY_WITH_FAILING_TESTS -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
-  ARE_2_TEST_FIXES_DONE_YES -- "exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW_TASK_TESTS
 
-  DO_TASK_TESTS_PASS_YES --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
 
   EXIT_WORKFLOW_TASK_TESTS["failures exit"]
 
@@ -56,7 +52,5 @@ flowchart TB
   class DO_TASK_TESTS_PASS,ARE_2_TEST_FIXES_DONE decision
   class AMEND_ENTRY_WITH_FAILING_TESTS,RUN_TASK_TESTS script
   class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE pipeline
-  class DO_TASK_TESTS_PASS_YES,ARE_2_TEST_FIXES_DONE_NO pass
-  class DO_TASK_TESTS_PASS_NO,ARE_2_TEST_FIXES_DONE_YES nopass
   class EXIT_WORKFLOW_TASK_TESTS fail
   class COMMITTED_WORK_INPUT output

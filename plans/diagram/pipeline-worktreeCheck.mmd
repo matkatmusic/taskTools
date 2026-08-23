@@ -32,28 +32,20 @@ flowchart TB
 %%   run-failed      - a script failed operationally
 
   ACTIVE_TASK_INPUT["Input: { taskNumber, worktree path }"] --> DOES_WORKTREE_EXIST
-  DOES_WORKTREE_EXIST{"does a worktree exist?"} --> DOES_WORKTREE_EXIST_YES["YES"]
-  DOES_WORKTREE_EXIST --> DOES_WORKTREE_EXIST_NO["NO"]
-  DOES_WORKTREE_EXIST_NO --> CREATE_WORKTREE["create a worktree"]
+  DOES_WORKTREE_EXIST{"does a worktree exist?"} -->|YES| IS_WORKTREE_SAFE_TO_USE{"is the worktree safe to use?"}
+  DOES_WORKTREE_EXIST -->|NO| CREATE_WORKTREE["create a worktree"]
   CREATE_WORKTREE --> TAKE_WORKTREE_LEASE["take the worktree lease for this run"]
   TAKE_WORKTREE_LEASE -- "docs mode: AUTOGEN" --> INIT_SUBMODULES_RECURSIVELY
 
-  DOES_WORKTREE_EXIST_YES --> IS_WORKTREE_SAFE_TO_USE{"is the worktree safe to use?"}
-  IS_WORKTREE_SAFE_TO_USE --> IS_WORKTREE_SAFE_TO_USE_YES["YES"]
-  IS_WORKTREE_SAFE_TO_USE --> IS_WORKTREE_SAFE_TO_USE_NO["NO"]
-  IS_WORKTREE_SAFE_TO_USE_NO --> TAKE_WORKTREE_LEASE_BEFORE_RESET["take the worktree lease for this run"]
+  IS_WORKTREE_SAFE_TO_USE -->|YES| IS_PREVIOUS_RUN_RESUMABLE{"is the previous run's work resumable?<br/>adopt the lease for this run"}
+  IS_WORKTREE_SAFE_TO_USE -->|NO| TAKE_WORKTREE_LEASE_BEFORE_RESET["take the worktree lease for this run"]
   TAKE_WORKTREE_LEASE_BEFORE_RESET --> RESET_WORKTREE
 
-  IS_WORKTREE_SAFE_TO_USE_YES --> IS_PREVIOUS_RUN_RESUMABLE{"is the previous run's work resumable?<br/>adopt the lease for this run"}
-  IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_YES["YES"]
-  IS_PREVIOUS_RUN_RESUMABLE --> IS_PREVIOUS_RUN_RESUMABLE_NO["NO"]
-  IS_PREVIOUS_RUN_RESUMABLE_NO -- "exit type: not-resumable<br/>exit note: a safe worktree holds work<br/>no run recorded a stopping point for" --> FAILURES_EXIT
+  IS_PREVIOUS_RUN_RESUMABLE -->|YES| DOES_FENCE_COVER_WORKTREE{"does the task's file list cover<br/>what the worktree touched?"}
+  IS_PREVIOUS_RUN_RESUMABLE -- "NO<br/>exit type: not-resumable<br/>exit note: a safe worktree holds work<br/>no run recorded a stopping point for" --> FAILURES_EXIT
 
-  IS_PREVIOUS_RUN_RESUMABLE_YES --> DOES_FENCE_COVER_WORKTREE{"does the task's file list cover<br/>what the worktree touched?"}
-  DOES_FENCE_COVER_WORKTREE --> DOES_FENCE_COVER_WORKTREE_YES["YES"]
-  DOES_FENCE_COVER_WORKTREE --> DOES_FENCE_COVER_WORKTREE_NO["NO"]
-  DOES_FENCE_COVER_WORKTREE_YES -- "docs mode: UPDATE" --> INIT_SUBMODULES_RECURSIVELY
-  DOES_FENCE_COVER_WORKTREE_NO -- "exit type: fence-violation<br/>exit note: the resumed worktree touched<br/>files the task does not own" --> FAILURES_EXIT
+  DOES_FENCE_COVER_WORKTREE -- "YES<br/>docs mode: UPDATE" --> INIT_SUBMODULES_RECURSIVELY
+  DOES_FENCE_COVER_WORKTREE -- "NO<br/>exit type: fence-violation<br/>exit note: the resumed worktree touched<br/>files the task does not own" --> FAILURES_EXIT
 
   RESET_WORKTREE["reset the worktree"] -- "docs mode: AUTOGEN" --> INIT_SUBMODULES_RECURSIVELY
 
@@ -72,7 +64,5 @@ flowchart TB
   class DOES_WORKTREE_EXIST,IS_WORKTREE_SAFE_TO_USE,IS_PREVIOUS_RUN_RESUMABLE,DOES_FENCE_COVER_WORKTREE decision
   class CREATE_WORKTREE,RESET_WORKTREE,INIT_SUBMODULES_RECURSIVELY,TAKE_WORKTREE_LEASE,TAKE_WORKTREE_LEASE_BEFORE_RESET script
   class DOCUMENT_GENERATION_PIPELINE pipeline
-  class DOES_WORKTREE_EXIST_YES,IS_WORKTREE_SAFE_TO_USE_YES,IS_PREVIOUS_RUN_RESUMABLE_YES,DOES_FENCE_COVER_WORKTREE_YES pass
-  class DOES_WORKTREE_EXIST_NO,IS_WORKTREE_SAFE_TO_USE_NO,IS_PREVIOUS_RUN_RESUMABLE_NO,DOES_FENCE_COVER_WORKTREE_NO nopass
   class FAILURES_EXIT fail
   class ACTIVE_TASK_INPUT output

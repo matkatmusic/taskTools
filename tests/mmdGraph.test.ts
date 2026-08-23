@@ -106,19 +106,15 @@ test("test_stepAfter_followsAScriptToItsOneNextNode", () => {
 });
 
 test("test_stepAfter_hopsThroughADecisionOutcomeToTheRealNextNode", () => {
-  // Setup: a decision whose YES and NO arms each pass through an outcome node.
+  // Setup: a decision whose YES and NO arms carry the outcome as an edge label.
   const g = parseMmd(`flowchart TB
-  D{"did it work?"} --> D_YES["YES"]
-  D --> D_NO["NO"]
-  D_YES --> GOOD["carry on"]
-  D_NO --> BAD["give up"]
+  D{"did it work?"} -->|YES| GOOD["carry on"]
+  D -- "NO<br/>exit type: gave-up" --> BAD["give up"]
   class D decision
-  class D_YES pass
-  class D_NO nopass
   class GOOD,BAD script`);
 
   // Test action: ask what follows the decision for each outcome.
-  // Verification step: the outcome nodes are hopped through, not returned.
+  // Verification step: the arm whose label starts with the outcome is followed.
   assert.equal(stepAfter(g, "D", "YES"), "GOOD");
   assert.equal(stepAfter(g, "D", "NO"), "BAD");
 });

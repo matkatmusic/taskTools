@@ -15,7 +15,7 @@ const SKIP = /^\s*(%%|flowchart\b|graph\b|classDef\b|class\b|subgraph\b|end\b|li
 const CLASS_LINE = /^\s*class\s+([A-Za-z0-9_,\s]+?)\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 
 const NODE = /^([A-Za-z_][A-Za-z0-9_]*)\s*(\["[^"]*"\]|\[[^\]]*\]|\{"[^"]*"\}|\{[^}]*\}|\("[^"]*"\)|\([^)]*\))?/;
-const ARROW = /^\s*(?:--\s*"([^"]*)"\s*)?(-->|-\.->)\s*/;
+const ARROW = /^\s*(?:--\s*"([^"]*)"\s*)?(-->|-\.->)\s*(?:\|([^|]*)\|\s*)?/;
 
 function labelOf(shape: string | undefined, id: string): string {
   if (!shape) return id;
@@ -51,7 +51,8 @@ export function parseMmd(text: string): MmdGraph {
 
       const a = ARROW.exec(rest);
       if (!a) break;
-      pendingLabel = a[1] ? a[1].replaceAll("<br/>", "\n") : undefined;
+      const rawLabel = a[1] ?? a[3];
+      pendingLabel = rawLabel ? rawLabel.replaceAll("<br/>", "\n") : undefined;
       rest = rest.slice(a[0].length);
     }
   }
@@ -73,17 +74,16 @@ function pipelineFileFor(id: string): string {
 
 /*
   The one node that follows `nodeId`. A decision needs the `outcome` its evaluator
-  returned; the YES/NO node carrying that outcome is hopped through, not returned.
+  returned; the arm whose edge label starts with that outcome is followed.
 */
 export function stepAfter(g: MmdGraph, nodeId: string, outcome?: string): string {
-  const children = [...new Set(g.edges.filter((e) => e.from === nodeId).map((e) => e.to))];
-  if (children.length === 0) throw new Error(`mmdGraph: "${nodeId}" has no next node`);
-  const target = children.length === 1
-    ? children[0]!
-    : children.find((id) => g.nodes.get(id) === outcome);
+  const arms = g.edges.filter((e) => e.from === nodeId);
+  if (arms.length === 0) throw new Error(`mmdGraph: "${nodeId}" has no next node`);
+  const target = arms.length === 1
+    ? arms[0]!.to
+    : arms.find((e) => e.label?.split("\n")[0] === outcome)?.to;
   if (!target) throw new Error(`mmdGraph: "${nodeId}" has no arm labelled ${JSON.stringify(outcome)}`);
   const kind = g.classes.get(target);
-  if (kind === "pass" || kind === "nopass") return stepAfter(g, target);
   if (kind === "pipeline") return diagramEntryNodes.get(pipelineFileFor(target)) as string;
   return target;
 }
