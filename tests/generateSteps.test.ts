@@ -16,8 +16,9 @@ function generateFrom(diagrams: Record<string, string>) {
     const stepsRoot = join(folder, "steps");
     const configPath = join(folder, "steps.json");
     mkdirSync(diagramFolder);
-    // A stub imports SIGNAL from two folders up, so the throwaway project needs that file too.
-    copyFileSync(join(PROJECT_ROOT, "scripts/signal.ts"), join(folder, "signal.ts"));
+    // A stub imports SCRIPT_SIGNAL from two folders up, so the throwaway project needs those files too.
+    copyFileSync(join(PROJECT_ROOT, "scripts/contracts.ts"), join(folder, "contracts.ts"));
+    copyFileSync(join(PROJECT_ROOT, "scripts/templateShape.ts"), join(folder, "templateShape.ts"));
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
     const run = () => generateSteps(diagramFolder, stepsRoot, configPath);
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
@@ -60,14 +61,14 @@ test("test_generateSteps_writesAStubForABoxWithNoScript", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const stub = readFileSync(join(stepsRoot, "one/NEW_BOX.ts"), "utf8");
     assert.match(stub, /export function main\(input: string\): Record<string, unknown>/);
-    assert.match(stub, /signal: SIGNAL\.CONTINUE/);
+    assert.match(stub, /scriptSignal: SCRIPT_SIGNAL\.CONTINUE/);
     assert.match(stub, /realpathSync\(process\.argv\[1\]!\) === realpathSync\(fileURLToPath\(import\.meta\.url\)\)\)/);
 });
 
 test("test_generateSteps_writesAStubThatPrintsItsBoxAndSignal", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const printed = execFileSync("node", ["--no-inspect", join(stepsRoot, "one/NEW_BOX.ts")], { encoding: "utf8" });
-    assert.deepEqual(JSON.parse(printed), { box: "NEW_BOX", signal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" });
+    assert.deepEqual(JSON.parse(printed), { box: "NEW_BOX", scriptSignal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" });
 });
 
 test("test_generateSteps_leavesAnExistingScriptAlone", () => {
@@ -85,7 +86,7 @@ test("test_generateSteps_dropsABoxTheDiagramNoLongerNames", () => {
 
 test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
     const { readConfig } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
-    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "template", "next"]);
+    assert.deepEqual(Object.keys(readConfig()["one.mmd"][0]), ["box", "script", "template", "producesPrompt", "next"]);
 });
 
 test("test_getEdgesInDiagram_recordsWhatEachBoxPointsAt", () => {
@@ -132,7 +133,7 @@ test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
 test("test_generateSteps_writesATemplateForABoxWithNone", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const template = JSON.parse(readFileSync(join(stepsRoot, "one/NEW_BOX.template.json"), "utf8"));
-    assert.deepEqual(template, { input: {}, output: { box: "NEW_BOX", signal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" } });
+    assert.deepEqual(template, { input: {}, output: { box: "NEW_BOX", scriptSignal: "continue", note: "NEW_BOX.ts for NEW_BOX", input: "" } });
 });
 
 test("test_generateSteps_recordsTheTemplatePathBesideTheScript", () => {

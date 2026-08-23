@@ -1,6 +1,7 @@
 // Every run-step schema, built from the block template files. The hook and the workflow generator share it.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { AGENT_ANSWER_TEMPLATE, KNOWN_SCRIPT_SIGNALS, WORKFLOW_SIGNAL } from "./contracts.ts";
 import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
 
 export type BlockSchema = {
@@ -11,7 +12,7 @@ export type BlockSchema = {
 };
 
 // The envelope owns these, so a block's payload is whatever its output declares beyond them.
-const ENVELOPE_OWNED_KEYS = ["box", "signal", "next"];
+const ENVELOPE_OWNED_KEYS = ["box", "scriptSignal", "next"];
 
 export function getPayloadFromOutput(output: unknown): Record<string, unknown> {
     const payload: Record<string, unknown> = {};
@@ -56,22 +57,30 @@ export function getBlockSchemaName(box: string): string {
     return `PAYLOAD_${box}_SCHEMA`;
 }
 
-export function getAgentOutputSchemaName(box: string): string {
-    return `AGENT_OUTPUT_${box}_SCHEMA`;
-}
-
 // A bare name belongs to the diagram that wrote it; a name holding :: already points across a seam.
 export function getStepKey(target: string, diagram: string): string {
     return target.includes("::") ? target : `${diagram}::${target}`;
 }
 
-// One entry per block, so every schema is named after the block it came from.
+// One entry per block. A prompt block's pass hands on the agent's answer, so that is its schema.
 export function buildBlockSchemas(config: StepConfig, projectRoot: string): BlockSchema[] {
     const blockSchemas: BlockSchema[] = [];
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
+            if (entry.producesPrompt) {
+                blockSchemas.push({
+                    diagram,
+                    box: entry.box,
+                    name: getBlockSchemaName(entry.box),
+                    schema: getSchemaFromTemplate(AGENT_ANSWER_TEMPLATE),
+                });
+                continue;
+            }
             const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
             const template = JSON.parse(templateText) as BlockTemplate;
+            if (template.output === undefined) {
+                throw new Error(`${entry.template} declares no output, and ${entry.box} is not marked returns_a_prompt`);
+            }
             blockSchemas.push({
                 diagram,
                 box: entry.box,
@@ -81,27 +90,6 @@ export function buildBlockSchemas(config: StepConfig, projectRoot: string): Bloc
         }
     }
     return blockSchemas;
-}
-
-// Only a prompt block declares agentOutput: the shape the agent fills in and returns.
-export function buildAgentOutputSchemas(config: StepConfig, projectRoot: string): BlockSchema[] {
-    const agentOutputSchemas: BlockSchema[] = [];
-    for (const [diagram, entries] of Object.entries(config)) {
-        for (const entry of entries) {
-            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
-            const template = JSON.parse(templateText) as BlockTemplate;
-            if (template.agentOutput === undefined) {
-                continue;
-            }
-            agentOutputSchemas.push({
-                diagram,
-                box: entry.box,
-                name: getAgentOutputSchemaName(entry.box),
-                schema: getSchemaFromTemplate(template.agentOutput),
-            });
-        }
-    }
-    return agentOutputSchemas;
 }
 
 export function buildNextStepsByStep(config: StepConfig): Record<string, string[]> {
@@ -134,13 +122,11 @@ export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Rec
 }
 
 // A prompt block hands the run to an agent, which is where one pass of the walk ends.
-export function getPromptStepKeys(config: StepConfig, projectRoot: string): string[] {
+export function getPromptStepKeys(config: StepConfig): string[] {
     const promptStepKeys: string[] = [];
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
-            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
-            const template = JSON.parse(templateText) as BlockTemplate;
-            if ((template.output as { signal?: unknown }).signal === "prompt") {
+            if (entry.producesPrompt) {
                 promptStepKeys.push(getStepKey(entry.box, diagram));
             }
         }
@@ -154,12 +140,13 @@ export function buildWalkResultSchema(): Record<string, unknown> {
         type: "object",
         properties: {
             box: { type: "string" },
-            signal: { type: "string", enum: ["continue", "stop", "prompt"] },
+            scriptSignal: { type: "string", enum: KNOWN_SCRIPT_SIGNALS },
+            workflowSignal: { type: "string", enum: Object.values(WORKFLOW_SIGNAL) },
             next: { type: ["string", "null"] },
             payload: { anyOf: [] },
             schema: { type: ["object", "null"] },
         },
-        required: ["box", "signal", "next", "payload", "schema"],
+        required: ["box", "scriptSignal", "workflowSignal", "next", "payload", "schema"],
         additionalProperties: false,
     };
     return {
@@ -178,9 +165,9 @@ export function buildWalkResultSchema(): Record<string, unknown> {
 
 // The schema one agent answers with, holding every payload a walk from this step can produce.
 export function buildAgentSchema(config: StepConfig, projectRoot: string, startStepKey: string): Record<string, unknown> {
-    const promptStepKeys = getPromptStepKeys(config, projectRoot);
+    const promptStepKeys = getPromptStepKeys(config);
     const reachableSteps = getStepsReachableFrom(startStepKey, buildNextStepsByStep(config), promptStepKeys);
-    const blockSchemas = [...buildBlockSchemas(config, projectRoot), ...buildAgentOutputSchemas(config, projectRoot)];
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
     const payloadSchemas: Record<string, unknown>[] = [];
     for (const stepKey of reachableSteps) {
         for (const blockSchema of blockSchemas) {

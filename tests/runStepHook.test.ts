@@ -22,7 +22,7 @@ function runHook(prompt: string, configFile?: string) {
 }
 
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
-function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; next: string[] }[]>) {
+function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; producesPrompt?: boolean; next: string[] }[]>) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
     const outputByBox: Record<string, Record<string, unknown>> = {};
     const writeStep = (box: string, result: Record<string, unknown>) => {
@@ -37,9 +37,10 @@ function configWith(build: (writeStep: (box: string, result: Record<string, unkn
     for (const entries of Object.values(config)) {
         for (const entry of entries) {
             const templatePath = join(folder, `${entry.box}.template.json`);
-            const output = outputByBox[entry.box] ?? { box: entry.box, signal: "stop" };
+            const output = outputByBox[entry.box] ?? { box: entry.box, scriptSignal: "stop" };
             writeFileSync(templatePath, JSON.stringify({ input: {}, output }));
             (entry as Record<string, unknown>).template = templatePath;
+            (entry as Record<string, unknown>).producesPrompt = entry.producesPrompt ?? false;
         }
     }
     writeFileSync(configFile, JSON.stringify(config));
@@ -67,8 +68,8 @@ test("test_runStepHook_namesTheKnownBlocksWhenTheBlockIsUnknown", () => {
 
 test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "SHARED", script: writeStep("SHARED", { signal: "stop" }), next: [] }],
-        "two.mmd": [{ box: "SHARED", script: writeStep("SHARED", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "SHARED", script: writeStep("SHARED", { scriptSignal: "stop" }), next: [] }],
+        "two.mmd": [{ box: "SHARED", script: writeStep("SHARED", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook("/run-step SHARED", configFile);
     assert.equal(result.ok, false);
@@ -76,38 +77,44 @@ test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
 });
 
 test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "SHARED", script: writeStep("ONE", { signal: "stop", from: "one" }), next: [] }],
-        "two.mmd": [{ box: "SHARED", script: writeStep("TWO", { signal: "stop", from: "two" }), next: [] }],
-    }));
+    const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
+    const writeShared = (from: string) => {
+        const scriptPath = join(folder, `SHARED-${from}.ts`);
+        writeFileSync(scriptPath, `console.log(JSON.stringify({ box: "SHARED", scriptSignal: "stop", from: "${from}", input: process.argv[2] ?? "" }));\n`);
+        const templatePath = join(folder, `SHARED-${from}.template.json`);
+        writeFileSync(templatePath, JSON.stringify({ input: {}, output: { box: "SHARED", scriptSignal: "stop", from: "", input: "" } }));
+        return { box: "SHARED", script: scriptPath, template: templatePath, producesPrompt: false, next: [] };
+    };
+    const configFile = join(folder, "steps.json");
+    writeFileSync(configFile, JSON.stringify({ "one.mmd": [writeShared("one")], "two.mmd": [writeShared("two")] }));
     assert.equal(runHook("/run-step two.mmd::SHARED", configFile).result.outcome.payload.from, "two");
 });
 
 test("test_runStepHook_walksUntilAStepSignalsStop", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "continue" }), next: ["C"] },
-            { box: "C", script: writeStep("C", { signal: "stop", why: "an agent takes over" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "continue" }), next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop", why: "an agent takes over" }), next: [] },
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::C"]);
     assert.equal(result.outcome.box, "one.mmd::C");
-    assert.equal(result.outcome.signal, "stop");
+    assert.equal(result.outcome.scriptSignal, "stop");
 });
 
 test("test_runStepHook_walksAcrossASeamIntoAnotherDiagram", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "HANDOFF", script: writeStep("HANDOFF", { signal: "continue" }), next: ["two.mmd::SWEEP"] }],
-        "two.mmd": [{ box: "SWEEP", script: writeStep("SWEEP", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "HANDOFF", script: writeStep("HANDOFF", { scriptSignal: "continue" }), next: ["two.mmd::SWEEP"] }],
+        "two.mmd": [{ box: "SWEEP", script: writeStep("SWEEP", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.deepEqual(runHook("/run-step HANDOFF", configFile).result.ran, ["one.mmd::HANDOFF", "two.mmd::SWEEP"]);
 });
 
 test("test_runStepHook_failsWhenABoxThatWantsToContinueHasAnEmptyNext", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "continue" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: [] }],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
@@ -116,34 +123,84 @@ test("test_runStepHook_failsWhenABoxThatWantsToContinueHasAnEmptyNext", () => {
 
 test("test_runStepHook_endsCleanlyWhenATerminalBoxSignalsStop", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.outcome.signal, "stop");
+    assert.equal(result.outcome.scriptSignal, "stop");
+    assert.equal(result.outcome.workflowSignal, "done");
 });
 
 // A block that prints a prompt hands off to an agent, so the walk stops without ending the path.
 test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "prompt", prompt: "read the plan and answer" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "read the plan and answer" }), producesPrompt: true, next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.outcome.signal, "prompt");
+    assert.equal(result.outcome.scriptSignal, "prompt");
+    assert.equal(result.outcome.workflowSignal, "continue");
     assert.deepEqual(result.ran, ["one.mmd::A"]);
     assert.equal(result.outcome.payload.prompt, "read the plan and answer");
+});
+
+// The diagram's returns_a_prompt mark and the printed scriptSignal must agree, both ways.
+test("test_runStepHook_failsWhenAMarkedBlockDoesNotPrintAPrompt", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), producesPrompt: true, next: ["B"] }],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /one\.mmd::A is marked returns_a_prompt but printed scriptSignal "continue"/);
+});
+
+test("test_runStepHook_failsWhenAnUnmarkedBlockPrintsAPrompt", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "surprise" }), next: [] }],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /one\.mmd::A printed scriptSignal "prompt" but is not marked returns_a_prompt/);
+});
+
+// The block's printed object must match its declared contract, so drift fails loudly at the hop.
+test("test_runStepHook_failsWhenABlockBreaksItsOutputContract", () => {
+    const configFile = configWith((writeStep, folder) => {
+        const brokenScript = join(folder, "A-broken.ts");
+        writeFileSync(brokenScript, `console.log(JSON.stringify({ box: "A", scriptSignal: "stop", input: "", surprise: true }));\n`);
+        writeStep("A", { scriptSignal: "stop", input: "" });
+        return { "one.mmd": [{ box: "A", script: brokenScript, next: [] }] };
+    });
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /one\.mmd::A output breaks its contract/);
+    assert.match(result.errors[1], /surprise is not in the template/);
+});
+
+// The walk's first input crosses a trust boundary, so it must match the start block's declared input.
+test("test_runStepHook_failsWhenTheStartInputBreaksTheBlocksInputContract", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
+    const scriptPath = join(folder, "A.ts");
+    writeFileSync(scriptPath, `console.log(JSON.stringify({ box: "A", scriptSignal: "stop", input: process.argv[2] ?? "" }));\n`);
+    const templatePath = join(folder, "A.template.json");
+    writeFileSync(templatePath, JSON.stringify({ input: { message: "", additionalData: {} }, output: { box: "A", scriptSignal: "stop", input: "" } }));
+    const configFile = join(folder, "steps.json");
+    writeFileSync(configFile, JSON.stringify({ "one.mmd": [{ box: "A", script: scriptPath, template: templatePath, producesPrompt: false, next: [] }] }));
+    const { result } = runHook(`/run-step A {"wrong":"shape"}`, configFile);
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0], /one\.mmd::A input breaks its contract/);
+    assert.match(result.errors[1], /message is missing/);
 });
 
 // The workflow reads outcome.next instead of keeping its own copy of the arrows.
 test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "prompt" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::B");
@@ -153,8 +210,8 @@ test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
 test("test_runStepHook_sendsTheNextBlocksSchemaWithTheOutcome", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "prompt" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
@@ -164,7 +221,7 @@ test("test_runStepHook_sendsTheNextBlocksSchemaWithTheOutcome", () => {
 
 test("test_runStepHook_sendsNoSchemaWhenNothingFollows", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.schema, null);
 });
@@ -172,9 +229,9 @@ test("test_runStepHook_sendsNoSchemaWhenNothingFollows", () => {
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "prompt", next: "C" }), next: ["B", "C"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
-            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer", next: "C" }), producesPrompt: true, next: ["B", "C"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::C");
@@ -182,26 +239,26 @@ test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
 
 test("test_runStepHook_leavesTheNextStepNullAtTheEndOfAPath", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, null);
 });
 
 test("test_runStepHook_failsWhenTheSignalIsNotOneOfTheThree", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "maybe" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "maybe" }), next: [] }],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
-    assert.match(result.errors[0], /signal must be one of "continue", "stop", "prompt", not "maybe"/);
+    assert.match(result.errors[0], /scriptSignal must be one of "continue", "stop", "prompt", not "maybe"/);
 });
 
 test("test_runStepHook_failsWhenADecisionBoxDoesNotNameItsChoice", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B", "C"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
-            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B", "C"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
@@ -213,9 +270,9 @@ test("test_runStepHook_failsWhenADecisionBoxDoesNotNameItsChoice", () => {
 test("test_runStepHook_takesTheBranchTheOutputNames", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue", next: "C" }), next: ["B", "C"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
-            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", next: "C" }), next: ["B", "C"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     assert.deepEqual(runHook("/run-step A", configFile).result.ran, ["one.mmd::A", "one.mmd::C"]);
@@ -224,8 +281,8 @@ test("test_runStepHook_takesTheBranchTheOutputNames", () => {
 test("test_runStepHook_failsWhenTheChosenBranchIsNotInNext", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue", next: "ELSEWHERE" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", next: "ELSEWHERE" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
@@ -235,7 +292,7 @@ test("test_runStepHook_failsWhenTheChosenBranchIsNotInNext", () => {
 
 test("test_runStepHook_stopsWhenTheNextBoxIsNotInTheConfig", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "continue" }), next: ["gone.mmd::MISSING"] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["gone.mmd::MISSING"] }],
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
@@ -267,14 +324,14 @@ test("test_runStepHook_stopsWhenAStepExitsNonZero", () => {
 test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const log = runHook("/run-step A", configFile).readLog();
     assert.match(log, /======= A ======[\s\S]*======= B ======/);
     assert.match(log, /====== command ======\nnode --no-inspect .*A\.ts\n====== end command ======/);
-    assert.match(log, /====== command output ======\n\{"box":"A","signal":"continue","input":""\}\n====== end command output ======/);
+    assert.match(log, /====== command output ======\n\{"box":"A","scriptSignal":"continue","input":""\}\n====== end command output ======/);
 });
 
 test("test_runStepHook_writesNothingToTheLogWhenNoBlockRan", () => {
@@ -284,21 +341,21 @@ test("test_runStepHook_writesNothingToTheLogWhenNoBlockRan", () => {
 
 test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runHook(`/run-step A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runHook("/run-step A", configFile).result.outcome.payload.input, "");
 });
 
 test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const log = runHook(`/run-step A it's here`, configFile).readLog();
     assert.match(log, /====== command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n====== end command ======/);
@@ -307,8 +364,8 @@ test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
 test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue", greeting: "hello" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", greeting: "hello" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const received = JSON.parse(runHook("/run-step A first-input", configFile).result.outcome.payload.input);
@@ -320,9 +377,9 @@ test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
 test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "continue" }), next: ["C"] },
-            { box: "C", script: writeStep("C", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "continue" }), next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const seenByC = JSON.parse(runHook("/run-step A", configFile).result.outcome.payload.input);
@@ -333,12 +390,12 @@ test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
 test("test_runStepHook_logsTheThreadedOutputAsThePasteableCommand", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
-            { box: "A", script: writeStep("A", { signal: "continue" }), next: ["B"] },
-            { box: "B", script: writeStep("B", { signal: "stop" }), next: [] },
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
     const log = runHook("/run-step A", configFile).readLog();
-    assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","signal":"continue","input":""\}'/);
+    assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
 });
 
 // PostToolUse names the skill and its args apart. That is how an agent reaches the hook.
@@ -356,14 +413,14 @@ function runSkillHook(skill: string, args: string, configFile?: string) {
 
 test("test_runStepHook_runsABlockWhenAnAgentCallsTheSkill", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runSkillHook("run-step", "A", configFile).result.ok, true);
 });
 
 test("test_runStepHook_runsABlockWhenAnAgentCallsTheSkillNamespaced", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runSkillHook("taskTools:run-step", "A", configFile).result.ok, true);
 });
@@ -374,14 +431,14 @@ test("test_runStepHook_staysSilentWhenAnAgentCallsAnotherSkill", () => {
 
 test("test_runStepHook_handsTheSkillArgsToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     assert.equal(runSkillHook("run-step", `A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "A", script: writeStep("A", { signal: "stop" }), next: [] }],
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "run-step", args: "A" } }),

@@ -1,20 +1,34 @@
-// One test per block in steps.json: feed the block its input template, check what it prints against its output template.
+// One test per block in steps.json: feed the block its input template, check what it prints against its contract.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StepConfig } from "../scripts/generateSteps.ts";
+import type { StepConfig, StepConfigEntry } from "../scripts/generateSteps.ts";
+import { AGENT_ANSWER_TEMPLATE, buildPromptOutputTemplate } from "../scripts/contracts.ts";
 import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 
-type BlockTemplate = { input: unknown; output: unknown };
+type BlockTemplate = { input: unknown; output?: unknown };
 
 function readBlockTemplate(templatePath: string): BlockTemplate {
     return JSON.parse(readFileSync(join(PROJECT_ROOT, templatePath), "utf8")) as BlockTemplate;
+}
+
+// A prompt block prints the canonical prompt shape; any other block prints its template's output.
+function getExpectedOutput(entry: StepConfigEntry, template: BlockTemplate): unknown {
+    if (entry.producesPrompt) {
+        return { ...buildPromptOutputTemplate(entry.box), ...(template.output as Record<string, unknown> | undefined ?? {}) };
+    }
+    return template.output;
+}
+
+// What a block hands to the next block: the agent's answer for a prompt block, its printed output otherwise.
+function getHandedOnShape(entry: StepConfigEntry, template: BlockTemplate): unknown {
+    return entry.producesPrompt ? AGENT_ANSWER_TEMPLATE : template.output;
 }
 
 // The block's result is the last line it prints, the same rule the hook uses.
@@ -36,12 +50,12 @@ const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
 
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
-        test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_producesItsOutputTemplate`, () => {
+        test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_producesItsOutputContract`, () => {
             const template = readBlockTemplate(entry.template);
             const { commandOutput, result } = runBlockScript(entry.script, template.input);
             assert.notEqual(result, null, `${entry.box} printed no result object:\n${commandOutput}`);
-            const mismatches = getTemplateShapeMismatches(template.output, result);
-            assert.deepEqual(mismatches, [], `${entry.box} does not match ${entry.template}:\n${mismatches.join("\n")}`);
+            const mismatches = getTemplateShapeMismatches(getExpectedOutput(entry, template), result);
+            assert.deepEqual(mismatches, [], `${entry.box} does not match its contract:\n${mismatches.join("\n")}`);
         });
     }
 }
@@ -58,8 +72,8 @@ for (const [diagramFile, entries] of Object.entries(config)) {
                 assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
                 const producedTemplate = readBlockTemplate(entry.template);
                 const acceptedTemplate = readBlockTemplate(targetEntry!.template);
-                const mismatches = getTemplateShapeMismatches(acceptedTemplate.input, producedTemplate.output);
-                assert.deepEqual(mismatches, [], `${targetBox} input does not match ${entry.box} output:\n${mismatches.join("\n")}`);
+                const mismatches = getTemplateShapeMismatches(acceptedTemplate.input, getHandedOnShape(entry, producedTemplate));
+                assert.deepEqual(mismatches, [], `${targetBox} input does not match what ${entry.box} hands on:\n${mismatches.join("\n")}`);
             });
         }
     }

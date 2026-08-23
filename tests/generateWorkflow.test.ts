@@ -4,6 +4,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
+import { AGENT_ANSWER_TEMPLATE } from "../scripts/contracts.ts";
 import { buildWorkflowScript, generateWorkflow } from "../scripts/generateWorkflow.ts";
 import {
     buildBlockSchemas,
@@ -15,7 +16,7 @@ import {
 } from "../scripts/buildRunStepSchemas.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
-function buildProject(blocks: { box: string; output: Record<string, unknown>; next?: string[] }[]) {
+function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
     const projectRoot = mkdtempSync(join(tmpdir(), "generate-workflow-"));
     mkdirSync(join(projectRoot, "steps"));
     const entries = blocks.map(block => {
@@ -25,6 +26,7 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; ne
             box: block.box,
             script: `steps/${block.box}.ts`,
             template: `steps/${block.box}.template.json`,
+            producesPrompt: block.producesPrompt ?? false,
             next: block.next ?? [],
         };
     });
@@ -54,8 +56,8 @@ test("test_buildWalkResultSchema_allowsAnOutcomeOfNull", () => {
 
 test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
     const { config, projectRoot } = buildProject([
-        { box: "A", output: { box: "A", signal: "continue", files: 0 } },
-        { box: "B", output: { box: "B", signal: "stop" } },
+        { box: "A", output: { box: "A", scriptSignal: "continue", files: 0 } },
+        { box: "B", output: { box: "B", scriptSignal: "stop" } },
     ]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_A_SCHEMA", "PAYLOAD_B_SCHEMA"]);
@@ -63,15 +65,22 @@ test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
 
 // The point of the whole task: the schema is the template, not a hand-written copy of it.
 test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
-    const output = { box: "A", signal: "continue", files: 0 };
+    const output = { box: "A", scriptSignal: "continue", files: 0 };
     const { config, projectRoot } = buildProject([{ box: "A", output }]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate({ files: 0 }));
 });
 
-// box, signal and next belong to the envelope, so a payload never repeats them.
+// A prompt block's pass hands on the agent's answer, so its schema is the canonical answer shape.
+test("test_buildBlockSchemas_usesTheAgentAnswerShapeForAPromptBlock", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true }]);
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
+    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(AGENT_ANSWER_TEMPLATE));
+});
+
+// box, scriptSignal and next belong to the envelope, so a payload never repeats them.
 test("test_getPayloadFromOutput_dropsTheKeysTheEnvelopeOwns", () => {
-    assert.deepEqual(getPayloadFromOutput({ box: "A", signal: "continue", next: "B", files: 0 }), { files: 0 });
+    assert.deepEqual(getPayloadFromOutput({ box: "A", scriptSignal: "continue", next: "B", files: 0 }), { files: 0 });
 });
 
 test("test_buildNextStepsByStep_keysEveryBoxByDiagramAndBox", () => {
@@ -113,7 +122,7 @@ test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
     assert.match(script, /if \(result === null\) \{/);
     assert.match(script, /if \(result\.ok === false\) \{/);
     assert.match(script, /if \(result\.ran\.length === 0\) \{/);
-    assert.match(script, /if \(result\.outcome\.next === null\) \{/);
+    assert.match(script, /if \(result\.outcome\.workflowSignal === 'done'\) \{/);
 });
 
 // Every return names the prompt that produced it, so a failure says what was asked.
@@ -142,7 +151,7 @@ test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
 });
 
 test("test_generateWorkflow_writesTheScriptToTheGivenPath", () => {
-    const { projectRoot } = buildProject([{ box: "A", output: { box: "A", signal: "stop" } }]);
+    const { projectRoot } = buildProject([{ box: "A", output: { box: "A", scriptSignal: "stop" } }]);
     const workflowFile = join(projectRoot, ".claude/workflows/run-step.workflow.js");
     generateWorkflow(workflowFile);
     assert.match(readFileSync(workflowFile, "utf8"), /export const meta/);

@@ -1,12 +1,13 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { KNOWN_SIGNALS, SIGNAL, type Signal } from "./signal.ts";
+import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, WORKFLOW_SIGNAL, type ScriptSignal } from "./contracts.ts";
+import { getTemplateShapeMismatches } from "./templateShape.ts";
 // Imported, not copied, so the hook and the workflow generator build the same schema.
 import { buildAgentSchema, getPayloadFromOutput } from "./buildRunStepSchemas.ts";
-import type { StepConfig, StepConfigEntry } from "./generateSteps.ts";
+import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
@@ -34,7 +35,8 @@ type StepRun = {
 };
 type Outcome = {
     box: string;
-    signal: string;
+    scriptSignal: string;
+    workflowSignal: string;
     next: string | null;
     payload: Record<string, unknown>;
     schema: Record<string, unknown> | null;
@@ -151,14 +153,45 @@ function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 
+function readTemplate(step: Step): BlockTemplate {
+    return JSON.parse(readFileSync(resolve(PROJECT_ROOT, step.template), "utf8")) as BlockTemplate;
+}
+
+// A prompt block must print the canonical prompt shape; any other block must print its template's output.
+function getOutputContractMismatches(step: Step, result: Record<string, unknown>): string[] {
+    const expected = step.producesPrompt
+        ? { ...buildPromptOutputTemplate(step.box), ...(readTemplate(step).output as Record<string, unknown> | undefined ?? {}) }
+        : readTemplate(step).output;
+    if (expected === undefined) {
+        return [`${step.template} declares no output`];
+    }
+    return getTemplateShapeMismatches(expected, result);
+}
+
+// The walk's first input crosses a trust boundary, so it must match the start block's declared input.
+function getStartInputMismatches(step: Step, startInput: string): string[] {
+    const templateInput = readTemplate(step).input;
+    if (typeof templateInput !== "object" || templateInput === null || Object.keys(templateInput).length === 0) {
+        return [];
+    }
+    let parsedInput: unknown;
+    try {
+        parsedInput = JSON.parse(startInput);
+    } catch {
+        return [`input must be JSON matching ${JSON.stringify(templateInput)}, got ${JSON.stringify(startInput)}`];
+    }
+    return getTemplateShapeMismatches(templateInput, parsedInput);
+}
+
 // A stop ends the run whatever the graph says, so only a prompt hands a next box back.
 function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>): WalkResult {
-    const next = output.signal === SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
+    const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
     // Built here from the same templates the generator reads, so the two can never disagree.
     const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
     const outcome = {
         box: stoppedAt,
-        signal: String(output.signal),
+        scriptSignal: String(output.scriptSignal),
+        workflowSignal: next === null ? WORKFLOW_SIGNAL.DONE : WORKFLOW_SIGNAL.CONTINUE,
         next,
         payload: getPayloadFromOutput(output),
         schema,
@@ -168,6 +201,10 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<stri
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
 function walkFromStep(startStepKey: string, startInput: string, invocation: string): WalkResult {
+    const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
+    if (startInputMismatches.length > 0) {
+        return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches]);
+    }
     const boxesRun: string[] = [];
     let stepKey = startStepKey;
     let input = startInput;
@@ -185,16 +222,27 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildFailure(boxesRun, [`${stepKey} printed no result object`, stepRun.stdout]);
         }
 
-        const signal = stepRun.result.signal as Signal;
-        if (!KNOWN_SIGNALS.includes(signal)) {
-            const knownList = KNOWN_SIGNALS.map(known => JSON.stringify(known)).join(", ");
-            return buildFailure(boxesRun, [`${stepKey} signal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.signal)}`]);
+        const scriptSignal = stepRun.result.scriptSignal as ScriptSignal;
+        if (!KNOWN_SCRIPT_SIGNALS.includes(scriptSignal)) {
+            const knownList = KNOWN_SCRIPT_SIGNALS.map(known => JSON.stringify(known)).join(", ");
+            return buildFailure(boxesRun, [`${stepKey} scriptSignal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.scriptSignal)}`]);
         }
-        if (signal === SIGNAL.STOP) {
+        // The diagram's returns_a_prompt mark and the printed scriptSignal must agree, both ways.
+        if (step.producesPrompt && scriptSignal !== SCRIPT_SIGNAL.PROMPT) {
+            return buildFailure(boxesRun, [`${stepKey} is marked returns_a_prompt but printed scriptSignal ${JSON.stringify(scriptSignal)}`]);
+        }
+        if (!step.producesPrompt && scriptSignal === SCRIPT_SIGNAL.PROMPT) {
+            return buildFailure(boxesRun, [`${stepKey} printed scriptSignal "prompt" but is not marked returns_a_prompt in its diagram`]);
+        }
+        const contractMismatches = getOutputContractMismatches(step, stepRun.result);
+        if (contractMismatches.length > 0) {
+            return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches]);
+        }
+        if (scriptSignal === SCRIPT_SIGNAL.STOP) {
             return buildSuccess(boxesRun, stepKey, stepRun.result);
         }
         // The block printed a prompt instead of data, so an agent takes over here.
-        if (signal === SIGNAL.PROMPT) {
+        if (scriptSignal === SCRIPT_SIGNAL.PROMPT) {
             return buildSuccess(boxesRun, stepKey, stepRun.result);
         }
         if (step.next.length === 0) {

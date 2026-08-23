@@ -34,7 +34,7 @@ function createPromptForAgent(blockToRun, input) {
         \`COMMAND: \\\`\${command}\\\`\`,
         'invoke COMMAND and follow instructions.',
         'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
-        'The only exception: if outcome.signal is "prompt", follow outcome.payload.prompt and put your answer in outcome.payload.',
+        'The only exception: if outcome.scriptSignal is "prompt", follow outcome.payload.prompt and put your answer in outcome.payload as {"message": string, "additionalData": object}.',
     ].join('\\n')
 }
 
@@ -66,8 +66,8 @@ while (true) {
         return { ok: false, ran, errors: [\`\${blockToRun}: agent answered without a hook envelope\`], prompt, outcome: null }
     }
 
-    // nothing follows the block the walk stopped at, so this run is done.
-    if (result.outcome.next === null) {
+    // the hook says nothing follows the block the walk stopped at, so this run is done.
+    if (result.outcome.workflowSignal === 'done') {
         return { ok: true, ran, errors: [], prompt, outcome: result.outcome }
     }
     blockToRun = result.outcome.next
