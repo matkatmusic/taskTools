@@ -16,9 +16,10 @@ export function doesTaskWorktreeExist(taskNumber: number, projectRoot: string): 
 
 export type DoesTaskWorktreeExistCliInput = { taskNumber: number; projectRoot: string };
 
-if (process.argv[1]?.endsWith("doesTaskWorktreeExist.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as DoesTaskWorktreeExistCliInput;
-    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
-    const output = doesTaskWorktreeExist(input.taskNumber, projectRoot);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-}
+// CLI entrypoint migrated to scripts/steps/pipeline-worktreeCheck/DOES_WORKTREE_EXIST.ts.
+// if (process.argv[1]?.endsWith("doesTaskWorktreeExist.ts")) {
+//     const input = JSON.parse(readFileSync(0, "utf8")) as DoesTaskWorktreeExistCliInput;
+//     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+//     const output = doesTaskWorktreeExist(input.taskNumber, projectRoot);
+//     process.stdout.write(`${JSON.stringify(output)}\n`);
+// }

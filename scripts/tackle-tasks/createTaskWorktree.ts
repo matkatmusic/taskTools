@@ -238,9 +238,11 @@ export function createTaskWorktree(taskNumber: number, runId: string, projectRoo
 
 export type CreateTaskWorktreeCliInput = { taskNumber: number; runId: string; projectRoot: string };
 
-if (process.argv[1]?.endsWith("createTaskWorktree.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as CreateTaskWorktreeCliInput;
-    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
-    const output = createTaskWorktree(input.taskNumber, input.runId, projectRoot);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-}
+// CLI entrypoint migrated to scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.ts and
+// TAKE_WORKTREE_LEASE.ts (split into a physical-creation step and a lease-recording step).
+// if (process.argv[1]?.endsWith("createTaskWorktree.ts")) {
+//     const input = JSON.parse(readFileSync(0, "utf8")) as CreateTaskWorktreeCliInput;
+//     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+//     const output = createTaskWorktree(input.taskNumber, input.runId, projectRoot);
+//     process.stdout.write(`${JSON.stringify(output)}\n`);
+// }

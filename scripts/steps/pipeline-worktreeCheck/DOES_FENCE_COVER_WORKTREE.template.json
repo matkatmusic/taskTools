@@ -2,13 +2,26 @@
     "input": {
         "box": "IS_PREVIOUS_RUN_RESUMABLE",
         "scriptSignal": "continue",
-        "note": "IS_PREVIOUS_RUN_RESUMABLE.ts for IS_PREVIOUS_RUN_RESUMABLE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "DOES_FENCE_COVER_WORKTREE",
         "scriptSignal": "continue",
-        "note": "DOES_FENCE_COVER_WORKTREE.ts for DOES_FENCE_COVER_WORKTREE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "exitType": "fence-violation",
+        "exitNote": "the resumed worktree touched files the task does not own: some/path.ts",
+        "next": "FAILURES_EXIT"
     }
 }

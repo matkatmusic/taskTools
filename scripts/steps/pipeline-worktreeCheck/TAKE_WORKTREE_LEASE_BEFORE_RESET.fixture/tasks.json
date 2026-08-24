@@ -1,0 +1,17 @@
+[
+    {
+        "taskNumber": 1,
+        "title": "Fixture task",
+        "files": ["fixture-file.ts"],
+        "run": {
+            "active": true, "worktree": null, "leaseRunId": "run-1",
+            "history": [
+                {
+                    "runId": "run-1", "startedAt": "2026-01-01T00:00:00+00:00", "endedAt": null,
+                    "exitType": null, "exitNote": null, "modifiedFiles": [], "commits": [],
+                    "implementationNotesFile": null, "taskTests": null, "fullSuite": null
+                }
+            ]
+        }
+    }
+]

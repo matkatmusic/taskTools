@@ -3,12 +3,14 @@
         "box": "MARK_TASK_ACTIVE",
         "scriptSignal": "continue",
         "taskNumber": 0,
-        "tasksFile": ""
+        "tasksFile": "",
+        "runId": ""
     },
     "output": {
         "box": "WORKTREE_CHECK_PIPELINE",
         "scriptSignal": "continue",
         "taskNumber": 0,
-        "tasksFile": ""
+        "tasksFile": "",
+        "runId": ""
     }
 }

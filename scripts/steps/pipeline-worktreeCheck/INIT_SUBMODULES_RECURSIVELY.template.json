@@ -2,13 +2,25 @@
     "input": {
         "box": "DOES_FENCE_COVER_WORKTREE",
         "scriptSignal": "continue",
-        "note": "DOES_FENCE_COVER_WORKTREE.ts for DOES_FENCE_COVER_WORKTREE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "INIT_SUBMODULES_RECURSIVELY",
         "scriptSignal": "continue",
-        "note": "INIT_SUBMODULES_RECURSIVELY.ts for INIT_SUBMODULES_RECURSIVELY",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": ""
     }
 }

@@ -48,9 +48,10 @@ export function checkTaskWorktreeSafe(taskNumber: number, worktreePath: string):
 
 export type CheckTaskWorktreeSafeCliInput = { taskNumber: number; worktreePath: string };
 
-if (process.argv[1]?.endsWith("checkTaskWorktreeSafe.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as CheckTaskWorktreeSafeCliInput;
-    const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
-    const output = checkTaskWorktreeSafe(input.taskNumber, worktreePath);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-}
+// CLI entrypoint migrated to scripts/steps/pipeline-worktreeCheck/IS_WORKTREE_SAFE_TO_USE.ts.
+// if (process.argv[1]?.endsWith("checkTaskWorktreeSafe.ts")) {
+//     const input = JSON.parse(readFileSync(0, "utf8")) as CheckTaskWorktreeSafeCliInput;
+//     const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
+//     const output = checkTaskWorktreeSafe(input.taskNumber, worktreePath);
+//     process.stdout.write(`${JSON.stringify(output)}\n`);
+// }

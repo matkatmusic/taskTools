@@ -11,11 +11,12 @@ import { taskFilesProjectRoot } from "../../taskFiles.ts";
 export function main(input: string): Record<string, unknown> {
     const { taskNumber, tasksFile } = JSON.parse(input) as { taskNumber: number; tasksFile: string };
     const projectRoot = taskFilesProjectRoot({ tasksPath: resolve(tasksFile), completedTasksPath: "" });
-    const outcome = claimTask(taskNumber, randomUUID(), projectRoot);
+    const runId = randomUUID();
+    const outcome = claimTask(taskNumber, runId, projectRoot);
     if (outcome.status !== "claimed") {
         throw new Error(`task ${taskNumber} could not be marked active: ${outcome.status}`);
     }
-    return { box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, taskNumber, tasksFile };
+    return { box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, taskNumber, tasksFile, runId };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

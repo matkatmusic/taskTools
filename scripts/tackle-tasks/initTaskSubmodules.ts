@@ -37,8 +37,9 @@ export function initTaskSubmodules(input: InitTaskSubmodulesInput): InitTaskSubm
     return result;
 }
 
-if (process.argv[1]?.endsWith("initTaskSubmodules.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as InitTaskSubmodulesInput;
-    const output = initTaskSubmodules(input);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-}
+// CLI entrypoint migrated to scripts/steps/pipeline-worktreeCheck/INIT_SUBMODULES_RECURSIVELY.ts.
+// if (process.argv[1]?.endsWith("initTaskSubmodules.ts")) {
+//     const input = JSON.parse(readFileSync(0, "utf8")) as InitTaskSubmodulesInput;
+//     const output = initTaskSubmodules(input);
+//     process.stdout.write(`${JSON.stringify(output)}\n`);
+// }

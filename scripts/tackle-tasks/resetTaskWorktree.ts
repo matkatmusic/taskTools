@@ -35,9 +35,11 @@ export function resetTaskWorktree(taskNumber: number, runId: string, projectRoot
 
 export type ResetTaskWorktreeCliInput = { taskNumber: number; runId: string; projectRoot: string };
 
-if (process.argv[1]?.endsWith("resetTaskWorktree.ts")) {
-    const input = JSON.parse(readFileSync(0, "utf8")) as ResetTaskWorktreeCliInput;
-    const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
-    const output = resetTaskWorktree(input.taskNumber, input.runId, projectRoot);
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-}
+// CLI entrypoint migrated to scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts
+// and RESET_WORKTREE.ts (split into a lease-transition step and a teardown/recreate step).
+// if (process.argv[1]?.endsWith("resetTaskWorktree.ts")) {
+//     const input = JSON.parse(readFileSync(0, "utf8")) as ResetTaskWorktreeCliInput;
+//     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
+//     const output = resetTaskWorktree(input.taskNumber, input.runId, projectRoot);
+//     process.stdout.write(`${JSON.stringify(output)}\n`);
+// }

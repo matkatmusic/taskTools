@@ -12,6 +12,7 @@
         "box": "MARK_TASK_ACTIVE",
         "scriptSignal": "continue",
         "taskNumber": 1,
-        "tasksFile": ".taskTools/tasks.json"
+        "tasksFile": ".taskTools/tasks.json",
+        "runId": ""
     }
 }

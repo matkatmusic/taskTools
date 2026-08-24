@@ -1230,6 +1230,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "TAKE_WORKTREE_LEASE"
             ]
@@ -1239,6 +1240,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "INIT_SUBMODULES_RECURSIVELY"
             ]
@@ -1248,6 +1250,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/INIT_SUBMODULES_RECURSIVELY.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/INIT_SUBMODULES_RECURSIVELY.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOCUMENT_GENERATION_PIPELINE"
             ]
@@ -1257,6 +1260,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOES_FENCE_COVER_WORKTREE",
                 "FAILURES_EXIT"
@@ -1267,6 +1271,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RESET_WORKTREE"
             ]
@@ -1276,6 +1281,7 @@
             "script": "scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.ts",
             "template": "scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "INIT_SUBMODULES_RECURSIVELY"
             ]

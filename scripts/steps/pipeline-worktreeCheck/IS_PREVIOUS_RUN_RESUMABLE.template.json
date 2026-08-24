@@ -2,13 +2,26 @@
     "input": {
         "box": "IS_WORKTREE_SAFE_TO_USE",
         "scriptSignal": "continue",
-        "note": "IS_WORKTREE_SAFE_TO_USE.ts for IS_WORKTREE_SAFE_TO_USE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "IS_PREVIOUS_RUN_RESUMABLE",
         "scriptSignal": "continue",
-        "note": "IS_PREVIOUS_RUN_RESUMABLE.ts for IS_PREVIOUS_RUN_RESUMABLE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "not-resumable",
+        "exitNote": "a safe worktree holds work no run recorded a stopping point for",
+        "next": "FAILURES_EXIT"
     }
 }

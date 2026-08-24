@@ -1,0 +1,8 @@
+[
+    {
+        "taskNumber": 1,
+        "title": "Fixture task",
+        "files": ["fixture-file.ts"],
+        "run": { "active": true, "worktree": null, "leaseRunId": null, "history": [] }
+    }
+]

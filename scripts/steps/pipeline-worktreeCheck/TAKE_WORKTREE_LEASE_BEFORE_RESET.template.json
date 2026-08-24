@@ -2,13 +2,25 @@
     "input": {
         "box": "IS_WORKTREE_SAFE_TO_USE",
         "scriptSignal": "continue",
-        "note": "IS_WORKTREE_SAFE_TO_USE.ts for IS_WORKTREE_SAFE_TO_USE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
         "scriptSignal": "continue",
-        "note": "TAKE_WORKTREE_LEASE_BEFORE_RESET.ts for TAKE_WORKTREE_LEASE_BEFORE_RESET",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

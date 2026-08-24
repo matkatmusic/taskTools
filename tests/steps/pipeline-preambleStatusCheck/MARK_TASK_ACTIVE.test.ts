@@ -19,7 +19,9 @@ function makeTasksFile(openTasks: unknown[]): { tasksFile: string; projectRoot: 
 test("test_MARK_TASK_ACTIVE_marksTheTaskActiveInTasksJson", () => {
     const { tasksFile, projectRoot } = makeTasksFile([{ taskNumber: 1 }]);
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
-    assert.deepEqual(output, { box: "MARK_TASK_ACTIVE", scriptSignal: "continue", taskNumber: 1, tasksFile });
+    assert.deepEqual({ ...output, runId: "" }, { box: "MARK_TASK_ACTIVE", scriptSignal: "continue", taskNumber: 1, tasksFile, runId: "" });
+    assert.equal(typeof output.runId, "string");
+    assert.notEqual(output.runId, "");
     assert.equal(readTaskRunState(1, projectRoot).active, true);
 });
 
