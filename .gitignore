@@ -17,3 +17,4 @@ plans/implementation-diff-*.patch
 .claude/skills/continue-rebase
 .claude/skills/run-step
 plans/diagrams/runs/run-log.md
+plans/diagram/runs/run-log.md
