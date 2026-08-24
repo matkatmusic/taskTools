@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "PUBLICATION_ALL",
+        "scriptSignal": "continue",
+        "note": "PUBLICATION_ALL.ts for PUBLICATION_ALL",
+        "input": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_SUCCESS",
+        "scriptSignal": "continue"
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MARK_TASK_INACTIVE_FAILURE",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_INACTIVE_FAILURE.ts for MARK_TASK_INACTIVE_FAILURE",
+        "input": ""
+    },
+    "output": {
+        "box": "REPORT_EXIT_TYPE_AND_NOTE",
+        "scriptSignal": "continue",
+        "note": "REPORT_EXIT_TYPE_AND_NOTE.ts for REPORT_EXIT_TYPE_AND_NOTE",
+        "input": ""
+    }
+}

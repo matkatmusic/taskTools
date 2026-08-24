@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MERGE_WORKTREES",
+        "scriptSignal": "continue",
+        "note": "MERGE_WORKTREES.ts for MERGE_WORKTREES",
+        "input": ""
+    },
+    "output": {
+        "box": "READ_MERGE_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "READ_MERGE_PUBLICATION_STATE.ts for READ_MERGE_PUBLICATION_STATE",
+        "input": ""
+    }
+}

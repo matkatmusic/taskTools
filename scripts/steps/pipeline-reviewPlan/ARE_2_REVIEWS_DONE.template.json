@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "UPDATE_TASK_ENTRY",
+        "scriptSignal": "continue",
+        "note": "UPDATE_TASK_ENTRY.ts for UPDATE_TASK_ENTRY",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_REVIEWS_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_REVIEWS_DONE.ts for ARE_2_REVIEWS_DONE",
+        "input": ""
+    }
+}

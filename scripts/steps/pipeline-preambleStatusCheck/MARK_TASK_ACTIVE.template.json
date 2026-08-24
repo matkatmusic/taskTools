@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "IS_TASK_ACTIVE.ts for IS_TASK_ACTIVE",
+        "input": ""
+    },
+    "output": {
+        "box": "MARK_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_ACTIVE.ts for MARK_TASK_ACTIVE",
+        "input": ""
+    }
+}

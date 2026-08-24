@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "MARK_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_ACTIVE.ts for MARK_TASK_ACTIVE",
+        "input": ""
+    },
+    "output": {
+        "box": "WORKTREE_CHECK_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

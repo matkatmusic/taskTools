@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOCS_MODE_AUTOGEN",
+        "scriptSignal": "continue",
+        "note": "DOCS_MODE_AUTOGEN.ts for DOCS_MODE_AUTOGEN",
+        "input": ""
+    },
+    "output": {
+        "box": "AUTO_GENERATE_DOCS",
+        "scriptSignal": "continue",
+        "note": "AUTO_GENERATE_DOCS.ts for AUTO_GENERATE_DOCS",
+        "input": ""
+    }
+}

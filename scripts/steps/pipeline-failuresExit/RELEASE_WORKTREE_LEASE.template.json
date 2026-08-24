@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOES_RUN_HOLD_LEASE",
+        "scriptSignal": "continue",
+        "note": "DOES_RUN_HOLD_LEASE.ts for DOES_RUN_HOLD_LEASE",
+        "input": ""
+    },
+    "output": {
+        "box": "RELEASE_WORKTREE_LEASE",
+        "scriptSignal": "continue",
+        "note": "RELEASE_WORKTREE_LEASE.ts for RELEASE_WORKTREE_LEASE",
+        "input": ""
+    }
+}

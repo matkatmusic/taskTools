@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_PUBLICATION_STATE.ts for WHAT_IS_PUBLICATION_STATE",
+        "input": ""
+    },
+    "output": {
+        "box": "PUBLICATION_PARTIAL",
+        "scriptSignal": "continue",
+        "note": "PUBLICATION_PARTIAL.ts for PUBLICATION_PARTIAL",
+        "input": ""
+    }
+}

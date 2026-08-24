@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DO_ALL_TESTS_PASS",
+        "scriptSignal": "continue",
+        "note": "DO_ALL_TESTS_PASS.ts for DO_ALL_TESTS_PASS",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_SUITE_FIXES_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_SUITE_FIXES_DONE.ts for ARE_2_SUITE_FIXES_DONE",
+        "input": ""
+    }
+}

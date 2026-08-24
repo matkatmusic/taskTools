@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WAIT_FOR_LOCK",
+        "scriptSignal": "continue",
+        "note": "WAIT_FOR_LOCK.ts for WAIT_FOR_LOCK",
+        "input": ""
+    },
+    "output": {
+        "box": "LOCK_SOURCE_REPO",
+        "scriptSignal": "continue",
+        "note": "LOCK_SOURCE_REPO.ts for LOCK_SOURCE_REPO",
+        "input": ""
+    }
+}

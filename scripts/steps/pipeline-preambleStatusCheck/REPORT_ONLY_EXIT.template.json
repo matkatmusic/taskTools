@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "IS_TASK_ACTIVE.ts for IS_TASK_ACTIVE",
+        "input": ""
+    },
+    "output": {
+        "box": "REPORT_ONLY_EXIT",
+        "scriptSignal": "continue"
+    }
+}

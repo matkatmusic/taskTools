@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_PREVIOUS_RUN_RESUMABLE",
+        "scriptSignal": "continue",
+        "note": "IS_PREVIOUS_RUN_RESUMABLE.ts for IS_PREVIOUS_RUN_RESUMABLE",
+        "input": ""
+    },
+    "output": {
+        "box": "DOES_FENCE_COVER_WORKTREE",
+        "scriptSignal": "continue",
+        "note": "DOES_FENCE_COVER_WORKTREE.ts for DOES_FENCE_COVER_WORKTREE",
+        "input": ""
+    }
+}

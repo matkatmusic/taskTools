@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "CONTINUE_REBASE",
+        "scriptSignal": "continue",
+        "note": "CONTINUE_REBASE.ts for CONTINUE_REBASE",
+        "input": ""
+    },
+    "output": {
+        "box": "IS_REBASE_FINISHED",
+        "scriptSignal": "continue",
+        "note": "IS_REBASE_FINISHED.ts for IS_REBASE_FINISHED",
+        "input": ""
+    }
+}

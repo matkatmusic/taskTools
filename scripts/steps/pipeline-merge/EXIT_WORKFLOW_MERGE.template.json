@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "ARE_2_MERGE_ATTEMPTS_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_MERGE_ATTEMPTS_DONE.ts for ARE_2_MERGE_ATTEMPTS_DONE",
+        "input": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_MERGE",
+        "scriptSignal": "continue"
+    }
+}

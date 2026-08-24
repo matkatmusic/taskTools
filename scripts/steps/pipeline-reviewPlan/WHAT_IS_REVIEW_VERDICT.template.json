@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "CODEX_REVIEWS_PLAN",
+        "scriptSignal": "continue",
+        "note": "CODEX_REVIEWS_PLAN.ts for CODEX_REVIEWS_PLAN",
+        "input": ""
+    },
+    "output": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
+        "input": ""
+    }
+}

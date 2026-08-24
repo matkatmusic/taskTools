@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const workflowPath = join(repoRoot, "skills", "tackle-tasks", "tackle-tasks.workflow.js");
-const diagramPath = join(repoRoot, "plans", "diagram", "pipeline.mmd");
+const diagramPath = join(repoRoot, "plans", "diagram", "_pipeline.mmd");
 
 const workflowSource = readFileSync(workflowPath, "utf8");
 

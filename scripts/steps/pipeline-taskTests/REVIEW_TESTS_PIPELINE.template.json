@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "DO_TASK_TESTS_PASS",
+        "scriptSignal": "continue",
+        "note": "DO_TASK_TESTS_PASS.ts for DO_TASK_TESTS_PASS",
+        "input": ""
+    },
+    "output": {
+        "box": "REVIEW_TESTS_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

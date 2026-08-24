@@ -97,6 +97,10 @@ test("test_getEdgesInDiagram_ignoresAnEdgeLabel", () => {
     assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A -->|yes| B\n").next, { A: ["B"], B: [] });
 });
 
+test("test_getEdgesInDiagram_aDottedArrowMakesNoEdge", () => {
+    assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A -.-> B[\"note\"] --> C\n").next, { A: [], B: ["C"], C: [] });
+});
+
 // The label sits before the arrow here, and reads as informational only. It is not a box.
 test("test_getEdgesInDiagram_ignoresAnEdgeLabelWrittenBeforeTheArrow", () => {
     assert.deepEqual(getEdgesInDiagram(`flowchart TD\n    A -- "exit type: agent-failed<br/>nothing usable" --> B\n`).next, { A: ["B"], B: [] });

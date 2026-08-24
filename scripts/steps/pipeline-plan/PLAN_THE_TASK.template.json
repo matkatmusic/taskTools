@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOCS_INPUT",
+        "scriptSignal": "continue",
+        "note": "DOCS_INPUT.ts for DOCS_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "PLAN_THE_TASK",
+        "scriptSignal": "continue",
+        "note": "PLAN_THE_TASK.ts for PLAN_THE_TASK",
+        "input": ""
+    }
+}

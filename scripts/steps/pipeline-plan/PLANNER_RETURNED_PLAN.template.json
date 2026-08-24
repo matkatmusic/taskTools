@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "scriptSignal": "continue",
+        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
+        "input": ""
+    },
+    "output": {
+        "box": "PLANNER_RETURNED_PLAN",
+        "scriptSignal": "continue",
+        "note": "PLANNER_RETURNED_PLAN.ts for PLANNER_RETURNED_PLAN",
+        "input": ""
+    }
+}

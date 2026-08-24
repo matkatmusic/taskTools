@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "CODEX_REVIEWS_TESTS",
+        "scriptSignal": "continue",
+        "note": "CODEX_REVIEWS_TESTS.ts for CODEX_REVIEWS_TESTS",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_TESTS_FLAGGED",
+        "scriptSignal": "continue",
+        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
+        "input": ""
+    }
+}

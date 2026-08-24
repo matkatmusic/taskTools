@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "RECORD_MODIFIED_FILES_FAILURE",
+        "scriptSignal": "continue",
+        "note": "RECORD_MODIFIED_FILES_FAILURE.ts for RECORD_MODIFIED_FILES_FAILURE",
+        "input": ""
+    },
+    "output": {
+        "box": "DOES_RUN_HOLD_LEASE",
+        "scriptSignal": "continue",
+        "note": "DOES_RUN_HOLD_LEASE.ts for DOES_RUN_HOLD_LEASE",
+        "input": ""
+    }
+}

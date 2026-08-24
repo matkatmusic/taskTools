@@ -1,9 +1,9 @@
 {
   "type": "module",
   "scripts": {
-    "steps": "node --no-inspect scripts/generateSteps.ts && node --no-inspect scripts/generateWorkflow.ts",
+    "steps": "node --no-inspect scripts/generateSteps.ts plans/diagram && node --no-inspect scripts/generateWorkflow.ts",
     "workflow": "node --no-inspect scripts/generateWorkflow.ts",
-    "steps:watch": "node --no-inspect scripts/generateSteps.ts --watch",
+    "steps:watch": "node --no-inspect scripts/generateSteps.ts plans/diagram --watch",
     "test": "node --test \"tests/**/*.test.ts\""
   },
   "devDependencies": {

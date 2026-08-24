@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "ACCEPTED_PLAN_INPUT",
+        "scriptSignal": "continue",
+        "note": "ACCEPTED_PLAN_INPUT.ts for ACCEPTED_PLAN_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "IMPLEMENT_TASK",
+        "scriptSignal": "continue",
+        "note": "IMPLEMENT_TASK.ts for IMPLEMENT_TASK",
+        "input": ""
+    }
+}

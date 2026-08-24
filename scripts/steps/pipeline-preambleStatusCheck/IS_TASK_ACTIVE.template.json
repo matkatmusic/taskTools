@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_TASK_BLOCKED",
+        "scriptSignal": "continue",
+        "note": "IS_TASK_BLOCKED.ts for IS_TASK_BLOCKED",
+        "input": ""
+    },
+    "output": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "IS_TASK_ACTIVE.ts for IS_TASK_ACTIVE",
+        "input": ""
+    }
+}

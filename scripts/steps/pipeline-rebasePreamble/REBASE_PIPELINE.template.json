@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "WAS_LOCK_ACQUIRED",
+        "scriptSignal": "continue",
+        "note": "WAS_LOCK_ACQUIRED.ts for WAS_LOCK_ACQUIRED",
+        "input": ""
+    },
+    "output": {
+        "box": "REBASE_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

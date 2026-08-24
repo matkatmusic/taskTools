@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "RELEASE_SOURCE_LOCK",
+        "scriptSignal": "continue",
+        "note": "RELEASE_SOURCE_LOCK.ts for RELEASE_SOURCE_LOCK",
+        "input": ""
+    },
+    "output": {
+        "box": "MARK_TASK_INACTIVE_FAILURE",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_INACTIVE_FAILURE.ts for MARK_TASK_INACTIVE_FAILURE",
+        "input": ""
+    }
+}

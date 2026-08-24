@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
+        "input": ""
+    },
+    "output": {
+        "box": "VERDICT_AMEND",
+        "scriptSignal": "continue",
+        "note": "VERDICT_AMEND.ts for VERDICT_AMEND",
+        "input": ""
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MERGE_RECEIPT_INPUT",
+        "scriptSignal": "continue",
+        "note": "MERGE_RECEIPT_INPUT.ts for MERGE_RECEIPT_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "RECORD_MERGE_COMMIT_HASHES",
+        "scriptSignal": "continue",
+        "note": "RECORD_MERGE_COMMIT_HASHES.ts for RECORD_MERGE_COMMIT_HASHES",
+        "input": ""
+    }
+}

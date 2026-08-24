@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": ""
+    },
+    "output": {
+        "box": "EXIT_TYPE_NOTE_NO_WRITE_INPUT",
+        "scriptSignal": "continue",
+        "note": "EXIT_TYPE_NOTE_NO_WRITE_INPUT.ts for EXIT_TYPE_NOTE_NO_WRITE_INPUT",
+        "input": ""
+    }
+}

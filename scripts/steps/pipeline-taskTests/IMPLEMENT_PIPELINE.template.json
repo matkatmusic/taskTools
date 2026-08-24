@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
+        "scriptSignal": "continue",
+        "note": "AMEND_ENTRY_WITH_FAILING_TESTS.ts for AMEND_ENTRY_WITH_FAILING_TESTS",
+        "input": ""
+    },
+    "output": {
+        "box": "IMPLEMENT_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

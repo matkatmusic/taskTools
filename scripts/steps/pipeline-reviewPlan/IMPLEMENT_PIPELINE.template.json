@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "VERDICT_AMEND_THEN_ACCEPT",
+        "scriptSignal": "continue",
+        "note": "VERDICT_AMEND_THEN_ACCEPT.ts for VERDICT_AMEND_THEN_ACCEPT",
+        "input": ""
+    },
+    "output": {
+        "box": "IMPLEMENT_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

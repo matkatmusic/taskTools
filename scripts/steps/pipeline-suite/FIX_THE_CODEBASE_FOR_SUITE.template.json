@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "ARE_2_SUITE_FIXES_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_SUITE_FIXES_DONE.ts for ARE_2_SUITE_FIXES_DONE",
+        "input": ""
+    },
+    "output": {
+        "box": "FIX_THE_CODEBASE_FOR_SUITE",
+        "scriptSignal": "continue",
+        "note": "FIX_THE_CODEBASE_FOR_SUITE.ts for FIX_THE_CODEBASE_FOR_SUITE",
+        "input": ""
+    }
+}

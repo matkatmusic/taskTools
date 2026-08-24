@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_WORKTREE_SAFE_TO_USE",
+        "scriptSignal": "continue",
+        "note": "IS_WORKTREE_SAFE_TO_USE.ts for IS_WORKTREE_SAFE_TO_USE",
+        "input": ""
+    },
+    "output": {
+        "box": "IS_PREVIOUS_RUN_RESUMABLE",
+        "scriptSignal": "continue",
+        "note": "IS_PREVIOUS_RUN_RESUMABLE.ts for IS_PREVIOUS_RUN_RESUMABLE",
+        "input": ""
+    }
+}

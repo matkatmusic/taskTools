@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "RUN_FULL_SUITE",
+        "scriptSignal": "continue",
+        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
+        "input": ""
+    },
+    "output": {
+        "box": "DO_ALL_TESTS_PASS",
+        "scriptSignal": "continue",
+        "note": "DO_ALL_TESTS_PASS.ts for DO_ALL_TESTS_PASS",
+        "input": ""
+    }
+}

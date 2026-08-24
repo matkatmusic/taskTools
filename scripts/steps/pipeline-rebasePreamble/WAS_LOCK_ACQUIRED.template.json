@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "LOCK_SOURCE_REPO",
+        "scriptSignal": "continue",
+        "note": "LOCK_SOURCE_REPO.ts for LOCK_SOURCE_REPO",
+        "input": ""
+    },
+    "output": {
+        "box": "WAS_LOCK_ACQUIRED",
+        "scriptSignal": "continue",
+        "note": "WAS_LOCK_ACQUIRED.ts for WAS_LOCK_ACQUIRED",
+        "input": ""
+    }
+}

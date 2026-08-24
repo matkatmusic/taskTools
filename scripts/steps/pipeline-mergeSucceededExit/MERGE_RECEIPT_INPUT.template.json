@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": ""
+    },
+    "output": {
+        "box": "MERGE_RECEIPT_INPUT",
+        "scriptSignal": "continue",
+        "note": "MERGE_RECEIPT_INPUT.ts for MERGE_RECEIPT_INPUT",
+        "input": ""
+    }
+}

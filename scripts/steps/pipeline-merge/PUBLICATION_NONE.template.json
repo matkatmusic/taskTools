@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_PUBLICATION_STATE.ts for WHAT_IS_PUBLICATION_STATE",
+        "input": ""
+    },
+    "output": {
+        "box": "PUBLICATION_NONE",
+        "scriptSignal": "continue",
+        "note": "PUBLICATION_NONE.ts for PUBLICATION_NONE",
+        "input": ""
+    }
+}

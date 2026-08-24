@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED",
+        "scriptSignal": "continue",
+        "note": "FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED.ts for FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED",
+        "input": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_SUITE",
+        "scriptSignal": "continue"
+    }
+}

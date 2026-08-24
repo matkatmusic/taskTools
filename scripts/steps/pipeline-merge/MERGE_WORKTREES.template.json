@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "GREEN_WORKTREE_INPUT",
+        "scriptSignal": "continue",
+        "note": "GREEN_WORKTREE_INPUT.ts for GREEN_WORKTREE_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "MERGE_WORKTREES",
+        "scriptSignal": "continue",
+        "note": "MERGE_WORKTREES.ts for MERGE_WORKTREES",
+        "input": ""
+    }
+}

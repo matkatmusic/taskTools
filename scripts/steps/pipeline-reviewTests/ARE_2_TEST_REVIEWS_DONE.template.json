@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "ARE_TESTS_FLAGGED",
+        "scriptSignal": "continue",
+        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_TEST_REVIEWS_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_TEST_REVIEWS_DONE.ts for ARE_2_TEST_REVIEWS_DONE",
+        "input": ""
+    }
+}

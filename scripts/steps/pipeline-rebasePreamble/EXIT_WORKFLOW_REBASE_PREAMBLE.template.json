@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "HAVE_15_MINUTES_PASSED",
+        "scriptSignal": "continue",
+        "note": "HAVE_15_MINUTES_PASSED.ts for HAVE_15_MINUTES_PASSED",
+        "input": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_REBASE_PREAMBLE",
+        "scriptSignal": "continue"
+    }
+}

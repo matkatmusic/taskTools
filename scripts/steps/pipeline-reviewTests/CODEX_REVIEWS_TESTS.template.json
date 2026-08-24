@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "GREEN_IMPLEMENTATION_INPUT",
+        "scriptSignal": "continue",
+        "note": "GREEN_IMPLEMENTATION_INPUT.ts for GREEN_IMPLEMENTATION_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "CODEX_REVIEWS_TESTS",
+        "scriptSignal": "continue",
+        "note": "CODEX_REVIEWS_TESTS.ts for CODEX_REVIEWS_TESTS",
+        "input": ""
+    }
+}

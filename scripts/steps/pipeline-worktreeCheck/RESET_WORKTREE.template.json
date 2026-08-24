@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "scriptSignal": "continue",
+        "note": "TAKE_WORKTREE_LEASE_BEFORE_RESET.ts for TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "input": ""
+    },
+    "output": {
+        "box": "RESET_WORKTREE",
+        "scriptSignal": "continue",
+        "note": "RESET_WORKTREE.ts for RESET_WORKTREE",
+        "input": ""
+    }
+}

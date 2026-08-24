@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "AGENT_ERRORED",
+        "scriptSignal": "continue",
+        "note": "AGENT_ERRORED.ts for AGENT_ERRORED",
+        "input": ""
+    }
+}

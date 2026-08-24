@@ -32,15 +32,18 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
         if (!statement || DIAGRAM_KEYWORDS.test(statement)) {
             continue;
         }
-        const boxChain = statement.split("-->").map(getBoxIdFromArrowSide).filter(Boolean);
-        for (const [position, box] of boxChain.entries()) {
-            if (!boxes.includes(box)) {
-                boxes.push(box);
-            }
-            next[box] ??= [];
-            const target = boxChain[position + 1];
-            if (target && !next[box]!.includes(target)) {
-                next[box]!.push(target);
+        // A dotted arrow is a side note, not an edge; each side parses alone.
+        for (const segment of statement.split("-.->")) {
+            const boxChain = segment.split("-->").map(getBoxIdFromArrowSide).filter(Boolean);
+            for (const [position, box] of boxChain.entries()) {
+                if (!boxes.includes(box)) {
+                    boxes.push(box);
+                }
+                next[box] ??= [];
+                const target = boxChain[position + 1];
+                if (target && !next[box]!.includes(target)) {
+                    next[box]!.push(target);
+                }
             }
         }
     }

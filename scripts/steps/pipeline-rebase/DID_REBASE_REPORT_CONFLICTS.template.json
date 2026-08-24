@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_REBASE_FINISHED",
+        "scriptSignal": "continue",
+        "note": "IS_REBASE_FINISHED.ts for IS_REBASE_FINISHED",
+        "input": ""
+    },
+    "output": {
+        "box": "DID_REBASE_REPORT_CONFLICTS",
+        "scriptSignal": "continue",
+        "note": "DID_REBASE_REPORT_CONFLICTS.ts for DID_REBASE_REPORT_CONFLICTS",
+        "input": ""
+    }
+}

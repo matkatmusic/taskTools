@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "ARE_TESTS_FLAGGED",
+        "scriptSignal": "continue",
+        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
+        "input": ""
+    },
+    "output": {
+        "box": "REBASE_PREAMBLE_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

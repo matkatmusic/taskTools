@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "BUILD_CLOSURE_NOTE",
+        "scriptSignal": "continue",
+        "note": "BUILD_CLOSURE_NOTE.ts for BUILD_CLOSURE_NOTE",
+        "input": ""
+    },
+    "output": {
+        "box": "MARK_TASK_INACTIVE_SUCCESS",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_INACTIVE_SUCCESS.ts for MARK_TASK_INACTIVE_SUCCESS",
+        "input": ""
+    }
+}

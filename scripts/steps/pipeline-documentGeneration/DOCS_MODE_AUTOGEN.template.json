@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_DOCS_MODE",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_DOCS_MODE.ts for WHAT_IS_DOCS_MODE",
+        "input": ""
+    },
+    "output": {
+        "box": "DOCS_MODE_AUTOGEN",
+        "scriptSignal": "continue",
+        "note": "DOCS_MODE_AUTOGEN.ts for DOCS_MODE_AUTOGEN",
+        "input": ""
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED",
+        "scriptSignal": "continue",
+        "note": "CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED.ts for CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED",
+        "input": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_REVIEW_TESTS",
+        "scriptSignal": "continue"
+    }
+}

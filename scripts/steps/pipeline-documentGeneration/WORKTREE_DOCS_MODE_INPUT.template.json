@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": ""
+    },
+    "output": {
+        "box": "WORKTREE_DOCS_MODE_INPUT",
+        "scriptSignal": "continue",
+        "note": "WORKTREE_DOCS_MODE_INPUT.ts for WORKTREE_DOCS_MODE_INPUT",
+        "input": ""
+    }
+}

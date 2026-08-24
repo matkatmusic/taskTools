@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "WRITE_CLARIFY_REQUEST",
+        "scriptSignal": "continue",
+        "note": "WRITE_CLARIFY_REQUEST.ts for WRITE_CLARIFY_REQUEST",
+        "input": ""
+    },
+    "output": {
+        "box": "DOCUMENT_GENERATION_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

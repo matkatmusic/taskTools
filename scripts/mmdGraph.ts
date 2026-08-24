@@ -142,7 +142,7 @@ export const DIAGRAM_FILES = [
   "pipeline-mergeSucceededExit.mmd",
   "pipeline-failuresExit.mmd",
   "pipeline-reportOnlyExit.mmd",
-  "pipeline.mmd",
+  "_pipeline.mmd",
 ];
 
 // Built at module load: every diagram node id mapped to its label. Conflicting labels throw.

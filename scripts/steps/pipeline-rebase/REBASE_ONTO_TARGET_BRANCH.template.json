@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "SOURCE_REPO_LOCKED_INPUT",
+        "scriptSignal": "continue",
+        "note": "SOURCE_REPO_LOCKED_INPUT.ts for SOURCE_REPO_LOCKED_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "REBASE_ONTO_TARGET_BRANCH",
+        "scriptSignal": "continue",
+        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
+        "input": ""
+    }
+}

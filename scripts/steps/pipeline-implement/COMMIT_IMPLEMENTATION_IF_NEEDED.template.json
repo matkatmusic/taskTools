@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IMPLEMENT_TASK",
+        "scriptSignal": "continue",
+        "note": "IMPLEMENT_TASK.ts for IMPLEMENT_TASK",
+        "input": ""
+    },
+    "output": {
+        "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "scriptSignal": "continue",
+        "note": "COMMIT_IMPLEMENTATION_IF_NEEDED.ts for COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "input": ""
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "PLANNER_RETURNED_PLAN",
+        "scriptSignal": "continue",
+        "note": "PLANNER_RETURNED_PLAN.ts for PLANNER_RETURNED_PLAN",
+        "input": ""
+    },
+    "output": {
+        "box": "REVIEW_PLAN_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

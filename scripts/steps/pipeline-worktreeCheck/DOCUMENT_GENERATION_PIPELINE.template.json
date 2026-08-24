@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "INIT_SUBMODULES_RECURSIVELY",
+        "scriptSignal": "continue",
+        "note": "INIT_SUBMODULES_RECURSIVELY.ts for INIT_SUBMODULES_RECURSIVELY",
+        "input": ""
+    },
+    "output": {
+        "box": "DOCUMENT_GENERATION_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

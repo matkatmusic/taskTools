@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DID_REBASE_REPORT_CONFLICTS",
+        "scriptSignal": "continue",
+        "note": "DID_REBASE_REPORT_CONFLICTS.ts for DID_REBASE_REPORT_CONFLICTS",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_CONFLICT_FIXES_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_CONFLICT_FIXES_DONE.ts for ARE_2_CONFLICT_FIXES_DONE",
+        "input": ""
+    }
+}

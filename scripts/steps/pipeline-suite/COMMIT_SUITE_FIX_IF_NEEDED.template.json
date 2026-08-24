@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "FIX_THE_CODEBASE_FOR_SUITE",
+        "scriptSignal": "continue",
+        "note": "FIX_THE_CODEBASE_FOR_SUITE.ts for FIX_THE_CODEBASE_FOR_SUITE",
+        "input": ""
+    },
+    "output": {
+        "box": "COMMIT_SUITE_FIX_IF_NEEDED",
+        "scriptSignal": "continue",
+        "note": "COMMIT_SUITE_FIX_IF_NEEDED.ts for COMMIT_SUITE_FIX_IF_NEEDED",
+        "input": ""
+    }
+}

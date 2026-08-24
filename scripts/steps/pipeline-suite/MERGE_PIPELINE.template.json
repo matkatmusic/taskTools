@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "DID_CHANGES_STAY_INSIDE_FENCE",
+        "scriptSignal": "continue",
+        "note": "DID_CHANGES_STAY_INSIDE_FENCE.ts for DID_CHANGES_STAY_INSIDE_FENCE",
+        "input": ""
+    },
+    "output": {
+        "box": "MERGE_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

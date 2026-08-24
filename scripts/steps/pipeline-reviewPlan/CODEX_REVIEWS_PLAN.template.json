@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DRAFT_PLAN_INPUT",
+        "scriptSignal": "continue",
+        "note": "DRAFT_PLAN_INPUT.ts for DRAFT_PLAN_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "CODEX_REVIEWS_PLAN",
+        "scriptSignal": "continue",
+        "note": "CODEX_REVIEWS_PLAN.ts for CODEX_REVIEWS_PLAN",
+        "input": ""
+    }
+}

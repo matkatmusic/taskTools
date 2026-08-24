@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": ""
+    },
+    "output": {
+        "box": "REBASED_WORKTREE_INPUT",
+        "scriptSignal": "continue",
+        "note": "REBASED_WORKTREE_INPUT.ts for REBASED_WORKTREE_INPUT",
+        "input": ""
+    }
+}

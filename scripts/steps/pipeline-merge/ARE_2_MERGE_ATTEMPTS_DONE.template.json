@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "PUBLICATION_NONE",
+        "scriptSignal": "continue",
+        "note": "PUBLICATION_NONE.ts for PUBLICATION_NONE",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_MERGE_ATTEMPTS_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_MERGE_ATTEMPTS_DONE.ts for ARE_2_MERGE_ATTEMPTS_DONE",
+        "input": ""
+    }
+}

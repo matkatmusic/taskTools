@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "scriptSignal": "continue",
+        "note": "AMEND_ENTRY_WITH_CODEX_NOTES.ts for AMEND_ENTRY_WITH_CODEX_NOTES",
+        "input": ""
+    },
+    "output": {
+        "box": "IMPLEMENT_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

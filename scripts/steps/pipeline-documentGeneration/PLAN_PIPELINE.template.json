@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "UPDATE_AUTO_GENERATED_DOCS",
+        "scriptSignal": "continue",
+        "note": "UPDATE_AUTO_GENERATED_DOCS.ts for UPDATE_AUTO_GENERATED_DOCS",
+        "input": ""
+    },
+    "output": {
+        "box": "PLAN_PIPELINE",
+        "scriptSignal": "continue"
+    }
+}

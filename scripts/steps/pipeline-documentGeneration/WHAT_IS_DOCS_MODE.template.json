@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WORKTREE_DOCS_MODE_INPUT",
+        "scriptSignal": "continue",
+        "note": "WORKTREE_DOCS_MODE_INPUT.ts for WORKTREE_DOCS_MODE_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "WHAT_IS_DOCS_MODE",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_DOCS_MODE.ts for WHAT_IS_DOCS_MODE",
+        "input": ""
+    }
+}

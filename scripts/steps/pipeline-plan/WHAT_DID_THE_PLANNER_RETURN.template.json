@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "PLAN_THE_TASK",
+        "scriptSignal": "continue",
+        "note": "PLAN_THE_TASK.ts for PLAN_THE_TASK",
+        "input": ""
+    },
+    "output": {
+        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "scriptSignal": "continue",
+        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
+        "input": ""
+    }
+}

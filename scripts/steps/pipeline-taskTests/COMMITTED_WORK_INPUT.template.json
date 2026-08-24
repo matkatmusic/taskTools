@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": ""
+    },
+    "output": {
+        "box": "COMMITTED_WORK_INPUT",
+        "scriptSignal": "continue",
+        "note": "COMMITTED_WORK_INPUT.ts for COMMITTED_WORK_INPUT",
+        "input": ""
+    }
+}

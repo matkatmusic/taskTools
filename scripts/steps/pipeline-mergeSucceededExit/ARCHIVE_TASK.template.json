@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MARK_TASK_INACTIVE_SUCCESS",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_INACTIVE_SUCCESS.ts for MARK_TASK_INACTIVE_SUCCESS",
+        "input": ""
+    },
+    "output": {
+        "box": "ARCHIVE_TASK",
+        "scriptSignal": "continue",
+        "note": "ARCHIVE_TASK.ts for ARCHIVE_TASK",
+        "input": ""
+    }
+}

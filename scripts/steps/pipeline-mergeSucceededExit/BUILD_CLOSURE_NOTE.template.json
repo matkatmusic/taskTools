@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "CLEAN_UP_WORKTREES",
+        "scriptSignal": "continue",
+        "note": "CLEAN_UP_WORKTREES.ts for CLEAN_UP_WORKTREES",
+        "input": ""
+    },
+    "output": {
+        "box": "BUILD_CLOSURE_NOTE",
+        "scriptSignal": "continue",
+        "note": "BUILD_CLOSURE_NOTE.ts for BUILD_CLOSURE_NOTE",
+        "input": ""
+    }
+}

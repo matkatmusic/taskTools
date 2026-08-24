@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "PREAMBLE_TASK_NUMBER_INPUT",
+        "scriptSignal": "continue",
+        "note": "PREAMBLE_TASK_NUMBER_INPUT.ts for PREAMBLE_TASK_NUMBER_INPUT",
+        "input": ""
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "EXIT_TYPE_NOTE_INPUT",
+        "scriptSignal": "continue",
+        "note": "EXIT_TYPE_NOTE_INPUT.ts for EXIT_TYPE_NOTE_INPUT",
+        "input": ""
+    },
+    "output": {
+        "box": "READ_FAILURES_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "READ_FAILURES_PUBLICATION_STATE.ts for READ_FAILURES_PUBLICATION_STATE",
+        "input": ""
+    }
+}

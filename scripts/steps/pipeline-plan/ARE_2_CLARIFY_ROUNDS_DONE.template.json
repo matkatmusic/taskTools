@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "PLANNER_RETURNED_CLARIFY",
+        "scriptSignal": "continue",
+        "note": "PLANNER_RETURNED_CLARIFY.ts for PLANNER_RETURNED_CLARIFY",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_CLARIFY_ROUNDS_DONE",
+        "scriptSignal": "continue",
+        "note": "ARE_2_CLARIFY_ROUNDS_DONE.ts for ARE_2_CLARIFY_ROUNDS_DONE",
+        "input": ""
+    }
+}

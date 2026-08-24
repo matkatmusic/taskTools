@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "READ_MERGE_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "READ_MERGE_PUBLICATION_STATE.ts for READ_MERGE_PUBLICATION_STATE",
+        "input": ""
+    },
+    "output": {
+        "box": "WHAT_IS_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_PUBLICATION_STATE.ts for WHAT_IS_PUBLICATION_STATE",
+        "input": ""
+    }
+}

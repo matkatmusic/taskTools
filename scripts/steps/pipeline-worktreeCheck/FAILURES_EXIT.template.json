@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "DOES_FENCE_COVER_WORKTREE",
+        "scriptSignal": "continue",
+        "note": "DOES_FENCE_COVER_WORKTREE.ts for DOES_FENCE_COVER_WORKTREE",
+        "input": ""
+    },
+    "output": {
+        "box": "FAILURES_EXIT",
+        "scriptSignal": "continue"
+    }
+}
