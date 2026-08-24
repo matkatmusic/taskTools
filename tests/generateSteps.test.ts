@@ -122,6 +122,13 @@ test("test_generateSteps_keepsAHandWrittenSeamIntoAnotherDiagram", () => {
     assert.deepEqual(run()["one.mmd"]![1]!.next, ["two.mmd::SWEEP"]);
 });
 
+test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
+    const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    config["one.mmd"]![1]!.mutating = true;
+    writeFileSync(configPath, JSON.stringify(config, null, 4));
+    assert.equal(run()["one.mmd"]![1]!.mutating, true);
+});
+
 test("test_generateSteps_dropsASameDiagramNextTheArrowsNoLongerName", () => {
     const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> C\n");

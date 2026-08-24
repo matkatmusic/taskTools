@@ -593,6 +593,7 @@
             "script": "scripts/steps/pipeline-preambleStatusCheck/MARK_TASK_ACTIVE.ts",
             "template": "scripts/steps/pipeline-preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "WORKTREE_CHECK_PIPELINE"
             ]

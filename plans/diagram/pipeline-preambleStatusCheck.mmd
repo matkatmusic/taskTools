@@ -35,7 +35,7 @@ flowchart TB
 %% ---
 %%   run-failed      - a script failed before the task became active
 
-  PREAMBLE_TASK_NUMBER_INPUT["Input: { taskNumber }"] --> IS_TASK_NUMBER_VALID
+  PREAMBLE_TASK_NUMBER_INPUT["Input: { taskNumber, tasksFile }"] --> IS_TASK_NUMBER_VALID
   IS_TASK_NUMBER_VALID{"is task number valid?"} -->|YES| IS_TASK_BLOCKED{"is task blocked?"}
   IS_TASK_NUMBER_VALID -- "NO<br/>exit type: invalid-number<br/>exit note: task number is not in tasks.json" --> REPORT_ONLY_EXIT
   IS_TASK_BLOCKED -- "YES<br/>exit type: blocked<br/>exit note: an open blocker remains" --> REPORT_ONLY_EXIT

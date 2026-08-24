@@ -1,7 +1,9 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "MARK_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "tasksFile": ""
     },
     "output": {
         "box": "ACTIVE_TASK_INPUT",

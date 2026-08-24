@@ -1,11 +1,17 @@
 // PREAMBLE_TASK_NUMBER_INPUT, from pipeline-preambleStatusCheck.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "PREAMBLE_TASK_NUMBER_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for PREAMBLE_TASK_NUMBER_INPUT`, input };
+    const { taskNumber, tasksFile } = JSON.parse(input) as { taskNumber: unknown; tasksFile: unknown };
+    if (!Number.isInteger(taskNumber)) {
+        throw new Error(`taskNumber must be an integer, got ${JSON.stringify(taskNumber)}`);
+    }
+    if (typeof tasksFile !== "string" || tasksFile === "") {
+        throw new Error(`tasksFile must be a non-empty string, got ${JSON.stringify(tasksFile)}`);
+    }
+    return { box: "PREAMBLE_TASK_NUMBER_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, taskNumber, tasksFile };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -1,11 +1,11 @@
 // REPORT_ONLY_EXIT, from pipeline-preambleStatusCheck.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "REPORT_ONLY_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    const { exitType, note } = JSON.parse(input) as { exitType: string; note: string };
+    return { box: "REPORT_ONLY_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, exitType, note };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

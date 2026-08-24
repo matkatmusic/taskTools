@@ -1,7 +1,9 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "REPORT_ONLY_EXIT",
+        "scriptSignal": "continue",
+        "exitType": "already-active",
+        "note": "a previous run left the task active"
     },
     "output": {
         "box": "EXIT_TYPE_NOTE_NO_WRITE_INPUT",

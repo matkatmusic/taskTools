@@ -2,13 +2,16 @@
     "input": {
         "box": "PREAMBLE_TASK_NUMBER_INPUT",
         "scriptSignal": "continue",
-        "note": "PREAMBLE_TASK_NUMBER_INPUT.ts for PREAMBLE_TASK_NUMBER_INPUT",
-        "input": ""
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json"
     },
     "output": {
         "box": "IS_TASK_NUMBER_VALID",
         "scriptSignal": "continue",
-        "note": "IS_TASK_NUMBER_VALID.ts for IS_TASK_NUMBER_VALID",
-        "input": ""
+        "next": "IS_TASK_BLOCKED",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "note": ""
     }
 }

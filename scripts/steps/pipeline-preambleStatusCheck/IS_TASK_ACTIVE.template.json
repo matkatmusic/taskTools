@@ -2,13 +2,19 @@
     "input": {
         "box": "IS_TASK_BLOCKED",
         "scriptSignal": "continue",
-        "note": "IS_TASK_BLOCKED.ts for IS_TASK_BLOCKED",
-        "input": ""
+        "next": "IS_TASK_ACTIVE",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "note": ""
     },
     "output": {
         "box": "IS_TASK_ACTIVE",
         "scriptSignal": "continue",
-        "note": "IS_TASK_ACTIVE.ts for IS_TASK_ACTIVE",
-        "input": ""
+        "next": "MARK_TASK_ACTIVE",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "note": ""
     }
 }

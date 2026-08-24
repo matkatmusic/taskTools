@@ -8,7 +8,7 @@ const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REGENERATE_DELAY_MS = 50;
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" for a hand-written seam.
-export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; next: string[] };
+export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; next: string[] };
 // Keyed by diagram file name, so two diagrams may name the same box without sharing a script.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -145,6 +145,23 @@ function getSeamsFromPreviousConfig(configPath: string): Record<string, string[]
     return seamsByStepKey;
 }
 
+// The mutating flag is hand-written, so regenerating from the arrows must not drop it.
+function getMutatingFromPreviousConfig(configPath: string): Record<string, boolean> {
+    if (!existsSync(configPath)) {
+        return {};
+    }
+    const previousConfig = JSON.parse(readFileSync(configPath, "utf8")) as StepConfig;
+    const mutatingByStepKey: Record<string, boolean> = {};
+    for (const [diagramFile, entries] of Object.entries(previousConfig)) {
+        for (const entry of entries) {
+            if (entry.mutating) {
+                mutatingByStepKey[`${diagramFile}::${entry.box}`] = true;
+            }
+        }
+    }
+    return mutatingByStepKey;
+}
+
 // A leading underscore marks a spec diagram: it is drawn and served, but never generated from.
 function getDiagramFileNames(diagramFolder: string): string[] {
     return readdirSync(diagramFolder).filter(name => name.endsWith(".mmd") && !name.startsWith("_")).sort();
@@ -152,6 +169,7 @@ function getDiagramFileNames(diagramFolder: string): string[] {
 
 export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string): StepConfig {
     const seamsByStepKey = getSeamsFromPreviousConfig(configPath);
+    const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
     const newTemplatePaths = new Set<string>();
     const config: StepConfig = {};
     for (const diagramFile of getDiagramFileNames(diagramFolder)) {
@@ -174,11 +192,13 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
                 newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
             }
             const seams = seamsByStepKey[`${diagramFile}::${box}`] ?? [];
+            const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
             entries.push({
                 box,
                 script: relative(PROJECT_ROOT, scriptPath),
                 template: relative(PROJECT_ROOT, templatePath),
                 producesPrompt,
+                ...(mutating ? { mutating } : {}),
                 next: [...next[box]!, ...seams],
             });
         }
