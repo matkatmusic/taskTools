@@ -1,51 +1,616 @@
+// bun scripts/tackle-tasks/monolith-pipeline.ts <taskNumber> scripts/tackle-tasks/monolith-pipeline.fixture/tasks.json
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 
+// ponytail: worktreeSafe and touchedFiles are fixture-only; the real checks read git.
+type Run = {
+    active?: boolean;
+    worktree?: string;
+    leaseRunId?: string;
+    history?: { endedAt: string | null; implementationNotesFile: string | null }[];
+    worktreeSafe?: boolean;
+    touchedFiles?: string[];
+};
+
+// ponytail: sim is fixture-only. One answer per visit, keyed by the block that asks.
 type Task = {
     taskNumber: number;
+    files?: string[];
     blockedBy?: { taskNum: number }[];
-    run?: { active: boolean };
+    run?: Run;
+    sim?: Record<string, (string | null)[]>;
 };
 
-type Input = {
+type State = {
+    tasks: Task[];
+    task: Task | undefined;
+    runId: string;
+    docsMode: string;
+    exitType: string;
+    exitNote: string;
+    prompt: string;
+    answer: string | null;
+    counts: Record<string, number>;
+    ran: string[];
+};
+
+type Input = State & {
     command: "/run-step";
-    block: string;
-    tasks: Task[];
-    task: Task | undefined;
+    block: string | null;
 };
 
-type Packet = {
-    next: string;
-    tasks: Task[];
-    task: Task | undefined;
+type Packet = Partial<State> & {
+    next: string | null;
 };
 
-function IS_TASK_NUMBER_VALID(input: Input): Packet {
-    const next = input.task === undefined ? "REPORT_ONLY_EXIT" : "IS_TASK_BLOCKED";
-    return { next, tasks: input.tasks, task: input.task };
-}
-
-function IS_TASK_BLOCKED(input: Input): Packet {
-    const blockers = input.task!.blockedBy ?? [];
-    const blocked = blockers.some((b) => input.tasks.some((t) => t.taskNumber === b.taskNum));
-    const next = blocked ? "REPORT_ONLY_EXIT" : "IS_TASK_ACTIVE";
-    return { next, tasks: input.tasks, task: input.task };
-}
-
-function IS_TASK_ACTIVE(input: Input): Packet {
-    const active = input.task!.run?.active === true;
-    const next = active ? "REPORT_ONLY_EXIT" : "MARK_TASK_ACTIVE";
-    return { next, tasks: input.tasks, task: input.task };
+// ponytail: the last answer repeats, so a fixture writes ["NO"] and not 180 of them.
+function sim(input: Input, block: string): string | null {
+    const answers = input.task!.sim![block];
+    return answers[Math.min(input.counts[block] - 1, answers.length - 1)]!;
 }
 
 const blocks: Record<string, (input: Input) => Packet> = {
-    IS_TASK_NUMBER_VALID,
-    IS_TASK_BLOCKED,
-    IS_TASK_ACTIVE,
+    // --- pipeline-preambleStatusCheck.mmd ---
+
+    PREAMBLE_TASK_NUMBER_INPUT(input) {
+        return { next: "IS_TASK_NUMBER_VALID" };
+    },
+
+    IS_TASK_NUMBER_VALID(input) {
+        if (input.task === undefined) {
+            return { next: "REPORT_ONLY_EXIT", exitType: "invalid-number", exitNote: "task number is not in tasks.json" };
+        }
+        return { next: "IS_TASK_BLOCKED" };
+    },
+
+    IS_TASK_BLOCKED(input) {
+        const blockers = input.task!.blockedBy ?? [];
+        const blocked = blockers.some((b) => input.tasks.some((t) => t.taskNumber === b.taskNum));
+        if (blocked) {
+            return { next: "REPORT_ONLY_EXIT", exitType: "blocked", exitNote: "an open blocker remains" };
+        }
+        return { next: "IS_TASK_ACTIVE" };
+    },
+
+    IS_TASK_ACTIVE(input) {
+        if (input.task!.run?.active === true) {
+            return { next: "REPORT_ONLY_EXIT", exitType: "already-active", exitNote: "a previous run left the task active" };
+        }
+        return { next: "MARK_TASK_ACTIVE" };
+    },
+
+    MARK_TASK_ACTIVE(input) {
+        input.task!.run = { ...input.task!.run, active: true };
+        return { next: "WORKTREE_CHECK_PIPELINE", runId: randomUUID() };
+    },
+
+    WORKTREE_CHECK_PIPELINE(input) {
+        return { next: "ACTIVE_TASK_INPUT" };
+    },
+
+    REPORT_ONLY_EXIT(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-worktreeCheck.mmd ---
+
+    ACTIVE_TASK_INPUT(input) {
+        return { next: "DOES_WORKTREE_EXIST" };
+    },
+
+    DOES_WORKTREE_EXIST(input) {
+        const exists = input.task!.run?.worktree !== undefined;
+        return { next: exists ? "IS_WORKTREE_SAFE_TO_USE" : "CREATE_WORKTREE" };
+    },
+
+    IS_WORKTREE_SAFE_TO_USE(input) {
+        const safe = input.task!.run?.worktreeSafe === true;
+        return { next: safe ? "IS_PREVIOUS_RUN_RESUMABLE" : "TAKE_WORKTREE_LEASE_BEFORE_RESET" };
+    },
+
+    IS_PREVIOUS_RUN_RESUMABLE(input) {
+        input.task!.run!.leaseRunId = input.runId;
+        const endedRuns = (input.task!.run!.history ?? []).filter((r) => r.endedAt !== null);
+        const newest = endedRuns[endedRuns.length - 1];
+        if (newest?.implementationNotesFile == null) {
+            return { next: "FAILURES_EXIT", exitType: "not-resumable", exitNote: "a safe worktree holds work no run recorded a stopping point for" };
+        }
+        return { next: "DOES_FENCE_COVER_WORKTREE" };
+    },
+
+    DOES_FENCE_COVER_WORKTREE(input) {
+        const files = input.task!.files ?? [];
+        const violations = (input.task!.run!.touchedFiles ?? []).filter((f) => !files.includes(f));
+        if (violations.length > 0) {
+            return { next: "FAILURES_EXIT", exitType: "fence-violation", exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}` };
+        }
+        return { next: "INIT_SUBMODULES_RECURSIVELY", docsMode: "UPDATE" };
+    },
+
+    CREATE_WORKTREE(input) {
+        input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
+        return { next: "TAKE_WORKTREE_LEASE", docsMode: "AUTOGEN" };
+    },
+
+    TAKE_WORKTREE_LEASE(input) {
+        input.task!.run!.leaseRunId = input.runId;
+        return { next: "INIT_SUBMODULES_RECURSIVELY" };
+    },
+
+    TAKE_WORKTREE_LEASE_BEFORE_RESET(input) {
+        input.task!.run!.leaseRunId = input.runId;
+        return { next: "RESET_WORKTREE" };
+    },
+
+    RESET_WORKTREE(input) {
+        input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
+        input.task!.run!.worktreeSafe = true;
+        return { next: "INIT_SUBMODULES_RECURSIVELY", docsMode: "AUTOGEN" };
+    },
+
+    INIT_SUBMODULES_RECURSIVELY(input) {
+        return { next: "DOCUMENT_GENERATION_PIPELINE" };
+    },
+
+    DOCUMENT_GENERATION_PIPELINE(input) {
+        return { next: "WORKTREE_DOCS_MODE_INPUT" };
+    },
+
+    FAILURES_EXIT(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-documentGeneration.mmd ---
+
+    WORKTREE_DOCS_MODE_INPUT(input) {
+        return { next: "WHAT_IS_DOCS_MODE" };
+    },
+
+    WHAT_IS_DOCS_MODE(input) {
+        if (input.docsMode === "AUTOGEN") return { next: "DOCS_MODE_AUTOGEN" };
+        if (input.docsMode === "UPDATE") return { next: "DOCS_MODE_UPDATE" };
+        throw new Error(`unknown docs mode ${JSON.stringify(input.docsMode)}`);
+    },
+
+    DOCS_MODE_AUTOGEN(input) {
+        return { next: "AUTO_GENERATE_DOCS" };
+    },
+
+    DOCS_MODE_UPDATE(input) {
+        return { next: "UPDATE_AUTO_GENERATED_DOCS" };
+    },
+
+    AUTO_GENERATE_DOCS(input) {
+        return { next: "PLAN_PIPELINE" };
+    },
+
+    UPDATE_AUTO_GENERATED_DOCS(input) {
+        return { next: "PLAN_PIPELINE" };
+    },
+
+    PLAN_PIPELINE(input) {
+        return { next: "DOCS_INPUT" };
+    },
+
+    // --- pipeline-plan.mmd ---
+
+    DOCS_INPUT(input) {
+        return { next: "PLAN_THE_TASK" };
+    },
+
+    PLAN_THE_TASK(input) {
+        return { next: "WHAT_DID_THE_PLANNER_RETURN", prompt: "PLAN_THE_TASK" };
+    },
+
+    WHAT_DID_THE_PLANNER_RETURN(input) {
+        if (input.answer === "PLAN") return { next: "PLANNER_RETURNED_PLAN" };
+        if (input.answer === "CLARIFY") return { next: "PLANNER_RETURNED_CLARIFY" };
+        throw new Error(`unknown planner answer ${JSON.stringify(input.answer)}`);
+    },
+
+    PLANNER_RETURNED_PLAN(input) {
+        return { next: "REVIEW_PLAN_PIPELINE" };
+    },
+
+    PLANNER_RETURNED_CLARIFY(input) {
+        return { next: "ARE_2_CLARIFY_ROUNDS_DONE" };
+    },
+
+    ARE_2_CLARIFY_ROUNDS_DONE(input) {
+        if (input.counts.PLANNER_RETURNED_CLARIFY >= 2) {
+            return { next: "EXIT_WORKFLOW_PLAN", exitType: "clarify-stuck", exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved." };
+        }
+        return { next: "WRITE_CLARIFY_REQUEST" };
+    },
+
+    WRITE_CLARIFY_REQUEST(input) {
+        return { next: "DOCUMENT_GENERATION_PIPELINE", docsMode: "UPDATE" };
+    },
+
+    EXIT_WORKFLOW_PLAN(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-reviewPlan.mmd ---
+
+    REVIEW_PLAN_PIPELINE(input) {
+        return { next: "DRAFT_PLAN_INPUT" };
+    },
+
+    DRAFT_PLAN_INPUT(input) {
+        return { next: "CODEX_REVIEWS_PLAN" };
+    },
+
+    CODEX_REVIEWS_PLAN(input) {
+        return { next: "WHAT_IS_REVIEW_VERDICT", prompt: "CODEX_REVIEWS_PLAN" };
+    },
+
+    WHAT_IS_REVIEW_VERDICT(input) {
+        const verdicts = ["ACCEPT", "AMEND_THEN_ACCEPT", "AMEND", "SCRAP", "ERROR"];
+        if (!verdicts.includes(input.answer!)) throw new Error(`unknown review verdict ${JSON.stringify(input.answer)}`);
+        return { next: `VERDICT_${input.answer}` };
+    },
+
+    VERDICT_ACCEPT(input) {
+        return { next: "IMPLEMENT_PIPELINE" };
+    },
+
+    VERDICT_AMEND_THEN_ACCEPT(input) {
+        return { next: "IMPLEMENT_PIPELINE" };
+    },
+
+    VERDICT_AMEND(input) {
+        return { next: "UPDATE_TASK_ENTRY" };
+    },
+
+    VERDICT_SCRAP(input) {
+        return { next: "UPDATE_TASK_ENTRY" };
+    },
+
+    VERDICT_ERROR(input) {
+        return { next: "EXIT_WORKFLOW_REVIEW_PLAN", exitType: "run-failed", exitNote: "the plan review could not run" };
+    },
+
+    UPDATE_TASK_ENTRY(input) {
+        return { next: "ARE_2_REVIEWS_DONE" };
+    },
+
+    ARE_2_REVIEWS_DONE(input) {
+        if (input.counts.CODEX_REVIEWS_PLAN >= 2) {
+            return { next: "EXIT_WORKFLOW_REVIEW_PLAN", exitType: "plan-scrapped", exitNote: "codex did not accept the plan in two reviews" };
+        }
+        return { next: "PLAN_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_REVIEW_PLAN(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-implement.mmd ---
+
+    IMPLEMENT_PIPELINE(input) {
+        return { next: "ACCEPTED_PLAN_INPUT" };
+    },
+
+    ACCEPTED_PLAN_INPUT(input) {
+        return { next: "IMPLEMENT_TASK" };
+    },
+
+    IMPLEMENT_TASK(input) {
+        return { next: "COMMIT_IMPLEMENTATION_IF_NEEDED", prompt: "IMPLEMENT_TASK" };
+    },
+
+    COMMIT_IMPLEMENTATION_IF_NEEDED(input) {
+        return { next: "TASK_TESTS_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_IMPLEMENT(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-taskTests.mmd ---
+
+    TASK_TESTS_PIPELINE(input) {
+        return { next: "COMMITTED_WORK_INPUT" };
+    },
+
+    COMMITTED_WORK_INPUT(input) {
+        return { next: "RUN_TASK_TESTS" };
+    },
+
+    RUN_TASK_TESTS(input) {
+        return { next: "DO_TASK_TESTS_PASS" };
+    },
+
+    DO_TASK_TESTS_PASS(input) {
+        const pass = sim(input, "DO_TASK_TESTS_PASS") === "YES";
+        return { next: pass ? "REVIEW_TESTS_PIPELINE" : "ARE_2_TEST_FIXES_DONE" };
+    },
+
+    ARE_2_TEST_FIXES_DONE(input) {
+        if (input.counts.AMEND_ENTRY_WITH_FAILING_TESTS >= 2) {
+            return { next: "EXIT_WORKFLOW_TASK_TESTS", exitType: "tests-red", exitNote: "task tests still failing after 2 fix attempts" };
+        }
+        return { next: "AMEND_ENTRY_WITH_FAILING_TESTS" };
+    },
+
+    AMEND_ENTRY_WITH_FAILING_TESTS(input) {
+        return { next: "IMPLEMENT_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_TASK_TESTS(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-reviewTests.mmd ---
+
+    REVIEW_TESTS_PIPELINE(input) {
+        return { next: "GREEN_IMPLEMENTATION_INPUT" };
+    },
+
+    GREEN_IMPLEMENTATION_INPUT(input) {
+        return { next: "CODEX_REVIEWS_TESTS" };
+    },
+
+    CODEX_REVIEWS_TESTS(input) {
+        return { next: "ARE_TESTS_FLAGGED", prompt: "CODEX_REVIEWS_TESTS" };
+    },
+
+    ARE_TESTS_FLAGGED(input) {
+        const flagged = input.answer === "YES";
+        return { next: flagged ? "ARE_2_TEST_REVIEWS_DONE" : "REBASE_PREAMBLE_PIPELINE" };
+    },
+
+    ARE_2_TEST_REVIEWS_DONE(input) {
+        if (input.counts.CODEX_REVIEWS_TESTS >= 2) {
+            return { next: "EXIT_WORKFLOW_REVIEW_TESTS", exitType: "tests-flagged", exitNote: "task tests failed codex review" };
+        }
+        return { next: "AMEND_ENTRY_WITH_CODEX_NOTES" };
+    },
+
+    AMEND_ENTRY_WITH_CODEX_NOTES(input) {
+        return { next: "IMPLEMENT_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_REVIEW_TESTS(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-rebasePreamble.mmd ---
+
+    REBASE_PREAMBLE_PIPELINE(input) {
+        return { next: "FINISHED_IMPLEMENTATION_INPUT" };
+    },
+
+    FINISHED_IMPLEMENTATION_INPUT(input) {
+        return { next: "LOCK_SOURCE_REPO" };
+    },
+
+    LOCK_SOURCE_REPO(input) {
+        return { next: "WAS_LOCK_ACQUIRED" };
+    },
+
+    WAS_LOCK_ACQUIRED(input) {
+        const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
+        return { next: acquired ? "REBASE_PIPELINE" : "HAVE_15_MINUTES_PASSED" };
+    },
+
+    HAVE_15_MINUTES_PASSED(input) {
+        if ((input.counts.WAIT_FOR_LOCK ?? 0) * 5 >= 15 * 60) {
+            return { next: "EXIT_WORKFLOW_REBASE_PREAMBLE", exitType: "run-failed", exitNote: "the source repo lock did not come free within 15 minutes" };
+        }
+        return { next: "WAIT_FOR_LOCK" };
+    },
+
+    WAIT_FOR_LOCK(input) {
+        return { next: "LOCK_SOURCE_REPO" };
+    },
+
+    EXIT_WORKFLOW_REBASE_PREAMBLE(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-rebase.mmd ---
+
+    REBASE_PIPELINE(input) {
+        return { next: "SOURCE_REPO_LOCKED_INPUT" };
+    },
+
+    SOURCE_REPO_LOCKED_INPUT(input) {
+        return { next: "REBASE_ONTO_TARGET_BRANCH" };
+    },
+
+    REBASE_ONTO_TARGET_BRANCH(input) {
+        return { next: "DID_REBASE_REPORT_CONFLICTS" };
+    },
+
+    DID_REBASE_REPORT_CONFLICTS(input) {
+        const conflicts = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
+        return { next: conflicts ? "ARE_2_CONFLICT_FIXES_DONE" : "SUITE_PIPELINE" };
+    },
+
+    ARE_2_CONFLICT_FIXES_DONE(input) {
+        if (input.counts.FIX_CONFLICTS >= 2) {
+            return { next: "EXIT_WORKFLOW_REBASE", exitType: "rebase-stuck", exitNote: "the rebase did not advance after 2 conflict fixes" };
+        }
+        return { next: "FIX_CONFLICTS" };
+    },
+
+    FIX_CONFLICTS(input) {
+        return { next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", prompt: "FIX_CONFLICTS" };
+    },
+
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED(input) {
+        return { next: "CONTINUE_REBASE" };
+    },
+
+    CONTINUE_REBASE(input) {
+        return { next: "IS_REBASE_FINISHED" };
+    },
+
+    IS_REBASE_FINISHED(input) {
+        const finished = sim(input, "IS_REBASE_FINISHED") === "YES";
+        return { next: finished ? "SUITE_PIPELINE" : "DID_REBASE_REPORT_CONFLICTS" };
+    },
+
+    AGENT_ERRORED(input) {
+        return { next: "EXIT_WORKFLOW_REBASE", exitType: "agent-failed", exitNote: "the agent returned nothing usable" };
+    },
+
+    EXIT_WORKFLOW_REBASE(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-suite.mmd ---
+
+    SUITE_PIPELINE(input) {
+        return { next: "REBASED_WORKTREE_INPUT" };
+    },
+
+    REBASED_WORKTREE_INPUT(input) {
+        return { next: "RUN_FULL_SUITE" };
+    },
+
+    RUN_FULL_SUITE(input) {
+        return { next: "DO_ALL_TESTS_PASS" };
+    },
+
+    DO_ALL_TESTS_PASS(input) {
+        const pass = sim(input, "DO_ALL_TESTS_PASS") === "YES";
+        return { next: pass ? "DID_CHANGES_STAY_INSIDE_FENCE" : "ARE_2_SUITE_FIXES_DONE" };
+    },
+
+    ARE_2_SUITE_FIXES_DONE(input) {
+        if (input.counts.FIX_THE_CODEBASE_FOR_SUITE >= 2) {
+            return { next: "EXIT_WORKFLOW_SUITE", exitType: "suite-red", exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved." };
+        }
+        return { next: "FIX_THE_CODEBASE_FOR_SUITE" };
+    },
+
+    FIX_THE_CODEBASE_FOR_SUITE(input) {
+        return { next: "COMMIT_SUITE_FIX_IF_NEEDED", prompt: "FIX_THE_CODEBASE_FOR_SUITE" };
+    },
+
+    COMMIT_SUITE_FIX_IF_NEEDED(input) {
+        return { next: "RUN_FULL_SUITE" };
+    },
+
+    DID_CHANGES_STAY_INSIDE_FENCE(input) {
+        if (sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") !== "YES") {
+            return { next: "EXIT_WORKFLOW_SUITE", exitType: "fence-violation", exitNote: "a repair edited files the task does not own. nothing merged. worktree preserved." };
+        }
+        return { next: "MERGE_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_SUITE(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-merge.mmd ---
+
+    MERGE_PIPELINE(input) {
+        return { next: "GREEN_WORKTREE_INPUT" };
+    },
+
+    GREEN_WORKTREE_INPUT(input) {
+        return { next: "MERGE_WORKTREES" };
+    },
+
+    MERGE_WORKTREES(input) {
+        return { next: "READ_MERGE_PUBLICATION_STATE" };
+    },
+
+    READ_MERGE_PUBLICATION_STATE(input) {
+        return { next: "WHAT_IS_PUBLICATION_STATE" };
+    },
+
+    WHAT_IS_PUBLICATION_STATE(input) {
+        const state = sim(input, "WHAT_IS_PUBLICATION_STATE");
+        if (state === "ALL") return { next: "PUBLICATION_ALL" };
+        if (state === "NONE") return { next: "PUBLICATION_NONE" };
+        if (state === "PARTIAL") return { next: "PUBLICATION_PARTIAL" };
+        throw new Error(`unknown publication state ${JSON.stringify(state)}`);
+    },
+
+    PUBLICATION_ALL(input) {
+        return { next: "EXIT_WORKFLOW_SUCCESS" };
+    },
+
+    PUBLICATION_NONE(input) {
+        return { next: "ARE_2_MERGE_ATTEMPTS_DONE" };
+    },
+
+    PUBLICATION_PARTIAL(input) {
+        return { next: "EXIT_WORKFLOW_MERGE", exitType: "partially-published", exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved." };
+    },
+
+    ARE_2_MERGE_ATTEMPTS_DONE(input) {
+        if (input.counts.MERGE_WORKTREES >= 2) {
+            return { next: "EXIT_WORKFLOW_MERGE", exitType: "merge-failed", exitNote: "nothing landed after 2 attempts. worktree preserved." };
+        }
+        return { next: "REBASE_PIPELINE" };
+    },
+
+    EXIT_WORKFLOW_MERGE(input) {
+        return { next: null };
+    },
+
+    // --- pipeline-mergeSucceededExit.mmd ---
+
+    EXIT_WORKFLOW_SUCCESS(input) {
+        return { next: "MERGE_RECEIPT_INPUT" };
+    },
+
+    MERGE_RECEIPT_INPUT(input) {
+        return { next: "RECORD_MERGE_COMMIT_HASHES" };
+    },
+
+    RECORD_MERGE_COMMIT_HASHES(input) {
+        return { next: "WRITE_EXIT_TYPE_COMPLETED" };
+    },
+
+    WRITE_EXIT_TYPE_COMPLETED(input) {
+        return { next: "RECORD_MODIFIED_FILES_SUCCESS", exitType: "completed" };
+    },
+
+    RECORD_MODIFIED_FILES_SUCCESS(input) {
+        return { next: "CLEAN_UP_WORKTREES" };
+    },
+
+    CLEAN_UP_WORKTREES(input) {
+        delete input.task!.run!.worktree;
+        delete input.task!.run!.leaseRunId;
+        return { next: "BUILD_CLOSURE_NOTE" };
+    },
+
+    BUILD_CLOSURE_NOTE(input) {
+        return { next: "MARK_TASK_INACTIVE_SUCCESS" };
+    },
+
+    MARK_TASK_INACTIVE_SUCCESS(input) {
+        input.task!.run!.active = false;
+        return { next: "ARCHIVE_TASK" };
+    },
+
+    ARCHIVE_TASK(input) {
+        return { next: "REPORT_CLOSURE_NOTE", tasks: input.tasks.filter((t) => t !== input.task) };
+    },
+
+    REPORT_CLOSURE_NOTE(input) {
+        return { next: "STOP" };
+    },
+
+    STOP(input) {
+        return { next: null };
+    },
 };
 
 function runStep(input: Input) {
-    const packet = blocks[input.block](input);
-    return { output: { command: "/run-step", block: packet.next, tasks: packet.tasks, task: packet.task } as Input };
+    const block = input.block!;
+    const counts = { ...input.counts, [block]: (input.counts[block] ?? 0) + 1 };
+    const visited: Input = { ...input, counts };
+    const { next, ...changes } = blocks[block](visited);
+    return { output: { ...visited, prompt: "", answer: "", ...changes, block: next, ran: [...input.ran, block] } as Input };
 }
 
 const commands = {
@@ -54,18 +619,29 @@ const commands = {
 
 function agent(input: Input) {
     const fn = commands[input.command];
-    return fn(input);
+    const result = fn(input);
+    if (result.output.prompt !== "") {
+        result.output.answer = sim(result.output, result.output.prompt);
+    }
+    return result;
 }
 
 function main(taskNumber: number, tasksJsonPath: string) {
     const tasks = JSON.parse(readFileSync(tasksJsonPath, "utf8")) as Task[];
     const task = tasks.find((t) => t.taskNumber === taskNumber);
-    let input: Input = { command: "/run-step", block: "IS_TASK_NUMBER_VALID", tasks, task };
+    let input: Input = {
+        command: "/run-step", block: "PREAMBLE_TASK_NUMBER_INPUT",
+        tasks, task, runId: "", docsMode: "", exitType: "", exitNote: "", prompt: "", answer: "", counts: {}, ran: [],
+    };
     while (true) {
         const result = agent(input);
         //handle errors
+        if (result.output.answer === null) result.output.block = "AGENT_ERRORED";
         input = result.output;
+        if (input.block === null) break;
     }
+    console.log(`task ${taskNumber}: ${input.ran.join(" -> ")}`);
+    console.log(`  docsMode=${JSON.stringify(input.docsMode)} exitType=${JSON.stringify(input.exitType)} exitNote=${JSON.stringify(input.exitNote)}`);
 }
 
 main(Number(process.argv[2]), process.argv[3]);
