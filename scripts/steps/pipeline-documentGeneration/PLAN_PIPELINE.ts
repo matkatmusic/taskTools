@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "PLAN_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    const packet = JSON.parse(input) as Record<string, unknown>;
+    return { ...packet, box: "PLAN_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

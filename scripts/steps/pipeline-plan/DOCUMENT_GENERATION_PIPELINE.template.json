@@ -7,6 +7,15 @@
     },
     "output": {
         "box": "DOCUMENT_GENERATION_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": ""
     }
 }

@@ -2,13 +2,28 @@
     "input": {
         "box": "WORKTREE_DOCS_MODE_INPUT",
         "scriptSignal": "continue",
-        "note": "WORKTREE_DOCS_MODE_INPUT.ts for WORKTREE_DOCS_MODE_INPUT",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "AUTOGEN",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": ""
     },
     "output": {
         "box": "WHAT_IS_DOCS_MODE",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_DOCS_MODE.ts for WHAT_IS_DOCS_MODE",
-        "input": ""
+        "next": "DOCS_MODE_AUTOGEN",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "AUTOGEN",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": ""
     }
 }

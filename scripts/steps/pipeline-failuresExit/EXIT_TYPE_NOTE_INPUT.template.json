@@ -1,7 +1,15 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "FAILURES_EXIT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "/tmp/example-project-worktrees/task-1",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "fence-violation",
+        "exitNote": "the resumed worktree touched files the task does not own: some/path.ts"
     },
     "output": {
         "box": "EXIT_TYPE_NOTE_INPUT",

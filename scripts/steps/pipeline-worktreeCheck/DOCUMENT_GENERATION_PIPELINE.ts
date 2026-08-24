@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import type { WorktreeCheckPacket } from "./_packet.ts";
 
-export function main(input: string): WorktreeCheckPacket {
+export function main(input: string): WorktreeCheckPacket & { clarifyRequest: string } {
     const packet = JSON.parse(input) as WorktreeCheckPacket;
-    return { ...packet, box: "DOCUMENT_GENERATION_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    return { ...packet, box: "DOCUMENT_GENERATION_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, clarifyRequest: "" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

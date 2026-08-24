@@ -42,6 +42,7 @@
             "script": "scripts/steps/pipeline-documentGeneration/AUTO_GENERATE_DOCS.ts",
             "template": "scripts/steps/pipeline-documentGeneration/AUTO_GENERATE_DOCS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "PLAN_PIPELINE"
             ]
@@ -51,6 +52,7 @@
             "script": "scripts/steps/pipeline-documentGeneration/UPDATE_AUTO_GENERATED_DOCS.ts",
             "template": "scripts/steps/pipeline-documentGeneration/UPDATE_AUTO_GENERATED_DOCS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "PLAN_PIPELINE"
             ]

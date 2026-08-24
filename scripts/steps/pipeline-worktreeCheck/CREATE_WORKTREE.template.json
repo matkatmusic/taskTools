@@ -2,6 +2,7 @@
     "input": {
         "box": "DOES_WORKTREE_EXIST",
         "scriptSignal": "continue",
+        "next": "CREATE_WORKTREE",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "/tmp/example-project",

@@ -1,12 +1,15 @@
-// Behavioral checks for scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts,
-// ported from tests/resetTaskWorktree.test.ts's lease-refusal case. Mutating: temp files only.
+// Behavioral checks for scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts, ported from tests/resetTaskWorktree.test.ts's lease-refusal case. Mutating: temp files only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "../../../scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts";
 import { claimTask, updateCurrentTaskRun, readTaskRunState } from "../../../scripts/tackle-tasks/taskRunState.ts";
+import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
+
+const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.template.json");
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "TAKE_WORKTREE_LEASE_BEFORE_RESET-"));
@@ -29,6 +32,9 @@ test("test_TAKE_WORKTREE_LEASE_BEFORE_RESET_passesThroughUnchangedWhenNoWorktree
 
     assert.equal(output.box, "TAKE_WORKTREE_LEASE_BEFORE_RESET");
     assert.equal(readTaskRunState(1, root).worktree, null);
+
+    const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
 test("test_TAKE_WORKTREE_LEASE_BEFORE_RESET_refusesWhenTheSiblingLeaseNamesAnotherOwner", () => {

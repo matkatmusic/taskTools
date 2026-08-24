@@ -7,7 +7,7 @@ import { updateCurrentTaskRun } from "../../tackle-tasks/taskRunState.ts";
 import { createFreshTaskWorktree } from "./_createFreshTaskWorktree.ts";
 import type { WorktreeCheckPacket } from "./_packet.ts";
 
-export function main(input: string): WorktreeCheckPacket {
+export function main(input: string): WorktreeCheckPacket & { next: string } {
     const packet = JSON.parse(input) as WorktreeCheckPacket;
     deleteTaskMergePersistence(packet.projectRoot, packet.branch);
     removeWorktreeAndBranch(packet.projectRoot, packet.worktree, packet.branch);
@@ -15,7 +15,7 @@ export function main(input: string): WorktreeCheckPacket {
     const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
     updateCurrentTaskRun(packet.taskNumber, packet.runId, { worktree, leaseRunId: packet.runId }, packet.projectRoot);
 
-    return { ...packet, box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree, docsMode: "AUTOGEN" };
+    return { ...packet, box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "INIT_SUBMODULES_RECURSIVELY", worktree, docsMode: "AUTOGEN" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

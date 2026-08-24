@@ -7,6 +7,14 @@
     },
     "output": {
         "box": "EXIT_WORKFLOW_REVIEW_TESTS",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

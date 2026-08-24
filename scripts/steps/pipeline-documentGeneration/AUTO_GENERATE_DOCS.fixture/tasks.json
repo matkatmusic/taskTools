@@ -1,0 +1,8 @@
+[
+    {
+        "taskNumber": 42,
+        "title": "fixture task",
+        "description": "fixture task for AUTO_GENERATE_DOCS reconciliation",
+        "files": []
+    }
+]

@@ -1,12 +1,15 @@
-// Behavioral checks for scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.ts, ported
-// from tests/isTaskRunResumable.test.ts. Mutating: it establishes lease ownership as a side effect.
+// Behavioral checks for scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.ts, ported from tests/isTaskRunResumable.test.ts. Mutating: it establishes lease ownership as a side effect.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "../../../scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.ts";
 import { claimTask, endTaskRun, updateCurrentTaskRun } from "../../../scripts/tackle-tasks/taskRunState.ts";
+import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
+
+const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../scripts/steps/pipeline-worktreeCheck/IS_PREVIOUS_RUN_RESUMABLE.template.json");
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "IS_PREVIOUS_RUN_RESUMABLE-"));
@@ -35,6 +38,9 @@ test("test_IS_PREVIOUS_RUN_RESUMABLE_choosesDoesFenceCoverWorktreeWhenTheEndedRu
 
     assert.equal(output.next, "DOES_FENCE_COVER_WORKTREE");
     assert.equal(output.exitType, "");
+
+    const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
 test("test_IS_PREVIOUS_RUN_RESUMABLE_choosesFailuresExitWhenNoEndedRunRecordedAStoppingPoint", () => {

@@ -2,6 +2,7 @@
     "input": {
         "box": "DOES_FENCE_COVER_WORKTREE",
         "scriptSignal": "continue",
+        "next": "FAILURES_EXIT",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "/tmp/example-project",

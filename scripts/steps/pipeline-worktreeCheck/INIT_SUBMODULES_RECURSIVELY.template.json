@@ -2,6 +2,7 @@
     "input": {
         "box": "DOES_FENCE_COVER_WORKTREE",
         "scriptSignal": "continue",
+        "next": "INIT_SUBMODULES_RECURSIVELY",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "/tmp/example-project",

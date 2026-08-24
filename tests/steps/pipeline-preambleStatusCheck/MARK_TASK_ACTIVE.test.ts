@@ -1,13 +1,15 @@
-// MARK_TASK_ACTIVE.ts is "Try: mark the task active in tasks.json" in pipeline-preambleStatusCheck.mmd.
-// Mutating: always exercised against a temp tasks.json, never the real one.
-// Run alone: node --test tests/steps/pipeline-preambleStatusCheck/MARK_TASK_ACTIVE.test.ts
+// MARK_TASK_ACTIVE.ts: mark the task active. Mutating: uses a temp tasks.json, never the real one.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "../../../scripts/steps/pipeline-preambleStatusCheck/MARK_TASK_ACTIVE.ts";
 import { claimTask, readTaskRunState } from "../../../scripts/tackle-tasks/taskRunState.ts";
+import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
+
+const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../scripts/steps/pipeline-preambleStatusCheck/MARK_TASK_ACTIVE.template.json");
 
 function makeTasksFile(openTasks: unknown[]): { tasksFile: string; projectRoot: string } {
     const projectRoot = mkdtempSync(join(tmpdir(), "MARK_TASK_ACTIVE-"));
@@ -23,6 +25,9 @@ test("test_MARK_TASK_ACTIVE_marksTheTaskActiveInTasksJson", () => {
     assert.equal(typeof output.runId, "string");
     assert.notEqual(output.runId, "");
     assert.equal(readTaskRunState(1, projectRoot).active, true);
+
+    const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
 test("test_MARK_TASK_ACTIVE_throwsWhenTheTaskIsAlreadyActive", () => {

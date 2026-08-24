@@ -2,13 +2,28 @@
     "input": {
         "box": "DOCS_MODE_UPDATE",
         "scriptSignal": "continue",
-        "note": "DOCS_MODE_UPDATE.ts for DOCS_MODE_UPDATE",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "add coverage for the new export"
     },
     "output": {
         "box": "UPDATE_AUTO_GENERATED_DOCS",
         "scriptSignal": "continue",
-        "note": "UPDATE_AUTO_GENERATED_DOCS.ts for UPDATE_AUTO_GENERATED_DOCS",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "add coverage for the new export",
+        "briefFile": "/repo/worktrees/task-42/plans/brief-42.md"
     }
 }

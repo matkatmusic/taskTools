@@ -1,15 +1,18 @@
-// Behavioral checks for scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.ts, ported from
-// tests/resetTaskWorktree.test.ts's "succeeds when run twice" case. Mutating: temp git repos only.
+// Behavioral checks for scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.ts, ported from tests/resetTaskWorktree.test.ts's "succeeds when run twice" case. Mutating: temp git repos only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "../../../scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.ts";
 import { main as takeLeaseBeforeReset } from "../../../scripts/steps/pipeline-worktreeCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "../../../scripts/tackle-tasks/taskRunState.ts";
 import { taskBranchName } from "../../../scripts/tackle-tasks/createTaskWorktree.ts";
 import { createFreshTaskWorktree } from "../../../scripts/steps/pipeline-worktreeCheck/_createFreshTaskWorktree.ts";
+import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../support/gitFixtures.ts";
+
+const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../scripts/steps/pipeline-worktreeCheck/RESET_WORKTREE.template.json");
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
     writeFileSync(join(root, "tasks.json"), `${JSON.stringify(tasks, null, 2)}\n`);
@@ -39,4 +42,7 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
     const currentBranch = git(output.worktree, "branch", "--show-current");
     assert.equal(currentBranch, "task-1");
     assert.equal(readTaskRunState(1, root).worktree, output.worktree);
+
+    const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });

@@ -1,13 +1,16 @@
-// Behavioral checks for scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.ts, ported from
-// tests/createTaskWorktree.test.ts. Mutating: exercised only against temp git repos.
+// Behavioral checks for scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.ts, ported from tests/createTaskWorktree.test.ts. Mutating: exercised only against temp git repos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "../../../scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.ts";
 import { claimTask } from "../../../scripts/tackle-tasks/taskRunState.ts";
 import { taskBranchName } from "../../../scripts/tackle-tasks/createTaskWorktree.ts";
+import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../support/gitFixtures.ts";
+
+const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../scripts/steps/pipeline-worktreeCheck/CREATE_WORKTREE.template.json");
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
     writeFileSync(join(root, "tasks.json"), `${JSON.stringify(tasks, null, 2)}\n`);
@@ -33,4 +36,7 @@ test("test_CREATE_WORKTREE_createsARealWorktreeOnTheTasksBranchWithSubmodulesPop
     const currentBranch = git(output.worktree, "branch", "--show-current");
     assert.equal(currentBranch, "task-1");
     assert.ok(existsSync(join(output.worktree, "vendor", "seed.txt")));
+
+    const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });

@@ -2,6 +2,7 @@
     "input": {
         "box": "IS_WORKTREE_SAFE_TO_USE",
         "scriptSignal": "continue",
+        "next": "IS_PREVIOUS_RUN_RESUMABLE",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "/tmp/example-project",

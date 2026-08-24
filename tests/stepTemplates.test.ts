@@ -1,7 +1,6 @@
 // One test per block in steps.json: feed the block its input template, check what it prints against its contract.
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -32,17 +31,6 @@ function getHandedOnShape(entry: StepConfigEntry, template: BlockTemplate): unkn
     return entry.producesPrompt ? AGENT_ANSWER_TEMPLATE : template.output;
 }
 
-// A mutating block writes real files, so it runs against a throwaway copy of its committed fixture.
-function getStepCwd(entry: StepConfigEntry): string {
-    if (!entry.mutating) {
-        return PROJECT_ROOT;
-    }
-    const fixtureDir = join(PROJECT_ROOT, dirname(entry.script), `${entry.box}.fixture`);
-    const tempDir = mkdtempSync(join(tmpdir(), `${entry.box}-fixture-`));
-    cpSync(fixtureDir, tempDir, { recursive: true });
-    return tempDir;
-}
-
 // The block's result is the last line it prints, the same rule the hook uses.
 function runBlockScript(scriptPath: string, input: unknown, cwd: string): { commandOutput: string; result: unknown } {
     const spawnResult = spawnSync("node", ["--no-inspect", scriptPath, JSON.stringify(input)], {
@@ -62,9 +50,13 @@ const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
 
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
+        // Mutating blocks write real files; their own test under tests/steps/<diagram>/ covers the contract instead.
+        if (entry.mutating) {
+            continue;
+        }
         test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_producesItsOutputContract`, () => {
             const template = readBlockTemplate(entry.template);
-            const { commandOutput, result } = runBlockScript(join(PROJECT_ROOT, entry.script), template.input, getStepCwd(entry));
+            const { commandOutput, result } = runBlockScript(join(PROJECT_ROOT, entry.script), template.input, PROJECT_ROOT);
             assert.notEqual(result, null, `${entry.box} printed no result object:\n${commandOutput}`);
             const mismatches = getTemplateShapeMismatches(getExpectedOutput(entry, template), result);
             assert.deepEqual(mismatches, [], `${entry.box} does not match its contract:\n${mismatches.join("\n")}`);
