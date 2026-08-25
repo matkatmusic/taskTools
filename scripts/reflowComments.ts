@@ -2,14 +2,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { applyQuota } from "./reflowQuota.ts";
 
-const COMMENT = /^(\s*)(\/\/|%%) ?(.*)$/; // `%%` is mermaid's line comment
+const COMMENT = /^(\s*)(\/\/|%%)(?!\/) ?(.*)$/; // `%%` is mermaid's line comment; `///` opts out
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
 const PARAGRAPH_MARK = /^ponytail:/; // joined like prose, but exempt from the word cap
 const DIVIDER = /^[-=*_#]{3,}/; // `---- section ----`: hand-formatted, passed through verbatim
 // `skipIf` guards JSDoc, whose `*`-prefixed continuation lines are a layout the tool must not touch.
 const BLOCK_KINDS = [
   {
-    open: /^(\s*)\/\*/, openTag: "/*", closeTag: "*/",
+    open: /^(\s*)\/\*(?!\*)/, openTag: "/*", closeTag: "*/",
     stripOpen: /^\s*\/\*+/, stripClose: /\*\/\s*$/, skipIf: /^\*/,
   },
   {
@@ -170,7 +170,7 @@ export function describeReflows(
       rewritten,
     }),
     ...(overCap.length > 0 && {
-      instruction: `Rewrite only 1-2 of the comments below to under ${WORD_LIMIT} words, keeping each on one line. Return to your primary task after finishing the comment rewrites.  The hook will track when any flagged comments pass the word-length restriction and stop blocking you.`,
+      instruction: `Spawn a sonnet-5 subagent to rewrite only 1-2 of the comments below to under ${WORD_LIMIT} words, keeping each on one line. Return to your primary task after finishing the comment rewrites.  The hook will track when any flagged comments pass the word-length restriction and stop blocking you.`,
       files: overCap.map(({ path, lines }) => ({ path, lines, show: showCommand(path, lines) })),
     }),
   });

@@ -54,25 +54,6 @@ test("surrounding code and indentation survive, runs report shifted line numbers
   assert.deepEqual(runs.map((r) => [r.start, r.end, r.line]), [[2, 3, 2], [5, 6, 4]]);
 });
 
-test("a bare // splits paragraphs instead of rejecting the whole block", () => {
-  const source = [
-    "// first paragraph that",
-    "// wraps across two lines",
-    "//",
-    "// second paragraph that",
-    "// also wraps",
-    "const x = 1;",
-  ].join("\n");
-  const { text, runs } = reflowSource(source);
-  assert.deepEqual(text.split("\n"), [
-    "// first paragraph that wraps across two lines",
-    "//",
-    "// second paragraph that also wraps",
-    "const x = 1;",
-  ]);
-  assert.deepEqual(runs.map((r) => [r.start, r.end, r.line]), [[1, 2, 1], [4, 5, 3]]);
-});
-
 test("a bare // is absorbed, so sentences split across it rejoin", () => {
   const source = ["// alone", "//", "// also alone"].join("\n");
   assert.equal(reflowSource(source).text, "// alone also alone");
@@ -209,4 +190,14 @@ test("the show command lists every over-cap line in order", () => {
   const runs = [12, 40, 7].map((line) => ({ start: line, end: line + 1, line, words: 30, joined: true, capped: true }));
   const [file] = JSON.parse(describeReflows([{ path: "/a b/c.ts", runs }])).files;
   assert.equal(file.show, "nl -ba '/a b/c.ts' | sed -n '12p;40p;7p'");
+});
+
+test("a /** block is left exactly as written", () => {
+  const source = ["/**", " * first line of a long doc comment that wraps", " * second line", " */"].join("\n");
+  assert.deepEqual(reflowSource(source), { text: source, runs: [] });
+});
+
+test("a /// run is left exactly as written", () => {
+  const source = ["/// first line of a long doc comment that wraps", "/// second line"].join("\n");
+  assert.deepEqual(reflowSource(source), { text: source, runs: [] });
 });
