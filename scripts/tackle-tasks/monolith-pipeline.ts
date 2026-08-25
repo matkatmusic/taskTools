@@ -1,6 +1,8 @@
 // bun scripts/tackle-tasks/monolith-pipeline.ts <taskNumber> scripts/tackle-tasks/monolith-pipeline.fixture/tasks.json
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ponytail: worktreeSafe and touchedFiles are fixture-only; the real checks read git.
 type Run = {
@@ -28,7 +30,6 @@ type State = {
     docsMode: string;
     exitType: string;
     exitNote: string;
-    prompt: string;
     answer: string | null;
     counts: Record<string, number>;
     ran: string[];
@@ -45,8 +46,12 @@ type Packet = Partial<State> & {
 
 // ponytail: the last answer repeats, so a fixture writes ["NO"] and not 180 of them.
 function sim(input: Input, block: string): string | null {
-    const answers = input.task!.sim![block];
-    return answers[Math.min(input.counts[block] - 1, answers.length - 1)]!;
+    const answers = input.task!.sim![block]!;
+    const visitIndex = input.counts[block]! - 1;
+    const lastAnswerIndex = answers.length - 1;
+    const answerIndex = Math.min(visitIndex, lastAnswerIndex);
+    const answer = answers[answerIndex]!;
+    return answer;
 }
 
 const blocks: Record<string, (input: Input) => Packet> = {
@@ -58,30 +63,51 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     IS_TASK_NUMBER_VALID(input) {
         if (input.task === undefined) {
-            return { next: "REPORT_ONLY_EXIT", exitType: "invalid-number", exitNote: "task number is not in tasks.json" };
+            return {
+                next: "REPORT_ONLY_EXIT",
+                exitType: "invalid-number",
+                exitNote: "task number is not in tasks.json",
+            };
         }
         return { next: "IS_TASK_BLOCKED" };
     },
 
     IS_TASK_BLOCKED(input) {
         const blockers = input.task!.blockedBy ?? [];
-        const blocked = blockers.some((b) => input.tasks.some((t) => t.taskNumber === b.taskNum));
+        let blocked = false;
+        for (const blocker of blockers) {
+            for (const openTask of input.tasks) {
+                if (openTask.taskNumber === blocker.taskNum) {
+                    blocked = true;
+                }
+            }
+        }
         if (blocked) {
-            return { next: "REPORT_ONLY_EXIT", exitType: "blocked", exitNote: "an open blocker remains" };
+            return {
+                next: "REPORT_ONLY_EXIT",
+                exitType: "blocked",
+                exitNote: "an open blocker remains",
+            };
         }
         return { next: "IS_TASK_ACTIVE" };
     },
 
     IS_TASK_ACTIVE(input) {
         if (input.task!.run?.active === true) {
-            return { next: "REPORT_ONLY_EXIT", exitType: "already-active", exitNote: "a previous run left the task active" };
+            return {
+                next: "REPORT_ONLY_EXIT",
+                exitType: "already-active",
+                exitNote: "a previous run left the task active",
+            };
         }
         return { next: "MARK_TASK_ACTIVE" };
     },
 
     MARK_TASK_ACTIVE(input) {
-        input.task!.run = { ...input.task!.run, active: true };
-        return { next: "WORKTREE_CHECK_PIPELINE", runId: randomUUID() };
+        const run = input.task!.run ?? {};
+        run.active = true;
+        input.task!.run = run;
+        return { next: "WORKTREE_CHECK_PIPELINE" };
     },
 
     WORKTREE_CHECK_PIPELINE(input) {
@@ -100,36 +126,68 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     DOES_WORKTREE_EXIST(input) {
         const exists = input.task!.run?.worktree !== undefined;
-        return { next: exists ? "IS_WORKTREE_SAFE_TO_USE" : "CREATE_WORKTREE" };
+        if (exists) {
+            return { next: "IS_WORKTREE_SAFE_TO_USE" };
+        }
+        return { next: "CREATE_WORKTREE" };
     },
 
     IS_WORKTREE_SAFE_TO_USE(input) {
         const safe = input.task!.run?.worktreeSafe === true;
-        return { next: safe ? "IS_PREVIOUS_RUN_RESUMABLE" : "TAKE_WORKTREE_LEASE_BEFORE_RESET" };
+        if (safe) {
+            return { next: "IS_PREVIOUS_RUN_RESUMABLE" };
+        }
+        return { next: "TAKE_WORKTREE_LEASE_BEFORE_RESET" };
     },
 
     IS_PREVIOUS_RUN_RESUMABLE(input) {
         input.task!.run!.leaseRunId = input.runId;
-        const endedRuns = (input.task!.run!.history ?? []).filter((r) => r.endedAt !== null);
+        const history = input.task!.run!.history ?? [];
+        const endedRuns = [];
+        for (const previousRun of history) {
+            if (previousRun.endedAt !== null) {
+                endedRuns.push(previousRun);
+            }
+        }
         const newest = endedRuns[endedRuns.length - 1];
         if (newest?.implementationNotesFile == null) {
-            return { next: "FAILURES_EXIT", exitType: "not-resumable", exitNote: "a safe worktree holds work no run recorded a stopping point for" };
+            return {
+                next: "FAILURES_EXIT",
+                exitType: "not-resumable",
+                exitNote: "a safe worktree holds work no run recorded a stopping point for",
+            };
         }
         return { next: "DOES_FENCE_COVER_WORKTREE" };
     },
 
     DOES_FENCE_COVER_WORKTREE(input) {
         const files = input.task!.files ?? [];
-        const violations = (input.task!.run!.touchedFiles ?? []).filter((f) => !files.includes(f));
-        if (violations.length > 0) {
-            return { next: "FAILURES_EXIT", exitType: "fence-violation", exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}` };
+        const touchedFiles = input.task!.run!.touchedFiles ?? [];
+        const violations = [];
+        for (const touchedFile of touchedFiles) {
+            if (!files.includes(touchedFile)) {
+                violations.push(touchedFile);
+            }
         }
-        return { next: "INIT_SUBMODULES_RECURSIVELY", docsMode: "UPDATE" };
+        if (violations.length > 0) {
+            return {
+                next: "FAILURES_EXIT",
+                exitType: "fence-violation",
+                exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}`,
+            };
+        }
+        return {
+            next: "INIT_SUBMODULES_RECURSIVELY",
+            docsMode: "UPDATE",
+        };
     },
 
     CREATE_WORKTREE(input) {
         input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
-        return { next: "TAKE_WORKTREE_LEASE", docsMode: "AUTOGEN" };
+        return {
+            next: "TAKE_WORKTREE_LEASE",
+            docsMode: "AUTOGEN",
+        };
     },
 
     TAKE_WORKTREE_LEASE(input) {
@@ -145,7 +203,10 @@ const blocks: Record<string, (input: Input) => Packet> = {
     RESET_WORKTREE(input) {
         input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
         input.task!.run!.worktreeSafe = true;
-        return { next: "INIT_SUBMODULES_RECURSIVELY", docsMode: "AUTOGEN" };
+        return {
+            next: "INIT_SUBMODULES_RECURSIVELY",
+            docsMode: "AUTOGEN",
+        };
     },
 
     INIT_SUBMODULES_RECURSIVELY(input) {
@@ -199,7 +260,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     PLAN_THE_TASK(input) {
-        return { next: "WHAT_DID_THE_PLANNER_RETURN", prompt: "PLAN_THE_TASK" };
+        return { next: "WHAT_DID_THE_PLANNER_RETURN" };
     },
 
     WHAT_DID_THE_PLANNER_RETURN(input) {
@@ -218,13 +279,20 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     ARE_2_CLARIFY_ROUNDS_DONE(input) {
         if (input.counts.PLANNER_RETURNED_CLARIFY >= 2) {
-            return { next: "EXIT_WORKFLOW_PLAN", exitType: "clarify-stuck", exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved." };
+            return {
+                next: "EXIT_WORKFLOW_PLAN",
+                exitType: "clarify-stuck",
+                exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved.",
+            };
         }
         return { next: "WRITE_CLARIFY_REQUEST" };
     },
 
     WRITE_CLARIFY_REQUEST(input) {
-        return { next: "DOCUMENT_GENERATION_PIPELINE", docsMode: "UPDATE" };
+        return {
+            next: "DOCUMENT_GENERATION_PIPELINE",
+            docsMode: "UPDATE",
+        };
     },
 
     EXIT_WORKFLOW_PLAN(input) {
@@ -242,7 +310,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     CODEX_REVIEWS_PLAN(input) {
-        return { next: "WHAT_IS_REVIEW_VERDICT", prompt: "CODEX_REVIEWS_PLAN" };
+        return { next: "WHAT_IS_REVIEW_VERDICT" };
     },
 
     WHAT_IS_REVIEW_VERDICT(input) {
@@ -268,7 +336,11 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     VERDICT_ERROR(input) {
-        return { next: "EXIT_WORKFLOW_REVIEW_PLAN", exitType: "run-failed", exitNote: "the plan review could not run" };
+        return {
+            next: "EXIT_WORKFLOW_REVIEW_PLAN",
+            exitType: "run-failed",
+            exitNote: "the plan review could not run",
+        };
     },
 
     UPDATE_TASK_ENTRY(input) {
@@ -277,7 +349,11 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     ARE_2_REVIEWS_DONE(input) {
         if (input.counts.CODEX_REVIEWS_PLAN >= 2) {
-            return { next: "EXIT_WORKFLOW_REVIEW_PLAN", exitType: "plan-scrapped", exitNote: "codex did not accept the plan in two reviews" };
+            return {
+                next: "EXIT_WORKFLOW_REVIEW_PLAN",
+                exitType: "plan-scrapped",
+                exitNote: "codex did not accept the plan in two reviews",
+            };
         }
         return { next: "PLAN_PIPELINE" };
     },
@@ -297,7 +373,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     IMPLEMENT_TASK(input) {
-        return { next: "COMMIT_IMPLEMENTATION_IF_NEEDED", prompt: "IMPLEMENT_TASK" };
+        return { next: "COMMIT_IMPLEMENTATION_IF_NEEDED" };
     },
 
     COMMIT_IMPLEMENTATION_IF_NEEDED(input) {
@@ -324,12 +400,19 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     DO_TASK_TESTS_PASS(input) {
         const pass = sim(input, "DO_TASK_TESTS_PASS") === "YES";
-        return { next: pass ? "REVIEW_TESTS_PIPELINE" : "ARE_2_TEST_FIXES_DONE" };
+        if (pass) {
+            return { next: "REVIEW_TESTS_PIPELINE" };
+        }
+        return { next: "ARE_2_TEST_FIXES_DONE" };
     },
 
     ARE_2_TEST_FIXES_DONE(input) {
         if (input.counts.AMEND_ENTRY_WITH_FAILING_TESTS >= 2) {
-            return { next: "EXIT_WORKFLOW_TASK_TESTS", exitType: "tests-red", exitNote: "task tests still failing after 2 fix attempts" };
+            return {
+                next: "EXIT_WORKFLOW_TASK_TESTS",
+                exitType: "tests-red",
+                exitNote: "task tests still failing after 2 fix attempts",
+            };
         }
         return { next: "AMEND_ENTRY_WITH_FAILING_TESTS" };
     },
@@ -353,17 +436,24 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     CODEX_REVIEWS_TESTS(input) {
-        return { next: "ARE_TESTS_FLAGGED", prompt: "CODEX_REVIEWS_TESTS" };
+        return { next: "ARE_TESTS_FLAGGED" };
     },
 
     ARE_TESTS_FLAGGED(input) {
         const flagged = input.answer === "YES";
-        return { next: flagged ? "ARE_2_TEST_REVIEWS_DONE" : "REBASE_PREAMBLE_PIPELINE" };
+        if (flagged) {
+            return { next: "ARE_2_TEST_REVIEWS_DONE" };
+        }
+        return { next: "REBASE_PREAMBLE_PIPELINE" };
     },
 
     ARE_2_TEST_REVIEWS_DONE(input) {
         if (input.counts.CODEX_REVIEWS_TESTS >= 2) {
-            return { next: "EXIT_WORKFLOW_REVIEW_TESTS", exitType: "tests-flagged", exitNote: "task tests failed codex review" };
+            return {
+                next: "EXIT_WORKFLOW_REVIEW_TESTS",
+                exitType: "tests-flagged",
+                exitNote: "task tests failed codex review",
+            };
         }
         return { next: "AMEND_ENTRY_WITH_CODEX_NOTES" };
     },
@@ -392,12 +482,19 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     WAS_LOCK_ACQUIRED(input) {
         const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
-        return { next: acquired ? "REBASE_PIPELINE" : "HAVE_15_MINUTES_PASSED" };
+        if (acquired) {
+            return { next: "REBASE_PIPELINE" };
+        }
+        return { next: "HAVE_15_MINUTES_PASSED" };
     },
 
     HAVE_15_MINUTES_PASSED(input) {
         if ((input.counts.WAIT_FOR_LOCK ?? 0) * 5 >= 15 * 60) {
-            return { next: "EXIT_WORKFLOW_REBASE_PREAMBLE", exitType: "run-failed", exitNote: "the source repo lock did not come free within 15 minutes" };
+            return {
+                next: "EXIT_WORKFLOW_REBASE_PREAMBLE",
+                exitType: "run-failed",
+                exitNote: "the source repo lock did not come free within 15 minutes",
+            };
         }
         return { next: "WAIT_FOR_LOCK" };
     },
@@ -426,18 +523,25 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     DID_REBASE_REPORT_CONFLICTS(input) {
         const conflicts = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
-        return { next: conflicts ? "ARE_2_CONFLICT_FIXES_DONE" : "SUITE_PIPELINE" };
+        if (conflicts) {
+            return { next: "ARE_2_CONFLICT_FIXES_DONE" };
+        }
+        return { next: "SUITE_PIPELINE" };
     },
 
     ARE_2_CONFLICT_FIXES_DONE(input) {
         if (input.counts.FIX_CONFLICTS >= 2) {
-            return { next: "EXIT_WORKFLOW_REBASE", exitType: "rebase-stuck", exitNote: "the rebase did not advance after 2 conflict fixes" };
+            return {
+                next: "EXIT_WORKFLOW_REBASE",
+                exitType: "rebase-stuck",
+                exitNote: "the rebase did not advance after 2 conflict fixes",
+            };
         }
         return { next: "FIX_CONFLICTS" };
     },
 
     FIX_CONFLICTS(input) {
-        return { next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", prompt: "FIX_CONFLICTS" };
+        return { next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED" };
     },
 
     COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED(input) {
@@ -450,11 +554,18 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     IS_REBASE_FINISHED(input) {
         const finished = sim(input, "IS_REBASE_FINISHED") === "YES";
-        return { next: finished ? "SUITE_PIPELINE" : "DID_REBASE_REPORT_CONFLICTS" };
+        if (finished) {
+            return { next: "SUITE_PIPELINE" };
+        }
+        return { next: "DID_REBASE_REPORT_CONFLICTS" };
     },
 
     AGENT_ERRORED(input) {
-        return { next: "EXIT_WORKFLOW_REBASE", exitType: "agent-failed", exitNote: "the agent returned nothing usable" };
+        return {
+            next: "EXIT_WORKFLOW_REBASE",
+            exitType: "agent-failed",
+            exitNote: "the agent returned nothing usable",
+        };
     },
 
     EXIT_WORKFLOW_REBASE(input) {
@@ -477,18 +588,25 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     DO_ALL_TESTS_PASS(input) {
         const pass = sim(input, "DO_ALL_TESTS_PASS") === "YES";
-        return { next: pass ? "DID_CHANGES_STAY_INSIDE_FENCE" : "ARE_2_SUITE_FIXES_DONE" };
+        if (pass) {
+            return { next: "DID_CHANGES_STAY_INSIDE_FENCE" };
+        }
+        return { next: "ARE_2_SUITE_FIXES_DONE" };
     },
 
     ARE_2_SUITE_FIXES_DONE(input) {
         if (input.counts.FIX_THE_CODEBASE_FOR_SUITE >= 2) {
-            return { next: "EXIT_WORKFLOW_SUITE", exitType: "suite-red", exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved." };
+            return {
+                next: "EXIT_WORKFLOW_SUITE",
+                exitType: "suite-red",
+                exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved.",
+            };
         }
         return { next: "FIX_THE_CODEBASE_FOR_SUITE" };
     },
 
     FIX_THE_CODEBASE_FOR_SUITE(input) {
-        return { next: "COMMIT_SUITE_FIX_IF_NEEDED", prompt: "FIX_THE_CODEBASE_FOR_SUITE" };
+        return { next: "COMMIT_SUITE_FIX_IF_NEEDED" };
     },
 
     COMMIT_SUITE_FIX_IF_NEEDED(input) {
@@ -497,7 +615,11 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     DID_CHANGES_STAY_INSIDE_FENCE(input) {
         if (sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") !== "YES") {
-            return { next: "EXIT_WORKFLOW_SUITE", exitType: "fence-violation", exitNote: "a repair edited files the task does not own. nothing merged. worktree preserved." };
+            return {
+                next: "EXIT_WORKFLOW_SUITE",
+                exitType: "fence-violation",
+                exitNote: "a repair edited files the task does not own. nothing merged. worktree preserved.",
+            };
         }
         return { next: "MERGE_PIPELINE" };
     },
@@ -541,12 +663,20 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     PUBLICATION_PARTIAL(input) {
-        return { next: "EXIT_WORKFLOW_MERGE", exitType: "partially-published", exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved." };
+        return {
+            next: "EXIT_WORKFLOW_MERGE",
+            exitType: "partially-published",
+            exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.",
+        };
     },
 
     ARE_2_MERGE_ATTEMPTS_DONE(input) {
         if (input.counts.MERGE_WORKTREES >= 2) {
-            return { next: "EXIT_WORKFLOW_MERGE", exitType: "merge-failed", exitNote: "nothing landed after 2 attempts. worktree preserved." };
+            return {
+                next: "EXIT_WORKFLOW_MERGE",
+                exitType: "merge-failed",
+                exitNote: "nothing landed after 2 attempts. worktree preserved.",
+            };
         }
         return { next: "REBASE_PIPELINE" };
     },
@@ -570,7 +700,10 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     WRITE_EXIT_TYPE_COMPLETED(input) {
-        return { next: "RECORD_MODIFIED_FILES_SUCCESS", exitType: "completed" };
+        return {
+            next: "RECORD_MODIFIED_FILES_SUCCESS",
+            exitType: "completed",
+        };
     },
 
     RECORD_MODIFIED_FILES_SUCCESS(input) {
@@ -593,7 +726,16 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 
     ARCHIVE_TASK(input) {
-        return { next: "REPORT_CLOSURE_NOTE", tasks: input.tasks.filter((t) => t !== input.task) };
+        const remainingTasks = [];
+        for (const openTask of input.tasks) {
+            if (openTask !== input.task) {
+                remainingTasks.push(openTask);
+            }
+        }
+        return {
+            next: "REPORT_CLOSURE_NOTE",
+            tasks: remainingTasks,
+        };
     },
 
     REPORT_CLOSURE_NOTE(input) {
@@ -605,43 +747,283 @@ const blocks: Record<string, (input: Input) => Packet> = {
     },
 };
 
-function runStep(input: Input) {
-    const block = input.block!;
-    const counts = { ...input.counts, [block]: (input.counts[block] ?? 0) + 1 };
-    const visited: Input = { ...input, counts };
-    const { next, ...changes } = blocks[block](visited);
-    return { output: { ...visited, prompt: "", answer: "", ...changes, block: next, ran: [...input.ran, block] } as Input };
+// --- the scaffolding between the workflow loop and a block's script ---
+
+// A diagram node, read from the .mmd files; a misspelled block name fails at startup.
+type Block = {
+    name: string;
+    diagram: string;
+    fedBy: string[];
+    feeds: string[];
+};
+
+// The function the hook runs for a block. In the live system, a scripts/steps/*.ts file.
+type Script = {
+    run: (input: Input) => Packet;
+    isPromptGenerating: boolean;
+};
+
+// What one script execution produced, before the hook decides whether to keep walking.
+type RunStepResult = {
+    output: Input;
+    nextBlock: string | null;
+    prompt: string;
+};
+
+// The hook's output. This lands in the agent's context as the directions to follow.
+type Directions = {
+    prompt: string;
+    payload: Input;
+    previousBlockWasTerminal: boolean;
+};
+
+// The object shape the agent must return, per block: the field names of that block's input.
+type Schema = Record<string, string[]>;
+
+type AgentResult = {
+    previousBlockWasTerminal: boolean;
+    schema: Schema;
+    output: Input;
+};
+
+const pipelines = [
+    "preambleStatusCheck", "worktreeCheck", "documentGeneration", "plan", "reviewPlan", "implement",
+    "taskTests", "reviewTests", "rebasePreamble", "rebase", "suite", "merge", "mergeSucceededExit",
+];
+
+// The live templates mark these scriptSignal: "prompt". Every other block continues.
+const promptGeneratingBlocks = new Set([
+    "PLAN_THE_TASK", "CODEX_REVIEWS_PLAN", "IMPLEMENT_TASK", "CODEX_REVIEWS_TESTS", "FIX_CONFLICTS", "FIX_THE_CODEBASE_FOR_SUITE",
+]);
+
+const blockToScriptMap = new Map<string, Script>();
+for (const name in blocks) {
+    const script: Script = {
+        run: blocks[name]!,
+        isPromptGenerating: promptGeneratingBlocks.has(name),
+    };
+    blockToScriptMap.set(name, script);
+}
+
+let blockList: Block[] = [];
+
+function getDiagramsForPipelines(pipelines: string[]): string[] {
+    const diagramDir = fileURLToPath(new URL("../../plans/diagram/", import.meta.url));
+    const diagrams = [];
+    for (const pipeline of pipelines) {
+        diagrams.push(`${diagramDir}pipeline-${pipeline}.mmd`);
+    }
+    return diagrams;
+}
+
+// ponytail: strips quoted labels and |YES| tags, then reads every ALL_CAPS id left on an edge line.
+function getBlocksForDiagrams(diagrams: string[]): Block[] {
+    const byName = new Map<string, Block>();
+    for (const diagram of diagrams) {
+        const lines = readFileSync(diagram, "utf8").split("\n");
+        for (const line of lines) {
+            if (/^\s*(%%|flowchart|classDef|class )/.test(line)) continue;
+            const withoutLabels = line.replace(/"[^"]*"/g, "");
+            const withoutEdgeTags = withoutLabels.replace(/\|[^|]*\|/g, "");
+            const ids = withoutEdgeTags.match(/[A-Z][A-Z0-9_]+/g) ?? [];
+            for (const id of ids) {
+                if (!byName.has(id)) {
+                    const block: Block = {
+                        name: id,
+                        diagram: basename(diagram),
+                        fedBy: [],
+                        feeds: [],
+                    };
+                    byName.set(id, block);
+                }
+            }
+            if (!line.includes("->")) continue;
+            for (let i = 1; i < ids.length; i++) {
+                const from = byName.get(ids[i - 1]!)!;
+                const to = byName.get(ids[i]!)!;
+                from.feeds.push(to.name);
+                to.fedBy.push(from.name);
+            }
+        }
+    }
+    const blockList = [];
+    for (const block of byName.values()) {
+        blockList.push(block);
+    }
+    return blockList;
+}
+
+// ponytail: every block reads and writes the same State today, so one field list serves all of them.
+function loadSchema(blockList: Block[]): Schema {
+    const fields = ["tasks", "task", "runId", "docsMode", "exitType", "exitNote", "answer", "counts", "ran"];
+    const schema: Schema = {};
+    for (const block of blockList) {
+        schema[block.name] = fields;
+    }
+    return schema;
+}
+
+function getBlockFor(input: Input): Block {
+    for (const block of blockList) {
+        if (block.name === input.block) {
+            return block;
+        }
+    }
+    throw new Error(`no diagram block named ${JSON.stringify(input.block)}`);
+}
+
+function prepareInputForBlock(input: Input, block: Block): Input {
+    const counts = { ...input.counts };
+    counts[block.name] = (counts[block.name] ?? 0) + 1;
+    const scriptInput: Input = { ...input };
+    scriptInput.block = block.name;
+    scriptInput.counts = counts;
+    return scriptInput;
+}
+
+function run(script: Script, scriptInput: Input): RunStepResult {
+    const { next, ...changes } = script.run(scriptInput);
+    const output: Input = { ...scriptInput };
+    output.answer = "";
+    Object.assign(output, changes);
+    output.block = next;
+    output.ran = [...scriptInput.ran];
+    output.ran.push(scriptInput.block!);
+    let prompt = "";
+    if (script.isPromptGenerating) {
+        prompt = scriptInput.block!;
+    }
+    const result: RunStepResult = {
+        output,
+        nextBlock: next,
+        prompt,
+    };
+    return result;
+}
+
+function runStep(input: Input): Directions {
+    /*
+      invokes the runStepHook.ts hook with the given input.  Looks up the script (here emulated as a function) that should be executed for the block, and passes the input to it.  If the script is matched to a 'continue' block, the output of the script says what block to run next, and the output is passed to the next block in the chain.  If the script is matched to a 'prompt' block, the script output stops the loop here, and the output is returned to the caller of 'runStep'.
+    */
+    let block = getBlockFor(input);
+    let scriptInput = prepareInputForBlock(input, block); //input contains 'blockName'
+    let result: RunStepResult;
+    while (true) {
+        // find the script (function) for the block being run.
+        console.log(`${block.name} being executed`);
+        const script = blockToScriptMap.get(block.name);
+        if (script === undefined) throw new Error(`no script found for block ${block.name}`);
+        // execute the script (function) matched to the block being run.
+        result = run(script, scriptInput);
+        // if the script is a prompt-generating script, return the generated prompt.
+        if (script.isPromptGenerating) {
+            return { 
+                prompt: result.prompt, 
+                payload: result.output, 
+                previousBlockWasTerminal: false 
+            };
+        }
+        // if the block is the last block in the chain, return the output of that
+        const nextBlock = result.nextBlock;
+        if (nextBlock === null) {
+            return {
+                prompt: "return the payload verbatim",
+                payload: result.output,
+                previousBlockWasTerminal: true,
+            };
+        }
+        // if the script is a continue-generating script, get the next block to run.
+        block = getBlockFor(result.output);
+        // else pass the output from the script execution to the next block in the chain.
+        scriptInput = prepareInputForBlock(result.output, block);
+        // loop back to find and execute the next block in the chain.
+    }
 }
 
 const commands = {
     "/run-step": runStep,
 };
 
-function agent(input: Input) {
-    const fn = commands[input.command];
-    const result = fn(input);
-    if (result.output.prompt !== "") {
-        result.output.answer = sim(result.output, result.output.prompt);
+// The agent's answer. null is the live agent() dying or being skipped.
+function followPrompt(directions: Directions, schema: Schema): AgentResult | null {
+    if (directions.previousBlockWasTerminal) {
+        return {
+            previousBlockWasTerminal: true,
+            schema,
+            output: directions.payload,
+        };
     }
+    const answer = sim(directions.payload, directions.prompt);
+    if (answer === null) return null;
+    const output: Input = { ...directions.payload };
+    output.answer = answer;
+    const result: AgentResult = {
+        previousBlockWasTerminal: false,
+        schema,
+        output,
+    };
     return result;
+}
+
+function agent(input: Input, schema: Schema): AgentResult | null {
+    /*
+      emulates the "invoke `/run-step <BLOCK> <args>` and follow directions" prompt to the agent in the live workflow.
+    */
+    const directions = runStep(input); //the output of the hook, shows up in the agent's context
+    if (directions.prompt === "") {
+        throw new Error("the hook returned an empty prompt to the agent. the agent has nothing to do and is idle.");
+    }
+
+    /*
+      the agent follows the prompt and returns a specific output shape (based on a schema)
+    */
+    const resultFromFollowingThePrompt = followPrompt(directions, schema);
+    return resultFromFollowingThePrompt;
 }
 
 function main(taskNumber: number, tasksJsonPath: string) {
     const tasks = JSON.parse(readFileSync(tasksJsonPath, "utf8")) as Task[];
-    const task = tasks.find((t) => t.taskNumber === taskNumber);
-    let input: Input = {
-        command: "/run-step", block: "PREAMBLE_TASK_NUMBER_INPUT",
-        tasks, task, runId: "", docsMode: "", exitType: "", exitNote: "", prompt: "", answer: "", counts: {}, ran: [],
-    };
-    while (true) {
-        const result = agent(input);
-        //handle errors
-        if (result.output.answer === null) result.output.block = "AGENT_ERRORED";
-        input = result.output;
-        if (input.block === null) break;
+    let task: Task | undefined = undefined;
+    for (const candidate of tasks) {
+        if (candidate.taskNumber === taskNumber) {
+            task = candidate;
+        }
     }
-    console.log(`task ${taskNumber}: ${input.ran.join(" -> ")}`);
-    console.log(`  docsMode=${JSON.stringify(input.docsMode)} exitType=${JSON.stringify(input.exitType)} exitNote=${JSON.stringify(input.exitNote)}`);
+    let input: Input = {
+        command: "/run-step",
+        block: "PREAMBLE_TASK_NUMBER_INPUT",
+        tasks,
+        task,
+        runId: randomUUID(),
+        docsMode: "",
+        exitType: "",
+        exitNote: "",
+        answer: "",
+        counts: {},
+        ran: [],
+    };
+    const diagrams = getDiagramsForPipelines(pipelines);
+    blockList = getBlocksForDiagrams(diagrams);
+    let schema = loadSchema(blockList);
+    while (true) {
+        const result = agent(input, schema);
+        // handle errors
+        if (result === null) {
+            // agent errored or terminated prematurely. exit the loop.
+            break;
+        }
+
+        if (result.previousBlockWasTerminal) {
+            console.log("reached end of pipeline. loop terminated.");
+            break;
+        }
+
+        // the agent returned a valid output. update the input for the next agent call.
+        schema = result.schema;
+        input = result.output;
+    }
+    // console.log(`task ${taskNumber}: ${input.ran.join(" -> ")}`);
+    // console.log(`  docsMode=${JSON.stringify(input.docsMode)} exitType=${JSON.stringify(input.exitType)} exitNote=${JSON.stringify(input.exitNote)}`);
 }
 
 main(Number(process.argv[2]), process.argv[3]);
