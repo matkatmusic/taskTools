@@ -1,5 +1,5 @@
 flowchart TB
-%% The pipeline as scripts/tackle-tasks/monolith-pipeline.ts runs it: 17 blocks.
+%% The pipeline as scripts/tackle-tasks/monolith-pipeline.ts runs it: 18 blocks.
 %% ---
 %% Each small box is one block. Each large box is one system: the diagrams its blocks absorbed.
 %% ---
@@ -27,12 +27,16 @@ flowchart TB
 
   subgraph implement ["implement + task tests: pipeline-implement.mmd + pipeline-taskTests.mmd"]
     IMPLEMENT_TASK["implement task"]
-    COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
+    COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>are the task tests skipped?<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
   end
 
-  subgraph reviewTests ["review tests + rebase preamble: pipeline-reviewTests.mmd + pipeline-rebasePreamble.mmd"]
+  subgraph reviewTests ["review tests: pipeline-reviewTests.mmd"]
     CODEX_REVIEWS_TESTS["codex reviews the tests"]
-    ARE_TESTS_FLAGGED["are the tests flagged?<br/>2 codex test reviews done?<br/>amend entry with codex's notes<br/>lock the source repo, wait up to 15 minutes"]
+    ARE_TESTS_FLAGGED["are the tests flagged?<br/>2 codex test reviews done?<br/>amend entry with codex's notes"]
+  end
+
+  subgraph rebasePreamble ["rebase preamble: pipeline-rebasePreamble.mmd"]
+    LOCK_SOURCE_REPO["lock the source repo, wait up to 15 minutes"]
   end
 
   subgraph rebase ["rebase: pipeline-rebase.mmd"]
@@ -70,12 +74,15 @@ flowchart TB
   WHAT_IS_REVIEW_VERDICT -- "run-failed<br/>plan-scrapped" --> FAILURES_EXIT
   IMPLEMENT_TASK -- "agent implements" --> COMMIT_IMPLEMENTATION_IF_NEEDED
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests pass" --> CODEX_REVIEWS_TESTS
+  COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests field: skip" --> LOCK_SOURCE_REPO
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests fail<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests-red" --> FAILURES_EXIT
   CODEX_REVIEWS_TESTS -- "agent runs the reviewer<br/>returns {flagged, notes}" --> ARE_TESTS_FLAGGED
   ARE_TESTS_FLAGGED -- "flagged<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
-  ARE_TESTS_FLAGGED -- "tests-flagged<br/>run-failed" --> FAILURES_EXIT
-  ARE_TESTS_FLAGGED -- "lock acquired" --> REBASE_ONTO_TARGET_BRANCH
+  ARE_TESTS_FLAGGED -- "tests-flagged" --> FAILURES_EXIT
+  ARE_TESTS_FLAGGED -- "not flagged" --> LOCK_SOURCE_REPO
+  LOCK_SOURCE_REPO -- "lock acquired" --> REBASE_ONTO_TARGET_BRANCH
+  LOCK_SOURCE_REPO -- "run-failed" --> FAILURES_EXIT
   REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> RUN_FULL_SUITE
   REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> FIX_CONFLICTS
   REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> FAILURES_EXIT
@@ -95,7 +102,7 @@ flowchart TB
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class PREAMBLE_STATUS_CHECK,DOCUMENT_GENERATION,WHAT_DID_THE_PLANNER_RETURN,WHAT_IS_REVIEW_VERDICT,COMMIT_IMPLEMENTATION_IF_NEEDED,ARE_TESTS_FLAGGED,REBASE_ONTO_TARGET_BRANCH,COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,RUN_FULL_SUITE script
+  class PREAMBLE_STATUS_CHECK,DOCUMENT_GENERATION,WHAT_DID_THE_PLANNER_RETURN,WHAT_IS_REVIEW_VERDICT,COMMIT_IMPLEMENTATION_IF_NEEDED,ARE_TESTS_FLAGGED,LOCK_SOURCE_REPO,REBASE_ONTO_TARGET_BRANCH,COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,RUN_FULL_SUITE script
   class PLAN_THE_TASK,CODEX_REVIEWS_PLAN,IMPLEMENT_TASK,CODEX_REVIEWS_TESTS,FIX_CONFLICTS,FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt
   class FAILURES_EXIT,REPORT_ONLY_EXIT fail
   class STOP output

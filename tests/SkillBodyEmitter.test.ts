@@ -45,24 +45,25 @@ test("test_skillBody_leavesNoUnexpandedPluginRootOrArgumentsPlaceholder", () => 
     assert.doesNotMatch(brief, /\$ARGUMENTS/);
 });
 
-test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyPreambleChecks", () => {
+test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyTheArgumentParser", () => {
     // Setup: the emitter's own source is the boundary under test.
     const source = readFileSync(emitterPath, "utf8");
 
-    // Verification: still no subprocess, and only the preamble checks are imported.
+    // Verification: still no subprocess, and the hook walks the preamble, so nothing of it is imported.
     assert.doesNotMatch(source, /execFileSync|spawn/);
     const relativeImports = [...source.matchAll(/from "\.\/([^"]+)"/g)].map((match) => match[1]);
-    assert.deepEqual(relativeImports.sort(), ["PreambleDataEmitter.ts", "WorkflowResultCodes.ts", "resolveTaskRun.ts"]);
+    assert.deepEqual(relativeImports.sort(), ["resolveTaskRun.ts"]);
 });
 
-test("test_skillBody_replacesTheWholeBodyWithOneLineWhenATaskNumberIsInNoTaskStore", () => {
-    // Setup: a task number present in neither tasks.json nor completedTasks.json.
-    const brief = skillBody("[191]", makeTargetRepository([74]));
+// The workflow starts at the preamble's first box, which reads exactly the task number and the tasks file.
+test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () => {
+    const root = makeTargetRepository([74]);
+    const brief = skillBody("[74]", root);
 
-    // Verification: nothing to resolve, launch, merge or commit — so none of it is emitted.
-    assert.equal(brief, "Say: '191 not found in `.taskTools/tasks.json`'\n");
-    assert.doesNotMatch(brief, /Workflow\(/);
-    assert.doesNotMatch(brief, /Commit message/);
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    assert.deepEqual(call.args, { task: 74, tasksFile: join(root, ".taskTools", "tasks.json") });
+    assert.match(call.scriptPath, /skills\/tackle-tasks\/tackle-tasks\.workflow\.js$/);
 });
 
 test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
@@ -73,16 +74,15 @@ test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
     assert.match(skillMd, /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/tackle-tasks\/SkillBodyEmitter\.ts" <<'TACKLETASKSEOF'\n\$ARGUMENTS\nTACKLETASKSEOF/);
 });
 
-test("test_skillBody_namesNoDataScriptAndNoTaskFile", () => {
+test("test_skillBody_namesNoDataScript", () => {
     // Setup: a normal invocation.
     const brief = skillBody("[74]", makeTargetRepository([74]));
 
-    // Verification: the main agent never learns of a data script or a task file.
+    // Verification: the main agent never learns of a data script.
     assert.doesNotMatch(brief, /checkBlockers\.ts/);
     assert.doesNotMatch(brief, /getTaskDetails\.ts/);
     assert.doesNotMatch(brief, /prepareTasks\.ts/);
     assert.doesNotMatch(brief, /closeTasks\.ts/);
-    assert.doesNotMatch(brief, /tasks\.json/);
 });
 
 test("test_skillBody_usesNoBootstrapPrepareMode", () => {

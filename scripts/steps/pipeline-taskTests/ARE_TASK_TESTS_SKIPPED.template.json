@@ -1,5 +1,14 @@
 {
     "input": {
+        "box": "COMMITTED_WORK_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "scripts/steps/pipeline-taskTests/fixtures"
+    },
+    "output": {
         "box": "ARE_TASK_TESTS_SKIPPED",
         "scriptSignal": "continue",
         "taskNumber": 1,
@@ -8,15 +17,5 @@
         "sourceBranch": "main",
         "projectRoot": "/abs/project",
         "next": "RUN_TASK_TESTS"
-    },
-    "output": {
-        "box": "RUN_TASK_TESTS",
-        "scriptSignal": "continue",
-        "taskNumber": 1,
-        "runId": "run-1",
-        "worktreePath": "/abs/worktree",
-        "sourceBranch": "main",
-        "projectRoot": "/abs/project",
-        "passed": true
     }
 }

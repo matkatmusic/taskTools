@@ -105,8 +105,8 @@ export function buildNextStepsByStep(config: StepConfig): Record<string, string[
     return nextStepsByStep;
 }
 
-// A block script picks its own branch, so a walk can reach every block down every arrow.
-export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Record<string, string[]>, promptStepKeys: string[]): string[] {
+// A block script picks its own branch, so a walk can reach every block down every arrow, prompt blocks included.
+export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Record<string, string[]>): string[] {
     const reachedSteps: string[] = [];
     const stepsToVisit = [startStepKey];
     while (stepsToVisit.length > 0) {
@@ -115,16 +115,12 @@ export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Rec
             continue;
         }
         reachedSteps.push(stepKey);
-        // An agent answers a prompt block, so what follows it belongs to the next pass.
-        if (promptStepKeys.includes(stepKey)) {
-            continue;
-        }
         stepsToVisit.push(...(nextStepsByStep[stepKey] ?? []));
     }
     return reachedSteps;
 }
 
-// A prompt block hands the run to an agent, which is where one pass of the walk ends.
+/* retired: the schema walks through prompt blocks now, so nothing asks which blocks prompt.
 export function getPromptStepKeys(config: StepConfig): string[] {
     const promptStepKeys: string[] = [];
     for (const [diagram, entries] of Object.entries(config)) {
@@ -136,6 +132,7 @@ export function getPromptStepKeys(config: StepConfig): string[] {
     }
     return promptStepKeys;
 }
+*/
 
 // The envelope the hook always returns. buildAgentSchema fills in payload, so it starts empty.
 export function buildWalkResultSchema(): Record<string, unknown> {
@@ -166,10 +163,9 @@ export function buildWalkResultSchema(): Record<string, unknown> {
     };
 }
 
-// The schema one agent answers with, holding every payload a walk from this step can produce.
+// The schema one agent answers with: every payload the run can still produce from this step. The list only shrinks.
 export function buildAgentSchema(config: StepConfig, projectRoot: string, startStepKey: string): Record<string, unknown> {
-    const promptStepKeys = getPromptStepKeys(config);
-    const reachableSteps = getStepsReachableFrom(startStepKey, buildNextStepsByStep(config), promptStepKeys);
+    const reachableSteps = getStepsReachableFrom(startStepKey, buildNextStepsByStep(config));
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     const payloadSchemas: Record<string, unknown>[] = [];
     for (const stepKey of reachableSteps) {

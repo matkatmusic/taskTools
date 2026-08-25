@@ -242,5 +242,85 @@
                 "50"
             ]
         }
+    },
+    {
+        "taskNumber": 9,
+        "title": "task tests fail once: IMPLEMENT_TASK runs twice",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "NO",
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        }
+    },
+    {
+        "taskNumber": 10,
+        "title": "tests field skip: no task tests, no codex test review",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "tests": "skip"
     }
 ]

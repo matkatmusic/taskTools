@@ -32,6 +32,7 @@ type Run = {
 type Task = {
     taskNumber: number;
     files?: string[];
+    tests?: string;
     blockedBy?: { taskNum: number }[];
     clarifyRequest?: string;
     codexReviewNotes?: string;
@@ -454,6 +455,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
             stepId: "implement",
         });
 
+        // --- are the task tests skipped? live: steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.ts reads the entry's tests field ---
+        if (task.tests === "skip") {
+            console.log("  skipping: the task tests and the codex test review; the entry's tests field is \"skip\"");
+            return { next: "LOCK_SOURCE_REPO" };
+        }
+
         // --- run task tests. live: steps/pipeline-taskTests/RUN_TASK_TESTS.ts -> tackle-tasks/runTaskTestsImpl.ts:runTaskTests ---
         console.log(`  skipping: node --test <the task's test files> in ${run.worktree}`);
         const passed = sim(input, "DO_TASK_TESTS_PASS") === "YES";
@@ -498,7 +505,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         };
     },
 
-    // One block for "are the tests flagged?" onward, and all of pipeline-rebasePreamble.mmd.
+    // One block for "are the tests flagged?" onward.
     ARE_TESTS_FLAGGED(input) {
         const task = input.task!;
         const run = task.run!;
@@ -523,8 +530,15 @@ const blocks: Record<string, (input: Input) => Packet> = {
             task.codexReviewNotes = `A reviewer flagged the task tests. Apply every fix below.\n\n${review.notes}`;
             return { next: "IMPLEMENT_TASK" };
         }
+        return { next: "LOCK_SOURCE_REPO" };
+    },
 
-        // --- rebase preamble. live: steps/pipeline-rebasePreamble/LOCK_SOURCE_REPO.ts -> tackle-tasks/sourceRepoLock.ts:acquireSourceRepoLock ---
+    // --- pipeline-rebasePreamble.mmd ---
+
+    // One block for the lock and its wait; the tests-skip path enters here too. live: steps/pipeline-rebasePreamble/LOCK_SOURCE_REPO.ts -> tackle-tasks/sourceRepoLock.ts:acquireSourceRepoLock
+    LOCK_SOURCE_REPO(input) {
+        const task = input.task!;
+        const run = task.run!;
         const lockOwner = `${input.runId}:${task.taskNumber}`;
         let waitedSeconds = 0;
         while (true) {
@@ -838,7 +852,6 @@ type AgentResult = {
 const pipelines = [
     "preambleStatusCheck", "worktreeCheck", "documentGeneration", "plan", "reviewPlan", "implement",
     "taskTests", "reviewTests", "rebasePreamble", "rebase", "suite", "merge", "mergeSucceededExit",
-    "monolith",
 ];
 
 // The fields each block reads from the run state. The live hook keeps these in *.template.json.
@@ -898,6 +911,7 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     EXIT_WORKFLOW_IMPLEMENT: [],
     TASK_TESTS_PIPELINE: [],
     COMMITTED_WORK_INPUT: [],
+    ARE_TASK_TESTS_SKIPPED: [],
     RUN_TASK_TESTS: [],
     DO_TASK_TESTS_PASS: ["task"],
     ARE_2_TEST_FIXES_DONE: ["task"],
@@ -906,13 +920,13 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     REVIEW_TESTS_PIPELINE: [],
     GREEN_IMPLEMENTATION_INPUT: [],
     CODEX_REVIEWS_TESTS: ["task"],
-    ARE_TESTS_FLAGGED: ["task", "answer", "runId"],
+    ARE_TESTS_FLAGGED: ["task", "answer"],
     ARE_2_TEST_REVIEWS_DONE: ["task"],
     AMEND_ENTRY_WITH_CODEX_NOTES: [],
     EXIT_WORKFLOW_REVIEW_TESTS: [],
     REBASE_PREAMBLE_PIPELINE: [],
     FINISHED_IMPLEMENTATION_INPUT: [],
-    LOCK_SOURCE_REPO: [],
+    LOCK_SOURCE_REPO: ["task", "runId"],
     WAS_LOCK_ACQUIRED: ["task"],
     HAVE_15_MINUTES_PASSED: ["task"],
     WAIT_FOR_LOCK: [],
@@ -975,6 +989,8 @@ function getDiagramsForPipelines(pipelines: string[]): string[] {
     for (const pipeline of pipelines) {
         diagrams.push(`${diagramDir}pipeline-${pipeline}.mmd`);
     }
+    // The monolith's own drawing. Its leading underscore keeps generateSteps.ts from making blocks out of it.
+    diagrams.push(`${diagramDir}_pipeline-monolith.mmd`);
     return diagrams;
 }
 
@@ -1032,7 +1048,7 @@ function assertEveryBlockDeclaresInputFields(blockList: Block[]): void {
     }
 }
 
-// live: buildRunStepSchemas.ts:buildBlockSchemas walks next until a prompt or a stop and unions the shapes.
+// Every block the run can still reach. live: buildRunStepSchemas.ts:getStepsReachableFrom, which stops at prompts; it must not.
 function getSchemaReachableFrom(startName: string): Schema {
     const schema: Schema = {};
     const queue = [startName];
@@ -1046,7 +1062,6 @@ function getSchemaReachableFrom(startName: string): Schema {
         for (const candidate of blockList) {
             if (candidate.name === name) block = candidate;
         }
-        if (block!.producesPrompt) continue;
         for (const next of block!.feeds) {
             queue.push(next);
         }
@@ -1090,7 +1105,7 @@ function run(script: Script, scriptInput: Input, state: Input): RunStepResult {
     return result;
 }
 
-function runStep(input: Input): Directions {
+function runStep(input: Input, schema: Schema): Directions {
     /*
       invokes the runStepHook.ts hook with the given input.  Looks up the script (here emulated as a function) that should be executed for the block, and passes the input to it.  If the script is matched to a 'continue' block, the output of the script says what block to run next, and the output is passed to the next block in the chain.  If the script is matched to a 'prompt' block, the script output stops the loop here, and the output is returned to the caller of 'runStep'.
     */
@@ -1106,14 +1121,20 @@ function runStep(input: Input): Directions {
             if (script === undefined) throw new Error(`no script found for block ${block.name}`);
             // execute the script (function) matched to the block being run.
             result = run(script, scriptInput, state);
-            // A prompt stops the walk here. live: runStepHook.ts:buildSuccess; its schema is buildAgentSchema(next)
+            // A prompt stops the walk here. live: runStepHook.ts:buildSuccess rebuilds the list with buildAgentSchema(next); it must filter instead.
             if (result.prompt !== "") {
+                // Drop every block the run can no longer reach. The list only shrinks.
+                const reachable = getSchemaReachableFrom(result.nextBlock!);
+                const remaining: Schema = {};
+                for (const name in schema) {
+                    if (name in reachable) remaining[name] = schema[name]!;
+                }
                 return {
                     block: block.name,
                     prompt: result.prompt,
                     payload: result.output,
                     previousBlockWasTerminal: false,
-                    schema: getSchemaReachableFrom(result.nextBlock!),
+                    schema: remaining,
                     error: "",
                 };
             }
@@ -1228,7 +1249,8 @@ function agent(input: Input, schema: Schema): AgentResult | null {
     /*
       emulates the "invoke `/run-step <BLOCK> <args>` and follow directions" prompt to the agent in the live workflow.
     */
-    const directions = runStep(input); //the output of the hook, shows up in the agent's context
+    console.log(`  agent may stop at: ${Object.keys(schema).join(", ")}`);
+    const directions = runStep(input, schema); //the output of the hook, shows up in the agent's context
     // The schema names every block this walk may stop at. live: the structured output of ctx.agent().
     if (directions.error === "") {
         if (!(directions.block in schema)) throw new Error(`the hook stopped at ${directions.block}, which this call's schema does not allow`);
@@ -1266,6 +1288,7 @@ function main(taskNumber: number, tasksJsonPath: string) {
     const diagrams = getDiagramsForPipelines(pipelines);
     blockList = getBlocksForDiagrams(diagrams);
     assertEveryBlockDeclaresInputFields(blockList);
+    // The first call gets every block; each later call gets the list the hook filtered.
     let schema = getSchemaReachableFrom(input.block!);
     while (true) {
         const result = agent(input, schema);

@@ -6,6 +6,6 @@ argument-hint: <blockName> [input]
 
 do nothing. Don't even respond.
 
-One exception. When the injected result has `outcome.signal` of `prompt`,
+One exception. When the injected result has `outcome.scriptSignal` of `prompt`,
 read `outcome.payload.prompt` and follow it. Return the whole injected result,
 with your answer as `outcome.payload`. Change no other field.

@@ -500,15 +500,6 @@
             ]
         },
         {
-            "box": "EXIT_WORKFLOW_PLAN",
-            "script": "scripts/steps/pipeline-plan/EXIT_WORKFLOW_PLAN.ts",
-            "template": "scripts/steps/pipeline-plan/EXIT_WORKFLOW_PLAN.template.json",
-            "producesPrompt": false,
-            "next": [
-                "pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT"
-            ]
-        },
-        {
             "box": "ARE_2_CLARIFY_ROUNDS_DONE",
             "script": "scripts/steps/pipeline-plan/ARE_2_CLARIFY_ROUNDS_DONE.ts",
             "template": "scripts/steps/pipeline-plan/ARE_2_CLARIFY_ROUNDS_DONE.template.json",
@@ -526,6 +517,15 @@
             "mutating": true,
             "next": [
                 "DOCUMENT_GENERATION_PIPELINE"
+            ]
+        },
+        {
+            "box": "EXIT_WORKFLOW_PLAN",
+            "script": "scripts/steps/pipeline-plan/EXIT_WORKFLOW_PLAN.ts",
+            "template": "scripts/steps/pipeline-plan/EXIT_WORKFLOW_PLAN.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT"
             ]
         },
         {
@@ -1100,7 +1100,17 @@
             "template": "scripts/steps/pipeline-taskTests/COMMITTED_WORK_INPUT.template.json",
             "producesPrompt": false,
             "next": [
-                "RUN_TASK_TESTS"
+                "ARE_TASK_TESTS_SKIPPED"
+            ]
+        },
+        {
+            "box": "ARE_TASK_TESTS_SKIPPED",
+            "script": "scripts/steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.ts",
+            "template": "scripts/steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RUN_TASK_TESTS",
+                "REBASE_PREAMBLE_PIPELINE"
             ]
         },
         {
@@ -1111,6 +1121,15 @@
             "mutating": true,
             "next": [
                 "DO_TASK_TESTS_PASS"
+            ]
+        },
+        {
+            "box": "REBASE_PREAMBLE_PIPELINE",
+            "script": "scripts/steps/pipeline-taskTests/REBASE_PREAMBLE_PIPELINE.ts",
+            "template": "scripts/steps/pipeline-taskTests/REBASE_PREAMBLE_PIPELINE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-rebasePreamble.mmd::FINISHED_IMPLEMENTATION_INPUT"
             ]
         },
         {

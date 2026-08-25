@@ -17,6 +17,8 @@ flowchart TB
 %% ---
 %% A script that fails operationally exits as run-failed.
 %% ---
+%% An entry whose tests field is "skip" runs no task tests and no codex test review: it goes straight to the rebase preamble.
+%% ---
 %% Exit types: tests-red, run-failed.
 %% ---
 %% CODE TASK: the runtime disagrees with this graph.
@@ -27,7 +29,9 @@ flowchart TB
 %% ---
 %% Its exit note still says "after 2 codebase fixes".
 
-  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> RUN_TASK_TESTS
+  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> ARE_TASK_TESTS_SKIPPED{"is the entry's tests field skip?"}
+  ARE_TASK_TESTS_SKIPPED -->|NO| RUN_TASK_TESTS
+  ARE_TASK_TESTS_SKIPPED -- "YES<br/>no task tests, no codex test review" --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
   RUN_TASK_TESTS["run task tests"] --> DO_TASK_TESTS_PASS{"do the task tests pass?"}
   DO_TASK_TESTS_PASS -->|YES| REVIEW_TESTS_PIPELINE["review task tests pipeline"]
   DO_TASK_TESTS_PASS -->|NO| ARE_2_TEST_FIXES_DONE{"have 2 fixes already<br/>been attempted?"}
@@ -49,8 +53,8 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class DO_TASK_TESTS_PASS,ARE_2_TEST_FIXES_DONE decision
+  class ARE_TASK_TESTS_SKIPPED,DO_TASK_TESTS_PASS,ARE_2_TEST_FIXES_DONE decision
   class AMEND_ENTRY_WITH_FAILING_TESTS,RUN_TASK_TESTS script
-  class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE pipeline
+  class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE pipeline
   class EXIT_WORKFLOW_TASK_TESTS fail
   class COMMITTED_WORK_INPUT output
