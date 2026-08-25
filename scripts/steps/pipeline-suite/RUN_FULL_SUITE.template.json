@@ -1,14 +1,28 @@
 {
     "input": {
-        "box": "COMMIT_SUITE_FIX_IF_NEEDED",
+        "box": "REBASED_WORKTREE_INPUT",
         "scriptSignal": "continue",
-        "note": "COMMIT_SUITE_FIX_IF_NEEDED.ts for COMMIT_SUITE_FIX_IF_NEEDED",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0
     },
     "output": {
         "box": "RUN_FULL_SUITE",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "passed": true,
+        "output": ""
     }
 }

@@ -2,13 +2,38 @@
     "input": {
         "box": "WHAT_DID_THE_PLANNER_RETURN",
         "scriptSignal": "continue",
-        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "plan": {
+            "task": 35,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": "",
+        "next": "PLANNER_RETURNED_PLAN"
     },
     "output": {
         "box": "PLANNER_RETURNED_PLAN",
         "scriptSignal": "continue",
-        "note": "PLANNER_RETURNED_PLAN.ts for PLANNER_RETURNED_PLAN",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "plan": {
+            "task": 35,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": ""
     }
 }

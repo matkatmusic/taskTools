@@ -1,12 +1,23 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "IMPLEMENT_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "maxFixRounds": 3
     },
     "output": {
         "box": "ACCEPTED_PLAN_INPUT",
         "scriptSignal": "continue",
-        "note": "ACCEPTED_PLAN_INPUT.ts for ACCEPTED_PLAN_INPUT",
-        "input": ""
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "typecheckCommand": "npx tsc --noEmit",
+        "maxFixRounds": 3
     }
 }

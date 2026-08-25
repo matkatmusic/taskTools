@@ -6,17 +6,15 @@
         "runId": "run-1",
         "projectRoot": "/repo",
         "worktree": "/repo/worktrees/task-42",
-        "branch": "task-42",
-        "docsMode": "UPDATE",
-        "exitType": "",
-        "exitNote": "",
-        "clarifyRequest": "add coverage for the new export",
-        "briefFile": "/repo/worktrees/task-42/plans/brief-42.md"
+        "branch": "task-42"
     },
     "output": {
         "box": "DOCS_INPUT",
         "scriptSignal": "continue",
-        "note": "DOCS_INPUT.ts for DOCS_INPUT",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project"
     }
 }

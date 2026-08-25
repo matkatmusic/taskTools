@@ -12,7 +12,7 @@ export type StepConfigEntry = { box: string; script: string; template: string; p
 // Keyed by diagram file name, so two diagrams may name the same box without sharing a script.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
-export type BlockTemplate = { input: unknown; output?: unknown };
+export type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 
 const DIAGRAM_KEYWORDS = /^(flowchart|graph|subgraph|end|classDef|class|style|direction|click)\b/;
 

@@ -22,7 +22,7 @@ test("test_IS_TASK_BLOCKED_exitsWhenBlockedByNamesAnOpenTask", () => {
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_BLOCKED", scriptSignal: "continue", next: "REPORT_ONLY_EXIT",
-        taskNumber: 1, tasksFile, exitType: "blocked", note: "an open blocker remains",
+        taskNumber: 1, tasksFile, exitType: "blocked", exitNote: "an open blocker remains",
     });
 });
 
@@ -31,7 +31,7 @@ test("test_IS_TASK_BLOCKED_continuesToIsTaskActiveWhenTheBlockerIsNotOpen", () =
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_BLOCKED", scriptSignal: "continue", next: "IS_TASK_ACTIVE",
-        taskNumber: 1, tasksFile, exitType: "", note: "",
+        taskNumber: 1, tasksFile, exitType: "", exitNote: "",
     });
 });
 
@@ -40,6 +40,6 @@ test("test_IS_TASK_BLOCKED_continuesToIsTaskActiveWhenThereIsNoBlockedByField", 
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_BLOCKED", scriptSignal: "continue", next: "IS_TASK_ACTIVE",
-        taskNumber: 1, tasksFile, exitType: "", note: "",
+        taskNumber: 1, tasksFile, exitType: "", exitNote: "",
     });
 });

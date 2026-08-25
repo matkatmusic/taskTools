@@ -1,14 +1,24 @@
 {
     "input": {
-        "box": "CODEX_REVIEWS_TESTS",
+        "box": "GREEN_IMPLEMENTATION_INPUT",
         "scriptSignal": "continue",
-        "note": "CODEX_REVIEWS_TESTS.ts for CODEX_REVIEWS_TESTS",
-        "input": ""
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     },
     "output": {
         "box": "ARE_TESTS_FLAGGED",
         "scriptSignal": "continue",
-        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
-        "input": ""
+        "next": "ARE_2_TEST_REVIEWS_DONE",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     }
 }

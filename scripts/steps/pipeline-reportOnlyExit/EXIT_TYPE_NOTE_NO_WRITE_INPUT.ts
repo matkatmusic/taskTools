@@ -1,11 +1,11 @@
 // EXIT_TYPE_NOTE_NO_WRITE_INPUT, from pipeline-reportOnlyExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "EXIT_TYPE_NOTE_NO_WRITE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for EXIT_TYPE_NOTE_NO_WRITE_INPUT`, input };
+    const { exitType, exitNote } = JSON.parse(input) as { exitType: string; exitNote: string };
+    return { box: "EXIT_TYPE_NOTE_NO_WRITE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, exitType, exitNote };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

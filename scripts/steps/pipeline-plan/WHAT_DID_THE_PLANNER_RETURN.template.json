@@ -1,14 +1,40 @@
 {
     "input": {
-        "box": "PLAN_THE_TASK",
+        "box": "DOCS_INPUT",
         "scriptSignal": "continue",
-        "note": "PLAN_THE_TASK.ts for PLAN_THE_TASK",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
+        "sourceBranch": "master",
+        "projectRoot": "scripts/steps/pipeline-plan/fixtures",
+        "outcome": "PLAN",
+        "plan": {
+            "task": 35,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": ""
     },
     "output": {
         "box": "WHAT_DID_THE_PLANNER_RETURN",
         "scriptSignal": "continue",
-        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
+        "sourceBranch": "master",
+        "projectRoot": "scripts/steps/pipeline-plan/fixtures",
+        "plan": {
+            "task": 35,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": "",
+        "next": "PLANNER_RETURNED_PLAN"
     }
 }

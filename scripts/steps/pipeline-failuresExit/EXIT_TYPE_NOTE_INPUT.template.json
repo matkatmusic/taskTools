@@ -1,20 +1,22 @@
 {
     "input": {
-        "box": "FAILURES_EXIT",
-        "scriptSignal": "continue",
-        "taskNumber": 1,
-        "runId": "run-1",
-        "projectRoot": "/tmp/example-project",
-        "worktree": "/tmp/example-project-worktrees/task-1",
-        "branch": "task-1",
-        "docsMode": "",
-        "exitType": "fence-violation",
-        "exitNote": "the resumed worktree touched files the task does not own: some/path.ts"
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
     },
     "output": {
         "box": "EXIT_TYPE_NOTE_INPUT",
         "scriptSignal": "continue",
-        "note": "EXIT_TYPE_NOTE_INPUT.ts for EXIT_TYPE_NOTE_INPUT",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
     }
 }

@@ -2,11 +2,20 @@
     "input": {
         "box": "DO_TASK_TESTS_PASS",
         "scriptSignal": "continue",
-        "note": "DO_TASK_TESTS_PASS.ts for DO_TASK_TESTS_PASS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "next": "REVIEW_TESTS_PIPELINE"
     },
     "output": {
         "box": "REVIEW_TESTS_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project"
     }
 }

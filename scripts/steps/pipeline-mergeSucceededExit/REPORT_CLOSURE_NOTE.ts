@@ -1,11 +1,20 @@
 // REPORT_CLOSURE_NOTE, from pipeline-mergeSucceededExit.mmd
+// "report the closure note". No mutation, no re-derivation: just hands the archived run's own
+// closure note on to STOP.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
+export type ReportClosureNoteInput = {
+    box: string;
+    scriptSignal: string;
+    taskNumber: number;
+    closureNote: string;
+};
+
 export function main(input: string): Record<string, unknown> {
-    return { box: "REPORT_CLOSURE_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for REPORT_CLOSURE_NOTE`, input };
+    const packet = JSON.parse(input) as ReportClosureNoteInput;
+    return { box: "REPORT_CLOSURE_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, taskNumber: packet.taskNumber, closureNote: packet.closureNote };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

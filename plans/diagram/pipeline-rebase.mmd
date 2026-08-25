@@ -25,7 +25,7 @@ flowchart TB
 %% ---
 %% So the receipt is normally empty, but check, don't assume.
 %% ---
-%% Exit types: agent-failed, rebase-stuck, run-failed.
+%% Exit types: rebase-stuck, run-failed.
 %% ---
 %% Output feeds the full suite pipeline.
 
@@ -42,9 +42,6 @@ flowchart TB
   IS_REBASE_FINISHED -->|YES| SUITE_PIPELINE["full suite pipeline"]
   IS_REBASE_FINISHED -- "NO<br/>it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
 
-
-  FIX_CONFLICTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REBASE
-
   EXIT_WORKFLOW_REBASE["failures exit"]
 
   %% pass/nopass: green heads to the next pipeline.
@@ -58,10 +55,10 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
-  class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_REBASE fail
   class DID_REBASE_REPORT_CONFLICTS,IS_REBASE_FINISHED,ARE_2_CONFLICT_FIXES_DONE decision
   class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,REBASE_ONTO_TARGET_BRANCH,CONTINUE_REBASE script
   class FIX_CONFLICTS agent
+  class FIX_CONFLICTS returns_a_prompt
   class SUITE_PIPELINE pipeline
   class SOURCE_REPO_LOCKED_INPUT output

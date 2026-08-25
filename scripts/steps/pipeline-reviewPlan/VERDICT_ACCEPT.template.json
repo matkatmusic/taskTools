@@ -2,13 +2,41 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_ACCEPT",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": { "outcome": "OK", "missingFiles": [], "message": "", "issues": [], "fixes": [], "sectionsThatHoldUp": [] },
+        "verdict": "ACCEPT",
+        "notes": ""
     },
     "output": {
         "box": "VERDICT_ACCEPT",
         "scriptSignal": "continue",
-        "note": "VERDICT_ACCEPT.ts for VERDICT_ACCEPT",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

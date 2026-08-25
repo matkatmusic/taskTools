@@ -2,11 +2,27 @@
     "input": {
         "box": "DID_CHANGES_STAY_INSIDE_FENCE",
         "scriptSignal": "continue",
-        "note": "DID_CHANGES_STAY_INSIDE_FENCE.ts for DID_CHANGES_STAY_INSIDE_FENCE",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "output": "",
+        "next": "MERGE_PIPELINE",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "MERGE_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "suiteFixAttempts": 0
     }
 }

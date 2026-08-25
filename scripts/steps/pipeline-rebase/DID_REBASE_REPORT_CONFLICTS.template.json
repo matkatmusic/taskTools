@@ -1,14 +1,44 @@
 {
     "input": {
-        "box": "IS_REBASE_FINISHED",
+        "box": "REBASE_ONTO_TARGET_BRANCH",
         "scriptSignal": "continue",
-        "note": "IS_REBASE_FINISHED.ts for IS_REBASE_FINISHED",
-        "input": ""
+        "next": "DID_REBASE_REPORT_CONFLICTS",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "DID_REBASE_REPORT_CONFLICTS",
         "scriptSignal": "continue",
-        "note": "DID_REBASE_REPORT_CONFLICTS.ts for DID_REBASE_REPORT_CONFLICTS",
-        "input": ""
+        "next": "SUITE_PIPELINE",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

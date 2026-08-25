@@ -1,9 +1,19 @@
 {
     "input": {
-        "box": "FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED",
+        "box": "DID_CHANGES_STAY_INSIDE_FENCE",
         "scriptSignal": "continue",
-        "note": "FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED.ts for FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "output": "",
+        "next": "EXIT_WORKFLOW_SUITE",
+        "exitType": "fence-violation",
+        "exitNote": ""
     },
     "output": {
         "box": "EXIT_WORKFLOW_SUITE",
@@ -11,9 +21,8 @@
         "taskNumber": 0,
         "runId": "",
         "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
         "exitType": "",
         "exitNote": ""
     }

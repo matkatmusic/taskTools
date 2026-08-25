@@ -1,23 +1,31 @@
-// DOCUMENT_GENERATION_PIPELINE, from pipeline-plan.mmd
+// DOCUMENT_GENERATION_PIPELINE, from pipeline-plan.mmd goes to pipeline-documentGeneration.mmd::WORKTREE_DOCS_MODE_INPUT, docs mode UPDATE.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-plan.mmd's own logic is not implemented yet, so this hand-off fabricates the docs packet shape pipeline-documentGeneration.mmd::WORKTREE_DOCS_MODE_INPUT requires.
+type Input = {
+    taskNumber: number;
+    runId: string;
+    worktree: string;
+    sourceBranch: string;
+    projectRoot: string;
+    clarifyRequest: string;
+};
+
 export function main(input: string): Record<string, unknown> {
+    const parsed = JSON.parse(input) as Input;
     return {
         box: "DOCUMENT_GENERATION_PIPELINE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
+        taskNumber: parsed.taskNumber,
+        runId: parsed.runId,
+        projectRoot: parsed.projectRoot,
+        worktree: parsed.worktree,
+        branch: parsed.sourceBranch,
+        docsMode: "UPDATE",
         exitType: "",
         exitNote: "",
-        clarifyRequest: "",
+        clarifyRequest: parsed.clarifyRequest,
     };
 }
 

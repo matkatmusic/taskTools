@@ -2,11 +2,21 @@
     "input": {
         "box": "ARE_TESTS_FLAGGED",
         "scriptSignal": "continue",
-        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
-        "input": ""
+        "next": "REBASE_PREAMBLE_PIPELINE",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": ""
     },
     "output": {
         "box": "REBASE_PREAMBLE_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1"
     }
 }

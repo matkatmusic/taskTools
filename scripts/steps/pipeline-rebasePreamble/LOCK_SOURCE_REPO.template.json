@@ -1,14 +1,24 @@
 {
     "input": {
-        "box": "WAIT_FOR_LOCK",
+        "box": "FINISHED_IMPLEMENTATION_INPUT",
         "scriptSignal": "continue",
-        "note": "WAIT_FOR_LOCK.ts for WAIT_FOR_LOCK",
-        "input": ""
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     },
     "output": {
         "box": "LOCK_SOURCE_REPO",
         "scriptSignal": "continue",
-        "note": "LOCK_SOURCE_REPO.ts for LOCK_SOURCE_REPO",
-        "input": ""
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
     }
 }

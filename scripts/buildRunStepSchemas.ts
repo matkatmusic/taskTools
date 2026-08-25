@@ -1,7 +1,7 @@
 // Every run-step schema, built from the block template files. The hook and the workflow generator share it.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { AGENT_ANSWER_TEMPLATE, KNOWN_SCRIPT_SIGNALS, WORKFLOW_SIGNAL } from "./contracts.ts";
+import { KNOWN_SCRIPT_SIGNALS, WORKFLOW_SIGNAL } from "./contracts.ts";
 import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
 
 export type BlockSchema = {
@@ -67,17 +67,20 @@ export function buildBlockSchemas(config: StepConfig, projectRoot: string): Bloc
     const blockSchemas: BlockSchema[] = [];
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
+            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
+            const template = JSON.parse(templateText) as BlockTemplate;
             if (entry.producesPrompt) {
+                if (template.agentAnswer === undefined) {
+                    throw new Error(`${entry.template} declares no agentAnswer, and ${entry.box} is marked producesPrompt`);
+                }
                 blockSchemas.push({
                     diagram,
                     box: entry.box,
                     name: getBlockSchemaName(entry.box),
-                    schema: getSchemaFromTemplate(AGENT_ANSWER_TEMPLATE),
+                    schema: getSchemaFromTemplate(template.agentAnswer),
                 });
                 continue;
             }
-            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
-            const template = JSON.parse(templateText) as BlockTemplate;
             if (template.output === undefined) {
                 throw new Error(`${entry.template} declares no output, and ${entry.box} is not marked returns_a_prompt`);
             }

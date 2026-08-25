@@ -2,13 +2,37 @@
     "input": {
         "box": "REPORT_EXIT_TYPE_AND_NOTE",
         "scriptSignal": "continue",
-        "note": "REPORT_EXIT_TYPE_AND_NOTE.ts for REPORT_EXIT_TYPE_AND_NOTE",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": [],
+        "leaseReleased": true,
+        "leaseRetained": false,
+        "lockReleased": true,
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00"
     },
     "output": {
         "box": "STOP",
-        "scriptSignal": "continue",
-        "note": "STOP.ts for STOP",
-        "input": ""
+        "scriptSignal": "stop",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": [],
+        "leaseReleased": true,
+        "leaseRetained": false,
+        "lockReleased": true,
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00"
     }
 }

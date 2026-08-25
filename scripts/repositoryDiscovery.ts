@@ -25,8 +25,11 @@ export type DiscoveryResult =
 
 function readOriginUrl(checkoutPath: string): string {
     try {
+        // stdio: caught below on purpose (no origin is a normal case), so its stderr must not
+        // leak to the parent process — a leak was corrupting run-step's "last line" output parsing.
         return execFileSync("git", ["-C", checkoutPath, "remote", "get-url", "origin"], {
             encoding: "utf8",
+            stdio: ["ignore", "pipe", "pipe"],
         }).trim();
     } catch {
         // No remote: the root commit identifies the repo across every checkout of it.

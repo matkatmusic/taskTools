@@ -1,20 +1,31 @@
 {
     "input": {
-        "box": "CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED",
+        "box": "VERDICT_ERROR",
         "scriptSignal": "continue",
-        "note": "CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED.ts for CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED",
-        "input": ""
+        "next": "EXIT_WORKFLOW_REVIEW_PLAN",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "run-failed",
+        "exitNote": "the plan review could not run",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     },
     "output": {
         "box": "EXIT_WORKFLOW_REVIEW_PLAN",
         "scriptSignal": "continue",
-        "taskNumber": 0,
-        "runId": "",
-        "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
-        "exitType": "",
-        "exitNote": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "run-failed",
+        "exitNote": "the plan review could not run"
     }
 }

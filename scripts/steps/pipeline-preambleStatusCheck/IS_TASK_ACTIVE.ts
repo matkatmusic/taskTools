@@ -13,12 +13,12 @@ export function main(input: string): Record<string, unknown> {
     if (active) {
         return {
             box: "IS_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REPORT_ONLY_EXIT",
-            taskNumber, tasksFile, exitType: "already-active", note: "a previous run left the task active",
+            taskNumber, tasksFile, exitType: "already-active", exitNote: "a previous run left the task active",
         };
     }
     return {
         box: "IS_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "MARK_TASK_ACTIVE",
-        taskNumber, tasksFile, exitType: "", note: "",
+        taskNumber, tasksFile, exitType: "", exitNote: "",
     };
 }
 

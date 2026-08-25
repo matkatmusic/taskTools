@@ -2,13 +2,48 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_AMEND_THEN_ACCEPT",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": {
+            "outcome": "OK",
+            "missingFiles": [],
+            "message": "",
+            "issues": [{ "sectionId": "step-1", "evidence": "src/owned.ts:1-10", "planAsserts": "the export exists", "actuallyTrue": "it does not" }],
+            "fixes": [{ "sectionId": "step-1", "fix": "Add the missing export.", "durableBecause": "the plan now matches the source" }],
+            "sectionsThatHoldUp": []
+        },
+        "verdict": "AMEND_THEN_ACCEPT",
+        "notes": "[step-1] Add the missing export.\n\nDurable because: the plan now matches the source"
     },
     "output": {
         "box": "VERDICT_AMEND_THEN_ACCEPT",
         "scriptSignal": "continue",
-        "note": "VERDICT_AMEND_THEN_ACCEPT.ts for VERDICT_AMEND_THEN_ACCEPT",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

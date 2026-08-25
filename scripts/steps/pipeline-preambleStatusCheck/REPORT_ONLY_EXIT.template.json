@@ -6,12 +6,12 @@
         "taskNumber": 0,
         "tasksFile": "",
         "exitType": "already-active",
-        "note": "a previous run left the task active"
+        "exitNote": "a previous run left the task active"
     },
     "output": {
         "box": "REPORT_ONLY_EXIT",
         "scriptSignal": "continue",
         "exitType": "already-active",
-        "note": "a previous run left the task active"
+        "exitNote": "a previous run left the task active"
     }
 }

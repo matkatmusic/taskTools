@@ -1,8 +1,6 @@
 // Planner phase: one function per pipeline-preamble.mmd box. Trailing comments are the box's diagram label, verbatim.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
 import { isTaskBlocked } from "./isTaskBlocked.ts";
 import { claimTask } from "./taskRunState.ts";
@@ -19,10 +17,13 @@ import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
 import { markTaskInactive } from "./markTaskInactive.ts";
 import { releaseSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
-import { absolutePathsSection } from "./promptSections.ts";
 import { generateRunId, releaseTaskWorktreeLease } from "../prepareTasks.ts";
 import type { Plan } from "./planArtifacts.ts";
-import type { PlanReview } from "./recordPlanReview.ts";
+// Moved to planPrompt.ts: shared between this file's createPlanningAgentPrompt and
+// AgentPromptEmitter.ts, and copied into scripts/steps/pipeline-plan/PLAN_THE_TASK.ts.
+import { planPrompt, type PlanPromptExtra } from "./planPrompt.ts";
+
+export { planPrompt, type PlanPromptExtra } from "./planPrompt.ts";
 
 // The receipt the "plan the task" agent box hands back: the plan file it drafted.
 export type PlanFileReceipt = Plan;
@@ -165,6 +166,9 @@ const initSubmodulesRecursively = (taskNumber: TaskNum, ctx: RunContext): TaskNu
     return taskNumber;
 };
 
+
+/* Retired: moved to scripts/tackle-tasks/planPrompt.ts, shared with AgentPromptEmitter.ts,
+   and copied into scripts/steps/pipeline-plan/PLAN_THE_TASK.ts for the run-step engine.
 
 // ---------------------------------------------------------------------------
 // The planner agent's prompt, and the helpers only it uses.
@@ -338,6 +342,7 @@ Return the shape given by \`${PLAN_OUTPUT_PATH}\`, which the read-file skill put
 ---- TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) ----
 ${t.tests ?? "(none)"}`;
 }
+*/
 
 const createPlanningAgentPrompt = (taskNumber: TaskNum, shouldBeValidated: boolean, ctx: RunContext): string => {
     if (taskNumber === null) throw new Error("the planner phase reached \"plan the task\" with no task number");

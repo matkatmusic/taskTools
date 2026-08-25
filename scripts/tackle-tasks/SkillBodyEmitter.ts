@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { runPreamble } from "./PreambleDataEmitter.ts";
 import { repositoryTopLevel, resolveTaskRun } from "./resolveTaskRun.ts";
 import { WorkflowResultCodes } from "./WorkflowResultCodes.ts";
+import { main as exitTypeNoteNoWriteInput } from "../steps/pipeline-reportOnlyExit/EXIT_TYPE_NOTE_NO_WRITE_INPUT.ts";
+import { main as reportExitTypeNoWrite } from "../steps/pipeline-reportOnlyExit/REPORT_EXIT_TYPE_NO_WRITE.ts";
 
 const AGENT_PROMPT_EMITTER_PATH = fileURLToPath(new URL("./AgentPromptEmitter.ts", import.meta.url));
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
@@ -14,7 +16,11 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     const [taskNumber] = run.taskNumbers;
     const preambleResult = runPreamble(taskNumber, run.runId, projectRoot);
     if (preambleResult.code === WorkflowResultCodes.DO_NOT_PROCEED) {
-        return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
+        // migrated to scripts/steps/pipeline-reportOnlyExit/{EXIT_TYPE_NOTE_NO_WRITE_INPUT,REPORT_EXIT_TYPE_NO_WRITE,STOP}.ts
+        // return `Say: '${taskNumber} ${preambleResult.reason}'\n`;
+        const entry = exitTypeNoteNoWriteInput(JSON.stringify({ exitType: preambleResult.exitType, exitNote: preambleResult.reason }));
+        const reported = reportExitTypeNoWrite(JSON.stringify(entry));
+        return `Say: '${taskNumber} ${reported.exitNote as string}'\n`;
     }
 
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.

@@ -6,7 +6,7 @@
         "taskNumber": 1,
         "tasksFile": ".taskTools/tasks.json",
         "exitType": "",
-        "note": ""
+        "exitNote": ""
     },
     "output": {
         "box": "MARK_TASK_ACTIVE",

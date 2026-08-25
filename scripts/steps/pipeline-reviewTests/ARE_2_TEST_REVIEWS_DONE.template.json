@@ -2,13 +2,25 @@
     "input": {
         "box": "ARE_TESTS_FLAGGED",
         "scriptSignal": "continue",
-        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
-        "input": ""
+        "next": "ARE_2_TEST_REVIEWS_DONE",
+        "projectRoot": "scripts/steps/pipeline-reviewTests/fixtures",
+        "taskNumber": 42,
+        "worktreePath": "scripts/steps/pipeline-reviewTests/fixtures/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     },
     "output": {
         "box": "ARE_2_TEST_REVIEWS_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_TEST_REVIEWS_DONE.ts for ARE_2_TEST_REVIEWS_DONE",
-        "input": ""
+        "next": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "projectRoot": "scripts/steps/pipeline-reviewTests/fixtures",
+        "taskNumber": 42,
+        "worktreePath": "scripts/steps/pipeline-reviewTests/fixtures/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value",
+        "exitType": "",
+        "exitNote": ""
     }
 }

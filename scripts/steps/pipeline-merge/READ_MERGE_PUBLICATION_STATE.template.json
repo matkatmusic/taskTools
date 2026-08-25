@@ -1,14 +1,37 @@
 {
     "input": {
+        "worktreePath": ".",
+        "rootSourceBranch": "main",
+        "taskNumber": 999999999,
+        "runId": "run-1",
+        "projectRoot": ".",
+        "suiteFixAttempts": 0,
         "box": "MERGE_WORKTREES",
         "scriptSignal": "continue",
-        "note": "MERGE_WORKTREES.ts for MERGE_WORKTREES",
-        "input": ""
+        "merged": true,
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "0000000000000000000000000000000000000000",
+                "kind": "merge"
+            }
+        ],
+        "failureReason": null
     },
     "output": {
+        "worktreePath": ".",
+        "rootSourceBranch": "main",
+        "taskNumber": 999999999,
+        "runId": "run-1",
+        "projectRoot": ".",
+        "suiteFixAttempts": 0,
         "box": "READ_MERGE_PUBLICATION_STATE",
         "scriptSignal": "continue",
-        "note": "READ_MERGE_PUBLICATION_STATE.ts for READ_MERGE_PUBLICATION_STATE",
-        "input": ""
+        "state": "NONE LANDED",
+        "landed": [],
+        "notLanded": [
+            "root"
+        ],
+        "commits": []
     }
 }

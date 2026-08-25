@@ -1,11 +1,31 @@
-// REVIEW_PLAN_PIPELINE, from pipeline-plan.mmd
+// REVIEW_PLAN_PIPELINE, from pipeline-plan.mmd goes to pipeline-reviewPlan.mmd::DRAFT_PLAN_INPUT, which re-derives the plan file itself.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
+type Input = {
+    taskNumber: number;
+    runId: string;
+    worktree: string;
+    sourceBranch: string;
+    projectRoot: string;
+    plan: unknown;
+    clarifyRequest: string | null;
+};
+
 export function main(input: string): Record<string, unknown> {
-    return { box: "REVIEW_PLAN_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    const parsed = JSON.parse(input) as Input;
+    return {
+        box: "REVIEW_PLAN_PIPELINE",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: parsed.taskNumber,
+        runId: parsed.runId,
+        worktree: parsed.worktree,
+        sourceBranch: parsed.sourceBranch,
+        projectRoot: parsed.projectRoot,
+        plan: parsed.plan,
+        clarifyRequest: parsed.clarifyRequest,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

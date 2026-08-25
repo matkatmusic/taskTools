@@ -2,13 +2,41 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_AMEND",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": { "outcome": "OK", "missingFiles": [], "message": "", "issues": [], "fixes": [], "sectionsThatHoldUp": [] },
+        "verdict": "AMEND",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file"
     },
     "output": {
         "box": "VERDICT_AMEND",
         "scriptSignal": "continue",
-        "note": "VERDICT_AMEND.ts for VERDICT_AMEND",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

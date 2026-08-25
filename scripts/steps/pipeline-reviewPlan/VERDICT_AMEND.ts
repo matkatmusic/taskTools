@@ -1,11 +1,31 @@
-// VERDICT_AMEND, from pipeline-reviewPlan.mmd
+// VERDICT_AMEND, from pipeline-reviewPlan.mmd. Codex wants the plan amended and re-reviewed.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
+export type VerdictAmendPacket = {
+    taskNumber: number;
+    taskStateRoot: string;
+    repoRoot: string;
+    notes: string;
+    runId: string;
+    sourceBranch: string;
+    plan: unknown;
+};
+
 export function main(input: string): Record<string, unknown> {
-    return { box: "VERDICT_AMEND", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for VERDICT_AMEND`, input };
+    const packet = JSON.parse(input) as VerdictAmendPacket;
+    return {
+        box: "VERDICT_AMEND",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: packet.taskNumber,
+        taskStateRoot: packet.taskStateRoot,
+        repoRoot: packet.repoRoot,
+        notes: packet.notes,
+        runId: packet.runId,
+        sourceBranch: packet.sourceBranch,
+        plan: packet.plan,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

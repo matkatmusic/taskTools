@@ -15,18 +15,14 @@ flowchart TB
 %% ---
 %% Exit types this pipeline can produce:
 %% ---
-%% agent-failed - an agent returned nothing usable
-%% ---
 %% clarify-stuck - the planner asked twice for what the docs cannot supply
 
   DOCS_INPUT["Input: { brief, docs, codexNotes? }"] --> PLAN_THE_TASK
   PLAN_THE_TASK["plan the task"] --> WHAT_DID_THE_PLANNER_RETURN{"what did the planner return?"}
   WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_PLAN["PLAN"]
   WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_CLARIFY["CLARIFY"]
-  WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_ERROR["ERROR"]
 
   PLANNER_RETURNED_PLAN --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
-  PLANNER_RETURNED_ERROR -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_PLAN
 
   PLANNER_RETURNED_CLARIFY --> ARE_2_CLARIFY_ROUNDS_DONE{"2 clarify rounds done?"}
   ARE_2_CLARIFY_ROUNDS_DONE -->|NO| WRITE_CLARIFY_REQUEST["write the clarify request<br/>into the tasks.json entry"]
@@ -46,11 +42,11 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   class WHAT_DID_THE_PLANNER_RETURN,ARE_2_CLARIFY_ROUNDS_DONE decision
-  class PLAN_THE_TASK agent
+  class PLAN_THE_TASK returns_a_prompt
   class WRITE_CLARIFY_REQUEST script
   class REVIEW_PLAN_PIPELINE,DOCUMENT_GENERATION_PIPELINE pipeline
   class PLANNER_RETURNED_PLAN,PLANNER_RETURNED_CLARIFY pass
-  class PLANNER_RETURNED_ERROR nopass
   class EXIT_WORKFLOW_PLAN fail
   class DOCS_INPUT output

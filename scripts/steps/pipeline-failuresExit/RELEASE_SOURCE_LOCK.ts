@@ -1,11 +1,21 @@
 // RELEASE_SOURCE_LOCK, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { buildLockOwner, releaseSourceRepoLock } from "../../tackle-tasks/sourceRepoLock.ts";
+import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
+import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
+
+type Input = FailuresExitEntryInput & {
+    publicationState: PublicationState; modifiedFiles: string[]; active: boolean; endedAt: string;
+    next: string; leaseReleased: boolean; leaseRetained: boolean; lockReleased: boolean;
+};
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for RELEASE_SOURCE_LOCK`, input };
+    const { next: _next, lockReleased: _lockReleased, ...packet } = JSON.parse(input) as Input;
+    const { released } = releaseSourceRepoLock(packet.projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
+    // next is constant: this box's one successor matches DOES_RUN_HOLD_SOURCE_LOCK's NO branch.
+    return { ...packet, box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REPORT_EXIT_TYPE_AND_NOTE", lockReleased: released };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

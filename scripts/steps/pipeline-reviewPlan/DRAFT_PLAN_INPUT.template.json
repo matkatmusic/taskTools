@@ -1,12 +1,41 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "REVIEW_PLAN_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "worktree": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": ""
     },
     "output": {
         "box": "DRAFT_PLAN_INPUT",
         "scriptSignal": "continue",
-        "note": "DRAFT_PLAN_INPUT.ts for DRAFT_PLAN_INPUT",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures",
+        "repoRoot": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree",
+        "briefFile": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/brief-42.md",
+        "planFile": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "reviewOutputFile": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json",
+        "ownedFilePaths": ["/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/src/owned.ts"],
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

@@ -19,7 +19,7 @@ test("test_IS_TASK_NUMBER_VALID_continuesToIsTaskBlockedWhenTheTaskIsInTasksJson
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_NUMBER_VALID", scriptSignal: "continue", next: "IS_TASK_BLOCKED",
-        taskNumber: 1, tasksFile, exitType: "", note: "",
+        taskNumber: 1, tasksFile, exitType: "", exitNote: "",
     });
 });
 
@@ -28,6 +28,6 @@ test("test_IS_TASK_NUMBER_VALID_exitsWhenTheTaskNumberIsNotInTasksJson", () => {
     const output = main(JSON.stringify({ taskNumber: 999, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_NUMBER_VALID", scriptSignal: "continue", next: "REPORT_ONLY_EXIT",
-        taskNumber: 999, tasksFile, exitType: "invalid-number", note: "task number is not in tasks.json",
+        taskNumber: 999, tasksFile, exitType: "invalid-number", exitNote: "task number is not in tasks.json",
     });
 });

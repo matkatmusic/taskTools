@@ -1,12 +1,21 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "REBASE_PREAMBLE_PIPELINE",
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-abc"
     },
     "output": {
         "box": "FINISHED_IMPLEMENTATION_INPUT",
         "scriptSignal": "continue",
-        "note": "FINISHED_IMPLEMENTATION_INPUT.ts for FINISHED_IMPLEMENTATION_INPUT",
-        "input": ""
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

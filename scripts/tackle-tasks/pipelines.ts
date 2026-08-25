@@ -157,11 +157,11 @@ export async function runAgent(
     if (isFake(ctx)) {
         const errors = (ctx.fake as Record<string, Record<string, boolean[]>>).agentErrors ?? {};
         const errored = attempt(errors[box] ?? [false], visit);
-        if (errored) step(ctx, ctx.L("AGENT_ERRORED"));
+        if (errored) step(ctx, "agent() errored");
         return errored ? null : {};
     }
     const result = await ctx.agent(emitterPrompt(ctx, role, extra), { label: `${role}:${ctx.task}`, schema });
-    if (result === null) step(ctx, ctx.L("AGENT_ERRORED"));
+    if (result === null) step(ctx, "agent() errored");
     return result;
 }
 
@@ -225,7 +225,8 @@ export const PLAN_RESULT = {
     type: "object",
     required: ["outcome"],
     properties: {
-        outcome: { type: "string", enum: ["PLAN", "CLARIFY", "ERROR"] },
+        outcome: { type: "string", enum: ["PLAN", "CLARIFY"] },
+        plan: { type: "object" },
         clarifyRequest: { type: "string" },
     },
 };
@@ -410,7 +411,8 @@ export async function planPipeline(ctx: PipelineContext): Promise<PipelineOutcom
     ctx.plannerIndex += 1;
     step(ctx, ctx.L("WHAT_DID_THE_PLANNER_RETURN"), outcome);
 
-    if (outcome === "ERROR") return toFailures("agent-failed", AGENT_FAILED_NOTE);
+    // Unreachable: PLAN_RESULT's outcome enum is only "PLAN" or "CLARIFY", never "ERROR".
+    // if (outcome === "ERROR") return toFailures("agent-failed", AGENT_FAILED_NOTE);
     // Paragraph 25.
     if (outcome === "PLAN") return { next: "review-plan" };
 

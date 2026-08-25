@@ -6,13 +6,13 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig, StepConfigEntry } from "../scripts/generateSteps.ts";
-import { AGENT_ANSWER_TEMPLATE, buildPromptOutputTemplate } from "../scripts/contracts.ts";
+import { buildPromptOutputTemplate } from "../scripts/contracts.ts";
 import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 
-type BlockTemplate = { input: unknown; output?: unknown };
+type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 
 function readBlockTemplate(templatePath: string): BlockTemplate {
     return JSON.parse(readFileSync(join(PROJECT_ROOT, templatePath), "utf8")) as BlockTemplate;
@@ -26,9 +26,9 @@ function getExpectedOutput(entry: StepConfigEntry, template: BlockTemplate): unk
     return template.output;
 }
 
-// What a block hands to the next block: the agent's answer for a prompt block, its printed output otherwise.
+// What a block hands on: for a prompt block, the engine's merged payload; otherwise its printed output.
 function getHandedOnShape(entry: StepConfigEntry, template: BlockTemplate): unknown {
-    return entry.producesPrompt ? AGENT_ANSWER_TEMPLATE : template.output;
+    return entry.producesPrompt ? { ...(template.input as Record<string, unknown>), ...(template.agentAnswer as Record<string, unknown>) } : template.output;
 }
 
 // The block's result is the last line it prints, the same rule the hook uses.
@@ -80,5 +80,21 @@ for (const [diagramFile, entries] of Object.entries(config)) {
                 assert.deepEqual(mismatches, [], `${targetBox} input does not match what ${entry.box} hands on:\n${mismatches.join("\n")}`);
             });
         }
+    }
+}
+
+// A prompt block is terminal for its agent; the engine carries the payload, not a next-step line.
+for (const [diagramFile, entries] of Object.entries(config)) {
+    for (const entry of entries) {
+        if (!entry.producesPrompt) {
+            continue;
+        }
+        test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_promptHasNoContinuationInstructions`, () => {
+            const template = readBlockTemplate(entry.template);
+            const { commandOutput, result } = runBlockScript(join(PROJECT_ROOT, entry.script), template.input, PROJECT_ROOT);
+            assert.notEqual(result, null, `${entry.box} printed no result object:\n${commandOutput}`);
+            const prompt = String((result as Record<string, unknown>).prompt);
+            assert.doesNotMatch(prompt, /\/run-step|invoke the skill/i);
+        });
     }
 }

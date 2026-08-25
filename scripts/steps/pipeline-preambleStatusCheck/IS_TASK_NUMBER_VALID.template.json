@@ -12,6 +12,6 @@
         "taskNumber": 1,
         "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
         "exitType": "",
-        "note": ""
+        "exitNote": ""
     }
 }

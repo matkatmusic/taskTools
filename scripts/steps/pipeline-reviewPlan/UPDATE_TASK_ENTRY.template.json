@@ -2,13 +2,37 @@
     "input": {
         "box": "VERDICT_SCRAP",
         "scriptSignal": "continue",
-        "note": "VERDICT_SCRAP.ts for VERDICT_SCRAP",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     },
     "output": {
         "box": "UPDATE_TASK_ENTRY",
         "scriptSignal": "continue",
-        "note": "UPDATE_TASK_ENTRY.ts for UPDATE_TASK_ENTRY",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "reviewCount": 1,
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

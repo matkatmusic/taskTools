@@ -1,11 +1,12 @@
-// TASK_TESTS_PIPELINE, from pipeline-implement.mmd
+// TASK_TESTS_PIPELINE, from pipeline-implement.mmd. Forwards the committed work packet to pipeline-taskTests.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "TASK_TESTS_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    const packet = JSON.parse(input) as Record<string, unknown>;
+    const { box: _box, scriptSignal: _scriptSignal, ...rest } = packet;
+    return { box: "TASK_TESTS_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, ...rest };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

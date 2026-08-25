@@ -1,11 +1,11 @@
-// REVIEW_TESTS_PIPELINE, from pipeline-taskTests.mmd
+// REVIEW_TESTS_PIPELINE, from pipeline-taskTests.mmd. Forwards the task identity to pipeline-reviewTests.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readPacket } from "./packet.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "REVIEW_TESTS_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    return { ...readPacket(input), box: "REVIEW_TESTS_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

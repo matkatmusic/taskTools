@@ -4,7 +4,6 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { AGENT_ANSWER_TEMPLATE } from "../scripts/contracts.ts";
 import { buildWorkflowScript, generateWorkflow } from "../scripts/generateWorkflow.ts";
 import {
     buildBlockSchemas,
@@ -16,11 +15,14 @@ import {
 } from "../scripts/buildRunStepSchemas.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
-function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
+function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[]; agentAnswer?: Record<string, unknown> }[]) {
     const projectRoot = mkdtempSync(join(tmpdir(), "generate-workflow-"));
     mkdirSync(join(projectRoot, "steps"));
     const entries = blocks.map(block => {
-        const template = { input: {}, output: block.output };
+        const template: Record<string, unknown> = { input: {}, output: block.output };
+        if (block.agentAnswer !== undefined) {
+            template.agentAnswer = block.agentAnswer;
+        }
         writeFileSync(join(projectRoot, "steps", `${block.box}.template.json`), JSON.stringify(template));
         return {
             box: block.box,
@@ -71,11 +73,18 @@ test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
     assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate({ files: 0 }));
 });
 
-// A prompt block's pass hands on the agent's answer, so its schema is the canonical answer shape.
+// A prompt block's pass hands on the agent's answer, so its schema comes from the block's own declared shape.
 test("test_buildBlockSchemas_usesTheAgentAnswerShapeForAPromptBlock", () => {
-    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true }]);
+    const agentAnswer = { outcome: "" };
+    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true, agentAnswer }]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(AGENT_ANSWER_TEMPLATE));
+    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(agentAnswer));
+});
+
+// Every producesPrompt block must declare its answer shape; there is no global fallback to drift against.
+test("test_buildBlockSchemas_throwsWhenAPromptBlockDeclaresNoAgentAnswer", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true }]);
+    assert.throws(() => buildBlockSchemas(config, projectRoot), /declares no agentAnswer/);
 });
 
 // box, scriptSignal and next belong to the envelope, so a payload never repeats them.

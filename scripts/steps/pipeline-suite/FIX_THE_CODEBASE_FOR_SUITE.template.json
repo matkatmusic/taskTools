@@ -2,13 +2,20 @@
     "input": {
         "box": "ARE_2_SUITE_FIXES_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_SUITE_FIXES_DONE.ts for ARE_2_SUITE_FIXES_DONE",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "output": "",
+        "next": "FIX_THE_CODEBASE_FOR_SUITE",
+        "exitType": "",
+        "exitNote": ""
     },
-    "output": {
-        "box": "FIX_THE_CODEBASE_FOR_SUITE",
-        "scriptSignal": "continue",
-        "note": "FIX_THE_CODEBASE_FOR_SUITE.ts for FIX_THE_CODEBASE_FOR_SUITE",
-        "input": ""
+    "agentAnswer": {
+        "fixSummary": "<one paragraph: which failures you fixed, and any failure left unaddressed and why>"
     }
 }

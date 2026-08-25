@@ -42,11 +42,11 @@ A rebase inside \`${root}\` is stopped on live conflict markers.
 It is stopped, not aborted, so the markers are still in the files.
 Resolve every conflict in the files listed under WHAT YOU MAY EDIT, and nothing else.
 
-before you do any work: invoke the skill \`/ponytail:ponytail ultra\` first.
+before you do any work, run \`/ponytail:ponytail ultra\` first.
 
 ## WHAT TO READ
 
-Invoke the following skill verbatim:
+Run this, verbatim:
 \`\`\`
 /read-file ${readFileArgs([...absolutePaths, FIX_CONFLICTS_OUTPUT_PATH])}
 \`\`\`

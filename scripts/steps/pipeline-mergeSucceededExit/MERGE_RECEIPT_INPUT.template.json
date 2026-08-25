@@ -1,12 +1,32 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "EXIT_WORKFLOW_SUCCESS",
+        "scriptSignal": "continue",
+        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "projectRoot": "/tmp/example-project",
+        "suiteFixAttempts": 0,
+        "state": "ALL LANDED",
+        "landed": ["root"],
+        "notLanded": [],
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ],
+        "next": "PUBLICATION_ALL"
     },
     "output": {
         "box": "MERGE_RECEIPT_INPUT",
         "scriptSignal": "continue",
-        "note": "MERGE_RECEIPT_INPUT.ts for MERGE_RECEIPT_INPUT",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "rootSourceBranch": "main",
+        "exitNote": "All layers merged successfully.",
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ]
     }
 }

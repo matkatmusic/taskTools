@@ -1,11 +1,11 @@
 // STOP, from pipeline-reportOnlyExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "STOP", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for STOP`, input };
+    const { exitType, exitNote } = JSON.parse(input) as { exitType: string; exitNote: string };
+    return { box: "STOP", scriptSignal: SCRIPT_SIGNAL.STOP, exitType, exitNote };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

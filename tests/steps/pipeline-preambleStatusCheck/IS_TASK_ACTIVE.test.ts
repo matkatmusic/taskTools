@@ -20,7 +20,7 @@ test("test_IS_TASK_ACTIVE_continuesToMarkTaskActiveWhenNotActive", () => {
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_ACTIVE", scriptSignal: "continue", next: "MARK_TASK_ACTIVE",
-        taskNumber: 1, tasksFile, exitType: "", note: "",
+        taskNumber: 1, tasksFile, exitType: "", exitNote: "",
     });
 });
 
@@ -30,6 +30,6 @@ test("test_IS_TASK_ACTIVE_exitsWhenAPreviousRunLeftTheTaskActive", () => {
     const output = main(JSON.stringify({ taskNumber: 1, tasksFile }));
     assert.deepEqual(output, {
         box: "IS_TASK_ACTIVE", scriptSignal: "continue", next: "REPORT_ONLY_EXIT",
-        taskNumber: 1, tasksFile, exitType: "already-active", note: "a previous run left the task active",
+        taskNumber: 1, tasksFile, exitType: "already-active", exitNote: "a previous run left the task active",
     });
 });

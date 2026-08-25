@@ -1,11 +1,28 @@
 // BUILD_CLOSURE_NOTE, from pipeline-mergeSucceededExit.mmd
+// "build the closure note from the recorded run". Read-only: deterministic from the stored run
+// record, so it runs correctly after CLEAN_UP_WORKTREES has already deleted the worktree.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { buildClosureNote } from "../../tackle-tasks/buildClosureNote.ts";
+
+export type BuildClosureNoteInput = {
+    box: string;
+    scriptSignal: string;
+    projectRoot: string;
+    taskNumber: number;
+    runId: string;
+};
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "BUILD_CLOSURE_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for BUILD_CLOSURE_NOTE`, input };
+    const packet = JSON.parse(input) as BuildClosureNoteInput;
+    const { closureNote } = buildClosureNote({
+        taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot,
+    });
+    return {
+        box: "BUILD_CLOSURE_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        projectRoot: packet.projectRoot, taskNumber: packet.taskNumber, runId: packet.runId, closureNote,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

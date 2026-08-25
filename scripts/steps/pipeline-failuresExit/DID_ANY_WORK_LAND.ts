@@ -1,11 +1,16 @@
 // DID_ANY_WORK_LAND, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
+import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
+
+type Input = FailuresExitEntryInput & { publicationState: PublicationState };
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "DID_ANY_WORK_LAND", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for DID_ANY_WORK_LAND`, input };
+    const packet = JSON.parse(input) as Input;
+    const next = packet.publicationState === "NONE LANDED" ? "WRITE_EXIT_TYPE_AND_NOTE" : "WRITE_PUBLICATION_OUTCOME";
+    return { ...packet, box: "DID_ANY_WORK_LAND", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

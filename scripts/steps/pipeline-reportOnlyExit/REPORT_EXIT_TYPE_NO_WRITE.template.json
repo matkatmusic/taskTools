@@ -2,13 +2,13 @@
     "input": {
         "box": "EXIT_TYPE_NOTE_NO_WRITE_INPUT",
         "scriptSignal": "continue",
-        "note": "EXIT_TYPE_NOTE_NO_WRITE_INPUT.ts for EXIT_TYPE_NOTE_NO_WRITE_INPUT",
-        "input": ""
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     },
     "output": {
         "box": "REPORT_EXIT_TYPE_NO_WRITE",
         "scriptSignal": "continue",
-        "note": "REPORT_EXIT_TYPE_NO_WRITE.ts for REPORT_EXIT_TYPE_NO_WRITE",
-        "input": ""
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     }
 }

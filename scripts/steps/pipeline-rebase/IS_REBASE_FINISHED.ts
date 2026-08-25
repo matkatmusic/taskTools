@@ -1,11 +1,13 @@
-// IS_REBASE_FINISHED, from pipeline-rebase.mmd
+// IS_REBASE_FINISHED, from pipeline-rebase.mmd. Decision: read-only, no lock refresh needed.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { RebasePacket } from "./packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "IS_REBASE_FINISHED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for IS_REBASE_FINISHED`, input };
+export function main(input: string): RebasePacket & { next: string } {
+    const packet = JSON.parse(input) as RebasePacket;
+    const next = packet.finished ? "SUITE_PIPELINE" : "DID_REBASE_REPORT_CONFLICTS";
+    return { ...packet, box: "IS_REBASE_FINISHED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

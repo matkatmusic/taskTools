@@ -29,7 +29,7 @@ flowchart TB
 %% ---
 %% A script that fails operationally exits as run-failed.
 %% ---
-%% Exit types: agent-failed, suite-red, fence-violation, run-failed.
+%% Exit types: suite-red, fence-violation, run-failed.
 
   REBASED_WORKTREE_INPUT["Input: { worktree }"] --> RUN_FULL_SUITE
   RUN_FULL_SUITE["run the full suite"] --> DO_ALL_TESTS_PASS{"do all tests pass?"}
@@ -43,9 +43,6 @@ flowchart TB
 
   DID_CHANGES_STAY_INSIDE_FENCE -->|YES| MERGE_PIPELINE["merge pipeline"]
   DID_CHANGES_STAY_INSIDE_FENCE -- "NO<br/>exit type: fence-violation<br/>exit note: a repair edited files the<br/>task does not own. nothing merged.<br/>worktree preserved." --> EXIT_WORKFLOW_SUITE
-
-  FIX_THE_CODEBASE_FOR_SUITE -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_SUITE
-  RUN_FULL_SUITE -.-> AGENT_ERRORED
 
   EXIT_WORKFLOW_SUITE["failures exit"]
 
@@ -64,6 +61,6 @@ flowchart TB
   class COMMIT_SUITE_FIX_IF_NEEDED,RUN_FULL_SUITE script
   class FIX_THE_CODEBASE_FOR_SUITE agent
   class MERGE_PIPELINE pipeline
-  class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_SUITE fail
   class REBASED_WORKTREE_INPUT output
+  class FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt

@@ -2,13 +2,13 @@
     "input": {
         "box": "REPORT_EXIT_TYPE_NO_WRITE",
         "scriptSignal": "continue",
-        "note": "REPORT_EXIT_TYPE_NO_WRITE.ts for REPORT_EXIT_TYPE_NO_WRITE",
-        "input": ""
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     },
     "output": {
         "box": "STOP",
-        "scriptSignal": "continue",
-        "note": "STOP.ts for STOP",
-        "input": ""
+        "scriptSignal": "stop",
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     }
 }

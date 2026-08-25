@@ -1,4 +1,6 @@
 // "write the clarify request into the tasks.json entry" — pipeline-plan.mmd. The planner reads the entry next.
+// Still live: planPrompt.ts's clarifyRequestBlock shells out to this CLI for the old AgentPromptEmitter
+// dispatch path. Copied (not moved) into scripts/steps/pipeline-plan/WRITE_CLARIFY_REQUEST.ts for run-step.
 import { readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";

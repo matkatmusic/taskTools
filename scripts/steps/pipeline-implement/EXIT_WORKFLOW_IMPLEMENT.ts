@@ -1,23 +1,12 @@
-// EXIT_WORKFLOW_IMPLEMENT, from pipeline-implement.mmd
+// EXIT_WORKFLOW_IMPLEMENT, from pipeline-implement.mmd. Forwards the exit type and note to pipeline-failuresExit.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-implement.mmd's own logic is not implemented yet, so this hand-off fabricates the packet shape pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT requires.
 export function main(input: string): Record<string, unknown> {
-    return {
-        box: "EXIT_WORKFLOW_IMPLEMENT",
-        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
-    };
+    const packet = JSON.parse(input) as Record<string, unknown>;
+    const { box: _box, scriptSignal: _scriptSignal, ...rest } = packet;
+    return { box: "EXIT_WORKFLOW_IMPLEMENT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, ...rest };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

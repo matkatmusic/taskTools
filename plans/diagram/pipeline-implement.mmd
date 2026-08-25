@@ -17,14 +17,11 @@ flowchart TB
 %% ---
 %% Exit types this pipeline can produce:
 %% ---
-%% agent-failed - an agent returned nothing usable
-%% ---
 %% run-failed - a script failed operationally
 
   ACCEPTED_PLAN_INPUT["Input: { plan, tasks.json entry }"] --> IMPLEMENT_TASK
   IMPLEMENT_TASK["implement task"] --> COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed"]
   COMMIT_IMPLEMENTATION_IF_NEEDED --> TASK_TESTS_PIPELINE["task tests pipeline"]
-  IMPLEMENT_TASK -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_IMPLEMENT
 
   EXIT_WORKFLOW_IMPLEMENT["failures exit"]
 
@@ -37,6 +34,6 @@ flowchart TB
   class COMMIT_IMPLEMENTATION_IF_NEEDED script
   class TASK_TESTS_PIPELINE pipeline
   class IMPLEMENT_TASK agent
-  class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_IMPLEMENT fail
   class ACCEPTED_PLAN_INPUT output
+  class IMPLEMENT_TASK returns_a_prompt

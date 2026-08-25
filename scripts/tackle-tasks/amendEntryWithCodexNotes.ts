@@ -1,4 +1,4 @@
-// "amend tasks.json entry with codex's notes and fixes" — pipeline-reviewTests.mmd. The implementer reads the entry next.
+// Old CLI entrypoint, still dispatched by path from ImplementBodyEmitter.ts. Ported to scripts/steps/pipeline-reviewTests/AMEND_ENTRY_WITH_CODEX_NOTES.ts.
 import { readFileSync } from "node:fs";
 import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";

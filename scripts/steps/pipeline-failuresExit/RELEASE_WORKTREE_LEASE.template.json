@@ -2,13 +2,37 @@
     "input": {
         "box": "DOES_RUN_HOLD_LEASE",
         "scriptSignal": "continue",
-        "note": "DOES_RUN_HOLD_LEASE.ts for DOES_RUN_HOLD_LEASE",
-        "input": ""
+        "next": "RELEASE_WORKTREE_LEASE",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00",
+        "leaseReleased": false,
+        "leaseRetained": false
     },
     "output": {
         "box": "RELEASE_WORKTREE_LEASE",
         "scriptSignal": "continue",
-        "note": "RELEASE_WORKTREE_LEASE.ts for RELEASE_WORKTREE_LEASE",
-        "input": ""
+        "next": "DOES_RUN_HOLD_SOURCE_LOCK",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00",
+        "leaseReleased": true,
+        "leaseRetained": false
     }
 }

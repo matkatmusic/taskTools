@@ -2,13 +2,15 @@
     "input": {
         "box": "MARK_TASK_INACTIVE_SUCCESS",
         "scriptSignal": "continue",
-        "note": "MARK_TASK_INACTIVE_SUCCESS.ts for MARK_TASK_INACTIVE_SUCCESS",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
     },
     "output": {
         "box": "ARCHIVE_TASK",
         "scriptSignal": "continue",
-        "note": "ARCHIVE_TASK.ts for ARCHIVE_TASK",
-        "input": ""
+        "taskNumber": 42,
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
     }
 }

@@ -1,4 +1,4 @@
-// Sole home of the test-review prompt, the "codex reviews the tests" box in plans/diagram/pipeline-reviewTests.mmd.
+// Ported to pipeline-reviewTests/CODEX_REVIEWS_TESTS.ts; stays live until AgentPromptEmitter.ts migrates too.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -42,17 +42,17 @@ function taskTestRun(t: PreparedTask) {
 const reviewedPaths = (t: PreparedTask, diffPath: string) => [t.briefFile, t.planFile, ...t.testFilePaths, diffPath, REVIEW_TESTS_TEMPLATE_PATH];
 
 function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
-    return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}. 
-You write no file. 
+    return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}.
+You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
 ## STRICT INPUT ALLOWLIST
 
-Read only the exact files listed under WHAT YOU READ. 
-Do not search for, list, discover, or open alternative files, even if an alternative has a similar name or appears to contain the requested material. 
+Read only the exact files listed under WHAT YOU READ.
+Do not search for, list, discover, or open alternative files, even if an alternative has a similar name or appears to contain the requested material.
 In particular, do not substitute another test file for one that is listed.
 
-You may check whether each listed path exists and is readable. 
+You may check whether each listed path exists and is readable.
 Before reviewing, verify every listed file.
 If any file is missing or unreadable, stop immediately without reviewing any other content.
 
@@ -62,7 +62,7 @@ If any required file is missing or unreadable, return only the following JSON:
 \`\`\`
 ${readFileSync(REVIEW_TESTS_ERROR_TEMPLATE_PATH, "utf8").trim()}
 \`\`\`
-This error response overrides the normal review-tests JSON template. 
+This error response overrides the normal review-tests JSON template.
 Leave \`"issues"\` and \`"testsThatHoldUp"\` empty.
 
 ## WHAT YOU READ
@@ -75,7 +75,7 @@ ${reviewedPaths(t, diffPath).map((path) => `- ${path}`).join("\n")}
 
 ${preExistingTestFiles.length === 0 ? "- (none)" : preExistingTestFiles.map((path) => `- ${path}`).join("\n")}
 
-A test in that list existed before this task. 
+A test in that list existed before this task.
 Flag it only when this task's diff broke it, never for asserting something this task did not ask for.
 
 ## WHAT ALREADY RAN
@@ -84,12 +84,12 @@ The task tests ran as \`${testCommand}\`, and printed this:
 \`\`\`
 ${testOutput}
 \`\`\`
-That is the evidence the tests execute. 
+That is the evidence the tests execute.
 You are still judging what they assert, not whether they pass.
 
 ## NEVER RUN THE TESTS
 
-You are judging what each test asserts, not whether the test passes. 
+You are judging what each test asserts, not whether the test passes.
 Never run a test, and never run the full suite.
 
 ## HOW TO JUDGE THE TESTS
@@ -110,7 +110,7 @@ Flag a test only when one of these is true:
 
 ## DOCUMENTING EVIDENCE
 
-Every issue flagged must carry evidence: 
+Every issue flagged must carry evidence:
 - include the repo-relative path and the exact line numbers you read, as \`tests/thing.test.ts:12-40\`.
 - An issue you cannot evidence does not go in the review.
 
@@ -121,13 +121,13 @@ If a test holds up, say so and move on.
 
 Return only JSON in the shape given by \`${REVIEW_TESTS_TEMPLATE_PATH}\`, which you read above, replacing every <...> with a real value.
 
-Write one fix per issue, in the same order. 
+Write one fix per issue, in the same order.
 Write each fix as an instruction to whoever repairs the test, not as commentary about it.
 Return empty arrays when you found nothing.
 
-## WHAT TO OUTPUT 
+## WHAT TO OUTPUT
 
-Print the JSON as your final message and nothing else. 
+Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${t.testReviewFile}\`, so do not try to write the file yourself.
 `;
 }
@@ -138,21 +138,21 @@ export function reviewTestsPrompt(t: PreparedTask, sourceBranch: string): string
     // testFiles is every changed test; createdTestFiles is a subset. Derive pre-existing here.
     const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
     const diffPath = writeImplementationDiff(t, root, sourceBranch);
-    return `You are spawning a review agent running in the CLI. 
-You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape. 
-The command runs a reviewing agent against this task's test files. 
+    return `You are spawning a review agent running in the CLI.
+You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape.
+The command runs a reviewing agent against this task's test files.
 
 ## YOUR RETURN SHAPE
 
-To put the required return shape into your context, Invoke the following skill verbatim: 
+To put the required return shape into your context, Invoke the following skill verbatim:
 \`\`\`
 /read-file "${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}"
 \`\`\`
 
 ## THE COMMAND
 
-Run the following multi-line command using Bash(), verbatim, as one single call. 
-It takes a few minutes; wait for it rather than abandoning it. 
+Run the following multi-line command using Bash(), verbatim, as one single call.
+It takes a few minutes; wait for it rather than abandoning it.
 \`</dev/null\` matters — codex hangs forever waiting on stdin without it. \`-o\` keeps codex from mixing its banner into the answer, and \`--output-schema\` makes it bare JSON.
 
 \`\`\`\`sh
@@ -167,12 +167,12 @@ codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_
 node ${DECIDE_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.number} ARE_TESTS_FLAGGED <"$REVIEW_FILE"
 \`\`\`\`
 
-The \`||\` chain is the fallback. 
+The \`||\` chain is the fallback.
 A non-zero exit means that reviewer was unavailable, not that the tests are bad, so the next one runs.
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
-Use the exact JSON shape given by \`${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}\`, which the read-file skill put into your context. 
-Replace every <...> with a real value. 
+Use the exact JSON shape given by \`${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}\`, which the read-file skill put into your context.
+Replace every <...> with a real value.
 Copy what the node command printed; never decide a verdict yourself.`;
 }

@@ -1,11 +1,19 @@
 // GREEN_WORKTREE_INPUT, from pipeline-merge.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
+export type GreenWorktreeInput = {
+    worktreePath: string;
+    rootSourceBranch: string;
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+};
+
 export function main(input: string): Record<string, unknown> {
-    return { box: "GREEN_WORKTREE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for GREEN_WORKTREE_INPUT`, input };
+    const packet = JSON.parse(input) as GreenWorktreeInput;
+    return { ...packet, box: "GREEN_WORKTREE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -2,13 +2,41 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_SCRAP",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": { "outcome": "OK", "missingFiles": [], "message": "", "issues": [], "fixes": [], "sectionsThatHoldUp": [] },
+        "verdict": "SCRAP",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file\n\n[step-2] Rewrite the section.\n\nDurable because: it names the file\n\n[step-3] Rewrite the section.\n\nDurable because: it names the file\n\n[step-4] Rewrite the section.\n\nDurable because: it names the file\n\n[step-5] Rewrite the section.\n\nDurable because: it names the file"
     },
     "output": {
         "box": "VERDICT_SCRAP",
         "scriptSignal": "continue",
-        "note": "VERDICT_SCRAP.ts for VERDICT_SCRAP",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file\n\n[step-2] Rewrite the section.\n\nDurable because: it names the file\n\n[step-3] Rewrite the section.\n\nDurable because: it names the file\n\n[step-4] Rewrite the section.\n\nDurable because: it names the file\n\n[step-5] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

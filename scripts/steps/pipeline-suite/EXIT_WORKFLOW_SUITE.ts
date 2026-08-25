@@ -1,22 +1,30 @@
-// EXIT_WORKFLOW_SUITE, from pipeline-suite.mmd
+// EXIT_WORKFLOW_SUITE, from pipeline-suite.mmd. Crosses to pipeline-failuresExit.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-suite.mmd's own logic is not implemented yet, so this hand-off fabricates the packet shape pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT requires.
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktreePath: string;
+    rootSourceBranch: string;
+    exitType: string;
+    exitNote: string;
+};
+
 export function main(input: string): Record<string, unknown> {
+    const packet = JSON.parse(input) as Input;
     return {
         box: "EXIT_WORKFLOW_SUITE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
+        taskNumber: packet.taskNumber,
+        runId: packet.runId,
+        projectRoot: packet.projectRoot,
+        worktreePath: packet.worktreePath,
+        rootSourceBranch: packet.rootSourceBranch,
+        exitType: packet.exitType,
+        exitNote: packet.exitNote,
     };
 }
 

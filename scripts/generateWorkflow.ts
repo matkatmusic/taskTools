@@ -34,7 +34,7 @@ function createPromptForAgent(blockToRun, input) {
         \`COMMAND: \\\`\${command}\\\`\`,
         'invoke COMMAND and follow instructions.',
         'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
-        'The only exception: if outcome.scriptSignal is "prompt", follow outcome.payload.prompt and put your answer in outcome.payload as {"message": string, "additionalData": object}.',
+        'The only exception: if outcome.scriptSignal is "prompt", follow outcome.payload.prompt and put your answer in outcome.payload as the object the schema requires.',
     ].join('\\n')
 }
 
@@ -42,6 +42,8 @@ let blockToRun = args.startStep
 let schema = FIRST_PASS_SCHEMA
 // A block sees only the pass before it, so the last payload has to be carried forward by hand.
 let input = {}
+// The last payload that was not a prompt block's answer, merged back in after a prompt pass.
+let lastPacket = {}
 // Only ran accumulates across passes. Everything else belongs to the pass that produced it.
 const ran = []
 while (true) {
@@ -72,7 +74,12 @@ while (true) {
     }
     blockToRun = result.outcome.next
     schema = result.outcome.schema
-    input = result.outcome.payload
+    if (result.outcome.scriptSignal === 'prompt') {
+        input = { ...lastPacket, ...result.outcome.payload }
+    } else {
+        lastPacket = result.outcome.payload
+        input = result.outcome.payload
+    }
 }
 `;
 }

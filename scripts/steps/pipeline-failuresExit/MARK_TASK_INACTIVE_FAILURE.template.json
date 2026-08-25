@@ -1,14 +1,30 @@
 {
     "input": {
-        "box": "RELEASE_SOURCE_LOCK",
+        "box": "RECORD_MODIFIED_FILES_FAILURE",
         "scriptSignal": "continue",
-        "note": "RELEASE_SOURCE_LOCK.ts for RELEASE_SOURCE_LOCK",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": []
     },
     "output": {
         "box": "MARK_TASK_INACTIVE_FAILURE",
         "scriptSignal": "continue",
-        "note": "MARK_TASK_INACTIVE_FAILURE.ts for MARK_TASK_INACTIVE_FAILURE",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00"
     }
 }

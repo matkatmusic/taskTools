@@ -101,6 +101,7 @@
             "script": "scripts/steps/pipeline-failuresExit/WRITE_PUBLICATION_OUTCOME.ts",
             "template": "scripts/steps/pipeline-failuresExit/WRITE_PUBLICATION_OUTCOME.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RECORD_MODIFIED_FILES_FAILURE"
             ]
@@ -110,6 +111,7 @@
             "script": "scripts/steps/pipeline-failuresExit/WRITE_EXIT_TYPE_AND_NOTE.ts",
             "template": "scripts/steps/pipeline-failuresExit/WRITE_EXIT_TYPE_AND_NOTE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RECORD_MODIFIED_FILES_FAILURE"
             ]
@@ -119,6 +121,17 @@
             "script": "scripts/steps/pipeline-failuresExit/RECORD_MODIFIED_FILES_FAILURE.ts",
             "template": "scripts/steps/pipeline-failuresExit/RECORD_MODIFIED_FILES_FAILURE.template.json",
             "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "MARK_TASK_INACTIVE_FAILURE"
+            ]
+        },
+        {
+            "box": "MARK_TASK_INACTIVE_FAILURE",
+            "script": "scripts/steps/pipeline-failuresExit/MARK_TASK_INACTIVE_FAILURE.ts",
+            "template": "scripts/steps/pipeline-failuresExit/MARK_TASK_INACTIVE_FAILURE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOES_RUN_HOLD_LEASE"
             ]
@@ -138,6 +151,7 @@
             "script": "scripts/steps/pipeline-failuresExit/RELEASE_WORKTREE_LEASE.ts",
             "template": "scripts/steps/pipeline-failuresExit/RELEASE_WORKTREE_LEASE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOES_RUN_HOLD_SOURCE_LOCK"
             ]
@@ -149,7 +163,7 @@
             "producesPrompt": false,
             "next": [
                 "RELEASE_SOURCE_LOCK",
-                "MARK_TASK_INACTIVE_FAILURE"
+                "REPORT_EXIT_TYPE_AND_NOTE"
             ]
         },
         {
@@ -157,15 +171,7 @@
             "script": "scripts/steps/pipeline-failuresExit/RELEASE_SOURCE_LOCK.ts",
             "template": "scripts/steps/pipeline-failuresExit/RELEASE_SOURCE_LOCK.template.json",
             "producesPrompt": false,
-            "next": [
-                "MARK_TASK_INACTIVE_FAILURE"
-            ]
-        },
-        {
-            "box": "MARK_TASK_INACTIVE_FAILURE",
-            "script": "scripts/steps/pipeline-failuresExit/MARK_TASK_INACTIVE_FAILURE.ts",
-            "template": "scripts/steps/pipeline-failuresExit/MARK_TASK_INACTIVE_FAILURE.template.json",
-            "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "REPORT_EXIT_TYPE_AND_NOTE"
             ]
@@ -201,7 +207,7 @@
             "box": "IMPLEMENT_TASK",
             "script": "scripts/steps/pipeline-implement/IMPLEMENT_TASK.ts",
             "template": "scripts/steps/pipeline-implement/IMPLEMENT_TASK.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
             "next": [
                 "COMMIT_IMPLEMENTATION_IF_NEEDED"
             ]
@@ -211,6 +217,7 @@
             "script": "scripts/steps/pipeline-implement/COMMIT_IMPLEMENTATION_IF_NEEDED.ts",
             "template": "scripts/steps/pipeline-implement/COMMIT_IMPLEMENTATION_IF_NEEDED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "TASK_TESTS_PIPELINE"
             ]
@@ -222,15 +229,6 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-taskTests.mmd::COMMITTED_WORK_INPUT"
-            ]
-        },
-        {
-            "box": "AGENT_ERRORED",
-            "script": "scripts/steps/pipeline-implement/AGENT_ERRORED.ts",
-            "template": "scripts/steps/pipeline-implement/AGENT_ERRORED.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_IMPLEMENT"
             ]
         },
         {
@@ -258,6 +256,7 @@
             "script": "scripts/steps/pipeline-merge/MERGE_WORKTREES.ts",
             "template": "scripts/steps/pipeline-merge/MERGE_WORKTREES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "READ_MERGE_PUBLICATION_STATE"
             ]
@@ -323,6 +322,7 @@
             "script": "scripts/steps/pipeline-merge/ARE_2_MERGE_ATTEMPTS_DONE.ts",
             "template": "scripts/steps/pipeline-merge/ARE_2_MERGE_ATTEMPTS_DONE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "REBASE_PIPELINE",
                 "EXIT_WORKFLOW_MERGE"
@@ -362,6 +362,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "WRITE_EXIT_TYPE_COMPLETED"
             ]
@@ -371,6 +372,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RECORD_MODIFIED_FILES_SUCCESS"
             ]
@@ -380,6 +382,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "CLEAN_UP_WORKTREES"
             ]
@@ -389,6 +392,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/CLEAN_UP_WORKTREES.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/CLEAN_UP_WORKTREES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "BUILD_CLOSURE_NOTE"
             ]
@@ -407,6 +411,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "ARCHIVE_TASK"
             ]
@@ -416,6 +421,7 @@
             "script": "scripts/steps/pipeline-mergeSucceededExit/ARCHIVE_TASK.ts",
             "template": "scripts/steps/pipeline-mergeSucceededExit/ARCHIVE_TASK.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "REPORT_CLOSURE_NOTE"
             ]
@@ -451,7 +457,7 @@
             "box": "PLAN_THE_TASK",
             "script": "scripts/steps/pipeline-plan/PLAN_THE_TASK.ts",
             "template": "scripts/steps/pipeline-plan/PLAN_THE_TASK.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
             "next": [
                 "WHAT_DID_THE_PLANNER_RETURN"
             ]
@@ -463,8 +469,7 @@
             "producesPrompt": false,
             "next": [
                 "PLANNER_RETURNED_PLAN",
-                "PLANNER_RETURNED_CLARIFY",
-                "PLANNER_RETURNED_ERROR"
+                "PLANNER_RETURNED_CLARIFY"
             ]
         },
         {
@@ -483,15 +488,6 @@
             "producesPrompt": false,
             "next": [
                 "ARE_2_CLARIFY_ROUNDS_DONE"
-            ]
-        },
-        {
-            "box": "PLANNER_RETURNED_ERROR",
-            "script": "scripts/steps/pipeline-plan/PLANNER_RETURNED_ERROR.ts",
-            "template": "scripts/steps/pipeline-plan/PLANNER_RETURNED_ERROR.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_PLAN"
             ]
         },
         {
@@ -527,6 +523,7 @@
             "script": "scripts/steps/pipeline-plan/WRITE_CLARIFY_REQUEST.ts",
             "template": "scripts/steps/pipeline-plan/WRITE_CLARIFY_REQUEST.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOCUMENT_GENERATION_PIPELINE"
             ]
@@ -625,6 +622,7 @@
             "script": "scripts/steps/pipeline-rebase/REBASE_ONTO_TARGET_BRANCH.ts",
             "template": "scripts/steps/pipeline-rebase/REBASE_ONTO_TARGET_BRANCH.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DID_REBASE_REPORT_CONFLICTS"
             ]
@@ -644,6 +642,7 @@
             "script": "scripts/steps/pipeline-rebase/ARE_2_CONFLICT_FIXES_DONE.ts",
             "template": "scripts/steps/pipeline-rebase/ARE_2_CONFLICT_FIXES_DONE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "FIX_CONFLICTS",
                 "EXIT_WORKFLOW_REBASE"
@@ -662,7 +661,8 @@
             "box": "FIX_CONFLICTS",
             "script": "scripts/steps/pipeline-rebase/FIX_CONFLICTS.ts",
             "template": "scripts/steps/pipeline-rebase/FIX_CONFLICTS.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
+            "mutating": true,
             "next": [
                 "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED"
             ]
@@ -681,6 +681,7 @@
             "script": "scripts/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts",
             "template": "scripts/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "CONTINUE_REBASE"
             ]
@@ -690,6 +691,7 @@
             "script": "scripts/steps/pipeline-rebase/CONTINUE_REBASE.ts",
             "template": "scripts/steps/pipeline-rebase/CONTINUE_REBASE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "IS_REBASE_FINISHED"
             ]
@@ -702,15 +704,6 @@
             "next": [
                 "SUITE_PIPELINE",
                 "DID_REBASE_REPORT_CONFLICTS"
-            ]
-        },
-        {
-            "box": "AGENT_ERRORED",
-            "script": "scripts/steps/pipeline-rebase/AGENT_ERRORED.ts",
-            "template": "scripts/steps/pipeline-rebase/AGENT_ERRORED.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_REBASE"
             ]
         }
     ],
@@ -729,6 +722,7 @@
             "script": "scripts/steps/pipeline-rebasePreamble/LOCK_SOURCE_REPO.ts",
             "template": "scripts/steps/pipeline-rebasePreamble/LOCK_SOURCE_REPO.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "WAS_LOCK_ACQUIRED"
             ]
@@ -822,7 +816,7 @@
             "box": "CODEX_REVIEWS_PLAN",
             "script": "scripts/steps/pipeline-reviewPlan/CODEX_REVIEWS_PLAN.ts",
             "template": "scripts/steps/pipeline-reviewPlan/CODEX_REVIEWS_PLAN.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
             "next": [
                 "WHAT_IS_REVIEW_VERDICT"
             ]
@@ -854,6 +848,7 @@
             "script": "scripts/steps/pipeline-reviewPlan/VERDICT_AMEND_THEN_ACCEPT.ts",
             "template": "scripts/steps/pipeline-reviewPlan/VERDICT_AMEND_THEN_ACCEPT.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "IMPLEMENT_PIPELINE"
             ]
@@ -908,6 +903,7 @@
             "script": "scripts/steps/pipeline-reviewPlan/UPDATE_TASK_ENTRY.ts",
             "template": "scripts/steps/pipeline-reviewPlan/UPDATE_TASK_ENTRY.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "ARE_2_REVIEWS_DONE"
             ]
@@ -930,15 +926,6 @@
             "next": [
                 "pipeline-plan.mmd::DOCS_INPUT"
             ]
-        },
-        {
-            "box": "AGENT_ERRORED",
-            "script": "scripts/steps/pipeline-reviewPlan/AGENT_ERRORED.ts",
-            "template": "scripts/steps/pipeline-reviewPlan/AGENT_ERRORED.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_REVIEW_PLAN"
-            ]
         }
     ],
     "pipeline-reviewTests.mmd": [
@@ -955,7 +942,7 @@
             "box": "CODEX_REVIEWS_TESTS",
             "script": "scripts/steps/pipeline-reviewTests/CODEX_REVIEWS_TESTS.ts",
             "template": "scripts/steps/pipeline-reviewTests/CODEX_REVIEWS_TESTS.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
             "next": [
                 "ARE_TESTS_FLAGGED"
             ]
@@ -994,6 +981,7 @@
             "script": "scripts/steps/pipeline-reviewTests/AMEND_ENTRY_WITH_CODEX_NOTES.ts",
             "template": "scripts/steps/pipeline-reviewTests/AMEND_ENTRY_WITH_CODEX_NOTES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "IMPLEMENT_PIPELINE"
             ]
@@ -1015,15 +1003,6 @@
             "next": [
                 "pipeline-implement.mmd::ACCEPTED_PLAN_INPUT"
             ]
-        },
-        {
-            "box": "AGENT_ERRORED",
-            "script": "scripts/steps/pipeline-reviewTests/AGENT_ERRORED.ts",
-            "template": "scripts/steps/pipeline-reviewTests/AGENT_ERRORED.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_REVIEW_TESTS"
-            ]
         }
     ],
     "pipeline-suite.mmd": [
@@ -1041,6 +1020,7 @@
             "script": "scripts/steps/pipeline-suite/RUN_FULL_SUITE.ts",
             "template": "scripts/steps/pipeline-suite/RUN_FULL_SUITE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DO_ALL_TESTS_PASS"
             ]
@@ -1079,7 +1059,7 @@
             "box": "FIX_THE_CODEBASE_FOR_SUITE",
             "script": "scripts/steps/pipeline-suite/FIX_THE_CODEBASE_FOR_SUITE.ts",
             "template": "scripts/steps/pipeline-suite/FIX_THE_CODEBASE_FOR_SUITE.template.json",
-            "producesPrompt": false,
+            "producesPrompt": true,
             "next": [
                 "COMMIT_SUITE_FIX_IF_NEEDED"
             ]
@@ -1098,6 +1078,7 @@
             "script": "scripts/steps/pipeline-suite/COMMIT_SUITE_FIX_IF_NEEDED.ts",
             "template": "scripts/steps/pipeline-suite/COMMIT_SUITE_FIX_IF_NEEDED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RUN_FULL_SUITE"
             ]
@@ -1109,15 +1090,6 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-merge.mmd::GREEN_WORKTREE_INPUT"
-            ]
-        },
-        {
-            "box": "AGENT_ERRORED",
-            "script": "scripts/steps/pipeline-suite/AGENT_ERRORED.ts",
-            "template": "scripts/steps/pipeline-suite/AGENT_ERRORED.template.json",
-            "producesPrompt": false,
-            "next": [
-                "EXIT_WORKFLOW_SUITE"
             ]
         }
     ],
@@ -1136,6 +1108,7 @@
             "script": "scripts/steps/pipeline-taskTests/RUN_TASK_TESTS.ts",
             "template": "scripts/steps/pipeline-taskTests/RUN_TASK_TESTS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DO_TASK_TESTS_PASS"
             ]
@@ -1174,6 +1147,7 @@
             "script": "scripts/steps/pipeline-taskTests/AMEND_ENTRY_WITH_FAILING_TESTS.ts",
             "template": "scripts/steps/pipeline-taskTests/AMEND_ENTRY_WITH_FAILING_TESTS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "IMPLEMENT_PIPELINE"
             ]

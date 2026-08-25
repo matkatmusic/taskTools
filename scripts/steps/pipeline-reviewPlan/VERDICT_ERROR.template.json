@@ -2,13 +2,43 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_ERROR",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": { "outcome": "ERROR", "missingFiles": ["/repo/.worktrees/task-42/plans/brief-42.md"], "message": "Review not performed because one or more required input files were unavailable.", "issues": [], "fixes": [], "sectionsThatHoldUp": [] },
+        "verdict": "ERROR",
+        "notes": "Review not performed because one or more required input files were unavailable. missing: /repo/.worktrees/task-42/plans/brief-42.md"
     },
     "output": {
         "box": "VERDICT_ERROR",
         "scriptSignal": "continue",
-        "note": "VERDICT_ERROR.ts for VERDICT_ERROR",
-        "input": ""
+        "next": "EXIT_WORKFLOW_REVIEW_PLAN",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "run-failed",
+        "exitNote": "Review not performed because one or more required input files were unavailable. missing: /repo/.worktrees/task-42/plans/brief-42.md",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     }
 }

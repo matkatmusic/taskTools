@@ -2,11 +2,29 @@
     "input": {
         "box": "VERDICT_AMEND_THEN_ACCEPT",
         "scriptSignal": "continue",
-        "note": "VERDICT_AMEND_THEN_ACCEPT.ts for VERDICT_AMEND_THEN_ACCEPT",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     },
     "output": {
         "box": "IMPLEMENT_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "maxFixRounds": 3
     }
 }

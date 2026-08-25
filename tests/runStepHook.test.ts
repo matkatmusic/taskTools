@@ -33,14 +33,16 @@ function configWith(build: (writeStep: (box: string, result: Record<string, unkn
     };
     const configFile = join(folder, "steps.json");
     const config = build(writeStep, folder);
-    // The hook builds the next block's schema from its template, so every entry needs one.
+    // Every entry needs a template; a producesPrompt entry also needs an agentAnswer for its schema.
     for (const entries of Object.values(config)) {
         for (const entry of entries) {
             const templatePath = join(folder, `${entry.box}.template.json`);
             const output = outputByBox[entry.box] ?? { box: entry.box, scriptSignal: "stop" };
-            writeFileSync(templatePath, JSON.stringify({ input: {}, output }));
+            const isPrompt = entry.producesPrompt ?? false;
+            const template = isPrompt ? { input: {}, output, agentAnswer: {} } : { input: {}, output };
+            writeFileSync(templatePath, JSON.stringify(template));
             (entry as Record<string, unknown>).template = templatePath;
-            (entry as Record<string, unknown>).producesPrompt = entry.producesPrompt ?? false;
+            (entry as Record<string, unknown>).producesPrompt = isPrompt;
         }
     }
     writeFileSync(configFile, JSON.stringify(config));

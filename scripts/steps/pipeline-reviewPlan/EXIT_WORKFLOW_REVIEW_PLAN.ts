@@ -1,22 +1,26 @@
-// EXIT_WORKFLOW_REVIEW_PLAN, from pipeline-reviewPlan.mmd
+// EXIT_WORKFLOW_REVIEW_PLAN, from pipeline-reviewPlan.mmd. Forwards the exit type/note to pipeline-failuresExit.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-reviewPlan.mmd's own logic is not implemented yet, so this hand-off fabricates the packet shape pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT requires.
+export type ExitWorkflowReviewPlanPacket = {
+    taskNumber: number;
+    taskStateRoot: string;
+    repoRoot: string;
+    exitType: string;
+    exitNote: string;
+};
+
 export function main(input: string): Record<string, unknown> {
+    const packet = JSON.parse(input) as ExitWorkflowReviewPlanPacket;
     return {
         box: "EXIT_WORKFLOW_REVIEW_PLAN",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
+        taskNumber: packet.taskNumber,
+        taskStateRoot: packet.taskStateRoot,
+        repoRoot: packet.repoRoot,
+        exitType: packet.exitType,
+        exitNote: packet.exitNote,
     };
 }
 

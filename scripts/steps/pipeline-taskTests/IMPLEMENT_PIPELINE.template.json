@@ -2,11 +2,21 @@
     "input": {
         "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
         "scriptSignal": "continue",
-        "note": "AMEND_ENTRY_WITH_FAILING_TESTS.ts for AMEND_ENTRY_WITH_FAILING_TESTS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "amendFailingTests": true
     },
     "output": {
         "box": "IMPLEMENT_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "maxFixRounds": 3
     }
 }

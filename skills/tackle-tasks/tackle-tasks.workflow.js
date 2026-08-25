@@ -55,7 +55,6 @@ export const meta = {
 
 const LABELS = {
   ACCEPTED_PLAN_INPUT: "Input: { plan, tasks.json entry }",
-  AGENT_ERRORED: "agent() errored",
   AMEND_ENTRY_WITH_CODEX_NOTES: "amend tasks.json entry with codex's notes and fixes",
   AMEND_ENTRY_WITH_FAILING_TESTS: "amend tasks.json entry with the failing tests",
   ARCHIVE_TASK: "move task to completedTasks.json and update tasks blocked by it",
@@ -353,11 +352,11 @@ async function runAgent(
     if (isFake(ctx)) {
         const errors = (ctx.fake                                             ).agentErrors ?? {};
         const errored = attempt(errors[box] ?? [false], visit);
-        if (errored) step(ctx, ctx.L("AGENT_ERRORED"));
+        if (errored) step(ctx, "agent() errored");
         return errored ? null : {};
     }
     const result = await ctx.agent(emitterPrompt(ctx, role, extra), { label: `${role}:${ctx.task}`, schema });
-    if (result === null) step(ctx, ctx.L("AGENT_ERRORED"));
+    if (result === null) step(ctx, "agent() errored");
     return result;
 }
 
@@ -421,7 +420,8 @@ const PLAN_RESULT = {
     type: "object",
     required: ["outcome"],
     properties: {
-        outcome: { type: "string", enum: ["PLAN", "CLARIFY", "ERROR"] },
+        outcome: { type: "string", enum: ["PLAN", "CLARIFY"] },
+        plan: { type: "object" },
         clarifyRequest: { type: "string" },
     },
 };
@@ -606,7 +606,8 @@ async function planPipeline(ctx                 )                           {
     ctx.plannerIndex += 1;
     step(ctx, ctx.L("WHAT_DID_THE_PLANNER_RETURN"), outcome);
 
-    if (outcome === "ERROR") return toFailures("agent-failed", AGENT_FAILED_NOTE);
+    // Unreachable: PLAN_RESULT's outcome enum is only "PLAN" or "CLARIFY", never "ERROR".
+    // if (outcome === "ERROR") return toFailures("agent-failed", AGENT_FAILED_NOTE);
     // Paragraph 25.
     if (outcome === "PLAN") return { next: "review-plan" };
 

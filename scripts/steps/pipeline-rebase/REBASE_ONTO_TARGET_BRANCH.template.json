@@ -2,13 +2,42 @@
     "input": {
         "box": "SOURCE_REPO_LOCKED_INPUT",
         "scriptSignal": "continue",
-        "note": "SOURCE_REPO_LOCKED_INPUT.ts for SOURCE_REPO_LOCKED_INPUT",
-        "input": ""
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "REBASE_ONTO_TARGET_BRANCH",
         "scriptSignal": "continue",
-        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
-        "input": ""
+        "next": "DID_REBASE_REPORT_CONFLICTS",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

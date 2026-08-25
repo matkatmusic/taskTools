@@ -1,11 +1,18 @@
 // WRITE_EXIT_TYPE_AND_NOTE, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { writeTaskExitNotes } from "../../tackle-tasks/writeTaskExitNotes.ts";
+import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
+import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
 
+type Input = FailuresExitEntryInput & { publicationState: PublicationState; next: string };
+
+// No work landed: write the incoming exit type and note as-is.
 export function main(input: string): Record<string, unknown> {
-    return { box: "WRITE_EXIT_TYPE_AND_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for WRITE_EXIT_TYPE_AND_NOTE`, input };
+    const { next: _next, ...packet } = JSON.parse(input) as Input;
+    writeTaskExitNotes({ taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot, exitType: packet.exitType, exitNote: packet.exitNote });
+    return { ...packet, box: "WRITE_EXIT_TYPE_AND_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

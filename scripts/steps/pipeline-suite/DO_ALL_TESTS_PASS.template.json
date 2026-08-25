@@ -2,13 +2,30 @@
     "input": {
         "box": "RUN_FULL_SUITE",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "passed": true,
+        "output": ""
     },
     "output": {
         "box": "DO_ALL_TESTS_PASS",
         "scriptSignal": "continue",
-        "note": "DO_ALL_TESTS_PASS.ts for DO_ALL_TESTS_PASS",
-        "input": ""
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "passed": true,
+        "output": "",
+        "next": "DID_CHANGES_STAY_INSIDE_FENCE"
     }
 }

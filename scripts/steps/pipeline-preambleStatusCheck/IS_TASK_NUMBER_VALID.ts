@@ -13,12 +13,12 @@ export function main(input: string): Record<string, unknown> {
     if (!valid) {
         return {
             box: "IS_TASK_NUMBER_VALID", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REPORT_ONLY_EXIT",
-            taskNumber, tasksFile, exitType: "invalid-number", note: "task number is not in tasks.json",
+            taskNumber, tasksFile, exitType: "invalid-number", exitNote: "task number is not in tasks.json",
         };
     }
     return {
         box: "IS_TASK_NUMBER_VALID", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "IS_TASK_BLOCKED",
-        taskNumber, tasksFile, exitType: "", note: "",
+        taskNumber, tasksFile, exitType: "", exitNote: "",
     };
 }
 

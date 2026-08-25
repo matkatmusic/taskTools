@@ -21,8 +21,6 @@ flowchart TB
 %% ---
 %% Exit types this pipeline can produce:
 %% ---
-%% agent-failed - an agent returned nothing usable
-%% ---
 %% plan-scrapped - codex did not accept the plan in two reviews
 %% ---
 %% run-failed - a script failed operationally
@@ -46,8 +44,6 @@ flowchart TB
   ARE_2_REVIEWS_DONE -- "NO<br/>replan against the amended entry" --> PLAN_PIPELINE["plan pipeline"]
   ARE_2_REVIEWS_DONE -- "YES<br/>exit type: plan-scrapped<br/>exit note: codex did not accept<br/>the plan in two reviews" --> EXIT_WORKFLOW_REVIEW_PLAN
 
-  CODEX_REVIEWS_PLAN -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REVIEW_PLAN
-
   EXIT_WORKFLOW_REVIEW_PLAN["failures exit"]
 
   %% Green heads for the next pipeline.
@@ -64,9 +60,9 @@ flowchart TB
   class WHAT_IS_REVIEW_VERDICT,ARE_2_REVIEWS_DONE decision
   class UPDATE_TASK_ENTRY script
   class CODEX_REVIEWS_PLAN agent
+  class CODEX_REVIEWS_PLAN returns_a_prompt
   class PLAN_PIPELINE,IMPLEMENT_PIPELINE pipeline
   class VERDICT_ACCEPT,VERDICT_AMEND_THEN_ACCEPT pass
   class VERDICT_AMEND,VERDICT_SCRAP,VERDICT_ERROR nopass
-  class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_REVIEW_PLAN fail
   class DRAFT_PLAN_INPUT output

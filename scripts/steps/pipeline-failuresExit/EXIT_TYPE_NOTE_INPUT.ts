@@ -1,11 +1,22 @@
 // EXIT_TYPE_NOTE_INPUT, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
+// Only exitType and exitNote are new at this cross-diagram entry; other fields ride along.
+export type FailuresExitEntryInput = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktree: string;
+    sourceBranch: string;
+    exitType: string;
+    exitNote: string;
+};
+
 export function main(input: string): Record<string, unknown> {
-    return { box: "EXIT_TYPE_NOTE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for EXIT_TYPE_NOTE_INPUT`, input };
+    const packet = JSON.parse(input) as FailuresExitEntryInput;
+    return { box: "EXIT_TYPE_NOTE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, ...packet };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

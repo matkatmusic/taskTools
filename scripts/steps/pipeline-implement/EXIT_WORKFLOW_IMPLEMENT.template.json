@@ -1,20 +1,24 @@
 {
     "input": {
-        "box": "IMPLEMENT_TASK -.-> AGENT_ERRORED",
+        "box": "",
         "scriptSignal": "continue",
-        "note": "IMPLEMENT_TASK -.-> AGENT_ERRORED.ts for IMPLEMENT_TASK -.-> AGENT_ERRORED",
-        "input": ""
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "exitType": "agent-failed",
+        "exitNote": "the agent returned nothing usable"
     },
     "output": {
         "box": "EXIT_WORKFLOW_IMPLEMENT",
         "scriptSignal": "continue",
-        "taskNumber": 0,
-        "runId": "",
-        "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
-        "exitType": "",
-        "exitNote": ""
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "exitType": "agent-failed",
+        "exitNote": "the agent returned nothing usable"
     }
 }

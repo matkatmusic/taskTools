@@ -1,22 +1,26 @@
-// EXIT_WORKFLOW_REBASE_PREAMBLE, from pipeline-rebasePreamble.mmd
+// EXIT_WORKFLOW_REBASE_PREAMBLE, from pipeline-rebasePreamble.mmd Cross-diagram exit box into pipeline-failuresExit.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-rebasePreamble.mmd's own logic is not implemented yet, so this hand-off fabricates the packet shape pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT requires.
+export type ExitWorkflowRebasePreambleInput = {
+    runId: string;
+    taskNumber: number;
+    projectRoot: string;
+    exitType: string;
+    exitNote: string;
+};
+
 export function main(input: string): Record<string, unknown> {
+    const parsed = JSON.parse(input) as ExitWorkflowRebasePreambleInput;
     return {
         box: "EXIT_WORKFLOW_REBASE_PREAMBLE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
+        exitType: parsed.exitType,
+        exitNote: parsed.exitNote,
+        runId: parsed.runId,
+        taskNumber: parsed.taskNumber,
+        projectRoot: parsed.projectRoot,
     };
 }
 

@@ -2,13 +2,24 @@
     "input": {
         "box": "ARE_2_CLARIFY_ROUNDS_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_CLARIFY_ROUNDS_DONE.ts for ARE_2_CLARIFY_ROUNDS_DONE",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "clarifyRequest": "which database does task 35 target?",
+        "exitType": "",
+        "exitNote": "",
+        "next": "WRITE_CLARIFY_REQUEST"
     },
     "output": {
         "box": "WRITE_CLARIFY_REQUEST",
         "scriptSignal": "continue",
-        "note": "WRITE_CLARIFY_REQUEST.ts for WRITE_CLARIFY_REQUEST",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "clarifyRequest": "which database does task 35 target?"
     }
 }

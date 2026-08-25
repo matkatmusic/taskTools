@@ -2,21 +2,30 @@
     "input": {
         "box": "ARE_2_REVIEWS_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_REVIEWS_DONE.ts for ARE_2_REVIEWS_DONE",
-        "input": ""
+        "next": "PLAN_PIPELINE",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "",
+        "exitNote": "",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        }
     },
     "output": {
         "box": "PLAN_PIPELINE",
         "scriptSignal": "continue",
-        "taskNumber": 0,
-        "runId": "",
-        "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
-        "exitType": "",
-        "exitNote": "",
-        "clarifyRequest": "",
-        "briefFile": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "worktree": "/repo/.worktrees/task-42",
+        "branch": "main",
+        "projectRoot": "/repo"
     }
 }

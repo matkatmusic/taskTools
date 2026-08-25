@@ -1,14 +1,31 @@
 {
     "input": {
-        "box": "IMPLEMENT_TASK",
+        "box": "ACCEPTED_PLAN_INPUT",
         "scriptSignal": "continue",
-        "note": "IMPLEMENT_TASK.ts for IMPLEMENT_TASK",
-        "input": ""
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "typecheckCommand": "npx tsc --noEmit",
+        "maxFixRounds": 3,
+        "message": "implemented the change",
+        "additionalData": { "implemented": true, "notes": "done" }
     },
     "output": {
         "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
         "scriptSignal": "continue",
-        "note": "COMMIT_IMPLEMENTATION_IF_NEEDED.ts for COMMIT_IMPLEMENTATION_IF_NEEDED",
-        "input": ""
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/.worktrees/task-42",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "typecheckCommand": "npx tsc --noEmit",
+        "maxFixRounds": 3,
+        "message": "implemented the change",
+        "additionalData": { "implemented": true, "notes": "done" },
+        "commits": [
+            { "occurrenceId": "", "hash": "abc123", "kind": "work", "stepId": "implement" }
+        ]
     }
 }

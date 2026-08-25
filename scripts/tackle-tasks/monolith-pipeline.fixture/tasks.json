@@ -1,0 +1,195 @@
+[
+    {
+        "taskNumber": 1,
+        "title": "no worktree yet: create it, AUTOGEN docs",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL"
+            ]
+        }
+    },
+    {
+        "taskNumber": 2,
+        "title": "blocked by task 1, which is still open",
+        "files": [
+            "src/b.ts"
+        ],
+        "blockedBy": [
+            {
+                "taskNum": 1
+            }
+        ]
+    },
+    {
+        "taskNumber": 3,
+        "title": "a previous run left it active",
+        "files": [
+            "src/c.ts"
+        ],
+        "run": {
+            "active": true
+        }
+    },
+    {
+        "taskNumber": 4,
+        "title": "worktree exists but is broken: reset it, AUTOGEN docs",
+        "files": [
+            "src/d.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-4",
+            "worktreeSafe": false
+        },
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL"
+            ]
+        }
+    },
+    {
+        "taskNumber": 5,
+        "title": "safe worktree, but no run recorded a stopping point",
+        "files": [
+            "src/e.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-5",
+            "worktreeSafe": true,
+            "history": []
+        }
+    },
+    {
+        "taskNumber": 6,
+        "title": "safe and resumable, but it touched a file outside the fence",
+        "files": [
+            "src/f.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-6",
+            "worktreeSafe": true,
+            "history": [
+                {
+                    "endedAt": "2026-08-24T00:00:00Z",
+                    "implementationNotesFile": ".taskTools/worktrees/task-6/plans/notes.md"
+                }
+            ],
+            "touchedFiles": [
+                "src/f.ts",
+                "src/not-mine.ts"
+            ]
+        }
+    },
+    {
+        "taskNumber": 7,
+        "title": "safe, resumable, inside the fence: UPDATE docs",
+        "files": [
+            "src/g.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-7",
+            "worktreeSafe": true,
+            "history": [
+                {
+                    "endedAt": "2026-08-24T00:00:00Z",
+                    "implementationNotesFile": ".taskTools/worktrees/task-7/plans/notes.md"
+                }
+            ],
+            "touchedFiles": [
+                "src/g.ts"
+            ]
+        },
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL"
+            ]
+        }
+    }
+]

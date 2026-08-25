@@ -1,11 +1,20 @@
 // RECORD_MODIFIED_FILES_FAILURE, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { recordTaskModifiedFiles } from "../../tackle-tasks/recordTaskModifiedFiles.ts";
+import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
+import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
+
+type Input = FailuresExitEntryInput & { publicationState: PublicationState };
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "RECORD_MODIFIED_FILES_FAILURE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for RECORD_MODIFIED_FILES_FAILURE`, input };
+    const packet = JSON.parse(input) as Input;
+    const { modifiedFiles } = recordTaskModifiedFiles({
+        taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot,
+        worktree: packet.worktree, sourceBranch: packet.sourceBranch,
+    });
+    return { ...packet, box: "RECORD_MODIFIED_FILES_FAILURE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, modifiedFiles };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

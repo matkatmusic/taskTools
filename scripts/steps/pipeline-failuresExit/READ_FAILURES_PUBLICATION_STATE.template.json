@@ -2,13 +2,24 @@
     "input": {
         "box": "EXIT_TYPE_NOTE_INPUT",
         "scriptSignal": "continue",
-        "note": "EXIT_TYPE_NOTE_INPUT.ts for EXIT_TYPE_NOTE_INPUT",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": ".",
+        "worktree": ".",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
     },
     "output": {
         "box": "READ_FAILURES_PUBLICATION_STATE",
         "scriptSignal": "continue",
-        "note": "READ_FAILURES_PUBLICATION_STATE.ts for READ_FAILURES_PUBLICATION_STATE",
-        "input": ""
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": ".",
+        "worktree": ".",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED"
     }
 }

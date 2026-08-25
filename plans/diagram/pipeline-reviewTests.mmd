@@ -25,7 +25,7 @@ flowchart TB
 %% ---
 %% A script that fails operationally exits as run-failed.
 %% ---
-%% Exit types: agent-failed, tests-flagged, run-failed.
+%% Exit types: tests-flagged, run-failed.
 
   GREEN_IMPLEMENTATION_INPUT["Input: { plan, tasks.json entry,<br/>task test files, implementation diff,<br/>test command, test results,<br/>pre-existing test files }"] --> CODEX_REVIEWS_TESTS
   CODEX_REVIEWS_TESTS["codex reviews the tests"] --> ARE_TESTS_FLAGGED{"are the tests flagged?"}
@@ -35,9 +35,6 @@ flowchart TB
   ARE_2_TEST_REVIEWS_DONE -->|NO| AMEND_ENTRY_WITH_CODEX_NOTES["amend tasks.json entry with<br/>codex's notes and fixes"]
   ARE_2_TEST_REVIEWS_DONE -- "YES<br/>exit type: tests-flagged<br/>exit note: task tests failed<br/>codex review" --> EXIT_WORKFLOW_REVIEW_TESTS
   AMEND_ENTRY_WITH_CODEX_NOTES -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
-
-
-  CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED["agent() errored"] -- "exit type: agent-failed<br/>exit note: the agent returned<br/>nothing usable" --> EXIT_WORKFLOW_REVIEW_TESTS
 
   EXIT_WORKFLOW_REVIEW_TESTS["failures exit"]
 
@@ -55,7 +52,7 @@ flowchart TB
   class ARE_TESTS_FLAGGED,ARE_2_TEST_REVIEWS_DONE decision
   class AMEND_ENTRY_WITH_CODEX_NOTES script
   class CODEX_REVIEWS_TESTS agent
+  class CODEX_REVIEWS_TESTS returns_a_prompt
   class IMPLEMENT_PIPELINE,REBASE_PREAMBLE_PIPELINE pipeline
-  class AGENT_ERRORED nopass
   class EXIT_WORKFLOW_REVIEW_TESTS fail
   class GREEN_IMPLEMENTATION_INPUT output

@@ -1,22 +1,15 @@
-// EXIT_WORKFLOW_TASK_TESTS, from pipeline-taskTests.mmd
+// EXIT_WORKFLOW_TASK_TESTS, from pipeline-taskTests.mmd. Forwards the exit type and note to pipeline-failuresExit.mmd.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readPacket } from "./packet.ts";
 
-// Stub: pipeline-taskTests.mmd's own logic is not implemented yet, so this hand-off fabricates the packet shape pipeline-failuresExit.mmd::EXIT_TYPE_NOTE_INPUT requires.
 export function main(input: string): Record<string, unknown> {
+    const parsed = JSON.parse(input) as { exitType: string; exitNote: string };
+    const packet = readPacket(input);
     return {
-        box: "EXIT_WORKFLOW_TASK_TESTS",
-        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
+        ...packet, box: "EXIT_WORKFLOW_TASK_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        exitType: parsed.exitType, exitNote: parsed.exitNote,
     };
 }
 

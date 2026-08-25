@@ -1,14 +1,60 @@
 {
     "input": {
-        "box": "CODEX_REVIEWS_PLAN",
+        "box": "DRAFT_PLAN_INPUT",
         "scriptSignal": "continue",
-        "note": "CODEX_REVIEWS_PLAN.ts for CODEX_REVIEWS_PLAN",
-        "input": ""
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "briefFile": "/repo/.worktrees/task-42/plans/brief-42.md",
+        "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "reviewOutputFile": "/repo/.worktrees/task-42/plans/codex-review.json",
+        "ownedFilePaths": ["/repo/.worktrees/task-42/src/owned.ts"],
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": {
+            "outcome": "OK",
+            "missingFiles": [],
+            "message": "",
+            "issues": [],
+            "fixes": [],
+            "sectionsThatHoldUp": ["step-1 — verified against src/owned.ts:1-10"]
+        }
     },
     "output": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "next": "VERDICT_ACCEPT",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "plan": {
+            "task": 42,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "review": {
+            "outcome": "OK",
+            "missingFiles": [],
+            "message": "",
+            "issues": [],
+            "fixes": [],
+            "sectionsThatHoldUp": ["step-1 — verified against src/owned.ts:1-10"]
+        },
+        "verdict": "ACCEPT",
+        "notes": ""
     }
 }

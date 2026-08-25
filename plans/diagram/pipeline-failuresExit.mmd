@@ -9,7 +9,7 @@ flowchart TB
 %% ---
 %% See releaseTaskRunHolds.ts.
 %% ---
-%% Every release and write here runs before "mark task inactive".
+%% "mark task inactive" runs before the lease and lock release chain.
 %% ---
 %% Marking inactive is what reopens the task to another run.
 %% ---
@@ -64,16 +64,15 @@ flowchart TB
 
   WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE
 
-  RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"] --> DOES_RUN_HOLD_LEASE{"does this run still hold<br/>the worktree lease?"}
+  RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"] --> MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"]
+  MARK_TASK_INACTIVE_FAILURE --> DOES_RUN_HOLD_LEASE{"does this run still hold<br/>the worktree lease?"}
   DOES_RUN_HOLD_LEASE -->|YES| RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
   DOES_RUN_HOLD_LEASE -->|NO| DOES_RUN_HOLD_SOURCE_LOCK
   RELEASE_WORKTREE_LEASE --> DOES_RUN_HOLD_SOURCE_LOCK
 
   DOES_RUN_HOLD_SOURCE_LOCK{"does this run still hold<br/>the source repo lock?"} -->|YES| RELEASE_SOURCE_LOCK["release the source repo lock"]
-  DOES_RUN_HOLD_SOURCE_LOCK -->|NO| MARK_TASK_INACTIVE_FAILURE
-  RELEASE_SOURCE_LOCK --> MARK_TASK_INACTIVE_FAILURE
-
-  MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"] --> REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  DOES_RUN_HOLD_SOURCE_LOCK -->|NO| REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  RELEASE_SOURCE_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
   REPORT_EXIT_TYPE_AND_NOTE --> STOP["stop"]
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff

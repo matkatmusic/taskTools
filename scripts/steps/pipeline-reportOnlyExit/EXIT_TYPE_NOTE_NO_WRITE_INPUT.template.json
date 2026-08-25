@@ -2,13 +2,13 @@
     "input": {
         "box": "REPORT_ONLY_EXIT",
         "scriptSignal": "continue",
-        "exitType": "already-active",
-        "note": "a previous run left the task active"
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     },
     "output": {
         "box": "EXIT_TYPE_NOTE_NO_WRITE_INPUT",
         "scriptSignal": "continue",
-        "note": "EXIT_TYPE_NOTE_NO_WRITE_INPUT.ts for EXIT_TYPE_NOTE_NO_WRITE_INPUT",
-        "input": ""
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
     }
 }

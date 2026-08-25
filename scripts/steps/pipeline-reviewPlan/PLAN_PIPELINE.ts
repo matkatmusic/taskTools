@@ -1,24 +1,28 @@
-// PLAN_PIPELINE, from pipeline-reviewPlan.mmd
+// PLAN_PIPELINE, from pipeline-reviewPlan.mmd. Replan against the amended entry.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Stub: pipeline-reviewPlan.mmd's own logic is not implemented yet, so this hand-off fabricates the docs packet shape pipeline-plan.mmd::DOCS_INPUT requires.
+export type PlanPipelinePacket = {
+    taskNumber: number;
+    taskStateRoot: string;
+    repoRoot: string;
+    exitType: string;
+    exitNote: string;
+    runId: string;
+    sourceBranch: string;
+};
+
 export function main(input: string): Record<string, unknown> {
+    const packet = JSON.parse(input) as PlanPipelinePacket;
     return {
         box: "PLAN_PIPELINE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        taskNumber: 0,
-        runId: "",
-        projectRoot: "",
-        worktree: "",
-        branch: "",
-        docsMode: "",
-        exitType: "",
-        exitNote: "",
-        clarifyRequest: "",
-        briefFile: "",
+        taskNumber: packet.taskNumber,
+        runId: packet.runId,
+        worktree: packet.repoRoot,
+        branch: packet.sourceBranch,
+        projectRoot: packet.taskStateRoot,
     };
 }
 

@@ -1,12 +1,34 @@
 {
     "input": {
-        "box": "",
-        "scriptSignal": ""
+        "box": "REBASE_PIPELINE",
+        "scriptSignal": "continue",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0
     },
     "output": {
         "box": "SOURCE_REPO_LOCKED_INPUT",
         "scriptSignal": "continue",
-        "note": "SOURCE_REPO_LOCKED_INPUT.ts for SOURCE_REPO_LOCKED_INPUT",
-        "input": ""
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

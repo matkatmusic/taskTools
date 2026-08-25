@@ -2,19 +2,24 @@
     "input": {
         "box": "ARE_2_TEST_FIXES_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_TEST_FIXES_DONE.ts for ARE_2_TEST_FIXES_DONE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "exitType": "tests-red",
+        "exitNote": "task tests still failing after 2 fix attempts",
+        "next": "EXIT_WORKFLOW_TASK_TESTS"
     },
     "output": {
         "box": "EXIT_WORKFLOW_TASK_TESTS",
         "scriptSignal": "continue",
-        "taskNumber": 0,
-        "runId": "",
-        "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
-        "exitType": "",
-        "exitNote": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "exitType": "tests-red",
+        "exitNote": "task tests still failing after 2 fix attempts"
     }
 }

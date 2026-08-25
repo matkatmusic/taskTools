@@ -2,13 +2,23 @@
     "input": {
         "box": "DO_TASK_TESTS_PASS",
         "scriptSignal": "continue",
-        "note": "DO_TASK_TESTS_PASS.ts for DO_TASK_TESTS_PASS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "scripts/steps/pipeline-taskTests/fixtures/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "scripts/steps/pipeline-taskTests/fixtures",
+        "next": "ARE_2_TEST_FIXES_DONE"
     },
     "output": {
         "box": "ARE_2_TEST_FIXES_DONE",
         "scriptSignal": "continue",
-        "note": "ARE_2_TEST_FIXES_DONE.ts for ARE_2_TEST_FIXES_DONE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "scripts/steps/pipeline-taskTests/fixtures/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "scripts/steps/pipeline-taskTests/fixtures",
+        "exitType": "",
+        "exitNote": "",
+        "next": "AMEND_ENTRY_WITH_FAILING_TESTS"
     }
 }

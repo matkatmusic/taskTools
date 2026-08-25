@@ -2,13 +2,30 @@
     "input": {
         "box": "WHAT_DID_THE_PLANNER_RETURN",
         "scriptSignal": "continue",
-        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "plan": {
+            "task": 35,
+            "revision": 1,
+            "createsFiles": [],
+            "sections": [
+                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
+            ]
+        },
+        "clarifyRequest": "which database does task 35 target?",
+        "next": "PLANNER_RETURNED_CLARIFY"
     },
     "output": {
         "box": "PLANNER_RETURNED_CLARIFY",
         "scriptSignal": "continue",
-        "note": "PLANNER_RETURNED_CLARIFY.ts for PLANNER_RETURNED_CLARIFY",
-        "input": ""
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "clarifyRequest": "which database does task 35 target?"
     }
 }

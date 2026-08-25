@@ -13,12 +13,12 @@ export function main(input: string): Record<string, unknown> {
     if (blocked) {
         return {
             box: "IS_TASK_BLOCKED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REPORT_ONLY_EXIT",
-            taskNumber, tasksFile, exitType: "blocked", note: "an open blocker remains",
+            taskNumber, tasksFile, exitType: "blocked", exitNote: "an open blocker remains",
         };
     }
     return {
         box: "IS_TASK_BLOCKED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "IS_TASK_ACTIVE",
-        taskNumber, tasksFile, exitType: "", note: "",
+        taskNumber, tasksFile, exitType: "", exitNote: "",
     };
 }
 

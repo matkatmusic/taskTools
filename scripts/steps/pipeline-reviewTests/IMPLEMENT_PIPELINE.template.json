@@ -2,11 +2,21 @@
     "input": {
         "box": "AMEND_ENTRY_WITH_CODEX_NOTES",
         "scriptSignal": "continue",
-        "note": "AMEND_ENTRY_WITH_CODEX_NOTES.ts for AMEND_ENTRY_WITH_CODEX_NOTES",
-        "input": ""
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "amended": true
     },
     "output": {
         "box": "IMPLEMENT_PIPELINE",
-        "scriptSignal": "continue"
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "maxFixRounds": 3
     }
 }

@@ -1,20 +1,25 @@
 {
     "input": {
-        "box": "CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED",
+        "box": "ARE_2_TEST_REVIEWS_DONE",
         "scriptSignal": "continue",
-        "note": "CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED.ts for CODEX_REVIEWS_TESTS -.-> AGENT_ERRORED",
-        "input": ""
+        "next": "EXIT_WORKFLOW_REVIEW_TESTS",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": "",
+        "exitType": "tests-flagged",
+        "exitNote": "task tests failed codex review"
     },
     "output": {
         "box": "EXIT_WORKFLOW_REVIEW_TESTS",
         "scriptSignal": "continue",
-        "taskNumber": 0,
-        "runId": "",
-        "projectRoot": "",
-        "worktree": "",
-        "branch": "",
-        "docsMode": "",
-        "exitType": "",
-        "exitNote": ""
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "exitType": "tests-flagged",
+        "exitNote": "task tests failed codex review"
     }
 }
