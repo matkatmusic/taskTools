@@ -12,6 +12,19 @@ type Run = {
     history?: { endedAt: string | null; implementationNotesFile: string | null }[];
     worktreeSafe?: boolean;
     touchedFiles?: string[];
+    simCounts?: Record<string, number>;
+    counts?: Record<string, number>;
+    attempts?: Record<string, number>;
+    sourceLockOwner?: string;
+    commits?: { hash: string; kind: string; stepId: string }[];
+    taskTests?: { passed: boolean; output: string };
+    fullSuite?: { passed: boolean; output: string };
+    publicationState?: string;
+    modifiedFiles?: string[];
+    exitType?: string;
+    exitNote?: string;
+    cleanupIncomplete?: boolean;
+    endedAt?: string;
 };
 
 // ponytail: sim is fixture-only. One answer per visit, keyed by the block that asks.
@@ -19,19 +32,25 @@ type Task = {
     taskNumber: number;
     files?: string[];
     blockedBy?: { taskNum: number }[];
+    clarifyRequest?: string;
+    codexReviewNotes?: string;
+    planReviewCount?: number;
     run?: Run;
     sim?: Record<string, (string | null)[]>;
 };
 
 type State = {
+    taskNumber: number;
     tasks: Task[];
     task: Task | undefined;
     runId: string;
     docsMode: string;
+    plan: string;
+    codexNotes: string;
+    suiteFixAttempts: number;
     exitType: string;
     exitNote: string;
     answer: string | null;
-    counts: Record<string, number>;
     ran: string[];
 };
 
@@ -42,38 +61,93 @@ type Input = State & {
 
 type Packet = Partial<State> & {
     next: string | null;
+    prompt?: string;
 };
 
 // ponytail: the last answer repeats, so a fixture writes ["NO"] and not 180 of them.
-function sim(input: Input, block: string): string | null {
-    const answers = input.task!.sim![block]!;
-    const visitIndex = input.counts[block]! - 1;
+function sim(input: Input, question: string): string | null {
+    const run = input.task!.run!;
+    const answers = input.task!.sim![question]!;
+    const simCounts = run.simCounts ?? {};
+    run.simCounts = simCounts;
+    const visitIndex = simCounts[question] ?? 0;
+    simCounts[question] = visitIndex + 1;
     const lastAnswerIndex = answers.length - 1;
     const answerIndex = Math.min(visitIndex, lastAnswerIndex);
     const answer = answers[answerIndex]!;
     return answer;
 }
 
+// pipeline-failuresExit.mmd as one function. Every failures-exit box in the other diagrams lands here.
+function reportRunsExitType(input: Input): Packet {
+    const task = input.task!;
+    const run = task.run!;
+
+    // --- read the publication state from the layer merge refs ---
+    console.log("  skipping: git rev-parse --verify refs/taskTools/merged-commits/... per layer");
+    const publicationState = run.publicationState ?? "NONE LANDED";
+
+    // --- did ANY of this task's work land? ---
+    if (publicationState !== "NONE LANDED") {
+        // write the publication outcome: keep completed if it is there, else partially-published. never run-failed.
+        if (run.exitType !== "completed") run.exitType = "partially-published";
+        run.exitNote = input.exitNote;
+        run.cleanupIncomplete = true;
+    } else {
+        // write exit type and exit notes to tasks.json
+        run.exitType = input.exitType;
+        run.exitNote = input.exitNote;
+    }
+
+    // --- record modified files to tasks.json ---
+    console.log("  skipping: git diff --name-only <baseRef>...HEAD per layer to record modifiedFiles");
+    run.modifiedFiles = run.touchedFiles ?? [];
+
+    // --- mark task inactive in tasks.json ---
+    run.active = false;
+    run.endedAt = new Date().toISOString();
+
+    // --- does this run still hold the worktree lease? ---
+    if (run.leaseRunId === input.runId) {
+        // release the worktree lease, keep the worktree. F5: the lease stays while the worktree still exists.
+        console.log(`  skipping: the worktree ${run.worktree} remains, so the lease is retained`);
+    }
+
+    // --- does this run still hold the source repo lock? ---
+    if (run.sourceLockOwner === `${input.runId}:${task.taskNumber}`) {
+        console.log("  skipping: release the source repo lock");
+        delete run.sourceLockOwner;
+    }
+
+    // --- report the run's exit type and note, then stop ---
+    console.log(`task ${task.taskNumber} ${run.exitType}: ${run.exitNote}`);
+    return { next: null };
+}
+
+// pipeline-reportOnlyExit.mmd as one function. Writes nothing.
+function reportExitTypeAndStop(input: Input): Packet {
+    console.log(`task ${input.taskNumber} ${input.exitType}: ${input.exitNote}`);
+    return { next: null };
+}
+
 const blocks: Record<string, (input: Input) => Packet> = {
-    // --- pipeline-preambleStatusCheck.mmd ---
-
-    PREAMBLE_TASK_NUMBER_INPUT(input) {
-        return { next: "IS_TASK_NUMBER_VALID" };
-    },
-
-    IS_TASK_NUMBER_VALID(input) {
-        if (input.task === undefined) {
+    // One block for pipeline-preambleStatusCheck.mmd, pipeline-worktreeCheck.mmd, and init submodules.
+    PREAMBLE_STATUS_CHECK(input) {
+        // --- task status ---
+        let task: Task | undefined = undefined;
+        for (const candidate of input.tasks) {
+            if (candidate.taskNumber === input.taskNumber) {
+                task = candidate;
+            }
+        }
+        if (task === undefined) {
             return {
                 next: "REPORT_ONLY_EXIT",
                 exitType: "invalid-number",
                 exitNote: "task number is not in tasks.json",
             };
         }
-        return { next: "IS_TASK_BLOCKED" };
-    },
-
-    IS_TASK_BLOCKED(input) {
-        const blockers = input.task!.blockedBy ?? [];
+        const blockers = task.blockedBy ?? [];
         let blocked = false;
         for (const blocker of blockers) {
             for (const openTask of input.tasks) {
@@ -85,666 +159,1398 @@ const blocks: Record<string, (input: Input) => Packet> = {
         if (blocked) {
             return {
                 next: "REPORT_ONLY_EXIT",
+                task,
                 exitType: "blocked",
                 exitNote: "an open blocker remains",
             };
         }
-        return { next: "IS_TASK_ACTIVE" };
-    },
-
-    IS_TASK_ACTIVE(input) {
-        if (input.task!.run?.active === true) {
+        const run = task.run ?? {};
+        task.run = run;
+        if (run.active === true) {
             return {
                 next: "REPORT_ONLY_EXIT",
+                task,
                 exitType: "already-active",
                 exitNote: "a previous run left the task active",
             };
         }
-        return { next: "MARK_TASK_ACTIVE" };
-    },
-
-    MARK_TASK_ACTIVE(input) {
-        const run = input.task!.run ?? {};
         run.active = true;
-        input.task!.run = run;
-        return { next: "WORKTREE_CHECK_PIPELINE" };
+
+        // --- worktree status ---
+        let docsMode = "";
+        if (run.worktree === undefined) {
+            run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
+            run.leaseRunId = input.runId;
+            docsMode = "AUTOGEN";
+        } else if (run.worktreeSafe !== true) {
+            run.leaseRunId = input.runId;
+            run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
+            run.worktreeSafe = true;
+            docsMode = "AUTOGEN";
+        } else {
+            run.leaseRunId = input.runId;
+            const history = run.history ?? [];
+            const endedRuns = [];
+            for (const previousRun of history) {
+                if (previousRun.endedAt !== null) {
+                    endedRuns.push(previousRun);
+                }
+            }
+            const newest = endedRuns[endedRuns.length - 1];
+            if (newest?.implementationNotesFile == null) {
+                return {
+                    next: "FAILURES_EXIT",
+                    task,
+                    exitType: "not-resumable",
+                    exitNote: "a safe worktree holds work no run recorded a stopping point for",
+                };
+            }
+            const files = task.files ?? [];
+            const touchedFiles = run.touchedFiles ?? [];
+            const violations = [];
+            for (const touchedFile of touchedFiles) {
+                if (!files.includes(touchedFile)) {
+                    violations.push(touchedFile);
+                }
+            }
+            if (violations.length > 0) {
+                return {
+                    next: "FAILURES_EXIT",
+                    task,
+                    exitType: "fence-violation",
+                    exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}`,
+                };
+            }
+            docsMode = "UPDATE";
+        }
+
+        // --- init submodules recursively ---
+        console.log(`  skipping: git submodule update --init --recursive in ${run.worktree}`);
+
+        return {
+            next: "DOCUMENT_GENERATION",
+            task,
+            docsMode,
+        };
     },
 
-    WORKTREE_CHECK_PIPELINE(input) {
-        return { next: "ACTIVE_TASK_INPUT" };
+    // One block for pipeline-documentGeneration.mmd.
+    DOCUMENT_GENERATION(input) {
+        // --- what is the docs mode? ---
+        if (input.docsMode !== "AUTOGEN") {
+            if (input.docsMode !== "UPDATE") {
+                throw new Error(`unknown docs mode ${JSON.stringify(input.docsMode)}`);
+            }
+        }
+
+        // --- auto generate docs / update auto generated docs ---
+        console.log(`  skipping: ${input.docsMode} write of the task brief into the worktree`);
+
+        return { next: "PLAN_THE_TASK" };
     },
+
+    // --- pipeline-preambleStatusCheck.mmd ---
+
+    // PREAMBLE_TASK_NUMBER_INPUT(input) {
+    //     return { next: "IS_TASK_NUMBER_VALID" };
+    // },
+
+    // IS_TASK_NUMBER_VALID(input) {
+    //     if (input.task === undefined) {
+    //         return {
+    //             next: "REPORT_ONLY_EXIT",
+    //             exitType: "invalid-number",
+    //             exitNote: "task number is not in tasks.json",
+    //         };
+    //     }
+    //     return { next: "IS_TASK_BLOCKED" };
+    // },
+
+    // IS_TASK_BLOCKED(input) {
+    //     const blockers = input.task!.blockedBy ?? [];
+    //     let blocked = false;
+    //     for (const blocker of blockers) {
+    //         for (const openTask of input.tasks) {
+    //             if (openTask.taskNumber === blocker.taskNum) {
+    //                 blocked = true;
+    //             }
+    //         }
+    //     }
+    //     if (blocked) {
+    //         return {
+    //             next: "REPORT_ONLY_EXIT",
+    //             exitType: "blocked",
+    //             exitNote: "an open blocker remains",
+    //         };
+    //     }
+    //     return { next: "IS_TASK_ACTIVE" };
+    // },
+
+    // IS_TASK_ACTIVE(input) {
+    //     if (input.task!.run?.active === true) {
+    //         return {
+    //             next: "REPORT_ONLY_EXIT",
+    //             exitType: "already-active",
+    //             exitNote: "a previous run left the task active",
+    //         };
+    //     }
+    //     return { next: "MARK_TASK_ACTIVE" };
+    // },
+
+    // MARK_TASK_ACTIVE(input) {
+    //     const run = input.task!.run ?? {};
+    //     run.active = true;
+    //     input.task!.run = run;
+    //     return { next: "WORKTREE_CHECK_PIPELINE" };
+    // },
+
+    // WORKTREE_CHECK_PIPELINE(input) {
+    //     return { next: "ACTIVE_TASK_INPUT" };
+    // },
 
     REPORT_ONLY_EXIT(input) {
-        return { next: null };
+        return reportExitTypeAndStop(input);
     },
 
     // --- pipeline-worktreeCheck.mmd ---
 
-    ACTIVE_TASK_INPUT(input) {
-        return { next: "DOES_WORKTREE_EXIST" };
-    },
+    // ACTIVE_TASK_INPUT(input) {
+    //     return { next: "DOES_WORKTREE_EXIST" };
+    // },
 
-    DOES_WORKTREE_EXIST(input) {
-        const exists = input.task!.run?.worktree !== undefined;
-        if (exists) {
-            return { next: "IS_WORKTREE_SAFE_TO_USE" };
-        }
-        return { next: "CREATE_WORKTREE" };
-    },
+    // DOES_WORKTREE_EXIST(input) {
+    //     const exists = input.task!.run?.worktree !== undefined;
+    //     if (exists) {
+    //         return { next: "IS_WORKTREE_SAFE_TO_USE" };
+    //     }
+    //     return { next: "CREATE_WORKTREE" };
+    // },
 
-    IS_WORKTREE_SAFE_TO_USE(input) {
-        const safe = input.task!.run?.worktreeSafe === true;
-        if (safe) {
-            return { next: "IS_PREVIOUS_RUN_RESUMABLE" };
-        }
-        return { next: "TAKE_WORKTREE_LEASE_BEFORE_RESET" };
-    },
+    // IS_WORKTREE_SAFE_TO_USE(input) {
+    //     const safe = input.task!.run?.worktreeSafe === true;
+    //     if (safe) {
+    //         return { next: "IS_PREVIOUS_RUN_RESUMABLE" };
+    //     }
+    //     return { next: "TAKE_WORKTREE_LEASE_BEFORE_RESET" };
+    // },
 
-    IS_PREVIOUS_RUN_RESUMABLE(input) {
-        input.task!.run!.leaseRunId = input.runId;
-        const history = input.task!.run!.history ?? [];
-        const endedRuns = [];
-        for (const previousRun of history) {
-            if (previousRun.endedAt !== null) {
-                endedRuns.push(previousRun);
-            }
-        }
-        const newest = endedRuns[endedRuns.length - 1];
-        if (newest?.implementationNotesFile == null) {
-            return {
-                next: "FAILURES_EXIT",
-                exitType: "not-resumable",
-                exitNote: "a safe worktree holds work no run recorded a stopping point for",
-            };
-        }
-        return { next: "DOES_FENCE_COVER_WORKTREE" };
-    },
+    // IS_PREVIOUS_RUN_RESUMABLE(input) {
+    //     input.task!.run!.leaseRunId = input.runId;
+    //     const history = input.task!.run!.history ?? [];
+    //     const endedRuns = [];
+    //     for (const previousRun of history) {
+    //         if (previousRun.endedAt !== null) {
+    //             endedRuns.push(previousRun);
+    //         }
+    //     }
+    //     const newest = endedRuns[endedRuns.length - 1];
+    //     if (newest?.implementationNotesFile == null) {
+    //         return {
+    //             next: "FAILURES_EXIT",
+    //             exitType: "not-resumable",
+    //             exitNote: "a safe worktree holds work no run recorded a stopping point for",
+    //         };
+    //     }
+    //     return { next: "DOES_FENCE_COVER_WORKTREE" };
+    // },
 
-    DOES_FENCE_COVER_WORKTREE(input) {
-        const files = input.task!.files ?? [];
-        const touchedFiles = input.task!.run!.touchedFiles ?? [];
-        const violations = [];
-        for (const touchedFile of touchedFiles) {
-            if (!files.includes(touchedFile)) {
-                violations.push(touchedFile);
-            }
-        }
-        if (violations.length > 0) {
-            return {
-                next: "FAILURES_EXIT",
-                exitType: "fence-violation",
-                exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}`,
-            };
-        }
-        return {
-            next: "INIT_SUBMODULES_RECURSIVELY",
-            docsMode: "UPDATE",
-        };
-    },
+    // DOES_FENCE_COVER_WORKTREE(input) {
+    //     const files = input.task!.files ?? [];
+    //     const touchedFiles = input.task!.run!.touchedFiles ?? [];
+    //     const violations = [];
+    //     for (const touchedFile of touchedFiles) {
+    //         if (!files.includes(touchedFile)) {
+    //             violations.push(touchedFile);
+    //         }
+    //     }
+    //     if (violations.length > 0) {
+    //         return {
+    //             next: "FAILURES_EXIT",
+    //             exitType: "fence-violation",
+    //             exitNote: `the resumed worktree touched files the task does not own: ${violations.join(", ")}`,
+    //         };
+    //     }
+    //     return {
+    //         next: "INIT_SUBMODULES_RECURSIVELY",
+    //         docsMode: "UPDATE",
+    //     };
+    // },
 
-    CREATE_WORKTREE(input) {
-        input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
-        return {
-            next: "TAKE_WORKTREE_LEASE",
-            docsMode: "AUTOGEN",
-        };
-    },
+    // CREATE_WORKTREE(input) {
+    //     input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
+    //     return {
+    //         next: "TAKE_WORKTREE_LEASE",
+    //         docsMode: "AUTOGEN",
+    //     };
+    // },
 
-    TAKE_WORKTREE_LEASE(input) {
-        input.task!.run!.leaseRunId = input.runId;
-        return { next: "INIT_SUBMODULES_RECURSIVELY" };
-    },
+    // TAKE_WORKTREE_LEASE(input) {
+    //     input.task!.run!.leaseRunId = input.runId;
+    //     return { next: "INIT_SUBMODULES_RECURSIVELY" };
+    // },
 
-    TAKE_WORKTREE_LEASE_BEFORE_RESET(input) {
-        input.task!.run!.leaseRunId = input.runId;
-        return { next: "RESET_WORKTREE" };
-    },
+    // TAKE_WORKTREE_LEASE_BEFORE_RESET(input) {
+    //     input.task!.run!.leaseRunId = input.runId;
+    //     return { next: "RESET_WORKTREE" };
+    // },
 
-    RESET_WORKTREE(input) {
-        input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
-        input.task!.run!.worktreeSafe = true;
-        return {
-            next: "INIT_SUBMODULES_RECURSIVELY",
-            docsMode: "AUTOGEN",
-        };
-    },
+    // RESET_WORKTREE(input) {
+    //     input.task!.run!.worktree = `.taskTools/worktrees/task-${input.task!.taskNumber}`;
+    //     input.task!.run!.worktreeSafe = true;
+    //     return {
+    //         next: "INIT_SUBMODULES_RECURSIVELY",
+    //         docsMode: "AUTOGEN",
+    //     };
+    // },
 
-    INIT_SUBMODULES_RECURSIVELY(input) {
-        return { next: "DOCUMENT_GENERATION_PIPELINE" };
-    },
+    // INIT_SUBMODULES_RECURSIVELY(input) {
+    //     return { next: "DOCUMENT_GENERATION_PIPELINE" };
+    // },
 
-    DOCUMENT_GENERATION_PIPELINE(input) {
-        return { next: "WORKTREE_DOCS_MODE_INPUT" };
-    },
+    // DOCUMENT_GENERATION_PIPELINE(input) {
+    //     return { next: "WORKTREE_DOCS_MODE_INPUT" };
+    // },
 
     FAILURES_EXIT(input) {
-        return { next: null };
+        return reportRunsExitType(input);
     },
 
     // --- pipeline-documentGeneration.mmd ---
 
-    WORKTREE_DOCS_MODE_INPUT(input) {
-        return { next: "WHAT_IS_DOCS_MODE" };
-    },
+    // WORKTREE_DOCS_MODE_INPUT(input) {
+    //     return { next: "WHAT_IS_DOCS_MODE" };
+    // },
 
-    WHAT_IS_DOCS_MODE(input) {
-        if (input.docsMode === "AUTOGEN") return { next: "DOCS_MODE_AUTOGEN" };
-        if (input.docsMode === "UPDATE") return { next: "DOCS_MODE_UPDATE" };
-        throw new Error(`unknown docs mode ${JSON.stringify(input.docsMode)}`);
-    },
+    // WHAT_IS_DOCS_MODE(input) {
+    //     if (input.docsMode === "AUTOGEN") return { next: "DOCS_MODE_AUTOGEN" };
+    //     if (input.docsMode === "UPDATE") return { next: "DOCS_MODE_UPDATE" };
+    //     throw new Error(`unknown docs mode ${JSON.stringify(input.docsMode)}`);
+    // },
 
-    DOCS_MODE_AUTOGEN(input) {
-        return { next: "AUTO_GENERATE_DOCS" };
-    },
+    // DOCS_MODE_AUTOGEN(input) {
+    //     return { next: "AUTO_GENERATE_DOCS" };
+    // },
 
-    DOCS_MODE_UPDATE(input) {
-        return { next: "UPDATE_AUTO_GENERATED_DOCS" };
-    },
+    // DOCS_MODE_UPDATE(input) {
+    //     return { next: "UPDATE_AUTO_GENERATED_DOCS" };
+    // },
 
-    AUTO_GENERATE_DOCS(input) {
-        return { next: "PLAN_PIPELINE" };
-    },
+    // AUTO_GENERATE_DOCS(input) {
+    //     return { next: "PLAN_PIPELINE" };
+    // },
 
-    UPDATE_AUTO_GENERATED_DOCS(input) {
-        return { next: "PLAN_PIPELINE" };
-    },
+    // UPDATE_AUTO_GENERATED_DOCS(input) {
+    //     return { next: "PLAN_PIPELINE" };
+    // },
 
-    PLAN_PIPELINE(input) {
-        return { next: "DOCS_INPUT" };
-    },
+    // PLAN_PIPELINE(input) {
+    //     return { next: "DOCS_INPUT" };
+    // },
 
     // --- pipeline-plan.mmd ---
 
-    DOCS_INPUT(input) {
-        return { next: "PLAN_THE_TASK" };
-    },
-
+    // Prompt block. The live script builds the planner prompt from the brief in the worktree.
     PLAN_THE_TASK(input) {
-        return { next: "WHAT_DID_THE_PLANNER_RETURN" };
+        const task = input.task!;
+        const run = task.run!;
+        const briefFile = `${run.worktree}/plans/task-${task.taskNumber}-brief.md`;
+        const planFile = `${run.worktree}/plans/task-${task.taskNumber}-plan.md`;
+        let prompt = `Plan task ${task.taskNumber} from ${briefFile}. Write the plan to ${planFile} and answer PLAN, or answer CLARIFY with what the brief does not say. Codex reviews this plan before it is implemented.`;
+        if (input.codexNotes !== "") {
+            prompt = `${prompt}\nCodex's notes on the previous plan:\n${input.codexNotes}`;
+        }
+        return {
+            next: "WHAT_DID_THE_PLANNER_RETURN",
+            prompt,
+        };
     },
 
+    // One block for "what did the planner return?" and every path after it in pipeline-plan.mmd.
     WHAT_DID_THE_PLANNER_RETURN(input) {
-        if (input.answer === "PLAN") return { next: "PLANNER_RETURNED_PLAN" };
-        if (input.answer === "CLARIFY") return { next: "PLANNER_RETURNED_CLARIFY" };
+        const task = input.task!;
+        const run = task.run!;
+
+        // --- PLAN ---
+        if (input.answer === "PLAN") {
+            return {
+                next: "CODEX_REVIEWS_PLAN",
+                plan: input.plan,
+            };
+        }
+
+        // --- CLARIFY ---
+        if (input.answer === "CLARIFY") {
+            // ponytail: the live agent words the request; the sim uses one fixed sentence.
+            const clarifyRequest = "the planner needs something the docs do not say";
+
+            // --- 2 clarify rounds done? ---
+            const attempts = run.attempts ?? {};
+            run.attempts = attempts;
+            const clarifyRounds = attempts.clarify ?? 0;
+            if (clarifyRounds >= 2) {
+                return {
+                    next: "FAILURES_EXIT",
+                    exitType: "clarify-stuck",
+                    exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved.",
+                };
+            }
+
+            // --- write the clarify request into the tasks.json entry ---
+            task.clarifyRequest = clarifyRequest;
+            attempts.clarify = clarifyRounds + 1;
+            return {
+                next: "DOCUMENT_GENERATION",
+                docsMode: "UPDATE",
+            };
+        }
+
         throw new Error(`unknown planner answer ${JSON.stringify(input.answer)}`);
     },
 
-    PLANNER_RETURNED_PLAN(input) {
-        return { next: "REVIEW_PLAN_PIPELINE" };
-    },
+    // DOCS_INPUT(input) {
+    //     return { next: "PLAN_THE_TASK" };
+    // },
 
-    PLANNER_RETURNED_CLARIFY(input) {
-        return { next: "ARE_2_CLARIFY_ROUNDS_DONE" };
-    },
+    // PLAN_THE_TASK(input) {
+    //     return { next: "WHAT_DID_THE_PLANNER_RETURN" };
+    // },
 
-    ARE_2_CLARIFY_ROUNDS_DONE(input) {
-        if (input.counts.PLANNER_RETURNED_CLARIFY >= 2) {
-            return {
-                next: "EXIT_WORKFLOW_PLAN",
-                exitType: "clarify-stuck",
-                exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved.",
-            };
-        }
-        return { next: "WRITE_CLARIFY_REQUEST" };
-    },
+    // WHAT_DID_THE_PLANNER_RETURN(input) {
+    //     if (input.answer === "PLAN") return { next: "PLANNER_RETURNED_PLAN" };
+    //     if (input.answer === "CLARIFY") return { next: "PLANNER_RETURNED_CLARIFY" };
+    //     throw new Error(`unknown planner answer ${JSON.stringify(input.answer)}`);
+    // },
 
-    WRITE_CLARIFY_REQUEST(input) {
-        return {
-            next: "DOCUMENT_GENERATION_PIPELINE",
-            docsMode: "UPDATE",
-        };
-    },
+    // PLANNER_RETURNED_PLAN(input) {
+    //     return { next: "REVIEW_PLAN_PIPELINE" };
+    // },
 
-    EXIT_WORKFLOW_PLAN(input) {
-        return { next: null };
-    },
+    // PLANNER_RETURNED_CLARIFY(input) {
+    //     return { next: "ARE_2_CLARIFY_ROUNDS_DONE" };
+    // },
+
+    // ARE_2_CLARIFY_ROUNDS_DONE(input) {
+    //     if (input.task!.run!.counts!.PLANNER_RETURNED_CLARIFY >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_PLAN",
+    //             exitType: "clarify-stuck",
+    //             exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved.",
+    //         };
+    //     }
+    //     return { next: "WRITE_CLARIFY_REQUEST" };
+    // },
+
+    // WRITE_CLARIFY_REQUEST(input) {
+    //     return {
+    //         next: "DOCUMENT_GENERATION",
+    //         docsMode: "UPDATE",
+    //     };
+    // },
+
+    // EXIT_WORKFLOW_PLAN(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-reviewPlan.mmd ---
 
-    REVIEW_PLAN_PIPELINE(input) {
-        return { next: "DRAFT_PLAN_INPUT" };
-    },
-
-    DRAFT_PLAN_INPUT(input) {
-        return { next: "CODEX_REVIEWS_PLAN" };
-    },
-
+    // Prompt block. The live script builds the review prompt; the agent runs codex with it in a shell.
     CODEX_REVIEWS_PLAN(input) {
-        return { next: "WHAT_IS_REVIEW_VERDICT" };
-    },
-
-    WHAT_IS_REVIEW_VERDICT(input) {
-        const verdicts = ["ACCEPT", "AMEND_THEN_ACCEPT", "AMEND", "SCRAP", "ERROR"];
-        if (!verdicts.includes(input.answer!)) throw new Error(`unknown review verdict ${JSON.stringify(input.answer)}`);
-        return { next: `VERDICT_${input.answer}` };
-    },
-
-    VERDICT_ACCEPT(input) {
-        return { next: "IMPLEMENT_PIPELINE" };
-    },
-
-    VERDICT_AMEND_THEN_ACCEPT(input) {
-        return { next: "IMPLEMENT_PIPELINE" };
-    },
-
-    VERDICT_AMEND(input) {
-        return { next: "UPDATE_TASK_ENTRY" };
-    },
-
-    VERDICT_SCRAP(input) {
-        return { next: "UPDATE_TASK_ENTRY" };
-    },
-
-    VERDICT_ERROR(input) {
+        const task = input.task!;
+        const run = task.run!;
+        const briefFile = `${run.worktree}/plans/task-${task.taskNumber}-brief.md`;
+        const reviewFile = `${run.worktree}/plans/task-${task.taskNumber}-plan-review.json`;
+        const ownedFiles = task.files ?? [];
+        const reviewPrompt = `You are a read-only review agent tasked with reviewing the implementation plan for task ${task.taskNumber}. Read only: ${briefFile}, ${input.plan}, ${ownedFiles.join(", ")}.`;
+        const command = `codex exec -s read-only --output-schema plans/review-plan-schema.json -o "${reviewFile}" "${reviewPrompt}" </dev/null`;
+        const prompt = `Run this with Bash:\n${command}\nThen return the JSON written to ${reviewFile}, unchanged.`;
         return {
-            next: "EXIT_WORKFLOW_REVIEW_PLAN",
-            exitType: "run-failed",
-            exitNote: "the plan review could not run",
+            next: "WHAT_IS_REVIEW_VERDICT",
+            prompt,
         };
     },
 
-    UPDATE_TASK_ENTRY(input) {
-        return { next: "ARE_2_REVIEWS_DONE" };
-    },
+    // One block for "what is the review verdict?" and every path after it in pipeline-reviewPlan.mmd.
+    WHAT_IS_REVIEW_VERDICT(input) {
+        const task = input.task!;
+        const review = JSON.parse(input.answer!);
 
-    ARE_2_REVIEWS_DONE(input) {
-        if (input.counts.CODEX_REVIEWS_PLAN >= 2) {
+        // --- decide the verdict from codex's review JSON ---
+        let verdict = "";
+        let notes = "";
+        if (review.outcome === "ERROR") {
+            verdict = "ERROR";
+            notes = `${review.message} missing: ${review.missingFiles.join(", ")}`;
+        } else {
+            const fixCount = review.fixes.length;
+            verdict = "SCRAP";
+            if (fixCount === 0) verdict = "ACCEPT";
+            if (fixCount === 1) verdict = "AMEND_THEN_ACCEPT";
+            if (fixCount >= 2) {
+                if (fixCount <= 4) verdict = "AMEND";
+            }
+            const noteLines = [];
+            for (const fix of review.fixes) {
+                noteLines.push(`[${fix.sectionId}] ${fix.fix}\n\nDurable because: ${fix.durableBecause}`);
+            }
+            notes = noteLines.join("\n\n");
+        }
+
+        // --- ERROR ---
+        if (verdict === "ERROR") {
             return {
-                next: "EXIT_WORKFLOW_REVIEW_PLAN",
+                next: "FAILURES_EXIT",
+                exitType: "run-failed",
+                exitNote: "the plan review could not run",
+            };
+        }
+
+        // --- ACCEPT ---
+        if (verdict === "ACCEPT") {
+            return { next: "IMPLEMENT_TASK" };
+        }
+
+        // --- AMEND_THEN_ACCEPT: write codex's fixes into the plan, then implement ---
+        if (verdict === "AMEND_THEN_ACCEPT") {
+            console.log(`  skipping: write codex's fixes into the sections of ${input.plan} and bump its revision`);
+            return { next: "IMPLEMENT_TASK" };
+        }
+
+        // --- AMEND / SCRAP: update the tasks.json entry ---
+        task.codexReviewNotes = notes;
+        const reviewCount = (task.planReviewCount ?? 0) + 1;
+        task.planReviewCount = reviewCount;
+
+        // --- 2 codex reviews done? ---
+        if (reviewCount >= 2) {
+            return {
+                next: "FAILURES_EXIT",
                 exitType: "plan-scrapped",
                 exitNote: "codex did not accept the plan in two reviews",
             };
         }
-        return { next: "PLAN_PIPELINE" };
+        return {
+            next: "PLAN_THE_TASK",
+            codexNotes: notes,
+        };
     },
 
-    EXIT_WORKFLOW_REVIEW_PLAN(input) {
-        return { next: null };
-    },
+    // The live agent runs codex in a shell. The sim builds that command, then fakes codex's reply.
+    // CODEX_REVIEWS_PLAN(input) {
+    //     const task = input.task!;
+    //     const run = task.run!;
+    // 
+    //     // --- build the review prompt and the shell command ---
+    //     const briefFile = `${run.worktree}/plans/task-${task.taskNumber}-brief.md`;
+    //     const reviewFile = `${run.worktree}/plans/task-${task.taskNumber}-plan-review.json`;
+    //     const ownedFiles = task.files ?? [];
+    //     const reviewPrompt = `You are a read-only review agent tasked with reviewing the implementation plan for task ${task.taskNumber}. Read only: ${briefFile}, ${input.plan}, ${ownedFiles.join(", ")}.`;
+    //     const command = `codex exec -s read-only --output-schema plans/review-plan-schema.json -o "${reviewFile}" "${reviewPrompt}" </dev/null`;
+    //     console.log(`  skipping: ${command}`);
+    // 
+    //     // --- codex's reply: the JSON string the shell would have written to the review file ---
+    //     // ponytail: the fixture names the verdict; the sim writes a reply with the fix count that earns it.
+    //     const fixtureVerdict = sim(input, "CODEX_REVIEWS_PLAN");
+    //     let codexReply = "";
+    //     if (fixtureVerdict === "ERROR") {
+    //         codexReply = JSON.stringify({
+    //             outcome: "ERROR",
+    //             missingFiles: [input.plan],
+    //             message: "Review not performed because one or more required input files were unavailable.",
+    //             issues: [],
+    //             fixes: [],
+    //             sectionsThatHoldUp: [],
+    //         });
+    //     } else {
+    //         let fixCount = 0;
+    //         if (fixtureVerdict === "AMEND_THEN_ACCEPT") fixCount = 1;
+    //         if (fixtureVerdict === "AMEND") fixCount = 2;
+    //         if (fixtureVerdict === "SCRAP") fixCount = 5;
+    //         const fixes = [];
+    //         for (let i = 1; i <= fixCount; i++) {
+    //             fixes.push({
+    //                 sectionId: `section-${i}`,
+    //                 fix: `simulated fix ${i}`,
+    //                 durableBecause: "simulated",
+    //             });
+    //         }
+    //         codexReply = JSON.stringify({
+    //             outcome: "OK",
+    //             missingFiles: [],
+    //             message: "",
+    //             issues: [],
+    //             fixes,
+    //             sectionsThatHoldUp: [],
+    //         });
+    //     }
+    // 
+    //     // --- process the reply as JSON into a verdict and feedback ---
+    //     const review = JSON.parse(codexReply);
+    //     if (review.outcome === "ERROR") {
+    //         return {
+    //             next: "WHAT_IS_REVIEW_VERDICT",
+    //             verdict: "ERROR",
+    //             codexNotes: `${review.message} missing: ${review.missingFiles.join(", ")}`,
+    //         };
+    //     }
+    //     const fixCount = review.fixes.length;
+    //     let verdict = "SCRAP";
+    //     if (fixCount === 0) verdict = "ACCEPT";
+    //     if (fixCount === 1) verdict = "AMEND_THEN_ACCEPT";
+    //     if (fixCount >= 2) {
+    //         if (fixCount <= 4) verdict = "AMEND";
+    //     }
+    //     const notes = [];
+    //     for (const fix of review.fixes) {
+    //         notes.push(`[${fix.sectionId}] ${fix.fix}\n\nDurable because: ${fix.durableBecause}`);
+    //     }
+    //     return {
+    //         next: "WHAT_IS_REVIEW_VERDICT",
+    //         verdict,
+    //         codexNotes: notes.join("\n\n"),
+    //     };
+    // },
+
+    // One block for "what is the review verdict?" and every path after it in pipeline-reviewPlan.mmd.
+    // WHAT_IS_REVIEW_VERDICT(input) {
+    //     const task = input.task!;
+    // 
+    //     // --- ERROR ---
+    //     if (input.verdict === "ERROR") {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REVIEW_PLAN",
+    //             exitType: "run-failed",
+    //             exitNote: "the plan review could not run",
+    //         };
+    //     }
+    // 
+    //     // --- ACCEPT ---
+    //     if (input.verdict === "ACCEPT") {
+    //         return { next: "IMPLEMENT_PIPELINE" };
+    //     }
+    // 
+    //     // --- AMEND_THEN_ACCEPT: write codex's fixes into the plan, then implement ---
+    //     if (input.verdict === "AMEND_THEN_ACCEPT") {
+    //         console.log(`  skipping: write codex's fixes into the sections of ${input.plan} and bump its revision`);
+    //         return { next: "IMPLEMENT_PIPELINE" };
+    //     }
+    // 
+    //     // --- AMEND / SCRAP: update the tasks.json entry ---
+    //     if (input.verdict !== "AMEND") {
+    //         if (input.verdict !== "SCRAP") {
+    //             throw new Error(`unknown review verdict ${JSON.stringify(input.verdict)}`);
+    //         }
+    //     }
+    //     task.codexReviewNotes = input.codexNotes;
+    //     const reviewCount = (task.planReviewCount ?? 0) + 1;
+    //     task.planReviewCount = reviewCount;
+    // 
+    //     // --- 2 codex reviews done? ---
+    //     if (reviewCount >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REVIEW_PLAN",
+    //             exitType: "plan-scrapped",
+    //             exitNote: "codex did not accept the plan in two reviews",
+    //         };
+    //     }
+    //     return { next: "PLAN_THE_TASK" };
+    // },
+
+    // REVIEW_PLAN_PIPELINE(input) {
+    //     return { next: "DRAFT_PLAN_INPUT" };
+    // },
+
+    // DRAFT_PLAN_INPUT(input) {
+    //     return { next: "CODEX_REVIEWS_PLAN" };
+    // },
+
+    // CODEX_REVIEWS_PLAN(input) {
+    //     return { next: "WHAT_IS_REVIEW_VERDICT" };
+    // },
+
+    // WHAT_IS_REVIEW_VERDICT(input) {
+    //     const verdicts = ["ACCEPT", "AMEND_THEN_ACCEPT", "AMEND", "SCRAP", "ERROR"];
+    //     if (!verdicts.includes(input.answer!)) throw new Error(`unknown review verdict ${JSON.stringify(input.answer)}`);
+    //     return { next: `VERDICT_${input.answer}` };
+    // },
+
+    // VERDICT_ACCEPT(input) {
+    //     return { next: "IMPLEMENT_PIPELINE" };
+    // },
+
+    // VERDICT_AMEND_THEN_ACCEPT(input) {
+    //     return { next: "IMPLEMENT_PIPELINE" };
+    // },
+
+    // VERDICT_AMEND(input) {
+    //     return { next: "UPDATE_TASK_ENTRY" };
+    // },
+
+    // VERDICT_SCRAP(input) {
+    //     return { next: "UPDATE_TASK_ENTRY" };
+    // },
+
+    // VERDICT_ERROR(input) {
+    //     return {
+    //         next: "EXIT_WORKFLOW_REVIEW_PLAN",
+    //         exitType: "run-failed",
+    //         exitNote: "the plan review could not run",
+    //     };
+    // },
+
+    // UPDATE_TASK_ENTRY(input) {
+    //     return { next: "ARE_2_REVIEWS_DONE" };
+    // },
+
+    // ARE_2_REVIEWS_DONE(input) {
+    //     if (input.task!.run!.counts!.CODEX_REVIEWS_PLAN >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REVIEW_PLAN",
+    //             exitType: "plan-scrapped",
+    //             exitNote: "codex did not accept the plan in two reviews",
+    //         };
+    //     }
+    //     return { next: "PLAN_THE_TASK" };
+    // },
+
+    // EXIT_WORKFLOW_REVIEW_PLAN(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-implement.mmd ---
 
-    IMPLEMENT_PIPELINE(input) {
-        return { next: "ACCEPTED_PLAN_INPUT" };
-    },
-
-    ACCEPTED_PLAN_INPUT(input) {
-        return { next: "IMPLEMENT_TASK" };
-    },
-
+    // Prompt block. The live script builds the implementer prompt from the brief, the plan, and the entry's notes.
     IMPLEMENT_TASK(input) {
-        return { next: "COMMIT_IMPLEMENTATION_IF_NEEDED" };
-    },
-
-    COMMIT_IMPLEMENTATION_IF_NEEDED(input) {
-        return { next: "TASK_TESTS_PIPELINE" };
-    },
-
-    EXIT_WORKFLOW_IMPLEMENT(input) {
-        return { next: null };
-    },
-
-    // --- pipeline-taskTests.mmd ---
-
-    TASK_TESTS_PIPELINE(input) {
-        return { next: "COMMITTED_WORK_INPUT" };
-    },
-
-    COMMITTED_WORK_INPUT(input) {
-        return { next: "RUN_TASK_TESTS" };
-    },
-
-    RUN_TASK_TESTS(input) {
-        return { next: "DO_TASK_TESTS_PASS" };
-    },
-
-    DO_TASK_TESTS_PASS(input) {
-        const pass = sim(input, "DO_TASK_TESTS_PASS") === "YES";
-        if (pass) {
-            return { next: "REVIEW_TESTS_PIPELINE" };
+        const task = input.task!;
+        const run = task.run!;
+        let prompt = `Implement task ${task.taskNumber} in ${run.worktree}, following ${input.plan}. Edit only the owned files and their tests. Do not commit. Answer with {message, additionalData: {implemented, notes}}.`;
+        if (task.codexReviewNotes !== undefined) {
+            prompt = `${prompt}\nNotes on the previous attempt:\n${task.codexReviewNotes}`;
         }
-        return { next: "ARE_2_TEST_FIXES_DONE" };
+        return {
+            next: "COMMIT_IMPLEMENTATION_IF_NEEDED",
+            prompt,
+        };
     },
 
-    ARE_2_TEST_FIXES_DONE(input) {
-        if (input.counts.AMEND_ENTRY_WITH_FAILING_TESTS >= 2) {
+    // One block for "commit if needed" and all of pipeline-taskTests.mmd.
+    COMMIT_IMPLEMENTATION_IF_NEEDED(input) {
+        const task = input.task!;
+        const run = task.run!;
+
+        // --- commit if needed ---
+        const commits = run.commits ?? [];
+        run.commits = commits;
+        let kind = "work";
+        if (commits.length > 0) kind = "repair";
+        console.log(`  skipping: git add -A && git commit -q in ${run.worktree} (Task-Step: implement, kind: ${kind})`);
+        commits.push({
+            hash: `sim-${commits.length + 1}`,
+            kind,
+            stepId: "implement",
+        });
+
+        // --- run task tests ---
+        console.log(`  skipping: node --test <the task's test files> in ${run.worktree}`);
+        const passed = sim(input, "DO_TASK_TESTS_PASS") === "YES";
+        let output = "";
+        if (!passed) output = "simulated failing task test output";
+        run.taskTests = { passed, output };
+
+        // --- do the task tests pass? ---
+        if (passed) {
+            return { next: "CODEX_REVIEWS_TESTS" };
+        }
+
+        // --- have 2 fixes already been attempted? ---
+        const attempts = run.attempts ?? {};
+        run.attempts = attempts;
+        const fixesSoFar = attempts.testFixes ?? 0;
+        if (fixesSoFar >= 2) {
             return {
-                next: "EXIT_WORKFLOW_TASK_TESTS",
+                next: "FAILURES_EXIT",
                 exitType: "tests-red",
                 exitNote: "task tests still failing after 2 fix attempts",
             };
         }
-        return { next: "AMEND_ENTRY_WITH_FAILING_TESTS" };
+
+        // --- amend tasks.json entry with the failing tests ---
+        task.codexReviewNotes = `The task tests failed. Fix the cause, and change no test.\n\n${output}`;
+        attempts.testFixes = fixesSoFar + 1;
+        return { next: "IMPLEMENT_TASK" };
     },
 
-    AMEND_ENTRY_WITH_FAILING_TESTS(input) {
-        return { next: "IMPLEMENT_PIPELINE" };
-    },
+    // IMPLEMENT_PIPELINE(input) {
+    //     return { next: "ACCEPTED_PLAN_INPUT" };
+    // },
 
-    EXIT_WORKFLOW_TASK_TESTS(input) {
-        return { next: null };
-    },
+    // ACCEPTED_PLAN_INPUT(input) {
+    //     return { next: "IMPLEMENT_TASK" };
+    // },
+
+    // IMPLEMENT_TASK(input) {
+    //     return { next: "COMMIT_IMPLEMENTATION_IF_NEEDED" };
+    // },
+
+    // COMMIT_IMPLEMENTATION_IF_NEEDED(input) {
+    //     return { next: "TASK_TESTS_PIPELINE" };
+    // },
+
+    // EXIT_WORKFLOW_IMPLEMENT(input) {
+    //     return { next: null };
+    // },
+
+    // --- pipeline-taskTests.mmd ---
+
+    // TASK_TESTS_PIPELINE(input) {
+    //     return { next: "COMMITTED_WORK_INPUT" };
+    // },
+
+    // COMMITTED_WORK_INPUT(input) {
+    //     return { next: "RUN_TASK_TESTS" };
+    // },
+
+    // RUN_TASK_TESTS(input) {
+    //     return { next: "DO_TASK_TESTS_PASS" };
+    // },
+
+    // DO_TASK_TESTS_PASS(input) {
+    //     const pass = sim(input, "DO_TASK_TESTS_PASS") === "YES";
+    //     if (pass) {
+    //         return { next: "REVIEW_TESTS_PIPELINE" };
+    //     }
+    //     return { next: "ARE_2_TEST_FIXES_DONE" };
+    // },
+
+    // ARE_2_TEST_FIXES_DONE(input) {
+    //     if (input.task!.run!.counts!.AMEND_ENTRY_WITH_FAILING_TESTS >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_TASK_TESTS",
+    //             exitType: "tests-red",
+    //             exitNote: "task tests still failing after 2 fix attempts",
+    //         };
+    //     }
+    //     return { next: "AMEND_ENTRY_WITH_FAILING_TESTS" };
+    // },
+
+    // AMEND_ENTRY_WITH_FAILING_TESTS(input) {
+    //     return { next: "IMPLEMENT_PIPELINE" };
+    // },
+
+    // EXIT_WORKFLOW_TASK_TESTS(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-reviewTests.mmd ---
 
-    REVIEW_TESTS_PIPELINE(input) {
-        return { next: "GREEN_IMPLEMENTATION_INPUT" };
-    },
-
-    GREEN_IMPLEMENTATION_INPUT(input) {
-        return { next: "CODEX_REVIEWS_TESTS" };
-    },
-
+    // Prompt block. The live script writes the implementation diff, then builds the test-review prompt.
     CODEX_REVIEWS_TESTS(input) {
-        return { next: "ARE_TESTS_FLAGGED" };
+        const task = input.task!;
+        const run = task.run!;
+        const diffFile = `${run.worktree}/plans/implementation-diff-${task.taskNumber}.patch`;
+        const prompt = `Run this with Bash: git -C ${run.worktree} diff <mergeBase>..HEAD > ${diffFile}. Then run the read-only reviewer over the brief, ${input.plan}, the test files, and ${diffFile}. Return its {flagged, notes} JSON, unchanged.`;
+        return {
+            next: "ARE_TESTS_FLAGGED",
+            prompt,
+        };
     },
 
+    // One block for "are the tests flagged?" onward, and all of pipeline-rebasePreamble.mmd.
     ARE_TESTS_FLAGGED(input) {
-        const flagged = input.answer === "YES";
-        if (flagged) {
-            return { next: "ARE_2_TEST_REVIEWS_DONE" };
+        const task = input.task!;
+        const run = task.run!;
+        const review = JSON.parse(input.answer!);
+
+        // --- are the tests flagged? ---
+        if (review.flagged === true) {
+            // --- 2 codex test reviews done? the live check: the entry already carries review notes ---
+            const alreadyAmended = (task.codexReviewNotes ?? "").trim() !== "";
+            if (alreadyAmended) {
+                return {
+                    next: "FAILURES_EXIT",
+                    exitType: "tests-flagged",
+                    exitNote: "task tests failed codex review",
+                };
+            }
+
+            // --- amend tasks.json entry with codex's notes and fixes ---
+            task.codexReviewNotes = `A reviewer flagged the task tests. Apply every fix below.\n\n${review.notes}`;
+            return { next: "IMPLEMENT_TASK" };
         }
-        return { next: "REBASE_PREAMBLE_PIPELINE" };
-    },
 
-    ARE_2_TEST_REVIEWS_DONE(input) {
-        if (input.counts.CODEX_REVIEWS_TESTS >= 2) {
-            return {
-                next: "EXIT_WORKFLOW_REVIEW_TESTS",
-                exitType: "tests-flagged",
-                exitNote: "task tests failed codex review",
-            };
+        // --- rebase preamble: try to lock the source repo, wait 5s, give up after 15 minutes ---
+        const lockOwner = `${input.runId}:${task.taskNumber}`;
+        let waitedSeconds = 0;
+        while (true) {
+            console.log(`  skipping: write the source repo lock file for owner ${lockOwner}`);
+            const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
+            if (acquired) {
+                run.sourceLockOwner = lockOwner;
+                return {
+                    next: "REBASE_ONTO_TARGET_BRANCH",
+                    suiteFixAttempts: 0,
+                };
+            }
+            if (waitedSeconds >= 15 * 60) {
+                return {
+                    next: "FAILURES_EXIT",
+                    exitType: "run-failed",
+                    exitNote: "the source repo lock did not come free within 15 minutes",
+                };
+            }
+            console.log("  skipping: wait 5s");
+            waitedSeconds += 5;
         }
-        return { next: "AMEND_ENTRY_WITH_CODEX_NOTES" };
     },
 
-    AMEND_ENTRY_WITH_CODEX_NOTES(input) {
-        return { next: "IMPLEMENT_PIPELINE" };
-    },
+    // REVIEW_TESTS_PIPELINE(input) {
+    //     return { next: "GREEN_IMPLEMENTATION_INPUT" };
+    // },
 
-    EXIT_WORKFLOW_REVIEW_TESTS(input) {
-        return { next: null };
-    },
+    // GREEN_IMPLEMENTATION_INPUT(input) {
+    //     return { next: "CODEX_REVIEWS_TESTS" };
+    // },
+
+    // CODEX_REVIEWS_TESTS(input) {
+    //     return { next: "ARE_TESTS_FLAGGED" };
+    // },
+
+    // ARE_TESTS_FLAGGED(input) {
+    //     const flagged = input.answer === "YES";
+    //     if (flagged) {
+    //         return { next: "ARE_2_TEST_REVIEWS_DONE" };
+    //     }
+    //     return { next: "REBASE_PREAMBLE_PIPELINE" };
+    // },
+
+    // ARE_2_TEST_REVIEWS_DONE(input) {
+    //     if (input.task!.run!.counts!.CODEX_REVIEWS_TESTS >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REVIEW_TESTS",
+    //             exitType: "tests-flagged",
+    //             exitNote: "task tests failed codex review",
+    //         };
+    //     }
+    //     return { next: "AMEND_ENTRY_WITH_CODEX_NOTES" };
+    // },
+
+    // AMEND_ENTRY_WITH_CODEX_NOTES(input) {
+    //     return { next: "IMPLEMENT_PIPELINE" };
+    // },
+
+    // EXIT_WORKFLOW_REVIEW_TESTS(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-rebasePreamble.mmd ---
 
-    REBASE_PREAMBLE_PIPELINE(input) {
-        return { next: "FINISHED_IMPLEMENTATION_INPUT" };
-    },
+    // REBASE_PREAMBLE_PIPELINE(input) {
+    //     return { next: "FINISHED_IMPLEMENTATION_INPUT" };
+    // },
 
-    FINISHED_IMPLEMENTATION_INPUT(input) {
-        return { next: "LOCK_SOURCE_REPO" };
-    },
+    // FINISHED_IMPLEMENTATION_INPUT(input) {
+    //     return { next: "LOCK_SOURCE_REPO" };
+    // },
 
-    LOCK_SOURCE_REPO(input) {
-        return { next: "WAS_LOCK_ACQUIRED" };
-    },
+    // LOCK_SOURCE_REPO(input) {
+    //     return { next: "WAS_LOCK_ACQUIRED" };
+    // },
 
-    WAS_LOCK_ACQUIRED(input) {
-        const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
-        if (acquired) {
-            return { next: "REBASE_PIPELINE" };
-        }
-        return { next: "HAVE_15_MINUTES_PASSED" };
-    },
+    // WAS_LOCK_ACQUIRED(input) {
+    //     const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
+    //     if (acquired) {
+    //         return { next: "REBASE_PIPELINE" };
+    //     }
+    //     return { next: "HAVE_15_MINUTES_PASSED" };
+    // },
 
-    HAVE_15_MINUTES_PASSED(input) {
-        if ((input.counts.WAIT_FOR_LOCK ?? 0) * 5 >= 15 * 60) {
-            return {
-                next: "EXIT_WORKFLOW_REBASE_PREAMBLE",
-                exitType: "run-failed",
-                exitNote: "the source repo lock did not come free within 15 minutes",
-            };
-        }
-        return { next: "WAIT_FOR_LOCK" };
-    },
+    // HAVE_15_MINUTES_PASSED(input) {
+    //     if ((input.task!.run!.counts!.WAIT_FOR_LOCK ?? 0) * 5 >= 15 * 60) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REBASE_PREAMBLE",
+    //             exitType: "run-failed",
+    //             exitNote: "the source repo lock did not come free within 15 minutes",
+    //         };
+    //     }
+    //     return { next: "WAIT_FOR_LOCK" };
+    // },
 
-    WAIT_FOR_LOCK(input) {
-        return { next: "LOCK_SOURCE_REPO" };
-    },
+    // WAIT_FOR_LOCK(input) {
+    //     return { next: "LOCK_SOURCE_REPO" };
+    // },
 
-    EXIT_WORKFLOW_REBASE_PREAMBLE(input) {
-        return { next: null };
-    },
+    // EXIT_WORKFLOW_REBASE_PREAMBLE(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-rebase.mmd ---
 
-    REBASE_PIPELINE(input) {
-        return { next: "SOURCE_REPO_LOCKED_INPUT" };
-    },
-
-    SOURCE_REPO_LOCKED_INPUT(input) {
-        return { next: "REBASE_ONTO_TARGET_BRANCH" };
-    },
-
+    // One block for the rebase and its conflict check. A merge retry re-enters here.
     REBASE_ONTO_TARGET_BRANCH(input) {
-        return { next: "DID_REBASE_REPORT_CONFLICTS" };
-    },
+        const task = input.task!;
+        const run = task.run!;
+        console.log(`  skipping: git rebase onto the target branch in ${run.worktree}, deepest submodule first, skipping every layer the receipt records as landed`);
 
-    DID_REBASE_REPORT_CONFLICTS(input) {
-        const conflicts = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
-        if (conflicts) {
-            return { next: "ARE_2_CONFLICT_FIXES_DONE" };
+        // --- did the rebase report conflicts? ---
+        const conflicted = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
+        if (!conflicted) {
+            console.log("  skipping: record sourceTipsAtRebase and the rebase step receipt in tasks.json");
+            return { next: "RUN_FULL_SUITE" };
         }
-        return { next: "SUITE_PIPELINE" };
-    },
 
-    ARE_2_CONFLICT_FIXES_DONE(input) {
-        if (input.counts.FIX_CONFLICTS >= 2) {
+        // --- 2 conflict fixes done? ---
+        const attempts = run.attempts ?? {};
+        run.attempts = attempts;
+        const fixesSoFar = attempts["pipeline-rebase-conflict-fix"] ?? 0;
+        if (fixesSoFar >= 2) {
             return {
-                next: "EXIT_WORKFLOW_REBASE",
+                next: "FAILURES_EXIT",
                 exitType: "rebase-stuck",
                 exitNote: "the rebase did not advance after 2 conflict fixes",
             };
         }
+        attempts["pipeline-rebase-conflict-fix"] = fixesSoFar + 1;
         return { next: "FIX_CONFLICTS" };
     },
 
+    // Prompt block. The live script lists the conflicted files with git, then builds the fix prompt.
     FIX_CONFLICTS(input) {
-        return { next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED" };
+        const run = input.task!.run!;
+        const prompt = `A rebase in ${run.worktree} is stopped on conflict markers. List the files with git diff --name-only --diff-filter=U -z, resolve every conflict in them, and never run git rebase --continue. Answer with {resolved, unresolvedPaths}.`;
+        return {
+            next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
+            prompt,
+        };
     },
 
+    // One block for "commit if needed", "continue the rebase", and "is the rebase finished?".
     COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED(input) {
-        return { next: "CONTINUE_REBASE" };
-    },
+        const task = input.task!;
+        const run = task.run!;
 
-    CONTINUE_REBASE(input) {
-        return { next: "IS_REBASE_FINISHED" };
-    },
+        // --- commit if needed ---
+        const commits = run.commits ?? [];
+        run.commits = commits;
+        console.log(`  skipping: git add -A && git commit -q in the stopped layer of ${run.worktree} (Task-Step: rebase)`);
+        commits.push({
+            hash: `sim-${commits.length + 1}`,
+            kind: "repair",
+            stepId: "rebase",
+        });
 
-    IS_REBASE_FINISHED(input) {
+        // --- continue the rebase ---
+        console.log(`  skipping: GIT_EDITOR=true git rebase --continue in ${run.worktree}, then resume the deepest-first walk`);
+
+        // --- is the rebase finished? ---
         const finished = sim(input, "IS_REBASE_FINISHED") === "YES";
         if (finished) {
-            return { next: "SUITE_PIPELINE" };
+            console.log("  skipping: record sourceTipsAtRebase and the rebase step receipt in tasks.json");
+            return { next: "RUN_FULL_SUITE" };
         }
-        return { next: "DID_REBASE_REPORT_CONFLICTS" };
+
+        // --- it stopped on new conflicts: 2 conflict fixes done? ---
+        const attempts = run.attempts ?? {};
+        run.attempts = attempts;
+        const fixesSoFar = attempts["pipeline-rebase-conflict-fix"] ?? 0;
+        if (fixesSoFar >= 2) {
+            return {
+                next: "FAILURES_EXIT",
+                exitType: "rebase-stuck",
+                exitNote: "the rebase did not advance after 2 conflict fixes",
+            };
+        }
+        attempts["pipeline-rebase-conflict-fix"] = fixesSoFar + 1;
+        return { next: "FIX_CONFLICTS" };
     },
+
+    // REBASE_PIPELINE(input) {
+    //     return { next: "SOURCE_REPO_LOCKED_INPUT" };
+    // },
+
+    // SOURCE_REPO_LOCKED_INPUT(input) {
+    //     return { next: "REBASE_ONTO_TARGET_BRANCH" };
+    // },
+
+    // REBASE_ONTO_TARGET_BRANCH(input) {
+    //     return { next: "DID_REBASE_REPORT_CONFLICTS" };
+    // },
+
+    // DID_REBASE_REPORT_CONFLICTS(input) {
+    //     const conflicts = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
+    //     if (conflicts) {
+    //         return { next: "ARE_2_CONFLICT_FIXES_DONE" };
+    //     }
+    //     return { next: "SUITE_PIPELINE" };
+    // },
+
+    // ARE_2_CONFLICT_FIXES_DONE(input) {
+    //     if (input.task!.run!.counts!.FIX_CONFLICTS >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_REBASE",
+    //             exitType: "rebase-stuck",
+    //             exitNote: "the rebase did not advance after 2 conflict fixes",
+    //         };
+    //     }
+    //     return { next: "FIX_CONFLICTS" };
+    // },
+
+    // FIX_CONFLICTS(input) {
+    //     return { next: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED" };
+    // },
+
+    // COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED(input) {
+    //     return { next: "CONTINUE_REBASE" };
+    // },
+
+    // CONTINUE_REBASE(input) {
+    //     return { next: "IS_REBASE_FINISHED" };
+    // },
+
+    // IS_REBASE_FINISHED(input) {
+    //     const finished = sim(input, "IS_REBASE_FINISHED") === "YES";
+    //     if (finished) {
+    //         return { next: "SUITE_PIPELINE" };
+    //     }
+    //     return { next: "DID_REBASE_REPORT_CONFLICTS" };
+    // },
 
     AGENT_ERRORED(input) {
         return {
-            next: "EXIT_WORKFLOW_REBASE",
+            next: "FAILURES_EXIT",
             exitType: "agent-failed",
             exitNote: "the agent returned nothing usable",
         };
     },
 
-    EXIT_WORKFLOW_REBASE(input) {
-        return { next: null };
-    },
+    // EXIT_WORKFLOW_REBASE(input) {
+    //     return { next: null };
+    // },
 
     // --- pipeline-suite.mmd ---
 
-    SUITE_PIPELINE(input) {
-        return { next: "REBASED_WORKTREE_INPUT" };
-    },
-
-    REBASED_WORKTREE_INPUT(input) {
-        return { next: "RUN_FULL_SUITE" };
-    },
-
+    // One block for pipeline-suite.mmd (minus its fix prompt), pipeline-merge.mmd, and pipeline-mergeSucceededExit.mmd.
     RUN_FULL_SUITE(input) {
-        return { next: "DO_ALL_TESTS_PASS" };
-    },
+        const task = input.task!;
+        const run = task.run!;
+        const commits = run.commits ?? [];
+        run.commits = commits;
 
-    DO_ALL_TESTS_PASS(input) {
-        const pass = sim(input, "DO_ALL_TESTS_PASS") === "YES";
-        if (pass) {
-            return { next: "DID_CHANGES_STAY_INSIDE_FENCE" };
+        // --- commit the suite fix if needed ---
+        if (input.suiteFixAttempts > 0) {
+            console.log(`  skipping: git add -A && git commit -q in ${run.worktree} (Task-Step: fix-suite-${input.suiteFixAttempts})`);
+            commits.push({
+                hash: `sim-${commits.length + 1}`,
+                kind: "repair",
+                stepId: `fix-suite-${input.suiteFixAttempts}`,
+            });
         }
-        return { next: "ARE_2_SUITE_FIXES_DONE" };
-    },
 
-    ARE_2_SUITE_FIXES_DONE(input) {
-        if (input.counts.FIX_THE_CODEBASE_FOR_SUITE >= 2) {
+        // --- run the full suite ---
+        console.log(`  skipping: run each layer's full suite command in ${run.worktree}, deepest first`);
+        const passed = sim(input, "DO_ALL_TESTS_PASS") === "YES";
+        let output = "";
+        if (!passed) output = "simulated failing suite output";
+        run.fullSuite = { passed, output };
+
+        // --- do all tests pass? ---
+        if (!passed) {
+            // --- 2 suite fix attempts done? ---
+            if (input.suiteFixAttempts >= 2) {
+                return {
+                    next: "FAILURES_EXIT",
+                    exitType: "suite-red",
+                    exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved.",
+                };
+            }
             return {
-                next: "EXIT_WORKFLOW_SUITE",
-                exitType: "suite-red",
-                exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved.",
+                next: "FIX_THE_CODEBASE_FOR_SUITE",
+                suiteFixAttempts: input.suiteFixAttempts + 1,
             };
         }
-        return { next: "FIX_THE_CODEBASE_FOR_SUITE" };
-    },
 
-    FIX_THE_CODEBASE_FOR_SUITE(input) {
-        return { next: "COMMIT_SUITE_FIX_IF_NEEDED" };
-    },
-
-    COMMIT_SUITE_FIX_IF_NEEDED(input) {
-        return { next: "RUN_FULL_SUITE" };
-    },
-
-    DID_CHANGES_STAY_INSIDE_FENCE(input) {
-        if (sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") !== "YES") {
+        // --- did every change stay inside the task's file fence? ---
+        console.log(`  skipping: git diff --name-only <baseRef>...HEAD per layer in ${run.worktree}, checked against the task's files`);
+        const insideFence = sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") === "YES";
+        if (!insideFence) {
             return {
-                next: "EXIT_WORKFLOW_SUITE",
+                next: "FAILURES_EXIT",
                 exitType: "fence-violation",
                 exitNote: "a repair edited files the task does not own. nothing merged. worktree preserved.",
             };
         }
-        return { next: "MERGE_PIPELINE" };
-    },
 
-    EXIT_WORKFLOW_SUITE(input) {
-        return { next: null };
-    },
+        // --- merge worktrees and submodules, no fast-forward; each layer writes its merge ref as it lands ---
+        console.log(`  skipping: git merge --no-ff task-${task.taskNumber} on each layer's target branch, writing refs/taskTools/merged-commits/... as each lands`);
 
-    // --- pipeline-merge.mmd ---
+        // --- read the publication state from the layer merge refs ---
+        console.log("  skipping: git rev-parse --verify refs/taskTools/merged-commits/... per layer");
+        const publicationState = sim(input, "WHAT_IS_PUBLICATION_STATE")!;
+        run.publicationState = publicationState;
 
-    MERGE_PIPELINE(input) {
-        return { next: "GREEN_WORKTREE_INPUT" };
-    },
-
-    GREEN_WORKTREE_INPUT(input) {
-        return { next: "MERGE_WORKTREES" };
-    },
-
-    MERGE_WORKTREES(input) {
-        return { next: "READ_MERGE_PUBLICATION_STATE" };
-    },
-
-    READ_MERGE_PUBLICATION_STATE(input) {
-        return { next: "WHAT_IS_PUBLICATION_STATE" };
-    },
-
-    WHAT_IS_PUBLICATION_STATE(input) {
-        const state = sim(input, "WHAT_IS_PUBLICATION_STATE");
-        if (state === "ALL") return { next: "PUBLICATION_ALL" };
-        if (state === "NONE") return { next: "PUBLICATION_NONE" };
-        if (state === "PARTIAL") return { next: "PUBLICATION_PARTIAL" };
-        throw new Error(`unknown publication state ${JSON.stringify(state)}`);
-    },
-
-    PUBLICATION_ALL(input) {
-        return { next: "EXIT_WORKFLOW_SUCCESS" };
-    },
-
-    PUBLICATION_NONE(input) {
-        return { next: "ARE_2_MERGE_ATTEMPTS_DONE" };
-    },
-
-    PUBLICATION_PARTIAL(input) {
-        return {
-            next: "EXIT_WORKFLOW_MERGE",
-            exitType: "partially-published",
-            exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.",
-        };
-    },
-
-    ARE_2_MERGE_ATTEMPTS_DONE(input) {
-        if (input.counts.MERGE_WORKTREES >= 2) {
+        // --- what is the publication state? ---
+        if (publicationState === "SOME LANDED") {
             return {
-                next: "EXIT_WORKFLOW_MERGE",
-                exitType: "merge-failed",
-                exitNote: "nothing landed after 2 attempts. worktree preserved.",
+                next: "FAILURES_EXIT",
+                exitType: "partially-published",
+                exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.",
             };
         }
-        return { next: "REBASE_PIPELINE" };
-    },
+        if (publicationState === "NONE LANDED") {
+            // --- 2 merge attempts done? the live check raises the count on every visit ---
+            const attempts = run.attempts ?? {};
+            run.attempts = attempts;
+            const mergeAttempts = (attempts.merge ?? 0) + 1;
+            attempts.merge = mergeAttempts;
+            if (mergeAttempts >= 2) {
+                return {
+                    next: "FAILURES_EXIT",
+                    exitType: "merge-failed",
+                    exitNote: "nothing landed after 2 attempts. worktree preserved.",
+                };
+            }
+            // the target branch tip moved. the receipt travels with the run.
+            return { next: "REBASE_ONTO_TARGET_BRANCH" };
+        }
+        if (publicationState !== "ALL LANDED") {
+            throw new Error(`unknown publication state ${JSON.stringify(publicationState)}`);
+        }
 
-    EXIT_WORKFLOW_MERGE(input) {
-        return { next: null };
-    },
+        // --- merge succeeded exit: write exit type completed to tasks.json (the point of no return) ---
+        run.exitType = "completed";
+        run.exitNote = "All layers merged successfully.";
 
-    // --- pipeline-mergeSucceededExit.mmd ---
+        // --- record merge commit hashes to tasks.json ---
+        commits.push({
+            hash: `sim-${commits.length + 1}`,
+            kind: "merge",
+            stepId: "merge",
+        });
 
-    EXIT_WORKFLOW_SUCCESS(input) {
-        return { next: "MERGE_RECEIPT_INPUT" };
-    },
+        // --- record modified files to tasks.json ---
+        console.log("  skipping: git diff --name-only <baseRef>...HEAD per layer to record modifiedFiles");
+        run.modifiedFiles = task.files ?? [];
 
-    MERGE_RECEIPT_INPUT(input) {
-        return { next: "RECORD_MERGE_COMMIT_HASHES" };
-    },
+        // --- clean up worktrees, leases, persistence refs and source lock ---
+        console.log(`  skipping: delete the generated docs, the merge refs, the worktree ${run.worktree} and its branch; release the lease, then the source lock`);
+        delete run.worktree;
+        delete run.leaseRunId;
+        delete run.sourceLockOwner;
 
-    RECORD_MERGE_COMMIT_HASHES(input) {
-        return { next: "WRITE_EXIT_TYPE_COMPLETED" };
-    },
+        // --- build the closure note from the recorded run ---
+        const closureLines = [`Task ${task.taskNumber} ${run.exitType}.`, "", "Commits:"];
+        for (const commit of commits) {
+            closureLines.push(`  ${commit.hash}  ${commit.kind}  ${commit.stepId}`);
+        }
+        closureLines.push(`Modified files: ${run.modifiedFiles.join(", ")}`);
+        const closureNote = closureLines.join("\n");
 
-    WRITE_EXIT_TYPE_COMPLETED(input) {
-        return {
-            next: "RECORD_MODIFIED_FILES_SUCCESS",
-            exitType: "completed",
-        };
-    },
+        // --- mark task inactive in tasks.json ---
+        run.active = false;
+        run.endedAt = new Date().toISOString();
 
-    RECORD_MODIFIED_FILES_SUCCESS(input) {
-        return { next: "CLEAN_UP_WORKTREES" };
-    },
-
-    CLEAN_UP_WORKTREES(input) {
-        delete input.task!.run!.worktree;
-        delete input.task!.run!.leaseRunId;
-        return { next: "BUILD_CLOSURE_NOTE" };
-    },
-
-    BUILD_CLOSURE_NOTE(input) {
-        return { next: "MARK_TASK_INACTIVE_SUCCESS" };
-    },
-
-    MARK_TASK_INACTIVE_SUCCESS(input) {
-        input.task!.run!.active = false;
-        return { next: "ARCHIVE_TASK" };
-    },
-
-    ARCHIVE_TASK(input) {
+        // --- move task to completedTasks.json and update tasks blocked by it ---
+        console.log(`  skipping: move task ${task.taskNumber} from tasks.json to completedTasks.json`);
         const remainingTasks = [];
         for (const openTask of input.tasks) {
-            if (openTask !== input.task) {
-                remainingTasks.push(openTask);
+            if (openTask === task) continue;
+            if (openTask.blockedBy !== undefined) {
+                const remainingBlockers = [];
+                for (const blocker of openTask.blockedBy) {
+                    if (blocker.taskNum !== task.taskNumber) remainingBlockers.push(blocker);
+                }
+                openTask.blockedBy = remainingBlockers;
             }
+            remainingTasks.push(openTask);
         }
+
+        // --- report the closure note, then stop ---
+        console.log(closureNote);
         return {
-            next: "REPORT_CLOSURE_NOTE",
+            next: null,
             tasks: remainingTasks,
         };
     },
 
-    REPORT_CLOSURE_NOTE(input) {
-        return { next: "STOP" };
+    // Prompt block. The live script builds the fix prompt from the owned files and the failing suite output.
+    FIX_THE_CODEBASE_FOR_SUITE(input) {
+        const run = input.task!.run!;
+        const prompt = `Fix the cause of every failure below in ${run.worktree}, editing only the owned files and never a test. Do not commit. Answer with {fixSummary}.\n\nFAILING SUITE OUTPUT:\n${run.fullSuite!.output}`;
+        return {
+            next: "RUN_FULL_SUITE",
+            prompt,
+        };
     },
 
-    STOP(input) {
-        return { next: null };
-    },
+    // SUITE_PIPELINE(input) {
+    //     return { next: "REBASED_WORKTREE_INPUT" };
+    // },
+
+    // REBASED_WORKTREE_INPUT(input) {
+    //     return { next: "RUN_FULL_SUITE" };
+    // },
+
+    // RUN_FULL_SUITE(input) {
+    //     return { next: "DO_ALL_TESTS_PASS" };
+    // },
+
+    // DO_ALL_TESTS_PASS(input) {
+    //     const pass = sim(input, "DO_ALL_TESTS_PASS") === "YES";
+    //     if (pass) {
+    //         return { next: "DID_CHANGES_STAY_INSIDE_FENCE" };
+    //     }
+    //     return { next: "ARE_2_SUITE_FIXES_DONE" };
+    // },
+
+    // ARE_2_SUITE_FIXES_DONE(input) {
+    //     if (input.task!.run!.counts!.FIX_THE_CODEBASE_FOR_SUITE >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_SUITE",
+    //             exitType: "suite-red",
+    //             exitNote: "full suite still red after 2 fix attempts. merge aborted. worktree preserved.",
+    //         };
+    //     }
+    //     return { next: "FIX_THE_CODEBASE_FOR_SUITE" };
+    // },
+
+    // FIX_THE_CODEBASE_FOR_SUITE(input) {
+    //     return { next: "COMMIT_SUITE_FIX_IF_NEEDED" };
+    // },
+
+    // COMMIT_SUITE_FIX_IF_NEEDED(input) {
+    //     return { next: "RUN_FULL_SUITE" };
+    // },
+
+    // DID_CHANGES_STAY_INSIDE_FENCE(input) {
+    //     if (sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") !== "YES") {
+    //         return {
+    //             next: "EXIT_WORKFLOW_SUITE",
+    //             exitType: "fence-violation",
+    //             exitNote: "a repair edited files the task does not own. nothing merged. worktree preserved.",
+    //         };
+    //     }
+    //     return { next: "MERGE_PIPELINE" };
+    // },
+
+    // EXIT_WORKFLOW_SUITE(input) {
+    //     return { next: null };
+    // },
+
+    // --- pipeline-merge.mmd ---
+
+    // MERGE_PIPELINE(input) {
+    //     return { next: "GREEN_WORKTREE_INPUT" };
+    // },
+
+    // GREEN_WORKTREE_INPUT(input) {
+    //     return { next: "MERGE_WORKTREES" };
+    // },
+
+    // MERGE_WORKTREES(input) {
+    //     return { next: "READ_MERGE_PUBLICATION_STATE" };
+    // },
+
+    // READ_MERGE_PUBLICATION_STATE(input) {
+    //     return { next: "WHAT_IS_PUBLICATION_STATE" };
+    // },
+
+    // WHAT_IS_PUBLICATION_STATE(input) {
+    //     const state = sim(input, "WHAT_IS_PUBLICATION_STATE");
+    //     if (state === "ALL") return { next: "PUBLICATION_ALL" };
+    //     if (state === "NONE") return { next: "PUBLICATION_NONE" };
+    //     if (state === "PARTIAL") return { next: "PUBLICATION_PARTIAL" };
+    //     throw new Error(`unknown publication state ${JSON.stringify(state)}`);
+    // },
+
+    // PUBLICATION_ALL(input) {
+    //     return { next: "EXIT_WORKFLOW_SUCCESS" };
+    // },
+
+    // PUBLICATION_NONE(input) {
+    //     return { next: "ARE_2_MERGE_ATTEMPTS_DONE" };
+    // },
+
+    // PUBLICATION_PARTIAL(input) {
+    //     return {
+    //         next: "EXIT_WORKFLOW_MERGE",
+    //         exitType: "partially-published",
+    //         exitNote: "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.",
+    //     };
+    // },
+
+    // ARE_2_MERGE_ATTEMPTS_DONE(input) {
+    //     if (input.task!.run!.counts!.MERGE_WORKTREES >= 2) {
+    //         return {
+    //             next: "EXIT_WORKFLOW_MERGE",
+    //             exitType: "merge-failed",
+    //             exitNote: "nothing landed after 2 attempts. worktree preserved.",
+    //         };
+    //     }
+    //     return { next: "REBASE_PIPELINE" };
+    // },
+
+    // EXIT_WORKFLOW_MERGE(input) {
+    //     return { next: null };
+    // },
+
+    // --- pipeline-mergeSucceededExit.mmd ---
+
+    // EXIT_WORKFLOW_SUCCESS(input) {
+    //     return { next: "MERGE_RECEIPT_INPUT" };
+    // },
+
+    // MERGE_RECEIPT_INPUT(input) {
+    //     return { next: "RECORD_MERGE_COMMIT_HASHES" };
+    // },
+
+    // RECORD_MERGE_COMMIT_HASHES(input) {
+    //     return { next: "WRITE_EXIT_TYPE_COMPLETED" };
+    // },
+
+    // WRITE_EXIT_TYPE_COMPLETED(input) {
+    //     return {
+    //         next: "RECORD_MODIFIED_FILES_SUCCESS",
+    //         exitType: "completed",
+    //     };
+    // },
+
+    // RECORD_MODIFIED_FILES_SUCCESS(input) {
+    //     return { next: "CLEAN_UP_WORKTREES" };
+    // },
+
+    // CLEAN_UP_WORKTREES(input) {
+    //     delete input.task!.run!.worktree;
+    //     delete input.task!.run!.leaseRunId;
+    //     return { next: "BUILD_CLOSURE_NOTE" };
+    // },
+
+    // BUILD_CLOSURE_NOTE(input) {
+    //     return { next: "MARK_TASK_INACTIVE_SUCCESS" };
+    // },
+
+    // MARK_TASK_INACTIVE_SUCCESS(input) {
+    //     input.task!.run!.active = false;
+    //     return { next: "ARCHIVE_TASK" };
+    // },
+
+    // ARCHIVE_TASK(input) {
+    //     const remainingTasks = [];
+    //     for (const openTask of input.tasks) {
+    //         if (openTask !== input.task) {
+    //             remainingTasks.push(openTask);
+    //         }
+    //     }
+    //     return {
+    //         next: "REPORT_CLOSURE_NOTE",
+    //         tasks: remainingTasks,
+    //     };
+    // },
+
+    // REPORT_CLOSURE_NOTE(input) {
+    //     return { next: "STOP" };
+    // },
+
+    // STOP(input) {
+    //     return { next: null };
+    // },
 };
 
 // --- the scaffolding between the workflow loop and a block's script ---
@@ -760,7 +1566,6 @@ type Block = {
 // The function the hook runs for a block. In the live system, a scripts/steps/*.ts file.
 type Script = {
     run: (input: Input) => Packet;
-    isPromptGenerating: boolean;
 };
 
 // What one script execution produced, before the hook decides whether to keep walking.
@@ -772,6 +1577,7 @@ type RunStepResult = {
 
 // The hook's output. This lands in the agent's context as the directions to follow.
 type Directions = {
+    block: string;
     prompt: string;
     payload: Input;
     previousBlockWasTerminal: boolean;
@@ -791,16 +1597,139 @@ const pipelines = [
     "taskTests", "reviewTests", "rebasePreamble", "rebase", "suite", "merge", "mergeSucceededExit",
 ];
 
-// The live templates mark these scriptSignal: "prompt". Every other block continues.
-const promptGeneratingBlocks = new Set([
-    "PLAN_THE_TASK", "CODEX_REVIEWS_PLAN", "IMPLEMENT_TASK", "CODEX_REVIEWS_TESTS", "FIX_CONFLICTS", "FIX_THE_CODEBASE_FOR_SUITE",
-]);
+// The fields each block reads from the run state. The live hook keeps these in *.template.json.
+const blockInputFields: Record<string, (keyof State)[]> = {
+    PREAMBLE_STATUS_CHECK: ["taskNumber", "tasks", "runId"],
+    DOCUMENT_GENERATION: ["docsMode"],
+    PREAMBLE_TASK_NUMBER_INPUT: [],
+    IS_TASK_NUMBER_VALID: ["task"],
+    IS_TASK_BLOCKED: ["task", "tasks"],
+    IS_TASK_ACTIVE: ["task"],
+    MARK_TASK_ACTIVE: ["task"],
+    WORKTREE_CHECK_PIPELINE: [],
+    REPORT_ONLY_EXIT: ["taskNumber", "exitType", "exitNote"],
+    ACTIVE_TASK_INPUT: [],
+    DOES_WORKTREE_EXIST: ["task"],
+    IS_WORKTREE_SAFE_TO_USE: ["task"],
+    IS_PREVIOUS_RUN_RESUMABLE: ["task", "runId"],
+    DOES_FENCE_COVER_WORKTREE: ["task"],
+    CREATE_WORKTREE: ["task"],
+    TAKE_WORKTREE_LEASE: ["task", "runId"],
+    TAKE_WORKTREE_LEASE_BEFORE_RESET: ["task", "runId"],
+    RESET_WORKTREE: ["task"],
+    INIT_SUBMODULES_RECURSIVELY: [],
+    DOCUMENT_GENERATION_PIPELINE: [],
+    FAILURES_EXIT: ["task", "runId", "exitType", "exitNote"],
+    WORKTREE_DOCS_MODE_INPUT: [],
+    WHAT_IS_DOCS_MODE: ["docsMode"],
+    DOCS_MODE_AUTOGEN: [],
+    DOCS_MODE_UPDATE: [],
+    AUTO_GENERATE_DOCS: [],
+    UPDATE_AUTO_GENERATED_DOCS: [],
+    PLAN_PIPELINE: [],
+    DOCS_INPUT: [],
+    PLAN_THE_TASK: ["task", "codexNotes"],
+    WHAT_DID_THE_PLANNER_RETURN: ["task", "answer", "plan"],
+    PLANNER_RETURNED_PLAN: [],
+    PLANNER_RETURNED_CLARIFY: [],
+    ARE_2_CLARIFY_ROUNDS_DONE: ["task"],
+    WRITE_CLARIFY_REQUEST: [],
+    EXIT_WORKFLOW_PLAN: [],
+    REVIEW_PLAN_PIPELINE: [],
+    DRAFT_PLAN_INPUT: [],
+    CODEX_REVIEWS_PLAN: ["task", "plan"],
+    WHAT_IS_REVIEW_VERDICT: ["task", "plan", "answer"],
+    VERDICT_ACCEPT: [],
+    VERDICT_AMEND_THEN_ACCEPT: [],
+    VERDICT_AMEND: [],
+    VERDICT_SCRAP: [],
+    VERDICT_ERROR: [],
+    UPDATE_TASK_ENTRY: [],
+    ARE_2_REVIEWS_DONE: ["task"],
+    EXIT_WORKFLOW_REVIEW_PLAN: [],
+    IMPLEMENT_PIPELINE: [],
+    ACCEPTED_PLAN_INPUT: [],
+    IMPLEMENT_TASK: ["task", "plan"],
+    COMMIT_IMPLEMENTATION_IF_NEEDED: ["task"],
+    EXIT_WORKFLOW_IMPLEMENT: [],
+    TASK_TESTS_PIPELINE: [],
+    COMMITTED_WORK_INPUT: [],
+    RUN_TASK_TESTS: [],
+    DO_TASK_TESTS_PASS: ["task"],
+    ARE_2_TEST_FIXES_DONE: ["task"],
+    AMEND_ENTRY_WITH_FAILING_TESTS: [],
+    EXIT_WORKFLOW_TASK_TESTS: [],
+    REVIEW_TESTS_PIPELINE: [],
+    GREEN_IMPLEMENTATION_INPUT: [],
+    CODEX_REVIEWS_TESTS: ["task", "plan"],
+    ARE_TESTS_FLAGGED: ["task", "answer", "runId"],
+    ARE_2_TEST_REVIEWS_DONE: ["task"],
+    AMEND_ENTRY_WITH_CODEX_NOTES: [],
+    EXIT_WORKFLOW_REVIEW_TESTS: [],
+    REBASE_PREAMBLE_PIPELINE: [],
+    FINISHED_IMPLEMENTATION_INPUT: [],
+    LOCK_SOURCE_REPO: [],
+    WAS_LOCK_ACQUIRED: ["task"],
+    HAVE_15_MINUTES_PASSED: ["task"],
+    WAIT_FOR_LOCK: [],
+    EXIT_WORKFLOW_REBASE_PREAMBLE: [],
+    REBASE_PIPELINE: [],
+    SOURCE_REPO_LOCKED_INPUT: [],
+    REBASE_ONTO_TARGET_BRANCH: ["task"],
+    DID_REBASE_REPORT_CONFLICTS: ["task"],
+    ARE_2_CONFLICT_FIXES_DONE: ["task"],
+    FIX_CONFLICTS: ["task"],
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: ["task"],
+    CONTINUE_REBASE: [],
+    IS_REBASE_FINISHED: ["task"],
+    AGENT_ERRORED: [],
+    EXIT_WORKFLOW_REBASE: [],
+    SUITE_PIPELINE: [],
+    REBASED_WORKTREE_INPUT: [],
+    RUN_FULL_SUITE: ["task", "tasks", "suiteFixAttempts"],
+    DO_ALL_TESTS_PASS: ["task"],
+    ARE_2_SUITE_FIXES_DONE: ["task"],
+    FIX_THE_CODEBASE_FOR_SUITE: ["task"],
+    COMMIT_SUITE_FIX_IF_NEEDED: [],
+    DID_CHANGES_STAY_INSIDE_FENCE: ["task"],
+    EXIT_WORKFLOW_SUITE: [],
+    MERGE_PIPELINE: [],
+    GREEN_WORKTREE_INPUT: [],
+    MERGE_WORKTREES: [],
+    READ_MERGE_PUBLICATION_STATE: [],
+    WHAT_IS_PUBLICATION_STATE: ["task"],
+    PUBLICATION_ALL: [],
+    PUBLICATION_NONE: [],
+    PUBLICATION_PARTIAL: [],
+    ARE_2_MERGE_ATTEMPTS_DONE: ["task"],
+    EXIT_WORKFLOW_MERGE: [],
+    EXIT_WORKFLOW_SUCCESS: [],
+    MERGE_RECEIPT_INPUT: [],
+    RECORD_MERGE_COMMIT_HASHES: [],
+    WRITE_EXIT_TYPE_COMPLETED: [],
+    RECORD_MODIFIED_FILES_SUCCESS: [],
+    CLEAN_UP_WORKTREES: ["task"],
+    BUILD_CLOSURE_NOTE: [],
+    MARK_TASK_INACTIVE_SUCCESS: ["task"],
+    ARCHIVE_TASK: ["tasks", "task"],
+    REPORT_CLOSURE_NOTE: [],
+    STOP: [],
+};
+
+// Counts live in the run state, beside everything else tasks.json records about a run.
+function recordVisitInRunState(state: Input, block: Block): void {
+    if (state.task === undefined) return;
+    const run = state.task.run ?? {};
+    state.task.run = run;
+    const counts = run.counts ?? {};
+    run.counts = counts;
+    counts[block.name] = (counts[block.name] ?? 0) + 1;
+}
 
 const blockToScriptMap = new Map<string, Script>();
 for (const name in blocks) {
     const script: Script = {
         run: blocks[name]!,
-        isPromptGenerating: promptGeneratingBlocks.has(name),
     };
     blockToScriptMap.set(name, script);
 }
@@ -855,9 +1784,10 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
 
 // ponytail: every block reads and writes the same State today, so one field list serves all of them.
 function loadSchema(blockList: Block[]): Schema {
-    const fields = ["tasks", "task", "runId", "docsMode", "exitType", "exitNote", "answer", "counts", "ran"];
     const schema: Schema = {};
     for (const block of blockList) {
+        const fields = blockInputFields[block.name];
+        if (fields === undefined) throw new Error(`no input fields declared for block ${block.name}`);
         schema[block.name] = fields;
     }
     return schema;
@@ -873,30 +1803,27 @@ function getBlockFor(input: Input): Block {
 }
 
 function prepareInputForBlock(input: Input, block: Block): Input {
-    const counts = { ...input.counts };
-    counts[block.name] = (counts[block.name] ?? 0) + 1;
-    const scriptInput: Input = { ...input };
-    scriptInput.block = block.name;
-    scriptInput.counts = counts;
-    return scriptInput;
+    const fieldsTheBlockReads = blockInputFields[block.name];
+    if (fieldsTheBlockReads === undefined) throw new Error(`no input fields declared for block ${block.name}`);
+    const scriptInput: Partial<Input> = {};
+    for (const field of fieldsTheBlockReads) {
+        scriptInput[field] = input[field] as never;
+    }
+    return scriptInput as Input;
 }
 
-function run(script: Script, scriptInput: Input): RunStepResult {
-    const { next, ...changes } = script.run(scriptInput);
-    const output: Input = { ...scriptInput };
+function run(script: Script, scriptInput: Input, state: Input): RunStepResult {
+    const { next, prompt, ...changes } = script.run(scriptInput);
+    const output: Input = { ...state };
     output.answer = "";
     Object.assign(output, changes);
     output.block = next;
-    output.ran = [...scriptInput.ran];
-    output.ran.push(scriptInput.block!);
-    let prompt = "";
-    if (script.isPromptGenerating) {
-        prompt = scriptInput.block!;
-    }
+    output.ran = [...state.ran];
+    output.ran.push(state.block!);
     const result: RunStepResult = {
         output,
         nextBlock: next,
-        prompt,
+        prompt: prompt ?? "",
     };
     return result;
 }
@@ -905,8 +1832,9 @@ function runStep(input: Input): Directions {
     /*
       invokes the runStepHook.ts hook with the given input.  Looks up the script (here emulated as a function) that should be executed for the block, and passes the input to it.  If the script is matched to a 'continue' block, the output of the script says what block to run next, and the output is passed to the next block in the chain.  If the script is matched to a 'prompt' block, the script output stops the loop here, and the output is returned to the caller of 'runStep'.
     */
-    let block = getBlockFor(input);
-    let scriptInput = prepareInputForBlock(input, block); //input contains 'blockName'
+    let state = input;
+    let block = getBlockFor(state);
+    let scriptInput = prepareInputForBlock(state, block); //input contains 'blockName'
     let result: RunStepResult;
     while (true) {
         // find the script (function) for the block being run.
@@ -914,28 +1842,32 @@ function runStep(input: Input): Directions {
         const script = blockToScriptMap.get(block.name);
         if (script === undefined) throw new Error(`no script found for block ${block.name}`);
         // execute the script (function) matched to the block being run.
-        result = run(script, scriptInput);
+        recordVisitInRunState(state, block);
+        result = run(script, scriptInput, state);
         // if the script is a prompt-generating script, return the generated prompt.
-        if (script.isPromptGenerating) {
-            return { 
-                prompt: result.prompt, 
-                payload: result.output, 
-                previousBlockWasTerminal: false 
+        if (result.prompt !== "") {
+            return {
+                block: block.name,
+                prompt: result.prompt,
+                payload: result.output,
+                previousBlockWasTerminal: false,
             };
         }
         // if the block is the last block in the chain, return the output of that
         const nextBlock = result.nextBlock;
         if (nextBlock === null) {
             return {
+                block: block.name,
                 prompt: "return the payload verbatim",
                 payload: result.output,
                 previousBlockWasTerminal: true,
             };
         }
         // if the script is a continue-generating script, get the next block to run.
-        block = getBlockFor(result.output);
+        state = result.output;
+        block = getBlockFor(state);
         // else pass the output from the script execution to the next block in the chain.
-        scriptInput = prepareInputForBlock(result.output, block);
+        scriptInput = prepareInputForBlock(state, block);
         // loop back to find and execute the next block in the chain.
     }
 }
@@ -953,9 +1885,60 @@ function followPrompt(directions: Directions, schema: Schema): AgentResult | nul
             output: directions.payload,
         };
     }
-    const answer = sim(directions.payload, directions.prompt);
+    let answer = sim(directions.payload, directions.block);
     if (answer === null) return null;
     const output: Input = { ...directions.payload };
+
+    // For the planner prompt the agent writes the plan file. The sim only names it.
+    if (directions.block === "PLAN_THE_TASK") {
+        if (answer === "PLAN") {
+            const task = directions.payload.task!;
+            output.plan = `${task.run!.worktree}/plans/task-${task.taskNumber}-plan.md`;
+        }
+    }
+
+    // For the two codex prompts the agent runs codex in a shell and returns codex's JSON.
+    // ponytail: the fixture names the outcome; the sim writes the JSON that outcome would carry.
+    if (directions.block === "CODEX_REVIEWS_PLAN") {
+        if (answer === "ERROR") {
+            answer = JSON.stringify({
+                outcome: "ERROR",
+                missingFiles: [directions.payload.plan],
+                message: "Review not performed because one or more required input files were unavailable.",
+                issues: [],
+                fixes: [],
+                sectionsThatHoldUp: [],
+            });
+        } else {
+            let fixCount = 0;
+            if (answer === "AMEND_THEN_ACCEPT") fixCount = 1;
+            if (answer === "AMEND") fixCount = 2;
+            if (answer === "SCRAP") fixCount = 5;
+            const fixes = [];
+            for (let i = 1; i <= fixCount; i++) {
+                fixes.push({
+                    sectionId: `section-${i}`,
+                    fix: `simulated fix ${i}`,
+                    durableBecause: "simulated",
+                });
+            }
+            answer = JSON.stringify({
+                outcome: "OK",
+                missingFiles: [],
+                message: "",
+                issues: [],
+                fixes,
+                sectionsThatHoldUp: [],
+            });
+        }
+    }
+    if (directions.block === "CODEX_REVIEWS_TESTS") {
+        const flagged = answer === "YES";
+        let notes = "";
+        if (flagged) notes = "simulated reviewer notes on the task tests";
+        answer = JSON.stringify({ flagged, notes });
+    }
+
     output.answer = answer;
     const result: AgentResult = {
         previousBlockWasTerminal: false,
@@ -973,6 +1956,7 @@ function agent(input: Input, schema: Schema): AgentResult | null {
     if (directions.prompt === "") {
         throw new Error("the hook returned an empty prompt to the agent. the agent has nothing to do and is idle.");
     }
+    console.log(`  agent reads the prompt from ${directions.block}:\n    ${directions.prompt.split("\n").join("\n    ")}`);
 
     /*
       the agent follows the prompt and returns a specific output shape (based on a schema)
@@ -983,27 +1967,37 @@ function agent(input: Input, schema: Schema): AgentResult | null {
 
 function main(taskNumber: number, tasksJsonPath: string) {
     const tasks = JSON.parse(readFileSync(tasksJsonPath, "utf8")) as Task[];
-    let task: Task | undefined = undefined;
-    for (const candidate of tasks) {
-        if (candidate.taskNumber === taskNumber) {
-            task = candidate;
-        }
-    }
     let input: Input = {
         command: "/run-step",
-        block: "PREAMBLE_TASK_NUMBER_INPUT",
+        block: "PREAMBLE_STATUS_CHECK",
+        taskNumber,
         tasks,
-        task,
+        task: undefined,
         runId: randomUUID(),
         docsMode: "",
+        plan: "",
+        codexNotes: "",
+        suiteFixAttempts: 0,
         exitType: "",
         exitNote: "",
         answer: "",
-        counts: {},
         ran: [],
     };
     const diagrams = getDiagramsForPipelines(pipelines);
     blockList = getBlocksForDiagrams(diagrams);
+    // Not in any diagram yet: the .mmd files still draw these as 24 boxes across three diagrams.
+    blockList.push({
+        name: "PREAMBLE_STATUS_CHECK",
+        diagram: "monolith",
+        fedBy: [],
+        feeds: ["DOCUMENT_GENERATION", "REPORT_ONLY_EXIT", "FAILURES_EXIT"],
+    });
+    blockList.push({
+        name: "DOCUMENT_GENERATION",
+        diagram: "monolith",
+        fedBy: ["PREAMBLE_STATUS_CHECK", "WHAT_DID_THE_PLANNER_RETURN"],
+        feeds: ["PLAN_THE_TASK"],
+    });
     let schema = loadSchema(blockList);
     while (true) {
         const result = agent(input, schema);
