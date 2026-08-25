@@ -13,7 +13,6 @@ type Run = {
     worktreeSafe?: boolean;
     touchedFiles?: string[];
     simCounts?: Record<string, number>;
-    counts?: Record<string, number>;
     attempts?: Record<string, number>;
     sourceLockOwner?: string;
     commits?: { hash: string; kind: string; stepId: string }[];
@@ -68,8 +67,10 @@ type Packet = Partial<State> & {
 function sim(input: Input, question: string): string | null {
     const run = input.task!.run!;
     const answers = input.task!.sim![question]!;
-    const simCounts = run.simCounts ?? {};
-    run.simCounts = simCounts;
+    if (run.simCounts === undefined) {
+        run.simCounts = {};
+    }
+    const simCounts = run.simCounts;
     const visitIndex = simCounts[question] ?? 0;
     simCounts[question] = visitIndex + 1;
     const lastAnswerIndex = answers.length - 1;
@@ -938,16 +939,6 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     STOP: [],
 };
 
-// Counts live in the run state, beside everything else tasks.json records about a run.
-function recordVisitInRunState(state: Input, block: Block): void {
-    if (state.task === undefined) return;
-    const run = state.task.run ?? {};
-    state.task.run = run;
-    const counts = run.counts ?? {};
-    run.counts = counts;
-    counts[block.name] = (counts[block.name] ?? 0) + 1;
-}
-
 const blockToScriptMap = new Map<string, Script>();
 for (const name in blocks) {
     const script: Script = {
@@ -1064,7 +1055,6 @@ function runStep(input: Input): Directions {
         const script = blockToScriptMap.get(block.name);
         if (script === undefined) throw new Error(`no script found for block ${block.name}`);
         // execute the script (function) matched to the block being run.
-        recordVisitInRunState(state, block);
         result = run(script, scriptInput, state);
         // if the script is a prompt-generating script, return the generated prompt.
         if (result.prompt !== "") {
