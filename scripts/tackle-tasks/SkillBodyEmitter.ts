@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
+import { buildOrderedBlockSchemas, generateWorkflow } from "../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
@@ -19,10 +20,16 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     }
     */
 
+    // Made fresh on every run, so the shapes in it always match the diagrams on disk.
+    generateWorkflow(TASK_WORKFLOW_PATH);
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const workflowCall = JSON.stringify({
         scriptPath: TASK_WORKFLOW_PATH,
-        args: { task: taskNumber, tasksFile: resolveTaskFiles(projectRoot).tasksPath },
+        args: {
+            task: taskNumber,
+            tasksFile: resolveTaskFiles(projectRoot).tasksPath,
+            firstPassSchemaCount: buildOrderedBlockSchemas().firstPassSchemaCount,
+        },
     });
 
     return `WORKFLOW: ${workflowCall}

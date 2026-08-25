@@ -219,6 +219,7 @@ export type FailedCheck = "typecheck" | "complete-suite";
 
 export type SubmoduleLayerOutcome =
     | { occurrenceId: string; checkoutPath: string; status: "no-op" }
+    | { occurrenceId: string; checkoutPath: string; status: "rebased" }
     | { occurrenceId: string; checkoutPath: string; status: "rebased-and-tested" }
     | { occurrenceId: string; checkoutPath: string; status: "conflicted"; conflictedFilePaths: string[] }
     | { occurrenceId: string; checkoutPath: string; status: "cleanup-failed"; failureReason: string }
@@ -266,6 +267,7 @@ function rebaseAndTestSubmoduleLayer(
     childrenByParentId: Map<string, RepositoryOccurrence[]>,
     leaveConflictLive: boolean = false,
     typecheckCommand: string | null = null,
+    runTests: boolean = true,
 ): SubmoduleLayerOutcome {
     const { occurrenceId, checkoutPath, baseBranch, operationBranch } = occurrence;
 
@@ -298,6 +300,11 @@ function rebaseAndTestSubmoduleLayer(
 
     // Either the rebase above just happened, or refs were identical but a child's gitlink still needs recommitting.
     recordRebasedChildGitlinks(occurrence, changedChildPaths);
+
+    // The rebase pipeline runs no tests; the suite pipeline runs them after the rebase.
+    if (!runTests) {
+        return { occurrenceId, checkoutPath, status: "rebased" };
+    }
 
     if (typecheckCommand !== null) {
         try {
@@ -332,7 +339,7 @@ function groupChildrenByParentId(occurrences: RepositoryOccurrence[]): Map<strin
 }
 
 // Rebases each submodule deepest-first, testing every layer before moving up; stops on the first red layer.
-export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest, leaveConflictLive: boolean = false, typecheckCommand: string | null = null): SubmoduleLayerWalkReport {
+export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest: DiscoveryManifest, leaveConflictLive: boolean = false, typecheckCommand: string | null = null, runTests: boolean = true): SubmoduleLayerWalkReport {
     const sourceCheckoutPathByOccurrenceId = new Map(
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
     );
@@ -351,12 +358,12 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
         const sourceCheckoutPath = sourceCheckoutPathByOccurrenceId.get(occurrence.occurrenceId) ?? "";
         let outcome: SubmoduleLayerOutcome;
         try {
-            outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive, typecheckCommand);
+            outcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, leaveConflictLive, typecheckCommand, runTests);
         } catch (error) {
             // An unexpected operational failure (e.g. a rejected commit hook) must not discard already-completed layers.
             return { completedLayers, stoppedAt: { occurrenceId: occurrence.occurrenceId, checkoutPath: occurrence.checkoutPath, status: "cleanup-failed", failureReason: gitErrorText(error) } };
         }
-        if (outcome.status !== "no-op" && outcome.status !== "rebased-and-tested") {
+        if (outcome.status !== "no-op" && outcome.status !== "rebased" && outcome.status !== "rebased-and-tested") {
             return { completedLayers, stoppedAt: outcome };
         }
         completedLayers.push(outcome);
@@ -365,6 +372,7 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
 }
 
 export type ParentRebaseOutcome =
+    | { status: "rebased" }
     | { status: "rebased-and-tested" }
     | { status: "conflicted"; conflictedFilePaths: string[] }
     | { status: "cleanup-failed"; failureReason: string }
@@ -380,6 +388,7 @@ export function rebaseParentOntoSourceAndTest(
     resolutionManifest: ResolutionManifest,
     leaveConflictLive: boolean = false,
     typecheckCommand: string | null = null,
+    runTests: boolean = true,
 ): ParentRebaseOutcome {
     const rebaseOutcome = rebaseGroupOntoSource(worktreePath, sourceBranch, submodulePaths, leaveConflictLive);
     if (rebaseOutcome.status === "conflicted") {
@@ -387,6 +396,10 @@ export function rebaseParentOntoSourceAndTest(
     }
     if (rebaseOutcome.status === "cleanup-failed") {
         return { status: "cleanup-failed", failureReason: rebaseOutcome.failureReason };
+    }
+    // The rebase pipeline runs no tests; the suite pipeline runs them after the rebase.
+    if (!runTests) {
+        return { status: "rebased" };
     }
 
     if (typecheckCommand !== null) {

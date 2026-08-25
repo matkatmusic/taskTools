@@ -1,6 +1,4 @@
-// "lock the source repo, then rebase onto the target branch" + "did the rebase report
-// conflicts?" (pipeline.mmd). Acquires the source-repo lock (re-entrant for the same owner,
-// bounded wait per rule 9), then rebases every layer deepest-first with live conflict markers.
+// Implements pipeline.mmd's lock-then-rebase step: acquires the re-entrant source lock (rule 9), rebases every layer deepest-first with conflict markers.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
@@ -27,9 +25,7 @@ export type RebaseTaskWorktreeInput = {
     rootSourceBranch: string;
 };
 
-// F3: the merge box's proof that it merges the exact tip rebase left. Persisted onto the
-// current run record (see mergeTaskWorktree.ts's verification) so a lost-stdout reconciliation
-// can still recover it.
+// F3: proof the merge box merges rebase's exact tip; persisted on the run record for lost-stdout reconciliation to recover.
 export type { RebaseStepReceipt, SourceTipReceipt } from "./taskRunState.ts";
 
 export type RebaseTaskWorktreeOutput = {
@@ -56,8 +52,7 @@ function defaultSleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Re-entrant for the same owner (already-held-by-me is a no-op). Bounded: polls, never blocks
-// forever. Returns "held" (warm) or "recoverable" (cold) instead of failing (rule 9, [a3 24]).
+// Re-entrant for the same owner; bounded polling, never blocks forever; returns held or recoverable, never fails (rule 9).
 export async function acquireSourceRepoLockBounded(
     projectRoot: string,
     owner: string,
@@ -91,9 +86,7 @@ function directChildPathsInParent(manifest: ReturnType<typeof buildDiscoveryMani
         .filter((path): path is string => path !== null);
 }
 
-// F3: reads the live source manifest via buildWorktreeOccurrences, so it must run after the
-// source lock is held/refreshed. Captures root plus every source occurrence's {baseBranch,
-// sourceTip} exactly as the rebase left it, for mergeTaskWorktree.ts to verify unchanged.
+// F3: reads the live source manifest; run after the source lock is held. Captures baseBranch/sourceTip per occurrence for verification.
 export function captureSourceTipReceipts(worktreePath: string, projectRoot: string, rootSourceBranch: string): SourceTipReceipt[] {
     const rootTip = execFileSync("git", ["-C", projectRoot, "rev-parse", rootSourceBranch], { encoding: "utf8" }).trim();
     const receipts: SourceTipReceipt[] = [{ occurrenceId: "", baseBranch: rootSourceBranch, sourceTip: rootTip }];
@@ -107,9 +100,7 @@ export function captureSourceTipReceipts(worktreePath: string, projectRoot: stri
     return receipts;
 }
 
-// F3: every worktree layer's HEAD right after the step finished. Paired with the exact
-// occurrence set it walked, this is what lets reconciliation tell "this step's own evidence"
-// from a stale receipt a prior visit left behind.
+// F3: each worktree layer's HEAD after the step finished; paired with occurrence set walked, lets reconciliation spot stale receipts.
 function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string): { occurrenceId: string; head: string }[] {
     return buildWorktreeOccurrences(worktreePath, projectRoot).map((occurrence) => ({
         occurrenceId: occurrence.occurrenceId,
@@ -117,10 +108,7 @@ function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string):
     }));
 }
 
-// F3: durable evidence for EVERY returned outcome of rebaseTaskWorktree/advanceTaskRebase, not
-// just a clean finish — a conflict or test failure is just as much a real result that must be
-// reconstructable. `occurrenceIds`/`worktreeHeads` are captured at the same moment as `result`,
-// so reconciliation can tell a still-live receipt from one the world has since moved past.
+// F3: durable evidence for every outcome, not just clean finishes; occurrenceIds/worktreeHeads captured with result so reconciliation spots stale receipts.
 export function persistRebaseStepResult(
     taskNumber: number, runId: string, stepId: string, script: string, worktreePath: string, projectRoot: string,
     result: Record<string, unknown>,
@@ -169,6 +157,9 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): O
     if (outcome.status === "tests-failed") {
         return { conflicted: false, stoppedAt: stoppedAtField, conflictedFilePaths: [], failureReason: `${outcome.failedCheck}: ${outcome.testOutput}` };
     }
+    if (outcome.status === "rebased") {
+        return { conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
+    }
     if (outcome.status === "rebased-and-tested") {
         return { conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
     }
@@ -196,7 +187,8 @@ export async function rebaseTaskWorktree(
     }
     refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
-    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
+    // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null, false);
     if (submoduleReport.stoppedAt !== null) {
         const result: RebaseTaskWorktreeOutput = {
             lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt),
@@ -214,6 +206,7 @@ export async function rebaseTaskWorktree(
         createEmptyResolutionManifest(),
         true,
         null,
+        false,
     );
     const mapped = mapParentOutcome(worktreePath, parentOutcome);
     if (mapped.stoppedAt === null && mapped.failureReason === null) {

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
+import { buildOrderedBlockSchemas, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
 import {
     buildBlockSchemas,
     buildNextStepsByStep,
@@ -57,10 +57,21 @@ test("test_buildWalkResultSchema_allowsAnOutcomeOfNull", () => {
     assert.deepEqual(schema.properties.outcome.anyOf[1], { type: "null" });
 });
 
-test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
+// The agent answers with the stopped block's payload, so a pass-through block has no schema.
+test("test_buildBlockSchemas_namesASchemaOnlyForABlockTheWalkCanStopAt", () => {
     const { config, projectRoot } = buildProject([
         { box: "A", output: { box: "A", scriptSignal: "continue", files: 0 } },
         { box: "B", output: { box: "B", scriptSignal: "stop" } },
+    ]);
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
+    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_B_SCHEMA"]);
+});
+
+// The walk stops before a prompt block, so its feeding block can end a pass and needs a shape.
+test("test_buildBlockSchemas_namesASchemaForABlockThatFeedsAPromptBlock", () => {
+    const { config, projectRoot } = buildProject([
+        { box: "A", output: { box: "A", scriptSignal: "continue" }, next: ["B"] },
+        { box: "B", output: {}, producesPrompt: true, agentAnswer: { answer: "" }, next: [] },
     ]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_A_SCHEMA", "PAYLOAD_B_SCHEMA"]);
@@ -68,7 +79,7 @@ test("test_buildBlockSchemas_namesEachSchemaAfterItsBlock", () => {
 
 // The point of the whole task: the schema is the template, not a hand-written copy of it.
 test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
-    const output = { box: "A", scriptSignal: "continue", files: 0 };
+    const output = { box: "A", scriptSignal: "stop", files: 0 };
     const { config, projectRoot } = buildProject([{ box: "A", output }]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate({ files: 0 }));
@@ -96,6 +107,12 @@ test("test_getPayloadFromOutput_dropsTheKeysTheEnvelopeOwns", () => {
 test("test_buildNextStepsByStep_keysEveryBoxByDiagramAndBox", () => {
     const { config } = buildProject([{ box: "A", output: {}, next: ["B"] }, { box: "B", output: {} }]);
     assert.deepEqual(buildNextStepsByStep(config), { "one.mmd::A": ["one.mmd::B"], "one.mmd::B": [] });
+});
+
+// A prompt block is a stopping block, so the walk does not follow its arrows.
+test("test_buildNextStepsByStep_dropsTheArrowsOutOfAPromptBlock", () => {
+    const { config } = buildProject([{ box: "A", output: {}, producesPrompt: true, next: ["B"] }, { box: "B", output: {} }]);
+    assert.deepEqual(buildNextStepsByStep(config), { "one.mmd::A": [], "one.mmd::B": [] });
 });
 
 test("test_getStepsReachableFrom_followsASingleChainToItsEnd", () => {
@@ -142,18 +159,46 @@ test("test_buildWorkflowScript_refusesToRunWithoutATaskNumberAndATasksFileInArgs
     assert.match(buildWorkflowScript(), /if \(!Number\.isInteger\(args\?\.task\) \|\| !args\?\.tasksFile\)/);
 });
 
-// The first pass may stop at any block the start can reach, so its schema names all of them; the hook shrinks it from there.
-test("test_buildWorkflowScript_startsAtThePreamblesFirstBoxWithEveryReachableBlockInItsFirstSchema", () => {
+// Every block's shape is in the file; first-pass blocks come before the first prompt block.
+test("test_buildWorkflowScript_putsTheFirstPassShapesFirstAndEveryBlockShapeInBlockSchemas", () => {
     const script = buildWorkflowScript();
     assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_TASK_NUMBER_INPUT'/);
     assert.match(script, /^let blockToRun = START_STEP$/m);
-    const schemaStart = script.indexOf("const FIRST_PASS_SCHEMA = ") + "const FIRST_PASS_SCHEMA = ".length;
-    const schema = JSON.parse(script.slice(schemaStart, script.indexOf("\n\n// Required")));
-    const stepsFile = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "steps.json");
-    const config = JSON.parse(readFileSync(stepsFile, "utf8")) as StepConfig;
-    const reachable = getStepsReachableFrom(START_STEP, buildNextStepsByStep(config));
-    assert.ok(reachable.length > 100, `only ${reachable.length} blocks reachable from the start`);
-    assert.equal(schema.properties.outcome.anyOf[0].properties.payload.anyOf.length, reachable.length);
+    assert.match(script, /BLOCK_SCHEMAS\.slice\(0, args\.firstPassSchemaCount\)/);
+    const listStart = script.indexOf("const BLOCK_SCHEMAS = ") + "const BLOCK_SCHEMAS = ".length;
+    const entries = JSON.parse(script.slice(listStart, script.indexOf("\nconst ENVELOPE_SCHEMA = "))) as { block: string }[];
+    const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const config = JSON.parse(readFileSync(join(projectRoot, "scripts", "steps.json"), "utf8")) as StepConfig;
+    const firstPass = getStepsReachableFrom(START_STEP, buildNextStepsByStep(config));
+    assert.ok(firstPass.includes("pipeline-plan.mmd::PLAN_THE_TASK"), "the first pass does not reach PLAN_THE_TASK");
+    assert.ok(!firstPass.includes("pipeline-implement.mmd::IMPLEMENT_TASK"), "the first pass walked past PLAN_THE_TASK");
+    const blockSchemas = buildBlockSchemas(config, projectRoot);
+    const firstPassStops = firstPass.filter(stepKey => blockSchemas.some(blockSchema => `${blockSchema.diagram}::${blockSchema.box}` === stepKey));
+    const { firstPassSchemaCount } = buildOrderedBlockSchemas();
+    assert.deepEqual(entries.slice(0, firstPassSchemaCount).map(entry => entry.block), firstPassStops);
+    assert.ok(!entries.some(entry => entry.block === "pipeline-preambleStatusCheck.mmd::IS_TASK_NUMBER_VALID"), "a pass-through block has a shape");
+    assert.equal(entries.length, blockSchemas.length);
+});
+
+// The first pass has no hook result to count from, so the caller must state the shape count.
+test("test_buildWorkflowScript_refusesToRunWithoutAFirstPassSchemaCountInArgs", () => {
+    assert.match(buildWorkflowScript(), /if \(!Number\.isInteger\(args\?\.firstPassSchemaCount\)\)/);
+});
+
+// After a prompt pass the next block reads the packet plus the answer, and the hook carries the packet.
+test("test_buildWorkflowScript_mergesAPromptAnswerOntoTheHooksPacket", () => {
+    const script = buildWorkflowScript();
+    assert.match(script, /input = \{ \.\.\.result\.outcome\.packet, \.\.\.result\.outcome\.payload \}/);
+    assert.match(script, /input = result\.outcome\.packet$/m);
+    assert.doesNotMatch(script, /lastPacket/);
+});
+
+// An agent that answers with text instead of the envelope must not crash the loop and lose that text.
+test("test_buildWorkflowScript_reportsATextAnswerInsteadOfSpreadingIt", () => {
+    const script = buildWorkflowScript();
+    const textGuard = script.indexOf("if (typeof result === 'string') {");
+    assert.ok(textGuard > 0, "no guard for a text answer");
+    assert.ok(textGuard < script.indexOf("ran.push(...result.ran)"), "the guard comes after the spread");
 });
 
 test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {

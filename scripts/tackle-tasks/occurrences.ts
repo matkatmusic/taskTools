@@ -1,5 +1,4 @@
-// Walks a worktree's occurrence tree deepest submodule first, root last (pipeline.mmd rule 8),
-// and bridges the two path namespaces: plain task-declared paths and occurrence-tagged changed paths.
+// Walks a worktree's occurrence tree deepest-submodule-first, root last (rule 8), bridging task-declared and occurrence-tagged paths.
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { attachOperationBranch, loadRepositoryManifest } from "../prepareTasks.ts";
@@ -22,11 +21,7 @@ export type Occurrence = {
     baseRef: string;
 };
 
-// F1: the source repository's checkout (the local, possibly-unpushed, lock-held authority) and
-// the task worktree's checkout are never the same directory, even though both are addressed by
-// the same occurrenceId. Any code that reads/fetches "the source" or "the worktree" for a given
-// occurrence should build this once and read the matching field, rather than re-deriving either
-// path independently.
+// F1: source and worktree checkouts differ despite sharing an occurrenceId; build this once and reuse it, don't re-derive paths.
 export type WorktreeOccurrence = {
     occurrenceId: string;
     sourceCheckoutPath: string;
@@ -35,10 +30,7 @@ export type WorktreeOccurrence = {
     baseBranch: string;
 };
 
-// The one source<->worktree mapping every v1.5 consumer should share: matches the live source
-// manifest's occurrences to their worktree checkout by occurrenceId. Call this (or one of the
-// wrappers below that reuse it) only after the source lock is held/refreshed, so the source
-// occurrences it reads reflect the checkout the lock protects.
+// The shared v1.5 source<->worktree mapping matches source occurrences to worktree checkouts; call only after the source lock is held.
 export function mapSourceOccurrencesToWorktree(
     worktreePath: string,
     sourceOccurrences: RepositoryOccurrence[],
@@ -56,21 +48,13 @@ export function buildWorktreeOccurrences(worktreePath: string, projectRoot: stri
     return mapSourceOccurrencesToWorktree(worktreePath, loadRepositoryManifest(projectRoot).occurrences);
 }
 
-// Fetches every non-root occurrence's base branch from its real source checkout into its
-// worktree checkout (never origin: the locked local source checkout is the target-branch
-// authority and its commits may not be pushed). This must run before any discovery/rebase code
-// inspects an occurrence's source-recorded OID inside the worktree - discovery walks a
-// submodule's tree by ls-tree'ing that OID directly in the worktree checkout, which fails with
-// "fatal: not a tree object" if the source has advanced past what the worktree has fetched.
+// Fetches each occurrence's base branch from source into worktree, never origin; run before discovery walks source-recorded OIDs.
 export function fetchWorktreeBaseBranchesFromSource(occurrences: WorktreeOccurrence[]): void {
     for (const occurrence of occurrences) {
         if (occurrence.occurrenceId === "") continue;
         execFileSync(
             "git",
-            // --no-recurse-submodules: nested occurrences are fetched independently by their own
-            // entry in this same loop, from their own source checkout - git's on-demand recursive
-            // fetch would otherwise try (and fail) to pull an unpushed nested advance from the
-            // worktree submodule's unrelated "origin" remote.
+            // --no-recurse-submodules: nested occurrences fetch independently via their own loop entry; recursive fetch would otherwise fail from wrong origin.
             ["-C", occurrence.worktreeCheckoutPath, "fetch", "--no-recurse-submodules", occurrence.sourceCheckoutPath, occurrence.baseBranch],
             { stdio: ["ignore", "pipe", "pipe"] },
         );
@@ -79,9 +63,7 @@ export function fetchWorktreeBaseBranchesFromSource(occurrences: WorktreeOccurre
 
 const OCCURRENCE_PATH_SEPARATOR = "::";
 
-// The source repository, never the task worktree, is the authority for each layer's base
-// branch: createWorktreeForGroup checks out task-N in every submodule, so discovering the
-// worktree itself would make every layer's own branch invisible.
+// The source repository, not the worktree, is the base-branch authority; createWorktreeForGroup checks out task-N everywhere, hiding layer branches.
 export function buildDiscoveryManifest(worktreePath: string, projectRoot: string): DiscoveryManifest {
     const sourceManifest = loadRepositoryManifest(projectRoot);
     return {
@@ -151,10 +133,7 @@ export function parseOccurrencePath(occurrencePath: string): { occurrenceId: str
     };
 }
 
-// Builds the SOURCE-checkoutPath manifest that mergeTaskWorktrees.ts's deepest-first walkers
-// require: they snapshot manifest.repositoryManifest.occurrences[*].checkoutPath as the source
-// side of every fetch before running discovery, so this must never be worktree-remapped like
-// buildDiscoveryManifest's occurrences are.
+// Builds the SOURCE-checkoutPath manifest mergeTaskWorktrees.ts's walkers require; unlike buildDiscoveryManifest, this must never be worktree-remapped.
 function buildSourceDiscoveryManifest(sourceManifest: ReturnType<typeof loadRepositoryManifest>, taskNumber: number): DiscoveryManifest {
     return {
         repositoryManifest: {
@@ -165,27 +144,22 @@ function buildSourceDiscoveryManifest(sourceManifest: ReturnType<typeof loadRepo
     };
 }
 
-// F1-safe replacement for "buildDiscoveryManifest(worktreePath, projectRoot) then
-// rebaseSubmoduleLayersDeepestFirst": pre-fetches every occurrence's base branch from its real
-// source checkout into its worktree checkout, then rebases with a manifest that keeps the real
-// source checkoutPath. Call after the source lock is held/refreshed.
+// F1-safe replacement for buildDiscoveryManifest-then-rebase; pre-fetches occurrences, then rebases with a source-checkoutPath manifest; call after the source lock is held.
 export function rebaseWorktreeSubmoduleLayersDeepestFirst(
     worktreePath: string,
     projectRoot: string,
     taskNumber: number,
     leaveConflictLive: boolean = false,
     typecheckCommand: string | null = null,
+    runTests: boolean = true,
 ): SubmoduleLayerWalkReport {
     const sourceManifest = loadRepositoryManifest(projectRoot);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber);
-    return rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, leaveConflictLive, typecheckCommand);
+    return rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, leaveConflictLive, typecheckCommand, runTests);
 }
 
-// F1-safe replacement for building a source-checkoutPath manifest by hand and calling
-// mergeTaskDeepestFirst (see mergeTaskWorktree.ts's prior inline version of this). Same
-// pre-fetch guarantee as the rebase wrapper above; call after the source lock is
-// held/refreshed.
+// F1-safe replacement for hand-building a source-checkoutPath manifest and calling mergeTaskDeepestFirst; same pre-fetch guarantee, call after source lock is held.
 export function mergeWorktreeTaskDeepestFirst(
     worktreePath: string,
     projectRoot: string,

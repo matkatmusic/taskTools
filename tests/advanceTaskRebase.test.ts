@@ -168,49 +168,6 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
     assert.deepEqual(run?.sourceTipsAtRebase?.map((receipt) => receipt.occurrenceId).sort(), ["", "child"]);
 });
 
-// F3: a test-failure outcome from advanceTaskRebase (root layer, no conflict) is also
-// reconstructable exactly from its receipt.
-test("test_advanceTaskRebase_reconciliationReproducesAFailedTestOutcomeFromTheReceipt", async () => {
-    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
-    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
-    seedTaskAndClaim(rootOrigin, taskNumber, "run-15");
-    const childCheckoutPath = join(worktreePath, "child");
-
-    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree\n");
-    git(childCheckoutPath, "add", "shared.txt");
-    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit");
-    git(worktreePath, "add", "child");
-    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
-    // Make the root's own test script fail, so once the submodule conflict resolves and
-    // advanceTaskRebase reaches the root layer, its test step (not a conflict) fails.
-    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ scripts: { test: "false" } }));
-    git(worktreePath, "add", "package.json");
-    git(worktreePath, "commit", "-q", "-m", "make root tests fail");
-
-    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
-
-    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-15", stepId: "rebase-15", rootSourceBranch: "main" };
-    const first = await rebaseTaskWorktree(rebaseInput);
-    assert.equal(first.conflicted, true);
-    assert.equal(first.stoppedAt?.occurrenceId, "child");
-
-    writeFileSync(join(childCheckoutPath, "shared.txt"), "resolved\n");
-    git(childCheckoutPath, "add", "shared.txt");
-
-    const second = advanceTaskRebase({ ...rebaseInput, stepId: "advance-15", stoppedAt: first.stoppedAt! });
-    assert.equal(second.finished, false);
-    assert.equal(second.conflicted, false);
-    assert.equal(second.stoppedAt?.occurrenceId, "");
-    assert.notEqual(second.failureReason, null);
-
-    const reconciled = reconcileStep({
-        script: "advanceTaskRebase", stepId: "advance-15", taskNumber, runId: "run-15", projectRoot: rootOrigin,
-        stepInput: { worktreePath, rootSourceBranch: "main" },
-    });
-    assert.equal(reconciled.status, "completed");
-    assert.deepEqual(reconciled.result, second);
-});
-
 // F3: a fresh conflict raised BY advanceTaskRebase's own --continue (a second worktree commit in
 // the same nested layer) must be reconstructable exactly while that layer's rebase is still live.
 test("test_advanceTaskRebase_reconciliationReproducesANestedConflictOutcomeFromTheReceipt", async () => {

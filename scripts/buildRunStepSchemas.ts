@@ -1,7 +1,7 @@
 // Every run-step schema, built from the block template files. The hook and the workflow generator share it.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { KNOWN_SCRIPT_SIGNALS, WORKFLOW_SIGNAL } from "./contracts.ts";
+import { KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, WORKFLOW_SIGNAL } from "./contracts.ts";
 import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
 
 export type BlockSchema = {
@@ -62,9 +62,10 @@ export function getStepKey(target: string, diagram: string): string {
     return target.includes("::") ? target : `${diagram}::${target}`;
 }
 
-// One entry per block. A prompt block's pass hands on the agent's answer, so that is its schema.
+// One entry per block the walk can stop at: a prompt block's answer, or a stop block's payload.
 export function buildBlockSchemas(config: StepConfig, projectRoot: string): BlockSchema[] {
     const blockSchemas: BlockSchema[] = [];
+    const promptStepKeys = getPromptStepKeys(config);
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
             const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
@@ -84,6 +85,14 @@ export function buildBlockSchemas(config: StepConfig, projectRoot: string): Bloc
             if (template.output === undefined) {
                 throw new Error(`${entry.template} declares no output, and ${entry.box} is not marked returns_a_prompt`);
             }
+            const isStopBlock = (template.output as { scriptSignal?: unknown }).scriptSignal === SCRIPT_SIGNAL.STOP;
+            const feedsAPromptBlock = entry.next.some(target => promptStepKeys.includes(getStepKey(target, diagram)));
+            // A block ends a pass when it stops, or when the walk stops before the prompt block it feeds.
+            if (!isStopBlock) {
+                if (!feedsAPromptBlock) {
+                    continue;
+                }
+            }
             blockSchemas.push({
                 diagram,
                 box: entry.box,
@@ -95,17 +104,22 @@ export function buildBlockSchemas(config: StepConfig, projectRoot: string): Bloc
     return blockSchemas;
 }
 
+// A prompt block stops the walk; its arrows are skipped, ending the list there.
 export function buildNextStepsByStep(config: StepConfig): Record<string, string[]> {
     const nextStepsByStep: Record<string, string[]> = {};
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
+            if (entry.producesPrompt) {
+                nextStepsByStep[getStepKey(entry.box, diagram)] = [];
+                continue;
+            }
             nextStepsByStep[getStepKey(entry.box, diagram)] = entry.next.map(target => getStepKey(target, diagram));
         }
     }
     return nextStepsByStep;
 }
 
-// A block script picks its own branch, so a walk can reach every block down every arrow, prompt blocks included.
+// A block script picks its branch, so a walk can reach any block through any arrow, including prompt blocks.
 export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Record<string, string[]>): string[] {
     const reachedSteps: string[] = [];
     const stepsToVisit = [startStepKey];
@@ -120,7 +134,6 @@ export function getStepsReachableFrom(startStepKey: string, nextStepsByStep: Rec
     return reachedSteps;
 }
 
-/* retired: the schema walks through prompt blocks now, so nothing asks which blocks prompt.
 export function getPromptStepKeys(config: StepConfig): string[] {
     const promptStepKeys: string[] = [];
     for (const [diagram, entries] of Object.entries(config)) {
@@ -132,7 +145,6 @@ export function getPromptStepKeys(config: StepConfig): string[] {
     }
     return promptStepKeys;
 }
-*/
 
 // The envelope the hook always returns. buildAgentSchema fills in payload, so it starts empty.
 export function buildWalkResultSchema(): Record<string, unknown> {
@@ -144,9 +156,10 @@ export function buildWalkResultSchema(): Record<string, unknown> {
             workflowSignal: { type: "string", enum: Object.values(WORKFLOW_SIGNAL) },
             next: { type: ["string", "null"] },
             payload: { anyOf: [] },
+            packet: { type: "object" },
             schema: { type: ["object", "null"] },
         },
-        required: ["box", "scriptSignal", "workflowSignal", "next", "payload", "schema"],
+        required: ["box", "scriptSignal", "workflowSignal", "next", "payload", "packet", "schema"],
         additionalProperties: false,
     };
     return {
@@ -163,15 +176,21 @@ export function buildWalkResultSchema(): Record<string, unknown> {
     };
 }
 
-// The schema one agent answers with: every payload the run can still produce from this step. The list only shrinks.
+// The schema an agent answers with: every payload the run could still produce, a list that only shrinks.
 export function buildAgentSchema(config: StepConfig, projectRoot: string, startStepKey: string): Record<string, unknown> {
     const reachableSteps = getStepsReachableFrom(startStepKey, buildNextStepsByStep(config));
     const blockSchemas = buildBlockSchemas(config, projectRoot);
     const payloadSchemas: Record<string, unknown>[] = [];
+    // Many blocks share one shape, and anyOf only needs each shape once.
+    const seenPayloadSchemaTexts = new Set<string>();
     for (const stepKey of reachableSteps) {
         for (const blockSchema of blockSchemas) {
             if (`${blockSchema.diagram}::${blockSchema.box}` === stepKey) {
-                payloadSchemas.push(blockSchema.schema);
+                const payloadSchemaText = JSON.stringify(blockSchema.schema);
+                if (!seenPayloadSchemaTexts.has(payloadSchemaText)) {
+                    seenPayloadSchemaTexts.add(payloadSchemaText);
+                    payloadSchemas.push(blockSchema.schema);
+                }
             }
         }
     }

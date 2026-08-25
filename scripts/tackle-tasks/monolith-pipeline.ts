@@ -1048,7 +1048,7 @@ function assertEveryBlockDeclaresInputFields(blockList: Block[]): void {
     }
 }
 
-// Every block the run can still reach. live: buildRunStepSchemas.ts:getStepsReachableFrom, which stops at prompts; it must not.
+// Every block before the next prompt block; exits are folded here, so any block can stop. live: buildBlockSchemas
 function getSchemaReachableFrom(startName: string): Schema {
     const schema: Schema = {};
     const queue = [startName];
@@ -1062,6 +1062,8 @@ function getSchemaReachableFrom(startName: string): Schema {
         for (const candidate of blockList) {
             if (candidate.name === name) block = candidate;
         }
+        // A prompt block stops the walk, so its arrows are not followed. live: buildRunStepSchemas.ts:buildNextStepsByStep
+        if (block!.producesPrompt) continue;
         for (const next of block!.feeds) {
             queue.push(next);
         }
@@ -1106,9 +1108,7 @@ function run(script: Script, scriptInput: Input, state: Input): RunStepResult {
 }
 
 function runStep(input: Input, schema: Schema): Directions {
-    /*
-      invokes the runStepHook.ts hook with the given input.  Looks up the script (here emulated as a function) that should be executed for the block, and passes the input to it.  If the script is matched to a 'continue' block, the output of the script says what block to run next, and the output is passed to the next block in the chain.  If the script is matched to a 'prompt' block, the script output stops the loop here, and the output is returned to the caller of 'runStep'.
-    */
+    // Invokes runStepHook.ts for the block; continue blocks return the next block, prompt blocks stop and return to the caller.
     let state = input;
     try {
         let block = getBlockFor(state);
@@ -1121,20 +1121,21 @@ function runStep(input: Input, schema: Schema): Directions {
             if (script === undefined) throw new Error(`no script found for block ${block.name}`);
             // execute the script (function) matched to the block being run.
             result = run(script, scriptInput, state);
-            // A prompt stops the walk here. live: runStepHook.ts:buildSuccess rebuilds the list with buildAgentSchema(next); it must filter instead.
+            // A prompt stops the walk here; the next list is rebuilt from next. live: runStepHook.ts:buildSuccess
             if (result.prompt !== "") {
-                // Drop every block the run can no longer reach. The list only shrinks.
+                /* retired: the list stops at each prompt block now, so the next segment is rebuilt, not filtered.
                 const reachable = getSchemaReachableFrom(result.nextBlock!);
                 const remaining: Schema = {};
                 for (const name in schema) {
                     if (name in reachable) remaining[name] = schema[name]!;
                 }
+                */
                 return {
                     block: block.name,
                     prompt: result.prompt,
                     payload: result.output,
                     previousBlockWasTerminal: false,
-                    schema: remaining,
+                    schema: getSchemaReachableFrom(result.nextBlock!),
                     error: "",
                 };
             }
@@ -1152,7 +1153,19 @@ function runStep(input: Input, schema: Schema): Directions {
             }
             // if the script is a continue-generating script, get the next block to run.
             state = result.output;
-            block = getBlockFor(state);
+            const blockAfter = getBlockFor(state);
+            // A prompt block gets a fresh agent, so the walk stops before it. live: runStepHook.ts:walkFromStep
+            if (blockAfter.producesPrompt) {
+                return {
+                    block: block.name,
+                    prompt: "",
+                    payload: state,
+                    previousBlockWasTerminal: false,
+                    schema: getSchemaReachableFrom(blockAfter.name),
+                    error: "",
+                };
+            }
+            block = blockAfter;
             // else pass the output from the script execution to the next block in the chain.
             scriptInput = prepareInputForBlock(state, block);
             // loop back to find and execute the next block in the chain.
@@ -1183,6 +1196,15 @@ function followPrompt(directions: Directions): AgentResult | null {
     if (directions.previousBlockWasTerminal) {
         return {
             previousBlockWasTerminal: true,
+            schema: directions.schema,
+            output: directions.payload,
+            error: "",
+        };
+    }
+    // The walk stopped before a prompt block: nothing to answer, the next pass starts at that block.
+    if (directions.prompt === "") {
+        return {
+            previousBlockWasTerminal: false,
             schema: directions.schema,
             output: directions.payload,
             error: "",
@@ -1255,9 +1277,11 @@ function agent(input: Input, schema: Schema): AgentResult | null {
     if (directions.error === "") {
         if (!(directions.block in schema)) throw new Error(`the hook stopped at ${directions.block}, which this call's schema does not allow`);
     }
+    /* retired: the walk now stops before a prompt block with an empty prompt, and the next pass starts there.
     if (directions.prompt === "") {
         throw new Error("the hook returned an empty prompt to the agent. the agent has nothing to do and is idle.");
     }
+    */
     console.log(`  agent reads the prompt from ${directions.block}:\n    ${directions.prompt.split("\n").join("\n    ")}`);
 
     /*

@@ -228,6 +228,43 @@ test("test_runStepHook_sendsTheNextBlocksSchemaWithTheOutcome", () => {
     assert.deepEqual(payloadSchemas.map((schema: { required: string[] }) => schema.required), [["input"]]);
 });
 
+// The block after a prompt reads packet plus answer, so the hook returns the packet the prompt block received.
+test("test_runStepHook_stopsBeforeAPromptBlockAndHandsItsOutputAsThePacket", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", taskNumber: 7, runId: "run-1" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.deepEqual(result.ran, ["one.mmd::A"]);
+    assert.equal(result.outcome.scriptSignal, "continue");
+    assert.equal(result.outcome.next, "one.mmd::B");
+    assert.deepEqual(result.outcome.packet, { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "" });
+});
+
+// A pass starting at the prompt block runs it; the packet is that pass's given input.
+test("test_runStepHook_handsAPromptBlocksOwnInputAsThePacket", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook(`/run-step B {"box":"A","scriptSignal":"continue","taskNumber":7}`, configFile);
+    assert.equal(result.outcome.scriptSignal, "prompt");
+    assert.deepEqual(result.outcome.packet, { box: "A", scriptSignal: "continue", taskNumber: 7 });
+});
+
+// After a stop block the packet is that block's whole output, box and scriptSignal included.
+test("test_runStepHook_handsAStopBlocksOutputAsThePacket", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    assert.deepEqual(runHook("/run-step A just words", configFile).result.outcome.packet, { box: "A", scriptSignal: "stop", input: "just words" });
+});
+
 test("test_runStepHook_sendsNoSchemaWhenNothingFollows", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
@@ -308,6 +345,18 @@ test("test_runStepHook_stopsWhenTheNextBoxIsNotInTheConfig", () => {
     assert.match(result.errors[0], /gone\.mmd::MISSING is not in the config/);
 });
 
+// git prints "Reset branch" on stderr after the step's result, so stderr must not hide the result line.
+test("test_runStepHook_readsTheResultFromStdoutWhenAStepWritesToStderrAfterIt", () => {
+    const configFile = configWith((_writeStep, folder) => {
+        const scriptPath = join(folder, "A.ts");
+        writeFileSync(scriptPath, `console.log(JSON.stringify({ box: "A", scriptSignal: "stop" }));\nconsole.error("Reset branch 'task-1'");\n`);
+        return { "one.mmd": [{ box: "A", script: scriptPath, next: [] }] };
+    });
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ran, ["one.mmd::A"]);
+});
+
 test("test_runStepHook_stopsWhenAStepPrintsNoResultObject", () => {
     const configFile = configWith((_writeStep, folder) => {
         const scriptPath = join(folder, "A.ts");
@@ -338,9 +387,10 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
         ],
     }));
     const log = runHook("/run-step A", configFile).readLog();
-    assert.match(log, /======= A ======[\s\S]*======= B ======/);
-    assert.match(log, /====== command ======\nnode --no-inspect .*A\.ts\n====== end command ======/);
-    assert.match(log, /====== command output ======\n\{"box":"A","scriptSignal":"continue","input":""\}\n====== end command output ======/);
+    assert.match(log, /^## ======= A =======$[\s\S]*^## ======= B =======$/m);
+    assert.match(log, /### === command ======\nnode --no-inspect .*A\.ts\n### end command ======/);
+    assert.match(log, /### command output ======\n```json\n\{"box":"A","scriptSignal":"continue","input":""\}\n```\n### end command output ======/);
+    assert.match(log, /### output ======\n```json\n\{\n    "ok": true,\n/);
 });
 
 test("test_runStepHook_writesNothingToTheLogWhenNoBlockRan", () => {
@@ -367,7 +417,7 @@ test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const log = runHook(`/run-step A it's here`, configFile).readLog();
-    assert.match(log, /====== command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n====== end command ======/);
+    assert.match(log, /### === command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n### end command ======/);
 });
 
 test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {

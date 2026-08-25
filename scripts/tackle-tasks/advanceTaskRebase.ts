@@ -1,6 +1,4 @@
-// "advance the rebase" + "is the rebase finished?" (pipeline.mmd). Continues the stopped
-// layer's live rebase, then resumes the same deepest-first walk rebaseTaskWorktree uses —
-// already-finished layers are no-ops, so this naturally reaches remaining, untouched layers.
+// Implements pipeline.mmd's advance-rebase step: continues the stopped layer, resumes rebaseTaskWorktree's deepest-first walk; finished layers are no-ops.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
@@ -41,8 +39,7 @@ function collectConflictedPaths(checkoutPath: string): string[] {
     return git(checkoutPath, "diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean);
 }
 
-// Mirrors continueRebaseChecked in tackle-tasks-v1_1_AgentPromptEmitter.ts: editor disabled so
-// a plain --continue never blocks on an interactive prompt.
+// Mirrors continueRebaseChecked in tackle-tasks-v1_1_AgentPromptEmitter.ts: editor disabled so a plain --continue never blocks on an interactive prompt.
 function continueRebaseChecked(checkoutPath: string): { continued: boolean; freshConflict: boolean; failureReason: string | null } {
     try {
         execFileSync("git", ["-C", checkoutPath, "rebase", "--continue"], {
@@ -111,6 +108,9 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): A
     if (outcome.status === "tests-failed") {
         return { finished: false, conflicted: false, stoppedAt: stoppedAtField, conflictedFilePaths: [], failureReason: `${outcome.failedCheck}: ${outcome.testOutput}` };
     }
+    if (outcome.status === "rebased") {
+        return { finished: true, conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
+    }
     if (outcome.status === "rebased-and-tested") {
         return { finished: true, conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null };
     }
@@ -118,9 +118,7 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): A
     throw new Error(`rebase of the root occurrence failed operationally: ${reason}`);
 }
 
-// Verifies "finished" by reading the world, not by trusting an exit code: no layer may still
-// have a rebase in progress. Worktree-only check (F1): buildDiscoveryManifest's remapped paths
-// are correct here since this never reads a source-only OID.
+// Verifies finished by reading the world, not an exit code; no layer may still be rebasing (worktree-only check, F1).
 function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: string): void {
     const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
     for (const occurrence of manifest.repositoryManifest.occurrences) {
@@ -142,7 +140,8 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
         return freshConflict;
     }
 
-    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null);
+    // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null, false);
     if (submoduleReport.stoppedAt !== null) {
         const result = mapSubmoduleStop(submoduleReport.stoppedAt);
         persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, result);
@@ -158,6 +157,7 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
         createEmptyResolutionManifest(),
         true,
         null,
+        false,
     );
     const result = mapParentOutcome(worktreePath, parentOutcome);
     if (result.finished) {

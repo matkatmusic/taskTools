@@ -288,31 +288,6 @@ test("test_rebaseTaskWorktree_reconciliationReproducesANestedConflictOutcomeFrom
     assert.deepEqual(reconciled.result, output);
 });
 
-// F3: a root test-failure outcome (no conflict at all) must also be reconstructable exactly.
-test("test_rebaseTaskWorktree_reconciliationReproducesAFailedTestOutcomeFromTheReceipt", async () => {
-    const rootOrigin = makeSourceRepoWithSubmodule();
-    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
-    seedTaskAndClaim(rootOrigin, taskNumber, "run-9");
-    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ scripts: { test: "false" } }));
-    git(worktreePath, "add", "package.json");
-    git(worktreePath, "commit", "-q", "-m", "make root tests fail");
-
-    const output = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-9", stepId: "rebase-9", rootSourceBranch: "main",
-    });
-
-    assert.equal(output.conflicted, false);
-    assert.equal(output.stoppedAt?.occurrenceId, "");
-    assert.notEqual(output.failureReason, null);
-
-    const reconciled = reconcileStep({
-        script: "rebaseTaskWorktree", stepId: "rebase-9", taskNumber, runId: "run-9", projectRoot: rootOrigin,
-        stepInput: { worktreePath, rootSourceBranch: "main" },
-    });
-    assert.equal(reconciled.status, "completed");
-    assert.deepEqual(reconciled.result, output);
-});
-
 // F3: two logical rebase visits in the same run. Before the fix, reconcileRebase only checked
 // that `sourceTipsAtRebase` was non-empty and no rebase was in progress - both true after step
 // "rebase-A" - so it reported "completed" for a wholly different, never-run step "rebase-B" too.

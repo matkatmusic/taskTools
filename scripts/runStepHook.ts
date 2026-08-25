@@ -18,8 +18,8 @@ process.on("uncaughtException", (error: Error) => {
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
-// The overrides exist so a test writes to its own temp files instead of the run's.
-const LOG_FILE = process.env.RUN_STEP_LOG ?? join(PROJECT_ROOT, "plans/diagram/runs/run-log.md");
+// Overrides let tests use own files; the log lives in the hook's cwd (skill's repo), not the plugin folder.
+const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), "plans/diagram/runs/run-log.md");
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
 const STEP_TIMEOUT_MS = 10_000;
@@ -39,6 +39,7 @@ type Outcome = {
     workflowSignal: string;
     next: string | null;
     payload: Record<string, unknown>;
+    packet: Record<string, unknown>;
     schema: Record<string, unknown> | null;
 };
 type WalkResult = {
@@ -85,16 +86,27 @@ function getStepKeysNamingBox(boxId: string): string[] {
 function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown): void {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
     const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
-    const logBlock = `${"=".repeat(7)} ${boxId} ${"=".repeat(6)}\n`
-        + `Source ${sourceLabel}: ${boxId}\n`
-        + `input: ${JSON.stringify({ invocation })}\n`
-        + `====== command ======\n`
+    const logBlock = `## ======= ${boxId} =======\n`
+        + `Source ${sourceLabel}\n`
+        + `Box: ${boxId}\n`
+        + `### === input ======\n`
+        + `\`\`\`json\n`
+        + `${JSON.stringify({ invocation }, null, 4)}\n`
+        + `\`\`\`\n`
+        + `### end input ======\n`
+        + `### === command ======\n`
         + `${command}\n`
-        + `====== end command ======\n`
-        + `====== command output ======\n`
+        + `### end command ======\n`
+        + `### command output ======\n`
+        + `\`\`\`json\n`
         + `${commandOutput}\n`
-        + `====== end command output ======\n`
-        + `output: ${JSON.stringify(output)}\n`
+        + `\`\`\`\n`
+        + `### end command output ======\n`
+        + `### output ======\n`
+        + `\`\`\`json\n`
+        + `${JSON.stringify(output, null, 4)}\n`
+        + `\`\`\`\n`
+        + `### end output ======\n`
         + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
     appendFileSync(LOG_FILE, logBlock);
@@ -131,7 +143,8 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
         command,
         exitCode: spawnResult.status,
         stdout: commandOutput,
-        result: parseStepResult(commandOutput),
+        // stderr is chatter (git prints "Reset branch" there), so the result line is read from stdout alone.
+        result: parseStepResult((spawnResult.stdout ?? "").trimEnd()),
     };
     appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun);
     return stepRun;
@@ -183,8 +196,16 @@ function getStartInputMismatches(step: Step, startInput: string): string[] {
     return getTemplateShapeMismatches(templateInput, parsedInput);
 }
 
+// A pipeline block's input is a JSON object; a bare string input carries no packet fields.
+function getPacketFromInput(input: string): Record<string, unknown> {
+    if (!input.startsWith("{")) {
+        return {};
+    }
+    return JSON.parse(input) as Record<string, unknown>;
+}
+
 // A stop ends the run whatever the graph says, so only a prompt hands a next box back.
-function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>): WalkResult {
+function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>, input: string): WalkResult {
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
     // Built here from the same templates the generator reads, so the two can never disagree.
     const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
@@ -194,6 +215,8 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<stri
         workflowSignal: next === null ? WORKFLOW_SIGNAL.DONE : WORKFLOW_SIGNAL.CONTINUE,
         next,
         payload: getPayloadFromOutput(output),
+        // What the next block starts from: after a prompt, that block's input; otherwise this block's output.
+        packet: output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPacketFromInput(input) : output,
         schema,
     };
     return { ok: true, ran: boxesRun, errors: [], outcome };
@@ -239,11 +262,11 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches]);
         }
         if (scriptSignal === SCRIPT_SIGNAL.STOP) {
-            return buildSuccess(boxesRun, stepKey, stepRun.result);
+            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
         }
         // The block printed a prompt instead of data, so an agent takes over here.
         if (scriptSignal === SCRIPT_SIGNAL.PROMPT) {
-            return buildSuccess(boxesRun, stepKey, stepRun.result);
+            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
         }
         if (step.next.length === 0) {
             return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`]);
@@ -258,10 +281,13 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         if (!step.next.includes(String(chosenNextBox))) {
             return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`]);
         }
-
         const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
         if (!STEPS_BY_KEY.has(nextStepKey)) {
             return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
+        }
+        // A prompt block gets a fresh agent, so the walk stops before it and names it as next.
+        if (STEPS_BY_KEY.get(nextStepKey)!.producesPrompt) {
+            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
         }
         stepKey = nextStepKey;
         // A box sees only the box before it, so anything further back has to be carried forward by hand.
