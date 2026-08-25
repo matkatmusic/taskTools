@@ -98,9 +98,14 @@ let schema = AGENT_SCHEMAS[START_STEP]
 let input = { taskNumber: args.task, tasksFile: args.tasksFile }
 // Only ran accumulates across passes. Everything else belongs to the pass that produced it.
 const ran = []
+let currentDiagram = ''
 while (true) {
-    // Grouped by diagram, so crossing a :: seam opens a new group in the progress tree.
-    phase(blockToRun.split('::')[0])
+    // One progress group per diagram visit: two agents in the same diagram share a box.
+    const diagram = blockToRun.split('::')[0]
+    if (diagram !== currentDiagram) {
+        phase(diagram)
+        currentDiagram = diagram
+    }
     const prompt = createPromptForAgent(blockToRun, input)
     const result = await agent(prompt, { label: \`run-step:\${blockToRun}\`, schema })
 

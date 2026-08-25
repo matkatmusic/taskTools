@@ -686,6 +686,7 @@ export function mergeTaskDeepestFirst(
     manifest: DiscoveryManifest,
     mergeStepOperations: MergeStepOperations = defaultMergeStepOperations,
     typecheckCommand: string | null = null,
+    runTests: boolean = true,
 ): MergeTaskWalkReport {
     const sourceCheckoutPathByOccurrenceId = new Map(
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
@@ -753,7 +754,7 @@ export function mergeTaskDeepestFirst(
             propagateChildGitlinks(occurrence, childrenByParentId, sourceTipByOccurrenceId, sourceCheckoutPathByOccurrenceId);
 
             if (occurrence.parentOccurrenceId !== null) {
-                const rebaseOutcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, false, typecheckCommand);
+                const rebaseOutcome = rebaseAndTestSubmoduleLayer(occurrence, sourceCheckoutPath, manifest.resolutionManifest, childrenByParentId, false, typecheckCommand, runTests);
                 if (rebaseOutcome.status === "conflicted") {
                     return { status: "submodule-conflicted", completedLayers, occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: rebaseOutcome.conflictedFilePaths, failureReason: null };
                 }
@@ -795,7 +796,7 @@ export function mergeTaskDeepestFirst(
                 .map((child) => child.pathInParent)
                 .filter((pathInParent): pathInParent is string => pathInParent !== null);
 
-            const parentOutcome = rebaseParentOntoSourceAndTest(occurrence.occurrenceId, occurrence.checkoutPath, occurrence.baseBranch, directChildPathsInParent, manifest.resolutionManifest, false, typecheckCommand);
+            const parentOutcome = rebaseParentOntoSourceAndTest(occurrence.occurrenceId, occurrence.checkoutPath, occurrence.baseBranch, directChildPathsInParent, manifest.resolutionManifest, false, typecheckCommand, runTests);
             if (parentOutcome.status === "conflicted") {
                 return { status: "parent-conflicted", completedLayers, checkoutPath: occurrence.checkoutPath, stage: "rebase", conflictedFilePaths: parentOutcome.conflictedFilePaths, failureReason: null };
             }

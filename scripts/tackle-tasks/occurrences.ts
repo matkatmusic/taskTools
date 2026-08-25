@@ -166,11 +166,12 @@ export function mergeWorktreeTaskDeepestFirst(
     taskNumber: number,
     mergeStepOperations: MergeStepOperations = defaultMergeStepOperations,
     typecheckCommand: string | null = null,
+    runTests: boolean = true,
 ): MergeTaskWalkReport {
     const sourceManifest = loadRepositoryManifest(projectRoot);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber);
-    return mergeTaskDeepestFirst(worktreePath, manifest, mergeStepOperations, typecheckCommand);
+    return mergeTaskDeepestFirst(worktreePath, manifest, mergeStepOperations, typecheckCommand, runTests);
 }
 
 export function buildOwnedOccurrencePaths(taskFiles: string[], occurrences: Occurrence[]): string[] {

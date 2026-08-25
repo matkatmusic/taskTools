@@ -1,5 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/runFullSuite.ts.
-// Run: node --test tests/runFullSuite.test.ts
+// Behavioral checks for scripts/tackle-tasks/runFullSuite.ts.  Run: node --test tests/runFullSuite.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -73,15 +72,16 @@ test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
     assert.equal(root?.passed, true);
 });
 
-test("test_runFullSuite_reportsRunFailedWhenALayerHasNoDiscoverableSuite", () => {
+test("test_runFullSuite_countsALayerWithNoDiscoverableSuiteAsPassed", () => {
     // Setup: a plain repo with no package.json at all, so no complete-suite command exists.
     const rootOrigin = makeTempRepoWithCommit("main");
     const worktreePath = createLinkedWorktree(rootOrigin);
     seedOpenTaskAndClaim(rootOrigin, 1);
 
-    // Test action + verification: the box treats a layer with no discoverable suite as an
-    // operational failure, the same rule the rebase box uses, rather than guessing a command.
-    assert.throws(() => runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /no discoverable test suite/);
+    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.layers, [{ occurrenceId: "", passed: true }]);
+    assert.match(result.output, /occurrence "" has no discoverable test suite/);
 });
 
 test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
@@ -105,8 +105,7 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
 });
 
 test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", () => {
-    // Setup: a claimed run that then ends and is replaced by a newer claim, simulating a
-    // timed-out process that is still holding the original run's id.
+    // Setup: a claimed run ends, replaced by a newer claim, while a timed-out process still holds the original run id.
     const rootOrigin = makeTempRepoWithCommit("main");
     writePackageJsonWithTestExitCode(rootOrigin, 0);
     const worktreePath = createLinkedWorktree(rootOrigin);

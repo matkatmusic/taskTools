@@ -103,7 +103,7 @@ test("test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits", async () => 
 
     assert.equal(result.box, "MERGE_WORKTREES");
     assert.equal(result.merged, true);
-    assert.equal(result.failureReason, null);
+    assert.equal(result.failureReason, "");
     assert.equal(result.suiteFixAttempts, 0);
     const commits = result.commits as { kind: string; occurrenceId: string }[];
     assert.deepEqual(commits.map((commit) => commit.kind), ["merge", "merge"]);

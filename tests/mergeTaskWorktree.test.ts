@@ -95,7 +95,7 @@ test("test_mergeTaskWorktree_mergesEveryLayerAndReturnsMergeCommits", async () =
     });
 
     assert.equal(result.merged, true);
-    assert.equal(result.failureReason, null);
+    assert.equal(result.failureReason, "");
     assert.deepEqual(result.commits.map((commit) => commit.kind), ["merge", "merge"]);
     assert.deepEqual(result.commits.map((commit) => commit.occurrenceId).sort(), ["", "child"]);
 });
@@ -219,4 +219,19 @@ test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     assert.equal(git(rootOrigin, "rev-parse", "HEAD"), beforeHead);
     const run = getCurrentTaskRun(taskNumber, rootOrigin);
     assert.deepEqual(run?.commits, []);
+});
+
+test("test_mergeTaskWorktree_mergesARootWithNoTestSuite", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    git(rootOrigin, "rm", "-q", "package.json");
+    git(rootOrigin, "commit", "-q", "-m", "drop the test script");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-31");
+
+    const result = mergeTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-31", rootSourceBranch: sourceBranch,
+    });
+
+    assert.equal(result.merged, true);
+    assert.equal(result.failureReason, "");
 });

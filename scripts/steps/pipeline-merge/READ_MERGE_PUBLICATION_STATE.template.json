@@ -16,7 +16,7 @@
                 "kind": "merge"
             }
         ],
-        "failureReason": null
+        "failureReason": ""
     },
     "output": {
         "worktreePath": ".",

@@ -1,4 +1,4 @@
-// "merge worktrees and submodules, no fast-forward" + "did the merge land?" (pipeline.mmd).  F3: immediately before merging, while proving lock ownership, re-verifies every source occurrence's base-branch tip against the receipt rebase left behind, and that every source checkout is structurally usable and clean - the lock serializes v1.5 tasks against each other, but ordinary git operations and other skills do not honor it, so a source checkout can move or go dirty while the lock holds, without changing its branch name or leaving it dirty forever (a clean new commit is enough to invalidate what rebase tested against).
+// F3: before merging, re-verifies each source's base-branch tip and clean state, since other git activity can bypass the lock.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
@@ -7,7 +7,7 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildWorktreeOccurrences, mergeWorktreeTaskDeepestFirst } from "./occurrences.ts";
 import { getCurrentTaskRun, type TaskCommit, type SourceTipReceipt } from "./taskRunState.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
-import { type MergeLayerOutcome, type MergeTaskWalkReport } from "../mergeTaskWorktrees.ts";
+import { defaultMergeStepOperations, type MergeLayerOutcome, type MergeTaskWalkReport } from "../mergeTaskWorktrees.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 
 export type MergeTaskWorktreeInput = {
@@ -21,7 +21,7 @@ export type MergeTaskWorktreeInput = {
 export type MergeTaskWorktreeOutput = {
     merged: boolean;
     commits: TaskCommit[];
-    failureReason: string | null;
+    failureReason: string;
 };
 
 function git(repoRoot: string, ...args: string[]): string {
@@ -40,7 +40,7 @@ function readSourceTipReceipts(taskNumber: number, runId: string, projectRoot: s
     return receipts;
 }
 
-// The root source checkout always carries the tool's own tasks.json/completedTasks.json, mutated directly on disk by every claim/state write in this same run - never "unrelated" dirt, so it must not trip the clean check every active run would otherwise always fail.
+// The root checkout's task files always change from this run, not unrelated dirt, so skip the clean check.
 function taskStateIgnorablePaths(checkoutPath: string, projectRoot: string): string[] {
     if (checkoutPath !== projectRoot) return [];
     const { tasksPath, completedTasksPath } = resolveTaskFiles(projectRoot);
@@ -51,7 +51,7 @@ function isIgnorableStatusPath(path: string, ignorablePaths: string[]): boolean 
     return ignorablePaths.includes(path);
 }
 
-// NUL-safe: `-z` never quotes or escapes a path, so whitespace and non-ASCII paths parse intact.  A rename/copy entry (`R`/`C`) carries a second NUL-terminated "from" path that must be consumed as part of the same entry, not read as an unrelated status line.
+// NUL-safe: `-z` parses paths intact; a rename or copy entry's second NUL-terminated "from" path belongs to that same entry.
 function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
     const output = git(checkoutPath, "status", "--porcelain=v1", "--untracked-files=all", "-z");
     const tokens = output.split("\0").filter((token) => token.length > 0);
@@ -64,7 +64,7 @@ function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
     return paths;
 }
 
-// F3: rev-parses every receipt's baseBranch in its live source checkout and compares against the tip rebase recorded, then confirms the checkout is structurally usable and clean.
+// F3: checks each receipt's baseBranch against the tip rebase recorded, then confirms the checkout is clean and usable.
 function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[]): void {
     const sourceCheckoutPathByOccurrenceId = new Map<string, string>([["", projectRoot]]);
     for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot)) {
@@ -113,13 +113,13 @@ function mergeCommitsFromLayers(layers: MergeLayerOutcome[], extraRootCommitHash
 
 function mapReport(report: MergeTaskWalkReport): MergeTaskWorktreeOutput {
     if (report.status === "merged") {
-        return { merged: true, commits: mergeCommitsFromLayers(report.completedLayers, null), failureReason: null };
+        return { merged: true, commits: mergeCommitsFromLayers(report.completedLayers, null), failureReason: "" };
     }
     if (report.status === "root-merged-but-not-closed") {
         return { merged: true, commits: mergeCommitsFromLayers(report.completedLayers, report.mergedCommitHash), failureReason: report.failureReason };
     }
     // submodule-conflicted, parent-conflicted, merge-record-missing
-    return { merged: false, commits: mergeCommitsFromLayers(report.completedLayers, null), failureReason: report.failureReason };
+    return { merged: false, commits: mergeCommitsFromLayers(report.completedLayers, null), failureReason: report.failureReason ?? "" };
 }
 
 export function mergeTaskWorktree(input: MergeTaskWorktreeInput): MergeTaskWorktreeOutput {
@@ -131,7 +131,8 @@ export function mergeTaskWorktree(input: MergeTaskWorktreeInput): MergeTaskWorkt
     const receipts = readSourceTipReceipts(input.taskNumber, input.runId, projectRoot);
     verifySourceTipsUnchangedSinceRebase(worktreePath, projectRoot, receipts);
 
-    const report = mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, input.taskNumber);
+    // pipeline-suite.mmd already ran the suite, so the merge itself runs no tests.
+    const report = mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, input.taskNumber, defaultMergeStepOperations, null, false);
     return mapReport(report);
 }
 

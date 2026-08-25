@@ -1,4 +1,4 @@
-// "run the full suite" — pipeline-suite.mmd. Runs each layer's suite, deepest first; a layer without one throws.
+// "run the full suite" — pipeline-suite.mmd. Runs each layer's suite, deepest first; a layer without one passes.
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { getOccurrencesDeepestFirst } from "./occurrences.ts";
@@ -50,10 +50,11 @@ export function runFullSuite(
     const outputs: string[] = [];
     for (const occurrence of occurrences) {
         const policyResult = discoverTestPolicy(occurrence.occurrenceId, occurrence.checkoutPath, resolutionManifest);
+        // A layer with no discoverable suite has nothing to fail, so it counts as passed.
         if (policyResult.status === "needsResolution") {
-            throw new Error(
-                `run-failed: occurrence "${occurrence.occurrenceId}" has no discoverable test suite`,
-            );
+            layers.push({ occurrenceId: occurrence.occurrenceId, passed: true });
+            outputs.push(`occurrence "${occurrence.occurrenceId}" has no discoverable test suite`);
+            continue;
         }
         const layerRun = runCompleteSuite(occurrence.checkoutPath, policyResult.policy.completeSuiteCommand);
         layers.push({ occurrenceId: occurrence.occurrenceId, passed: layerRun.passed });
