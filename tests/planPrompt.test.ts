@@ -50,3 +50,10 @@ test("test_planPrompt_prependsACommandBlockPerPresentPayloadField", () => {
     const combined = planPrompt(fakeTask, { clarifyRequest: "need X", updateDocs: true });
     assert.ok(combined.indexOf("TTCLARIFY") < combined.indexOf("TTDOCS"));
 });
+
+test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () => {
+    const prompt = planPrompt(fakeTask);
+    assert.match(prompt, /\/read-file "[^"]*\/plans\/plan-template\.json"/);
+    assert.equal(prompt.includes('"sections": ['), false);
+    assert.match(prompt, /with `task` set to 99\./);
+});

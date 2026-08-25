@@ -1,6 +1,7 @@
-// IMPLEMENT_TASK, from pipeline-implement.mmd. Adapted from scripts/tackle-tasks/ImplementBodyEmitter.ts: drops the amend/test-review preamble (that now runs as its own box before this pipeline is re-entered) and drops the embedded "commit it yourself" step (COMMIT_IMPLEMENTATION_IF_NEEDED now does that as its own box).
-import { realpathSync } from "node:fs";
+// IMPLEMENT_TASK, from pipeline-implement.mmd. COMMIT_IMPLEMENTATION_IF_NEEDED now owns committing, not this box.
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL, buildPromptOutputTemplate } from "../../contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../../tackle-tasks/preparedTask.ts";
@@ -111,7 +112,10 @@ Return JSON with two fields, \`message\` and \`additionalData\`.
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as AcceptedPlanInput;
     const t = loadPreparedTask(packet.taskNumber, packet.worktreePath, packet.projectRoot);
-    const prompt = buildImplementPrompt(t, packet.typecheckCommand, packet.maxFixRounds);
+    const promptFile = `${packet.worktreePath.replace(/\/+$/, "")}/plans/IMPLEMENT_TASK.prompt.md`;
+    mkdirSync(dirname(promptFile), { recursive: true });
+    writeFileSync(promptFile, buildImplementPrompt(t, packet.typecheckCommand, packet.maxFixRounds));
+    const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { ...buildPromptOutputTemplate("IMPLEMENT_TASK"), scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };
 }
 

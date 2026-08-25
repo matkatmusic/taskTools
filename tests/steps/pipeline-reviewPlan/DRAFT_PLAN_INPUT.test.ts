@@ -23,7 +23,7 @@ function packetFrom(fixture: ReturnType<typeof makeFixture>) {
         worktree: fixture.worktree,
         sourceBranch: "main",
         projectRoot: fixture.projectRoot,
-        plan: { task: 42, revision: 1, createsFiles: [], sections: [] },
+        planFile: "/repo/.worktrees/task-42/plans/plan.json",
         clarifyRequest: "",
     };
 }
@@ -46,13 +46,12 @@ test("test_main_derivesTheFilePathsFromTaskWorktreeAndProjectRoot", () => {
     assert.deepEqual(output.ownedFilePaths, [join(fixture.worktree, "src/owned.ts")]);
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const fixture = makeFixture();
     const packet = packetFrom(fixture);
     const output = main(JSON.stringify(packet));
     assert.equal(output.runId, "run-1");
     assert.equal(output.sourceBranch, "main");
-    assert.deepEqual(output.plan, packet.plan);
 });
 
 test("test_main_throwsWhenWorktreeIsNotAnAbsolutePath", () => {

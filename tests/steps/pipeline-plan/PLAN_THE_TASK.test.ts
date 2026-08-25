@@ -31,11 +31,11 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
 
     assert.equal(output.box, "PLAN_THE_TASK");
     assert.equal(output.scriptSignal, "prompt");
-    const prompt = String(output.prompt);
-    assert.match(prompt, /task 35/);
-    assert.match(prompt, /Codex reviews this plan before it is implemented\./);
-    // The next block runs in a different agent() call; the engine carries the payload, not the prompt text.
-    assert.doesNotMatch(prompt, /\/run-step|invoke the skill/i);
+    const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+    assert.equal(output.prompt, `invoke '/read-file "${promptFile}"' and follow the instructions.`);
+    const promptFileContents = readFileSync(promptFile, "utf8");
+    assert.match(promptFileContents, /task 35/);
+    assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
 });
 
 // Rule D: PLAN_THE_TASK's declared answer shape must never drift from the planner's actual contract file.

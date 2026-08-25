@@ -5,7 +5,7 @@
         "taskNumber": 0,
         "runId": "",
         "projectRoot": "",
-        "worktreePath": "",
+        "worktreePath": "scripts/steps/pipeline-suite/fixtures/worktree",
         "rootSourceBranch": "",
         "ownedFilePaths": [""],
         "testFilePaths": [""],

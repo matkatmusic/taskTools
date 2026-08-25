@@ -11,7 +11,8 @@ export type DraftPlanInputPacket = {
     worktree: string;
     sourceBranch: string;
     projectRoot: string;
-    plan: unknown;
+    // plan: unknown;
+    planFile: string;
     clarifyRequest: string | null;
 };
 
@@ -35,7 +36,7 @@ export function main(input: string): Record<string, unknown> {
         ownedFilePaths: prepared.ownedFilePaths,
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
-        plan: packet.plan,
+        // plan: packet.plan,
     };
 }
 

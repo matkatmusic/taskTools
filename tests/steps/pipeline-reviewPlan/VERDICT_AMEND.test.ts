@@ -5,7 +5,7 @@ import { main } from "../../../scripts/steps/pipeline-reviewPlan/VERDICT_AMEND.t
 
 const PACKET = {
     taskNumber: 42, taskStateRoot: "/repo", repoRoot: "/repo/wt", notes: "fix the thing",
-    runId: "run-1", sourceBranch: "main", plan: { task: 42, revision: 1, createsFiles: [], sections: [] },
+    runId: "run-1", sourceBranch: "main",
 };
 
 test("test_main_forwardsTheNotesTowardUpdateTaskEntry", () => {
@@ -15,9 +15,8 @@ test("test_main_forwardsTheNotesTowardUpdateTaskEntry", () => {
     assert.equal(output.notes, "fix the thing");
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const output = main(JSON.stringify(PACKET));
     assert.equal(output.runId, "run-1");
     assert.equal(output.sourceBranch, "main");
-    assert.deepEqual(output.plan, PACKET.plan);
 });

@@ -9,26 +9,24 @@ import { getTemplateShapeMismatches } from "../../../scripts/templateShape.ts";
 
 const TEMPLATE_PATH = join(import.meta.dirname, "../../../scripts/steps/pipeline-reviewPlan/VERDICT_AMEND_THEN_ACCEPT.template.json");
 
-const FIXTURE_PLAN = {
-    task: 42,
-    revision: 1,
-    createsFiles: [],
-    sections: [
-        { id: "step-1", title: "Step 1", body: "Edit src/owned.ts to add the export.", codexNotes: "" },
-    ],
-};
-
 function makeFixture(): { taskStateRoot: string; planFile: string } {
     const taskStateRoot = mkdtempSync(join(tmpdir(), "verdict-amend-then-accept-"));
     const planFile = join(taskStateRoot, "plan.json");
-    writeFileSync(planFile, JSON.stringify(FIXTURE_PLAN));
+    writeFileSync(planFile, JSON.stringify({
+        task: 42,
+        revision: 1,
+        createsFiles: [],
+        sections: [
+            { id: "step-1", title: "Step 1", body: "Edit src/owned.ts to add the export.", codexNotes: "" },
+        ],
+    }));
     return { taskStateRoot, planFile };
 }
 
 function packet(taskStateRoot: string, planFile: string, fixes: unknown[]) {
     return {
         taskNumber: 42, taskStateRoot, repoRoot: taskStateRoot, planFile,
-        runId: "run-1", sourceBranch: "main", plan: FIXTURE_PLAN,
+        runId: "run-1", sourceBranch: "main",
         review: { outcome: "OK", missingFiles: [], message: "", issues: [], fixes, sectionsThatHoldUp: [] },
     };
 }
@@ -64,10 +62,9 @@ test("test_main_forwardsTaskIdentityTowardImplement", () => {
     assert.equal(output.planFile, planFile);
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const { taskStateRoot, planFile } = makeFixture();
     const output = main(JSON.stringify(packet(taskStateRoot, planFile, [])));
     assert.equal(output.runId, "run-1");
     assert.equal(output.sourceBranch, "main");
-    assert.deepEqual(output.plan, FIXTURE_PLAN);
 });

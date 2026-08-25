@@ -28,7 +28,7 @@ const reviewedPaths = (t: PreparedTask) => {
     return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
 };
 
-function reviewQuestion(t: PreparedTask): string {
+export function reviewQuestion(t: PreparedTask): string {
     return `You are a read-only review agent tasked with reviewing the implementation plan for task ${t.number}. 
 You write no file. 
 Your sandbox is read-only, so any attempt to write one fails.
@@ -59,7 +59,7 @@ ${reviewedPaths(t).map((path) => `- ${path}`).join("\n")}
 ## HOW TO JUDGE THE PLAN
 
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
-Verify every claim against the source file it is about, never against what the plan says about it. 
+Verify every assertion against the source file it is about, never against what the plan says about it. 
 
 The plan is good enough when an implementer could follow the plan without deciding anything the plan should have already decided: 
 - every edit names its file and line numbers with the old and new text, 
@@ -69,7 +69,7 @@ The plan is good enough when an implementer could follow the plan without decidi
 - the verification is an exact command with its expected result.
 
 ## DO NOT FLAG 
-- file-size or line-count claims, 
+- file-size or line-count assertions, 
 - spelling, 
 - grammar, 
 - style (coding or prose), 

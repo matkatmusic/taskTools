@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { resolveTaskFiles } from "../taskFiles.ts";
-import { buildOrderedBlockSchemas, generateWorkflow } from "../generateWorkflow.ts";
+import { generateWorkflow } from "../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
@@ -28,7 +28,7 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
         args: {
             task: taskNumber,
             tasksFile: resolveTaskFiles(projectRoot).tasksPath,
-            firstPassSchemaCount: buildOrderedBlockSchemas().firstPassSchemaCount,
+            // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
         },
     });
 

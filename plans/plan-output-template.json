@@ -1,23 +1,5 @@
 {
   "outcome": "<PLAN|CLARIFY>",
-  "plan": {
-    "task": 0,
-    "revision": 1,
-    "createsFiles": ["<repo-relative path, same form as a task's files entries, e.g. \"server.py\"; one entry per file this plan creates that does not exist yet. Delete this placeholder and leave the array empty if the plan creates nothing new.>"],
-    "sections": [
-      {
-        "id": "<stable, lowercase, kebab-case, unique within this plan; codex addresses feedback by this id>",
-        "title": "<short name for this step>",
-        "body": "<markdown. HOW and IN WHAT ORDER, not why. Per ~/.claude/guides/planning.md the implementer must not have to reason about how the thing should be built, so name the file and line numbers, show each edit as old and new text, and sort a file's edits highest line number first. Resolve every ambiguity here; write no conditional instruction. Per ~/.claude/guides/tdd.md the failing test comes first, so a test section precedes the section implementing it. Any code snippet follows ~/.claude/guides/coding-standards.md.>",
-        "codexNotes": "<leave this empty. The plan review script fills it in with codex's durable fix for THIS section, and the implementer must do what it says.>"
-      },
-      {
-        "id": "<the next step's id; array order is the plan order and nothing else encodes sequence>",
-        "title": "<short name for this step>",
-        "body": "<markdown, same rules>",
-        "codexNotes": "<leave empty; same field, same rule>"
-      }
-    ]
-  },
+  "planFile": "<the exact absolute path the prompt named for the plan; the plan is written there when outcome is PLAN>",
   "clarifyRequest": "<string, null when outcome is PLAN>"
 }

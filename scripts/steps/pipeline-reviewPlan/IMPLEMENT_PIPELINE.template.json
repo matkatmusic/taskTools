@@ -7,15 +7,7 @@
         "repoRoot": "/repo/.worktrees/task-42",
         "planFile": "/repo/.worktrees/task-42/plans/plan.json",
         "runId": "run-1",
-        "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        }
+        "sourceBranch": "main"
     },
     "output": {
         "box": "IMPLEMENT_PIPELINE",

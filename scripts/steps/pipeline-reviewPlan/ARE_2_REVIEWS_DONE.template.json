@@ -7,15 +7,7 @@
         "repoRoot": "/repo/.worktrees/task-42",
         "reviewCount": 1,
         "runId": "run-1",
-        "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        }
+        "sourceBranch": "main"
     },
     "output": {
         "box": "ARE_2_REVIEWS_DONE",
@@ -27,14 +19,6 @@
         "exitType": "",
         "exitNote": "",
         "runId": "run-1",
-        "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        }
+        "sourceBranch": "main"
     }
 }

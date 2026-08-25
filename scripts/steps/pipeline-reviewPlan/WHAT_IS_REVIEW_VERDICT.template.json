@@ -11,14 +11,6 @@
         "ownedFilePaths": ["/repo/.worktrees/task-42/src/owned.ts"],
         "runId": "run-1",
         "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
         "review": {
             "outcome": "OK",
             "missingFiles": [],
@@ -38,14 +30,6 @@
         "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
         "runId": "run-1",
         "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
         "review": {
             "outcome": "OK",
             "missingFiles": [],

@@ -7,14 +7,7 @@
         "worktree": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree",
         "sourceBranch": "main",
         "projectRoot": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
+        "planFile": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
         "clarifyRequest": ""
     },
     "output": {
@@ -28,14 +21,6 @@
         "reviewOutputFile": "/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json",
         "ownedFilePaths": ["/Users/matkatmusicllc/Programming/taskTools-86/scripts/steps/pipeline-reviewPlan/fixtures/worktree/src/owned.ts"],
         "runId": "run-1",
-        "sourceBranch": "main",
-        "plan": {
-            "task": 42,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        }
+        "sourceBranch": "main"
     }
 }

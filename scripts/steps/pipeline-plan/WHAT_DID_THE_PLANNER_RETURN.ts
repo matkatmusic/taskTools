@@ -10,7 +10,8 @@ type Input = {
     sourceBranch: string;
     projectRoot: string;
     outcome: "PLAN" | "CLARIFY";
-    plan: unknown;
+    // plan: unknown;
+    planFile: string;
     clarifyRequest: string | null;
 };
 
@@ -31,7 +32,8 @@ export function main(input: string): Record<string, unknown> {
         worktree: parsed.worktree,
         sourceBranch: parsed.sourceBranch,
         projectRoot: parsed.projectRoot,
-        plan: parsed.plan,
+        // plan: parsed.plan,
+        planFile: parsed.planFile,
         clarifyRequest: parsed.clarifyRequest,
         next,
     };

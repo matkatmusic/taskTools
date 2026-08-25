@@ -1,5 +1,6 @@
 // FIX_THE_CODEBASE_FOR_SUITE, from pipeline-suite.mmd. Prompt block; old home: SuiteFixBodyEmitter.ts.
-import { realpathSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { absolutePathsSection } from "../../tackle-tasks/promptSections.ts";
@@ -83,7 +84,11 @@ ${packet.output}
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
-    return { ...buildPromptOutputTemplate("FIX_THE_CODEBASE_FOR_SUITE"), prompt: buildSuiteFixPrompt(packet) };
+    const promptFile = `${packet.worktreePath.replace(/\/+$/, "")}/plans/FIX_THE_CODEBASE_FOR_SUITE.prompt.md`;
+    mkdirSync(dirname(promptFile), { recursive: true });
+    writeFileSync(promptFile, buildSuiteFixPrompt(packet));
+    const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
+    return { ...buildPromptOutputTemplate("FIX_THE_CODEBASE_FOR_SUITE"), prompt };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

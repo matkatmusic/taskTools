@@ -6,7 +6,7 @@ import { main } from "../../../scripts/steps/pipeline-reviewPlan/ARE_2_REVIEWS_D
 function packet(reviewCount: number) {
     return {
         taskNumber: 42, taskStateRoot: "/repo", repoRoot: "/repo/wt", reviewCount,
-        runId: "run-1", sourceBranch: "main", plan: { task: 42, revision: 1, createsFiles: [], sections: [] },
+        runId: "run-1", sourceBranch: "main",
     };
 }
 
@@ -24,10 +24,9 @@ test("test_main_scrapsTheTaskAfterTwoReviews", () => {
     assert.equal(output.exitNote, "codex did not accept the plan in two reviews");
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const p = packet(1);
     const output = main(JSON.stringify(p));
     assert.equal(output.runId, "run-1");
     assert.equal(output.sourceBranch, "main");
-    assert.deepEqual(output.plan, p.plan);
 });

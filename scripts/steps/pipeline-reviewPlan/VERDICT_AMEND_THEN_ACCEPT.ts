@@ -12,7 +12,7 @@ export type VerdictAmendThenAcceptPacket = {
     planFile: string;
     runId: string;
     sourceBranch: string;
-    plan: unknown;
+    // plan: unknown;
     review: PlanReview;
 };
 
@@ -42,7 +42,7 @@ export function main(input: string): Record<string, unknown> {
         planFile: packet.planFile,
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
-        plan: packet.plan,
+        // plan: packet.plan,
     };
 }
 

@@ -12,9 +12,11 @@ plans/implementation-notes-*.md
 .claude/skills/check-time
 .claude/skills/run-full-suite
 plans/implementation-diff-*.patch
+**/plans/*.prompt.md
 .claude/skills/run-task-tests
 .claude/skills/rebase-worktree
 .claude/skills/continue-rebase
 .claude/skills/run-step
 plans/diagrams/runs/run-log.md
 plans/diagram/runs/run-log.md
+plans/diagram/runs/packets/

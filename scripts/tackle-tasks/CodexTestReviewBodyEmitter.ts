@@ -41,7 +41,7 @@ function taskTestRun(t: PreparedTask) {
 // Every reviewer opens these itself, so one question serves codex and the claude fallbacks alike.
 const reviewedPaths = (t: PreparedTask, diffPath: string) => [t.briefFile, t.planFile, ...t.testFilePaths, diffPath, REVIEW_TESTS_TEMPLATE_PATH];
 
-function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
+export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
     return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.

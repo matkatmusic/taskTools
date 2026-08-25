@@ -1,5 +1,5 @@
 // The planner agent's prompt, shared between the old AgentPromptEmitter dispatch and the pipeline-plan.mmd run-step block (scripts/steps/pipeline-plan/PLAN_THE_TASK.ts).
-import { readFileSync } from "node:fs";
+// import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
@@ -64,12 +64,12 @@ TTDOCS
 `;
 };
 
-// The template is valid JSON, so the task number is set here rather than left for the agent.
-const planShape = (t: PreparedTask) => {
-    const shape = JSON.parse(readFileSync(PLAN_TEMPLATE_PATH, "utf8"));
-    shape.task = t.number;
-    return JSON.stringify(shape, null, 2);
-};
+// Retired: the prompt now reads plans/plan-template.json through /read-file instead of pasting it.
+// const planShape = (t: PreparedTask) => {
+//     const shape = JSON.parse(readFileSync(PLAN_TEMPLATE_PATH, "utf8"));
+//     shape.task = t.number;
+//     return JSON.stringify(shape, null, 2);
+// };
 
 // ---------------------------------------------------------------------------
 // plan — writes plan.json in the shape of plans/plan-template.json, spliced in below.
@@ -114,10 +114,11 @@ Do not change any source file — this is planning only, not implementation.
 
 ## FORMATTING THE PLAN
 
-Write the plan in exactly this shape, replacing every \`<...>\` with a real value:
-\`\`\`json
-${planShape(t)}
+Run this, which puts the exact shape the plan must take into your context:
 \`\`\`
+/read-file ${readFileArgs([PLAN_TEMPLATE_PATH])}
+\`\`\`
+Write the plan in exactly that shape, replacing every \`<...>\` with a real value, with \`task\` set to ${t.number}.
 
 ## PLAN REQUIREMENTS
 

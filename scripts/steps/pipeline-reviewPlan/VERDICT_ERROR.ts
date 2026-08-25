@@ -9,7 +9,7 @@ export type VerdictErrorPacket = {
     repoRoot: string;
     runId: string;
     sourceBranch: string;
-    plan: unknown;
+    // plan: unknown;
     notes: string;
 };
 
@@ -27,7 +27,7 @@ export function main(input: string): Record<string, unknown> {
         exitNote: packet.notes || "the plan review could not run",
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
-        plan: packet.plan,
+        // plan: packet.plan,
     };
 }
 

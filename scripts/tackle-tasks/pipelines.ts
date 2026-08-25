@@ -226,7 +226,7 @@ export const PLAN_RESULT = {
     required: ["outcome"],
     properties: {
         outcome: { type: "string", enum: ["PLAN", "CLARIFY"] },
-        plan: { type: "object" },
+        planFile: { type: "string" },
         clarifyRequest: { type: "string" },
     },
 };

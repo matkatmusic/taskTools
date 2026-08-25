@@ -12,7 +12,7 @@ export type UpdateTaskEntryPacket = {
     notes: string;
     runId: string;
     sourceBranch: string;
-    plan: unknown;
+    // plan: unknown;
 };
 
 function writeCodexReviewNotes(taskStateRoot: string, taskNumber: number, notes: string): number {
@@ -43,7 +43,7 @@ export function main(input: string): Record<string, unknown> {
         reviewCount,
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
-        plan: packet.plan,
+        // plan: packet.plan,
     };
 }
 

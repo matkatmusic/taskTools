@@ -8,14 +8,7 @@
         "sourceBranch": "master",
         "projectRoot": "scripts/steps/pipeline-plan/fixtures",
         "outcome": "PLAN",
-        "plan": {
-            "task": 35,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
         "clarifyRequest": ""
     },
     "output": {
@@ -26,14 +19,7 @@
         "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
         "sourceBranch": "master",
         "projectRoot": "scripts/steps/pipeline-plan/fixtures",
-        "plan": {
-            "task": 35,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
         "clarifyRequest": "",
         "next": "PLANNER_RETURNED_PLAN"
     }

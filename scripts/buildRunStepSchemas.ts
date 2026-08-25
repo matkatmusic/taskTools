@@ -1,7 +1,8 @@
 // Every run-step schema, built from the block template files. The hook and the workflow generator share it.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, WORKFLOW_SIGNAL } from "./contracts.ts";
+import { KNOWN_SCRIPT_SIGNALS, WORKFLOW_SIGNAL } from "./contracts.ts";
+// SCRIPT_SIGNAL: only the retired STOP-block criterion in buildBlockSchemas used it.
 import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
 
 export type BlockSchema = {
@@ -62,42 +63,24 @@ export function getStepKey(target: string, diagram: string): string {
     return target.includes("::") ? target : `${diagram}::${target}`;
 }
 
-// One entry per block the walk can stop at: a prompt block's answer, or a stop block's payload.
+// One entry per block the walk can stop at: a prompt block's answer.
 export function buildBlockSchemas(config: StepConfig, projectRoot: string): BlockSchema[] {
     const blockSchemas: BlockSchema[] = [];
-    const promptStepKeys = getPromptStepKeys(config);
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {
-            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
-            const template = JSON.parse(templateText) as BlockTemplate;
-            if (entry.producesPrompt) {
-                if (template.agentAnswer === undefined) {
-                    throw new Error(`${entry.template} declares no agentAnswer, and ${entry.box} is marked producesPrompt`);
-                }
-                blockSchemas.push({
-                    diagram,
-                    box: entry.box,
-                    name: getBlockSchemaName(entry.box),
-                    schema: getSchemaFromTemplate(template.agentAnswer),
-                });
+            if (!entry.producesPrompt) {
                 continue;
             }
-            if (template.output === undefined) {
-                throw new Error(`${entry.template} declares no output, and ${entry.box} is not marked returns_a_prompt`);
-            }
-            const isStopBlock = (template.output as { scriptSignal?: unknown }).scriptSignal === SCRIPT_SIGNAL.STOP;
-            const feedsAPromptBlock = entry.next.some(target => promptStepKeys.includes(getStepKey(target, diagram)));
-            // A block ends a pass when it stops, or when the walk stops before the prompt block it feeds.
-            if (!isStopBlock) {
-                if (!feedsAPromptBlock) {
-                    continue;
-                }
+            const templateText = readFileSync(resolve(projectRoot, entry.template), "utf8");
+            const template = JSON.parse(templateText) as BlockTemplate;
+            if (template.agentAnswer === undefined) {
+                throw new Error(`${entry.template} declares no agentAnswer, and ${entry.box} is marked producesPrompt`);
             }
             blockSchemas.push({
                 diagram,
                 box: entry.box,
                 name: getBlockSchemaName(entry.box),
-                schema: getSchemaFromTemplate(getPayloadFromOutput(template.output)),
+                schema: getSchemaFromTemplate(template.agentAnswer),
             });
         }
     }
@@ -156,10 +139,11 @@ export function buildWalkResultSchema(): Record<string, unknown> {
             workflowSignal: { type: "string", enum: Object.values(WORKFLOW_SIGNAL) },
             next: { type: ["string", "null"] },
             payload: { anyOf: [] },
-            packet: { type: "object" },
-            schema: { type: ["object", "null"] },
+            // packet: { type: "object" }, // retired: the hook now returns packetFile instead.
+            packetFile: { type: "string" },
+            // schema: { type: ["object", "null"] }, // retired: the agent never echoes a schema.
         },
-        required: ["box", "scriptSignal", "workflowSignal", "next", "payload", "packet", "schema"],
+        required: ["box", "scriptSignal", "workflowSignal", "next", "payload", "packetFile"],
         additionalProperties: false,
     };
     return {
@@ -194,6 +178,8 @@ export function buildAgentSchema(config: StepConfig, projectRoot: string, startS
             }
         }
     }
+    // A pass that ends before a prompt block, or at a STOP block, answers payload with {}.
+    payloadSchemas.push({ type: "object", maxProperties: 0 });
     const envelope = buildWalkResultSchema() as Record<string, any>;
     envelope.properties.outcome.anyOf[0].properties.payload = { anyOf: payloadSchemas };
     return envelope;

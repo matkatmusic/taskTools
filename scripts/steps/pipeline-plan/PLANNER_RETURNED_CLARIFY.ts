@@ -10,7 +10,8 @@ type Input = {
     sourceBranch: string;
     projectRoot: string;
     // Carried by WHAT_DID_THE_PLANNER_RETURN's output; the CLARIFY branch has no plan yet, so it stops here.
-    plan: unknown;
+    // plan: unknown;
+    planFile: string;
     clarifyRequest: string;
 };
 

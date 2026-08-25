@@ -5,12 +5,14 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { buildOrderedBlockSchemas, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
+import { buildAgentSchemasByStartBlock, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
 import {
+    buildAgentSchema,
     buildBlockSchemas,
     buildNextStepsByStep,
     buildWalkResultSchema,
     getPayloadFromOutput,
+    getPromptStepKeys,
     getSchemaFromTemplate,
     getStepsReachableFrom,
 } from "../scripts/buildRunStepSchemas.ts";
@@ -40,9 +42,10 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; pr
 }
 
 test("test_buildWalkResultSchema_closesTheEnvelopeTheHookReturns", () => {
-    const schema = buildWalkResultSchema();
-    assert.deepEqual(schema.required, ["ok", "ran", "errors", "outcome"]);
-    assert.equal(schema.additionalProperties, false);
+    const schema = buildWalkResultSchema() as Record<string, any>;
+    const outcome = schema.properties.outcome.anyOf[0];
+    assert.deepEqual(outcome.required, ["box", "scriptSignal", "workflowSignal", "next", "payload", "packetFile"]);
+    assert.equal(outcome.additionalProperties, false);
 });
 
 // The envelope is shared, so the block shapes are left out until buildPossibleSchemas picks them.
@@ -57,32 +60,15 @@ test("test_buildWalkResultSchema_allowsAnOutcomeOfNull", () => {
     assert.deepEqual(schema.properties.outcome.anyOf[1], { type: "null" });
 });
 
-// The agent answers with the stopped block's payload, so a pass-through block has no schema.
+// The agent answers with a prompt block's answer shape; a continue or stop block has no schema.
 test("test_buildBlockSchemas_namesASchemaOnlyForABlockTheWalkCanStopAt", () => {
     const { config, projectRoot } = buildProject([
         { box: "A", output: { box: "A", scriptSignal: "continue", files: 0 } },
         { box: "B", output: { box: "B", scriptSignal: "stop" } },
+        { box: "C", output: {}, producesPrompt: true, agentAnswer: { answer: "" } },
     ]);
     const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_B_SCHEMA"]);
-});
-
-// The walk stops before a prompt block, so its feeding block can end a pass and needs a shape.
-test("test_buildBlockSchemas_namesASchemaForABlockThatFeedsAPromptBlock", () => {
-    const { config, projectRoot } = buildProject([
-        { box: "A", output: { box: "A", scriptSignal: "continue" }, next: ["B"] },
-        { box: "B", output: {}, producesPrompt: true, agentAnswer: { answer: "" }, next: [] },
-    ]);
-    const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_A_SCHEMA", "PAYLOAD_B_SCHEMA"]);
-});
-
-// The point of the whole task: the schema is the template, not a hand-written copy of it.
-test("test_buildBlockSchemas_buildsEachShapeFromThatBlocksTemplate", () => {
-    const output = { box: "A", scriptSignal: "stop", files: 0 };
-    const { config, projectRoot } = buildProject([{ box: "A", output }]);
-    const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate({ files: 0 }));
+    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_C_SCHEMA"]);
 });
 
 // A prompt block's pass hands on the agent's answer, so its schema comes from the block's own declared shape.
@@ -97,6 +83,14 @@ test("test_buildBlockSchemas_usesTheAgentAnswerShapeForAPromptBlock", () => {
 test("test_buildBlockSchemas_throwsWhenAPromptBlockDeclaresNoAgentAnswer", () => {
     const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true }]);
     assert.throws(() => buildBlockSchemas(config, projectRoot), /declares no agentAnswer/);
+});
+
+// A pass ending before a prompt block, or at a STOP block, still needs a payload shape.
+test("test_buildAgentSchema_endsThePayloadAnyOfWithTheEmptyObjectAlternative", () => {
+    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true, agentAnswer: { answer: "" } }]);
+    const schema = buildAgentSchema(config, projectRoot, "one.mmd::A") as Record<string, any>;
+    const payloadSchemas = schema.properties.outcome.anyOf[0].properties.payload.anyOf;
+    assert.deepEqual(payloadSchemas.at(-1), { type: "object", maxProperties: 0 });
 });
 
 // box, scriptSignal and next belong to the envelope, so a payload never repeats them.
@@ -159,37 +153,29 @@ test("test_buildWorkflowScript_refusesToRunWithoutATaskNumberAndATasksFileInArgs
     assert.match(buildWorkflowScript(), /if \(!Number\.isInteger\(args\?\.task\) \|\| !args\?\.tasksFile\)/);
 });
 
-// Every block's shape is in the file; first-pass blocks come before the first prompt block.
-test("test_buildWorkflowScript_putsTheFirstPassShapesFirstAndEveryBlockShapeInBlockSchemas", () => {
+// AGENT_SCHEMAS holds one envelope per block a pass can start at: START_STEP and every prompt block.
+test("test_buildWorkflowScript_putsAnAgentSchemaKeyOnStartStepAndEveryPromptBlock", () => {
     const script = buildWorkflowScript();
     assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_TASK_NUMBER_INPUT'/);
     assert.match(script, /^let blockToRun = START_STEP$/m);
-    assert.match(script, /BLOCK_SCHEMAS\.slice\(0, args\.firstPassSchemaCount\)/);
-    const listStart = script.indexOf("const BLOCK_SCHEMAS = ") + "const BLOCK_SCHEMAS = ".length;
-    const entries = JSON.parse(script.slice(listStart, script.indexOf("\nconst ENVELOPE_SCHEMA = "))) as { block: string }[];
+    assert.match(script, /^let schema = AGENT_SCHEMAS\[START_STEP\]$/m);
+    const listStart = script.indexOf("const AGENT_SCHEMAS = ") + "const AGENT_SCHEMAS = ".length;
+    const agentSchemaKeys = Object.keys(JSON.parse(script.slice(listStart, script.indexOf("\n\n// Required:"))));
     const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
     const config = JSON.parse(readFileSync(join(projectRoot, "scripts", "steps.json"), "utf8")) as StepConfig;
-    const firstPass = getStepsReachableFrom(START_STEP, buildNextStepsByStep(config));
-    assert.ok(firstPass.includes("pipeline-plan.mmd::PLAN_THE_TASK"), "the first pass does not reach PLAN_THE_TASK");
-    assert.ok(!firstPass.includes("pipeline-implement.mmd::IMPLEMENT_TASK"), "the first pass walked past PLAN_THE_TASK");
-    const blockSchemas = buildBlockSchemas(config, projectRoot);
-    const firstPassStops = firstPass.filter(stepKey => blockSchemas.some(blockSchema => `${blockSchema.diagram}::${blockSchema.box}` === stepKey));
-    const { firstPassSchemaCount } = buildOrderedBlockSchemas();
-    assert.deepEqual(entries.slice(0, firstPassSchemaCount).map(entry => entry.block), firstPassStops);
-    assert.ok(!entries.some(entry => entry.block === "pipeline-preambleStatusCheck.mmd::IS_TASK_NUMBER_VALID"), "a pass-through block has a shape");
-    assert.equal(entries.length, blockSchemas.length);
+    const expectedKeys = Object.keys(buildAgentSchemasByStartBlock());
+    assert.ok(agentSchemaKeys.includes(START_STEP));
+    for (const promptStepKey of getPromptStepKeys(config)) {
+        assert.ok(agentSchemaKeys.includes(promptStepKey), `missing ${promptStepKey}`);
+    }
+    assert.deepEqual(agentSchemaKeys.sort(), expectedKeys.sort());
 });
 
-// The first pass has no hook result to count from, so the caller must state the shape count.
-test("test_buildWorkflowScript_refusesToRunWithoutAFirstPassSchemaCountInArgs", () => {
-    assert.match(buildWorkflowScript(), /if \(!Number\.isInteger\(args\?\.firstPassSchemaCount\)\)/);
-});
-
-// After a prompt pass the next block reads the packet plus the answer, and the hook carries the packet.
+// After a prompt pass the next block reads the packetFile plus the answer.
 test("test_buildWorkflowScript_mergesAPromptAnswerOntoTheHooksPacket", () => {
     const script = buildWorkflowScript();
-    assert.match(script, /input = \{ \.\.\.result\.outcome\.packet, \.\.\.result\.outcome\.payload \}/);
-    assert.match(script, /input = result\.outcome\.packet$/m);
+    assert.match(script, /input = \{ packetFile: result\.outcome\.packetFile, \.\.\.result\.outcome\.payload \}/);
+    assert.match(script, /input = \{ packetFile: result\.outcome\.packetFile \}$/m);
     assert.doesNotMatch(script, /lastPacket/);
 });
 

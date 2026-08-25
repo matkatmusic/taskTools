@@ -69,12 +69,13 @@ test("test_main_printsAPromptSignal", () => {
 
 test("test_main_namesTheBriefPlanAndTestFilesForTheReviewer", () => {
     const packet = makePacket();
-    const prompt = main(JSON.stringify(packet)).prompt as string;
+    main(JSON.stringify(packet));
+    const promptFileContents = readFileSync(join(packet.worktreePath, "plans/CODEX_REVIEWS_TESTS.prompt.md"), "utf8");
     const briefFile = `${packet.worktreePath}/plans/brief-${packet.taskNumber}.md`;
     const planFile = `${packet.worktreePath}/plans/plan.json`;
     const testFile = `${packet.worktreePath}/tests/thing.test.ts`;
     for (const path of [briefFile, planFile, testFile]) {
-        assert.ok(prompt.includes(path), `prompt is missing ${path}`);
+        assert.ok(promptFileContents.includes(path), `prompt file is missing ${path}`);
     }
 });
 
@@ -87,15 +88,18 @@ test("test_main_everyCliLineRedirectsStdinAndCodexIsSchemaBound", () => {
 });
 
 test("test_main_forbidsRunningTheTests", () => {
-    const prompt = main(JSON.stringify(makePacket())).prompt as string;
-    assert.match(prompt, /Never run a test, and never run the full suite\./);
+    const packet = makePacket();
+    main(JSON.stringify(packet));
+    const promptFileContents = readFileSync(join(packet.worktreePath, "plans/CODEX_REVIEWS_TESTS.prompt.md"), "utf8");
+    assert.match(promptFileContents, /Never run a test, and never run the full suite\./);
 });
 
 test("test_main_writesTheImplementationDiffAndNamesItForTheReviewer", () => {
     const packet = makePacket();
-    const prompt = main(JSON.stringify(packet)).prompt as string;
+    main(JSON.stringify(packet));
+    const promptFileContents = readFileSync(join(packet.worktreePath, "plans/CODEX_REVIEWS_TESTS.prompt.md"), "utf8");
     const diffPath = `${packet.worktreePath}/plans/implementation-diff-99.patch`;
-    assert.ok(prompt.includes(diffPath), "prompt is missing the diff path");
+    assert.ok(promptFileContents.includes(diffPath), "prompt file is missing the diff path");
     assert.match(readFileSync(diffPath, "utf8"), /-export const thing = 1;/);
 });
 
@@ -145,15 +149,18 @@ test("test_main_separatesTestsThisTaskDidNotCreate", () => {
         projectRoot, taskNumber: 99, worktreePath: worktree, sourceBranch: SOURCE_BRANCH, runId: "run-1",
     };
 
-    const prompt = main(JSON.stringify(packet)).prompt as string;
-    assert.match(prompt, /## TESTS THIS TASK DID NOT CREATE\n\n- .*tests\/older\.test\.ts/);
-    assert.equal(prompt.includes(`- ${join(worktree, "tests", "thing.test.ts")}\n\nA test in that list`), false);
+    main(JSON.stringify(packet));
+    const promptFileContents = readFileSync(join(worktree, "plans/CODEX_REVIEWS_TESTS.prompt.md"), "utf8");
+    assert.match(promptFileContents, /## TESTS THIS TASK DID NOT CREATE\n\n- .*tests\/older\.test\.ts/);
+    assert.equal(promptFileContents.includes(`- ${join(worktree, "tests", "thing.test.ts")}\n\nA test in that list`), false);
 });
 
 test("test_main_carriesTheTestCommandAndItsRecordedOutput", () => {
-    const prompt = main(JSON.stringify(makePacket())).prompt as string;
-    assert.match(prompt, /ran as `node --test tests\/thing\.test\.ts`/);
-    assert.match(prompt, /SENTINEL_TASK_TEST_OUTPUT/);
+    const packet = makePacket();
+    main(JSON.stringify(packet));
+    const promptFileContents = readFileSync(join(packet.worktreePath, "plans/CODEX_REVIEWS_TESTS.prompt.md"), "utf8");
+    assert.match(promptFileContents, /ran as `node --test tests\/thing\.test\.ts`/);
+    assert.match(promptFileContents, /SENTINEL_TASK_TEST_OUTPUT/);
 });
 
 test("test_main_leavesTheContinuationToTheEngineNotTheAgent", () => {

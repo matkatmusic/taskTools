@@ -1,18 +1,21 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, WORKFLOW_SIGNAL, type ScriptSignal } from "./contracts.ts";
 import { getTemplateShapeMismatches } from "./templateShape.ts";
 // Imported, not copied, so the hook and the workflow generator build the same schema.
-import { buildAgentSchema, getPayloadFromOutput } from "./buildRunStepSchemas.ts";
+// import { buildAgentSchema, getPayloadFromOutput } from "./buildRunStepSchemas.ts";
+import { getPayloadFromOutput } from "./buildRunStepSchemas.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    appendFileSync(LOG_FILE, `## ======= HOOK EXCEPTION =======\n\`\`\`\n${reason}\n\`\`\`\n${"=".repeat(36)}\n`);
     process.exit(0);
 });
 
@@ -39,8 +42,9 @@ type Outcome = {
     workflowSignal: string;
     next: string | null;
     payload: Record<string, unknown>;
-    packet: Record<string, unknown>;
-    schema: Record<string, unknown> | null;
+    // packet: Record<string, unknown>;
+    // schema: Record<string, unknown> | null;
+    packetFile: string;
 };
 type WalkResult = {
     ok: boolean;
@@ -163,6 +167,8 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
 
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
+    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    appendFileSync(LOG_FILE, `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 
@@ -208,22 +214,32 @@ function getPacketFromInput(input: string): Record<string, unknown> {
 function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>, input: string): WalkResult {
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
     // Built here from the same templates the generator reads, so the two can never disagree.
-    const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
+    // const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
+    // What the next block starts from: after a prompt, that block's input; otherwise this block's output.
+    const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPacketFromInput(input) : output;
+    const packetFile = join(dirname(LOG_FILE), "packets", `${String(output.box)}-${process.pid}.json`);
+    mkdirSync(dirname(packetFile), { recursive: true });
+    writeFileSync(packetFile, JSON.stringify(packet));
     const outcome = {
         box: stoppedAt,
         scriptSignal: String(output.scriptSignal),
         workflowSignal: next === null ? WORKFLOW_SIGNAL.DONE : WORKFLOW_SIGNAL.CONTINUE,
         next,
-        payload: getPayloadFromOutput(output),
-        // What the next block starts from: after a prompt, that block's input; otherwise this block's output.
-        packet: output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPacketFromInput(input) : output,
-        schema,
+        payload: output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPayloadFromOutput(output) : {},
+        // packet,
+        packetFile,
     };
     return { ok: true, ran: boxesRun, errors: [], outcome };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
 function walkFromStep(startStepKey: string, startInput: string, invocation: string): WalkResult {
+    // A packetFile in the input expands to the packet plus the answer fields alongside it.
+    const startPacket = getPacketFromInput(startInput);
+    if (typeof startPacket.packetFile === "string") {
+        const { packetFile, ...answer } = startPacket;
+        startInput = JSON.stringify({ ...JSON.parse(readFileSync(packetFile, "utf8")), ...answer });
+    }
     const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
     if (startInputMismatches.length > 0) {
         return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches]);

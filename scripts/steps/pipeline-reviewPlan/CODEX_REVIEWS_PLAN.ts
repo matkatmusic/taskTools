@@ -1,8 +1,11 @@
 // CODEX_REVIEWS_PLAN, from pipeline-reviewPlan.mmd. Ported from scripts/tackle-tasks/CodexReviewBodyEmitter.ts.
-import { readFileSync, realpathSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { isPlanProblem, readAndValidatePlan } from "../../tackle-tasks/planArtifacts.ts";
+// import { isPlanProblem, readAndValidatePlan } from "../../tackle-tasks/planArtifacts.ts";
+import { reviewQuestion } from "../../tackle-tasks/CodexReviewBodyEmitter.ts";
+import { loadPreparedTask, type PreparedTask } from "../../tackle-tasks/preparedTask.ts";
 
 export type CodexReviewsPlanPacket = {
     taskNumber: number;
@@ -14,9 +17,11 @@ export type CodexReviewsPlanPacket = {
     ownedFilePaths: string[];
 };
 
-const REVIEW_PLAN_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-template.json", import.meta.url));
+// const REVIEW_PLAN_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-template.json", import.meta.url));
 const REVIEW_PLAN_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-plan-schema.json", import.meta.url));
-const REVIEW_PLAN_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-error-template.json", import.meta.url));
+// const REVIEW_PLAN_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-error-template.json", import.meta.url));
+
+/* Retired: reviewedPaths and reviewQuestion moved to CodexReviewBodyEmitter.ts, the single source of the review text.
 
 // Serves codex and claude fallbacks alike; drops a createsFiles path since it doesn't exist yet.
 function reviewedPaths(t: CodexReviewsPlanPacket): string[] {
@@ -105,8 +110,12 @@ Print the JSON as your final message and nothing else. The command that runs you
 message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 `;
 }
+*/
 
-function planReviewPrompt(t: CodexReviewsPlanPacket): string {
+function planReviewPrompt(t: PreparedTask): string {
+    const promptFile = `${t.repoRoot}/plans/CODEX_REVIEWS_PLAN.prompt.md`;
+    mkdirSync(dirname(promptFile), { recursive: true });
+    writeFileSync(promptFile, reviewQuestion(t));
     return `You are spawning a review agent running in the CLI.
 You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape.
 The command runs a reviewing agent against a plan file.
@@ -118,10 +127,7 @@ minutes; wait for it rather than abandoning it. \`</dev/null\` matters — codex
 waiting on stdin without it. \`-o\` keeps codex from mixing its banner into the answer, and \`--output-schema\` makes it bare JSON.
 
 \`\`\`\`sh
-REVIEW_PROMPT=$(cat <<'REVIEWEOF'
-${reviewQuestion(t)}
-REVIEWEOF
-)
+REVIEW_PROMPT=$(cat "${promptFile}")
 REVIEW_FILE=${t.reviewOutputFile}
 codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
@@ -138,7 +144,8 @@ If the command above could not be run at all, or the review file holds nothing u
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as CodexReviewsPlanPacket;
-    return { box: "CODEX_REVIEWS_PLAN", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: planReviewPrompt(packet) };
+    const t = loadPreparedTask(packet.taskNumber, packet.repoRoot, packet.taskStateRoot);
+    return { box: "CODEX_REVIEWS_PLAN", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: planReviewPrompt(t) };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

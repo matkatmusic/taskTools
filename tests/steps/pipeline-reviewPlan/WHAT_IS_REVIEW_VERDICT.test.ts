@@ -30,7 +30,7 @@ const review = (fixes: ReturnType<typeof fix>[]) => ({
 function packet(taskStateRoot: string, planFile: string, review: unknown) {
     return {
         taskNumber: 7, taskStateRoot, repoRoot: taskStateRoot, planFile, review,
-        runId: "run-1", sourceBranch: "main", plan: { task: 7, revision: 1, createsFiles: [], sections: [] },
+        runId: "run-1", sourceBranch: "main",
     };
 }
 
@@ -41,13 +41,12 @@ test("test_main_acceptsAPlanWithNoFixes", () => {
     assert.equal(output.next, "VERDICT_ACCEPT");
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const { taskStateRoot, planFile } = makeFixture();
     const p = packet(taskStateRoot, planFile, review([]));
     const output = main(JSON.stringify(p));
     assert.equal(output.runId, p.runId);
     assert.equal(output.sourceBranch, p.sourceBranch);
-    assert.deepEqual(output.plan, p.plan);
 });
 
 test("test_main_amendsThenAcceptsOnASingleFix", () => {

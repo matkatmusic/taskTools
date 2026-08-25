@@ -10,7 +10,7 @@ export type VerdictScrapPacket = {
     notes: string;
     runId: string;
     sourceBranch: string;
-    plan: unknown;
+    // plan: unknown;
 };
 
 export function main(input: string): Record<string, unknown> {
@@ -24,7 +24,7 @@ export function main(input: string): Record<string, unknown> {
         notes: packet.notes,
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
-        plan: packet.plan,
+        // plan: packet.plan,
     };
 }
 

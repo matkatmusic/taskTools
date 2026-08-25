@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after } from "node:test";
 import { skillBody } from "../scripts/tackle-tasks/SkillBodyEmitter.ts";
-import { buildOrderedBlockSchemas, buildWorkflowScript } from "../scripts/generateWorkflow.ts";
+import { buildWorkflowScript } from "../scripts/generateWorkflow.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
 
 const emitterPath = fileURLToPath(new URL("../scripts/tackle-tasks/SkillBodyEmitter.ts", import.meta.url));
@@ -56,15 +56,14 @@ test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyTheArgumentParser", ()
     assert.deepEqual(relativeImports.sort(), ["resolveTaskRun.ts"]);
 });
 
-// The preamble's first box reads the task number and the tasks file; the first pass answers from a slice.
-test("test_skillBody_launchesTheWorkflowWithTheTaskNumberTheTasksFileAndTheFirstPassSchemaCount", () => {
+// The preamble's first box reads the task number and the tasks file.
+test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () => {
     const root = makeTargetRepository([74]);
     const brief = skillBody("[74]", root);
 
     const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
     const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
-    const { firstPassSchemaCount } = buildOrderedBlockSchemas();
-    assert.deepEqual(call.args, { task: 74, tasksFile: join(root, ".taskTools", "tasks.json"), firstPassSchemaCount });
+    assert.deepEqual(call.args, { task: 74, tasksFile: join(root, ".taskTools", "tasks.json") });
     assert.match(call.scriptPath, /skills\/tackle-tasks\/tackle-tasks\.workflow\.js$/);
 });
 

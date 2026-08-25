@@ -23,7 +23,7 @@ function makeFixture(): string {
 function packet(taskStateRoot: string, notes: string) {
     return {
         taskNumber: 42, taskStateRoot, repoRoot: taskStateRoot, notes,
-        runId: "run-1", sourceBranch: "main", plan: { task: 42, revision: 1, createsFiles: [], sections: [] },
+        runId: "run-1", sourceBranch: "main",
     };
 }
 
@@ -59,11 +59,10 @@ test("test_main_throwsWhenTheTaskIsNotInTasksJson", () => {
     assert.throws(() => main(JSON.stringify(missingTaskPacket)), /999/);
 });
 
-test("test_main_carriesRunIdSourceBranchAndPlanForward", () => {
+test("test_main_carriesRunIdAndSourceBranchForward", () => {
     const taskStateRoot = makeFixture();
     const p = packet(taskStateRoot, "fix the thing");
     const output = main(JSON.stringify(p));
     assert.equal(output.runId, "run-1");
     assert.equal(output.sourceBranch, "main");
-    assert.deepEqual(output.plan, p.plan);
 });

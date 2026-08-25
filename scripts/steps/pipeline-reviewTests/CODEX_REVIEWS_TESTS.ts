@@ -1,16 +1,17 @@
 // CODEX_REVIEWS_TESTS, from pipeline-reviewTests.mmd. Ported from scripts/tackle-tasks/CodexTestReviewBodyEmitter.ts.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { loadPreparedTask } from "../../tackle-tasks/preparedTask.ts";
 import { getCurrentTaskRun } from "../../tackle-tasks/taskRunState.ts";
+import { reviewTestsQuestion } from "../../tackle-tasks/CodexTestReviewBodyEmitter.ts";
 import type { ReviewTestsCorePacket } from "./GREEN_IMPLEMENTATION_INPUT.ts";
 
-const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
+// const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
-const REVIEW_TESTS_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-error-template.json", import.meta.url));
+// const REVIEW_TESTS_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-error-template.json", import.meta.url));
 const DECIDE_REVIEW_SCRIPT = fileURLToPath(new URL("../../tackle-tasks/decideTestReview.ts", import.meta.url));
 
 // The reviewer is read-only and cannot run git, so the diff it judges against is written out for it.
@@ -33,6 +34,8 @@ function wasPreExisting(worktree: string, mergeBase: string, absoluteTestFilePat
         return false;
     }
 }
+
+/* Retired: reviewTestsQuestion moved to CodexTestReviewBodyEmitter.ts, the single source of the review text.
 
 function reviewTestsQuestion(
     briefFile: string, planFile: string, testFilePaths: string[], diffPath: string,
@@ -128,6 +131,7 @@ Print the JSON as your final message and nothing else.
 The command that runs you captures that message to the review file, so do not try to write the file yourself.
 `;
 }
+*/
 
 // Derived here, never accepted from the caller: the run that judged the task tests recorded all of this.
 function taskTestRunOutput(taskNumber: number, projectRoot: string): string {
@@ -141,11 +145,13 @@ function reviewTestsPrompt(packet: ReviewTestsCorePacket): string {
     const t = loadPreparedTask(packet.taskNumber, worktree, packet.projectRoot);
     const testCommand = t.tests ?? "(no test command recorded)";
     const testOutput = taskTestRunOutput(packet.taskNumber, packet.projectRoot);
-    const briefFile = t.briefFile;
     const testReviewFile = t.testReviewFile;
     const { diffPath, mergeBase } = writeImplementationDiff(worktree, packet.taskNumber, packet.sourceBranch);
     const preExistingTestFiles = t.testFilePaths.filter((path) => wasPreExisting(worktree, mergeBase, path));
-    const question = reviewTestsQuestion(briefFile, t.planFile, t.testFilePaths, diffPath, preExistingTestFiles, testCommand, testOutput);
+    const question = reviewTestsQuestion(t, diffPath, preExistingTestFiles, testCommand, testOutput);
+    const promptFile = `${worktree}/plans/CODEX_REVIEWS_TESTS.prompt.md`;
+    mkdirSync(dirname(promptFile), { recursive: true });
+    writeFileSync(promptFile, question);
 
     return `You are spawning a review agent running in the CLI.
 You do not edit any files; your job is to run the following command and report back exactly what it printed.
@@ -158,10 +164,7 @@ It takes a few minutes; wait for it rather than abandoning it.
 \`</dev/null\` matters — codex hangs forever waiting on stdin without it. \`-o\` keeps codex from mixing its banner into the answer, and \`--output-schema\` makes it bare JSON.
 
 \`\`\`\`sh
-REVIEW_PROMPT=$(cat <<'REVIEWEOF'
-${question}
-REVIEWEOF
-)
+REVIEW_PROMPT=$(cat "${promptFile}")
 REVIEW_FILE=${testReviewFile}
 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\

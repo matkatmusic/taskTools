@@ -1,6 +1,6 @@
-// FIX_CONFLICTS, from pipeline-rebase.mmd. Prompt block: reuses fixConflictsPrompt, the sole
-// home of this prompt's text (still imported by AgentPromptEmitter.ts's old dispatch too).
-import { realpathSync } from "node:fs";
+// FIX_CONFLICTS, from pipeline-rebase.mmd. Reuses fixConflictsPrompt, the sole home of this prompt's text.
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { fixConflictsPrompt } from "../../tackle-tasks/FixConflictsBodyEmitter.ts";
@@ -9,7 +9,10 @@ import { refreshLockHeartbeat, type RebasePacket } from "./packet.ts";
 export function main(input: string): { box: string; scriptSignal: string; prompt: string } {
     const packet = JSON.parse(input) as RebasePacket;
     refreshLockHeartbeat(packet.projectRoot, packet.runId, packet.taskNumber);
-    const prompt = fixConflictsPrompt(packet.stoppedCheckoutPath, packet.taskNumber, packet.projectRoot, packet.runId, packet.rootSourceBranch);
+    const promptFile = `${packet.worktreePath.replace(/\/+$/, "")}/plans/FIX_CONFLICTS.prompt.md`;
+    mkdirSync(dirname(promptFile), { recursive: true });
+    writeFileSync(promptFile, fixConflictsPrompt(packet.stoppedCheckoutPath, packet.taskNumber, packet.projectRoot, packet.runId, packet.rootSourceBranch));
+    const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { box: "FIX_CONFLICTS", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };
 }
 

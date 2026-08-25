@@ -96,7 +96,8 @@ test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
     };
     const configFile = join(folder, "steps.json");
     writeFileSync(configFile, JSON.stringify({ "one.mmd": [writeShared("one")], "two.mmd": [writeShared("two")] }));
-    assert.equal(runHook("/run-step two.mmd::SHARED", configFile).result.outcome.payload.from, "two");
+    const { result } = runHook("/run-step two.mmd::SHARED", configFile);
+    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).from, "two");
 });
 
 test("test_runStepHook_walksUntilAStepSignalsStop", () => {
@@ -215,19 +216,6 @@ test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::B");
 });
 
-// The next agent answers with this schema, so it must describe the next block, not the one that ran.
-test("test_runStepHook_sendsTheNextBlocksSchemaWithTheOutcome", () => {
-    const configFile = configWith(writeStep => ({
-        "one.mmd": [
-            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["B"] },
-            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
-        ],
-    }));
-    const { result } = runHook("/run-step A", configFile);
-    const payloadSchemas = result.outcome.schema.properties.outcome.anyOf[0].properties.payload.anyOf;
-    assert.deepEqual(payloadSchemas.map((schema: { required: string[] }) => schema.required), [["input"]]);
-});
-
 // The block after a prompt reads packet plus answer, so the hook returns the packet the prompt block received.
 test("test_runStepHook_stopsBeforeAPromptBlockAndHandsItsOutputAsThePacket", () => {
     const configFile = configWith(writeStep => ({
@@ -241,7 +229,8 @@ test("test_runStepHook_stopsBeforeAPromptBlockAndHandsItsOutputAsThePacket", () 
     assert.deepEqual(result.ran, ["one.mmd::A"]);
     assert.equal(result.outcome.scriptSignal, "continue");
     assert.equal(result.outcome.next, "one.mmd::B");
-    assert.deepEqual(result.outcome.packet, { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "" });
+    assert.equal("packet" in result.outcome, false);
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "" });
 });
 
 // A pass starting at the prompt block runs it; the packet is that pass's given input.
@@ -254,7 +243,8 @@ test("test_runStepHook_handsAPromptBlocksOwnInputAsThePacket", () => {
     }));
     const { result } = runHook(`/run-step B {"box":"A","scriptSignal":"continue","taskNumber":7}`, configFile);
     assert.equal(result.outcome.scriptSignal, "prompt");
-    assert.deepEqual(result.outcome.packet, { box: "A", scriptSignal: "continue", taskNumber: 7 });
+    assert.equal("packet" in result.outcome, false);
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7 });
 });
 
 // After a stop block the packet is that block's whole output, box and scriptSignal included.
@@ -262,14 +252,23 @@ test("test_runStepHook_handsAStopBlocksOutputAsThePacket", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    assert.deepEqual(runHook("/run-step A just words", configFile).result.outcome.packet, { box: "A", scriptSignal: "stop", input: "just words" });
+    const { result } = runHook("/run-step A just words", configFile);
+    assert.equal("packet" in result.outcome, false);
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "stop", input: "just words" });
 });
 
-test("test_runStepHook_sendsNoSchemaWhenNothingFollows", () => {
+// A start input naming a packetFile expands to that file's contents plus the fields alongside it.
+test("test_runStepHook_expandsAPacketFileIntoTheStartInput", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-packet-"));
+    const packetFile = join(folder, "task-packet.json");
+    writeFileSync(packetFile, JSON.stringify({ taskNumber: 7 }));
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.outcome.schema, null);
+    const { result } = runHook(`/run-step A {"packetFile":"${packetFile}","answer":"x"}`, configFile);
+    const startInput = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
+    assert.equal(startInput.taskNumber, 7);
+    assert.equal(startInput.answer, "x");
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
@@ -393,23 +392,25 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
     assert.match(log, /### output ======\n```json\n\{\n    "ok": true,\n/);
 });
 
-test("test_runStepHook_writesNothingToTheLogWhenNoBlockRan", () => {
-    const { readLog } = runHook("/run-step NOT_A_BLOCK");
-    assert.throws(readLog, /ENOENT/);
+test("test_runStepHook_logsTheFailureWhenTheWalkCannotFinish", () => {
+    const log = runHook("/run-step NOT_A_BLOCK").readLog();
+    assert.match(log, /^## ======= FAILURE =======\n```json\n\{\n    "ran": \[\],\n    "errors": \[\n        "no block named NOT_A_BLOCK; known: /m);
 });
 
 test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook(`/run-step A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
+    const { result } = runHook(`/run-step A {"name":"matt"}`, configFile);
+    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    assert.equal(runHook("/run-step A", configFile).result.outcome.payload.input, "");
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, "");
 });
 
 test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
@@ -427,7 +428,8 @@ test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
             { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    const received = JSON.parse(runHook("/run-step A first-input", configFile).result.outcome.payload.input);
+    const { result } = runHook("/run-step A first-input", configFile);
+    const received = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
     assert.equal(received.box, "A");
     assert.equal(received.greeting, "hello");
     assert.equal(received.input, "first-input");
@@ -441,7 +443,8 @@ test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
             { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    const seenByC = JSON.parse(runHook("/run-step A", configFile).result.outcome.payload.input);
+    const { result } = runHook("/run-step A", configFile);
+    const seenByC = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
     assert.equal(seenByC.box, "B");
     assert.equal(JSON.parse(seenByC.input).box, "A");
 });
@@ -492,7 +495,8 @@ test("test_runStepHook_handsTheSkillArgsToTheFirstBlock", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    assert.equal(runSkillHook("run-step", `A {"name":"matt"}`, configFile).result.outcome.payload.input, `{"name":"matt"}`);
+    const { result } = runSkillHook("run-step", `A {"name":"matt"}`, configFile);
+    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {

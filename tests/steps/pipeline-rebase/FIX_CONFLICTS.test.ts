@@ -69,7 +69,8 @@ test("test_FIX_CONFLICTS_printsAPromptNamingTheConflictedPathFromTheStoppedCheck
 
     assert.equal(output.box, "FIX_CONFLICTS");
     assert.equal(output.scriptSignal, "prompt");
-    assert.ok(output.prompt.includes(`${repo}/conflicted.ts`), "prompt is missing the conflicted path");
+    const promptFileContents = readFileSync(join(repo, "plans", "FIX_CONFLICTS.prompt.md"), "utf8");
+    assert.ok(promptFileContents.includes(`${repo}/conflicted.ts`), "prompt is missing the conflicted path");
 
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);

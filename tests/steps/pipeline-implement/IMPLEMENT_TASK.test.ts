@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/steps/pipeline-implement/IMPLEMENT_TASK.ts. Run: node --test tests/steps/pipeline-implement/IMPLEMENT_TASK.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -82,6 +82,7 @@ test("test_main_printsAPromptSignalAndMentionsTheTaskFromDisk", () => {
     const output = main(input);
     assert.equal(output.scriptSignal, "prompt");
     assert.equal(output.box, "IMPLEMENT_TASK");
-    assert.match(output.prompt as string, /task 7/);
+    const promptFileContents = readFileSync(join(worktreePath, "plans", "IMPLEMENT_TASK.prompt.md"), "utf8");
+    assert.match(promptFileContents, /task 7/);
     assertMatchesTemplate("IMPLEMENT_TASK", { box: "", scriptSignal: "prompt", prompt: "" }, output);
 });

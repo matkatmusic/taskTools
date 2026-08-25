@@ -7,14 +7,7 @@
         "worktree": "/tmp/fake-worktree",
         "sourceBranch": "master",
         "projectRoot": "/tmp/fake-project",
-        "plan": {
-            "task": 35,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
         "clarifyRequest": "",
         "next": "PLANNER_RETURNED_PLAN"
     },
@@ -26,14 +19,7 @@
         "worktree": "/tmp/fake-worktree",
         "sourceBranch": "master",
         "projectRoot": "/tmp/fake-project",
-        "plan": {
-            "task": 35,
-            "revision": 1,
-            "createsFiles": [],
-            "sections": [
-                { "id": "sentinel-step", "title": "sentinel", "body": "sentinel body", "codexNotes": "" }
-            ]
-        },
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
         "clarifyRequest": ""
     }
 }
