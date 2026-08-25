@@ -183,13 +183,14 @@ const blocks: Record<string, (input: Input) => Packet> = {
         // --- worktree status. live: steps/pipeline-worktreeCheck/DOES_WORKTREE_EXIST.ts -> tackle-tasks/doesTaskWorktreeExist.ts ---
         let docsMode = "";
         if (run.worktree === undefined) {
-            // live: CREATE_WORKTREE.ts -> _createFreshTaskWorktree.ts, then TAKE_WORKTREE_LEASE.ts -> taskRunState.ts:updateCurrentTaskRun
+            // live: CREATE_WORKTREE.ts -> _createFreshTaskWorktree.ts, TAKE_WORKTREE_LEASE.ts; ponytail: fake path, real: prepareTasks.ts:resolveTaskWorktreeConventionDirectory
             run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
             run.leaseRunId = input.runId;
             docsMode = "AUTOGEN";
         } else if (run.worktreeSafe !== true) {
             // live: IS_WORKTREE_SAFE_TO_USE.ts -> checkTaskWorktreeSafe.ts; TAKE_WORKTREE_LEASE_BEFORE_RESET.ts -> taskRunState.ts:transitionWorktreeLease; RESET_WORKTREE.ts
             run.leaseRunId = input.runId;
+            // ponytail: fake path; RESET_WORKTREE.ts rebuilds the real one from prepareTasks.ts:resolveTaskWorktreeConventionDirectory
             run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
             run.worktreeSafe = true;
             docsMode = "AUTOGEN";
@@ -351,7 +352,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const task = input.task!;
         const review = JSON.parse(input.answer!);
 
-        // --- decide the verdict. live: planReviewRuling.ts:rulingByFixCount; 12+ sections use rulingByPercentage instead ---
+        // --- decide the verdict. live: planReviewRuling.ts:rulingByFixCount, or rulingByPercentage at 12+ sections ---
         let verdict = "";
         let notes = "";
         if (review.outcome === "ERROR") {
@@ -359,11 +360,20 @@ const blocks: Record<string, (input: Input) => Packet> = {
             notes = `${review.message} missing: ${review.missingFiles.join(", ")}`;
         } else {
             const fixCount = review.fixes.length;
+            console.log(`  skipping: count the sections of ${task.run!.worktree}/plans/plan.json`);
+            const sectionCount = Number(sim(input, "HOW_MANY_PLAN_SECTIONS"));
             verdict = "SCRAP";
-            if (fixCount === 0) verdict = "ACCEPT";
-            if (fixCount === 1) verdict = "AMEND_THEN_ACCEPT";
-            if (fixCount >= 2) {
-                if (fixCount <= 4) verdict = "AMEND";
+            if (sectionCount >= 12) {
+                const efficacy = Math.max(0, Math.round(((sectionCount - fixCount) / sectionCount) * 100));
+                if (efficacy >= 75) verdict = "AMEND";
+                if (efficacy >= 92) verdict = "AMEND_THEN_ACCEPT";
+                if (efficacy === 100) verdict = "ACCEPT";
+            } else {
+                if (fixCount === 0) verdict = "ACCEPT";
+                if (fixCount === 1) verdict = "AMEND_THEN_ACCEPT";
+                if (fixCount >= 2) {
+                    if (fixCount <= 4) verdict = "AMEND";
+                }
             }
             const noteLines = [];
             for (const fix of review.fixes) {
@@ -372,12 +382,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
             notes = noteLines.join("\n\n");
         }
 
-        // --- ERROR. live: VERDICT_ERROR.ts; its exit note is packet.notes when present ---
+        // --- ERROR. live: VERDICT_ERROR.ts carries packet.notes as the exit note ---
         if (verdict === "ERROR") {
             return {
                 next: "FAILURES_EXIT",
                 exitType: "run-failed",
-                exitNote: "the plan review could not run",
+                exitNote: notes,
             };
         }
 
@@ -411,7 +421,6 @@ const blocks: Record<string, (input: Input) => Packet> = {
         };
     },
 
-    // One block for "what is the review verdict?" and the paths after it in pipeline-reviewPlan.mmd.
     // --- pipeline-implement.mmd ---
 
     // Prompt block. live: steps/pipeline-implement/IMPLEMENT_TASK.ts:buildImplementPrompt -> tackle-tasks/preparedTask.ts:loadPreparedTask
@@ -715,16 +724,16 @@ const blocks: Record<string, (input: Input) => Packet> = {
             throw new Error(`unknown publication state ${JSON.stringify(publicationState)}`);
         }
 
-        // --- write completed. live: steps/pipeline-mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.ts -> writeTaskExitNotes.ts; runs after RECORD_MERGE_COMMIT_HASHES.ts ---
-        run.exitType = "completed";
-        run.exitNote = "All layers merged successfully.";
-
-        // --- record merge commit hashes. live: RECORD_MERGE_COMMIT_HASHES.ts -> tackle-tasks/recordMergeCommits.ts, one per landed layer ---
+        // --- record merge commit hashes. live: steps/pipeline-mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.ts -> recordMergeCommits.ts, one per landed layer ---
         commits.push({
             hash: `sim-${commits.length + 1}`,
             kind: "merge",
             stepId: "merge",
         });
+
+        // --- write completed. live: WRITE_EXIT_TYPE_COMPLETED.ts -> tackle-tasks/writeTaskExitNotes.ts; the point of no return ---
+        run.exitType = "completed";
+        run.exitNote = "All layers merged successfully.";
 
         // --- record modified files. live: RECORD_MODIFIED_FILES_SUCCESS.ts -> tackle-tasks/recordTaskModifiedFiles.ts ---
         console.log("  skipping: git diff --name-only <baseRef>...HEAD per layer to record modifiedFiles");
@@ -791,6 +800,7 @@ type Block = {
     diagram: string;
     fedBy: string[];
     feeds: string[];
+    producesPrompt: boolean;
 };
 
 // The function the hook runs for a block. live: scripts/steps/<diagram>/<BOX>.ts, spawned by runStepHook.ts:runStepScript
@@ -974,6 +984,14 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
     for (const diagram of diagrams) {
         const lines = readFileSync(diagram, "utf8").split("\n");
         for (const line of lines) {
+            // The class line marks the prompt blocks; steps.json carries the same mark as producesPrompt.
+            const promptMark = line.match(/^\s*class ([A-Z0-9_,]+) returns_a_prompt\s*$/);
+            if (promptMark !== null) {
+                for (const id of promptMark[1]!.split(",")) {
+                    byName.get(id)!.producesPrompt = true;
+                }
+                continue;
+            }
             if (/^\s*(%%|flowchart|classDef|class |subgraph |end$)/.test(line)) continue;
             const withoutLabels = line.replace(/"[^"]*"/g, "");
             const withoutEdgeTags = withoutLabels.replace(/\|[^|]*\|/g, "");
@@ -985,6 +1003,7 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
                         diagram: basename(diagram),
                         fedBy: [],
                         feeds: [],
+                        producesPrompt: false,
                     };
                     byName.set(id, block);
                 }
@@ -1011,6 +1030,28 @@ function assertEveryBlockDeclaresInputFields(blockList: Block[]): void {
         const fields = blockInputFields[block.name];
         if (fields === undefined) throw new Error(`no input fields declared for block ${block.name}`);
     }
+}
+
+// live: buildRunStepSchemas.ts:buildBlockSchemas walks next until a prompt or a stop and unions the shapes.
+function getSchemaReachableFrom(startName: string): Schema {
+    const schema: Schema = {};
+    const queue = [startName];
+    while (queue.length > 0) {
+        const name = queue.shift()!;
+        if (name in schema) continue;
+        // A box from an old diagram has no script here, so no walk can reach it.
+        if (!blockToScriptMap.has(name)) continue;
+        schema[name] = blockInputFields[name]!;
+        let block: Block | undefined = undefined;
+        for (const candidate of blockList) {
+            if (candidate.name === name) block = candidate;
+        }
+        if (block!.producesPrompt) continue;
+        for (const next of block!.feeds) {
+            queue.push(next);
+        }
+    }
+    return schema;
 }
 
 function getBlockFor(input: Input): Block {
@@ -1067,14 +1108,12 @@ function runStep(input: Input): Directions {
             result = run(script, scriptInput, state);
             // A prompt stops the walk here. live: runStepHook.ts:buildSuccess; its schema is buildAgentSchema(next)
             if (result.prompt !== "") {
-                // ponytail: one block's field list; the live hook unions every block reachable before the next prompt or stop.
-                const answerFeeds = result.nextBlock!;
                 return {
                     block: block.name,
                     prompt: result.prompt,
                     payload: result.output,
                     previousBlockWasTerminal: false,
-                    schema: { [answerFeeds]: blockInputFields[answerFeeds]! },
+                    schema: getSchemaReachableFrom(result.nextBlock!),
                     error: "",
                 };
             }
@@ -1109,10 +1148,6 @@ function runStep(input: Input): Directions {
         };
     }
 }
-
-const commands = {
-    "/run-step": runStep,
-};
 
 // The agent's answer. null is the live agent() dying or being skipped. live: skills/run-step/SKILL.md
 function followPrompt(directions: Directions): AgentResult | null {
@@ -1189,11 +1224,15 @@ function followPrompt(directions: Directions): AgentResult | null {
 }
 
 // live: pipelines.ts:runStep and runAgent -> ctx.agent(prompt, { schema }); schema shapes this call's answer.
-function agent(input: Input, schema: Schema | null): AgentResult | null {
+function agent(input: Input, schema: Schema): AgentResult | null {
     /*
       emulates the "invoke `/run-step <BLOCK> <args>` and follow directions" prompt to the agent in the live workflow.
     */
     const directions = runStep(input); //the output of the hook, shows up in the agent's context
+    // The schema names every block this walk may stop at. live: the structured output of ctx.agent().
+    if (directions.error === "") {
+        if (!(directions.block in schema)) throw new Error(`the hook stopped at ${directions.block}, which this call's schema does not allow`);
+    }
     if (directions.prompt === "") {
         throw new Error("the hook returned an empty prompt to the agent. the agent has nothing to do and is idle.");
     }
@@ -1227,7 +1266,7 @@ function main(taskNumber: number, tasksJsonPath: string) {
     const diagrams = getDiagramsForPipelines(pipelines);
     blockList = getBlocksForDiagrams(diagrams);
     assertEveryBlockDeclaresInputFields(blockList);
-    let schema: Schema | null = { [input.block!]: blockInputFields[input.block!]! };
+    let schema = getSchemaReachableFrom(input.block!);
     while (true) {
         const result = agent(input, schema);
         // live: pipelines.ts:406 returns toFailures("agent-failed", ...) and runTaskPipeline runs the failures exit.
@@ -1237,7 +1276,7 @@ function main(taskNumber: number, tasksJsonPath: string) {
                 if (candidate.taskNumber === input.taskNumber) task = candidate;
             }
             input = { ...input, block: "FAILURES_EXIT", task, exitType: "agent-failed", exitNote: "the agent returned nothing usable" };
-            schema = { FAILURES_EXIT: blockInputFields.FAILURES_EXIT! };
+            schema = getSchemaReachableFrom("FAILURES_EXIT");
             continue;
         }
         // The hook failed; the agent handed the error back, so the run stops here and the user reads it.
@@ -1253,7 +1292,7 @@ function main(taskNumber: number, tasksJsonPath: string) {
         }
 
         // the agent returned a valid output. update the input for the next agent call.
-        schema = result.schema;
+        schema = result.schema!;
         input = result.output;
     }
     // console.log(`task ${taskNumber}: ${input.ran.join(" -> ")}`);

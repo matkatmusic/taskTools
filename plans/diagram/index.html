@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta http-equiv="cache-control" content="no-store">
-<title>pipeline.mmd</title>
+<title>_pipeline.mmd</title>
 <style>
   body { margin: 0; min-height: 100vh; background: #fff; }
   @media (prefers-color-scheme: dark) { body { background: #16181b; } }
@@ -33,11 +33,11 @@
     flowchart: { htmlLabels: false, useMaxWidth: false, padding: 12, wrappingWidth: 220,
                  nodeSpacing: 60, rankSpacing: 80 },
   })
-  const file = decodeURIComponent(location.search.slice(1)) || 'pipeline.mmd'
+  const file = decodeURIComponent(location.search.slice(1)) || '_pipeline.mmd'
   document.title = file
   // ponytail: hardcoded, python http.server gives no listing when index.html exists.  Add a line here when a diagram is added.
   nav.innerHTML = [
-    ['pipeline.mmd', 'overview'],
+    ['_pipeline.mmd', 'overview'],
     ['pipeline-monolith.mmd', 'monolith'],
     ['pipeline-preambleStatusCheck.mmd', 'preamble status check'],
     ['pipeline-worktreeCheck.mmd', 'worktree check'],

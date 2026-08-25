@@ -35,6 +35,9 @@
             ],
             "WHAT_IS_PUBLICATION_STATE": [
                 "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
             ]
         }
     },
@@ -101,6 +104,9 @@
             ],
             "WHAT_IS_PUBLICATION_STATE": [
                 "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
             ]
         }
     },
@@ -189,6 +195,51 @@
             ],
             "WHAT_IS_PUBLICATION_STATE": [
                 "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        }
+    },
+    {
+        "taskNumber": 8,
+        "title": "50-section plan: 2 fixes is AMEND_THEN_ACCEPT by percentage, not AMEND by fix count",
+        "files": [
+            "src/h.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "AMEND"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "50"
             ]
         }
     }
