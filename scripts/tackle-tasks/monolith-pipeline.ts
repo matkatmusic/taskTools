@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// live: <path> names the real script under scripts/ that runs in place of the fake line under it.
+
 // ponytail: worktreeSafe and touchedFiles are fixture-only; the real checks read git.
 type Run = {
     active?: boolean;
@@ -84,11 +86,11 @@ function reportRunsExitType(input: Input): Packet {
     const task = input.task!;
     const run = task.run!;
 
-    // --- read the publication state from the layer merge refs ---
+    // --- read the publication state. live: steps/pipeline-failuresExit/READ_FAILURES_PUBLICATION_STATE.ts -> tackle-tasks/readPublicationState.ts ---
     console.log("  skipping: git rev-parse --verify refs/taskTools/merged-commits/... per layer");
     const publicationState = run.publicationState ?? "NONE LANDED";
 
-    // --- did ANY of this task's work land? ---
+    // --- did ANY work land? live: DID_ANY_WORK_LAND.ts, then WRITE_PUBLICATION_OUTCOME.ts or WRITE_EXIT_TYPE_AND_NOTE.ts -> tackle-tasks/writeTaskExitNotes.ts ---
     if (publicationState !== "NONE LANDED") {
         // write the publication outcome: keep completed if it is there, else partially-published. never run-failed.
         if (run.exitType !== "completed") run.exitType = "partially-published";
@@ -100,32 +102,32 @@ function reportRunsExitType(input: Input): Packet {
         run.exitNote = input.exitNote;
     }
 
-    // --- record modified files to tasks.json ---
+    // --- record modified files. live: RECORD_MODIFIED_FILES_FAILURE.ts -> tackle-tasks/recordTaskModifiedFiles.ts ---
     console.log("  skipping: git diff --name-only <baseRef>...HEAD per layer to record modifiedFiles");
     run.modifiedFiles = run.touchedFiles ?? [];
 
-    // --- mark task inactive in tasks.json ---
+    // --- mark task inactive. live: MARK_TASK_INACTIVE_FAILURE.ts -> tackle-tasks/markTaskInactive.ts ---
     run.active = false;
     run.endedAt = new Date().toISOString();
 
-    // --- does this run still hold the worktree lease? ---
+    // --- lease held? live: DOES_RUN_HOLD_LEASE.ts and RELEASE_WORKTREE_LEASE.ts -> prepareTasks.ts:releaseTaskWorktreeLease ---
     if (run.leaseRunId === input.runId) {
         // release the worktree lease, keep the worktree. F5: the lease stays while the worktree still exists.
         console.log(`  skipping: the worktree ${run.worktree} remains, so the lease is retained`);
     }
 
-    // --- does this run still hold the source repo lock? ---
+    // --- lock held? live: DOES_RUN_HOLD_SOURCE_LOCK.ts and RELEASE_SOURCE_LOCK.ts -> tackle-tasks/sourceRepoLock.ts:releaseSourceRepoLock ---
     if (run.sourceLockOwner === `${input.runId}:${task.taskNumber}`) {
         console.log("  skipping: release the source repo lock");
         delete run.sourceLockOwner;
     }
 
-    // --- report the run's exit type and note, then stop ---
+    // --- report and stop. live: REPORT_EXIT_TYPE_AND_NOTE.ts, then STOP.ts ---
     console.log(`task ${task.taskNumber} ${run.exitType}: ${run.exitNote}`);
     return { next: null };
 }
 
-// pipeline-reportOnlyExit.mmd as one function. Writes nothing.
+// pipeline-reportOnlyExit.mmd as one function. Writes nothing. live: steps/pipeline-reportOnlyExit/REPORT_EXIT_TYPE_NO_WRITE.ts, then STOP.ts
 function reportExitTypeAndStop(input: Input): Packet {
     console.log(`task ${input.taskNumber} ${input.exitType}: ${input.exitNote}`);
     return { next: null };
@@ -134,7 +136,7 @@ function reportExitTypeAndStop(input: Input): Packet {
 const blocks: Record<string, (input: Input) => Packet> = {
     // One block for pipeline-preambleStatusCheck.mmd, pipeline-worktreeCheck.mmd, and init submodules.
     PREAMBLE_STATUS_CHECK(input) {
-        // --- task status ---
+        // --- task status. live: steps/pipeline-preambleStatusCheck/IS_TASK_NUMBER_VALID.ts -> tackle-tasks/isTaskNumberValid.ts ---
         let task: Task | undefined = undefined;
         for (const candidate of input.tasks) {
             if (candidate.taskNumber === input.taskNumber) {
@@ -148,6 +150,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                 exitNote: "task number is not in tasks.json",
             };
         }
+        // live: IS_TASK_BLOCKED.ts -> tackle-tasks/isTaskBlocked.ts -> checkBlockers.ts:blockerReport
         const blockers = task.blockedBy ?? [];
         let blocked = false;
         for (const blocker of blockers) {
@@ -165,6 +168,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                 exitNote: "an open blocker remains",
             };
         }
+        // live: IS_TASK_ACTIVE.ts -> taskRunState.ts:readTaskRunState; MARK_TASK_ACTIVE.ts -> taskRunState.ts:claimTask, one atomic write
         const run = task.run ?? {};
         task.run = run;
         if (run.active === true) {
@@ -177,18 +181,21 @@ const blocks: Record<string, (input: Input) => Packet> = {
         }
         run.active = true;
 
-        // --- worktree status ---
+        // --- worktree status. live: steps/pipeline-worktreeCheck/DOES_WORKTREE_EXIST.ts -> tackle-tasks/doesTaskWorktreeExist.ts ---
         let docsMode = "";
         if (run.worktree === undefined) {
+            // live: CREATE_WORKTREE.ts -> _createFreshTaskWorktree.ts, then TAKE_WORKTREE_LEASE.ts -> taskRunState.ts:updateCurrentTaskRun
             run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
             run.leaseRunId = input.runId;
             docsMode = "AUTOGEN";
         } else if (run.worktreeSafe !== true) {
+            // live: IS_WORKTREE_SAFE_TO_USE.ts -> checkTaskWorktreeSafe.ts; TAKE_WORKTREE_LEASE_BEFORE_RESET.ts -> taskRunState.ts:transitionWorktreeLease; RESET_WORKTREE.ts
             run.leaseRunId = input.runId;
             run.worktree = `.taskTools/worktrees/task-${task.taskNumber}`;
             run.worktreeSafe = true;
             docsMode = "AUTOGEN";
         } else {
+            // live: IS_PREVIOUS_RUN_RESUMABLE.ts -> isTaskRunResumable.ts, which adopts the lease first
             run.leaseRunId = input.runId;
             const history = run.history ?? [];
             const endedRuns = [];
@@ -206,6 +213,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                     exitNote: "a safe worktree holds work no run recorded a stopping point for",
                 };
             }
+            // live: DOES_FENCE_COVER_WORKTREE.ts -> checkResumedWorktreeFence.ts
             const files = task.files ?? [];
             const touchedFiles = run.touchedFiles ?? [];
             const violations = [];
@@ -225,7 +233,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             docsMode = "UPDATE";
         }
 
-        // --- init submodules recursively ---
+        // --- init submodules recursively. live: INIT_SUBMODULES_RECURSIVELY.ts -> tackle-tasks/initTaskSubmodules.ts, writes a step receipt ---
         console.log(`  skipping: git submodule update --init --recursive in ${run.worktree}`);
 
         return {
@@ -237,14 +245,14 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     // One block for pipeline-documentGeneration.mmd.
     DOCUMENT_GENERATION(input) {
-        // --- what is the docs mode? ---
+        // --- what is the docs mode? live: steps/pipeline-documentGeneration/WHAT_IS_DOCS_MODE.ts, DOCS_MODE_AUTOGEN.ts, DOCS_MODE_UPDATE.ts ---
         if (input.docsMode !== "AUTOGEN") {
             if (input.docsMode !== "UPDATE") {
                 throw new Error(`unknown docs mode ${JSON.stringify(input.docsMode)}`);
             }
         }
 
-        // --- auto generate docs / update auto generated docs ---
+        // --- write the brief. live: AUTO_GENERATE_DOCS.ts or UPDATE_AUTO_GENERATED_DOCS.ts -> tackle-tasks/writeTaskBrief.ts:writeTaskBriefToDisk, plans/brief-N.md ---
         console.log(`  skipping: ${input.docsMode} write of the task brief into the worktree`);
 
         return { next: "PLAN_THE_TASK" };
@@ -264,7 +272,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     // --- pipeline-plan.mmd ---
 
-    // Prompt block. The live script builds the planner prompt from the brief in the worktree.
+    // Prompt block. live: steps/pipeline-plan/PLAN_THE_TASK.ts -> tackle-tasks/planPrompt.ts:planPrompt
     PLAN_THE_TASK(input) {
         const task = input.task!;
         const run = task.run!;
@@ -280,12 +288,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
         };
     },
 
-    // One block for "what did the planner return?" and every path after it in pipeline-plan.mmd.
+    // One block for "what did the planner return?" onward. live: WHAT_DID_THE_PLANNER_RETURN.ts routes on outcome
     WHAT_DID_THE_PLANNER_RETURN(input) {
         const task = input.task!;
         const run = task.run!;
 
-        // --- PLAN ---
+        // --- PLAN. live: PLANNER_RETURNED_PLAN.ts, then REVIEW_PLAN_PIPELINE.ts ---
         if (input.answer === "PLAN") {
             return {
                 next: "CODEX_REVIEWS_PLAN",
@@ -293,12 +301,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
 
-        // --- CLARIFY ---
+        // --- CLARIFY. live: PLANNER_RETURNED_CLARIFY.ts; the planner agent words clarifyRequest itself ---
         if (input.answer === "CLARIFY") {
             // ponytail: the live agent words the request; the sim uses one fixed sentence.
             const clarifyRequest = "the planner needs something the docs do not say";
 
-            // --- 2 clarify rounds done? ---
+            // --- 2 clarify rounds done? live: ARE_2_CLARIFY_ROUNDS_DONE.ts -> taskRunState.ts:getAttemptCount, MAX_ATTEMPTS ---
             const attempts = run.attempts ?? {};
             run.attempts = attempts;
             const clarifyRounds = attempts.clarify ?? 0;
@@ -310,7 +318,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                 };
             }
 
-            // --- write the clarify request into the tasks.json entry ---
+            // --- write the clarify request. live: WRITE_CLARIFY_REQUEST.ts + taskRunState.ts:raiseAttemptCount, then DOCUMENT_GENERATION_PIPELINE.ts ---
             task.clarifyRequest = clarifyRequest;
             attempts.clarify = clarifyRounds + 1;
             return {
@@ -324,7 +332,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     // --- pipeline-reviewPlan.mmd ---
 
-    // Prompt block. The live script builds the review prompt; the agent runs codex with it in a shell.
+    // Prompt block. live: steps/pipeline-reviewPlan/CODEX_REVIEWS_PLAN.ts + tackle-tasks/planArtifacts.ts:readAndValidatePlan
     CODEX_REVIEWS_PLAN(input) {
         const task = input.task!;
         const run = task.run!;
@@ -332,6 +340,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const reviewFile = `${run.worktree}/plans/task-${task.taskNumber}-plan-review.json`;
         const ownedFiles = task.files ?? [];
         const reviewPrompt = `You are a read-only review agent tasked with reviewing the implementation plan for task ${task.taskNumber}. Read only: ${briefFile}, ${input.plan}, ${ownedFiles.join(", ")}.`;
+        // live: codex exec, else claude -p fable, else claude -p opus. Three-way fallback in CODEX_REVIEWS_PLAN.ts
         const command = `codex exec -s read-only --output-schema plans/review-plan-schema.json -o "${reviewFile}" "${reviewPrompt}" </dev/null`;
         const prompt = `Run this with Bash:\n${command}\nThen return the JSON written to ${reviewFile}, unchanged.`;
         return {
@@ -340,12 +349,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
         };
     },
 
-    // One block for "what is the review verdict?" and every path after it in pipeline-reviewPlan.mmd.
+    // One block for "what is the review verdict?" onward. live: WHAT_IS_REVIEW_VERDICT.ts -> planReviewRuling.ts
     WHAT_IS_REVIEW_VERDICT(input) {
         const task = input.task!;
         const review = JSON.parse(input.answer!);
 
-        // --- decide the verdict from codex's review JSON ---
+        // --- decide the verdict. live: planReviewRuling.ts:rulingByFixCount; 12+ sections use rulingByPercentage instead ---
         let verdict = "";
         let notes = "";
         if (review.outcome === "ERROR") {
@@ -366,7 +375,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             notes = noteLines.join("\n\n");
         }
 
-        // --- ERROR ---
+        // --- ERROR. live: VERDICT_ERROR.ts; its exit note is packet.notes when present ---
         if (verdict === "ERROR") {
             return {
                 next: "FAILURES_EXIT",
@@ -375,23 +384,23 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
 
-        // --- ACCEPT ---
+        // --- ACCEPT. live: VERDICT_ACCEPT.ts, then IMPLEMENT_PIPELINE.ts ---
         if (verdict === "ACCEPT") {
             return { next: "IMPLEMENT_TASK" };
         }
 
-        // --- AMEND_THEN_ACCEPT: write codex's fixes into the plan, then implement ---
+        // --- AMEND_THEN_ACCEPT. live: VERDICT_AMEND_THEN_ACCEPT.ts:applyFixesToPlan writes the fixes into the plan ---
         if (verdict === "AMEND_THEN_ACCEPT") {
             console.log(`  skipping: write codex's fixes into the sections of ${input.plan} and bump its revision`);
             return { next: "IMPLEMENT_TASK" };
         }
 
-        // --- AMEND / SCRAP: update the tasks.json entry ---
+        // --- AMEND / SCRAP. live: VERDICT_AMEND.ts or VERDICT_SCRAP.ts, then UPDATE_TASK_ENTRY.ts:writeCodexReviewNotes ---
         task.codexReviewNotes = notes;
         const reviewCount = (task.planReviewCount ?? 0) + 1;
         task.planReviewCount = reviewCount;
 
-        // --- 2 codex reviews done? ---
+        // --- 2 codex reviews done? live: ARE_2_REVIEWS_DONE.ts, REVIEWS_LIMIT = 2, then PLAN_PIPELINE.ts ---
         if (reviewCount >= 2) {
             return {
                 next: "FAILURES_EXIT",
@@ -408,7 +417,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
     // One block for "what is the review verdict?" and the paths after it in pipeline-reviewPlan.mmd.
     // --- pipeline-implement.mmd ---
 
-    // Prompt block. The live script builds the implementer prompt from the brief, the plan, and the entry's notes.
+    // Prompt block. live: steps/pipeline-implement/IMPLEMENT_TASK.ts:buildImplementPrompt -> tackle-tasks/preparedTask.ts:loadPreparedTask
     IMPLEMENT_TASK(input) {
         const task = input.task!;
         const run = task.run!;
@@ -427,7 +436,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const task = input.task!;
         const run = task.run!;
 
-        // --- commit if needed ---
+        // --- commit if needed. live: COMMIT_IMPLEMENTATION_IF_NEEDED.ts -> tackle-tasks/commitTaskWork.ts:commitTaskWork ---
         const commits = run.commits ?? [];
         run.commits = commits;
         let kind = "work";
@@ -439,19 +448,19 @@ const blocks: Record<string, (input: Input) => Packet> = {
             stepId: "implement",
         });
 
-        // --- run task tests ---
+        // --- run task tests. live: steps/pipeline-taskTests/RUN_TASK_TESTS.ts -> tackle-tasks/runTaskTestsImpl.ts:runTaskTests ---
         console.log(`  skipping: node --test <the task's test files> in ${run.worktree}`);
         const passed = sim(input, "DO_TASK_TESTS_PASS") === "YES";
         let output = "";
         if (!passed) output = "simulated failing task test output";
         run.taskTests = { passed, output };
 
-        // --- do the task tests pass? ---
+        // --- do the task tests pass? live: DO_TASK_TESTS_PASS.ts, then REVIEW_TESTS_PIPELINE.ts ---
         if (passed) {
             return { next: "CODEX_REVIEWS_TESTS" };
         }
 
-        // --- have 2 fixes already been attempted? ---
+        // --- 2 fixes done? live: ARE_2_TEST_FIXES_DONE.ts -> taskRunState.ts:getAttemptCount, MAX_ATTEMPTS ---
         const attempts = run.attempts ?? {};
         run.attempts = attempts;
         const fixesSoFar = attempts.testFixes ?? 0;
@@ -463,7 +472,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
 
-        // --- amend tasks.json entry with the failing tests ---
+        // --- amend the entry. live: AMEND_ENTRY_WITH_FAILING_TESTS.ts -> amendEntryWithFailingTestsImpl.ts + taskRunState.ts:raiseAttemptCount ---
         task.codexReviewNotes = `The task tests failed. Fix the cause, and change no test.\n\n${output}`;
         attempts.testFixes = fixesSoFar + 1;
         return { next: "IMPLEMENT_TASK" };
@@ -471,7 +480,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     // --- pipeline-reviewTests.mmd ---
 
-    // Prompt block. The live script writes the implementation diff, then builds the test-review prompt.
+    // Prompt block. live: steps/pipeline-reviewTests/CODEX_REVIEWS_TESTS.ts; its shell command ends in decideTestReview.ts
     CODEX_REVIEWS_TESTS(input) {
         const task = input.task!;
         const run = task.run!;
@@ -489,9 +498,9 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const run = task.run!;
         const review = JSON.parse(input.answer!);
 
-        // --- are the tests flagged? ---
+        // --- are the tests flagged? live: ARE_TESTS_FLAGGED.ts routes on flagged ---
         if (review.flagged === true) {
-            // --- 2 codex test reviews done? the live check: the entry already carries review notes ---
+            // --- 2 test reviews done? live: ARE_2_TEST_REVIEWS_DONE.ts:hasAlreadyBeenAmended reads the same shared field ---
             const alreadyAmended = (task.codexReviewNotes ?? "").trim() !== "";
             if (alreadyAmended) {
                 return {
@@ -501,17 +510,18 @@ const blocks: Record<string, (input: Input) => Packet> = {
                 };
             }
 
-            // --- amend tasks.json entry with codex's notes and fixes ---
+            // --- amend the entry. live: AMEND_ENTRY_WITH_CODEX_NOTES.ts, then IMPLEMENT_PIPELINE.ts ---
             task.codexReviewNotes = `A reviewer flagged the task tests. Apply every fix below.\n\n${review.notes}`;
             return { next: "IMPLEMENT_TASK" };
         }
 
-        // --- rebase preamble: try to lock the source repo, wait 5s, give up after 15 minutes ---
+        // --- rebase preamble. live: steps/pipeline-rebasePreamble/LOCK_SOURCE_REPO.ts -> tackle-tasks/sourceRepoLock.ts:acquireSourceRepoLock ---
         const lockOwner = `${input.runId}:${task.taskNumber}`;
         let waitedSeconds = 0;
         while (true) {
             console.log(`  skipping: write the source repo lock file for owner ${lockOwner}`);
             const acquired = sim(input, "WAS_LOCK_ACQUIRED") === "YES";
+            // live: WAS_LOCK_ACQUIRED.ts; YES -> steps/pipeline-rebasePreamble/REBASE_PIPELINE.ts sets suiteFixAttempts 0 and stepId "rebase"
             if (acquired) {
                 run.sourceLockOwner = lockOwner;
                 return {
@@ -519,6 +529,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                     suiteFixAttempts: 0,
                 };
             }
+            // live: HAVE_15_MINUTES_PASSED.ts reads a wall clock from lockWaitStartedAt
             if (waitedSeconds >= 15 * 60) {
                 return {
                     next: "FAILURES_EXIT",
@@ -526,6 +537,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
                     exitNote: "the source repo lock did not come free within 15 minutes",
                 };
             }
+            // live: WAIT_FOR_LOCK.ts sleeps WAIT_FOR_LOCK_MS with Atomics.wait, then LOCK_SOURCE_REPO.ts again
             console.log("  skipping: wait 5s");
             waitedSeconds += 5;
         }
@@ -533,20 +545,21 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
     // --- pipeline-rebase.mmd ---
 
-    // One block for the rebase and its conflict check. A merge retry re-enters here.
+    // One block for the rebase and its conflict check; a merge retry re-enters here. live: steps/pipeline-rebase/REBASE_ONTO_TARGET_BRANCH.ts -> rebaseTaskWorktree.ts
     REBASE_ONTO_TARGET_BRANCH(input) {
         const task = input.task!;
         const run = task.run!;
         console.log(`  skipping: git rebase onto the target branch in ${run.worktree}, deepest submodule first, skipping every layer the receipt records as landed`);
 
-        // --- did the rebase report conflicts? ---
+        // --- did the rebase report conflicts? live: DID_REBASE_REPORT_CONFLICTS.ts routes on conflicted only ---
         const conflicted = sim(input, "DID_REBASE_REPORT_CONFLICTS") === "YES";
         if (!conflicted) {
+            // live: rebaseTaskWorktree.ts:persistSourceTipReceipts, inside the rebase box itself
             console.log("  skipping: record sourceTipsAtRebase and the rebase step receipt in tasks.json");
             return { next: "RUN_FULL_SUITE" };
         }
 
-        // --- 2 conflict fixes done? ---
+        // --- 2 conflict fixes done? live: ARE_2_CONFLICT_FIXES_DONE.ts -> taskRunState.ts:getAttemptCount, raiseAttemptCount ---
         const attempts = run.attempts ?? {};
         run.attempts = attempts;
         const fixesSoFar = attempts["pipeline-rebase-conflict-fix"] ?? 0;
@@ -561,7 +574,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         return { next: "FIX_CONFLICTS" };
     },
 
-    // Prompt block. The live script lists the conflicted files with git, then builds the fix prompt.
+    // Prompt block. live: steps/pipeline-rebase/FIX_CONFLICTS.ts -> tackle-tasks/FixConflictsBodyEmitter.ts:fixConflictsPrompt
     FIX_CONFLICTS(input) {
         const run = input.task!.run!;
         const prompt = `A rebase in ${run.worktree} is stopped on conflict markers. List the files with git diff --name-only --diff-filter=U -z, resolve every conflict in them, and never run git rebase --continue. Answer with {resolved, unresolvedPaths}.`;
@@ -576,7 +589,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const task = input.task!;
         const run = task.run!;
 
-        // --- commit if needed ---
+        // --- commit if needed. live: COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts -> tackle-tasks/commitTaskWork.ts:commitTaskWork ---
         const commits = run.commits ?? [];
         run.commits = commits;
         console.log(`  skipping: git add -A && git commit -q in the stopped layer of ${run.worktree} (Task-Step: rebase)`);
@@ -586,17 +599,18 @@ const blocks: Record<string, (input: Input) => Packet> = {
             stepId: "rebase",
         });
 
-        // --- continue the rebase ---
+        // --- continue the rebase. live: CONTINUE_REBASE.ts -> tackle-tasks/advanceTaskRebase.ts:advanceTaskRebase ---
         console.log(`  skipping: GIT_EDITOR=true git rebase --continue in ${run.worktree}, then resume the deepest-first walk`);
 
-        // --- is the rebase finished? ---
+        // --- is the rebase finished? live: IS_REBASE_FINISHED.ts, then SUITE_PIPELINE.ts ---
         const finished = sim(input, "IS_REBASE_FINISHED") === "YES";
         if (finished) {
+            // live: advanceTaskRebase.ts calls rebaseTaskWorktree.ts:persistSourceTipReceipts
             console.log("  skipping: record sourceTipsAtRebase and the rebase step receipt in tasks.json");
             return { next: "RUN_FULL_SUITE" };
         }
 
-        // --- it stopped on new conflicts: 2 conflict fixes done? ---
+        // --- stopped on new conflicts. live: DID_REBASE_REPORT_CONFLICTS.ts, then ARE_2_CONFLICT_FIXES_DONE.ts again ---
         const attempts = run.attempts ?? {};
         run.attempts = attempts;
         const fixesSoFar = attempts["pipeline-rebase-conflict-fix"] ?? 0;
@@ -611,14 +625,6 @@ const blocks: Record<string, (input: Input) => Packet> = {
         return { next: "FIX_CONFLICTS" };
     },
 
-    AGENT_ERRORED(input) {
-        return {
-            next: "FAILURES_EXIT",
-            exitType: "agent-failed",
-            exitNote: "the agent returned nothing usable",
-        };
-    },
-
     // --- pipeline-suite.mmd ---
 
     // One block for pipeline-suite.mmd (minus its fix prompt), pipeline-merge.mmd, and pipeline-mergeSucceededExit.mmd.
@@ -628,7 +634,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const commits = run.commits ?? [];
         run.commits = commits;
 
-        // --- commit the suite fix if needed ---
+        // --- commit the suite fix if needed. live: steps/pipeline-suite/COMMIT_SUITE_FIX_IF_NEEDED.ts -> tackle-tasks/commitTaskWork.ts ---
         if (input.suiteFixAttempts > 0) {
             console.log(`  skipping: git add -A && git commit -q in ${run.worktree} (Task-Step: fix-suite-${input.suiteFixAttempts})`);
             commits.push({
@@ -638,16 +644,16 @@ const blocks: Record<string, (input: Input) => Packet> = {
             });
         }
 
-        // --- run the full suite ---
+        // --- run the full suite. live: RUN_FULL_SUITE.ts -> tackle-tasks/runFullSuite.ts:runFullSuite; input from REBASED_WORKTREE_INPUT.ts ---
         console.log(`  skipping: run each layer's full suite command in ${run.worktree}, deepest first`);
         const passed = sim(input, "DO_ALL_TESTS_PASS") === "YES";
         let output = "";
         if (!passed) output = "simulated failing suite output";
         run.fullSuite = { passed, output };
 
-        // --- do all tests pass? ---
+        // --- do all tests pass? live: DO_ALL_TESTS_PASS.ts ---
         if (!passed) {
-            // --- 2 suite fix attempts done? ---
+            // --- 2 suite fix attempts done? live: ARE_2_SUITE_FIXES_DONE.ts, MAX_SUITE_FIX_ATTEMPTS = 2, payload-only counter ---
             if (input.suiteFixAttempts >= 2) {
                 return {
                     next: "FAILURES_EXIT",
@@ -661,7 +667,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
 
-        // --- did every change stay inside the task's file fence? ---
+        // --- inside the fence? live: DID_CHANGES_STAY_INSIDE_FENCE.ts -> tackle-tasks/checkTaskFileFence.ts:checkTaskFileFence ---
         console.log(`  skipping: git diff --name-only <baseRef>...HEAD per layer in ${run.worktree}, checked against the task's files`);
         const insideFence = sim(input, "DID_CHANGES_STAY_INSIDE_FENCE") === "YES";
         if (!insideFence) {
@@ -672,15 +678,15 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
 
-        // --- merge worktrees and submodules, no fast-forward; each layer writes its merge ref as it lands ---
+        // --- merge, no fast-forward. live: steps/pipeline-merge/MERGE_WORKTREES.ts -> tackle-tasks/mergeTaskWorktree.ts -> mergeTaskWorktrees.ts ---
         console.log(`  skipping: git merge --no-ff task-${task.taskNumber} on each layer's target branch, writing refs/taskTools/merged-commits/... as each lands`);
 
-        // --- read the publication state from the layer merge refs ---
+        // --- read the publication state. live: READ_MERGE_PUBLICATION_STATE.ts -> tackle-tasks/readPublicationState.ts ---
         console.log("  skipping: git rev-parse --verify refs/taskTools/merged-commits/... per layer");
         const publicationState = sim(input, "WHAT_IS_PUBLICATION_STATE")!;
         run.publicationState = publicationState;
 
-        // --- what is the publication state? ---
+        // --- what is the publication state? live: WHAT_IS_PUBLICATION_STATE.ts; not ALL or NONE routes to PUBLICATION_PARTIAL.ts ---
         if (publicationState === "SOME LANDED") {
             return {
                 next: "FAILURES_EXIT",
@@ -689,7 +695,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             };
         }
         if (publicationState === "NONE LANDED") {
-            // --- 2 merge attempts done? the live check raises the count on every visit ---
+            // --- 2 merge attempts done? live: PUBLICATION_NONE.ts, then ARE_2_MERGE_ATTEMPTS_DONE.ts -> taskRunState.ts:raiseAttemptCount("merge") ---
             const attempts = run.attempts ?? {};
             run.attempts = attempts;
             const mergeAttempts = (attempts.merge ?? 0) + 1;
@@ -701,35 +707,36 @@ const blocks: Record<string, (input: Input) => Packet> = {
                     exitNote: "nothing landed after 2 attempts. worktree preserved.",
                 };
             }
-            // the target branch tip moved. the receipt travels with the run.
+            // the target branch tip moved. live: steps/pipeline-merge/REBASE_PIPELINE.ts forwards suiteFixAttempts and landedOccurrenceIds unchanged
             return { next: "REBASE_ONTO_TARGET_BRANCH" };
         }
+        // live: MERGE_RECEIPT_INPUT.ts re-reads the publication state and refuses to archive unless ALL LANDED
         if (publicationState !== "ALL LANDED") {
             throw new Error(`unknown publication state ${JSON.stringify(publicationState)}`);
         }
 
-        // --- merge succeeded exit: write exit type completed to tasks.json (the point of no return) ---
+        // --- write completed. live: steps/pipeline-mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.ts -> writeTaskExitNotes.ts; runs after RECORD_MERGE_COMMIT_HASHES.ts ---
         run.exitType = "completed";
         run.exitNote = "All layers merged successfully.";
 
-        // --- record merge commit hashes to tasks.json ---
+        // --- record merge commit hashes. live: RECORD_MERGE_COMMIT_HASHES.ts -> tackle-tasks/recordMergeCommits.ts, one per landed layer ---
         commits.push({
             hash: `sim-${commits.length + 1}`,
             kind: "merge",
             stepId: "merge",
         });
 
-        // --- record modified files to tasks.json ---
+        // --- record modified files. live: RECORD_MODIFIED_FILES_SUCCESS.ts -> tackle-tasks/recordTaskModifiedFiles.ts ---
         console.log("  skipping: git diff --name-only <baseRef>...HEAD per layer to record modifiedFiles");
         run.modifiedFiles = task.files ?? [];
 
-        // --- clean up worktrees, leases, persistence refs and source lock ---
+        // --- clean up. live: CLEAN_UP_WORKTREES.ts -> tackle-tasks/cleanupTaskWorktree.ts:cleanupTaskWorktree ---
         console.log(`  skipping: delete the generated docs, the merge refs, the worktree ${run.worktree} and its branch; release the lease, then the source lock`);
         delete run.worktree;
         delete run.leaseRunId;
         delete run.sourceLockOwner;
 
-        // --- build the closure note from the recorded run ---
+        // --- build the closure note. live: BUILD_CLOSURE_NOTE.ts -> tackle-tasks/buildClosureNote.ts:buildClosureNote ---
         const closureLines = [`Task ${task.taskNumber} ${run.exitType}.`, "", "Commits:"];
         for (const commit of commits) {
             closureLines.push(`  ${commit.hash}  ${commit.kind}  ${commit.stepId}`);
@@ -737,11 +744,11 @@ const blocks: Record<string, (input: Input) => Packet> = {
         closureLines.push(`Modified files: ${run.modifiedFiles.join(", ")}`);
         const closureNote = closureLines.join("\n");
 
-        // --- mark task inactive in tasks.json ---
+        // --- mark task inactive. live: MARK_TASK_INACTIVE_SUCCESS.ts -> tackle-tasks/markTaskInactive.ts ---
         run.active = false;
         run.endedAt = new Date().toISOString();
 
-        // --- move task to completedTasks.json and update tasks blocked by it ---
+        // --- archive. live: ARCHIVE_TASK.ts -> tackle-tasks/closeTaskRun.ts -> closeTasks.ts:closeTaskRunReconciled ---
         console.log(`  skipping: move task ${task.taskNumber} from tasks.json to completedTasks.json`);
         const remainingTasks = [];
         for (const openTask of input.tasks) {
@@ -756,7 +763,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
             remainingTasks.push(openTask);
         }
 
-        // --- report the closure note, then stop ---
+        // --- report the closure note, then stop. live: REPORT_CLOSURE_NOTE.ts, then STOP.ts ---
         console.log(closureNote);
         return {
             next: null,
@@ -764,7 +771,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         };
     },
 
-    // Prompt block. The live script builds the fix prompt from the owned files and the failing suite output.
+    // Prompt block. live: steps/pipeline-suite/FIX_THE_CODEBASE_FOR_SUITE.ts + tackle-tasks/promptSections.ts:absolutePathsSection
     FIX_THE_CODEBASE_FOR_SUITE(input) {
         const run = input.task!.run!;
         const prompt = `Fix the cause of every failure below in ${run.worktree}, editing only the owned files and never a test. Do not commit. Answer with {fixSummary}.\n\nFAILING SUITE OUTPUT:\n${run.fullSuite!.output}`;
@@ -778,7 +785,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
 // --- the scaffolding between the workflow loop and a block's script ---
 
-// A diagram node, read from the .mmd files; a misspelled block name fails at startup.
+// A diagram node from the .mmd files; a misspelled name fails at startup. live: generateSteps.ts -> steps.json
 type Block = {
     name: string;
     diagram: string;
@@ -786,38 +793,40 @@ type Block = {
     feeds: string[];
 };
 
-// The function the hook runs for a block. In the live system, a scripts/steps/*.ts file.
+// The function the hook runs for a block. live: scripts/steps/<diagram>/<BOX>.ts, spawned by runStepHook.ts:runStepScript
 type Script = {
     run: (input: Input) => Packet;
 };
 
-// What one script execution produced, before the hook decides whether to keep walking.
+// What one script execution produced. live: runStepHook.ts StepRun, parsed from the script's last stdout line
 type RunStepResult = {
     output: Input;
     nextBlock: string | null;
     prompt: string;
 };
 
-// The hook's output. This lands in the agent's context as the directions to follow.
+// The hook's output, in the agent's context. live: runStepHook.ts WalkResult.outcome; schema is for the next agent().
 type Directions = {
     block: string;
     prompt: string;
     payload: Input;
     previousBlockWasTerminal: boolean;
+    schema: Schema | null;
 };
 
-// The object shape the agent must return, per block: the field names of that block's input.
+// What the agent must return: the next block's input field names. live: buildRunStepSchemas.ts:buildAgentSchema.
 type Schema = Record<string, string[]>;
 
 type AgentResult = {
     previousBlockWasTerminal: boolean;
-    schema: Schema;
+    schema: Schema | null;
     output: Input;
 };
 
 const pipelines = [
     "preambleStatusCheck", "worktreeCheck", "documentGeneration", "plan", "reviewPlan", "implement",
     "taskTests", "reviewTests", "rebasePreamble", "rebase", "suite", "merge", "mergeSucceededExit",
+    "monolith",
 ];
 
 // The fields each block reads from the run state. The live hook keeps these in *.template.json.
@@ -905,7 +914,6 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: ["task"],
     CONTINUE_REBASE: [],
     IS_REBASE_FINISHED: ["task"],
-    AGENT_ERRORED: [],
     EXIT_WORKFLOW_REBASE: [],
     SUITE_PIPELINE: [],
     REBASED_WORKTREE_INPUT: [],
@@ -964,7 +972,7 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
     for (const diagram of diagrams) {
         const lines = readFileSync(diagram, "utf8").split("\n");
         for (const line of lines) {
-            if (/^\s*(%%|flowchart|classDef|class )/.test(line)) continue;
+            if (/^\s*(%%|flowchart|classDef|class |subgraph |end$)/.test(line)) continue;
             const withoutLabels = line.replace(/"[^"]*"/g, "");
             const withoutEdgeTags = withoutLabels.replace(/\|[^|]*\|/g, "");
             const ids = withoutEdgeTags.match(/[A-Z][A-Z0-9_]+/g) ?? [];
@@ -995,15 +1003,12 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
     return blockList;
 }
 
-// ponytail: every block reads and writes the same State today, so one field list serves all of them.
-function loadSchema(blockList: Block[]): Schema {
-    const schema: Schema = {};
+// Fails at startup when a diagram box has no field list. live: generateSteps.ts fails when a box has no template.
+function assertEveryBlockDeclaresInputFields(blockList: Block[]): void {
     for (const block of blockList) {
         const fields = blockInputFields[block.name];
         if (fields === undefined) throw new Error(`no input fields declared for block ${block.name}`);
-        schema[block.name] = fields;
     }
-    return schema;
 }
 
 function getBlockFor(input: Input): Block {
@@ -1025,6 +1030,7 @@ function prepareInputForBlock(input: Input, block: Block): Input {
     return scriptInput as Input;
 }
 
+// live: runStepHook.ts:runStepScript spawns node on the box script and parses its last stdout line.
 function run(script: Script, scriptInput: Input, state: Input): RunStepResult {
     const { next, prompt, ...changes } = script.run(scriptInput);
     const output: Input = { ...state };
@@ -1056,16 +1062,19 @@ function runStep(input: Input): Directions {
         if (script === undefined) throw new Error(`no script found for block ${block.name}`);
         // execute the script (function) matched to the block being run.
         result = run(script, scriptInput, state);
-        // if the script is a prompt-generating script, return the generated prompt.
+        // A prompt stops the walk here. live: runStepHook.ts:buildSuccess; its schema is buildAgentSchema(next)
         if (result.prompt !== "") {
+            // ponytail: one block's field list; the live hook unions every block reachable before the next prompt or stop.
+            const answerFeeds = result.nextBlock!;
             return {
                 block: block.name,
                 prompt: result.prompt,
                 payload: result.output,
                 previousBlockWasTerminal: false,
+                schema: { [answerFeeds]: blockInputFields[answerFeeds]! },
             };
         }
-        // if the block is the last block in the chain, return the output of that
+        // A stop ends the run; no next block, so no schema. live: runStepHook.ts:buildSuccess with scriptSignal stop
         const nextBlock = result.nextBlock;
         if (nextBlock === null) {
             return {
@@ -1073,6 +1082,7 @@ function runStep(input: Input): Directions {
                 prompt: "return the payload verbatim",
                 payload: result.output,
                 previousBlockWasTerminal: true,
+                schema: null,
             };
         }
         // if the script is a continue-generating script, get the next block to run.
@@ -1088,12 +1098,12 @@ const commands = {
     "/run-step": runStep,
 };
 
-// The agent's answer. null is the live agent() dying or being skipped.
-function followPrompt(directions: Directions, schema: Schema): AgentResult | null {
+// The agent's answer. null is the live agent() dying or being skipped. live: skills/run-step/SKILL.md
+function followPrompt(directions: Directions): AgentResult | null {
     if (directions.previousBlockWasTerminal) {
         return {
             previousBlockWasTerminal: true,
-            schema,
+            schema: directions.schema,
             output: directions.payload,
         };
     }
@@ -1154,13 +1164,14 @@ function followPrompt(directions: Directions, schema: Schema): AgentResult | nul
     output.answer = answer;
     const result: AgentResult = {
         previousBlockWasTerminal: false,
-        schema,
+        schema: directions.schema,
         output,
     };
     return result;
 }
 
-function agent(input: Input, schema: Schema): AgentResult | null {
+// live: pipelines.ts:runStep and runAgent -> ctx.agent(prompt, { schema }); schema shapes this call's answer.
+function agent(input: Input, schema: Schema | null): AgentResult | null {
     /*
       emulates the "invoke `/run-step <BLOCK> <args>` and follow directions" prompt to the agent in the live workflow.
     */
@@ -1173,10 +1184,11 @@ function agent(input: Input, schema: Schema): AgentResult | null {
     /*
       the agent follows the prompt and returns a specific output shape (based on a schema)
     */
-    const resultFromFollowingThePrompt = followPrompt(directions, schema);
+    const resultFromFollowingThePrompt = followPrompt(directions);
     return resultFromFollowingThePrompt;
 }
 
+// live: pipelines.ts:runTaskPipeline, spliced into skills/tackle-tasks/tackle-tasks.workflow.js
 function main(taskNumber: number, tasksJsonPath: string) {
     const tasks = JSON.parse(readFileSync(tasksJsonPath, "utf8")) as Task[];
     let input: Input = {
@@ -1197,20 +1209,8 @@ function main(taskNumber: number, tasksJsonPath: string) {
     };
     const diagrams = getDiagramsForPipelines(pipelines);
     blockList = getBlocksForDiagrams(diagrams);
-    // Not in any diagram yet: the .mmd files still draw these as 24 boxes across three diagrams.
-    blockList.push({
-        name: "PREAMBLE_STATUS_CHECK",
-        diagram: "monolith",
-        fedBy: [],
-        feeds: ["DOCUMENT_GENERATION", "REPORT_ONLY_EXIT", "FAILURES_EXIT"],
-    });
-    blockList.push({
-        name: "DOCUMENT_GENERATION",
-        diagram: "monolith",
-        fedBy: ["PREAMBLE_STATUS_CHECK", "WHAT_DID_THE_PLANNER_RETURN"],
-        feeds: ["PLAN_THE_TASK"],
-    });
-    let schema = loadSchema(blockList);
+    assertEveryBlockDeclaresInputFields(blockList);
+    let schema: Schema | null = { [input.block!]: blockInputFields[input.block!]! };
     while (true) {
         const result = agent(input, schema);
         // handle errors
