@@ -46,7 +46,6 @@ type State = {
     task: Task | undefined;
     runId: string;
     docsMode: string;
-    plan: string;
     codexNotes: string;
     suiteFixAttempts: number;
     exitType: string;
@@ -276,8 +275,8 @@ const blocks: Record<string, (input: Input) => Packet> = {
     PLAN_THE_TASK(input) {
         const task = input.task!;
         const run = task.run!;
-        const briefFile = `${run.worktree}/plans/task-${task.taskNumber}-brief.md`;
-        const planFile = `${run.worktree}/plans/task-${task.taskNumber}-plan.md`;
+        const briefFile = `${run.worktree}/plans/brief-${task.taskNumber}.md`;
+        const planFile = `${run.worktree}/plans/plan.json`;
         let prompt = `Plan task ${task.taskNumber} from ${briefFile}. Write the plan to ${planFile} and answer PLAN, or answer CLARIFY with what the brief does not say. Codex reviews this plan before it is implemented.`;
         if (input.codexNotes !== "") {
             prompt = `${prompt}\nCodex's notes on the previous plan:\n${input.codexNotes}`;
@@ -295,10 +294,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
         // --- PLAN. live: PLANNER_RETURNED_PLAN.ts, then REVIEW_PLAN_PIPELINE.ts ---
         if (input.answer === "PLAN") {
-            return {
-                next: "CODEX_REVIEWS_PLAN",
-                plan: input.plan,
-            };
+            return { next: "CODEX_REVIEWS_PLAN" };
         }
 
         // --- CLARIFY. live: PLANNER_RETURNED_CLARIFY.ts; the planner agent words clarifyRequest itself ---
@@ -336,10 +332,11 @@ const blocks: Record<string, (input: Input) => Packet> = {
     CODEX_REVIEWS_PLAN(input) {
         const task = input.task!;
         const run = task.run!;
-        const briefFile = `${run.worktree}/plans/task-${task.taskNumber}-brief.md`;
-        const reviewFile = `${run.worktree}/plans/task-${task.taskNumber}-plan-review.json`;
+        const briefFile = `${run.worktree}/plans/brief-${task.taskNumber}.md`;
+        const planFile = `${run.worktree}/plans/plan.json`;
+        const reviewFile = `${run.worktree}/plans/codex-review.json`;
         const ownedFiles = task.files ?? [];
-        const reviewPrompt = `You are a read-only review agent tasked with reviewing the implementation plan for task ${task.taskNumber}. Read only: ${briefFile}, ${input.plan}, ${ownedFiles.join(", ")}.`;
+        const reviewPrompt = `You are a read-only review agent tasked with reviewing the implementation plan for task ${task.taskNumber}. Read only: ${briefFile}, ${planFile}, ${ownedFiles.join(", ")}.`;
         // live: codex exec, else claude -p fable, else claude -p opus. Three-way fallback in CODEX_REVIEWS_PLAN.ts
         const command = `codex exec -s read-only --output-schema plans/review-plan-schema.json -o "${reviewFile}" "${reviewPrompt}" </dev/null`;
         const prompt = `Run this with Bash:\n${command}\nThen return the JSON written to ${reviewFile}, unchanged.`;
@@ -391,7 +388,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
         // --- AMEND_THEN_ACCEPT. live: VERDICT_AMEND_THEN_ACCEPT.ts:applyFixesToPlan writes the fixes into the plan ---
         if (verdict === "AMEND_THEN_ACCEPT") {
-            console.log(`  skipping: write codex's fixes into the sections of ${input.plan} and bump its revision`);
+            console.log(`  skipping: write codex's fixes into the sections of ${task.run!.worktree}/plans/plan.json and bump its revision`);
             return { next: "IMPLEMENT_TASK" };
         }
 
@@ -421,7 +418,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
     IMPLEMENT_TASK(input) {
         const task = input.task!;
         const run = task.run!;
-        let prompt = `Implement task ${task.taskNumber} in ${run.worktree}, following ${input.plan}. Edit only the owned files and their tests. Do not commit. Answer with {message, additionalData: {implemented, notes}}.`;
+        let prompt = `Implement task ${task.taskNumber} in ${run.worktree}, following ${run.worktree}/plans/plan.json. Edit only the owned files and their tests. Do not commit. Answer with {message, additionalData: {implemented, notes}}.`;
         if (task.codexReviewNotes !== undefined) {
             prompt = `${prompt}\nNotes on the previous attempt:\n${task.codexReviewNotes}`;
         }
@@ -485,7 +482,7 @@ const blocks: Record<string, (input: Input) => Packet> = {
         const task = input.task!;
         const run = task.run!;
         const diffFile = `${run.worktree}/plans/implementation-diff-${task.taskNumber}.patch`;
-        const prompt = `Run this with Bash: git -C ${run.worktree} diff <mergeBase>..HEAD > ${diffFile}. Then run the read-only reviewer over the brief, ${input.plan}, the test files, and ${diffFile}. Return its {flagged, notes} JSON, unchanged.`;
+        const prompt = `Run this with Bash: git -C ${run.worktree} diff <mergeBase>..HEAD > ${diffFile}. Then run the read-only reviewer over the brief, ${run.worktree}/plans/plan.json, the test files, and ${diffFile}. Return its {flagged, notes} JSON, unchanged.`;
         return {
             next: "ARE_TESTS_FLAGGED",
             prompt,
@@ -500,9 +497,12 @@ const blocks: Record<string, (input: Input) => Packet> = {
 
         // --- are the tests flagged? live: ARE_TESTS_FLAGGED.ts routes on flagged ---
         if (review.flagged === true) {
-            // --- 2 test reviews done? live: ARE_2_TEST_REVIEWS_DONE.ts:hasAlreadyBeenAmended reads the same shared field ---
-            const alreadyAmended = (task.codexReviewNotes ?? "").trim() !== "";
-            if (alreadyAmended) {
+            // --- 2 test reviews done? live: ARE_2_TEST_REVIEWS_DONE.ts still reads the shared codexReviewNotes field ---
+            const attempts = run.attempts ?? {};
+            run.attempts = attempts;
+            const testReviews = (attempts.testReviews ?? 0) + 1;
+            attempts.testReviews = testReviews;
+            if (testReviews >= 2) {
                 return {
                     next: "FAILURES_EXIT",
                     exitType: "tests-flagged",
@@ -812,6 +812,7 @@ type Directions = {
     payload: Input;
     previousBlockWasTerminal: boolean;
     schema: Schema | null;
+    error: string;
 };
 
 // What the agent must return: the next block's input field names. live: buildRunStepSchemas.ts:buildAgentSchema.
@@ -821,6 +822,7 @@ type AgentResult = {
     previousBlockWasTerminal: boolean;
     schema: Schema | null;
     output: Input;
+    error: string;
 };
 
 const pipelines = [
@@ -861,7 +863,7 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     PLAN_PIPELINE: [],
     DOCS_INPUT: [],
     PLAN_THE_TASK: ["task", "codexNotes"],
-    WHAT_DID_THE_PLANNER_RETURN: ["task", "answer", "plan"],
+    WHAT_DID_THE_PLANNER_RETURN: ["task", "answer"],
     PLANNER_RETURNED_PLAN: [],
     PLANNER_RETURNED_CLARIFY: [],
     ARE_2_CLARIFY_ROUNDS_DONE: ["task"],
@@ -869,8 +871,8 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     EXIT_WORKFLOW_PLAN: [],
     REVIEW_PLAN_PIPELINE: [],
     DRAFT_PLAN_INPUT: [],
-    CODEX_REVIEWS_PLAN: ["task", "plan"],
-    WHAT_IS_REVIEW_VERDICT: ["task", "plan", "answer"],
+    CODEX_REVIEWS_PLAN: ["task"],
+    WHAT_IS_REVIEW_VERDICT: ["task", "answer"],
     VERDICT_ACCEPT: [],
     VERDICT_AMEND_THEN_ACCEPT: [],
     VERDICT_AMEND: [],
@@ -881,7 +883,7 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     EXIT_WORKFLOW_REVIEW_PLAN: [],
     IMPLEMENT_PIPELINE: [],
     ACCEPTED_PLAN_INPUT: [],
-    IMPLEMENT_TASK: ["task", "plan"],
+    IMPLEMENT_TASK: ["task"],
     COMMIT_IMPLEMENTATION_IF_NEEDED: ["task"],
     EXIT_WORKFLOW_IMPLEMENT: [],
     TASK_TESTS_PIPELINE: [],
@@ -893,7 +895,7 @@ const blockInputFields: Record<string, (keyof State)[]> = {
     EXIT_WORKFLOW_TASK_TESTS: [],
     REVIEW_TESTS_PIPELINE: [],
     GREEN_IMPLEMENTATION_INPUT: [],
-    CODEX_REVIEWS_TESTS: ["task", "plan"],
+    CODEX_REVIEWS_TESTS: ["task"],
     ARE_TESTS_FLAGGED: ["task", "answer", "runId"],
     ARE_2_TEST_REVIEWS_DONE: ["task"],
     AMEND_ENTRY_WITH_CODEX_NOTES: [],
@@ -1003,7 +1005,7 @@ function getBlocksForDiagrams(diagrams: string[]): Block[] {
     return blockList;
 }
 
-// Fails at startup when a diagram box has no field list. live: generateSteps.ts fails when a box has no template.
+// Fails at startup when a diagram box has no field list. live: scripts/generateSteps.ts, scripts/steps.json
 function assertEveryBlockDeclaresInputFields(blockList: Block[]): void {
     for (const block of blockList) {
         const fields = blockInputFields[block.name];
@@ -1052,45 +1054,59 @@ function runStep(input: Input): Directions {
       invokes the runStepHook.ts hook with the given input.  Looks up the script (here emulated as a function) that should be executed for the block, and passes the input to it.  If the script is matched to a 'continue' block, the output of the script says what block to run next, and the output is passed to the next block in the chain.  If the script is matched to a 'prompt' block, the script output stops the loop here, and the output is returned to the caller of 'runStep'.
     */
     let state = input;
-    let block = getBlockFor(state);
-    let scriptInput = prepareInputForBlock(state, block); //input contains 'blockName'
-    let result: RunStepResult;
-    while (true) {
-        // find the script (function) for the block being run.
-        console.log(`${block.name} being executed`);
-        const script = blockToScriptMap.get(block.name);
-        if (script === undefined) throw new Error(`no script found for block ${block.name}`);
-        // execute the script (function) matched to the block being run.
-        result = run(script, scriptInput, state);
-        // A prompt stops the walk here. live: runStepHook.ts:buildSuccess; its schema is buildAgentSchema(next)
-        if (result.prompt !== "") {
-            // ponytail: one block's field list; the live hook unions every block reachable before the next prompt or stop.
-            const answerFeeds = result.nextBlock!;
-            return {
-                block: block.name,
-                prompt: result.prompt,
-                payload: result.output,
-                previousBlockWasTerminal: false,
-                schema: { [answerFeeds]: blockInputFields[answerFeeds]! },
-            };
+    try {
+        let block = getBlockFor(state);
+        let scriptInput = prepareInputForBlock(state, block); //input contains 'blockName'
+        let result: RunStepResult;
+        while (true) {
+            // find the script (function) for the block being run.
+            console.log(`${block.name} being executed`);
+            const script = blockToScriptMap.get(block.name);
+            if (script === undefined) throw new Error(`no script found for block ${block.name}`);
+            // execute the script (function) matched to the block being run.
+            result = run(script, scriptInput, state);
+            // A prompt stops the walk here. live: runStepHook.ts:buildSuccess; its schema is buildAgentSchema(next)
+            if (result.prompt !== "") {
+                // ponytail: one block's field list; the live hook unions every block reachable before the next prompt or stop.
+                const answerFeeds = result.nextBlock!;
+                return {
+                    block: block.name,
+                    prompt: result.prompt,
+                    payload: result.output,
+                    previousBlockWasTerminal: false,
+                    schema: { [answerFeeds]: blockInputFields[answerFeeds]! },
+                    error: "",
+                };
+            }
+            // A stop ends the run; no next block, so no schema. live: runStepHook.ts:buildSuccess with scriptSignal stop
+            const nextBlock = result.nextBlock;
+            if (nextBlock === null) {
+                return {
+                    block: block.name,
+                    prompt: "return the payload verbatim",
+                    payload: result.output,
+                    previousBlockWasTerminal: true,
+                    schema: null,
+                    error: "",
+                };
+            }
+            // if the script is a continue-generating script, get the next block to run.
+            state = result.output;
+            block = getBlockFor(state);
+            // else pass the output from the script execution to the next block in the chain.
+            scriptInput = prepareInputForBlock(state, block);
+            // loop back to find and execute the next block in the chain.
         }
-        // A stop ends the run; no next block, so no schema. live: runStepHook.ts:buildSuccess with scriptSignal stop
-        const nextBlock = result.nextBlock;
-        if (nextBlock === null) {
-            return {
-                block: block.name,
-                prompt: "return the payload verbatim",
-                payload: result.output,
-                previousBlockWasTerminal: true,
-                schema: null,
-            };
-        }
-        // if the script is a continue-generating script, get the next block to run.
-        state = result.output;
-        block = getBlockFor(state);
-        // else pass the output from the script execution to the next block in the chain.
-        scriptInput = prepareInputForBlock(state, block);
-        // loop back to find and execute the next block in the chain.
+    } catch (error) {
+        // live: runStepHook.ts:buildFailure prints ok false and the errors; the agent returns that unchanged.
+        return {
+            block: String(state.block),
+            prompt: "return the error message",
+            payload: state,
+            previousBlockWasTerminal: false,
+            schema: null,
+            error: `${state.block} failed: ${(error as Error).message}`,
+        };
     }
 }
 
@@ -1100,24 +1116,25 @@ const commands = {
 
 // The agent's answer. null is the live agent() dying or being skipped. live: skills/run-step/SKILL.md
 function followPrompt(directions: Directions): AgentResult | null {
+    if (directions.error !== "") {
+        return {
+            previousBlockWasTerminal: false,
+            schema: null,
+            output: directions.payload,
+            error: directions.error,
+        };
+    }
     if (directions.previousBlockWasTerminal) {
         return {
             previousBlockWasTerminal: true,
             schema: directions.schema,
             output: directions.payload,
+            error: "",
         };
     }
     let answer = sim(directions.payload, directions.block);
     if (answer === null) return null;
     const output: Input = { ...directions.payload };
-
-    // For the planner prompt the agent writes the plan file. The sim only names it.
-    if (directions.block === "PLAN_THE_TASK") {
-        if (answer === "PLAN") {
-            const task = directions.payload.task!;
-            output.plan = `${task.run!.worktree}/plans/task-${task.taskNumber}-plan.md`;
-        }
-    }
 
     // For the two codex prompts the agent runs codex in a shell and returns codex's JSON.
     // ponytail: the fixture names the outcome; the sim writes the JSON that outcome would carry.
@@ -1125,7 +1142,7 @@ function followPrompt(directions: Directions): AgentResult | null {
         if (answer === "ERROR") {
             answer = JSON.stringify({
                 outcome: "ERROR",
-                missingFiles: [directions.payload.plan],
+                missingFiles: [`${directions.payload.task!.run!.worktree}/plans/plan.json`],
                 message: "Review not performed because one or more required input files were unavailable.",
                 issues: [],
                 fixes: [],
@@ -1166,6 +1183,7 @@ function followPrompt(directions: Directions): AgentResult | null {
         previousBlockWasTerminal: false,
         schema: directions.schema,
         output,
+        error: "",
     };
     return result;
 }
@@ -1199,7 +1217,6 @@ function main(taskNumber: number, tasksJsonPath: string) {
         task: undefined,
         runId: randomUUID(),
         docsMode: "",
-        plan: "",
         codexNotes: "",
         suiteFixAttempts: 0,
         exitType: "",
@@ -1213,9 +1230,20 @@ function main(taskNumber: number, tasksJsonPath: string) {
     let schema: Schema | null = { [input.block!]: blockInputFields[input.block!]! };
     while (true) {
         const result = agent(input, schema);
-        // handle errors
+        // live: pipelines.ts:406 returns toFailures("agent-failed", ...) and runTaskPipeline runs the failures exit.
         if (result === null) {
-            // agent errored or terminated prematurely. exit the loop.
+            let task: Task | undefined = undefined;
+            for (const candidate of input.tasks) {
+                if (candidate.taskNumber === input.taskNumber) task = candidate;
+            }
+            input = { ...input, block: "FAILURES_EXIT", task, exitType: "agent-failed", exitNote: "the agent returned nothing usable" };
+            schema = { FAILURES_EXIT: blockInputFields.FAILURES_EXIT! };
+            continue;
+        }
+        // The hook failed; the agent handed the error back, so the run stops here and the user reads it.
+        if (result.error !== "") {
+            console.log(`run-step failed: ${result.error}`);
+            process.exitCode = 1;
             break;
         }
 
