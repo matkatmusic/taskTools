@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
-import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests } from "../taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
@@ -118,8 +118,7 @@ export function runTaskTests(
 
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
-    const declaredTests = task?.tests;
-    const taskDeclaresTests = typeof declaredTests === "string" && declaredTests !== "skip";
+    const taskDeclaresTests = task !== undefined && taskHasTests(task);
 
     let passed: boolean;
     let missingTests: boolean;

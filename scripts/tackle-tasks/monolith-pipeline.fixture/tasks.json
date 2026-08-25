@@ -39,7 +39,8 @@
             "HOW_MANY_PLAN_SECTIONS": [
                 "3"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 2,
@@ -51,7 +52,8 @@
             {
                 "taskNum": 1
             }
-        ]
+        ],
+        "hasTests": true
     },
     {
         "taskNumber": 3,
@@ -61,7 +63,8 @@
         ],
         "run": {
             "active": true
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 4,
@@ -108,7 +111,8 @@
             "HOW_MANY_PLAN_SECTIONS": [
                 "3"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 5,
@@ -121,7 +125,8 @@
             "worktree": ".taskTools/worktrees/task-5",
             "worktreeSafe": true,
             "history": []
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 6,
@@ -143,7 +148,8 @@
                 "src/f.ts",
                 "src/not-mine.ts"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 7,
@@ -199,7 +205,8 @@
             "HOW_MANY_PLAN_SECTIONS": [
                 "3"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 8,
@@ -241,7 +248,8 @@
             "HOW_MANY_PLAN_SECTIONS": [
                 "50"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 9,
@@ -284,7 +292,8 @@
             "HOW_MANY_PLAN_SECTIONS": [
                 "3"
             ]
-        }
+        },
+        "hasTests": true
     },
     {
         "taskNumber": 10,
@@ -321,6 +330,6 @@
                 "3"
             ]
         },
-        "tests": "skip"
+        "hasTests": false
     }
 ]

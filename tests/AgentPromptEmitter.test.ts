@@ -31,6 +31,7 @@ const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
     testFilePaths: [],
+    hasTests: true,
     tests: "node --test tests/thing.test.ts",
     codexReviewNotes: "",
     repoRoot: "/tmp/fake-worktree",

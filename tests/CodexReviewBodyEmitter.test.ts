@@ -12,7 +12,7 @@ const task: PreparedTask = {
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
     testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
     files: ["src/thing.ts"], ownedFilePaths: ["/wt/src/thing.ts"], testFilePaths: [],
-    tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: "/project",
+    hasTests: false, tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: "/project",
 };
 
 test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {

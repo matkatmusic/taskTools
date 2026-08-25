@@ -29,7 +29,9 @@ function minimalPayload(overrides: Partial<NewTaskPayload> = {}): NewTaskPayload
         title: "Do the thing",
         userDescription: "user asked for the thing",
         goal: ["- the thing works"],
-        tests: "skip",
+        schemaVersion: "1.0.1",
+        hasTests: false,
+        tests: "",
         ...overrides,
     };
 }

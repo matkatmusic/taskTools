@@ -9,6 +9,8 @@ export type NewTaskPayload = {
     title: string;
     userDescription: string;
     goal: string[];
+    schemaVersion: string;
+    hasTests: boolean;
     tests: string;
     chainGoal?: string[];
     files?: string[];
@@ -44,6 +46,8 @@ export function buildTaskEntry(payload: NewTaskPayload, taskNumber: number, comm
     if (payload.files && payload.files.length > 0) {
         entry.files = payload.files;
     }
+    entry.schemaVersion = payload.schemaVersion;
+    entry.hasTests = payload.hasTests;
     entry.tests = payload.tests;
     if (payload.difficulty !== undefined) {
         entry.difficulty = payload.difficulty;

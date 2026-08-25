@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "../../../scripts/steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.ts";
 
-// A throwaway project holding one tasks.json entry, so the decision reads a real tests field.
+// A throwaway project holding one tasks.json entry, so the decision reads a real entry.
 function packetForTask(entry: Record<string, unknown>) {
     const projectRoot = mkdtempSync(join(tmpdir(), "are-task-tests-skipped-"));
     mkdirSync(join(projectRoot, ".taskTools"));
@@ -15,20 +15,29 @@ function packetForTask(entry: Record<string, unknown>) {
     return { taskNumber: 1, runId: "run-1", worktreePath: "/abs/worktree", sourceBranch: "main", projectRoot };
 }
 
-test("test_ARE_TASK_TESTS_SKIPPED_choosesRebasePreambleWhenTestsIsSkip", () => {
-    const packet = packetForTask({ taskNumber: 1, tests: "skip" });
+function nextFor(entry: Record<string, unknown>): unknown {
+    const packet = packetForTask(entry);
     const output = main(JSON.stringify({ box: "COMMITTED_WORK_INPUT", scriptSignal: "continue", ...packet }));
-    assert.deepEqual(output, { box: "ARE_TASK_TESTS_SKIPPED", scriptSignal: "continue", ...packet, next: "REBASE_PREAMBLE_PIPELINE" });
+    assert.deepEqual(output, { box: "ARE_TASK_TESTS_SKIPPED", scriptSignal: "continue", ...packet, next: output.next });
+    return output.next;
+}
+
+test("test_ARE_TASK_TESTS_SKIPPED_readsHasTestsOnA101Entry", () => {
+    assert.equal(nextFor({ taskNumber: 1, schemaVersion: "1.0.1", hasTests: false }), "REBASE_PREAMBLE_PIPELINE");
+    assert.equal(nextFor({ taskNumber: 1, schemaVersion: "1.0.1", hasTests: true }), "RUN_TASK_TESTS");
 });
 
-test("test_ARE_TASK_TESTS_SKIPPED_choosesRunTaskTestsForAnyOtherTestsField", () => {
-    const packet = packetForTask({ taskNumber: 1, tests: "npm test" });
-    const output = main(JSON.stringify({ box: "COMMITTED_WORK_INPUT", scriptSignal: "continue", ...packet }));
-    assert.deepEqual(output, { box: "ARE_TASK_TESTS_SKIPPED", scriptSignal: "continue", ...packet, next: "RUN_TASK_TESTS" });
+test("test_ARE_TASK_TESTS_SKIPPED_readsTestsOnA100Entry", () => {
+    assert.equal(nextFor({ taskNumber: 1, schemaVersion: "1.0.0", tests: "skip" }), "REBASE_PREAMBLE_PIPELINE");
+    assert.equal(nextFor({ taskNumber: 1, schemaVersion: "1.0.0", tests: "add a test for the widget" }), "RUN_TASK_TESTS");
 });
 
-test("test_ARE_TASK_TESTS_SKIPPED_choosesRunTaskTestsWhenTheEntryHasNoTestsField", () => {
-    const packet = packetForTask({ taskNumber: 1 });
-    const output = main(JSON.stringify({ box: "COMMITTED_WORK_INPUT", scriptSignal: "continue", ...packet }));
-    assert.equal(output.next, "RUN_TASK_TESTS");
+// An entry made before schemaVersion existed is a 1.0.0 entry.
+test("test_ARE_TASK_TESTS_SKIPPED_treatsAnEntryWithoutSchemaVersionAs100", () => {
+    assert.equal(nextFor({ taskNumber: 1, tests: "skip" }), "REBASE_PREAMBLE_PIPELINE");
+    assert.equal(nextFor({ taskNumber: 1 }), "REBASE_PREAMBLE_PIPELINE");
+});
+
+test("test_ARE_TASK_TESTS_SKIPPED_throwsOnAnUnknownSchemaVersion", () => {
+    assert.throws(() => nextFor({ taskNumber: 1, schemaVersion: "2.0.0", hasTests: true }), /unknown schemaVersion "2.0.0"/);
 });

@@ -17,7 +17,7 @@ flowchart TB
 %% ---
 %% A script that fails operationally exits as run-failed.
 %% ---
-%% An entry whose tests field is "skip" runs no task tests and no codex test review: it goes straight to the rebase preamble.
+%% An entry with hasTests false (tests "skip" on a 1.0.0 entry) runs no task tests and no codex test review: it goes straight to the rebase preamble.
 %% ---
 %% Exit types: tests-red, run-failed.
 %% ---
@@ -29,7 +29,7 @@ flowchart TB
 %% ---
 %% Its exit note still says "after 2 codebase fixes".
 
-  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> ARE_TASK_TESTS_SKIPPED{"is the entry's tests field skip?"}
+  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> ARE_TASK_TESTS_SKIPPED{"is the entry's hasTests false?"}
   ARE_TASK_TESTS_SKIPPED -->|NO| RUN_TASK_TESTS
   ARE_TASK_TESTS_SKIPPED -- "YES<br/>no task tests, no codex test review" --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
   RUN_TASK_TESTS["run task tests"] --> DO_TASK_TESTS_PASS{"do the task tests pass?"}

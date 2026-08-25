@@ -2,7 +2,7 @@
 // has to import the dispatch hub, which would make the imports circular.
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { readTaskFile, resolveTaskFiles } from "../taskFiles.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests } from "../taskFiles.ts";
 
 function fail(problem: string): never {
     process.stderr.write(`AgentPromptEmitter: ${problem}\n`);
@@ -23,6 +23,8 @@ export type PreparedTask = {
     ownedFilePaths: string[];
     // The test file paired with each owned file by the naming convention, kept to the ones that exist.
     testFilePaths: string[];
+    hasTests: boolean;
+    // The user's example test as prose; "skip" on a 1.0.0 entry, "" on a 1.0.1 entry without tests.
     tests: string | null;
     // Written into the task entry by UPDATE_TASK_ENTRY; empty until a replan has been asked for.
     codexReviewNotes: string;
@@ -58,6 +60,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         files,
         ownedFilePaths: files.map((file) => `${root}/${file}`),
         testFilePaths: files.map((file) => pairedTestPath(root, file)).filter((path) => existsSync(path)),
+        hasTests: taskHasTests(task),
         tests: typeof (task as any).tests === "string" ? (task as any).tests : null,
         codexReviewNotes: typeof (task as any).codexReviewNotes === "string" ? (task as any).codexReviewNotes : "",
         repoRoot: worktree,

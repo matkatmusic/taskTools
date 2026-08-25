@@ -30,7 +30,7 @@ function makeTask(projectRoot: string): PreparedTask {
         reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
         testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-35.md",
         files: ["src/owned.ts"], ownedFilePaths: ["/wt/src/owned.ts"], testFilePaths: [],
-        tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: projectRoot,
+        hasTests: false, tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: projectRoot,
     };
 }
 

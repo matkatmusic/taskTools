@@ -56,6 +56,7 @@ function makeTaskFixture(): PreparedTask {
         files: ["src/thing.ts"],
         ownedFilePaths: [join(worktree, "src", "thing.ts")],
         testFilePaths: [join(worktree, "tests", "thing.test.ts")],
+        hasTests: true,
         tests: "node --test tests/thing.test.ts",
         codexReviewNotes: "",
         repoRoot: worktree,

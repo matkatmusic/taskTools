@@ -6,6 +6,15 @@ import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 export type TaskRecord = { taskNumber: number; title?: string; description?: string } & Record<string, unknown>;
 export type TaskFilePair = { tasksPath: string; completedTasksPath: string };
 
+// A 1.0.0 entry says it with tests ("skip" or the user's example test); a 1.0.1 entry says it with hasTests.
+// No schemaVersion means the entry was made before the field existed, so it is 1.0.0.
+export function taskHasTests(task: TaskRecord): boolean {
+  const schemaVersion = task.schemaVersion ?? "1.0.0";
+  if (schemaVersion === "1.0.1") return task.hasTests === true;
+  if (schemaVersion === "1.0.0") return typeof task.tests === "string" && task.tests !== "skip";
+  throw new Error(`task ${task.taskNumber} has an unknown schemaVersion ${JSON.stringify(schemaVersion)}`);
+}
+
 export function taskFilesProjectRoot(pair: TaskFilePair): string {
   const taskDirectory = dirname(pair.tasksPath)
   return basename(taskDirectory) === '.taskTools'

@@ -14,7 +14,7 @@ export function produceSkillBody(taskDescription: string): string {
 
 1. Decide whether that description is actionable later without this conversation's context: a concrete goal or symptom, plus file paths / repro steps / URLs where applicable. If it is, proceed. If not, invoke AskUserQuestion to fill the specific gaps; for a large or direction-setting task, invoke \`/grill-me\` instead to refine it.
 
-2. Invoke AskUserQuestion to ask for an example test (most likely an e2e test) that would correctly test the thing being added, offering an option to skip. If the user skips, set the task's \`tests\` field to the literal string \`skip\`. Otherwise set \`tests\` to the user's answer verbatim, as prose or pseudocode — this becomes what the implementing agent writes the test around.
+2. Invoke AskUserQuestion to ask for an example test (most likely an e2e test) that would correctly test the thing being added, offering an option to skip. If the user skips, set the task's \`hasTests\` field to \`false\` and its \`tests\` field to an empty string. Otherwise set \`hasTests\` to \`true\` and \`tests\` to the user's answer verbatim, as prose or pseudocode — this becomes what the implementing agent writes the test around. Copy \`schemaVersion\` from the template as is.
 
 3. Write a \`title\`: a short summary of the task.
 
@@ -26,7 +26,7 @@ export function produceSkillBody(taskDescription: string): string {
 
 WORKFLOW: ${workflowArgs}
 
-7. Pipe the merged payload into \`appendTask.ts\`, combining the user-settled \`title\`, \`userDescription\`, \`goal\`, \`tests\`, and optional \`chainGoal\` with the workflow's \`files\`, \`description\`, \`difficulty\`, and \`blockedBy\`. Populate \`userDescription\` with the task description verbatim, exactly as typed — never edit, summarize, or reword it. If the request names the source note/handoff file(s) the task came from (e.g. an \`update-tasks\` harvest), also include \`"handoffFilePaths": [<those repo-relative paths>]\` in the object; otherwise omit the field. Run this with Bash, with the payload filled in:
+7. Pipe the merged payload into \`appendTask.ts\`, combining the user-settled \`title\`, \`userDescription\`, \`goal\`, \`hasTests\`, \`tests\`, \`schemaVersion\`, and optional \`chainGoal\` with the workflow's \`files\`, \`description\`, \`difficulty\`, and \`blockedBy\`. Populate \`userDescription\` with the task description verbatim, exactly as typed — never edit, summarize, or reword it. If the request names the source note/handoff file(s) the task came from (e.g. an \`update-tasks\` harvest), also include \`"handoffFilePaths": [<those repo-relative paths>]\` in the object; otherwise omit the field. Run this with Bash, with the payload filled in:
 
 node "${appendTaskPath}" <<'APPENDTASKEOF'
 <payload JSON here>

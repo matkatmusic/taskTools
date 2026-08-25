@@ -6,10 +6,11 @@ import type { PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
 import type { PlanReview } from "./recordPlanReview.ts";
 
-const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is present and is not the literal string "skip", it holds an
-example test the user wrote: put it into the plan's verification section as the concrete
-check to run, expanded with a few extra cases covering the individual functions/subparts
-it touches. Otherwise do not require TDD; write ordinary verification commands instead.`;
+const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is the literal string "skip", do not require TDD; write ordinary
+verification commands instead. Otherwise the task has tests: the plan's verification section
+must name the concrete tests to write and run. When TESTS_FIELD holds an example test the user
+wrote, put it in as that check, expanded with a few extra cases covering the individual
+functions/subparts it touches.`;
 
 // Double-quoted for the read-file hook's parser, not a shell: a quoted run keeps a spaced path whole.
 const readFileArgs = (paths: string[]) => paths.map((path) => `"${path}"`).join(" ");
@@ -169,6 +170,6 @@ You are allowed to read every file the read-file skill put into your context, an
 ## WHAT TO RETURN:
 Return the shape given by \`${PLAN_OUTPUT_PATH}\`, which the read-file skill put into your context, replacing every \`<...>\` with a real value.
 
----- TESTS_FIELD (task's tests field; empty or "skip" means no TDD requirement) ----
-${t.tests ?? "(none)"}`;
+---- TESTS_FIELD ("skip" means no TDD requirement) ----
+${t.hasTests ? (t.tests ?? "(the task has tests; the user wrote no example)") : "skip"}`;
 }

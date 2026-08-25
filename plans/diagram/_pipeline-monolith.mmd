@@ -74,7 +74,7 @@ flowchart TB
   WHAT_IS_REVIEW_VERDICT -- "run-failed<br/>plan-scrapped" --> FAILURES_EXIT
   IMPLEMENT_TASK -- "agent implements" --> COMMIT_IMPLEMENTATION_IF_NEEDED
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests pass" --> CODEX_REVIEWS_TESTS
-  COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests field: skip" --> LOCK_SOURCE_REPO
+  COMMIT_IMPLEMENTATION_IF_NEEDED -- "hasTests: false" --> LOCK_SOURCE_REPO
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests fail<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
   COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests-red" --> FAILURES_EXIT
   CODEX_REVIEWS_TESTS -- "agent runs the reviewer<br/>returns {flagged, notes}" --> ARE_TESTS_FLAGGED

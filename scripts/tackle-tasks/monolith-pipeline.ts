@@ -32,7 +32,7 @@ type Run = {
 type Task = {
     taskNumber: number;
     files?: string[];
-    tests?: string;
+    hasTests: boolean;
     blockedBy?: { taskNum: number }[];
     clarifyRequest?: string;
     codexReviewNotes?: string;
@@ -455,9 +455,9 @@ const blocks: Record<string, (input: Input) => Packet> = {
             stepId: "implement",
         });
 
-        // --- are the task tests skipped? live: steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.ts reads the entry's tests field ---
-        if (task.tests === "skip") {
-            console.log("  skipping: the task tests and the codex test review; the entry's tests field is \"skip\"");
+        // --- are the task tests skipped? live: steps/pipeline-taskTests/ARE_TASK_TESTS_SKIPPED.ts -> taskFiles.ts:taskHasTests ---
+        if (!task.hasTests) {
+            console.log("  skipping: the task tests and the codex test review; the entry's hasTests is false");
             return { next: "LOCK_SOURCE_REPO" };
         }
 
