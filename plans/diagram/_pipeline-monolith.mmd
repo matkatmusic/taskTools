@@ -1,108 +1,189 @@
 flowchart TB
-%% The pipeline as scripts/tackle-tasks/monolith-pipeline.ts runs it: 18 blocks.
+%% The pipeline as scripts/tackle-tasks/monolith-pipeline.ts runs it: 18 block names, drawn fully unrolled.
 %% ---
-%% Each small box is one block. Each large box is one system: the diagrams its blocks absorbed.
+%% Each large box is one agent() call. Its first block is where /run-step starts. Every path inside it runs to an orange box or to STOP. No arrow points back.
 %% ---
-%% An orange box returns a prompt. runStep() stops there and agent() answers it. Every other box continues.
+%% An orange box returns a prompt. runStep() walks into it, hands the agent its prompt, and stops. The agent answers it.
 %% ---
-%% An edge out of an orange box is the agent's answer coming back into the run.
+%% The agent's answer is the input of the next large box: the one whose title says 'after <that orange box> answers'.
+%% ---
+%% The same block name appears in several large boxes; the ID prefix E<n>_ only keeps mermaid happy. The NONE LANDED retry is drawn once, since merge tries stop at 2.
 
-  subgraph preamble ["preamble status check: pipeline-preambleStatusCheck.mmd + pipeline-worktreeCheck.mmd"]
-    PREAMBLE_STATUS_CHECK["task status<br/>worktree status<br/>init submodules recursively"]
+  subgraph entry1 ["Start of workflow"]
+    direction TB
+    E1_PREAMBLE_STATUS_CHECK["task status<br/>worktree status<br/>init submodules recursively"]
+    E1_REPORT_ONLY_EXIT["report the exit type and note"]
+    E1_STOP["stop"]
+    E1_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E1_DOCUMENT_GENERATION["what is the docs mode?<br/>write the task brief"]
+    E1_PLAN_THE_TASK["PLAN_THE_TASK"]
   end
+  E1_PREAMBLE_STATUS_CHECK -- "invalid-number<br/>blocked<br/>already-active" --> E1_REPORT_ONLY_EXIT
+  E1_REPORT_ONLY_EXIT --> E1_STOP
+  E1_FAILURES_EXIT --> E1_STOP
+  E1_PREAMBLE_STATUS_CHECK -- "not-resumable<br/>fence-violation" --> E1_FAILURES_EXIT
+  E1_PREAMBLE_STATUS_CHECK -- "docs mode: AUTOGEN or UPDATE" --> E1_DOCUMENT_GENERATION
+  E1_DOCUMENT_GENERATION --> E1_PLAN_THE_TASK
 
-  subgraph docs ["document generation: pipeline-documentGeneration.mmd"]
-    DOCUMENT_GENERATION["what is the docs mode?<br/>write the task brief"]
+  subgraph entry2 ["Input: [PLAN_THE_TASK]'s result"]
+    direction TB
+    E2_WHAT_DID_THE_PLANNER_RETURN["what did the planner return?<br/>2 clarify rounds done?<br/>write the clarify request"]
+    E2_CODEX_REVIEWS_PLAN["CODEX_REVIEWS_THE_PLAN"]
+    E2_DOCUMENT_GENERATION["what is the docs mode?<br/>write the task brief"]
+    E2_PLAN_THE_TASK["PLAN_THE_TASK"]
+    E2_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E2_STOP["stop"]
   end
+  E2_WHAT_DID_THE_PLANNER_RETURN -- "PLAN" --> E2_CODEX_REVIEWS_PLAN
+  E2_WHAT_DID_THE_PLANNER_RETURN -- "CLARIFY<br/>docs mode: UPDATE" --> E2_DOCUMENT_GENERATION
+  E2_DOCUMENT_GENERATION --> E2_PLAN_THE_TASK
+  E2_FAILURES_EXIT --> E2_STOP
+  E2_WHAT_DID_THE_PLANNER_RETURN -- "clarify-stuck" --> E2_FAILURES_EXIT
 
-  subgraph plan ["plan: pipeline-plan.mmd"]
-    PLAN_THE_TASK["plan the task"]
-    WHAT_DID_THE_PLANNER_RETURN["what did the planner return?<br/>2 clarify rounds done?<br/>write the clarify request"]
+  subgraph entry3 ["Input: [CODEX_REVIEWS_PLAN]'s result"]
+    direction TB
+    E3_WHAT_IS_REVIEW_VERDICT["what is the review verdict?<br/>update tasks.json entry<br/>2 codex reviews done?"]
+    E3_IMPLEMENT_TASK["IMPLEMENT_TASK"]
+    E3_PLAN_THE_TASK["PLAN_THE_TASK"]
+    E3_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E3_STOP["stop"]
   end
+  E3_WHAT_IS_REVIEW_VERDICT -- "ACCEPT<br/>AMEND_THEN_ACCEPT" --> E3_IMPLEMENT_TASK
+  E3_WHAT_IS_REVIEW_VERDICT -- "AMEND or SCRAP<br/>replan with codex's notes" --> E3_PLAN_THE_TASK
+  E3_FAILURES_EXIT --> E3_STOP
+  E3_WHAT_IS_REVIEW_VERDICT -- "run-failed<br/>plan-scrapped" --> E3_FAILURES_EXIT
 
-  subgraph reviewPlan ["review plan: pipeline-reviewPlan.mmd"]
-    CODEX_REVIEWS_PLAN["codex reviews the plan"]
-    WHAT_IS_REVIEW_VERDICT["what is the review verdict?<br/>update tasks.json entry<br/>2 codex reviews done?"]
+  subgraph entry4 ["Input: [IMPLEMENT_TASK]'s result"]
+    direction TB
+    E4_COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>are the task tests skipped?<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
+    E4_CODEX_REVIEWS_TESTS["CODEX_REVIEWS_THE_TESTS"]
+    E4_IMPLEMENT_TASK["IMPLEMENT_TASK"]
+    E4_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E4_STOP["stop"]
+    E4_LOCK_SOURCE_REPO["lock the source repo, wait up to 15 minutes"]
+    E4_REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E4_FIX_CONFLICTS["FIX_CONFLICTS"]
+    E4_RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E4_FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
+    E4_REBASE_ONTO_TARGET_BRANCH_2["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E4_FIX_CONFLICTS_2["FIX_CONFLICTS"]
+    E4_RUN_FULL_SUITE_2["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E4_FIX_THE_CODEBASE_FOR_SUITE_2["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
   end
+  E4_COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests pass" --> E4_CODEX_REVIEWS_TESTS
+  E4_COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests fail<br/>reimplement against the amended entry" --> E4_IMPLEMENT_TASK
+  E4_FAILURES_EXIT --> E4_STOP
+  E4_COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests-red" --> E4_FAILURES_EXIT
+  E4_COMMIT_IMPLEMENTATION_IF_NEEDED -- "hasTests: false" --> E4_LOCK_SOURCE_REPO
+  E4_LOCK_SOURCE_REPO -- "run-failed" --> E4_FAILURES_EXIT
+  E4_LOCK_SOURCE_REPO -- "lock acquired" --> E4_REBASE_ONTO_TARGET_BRANCH
+  E4_REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> E4_FIX_CONFLICTS
+  E4_REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> E4_FAILURES_EXIT
+  E4_REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> E4_RUN_FULL_SUITE
+  E4_RUN_FULL_SUITE -- "suite red" --> E4_FIX_THE_CODEBASE_FOR_SUITE
+  E4_RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published" --> E4_FAILURES_EXIT
+  E4_RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> E4_STOP
+  E4_RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved" --> E4_REBASE_ONTO_TARGET_BRANCH_2
+  E4_REBASE_ONTO_TARGET_BRANCH_2 -- "conflicts" --> E4_FIX_CONFLICTS_2
+  E4_REBASE_ONTO_TARGET_BRANCH_2 -- "rebase-stuck" --> E4_FAILURES_EXIT
+  E4_REBASE_ONTO_TARGET_BRANCH_2 -- "no conflicts" --> E4_RUN_FULL_SUITE_2
+  E4_RUN_FULL_SUITE_2 -- "suite red" --> E4_FIX_THE_CODEBASE_FOR_SUITE_2
+  E4_RUN_FULL_SUITE_2 -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> E4_FAILURES_EXIT
+  E4_RUN_FULL_SUITE_2 -- "ALL LANDED<br/>exit type: completed" --> E4_STOP
 
-  subgraph implement ["implement + task tests: pipeline-implement.mmd + pipeline-taskTests.mmd"]
-    IMPLEMENT_TASK["implement task"]
-    COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>are the task tests skipped?<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
+  subgraph entry5 ["Input: [CODEX_REVIEWS_TESTS]'s result"]
+    direction TB
+    E5_ARE_TESTS_FLAGGED["are the tests flagged?<br/>2 codex test reviews done?<br/>amend entry with codex's notes"]
+    E5_IMPLEMENT_TASK["IMPLEMENT_TASK"]
+    E5_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E5_STOP["stop"]
+    E5_LOCK_SOURCE_REPO["lock the source repo, wait up to 15 minutes"]
+    E5_REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E5_FIX_CONFLICTS["FIX_CONFLICTS"]
+    E5_RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E5_FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
+    E5_REBASE_ONTO_TARGET_BRANCH_2["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E5_FIX_CONFLICTS_2["FIX_CONFLICTS"]
+    E5_RUN_FULL_SUITE_2["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E5_FIX_THE_CODEBASE_FOR_SUITE_2["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
   end
+  E5_ARE_TESTS_FLAGGED -- "flagged<br/>reimplement against the amended entry" --> E5_IMPLEMENT_TASK
+  E5_FAILURES_EXIT --> E5_STOP
+  E5_ARE_TESTS_FLAGGED -- "tests-flagged" --> E5_FAILURES_EXIT
+  E5_ARE_TESTS_FLAGGED -- "not flagged" --> E5_LOCK_SOURCE_REPO
+  E5_LOCK_SOURCE_REPO -- "run-failed" --> E5_FAILURES_EXIT
+  E5_LOCK_SOURCE_REPO -- "lock acquired" --> E5_REBASE_ONTO_TARGET_BRANCH
+  E5_REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> E5_FIX_CONFLICTS
+  E5_REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> E5_FAILURES_EXIT
+  E5_REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> E5_RUN_FULL_SUITE
+  E5_RUN_FULL_SUITE -- "suite red" --> E5_FIX_THE_CODEBASE_FOR_SUITE
+  E5_RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published" --> E5_FAILURES_EXIT
+  E5_RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> E5_STOP
+  E5_RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved" --> E5_REBASE_ONTO_TARGET_BRANCH_2
+  E5_REBASE_ONTO_TARGET_BRANCH_2 -- "conflicts" --> E5_FIX_CONFLICTS_2
+  E5_REBASE_ONTO_TARGET_BRANCH_2 -- "rebase-stuck" --> E5_FAILURES_EXIT
+  E5_REBASE_ONTO_TARGET_BRANCH_2 -- "no conflicts" --> E5_RUN_FULL_SUITE_2
+  E5_RUN_FULL_SUITE_2 -- "suite red" --> E5_FIX_THE_CODEBASE_FOR_SUITE_2
+  E5_RUN_FULL_SUITE_2 -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> E5_FAILURES_EXIT
+  E5_RUN_FULL_SUITE_2 -- "ALL LANDED<br/>exit type: completed" --> E5_STOP
 
-  subgraph reviewTests ["review tests: pipeline-reviewTests.mmd"]
-    CODEX_REVIEWS_TESTS["codex reviews the tests"]
-    ARE_TESTS_FLAGGED["are the tests flagged?<br/>2 codex test reviews done?<br/>amend entry with codex's notes"]
+  subgraph entry6 ["Input: [FIX_CONFLICTS]'s result"]
+    direction TB
+    E6_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed<br/>continue the rebase<br/>is the rebase finished?"]
+    E6_FIX_CONFLICTS["FIX_CONFLICTS"]
+    E6_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E6_STOP["stop"]
+    E6_RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E6_FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
+    E6_REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E6_FIX_CONFLICTS_2["FIX_CONFLICTS"]
+    E6_RUN_FULL_SUITE_2["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E6_FIX_THE_CODEBASE_FOR_SUITE_2["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
   end
+  E6_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "stopped on new conflicts" --> E6_FIX_CONFLICTS
+  E6_FAILURES_EXIT --> E6_STOP
+  E6_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase-stuck" --> E6_FAILURES_EXIT
+  E6_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase finished" --> E6_RUN_FULL_SUITE
+  E6_RUN_FULL_SUITE -- "suite red" --> E6_FIX_THE_CODEBASE_FOR_SUITE
+  E6_RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published" --> E6_FAILURES_EXIT
+  E6_RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> E6_STOP
+  E6_RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved" --> E6_REBASE_ONTO_TARGET_BRANCH
+  E6_REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> E6_FIX_CONFLICTS_2
+  E6_REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> E6_FAILURES_EXIT
+  E6_REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> E6_RUN_FULL_SUITE_2
+  E6_RUN_FULL_SUITE_2 -- "suite red" --> E6_FIX_THE_CODEBASE_FOR_SUITE_2
+  E6_RUN_FULL_SUITE_2 -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> E6_FAILURES_EXIT
+  E6_RUN_FULL_SUITE_2 -- "ALL LANDED<br/>exit type: completed" --> E6_STOP
 
-  subgraph rebasePreamble ["rebase preamble: pipeline-rebasePreamble.mmd"]
-    LOCK_SOURCE_REPO["lock the source repo, wait up to 15 minutes"]
+  subgraph entry7 ["Input: [FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES]'s result"]
+    direction TB
+    E7_RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E7_FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
+    E7_FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    E7_STOP["stop"]
+    E7_REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    E7_FIX_CONFLICTS["FIX_CONFLICTS"]
+    E7_RUN_FULL_SUITE_2["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
+    E7_FIX_THE_CODEBASE_FOR_SUITE_2["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
   end
+  E7_RUN_FULL_SUITE -- "suite red" --> E7_FIX_THE_CODEBASE_FOR_SUITE
+  E7_FAILURES_EXIT --> E7_STOP
+  E7_RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published" --> E7_FAILURES_EXIT
+  E7_RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> E7_STOP
+  E7_RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved" --> E7_REBASE_ONTO_TARGET_BRANCH
+  E7_REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> E7_FIX_CONFLICTS
+  E7_REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> E7_FAILURES_EXIT
+  E7_REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> E7_RUN_FULL_SUITE_2
+  E7_RUN_FULL_SUITE_2 -- "suite red" --> E7_FIX_THE_CODEBASE_FOR_SUITE_2
+  E7_RUN_FULL_SUITE_2 -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> E7_FAILURES_EXIT
+  E7_RUN_FULL_SUITE_2 -- "ALL LANDED<br/>exit type: completed" --> E7_STOP
 
-  subgraph rebase ["rebase: pipeline-rebase.mmd"]
-    REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
-    FIX_CONFLICTS["fix conflicts"]
-    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed<br/>continue the rebase<br/>is the rebase finished?"]
-  end
-
-  subgraph suite ["full suite + merge + merge succeeded exit: pipeline-suite.mmd + pipeline-merge.mmd + pipeline-mergeSucceededExit.mmd"]
-    RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
-    FIX_THE_CODEBASE_FOR_SUITE["fix the codebase so<br/>the full suite passes"]
-  end
-
-  subgraph failures ["failures exit: pipeline-failuresExit.mmd"]
-    FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
-  end
-
-  subgraph reportOnly ["report only exit: pipeline-reportOnlyExit.mmd"]
-    REPORT_ONLY_EXIT["report the exit type and note"]
-  end
-
-  STOP["stop"]
-
-  PREAMBLE_STATUS_CHECK -- "invalid-number<br/>blocked<br/>already-active" --> REPORT_ONLY_EXIT
-  PREAMBLE_STATUS_CHECK -- "not-resumable<br/>fence-violation" --> FAILURES_EXIT
-  PREAMBLE_STATUS_CHECK -- "docs mode: AUTOGEN or UPDATE" --> DOCUMENT_GENERATION
-  DOCUMENT_GENERATION --> PLAN_THE_TASK
-  PLAN_THE_TASK -- "agent answers PLAN or CLARIFY" --> WHAT_DID_THE_PLANNER_RETURN
-  WHAT_DID_THE_PLANNER_RETURN -- "PLAN" --> CODEX_REVIEWS_PLAN
-  WHAT_DID_THE_PLANNER_RETURN -- "CLARIFY<br/>docs mode: UPDATE" --> DOCUMENT_GENERATION
-  WHAT_DID_THE_PLANNER_RETURN -- "clarify-stuck" --> FAILURES_EXIT
-  CODEX_REVIEWS_PLAN -- "agent runs codex<br/>returns its JSON" --> WHAT_IS_REVIEW_VERDICT
-  WHAT_IS_REVIEW_VERDICT -- "ACCEPT<br/>AMEND_THEN_ACCEPT" --> IMPLEMENT_TASK
-  WHAT_IS_REVIEW_VERDICT -- "AMEND or SCRAP<br/>replan with codex's notes" --> PLAN_THE_TASK
-  WHAT_IS_REVIEW_VERDICT -- "run-failed<br/>plan-scrapped" --> FAILURES_EXIT
-  IMPLEMENT_TASK -- "agent implements" --> COMMIT_IMPLEMENTATION_IF_NEEDED
-  COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests pass" --> CODEX_REVIEWS_TESTS
-  COMMIT_IMPLEMENTATION_IF_NEEDED -- "hasTests: false" --> LOCK_SOURCE_REPO
-  COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests fail<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
-  COMMIT_IMPLEMENTATION_IF_NEEDED -- "tests-red" --> FAILURES_EXIT
-  CODEX_REVIEWS_TESTS -- "agent runs the reviewer<br/>returns {flagged, notes}" --> ARE_TESTS_FLAGGED
-  ARE_TESTS_FLAGGED -- "flagged<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
-  ARE_TESTS_FLAGGED -- "tests-flagged" --> FAILURES_EXIT
-  ARE_TESTS_FLAGGED -- "not flagged" --> LOCK_SOURCE_REPO
-  LOCK_SOURCE_REPO -- "lock acquired" --> REBASE_ONTO_TARGET_BRANCH
-  LOCK_SOURCE_REPO -- "run-failed" --> FAILURES_EXIT
-  REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> RUN_FULL_SUITE
-  REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> FIX_CONFLICTS
-  REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> FAILURES_EXIT
-  FIX_CONFLICTS -- "agent resolves the conflicts" --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase finished" --> RUN_FULL_SUITE
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "stopped on new conflicts" --> FIX_CONFLICTS
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase-stuck" --> FAILURES_EXIT
-  RUN_FULL_SUITE -- "suite red" --> FIX_THE_CODEBASE_FOR_SUITE
-  FIX_THE_CODEBASE_FOR_SUITE -- "agent fixes the codebase" --> RUN_FULL_SUITE
-  RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved" --> REBASE_ONTO_TARGET_BRANCH
-  RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>merge-failed<br/>partially-published" --> FAILURES_EXIT
-  RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> STOP
-  FAILURES_EXIT --> STOP
-  REPORT_ONLY_EXIT --> STOP
-
+  entry1 ~~~ entry2 ~~~ entry3 ~~~ entry4 ~~~ entry5 ~~~ entry6 ~~~ entry7
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class PREAMBLE_STATUS_CHECK,DOCUMENT_GENERATION,WHAT_DID_THE_PLANNER_RETURN,WHAT_IS_REVIEW_VERDICT,COMMIT_IMPLEMENTATION_IF_NEEDED,ARE_TESTS_FLAGGED,LOCK_SOURCE_REPO,REBASE_ONTO_TARGET_BRANCH,COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,RUN_FULL_SUITE script
-  class PLAN_THE_TASK,CODEX_REVIEWS_PLAN,IMPLEMENT_TASK,CODEX_REVIEWS_TESTS,FIX_CONFLICTS,FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt
-  class FAILURES_EXIT,REPORT_ONLY_EXIT fail
-  class STOP output
+  class E1_PREAMBLE_STATUS_CHECK,E1_DOCUMENT_GENERATION,E2_WHAT_DID_THE_PLANNER_RETURN,E2_DOCUMENT_GENERATION,E3_WHAT_IS_REVIEW_VERDICT,E4_COMMIT_IMPLEMENTATION_IF_NEEDED,E4_LOCK_SOURCE_REPO,E4_REBASE_ONTO_TARGET_BRANCH,E4_RUN_FULL_SUITE,E4_REBASE_ONTO_TARGET_BRANCH_2,E4_RUN_FULL_SUITE_2,E5_ARE_TESTS_FLAGGED,E5_LOCK_SOURCE_REPO,E5_REBASE_ONTO_TARGET_BRANCH,E5_RUN_FULL_SUITE,E5_REBASE_ONTO_TARGET_BRANCH_2,E5_RUN_FULL_SUITE_2,E6_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,E6_RUN_FULL_SUITE,E6_REBASE_ONTO_TARGET_BRANCH,E6_RUN_FULL_SUITE_2,E7_RUN_FULL_SUITE,E7_REBASE_ONTO_TARGET_BRANCH,E7_RUN_FULL_SUITE_2 script
+  class E1_PLAN_THE_TASK,E2_CODEX_REVIEWS_PLAN,E2_PLAN_THE_TASK,E3_IMPLEMENT_TASK,E3_PLAN_THE_TASK,E4_CODEX_REVIEWS_TESTS,E4_IMPLEMENT_TASK,E4_FIX_CONFLICTS,E4_FIX_THE_CODEBASE_FOR_SUITE,E4_FIX_CONFLICTS_2,E4_FIX_THE_CODEBASE_FOR_SUITE_2,E5_IMPLEMENT_TASK,E5_FIX_CONFLICTS,E5_FIX_THE_CODEBASE_FOR_SUITE,E5_FIX_CONFLICTS_2,E5_FIX_THE_CODEBASE_FOR_SUITE_2,E6_FIX_CONFLICTS,E6_FIX_THE_CODEBASE_FOR_SUITE,E6_FIX_CONFLICTS_2,E6_FIX_THE_CODEBASE_FOR_SUITE_2,E7_FIX_THE_CODEBASE_FOR_SUITE,E7_FIX_CONFLICTS,E7_FIX_THE_CODEBASE_FOR_SUITE_2 returns_a_prompt
+  class E1_REPORT_ONLY_EXIT,E1_FAILURES_EXIT,E2_FAILURES_EXIT,E3_FAILURES_EXIT,E4_FAILURES_EXIT,E5_FAILURES_EXIT,E6_FAILURES_EXIT,E7_FAILURES_EXIT fail
+  class E1_STOP,E2_STOP,E3_STOP,E4_STOP,E5_STOP,E6_STOP,E7_STOP output
