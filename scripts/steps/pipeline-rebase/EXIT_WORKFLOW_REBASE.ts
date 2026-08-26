@@ -2,14 +2,31 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import type { RebasePacket } from "./packet.ts";
 
-type IncomingPacket = RebasePacket & { next?: string };
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktreePath: string;
+    rootSourceBranch: string;
+    exitType: string;
+    exitNote: string;
+};
 
 // Reached from ARE_2_CONFLICT_FIXES_DONE.
-export function main(input: string): RebasePacket {
-    const { next: _next, ...packet } = JSON.parse(input) as IncomingPacket;
-    return { ...packet, box: "EXIT_WORKFLOW_REBASE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+export function main(input: string): Record<string, unknown> {
+    const packet = JSON.parse(input) as Input;
+    return {
+        box: "EXIT_WORKFLOW_REBASE",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: packet.taskNumber,
+        runId: packet.runId,
+        projectRoot: packet.projectRoot,
+        worktree: packet.worktreePath,
+        sourceBranch: packet.rootSourceBranch,
+        exitType: packet.exitType,
+        exitNote: packet.exitNote,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

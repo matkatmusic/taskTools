@@ -16,9 +16,9 @@
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
-        "worktreePath": "/abs/worktree",
-        "sourceBranch": "main",
         "projectRoot": "/abs/project",
+        "worktree": "/abs/worktree",
+        "sourceBranch": "main",
         "exitType": "tests-red",
         "exitNote": "task tests still failing after 2 fix attempts"
     }

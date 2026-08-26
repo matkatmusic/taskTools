@@ -21,8 +21,8 @@ export function main(input: string): Record<string, unknown> {
         taskNumber: packet.taskNumber,
         runId: packet.runId,
         projectRoot: packet.projectRoot,
-        worktreePath: packet.worktreePath,
-        rootSourceBranch: packet.rootSourceBranch,
+        worktree: packet.worktreePath,
+        sourceBranch: packet.rootSourceBranch,
         exitType: packet.exitType,
         exitNote: packet.exitNote,
     };

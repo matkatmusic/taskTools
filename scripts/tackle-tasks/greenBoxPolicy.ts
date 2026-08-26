@@ -77,6 +77,7 @@ export const NON_DISPATCHED_SCRIPTS: string[] = [
     "greenBoxPolicy",
     "inputPaths",
     "logStepOutput",
+    "monolith-pipeline",
     "occurrences",
     "pipelines",
     "planArtifacts",

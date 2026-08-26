@@ -15,10 +15,12 @@
     "output": {
         "box": "EXIT_WORKFLOW_REBASE_PREAMBLE",
         "scriptSignal": "continue",
-        "exitType": "run-failed",
-        "exitNote": "the source repo lock did not come free within 15 minutes",
-        "runId": "run-abc",
         "taskNumber": 42,
-        "projectRoot": "/abs/project"
+        "runId": "run-abc",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "exitType": "run-failed",
+        "exitNote": "the source repo lock did not come free within 15 minutes"
     }
 }

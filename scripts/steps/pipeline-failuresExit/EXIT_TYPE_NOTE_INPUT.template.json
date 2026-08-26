@@ -1,5 +1,7 @@
 {
     "input": {
+        "box": "EXIT_WORKFLOW_SUITE",
+        "scriptSignal": "continue",
         "taskNumber": 169,
         "runId": "run-a",
         "projectRoot": "/repo",

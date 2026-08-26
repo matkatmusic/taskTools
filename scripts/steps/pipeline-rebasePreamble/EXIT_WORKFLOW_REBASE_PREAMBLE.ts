@@ -3,24 +3,28 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-export type ExitWorkflowRebasePreambleInput = {
-    runId: string;
+type Input = {
     taskNumber: number;
+    runId: string;
     projectRoot: string;
+    worktreePath: string;
+    sourceBranch: string;
     exitType: string;
     exitNote: string;
 };
 
 export function main(input: string): Record<string, unknown> {
-    const parsed = JSON.parse(input) as ExitWorkflowRebasePreambleInput;
+    const parsed = JSON.parse(input) as Input;
     return {
         box: "EXIT_WORKFLOW_REBASE_PREAMBLE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: parsed.taskNumber,
+        runId: parsed.runId,
+        projectRoot: parsed.projectRoot,
+        worktree: parsed.worktreePath,
+        sourceBranch: parsed.sourceBranch,
         exitType: parsed.exitType,
         exitNote: parsed.exitNote,
-        runId: parsed.runId,
-        taskNumber: parsed.taskNumber,
-        projectRoot: parsed.projectRoot,
     };
 }
 

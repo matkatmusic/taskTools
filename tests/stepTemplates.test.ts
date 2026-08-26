@@ -1,6 +1,6 @@
 // One test per block in steps.json: feed the block its input template, check what it prints against its contract.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -15,7 +15,8 @@ const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 
 function readBlockTemplate(templatePath: string): BlockTemplate {
-    return JSON.parse(readFileSync(join(PROJECT_ROOT, templatePath), "utf8")) as BlockTemplate;
+    const raw = readFileSync(join(PROJECT_ROOT, templatePath), "utf8").replaceAll("{{PROJECT_ROOT}}", PROJECT_ROOT);
+    return JSON.parse(raw) as BlockTemplate;
 }
 
 // A prompt block prints the canonical prompt shape; any other block prints its template's output.
@@ -43,6 +44,17 @@ function runBlockScript(scriptPath: string, input: unknown, cwd: string): { comm
         return { commandOutput, result: JSON.parse(lastLine) };
     } catch {
         return { commandOutput, result: null };
+    }
+}
+
+// Rebuilds every fixture's disposable .git repo before the tests read it; a .git can never be committed.
+const STEPS_DIR = join(PROJECT_ROOT, "scripts/steps");
+for (const pipelineDir of readdirSync(STEPS_DIR)) {
+    const setupScript = join(STEPS_DIR, pipelineDir, "fixtures/setup.sh");
+    if (!existsSync(setupScript)) continue;
+    const setupResult = spawnSync("bash", [setupScript], { cwd: dirname(setupScript), encoding: "utf8" });
+    if (setupResult.status !== 0) {
+        throw new Error(`${setupScript} failed:\n${setupResult.stdout ?? ""}${setupResult.stderr ?? ""}`);
     }
 }
 

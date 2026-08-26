@@ -11,8 +11,9 @@ test("test_main_forwardsTheExitTypeAndNote", () => {
         exitType: "agent-failed", exitNote: "the agent returned nothing usable",
     };
     const output = main(JSON.stringify(input));
-    assert.equal(output.box, "EXIT_WORKFLOW_IMPLEMENT");
-    assert.equal(output.exitType, "agent-failed");
-    assert.equal(output.exitNote, "the agent returned nothing usable");
-    assert.equal(output.taskNumber, 42);
+    assert.deepEqual(output, {
+        box: "EXIT_WORKFLOW_IMPLEMENT", scriptSignal: "continue",
+        taskNumber: 42, runId: "run-1", projectRoot: "/abs/project", worktree: "/abs/project/.worktrees/task-42",
+        sourceBranch: "main", exitType: "agent-failed", exitNote: "the agent returned nothing usable",
+    });
 });

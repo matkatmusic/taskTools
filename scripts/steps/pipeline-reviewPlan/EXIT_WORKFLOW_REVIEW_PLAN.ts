@@ -3,22 +3,26 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-export type ExitWorkflowReviewPlanPacket = {
+type Input = {
     taskNumber: number;
+    runId: string;
     taskStateRoot: string;
     repoRoot: string;
+    sourceBranch: string;
     exitType: string;
     exitNote: string;
 };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as ExitWorkflowReviewPlanPacket;
+    const packet = JSON.parse(input) as Input;
     return {
         box: "EXIT_WORKFLOW_REVIEW_PLAN",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         taskNumber: packet.taskNumber,
-        taskStateRoot: packet.taskStateRoot,
-        repoRoot: packet.repoRoot,
+        runId: packet.runId,
+        projectRoot: packet.taskStateRoot,
+        worktree: packet.repoRoot,
+        sourceBranch: packet.sourceBranch,
         exitType: packet.exitType,
         exitNote: packet.exitNote,
     };

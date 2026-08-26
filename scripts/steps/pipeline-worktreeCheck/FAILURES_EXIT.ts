@@ -2,12 +2,30 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import type { WorktreeCheckPacket } from "./_packet.ts";
 
-export function main(input: string): WorktreeCheckPacket {
-    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
-    const { next: _next, ...packet } = JSON.parse(input) as WorktreeCheckPacket & { next?: string };
-    return { ...packet, box: "FAILURES_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktree: string;
+    branch: string;
+    exitType: string;
+    exitNote: string;
+};
+
+export function main(input: string): Record<string, unknown> {
+    const packet = JSON.parse(input) as Input;
+    return {
+        box: "FAILURES_EXIT",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: packet.taskNumber,
+        runId: packet.runId,
+        projectRoot: packet.projectRoot,
+        worktree: packet.worktree,
+        sourceBranch: packet.branch,
+        exitType: packet.exitType,
+        exitNote: packet.exitNote,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

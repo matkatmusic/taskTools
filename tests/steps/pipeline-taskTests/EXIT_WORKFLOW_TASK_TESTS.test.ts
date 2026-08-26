@@ -1,5 +1,4 @@
-// Behavioral checks for scripts/steps/pipeline-taskTests/EXIT_WORKFLOW_TASK_TESTS.ts.
-// Run: node --test tests/steps/pipeline-taskTests/EXIT_WORKFLOW_TASK_TESTS.test.ts
+// Behavioral checks for scripts/steps/pipeline-taskTests/EXIT_WORKFLOW_TASK_TESTS.ts.  Run: node --test tests/steps/pipeline-taskTests/EXIT_WORKFLOW_TASK_TESTS.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { main } from "../../../scripts/steps/pipeline-taskTests/EXIT_WORKFLOW_TASK_TESTS.ts";
@@ -13,7 +12,8 @@ test("test_EXIT_WORKFLOW_TASK_TESTS_forwardsTheExitTypeAndNote", () => {
     };
     const output = main(JSON.stringify(input));
     assert.deepEqual(output, {
-        box: "EXIT_WORKFLOW_TASK_TESTS", scriptSignal: "continue", ...PACKET,
+        box: "EXIT_WORKFLOW_TASK_TESTS", scriptSignal: "continue",
+        taskNumber: 1, runId: "run-1", projectRoot: "/abs/project", worktree: "/abs/worktree", sourceBranch: "main",
         exitType: "tests-red", exitNote: "task tests still failing after 2 fix attempts",
     });
 });

@@ -15,9 +15,10 @@
     "output": {
         "box": "EXIT_WORKFLOW_REVIEW_TESTS",
         "scriptSignal": "continue",
-        "projectRoot": "/abs/project",
         "taskNumber": 42,
-        "worktreePath": "/abs/project/worktree",
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
         "sourceBranch": "main",
         "exitType": "tests-flagged",
         "exitNote": "task tests failed codex review"

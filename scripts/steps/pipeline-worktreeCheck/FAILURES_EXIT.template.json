@@ -19,8 +19,7 @@
         "runId": "run-1",
         "projectRoot": "/tmp/example-project",
         "worktree": "/tmp/example-project-worktrees/task-1",
-        "branch": "task-1",
-        "docsMode": "",
+        "sourceBranch": "task-1",
         "exitType": "fence-violation",
         "exitNote": "the resumed worktree touched files the task does not own: some/path.ts"
     }

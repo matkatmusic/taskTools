@@ -9,7 +9,7 @@ test("test_EXIT_WORKFLOW_PLAN_forwardsTheExitTypeAndNote", () => {
     assert.deepEqual(output, {
         box: "EXIT_WORKFLOW_PLAN", scriptSignal: "continue",
         taskNumber: base.taskNumber, runId: base.runId, projectRoot: base.projectRoot, worktree: base.worktree,
-        branch: base.sourceBranch, docsMode: "",
+        sourceBranch: base.sourceBranch,
         exitType: "clarify-stuck", exitNote: "the planner asked twice for something the docs cannot supply. worktree preserved.",
     });
 });

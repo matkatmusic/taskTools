@@ -2,14 +2,29 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readPacket } from "./packet.ts";
+
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktreePath: string;
+    sourceBranch: string;
+    exitType: string;
+    exitNote: string;
+};
 
 export function main(input: string): Record<string, unknown> {
-    const parsed = JSON.parse(input) as { exitType: string; exitNote: string };
-    const packet = readPacket(input);
+    const packet = JSON.parse(input) as Input;
     return {
-        ...packet, box: "EXIT_WORKFLOW_TASK_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        exitType: parsed.exitType, exitNote: parsed.exitNote,
+        box: "EXIT_WORKFLOW_TASK_TESTS",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: packet.taskNumber,
+        runId: packet.runId,
+        projectRoot: packet.projectRoot,
+        worktree: packet.worktreePath,
+        sourceBranch: packet.sourceBranch,
+        exitType: packet.exitType,
+        exitNote: packet.exitNote,
     };
 }
 

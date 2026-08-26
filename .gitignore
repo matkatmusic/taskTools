@@ -11,7 +11,7 @@ plans/implementation-notes-*.md
 .claude/skills/read-file
 .claude/skills/check-time
 .claude/skills/run-full-suite
-plans/implementation-diff-*.patch
+**/plans/implementation-diff-*.patch
 **/plans/*.prompt.md
 .claude/skills/run-task-tests
 .claude/skills/rebase-worktree
@@ -20,3 +20,6 @@ plans/implementation-diff-*.patch
 plans/diagrams/runs/run-log.md
 plans/diagram/runs/run-log.md
 plans/diagram/runs/packets/
+scripts/steps/pipeline-suite/fixtures/.fixture-marker
+scripts/steps/pipeline-suite/fixtures/worktree/src/thing.ts
+scripts/steps/pipeline-rebase/fixtures/worktree/

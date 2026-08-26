@@ -19,8 +19,7 @@
         "runId": "run-1",
         "projectRoot": "/tmp/fake-project",
         "worktree": "/tmp/fake-worktree",
-        "branch": "master",
-        "docsMode": "",
+        "sourceBranch": "master",
         "exitType": "clarify-stuck",
         "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved."
     }

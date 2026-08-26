@@ -2,11 +2,11 @@
     "input": {
         "box": "EXIT_WORKFLOW_SUCCESS",
         "scriptSignal": "continue",
-        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "worktreePath": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
         "rootSourceBranch": "main",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
         "suiteFixAttempts": 0,
         "state": "ALL LANDED",
         "landed": ["root"],
@@ -19,10 +19,10 @@
     "output": {
         "box": "MERGE_RECEIPT_INPUT",
         "scriptSignal": "continue",
-        "projectRoot": "/tmp/example-project",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
         "taskNumber": 42,
         "runId": "run-abc123",
-        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "worktreePath": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
         "rootSourceBranch": "main",
         "exitNote": "All layers merged successfully.",
         "commits": [

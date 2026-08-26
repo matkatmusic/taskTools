@@ -11,19 +11,11 @@ test("test_main_carriesTheExitTypeAndNoteFromARE_2_TEST_REVIEWS_DONE", () => {
     };
     const output = main(JSON.stringify(input));
     assert.equal(output.box, "EXIT_WORKFLOW_REVIEW_TESTS");
+    assert.equal(output.taskNumber, 99);
+    assert.equal(output.runId, "run-1");
+    assert.equal(output.projectRoot, "/abs/project");
+    assert.equal(output.worktree, "/abs/project/worktree");
+    assert.equal(output.sourceBranch, "main");
     assert.equal(output.exitType, "tests-flagged");
     assert.equal(output.exitNote, "task tests failed codex review");
-    assert.equal(output.taskNumber, 99);
-});
-
-test("test_main_alsoForwardsAnAgentFailedExit", () => {
-    // The workflow loop's own synthesized packet has no "next" and empty identity fields; this box must still work.
-    const input = {
-        box: "", scriptSignal: "continue",
-        projectRoot: "", taskNumber: 0, worktreePath: "", sourceBranch: "",
-        notes: "", exitType: "agent-failed", exitNote: "the agent returned nothing usable",
-    };
-    const output = main(JSON.stringify(input));
-    assert.equal(output.exitType, "agent-failed");
-    assert.equal(output.exitNote, "the agent returned nothing usable");
 });

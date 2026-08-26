@@ -22,8 +22,7 @@ export function main(input: string): Record<string, unknown> {
         runId: parsed.runId,
         projectRoot: parsed.projectRoot,
         worktree: parsed.worktree,
-        branch: parsed.sourceBranch,
-        docsMode: "",
+        sourceBranch: parsed.sourceBranch,
         exitType: parsed.exitType,
         exitNote: parsed.exitNote,
     };

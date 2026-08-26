@@ -1,11 +1,14 @@
-// Behavioral checks for scripts/steps/pipeline-merge/EXIT_WORKFLOW_MERGE.ts.
-// Run: node --test tests/steps/pipeline-merge/EXIT_WORKFLOW_MERGE.test.ts
+// Behavioral checks for scripts/steps/pipeline-merge/EXIT_WORKFLOW_MERGE.ts.  Run: node --test tests/steps/pipeline-merge/EXIT_WORKFLOW_MERGE.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { main } from "../../../scripts/steps/pipeline-merge/EXIT_WORKFLOW_MERGE.ts";
 
-test("test_EXIT_WORKFLOW_MERGE_relaysThePacketAndSetsItsOwnBox", () => {
-    const packet = { worktreePath: "/wt", taskNumber: 7, runId: "run-1", projectRoot: "/proj", exitType: "merge-failed", exitNote: "note" };
+test("test_EXIT_WORKFLOW_MERGE_narrowsThePacketToTheExitContract", () => {
+    const packet = { worktreePath: "/wt", rootSourceBranch: "main", taskNumber: 7, runId: "run-1", projectRoot: "/proj", exitType: "merge-failed", exitNote: "note" };
     const result = main(JSON.stringify(packet));
-    assert.deepEqual(result, { ...packet, box: "EXIT_WORKFLOW_MERGE", scriptSignal: "continue" });
+    assert.deepEqual(result, {
+        box: "EXIT_WORKFLOW_MERGE", scriptSignal: "continue",
+        taskNumber: 7, runId: "run-1", projectRoot: "/proj", worktree: "/wt",
+        sourceBranch: "main", exitType: "merge-failed", exitNote: "note",
+    });
 });

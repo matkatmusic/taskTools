@@ -16,7 +16,7 @@ export type FailuresExitEntryInput = {
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as FailuresExitEntryInput;
-    return { box: "EXIT_TYPE_NOTE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, ...packet };
+    return { ...packet, box: "EXIT_TYPE_NOTE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

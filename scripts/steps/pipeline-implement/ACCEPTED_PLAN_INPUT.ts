@@ -13,7 +13,7 @@ export type AcceptedPlanInput = {
     worktreePath: string;
     runId: string;
     sourceBranch: string;
-    typecheckCommand?: string;
+    typecheckCommand: string;
     maxFixRounds: number;
 };
 

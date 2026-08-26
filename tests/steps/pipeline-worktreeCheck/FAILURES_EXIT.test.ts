@@ -10,8 +10,15 @@ test("test_FAILURES_EXIT_forwardsTheExitTypeAndNoteUnchanged", () => {
         docsMode: "", exitType: "fence-violation", exitNote: "the resumed worktree touched files the task does not own: some/path.ts",
     }));
 
-    assert.equal(output.box, "FAILURES_EXIT");
-    assert.equal(output.exitType, "fence-violation");
-    assert.equal(output.exitNote, "the resumed worktree touched files the task does not own: some/path.ts");
-    assert.equal(output.taskNumber, 1);
+    assert.deepEqual(output, {
+        box: "FAILURES_EXIT",
+        scriptSignal: "continue",
+        taskNumber: 1,
+        runId: "run-1",
+        projectRoot: "/tmp/example-project",
+        worktree: "/tmp/example-project-worktrees/task-1",
+        sourceBranch: "task-1",
+        exitType: "fence-violation",
+        exitNote: "the resumed worktree touched files the task does not own: some/path.ts",
+    });
 });

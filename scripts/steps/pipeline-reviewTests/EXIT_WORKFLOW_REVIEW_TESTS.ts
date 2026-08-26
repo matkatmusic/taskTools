@@ -3,21 +3,26 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
-// Reached from ARE_2_TEST_REVIEWS_DONE's exit branch, whose envelope carries an unread `next`.
-type ExitArrival = {
-    projectRoot?: string; taskNumber?: number; worktreePath?: string; sourceBranch?: string;
-    exitType: string; exitNote: string;
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktreePath: string;
+    sourceBranch: string;
+    exitType: string;
+    exitNote: string;
 };
 
 export function main(input: string): Record<string, unknown> {
-    const arrival = JSON.parse(input) as ExitArrival;
+    const arrival = JSON.parse(input) as Input;
     return {
         box: "EXIT_WORKFLOW_REVIEW_TESTS",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        projectRoot: arrival.projectRoot ?? "",
-        taskNumber: arrival.taskNumber ?? 0,
-        worktreePath: arrival.worktreePath ?? "",
-        sourceBranch: arrival.sourceBranch ?? "",
+        taskNumber: arrival.taskNumber,
+        runId: arrival.runId,
+        projectRoot: arrival.projectRoot,
+        worktree: arrival.worktreePath,
+        sourceBranch: arrival.sourceBranch,
         exitType: arrival.exitType,
         exitNote: arrival.exitNote,
     };

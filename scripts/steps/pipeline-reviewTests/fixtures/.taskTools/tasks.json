@@ -17,7 +17,16 @@
                     "modifiedFiles": [],
                     "commits": [],
                     "implementationNotesFile": null,
-                    "taskTests": null,
+                    "taskTests": {
+                        "stepId": "RUN_TASK_TESTS",
+                        "testFiles": ["tests/thing.test.ts"],
+                        "createdTestFiles": ["tests/thing.test.ts"],
+                        "deletedTestFiles": [],
+                        "missingTests": false,
+                        "passed": true,
+                        "output": "1 passing",
+                        "checkedAt": "2026-01-01T00:00:00.000Z"
+                    },
                     "fullSuite": null,
                     "attempts": {}
                 }

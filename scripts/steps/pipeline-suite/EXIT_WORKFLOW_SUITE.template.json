@@ -21,8 +21,8 @@
         "taskNumber": 0,
         "runId": "",
         "projectRoot": "",
-        "worktreePath": "",
-        "rootSourceBranch": "",
+        "worktree": "",
+        "sourceBranch": "",
         "exitType": "",
         "exitNote": ""
     }
