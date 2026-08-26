@@ -33,27 +33,18 @@
     flowchart: { htmlLabels: false, useMaxWidth: false, padding: 12, wrappingWidth: 220,
                  nodeSpacing: 60, rankSpacing: 80 },
   })
-  const file = decodeURIComponent(location.search.slice(1)) || '_pipeline.mmd'
+  const file = decodeURIComponent(location.search.slice(1)) || '_pipeline-monolith.mmd'
   document.title = file
   // ponytail: hardcoded, python http.server gives no listing when index.html exists.  Add a line here when a diagram is added.
   nav.innerHTML = [
-    ['_pipeline.mmd', 'overview'],
-    ['_pipeline-monolith.mmd', 'monolith'],
-    ['pipeline-preambleStatusCheck.mmd', 'preamble status check'],
-    ['pipeline-worktreeCheck.mmd', 'worktree check'],
-    ['pipeline-documentGeneration.mmd', 'document generation'],
-    ['pipeline-plan.mmd', 'plan'],
-    ['pipeline-reviewPlan.mmd', 'review plan'],
-    ['pipeline-implement.mmd', 'implement'],
-    ['pipeline-taskTests.mmd', 'task tests'],
-    ['pipeline-reviewTests.mmd', 'review task tests'],
-    ['pipeline-rebasePreamble.mmd', 'rebase preamble'],
-    ['pipeline-rebase.mmd', 'rebase'],
-    ['pipeline-suite.mmd', 'full suite'],
-    ['pipeline-merge.mmd', 'merge'],
-    ['pipeline-mergeSucceededExit.mmd', 'merge succeeded exit'],
-    ['pipeline-failuresExit.mmd', 'failures exit'],
-    ['pipeline-reportOnlyExit.mmd', 'report only exit'],
+    ['_pipeline-monolith.mmd', 'monolith, unrolled'],
+    ['pipeline-preambleStatusCheck.mmd', '1 start of workflow'],
+    ['pipeline-whatDidThePlannerReturn.mmd', '2 after PLAN_THE_TASK'],
+    ['pipeline-whatIsReviewVerdict.mmd', '3 after CODEX_REVIEWS_PLAN'],
+    ['pipeline-commitImplementationIfNeeded.mmd', '4 after IMPLEMENT_TASK'],
+    ['pipeline-areTestsFlagged.mmd', '5 after CODEX_REVIEWS_TESTS'],
+    ['pipeline-commitMergeConflictFixIfNeeded.mmd', '6 after FIX_CONFLICTS'],
+    ['pipeline-runFullSuite.mmd', '7 after FIX_THE_CODEBASE_FOR_SUITE'],
   ].map(([href, label]) =>
     `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   let last = null
