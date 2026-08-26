@@ -1,0 +1,12 @@
+{
+    "input": {
+        "message": "",
+        "additionalData": {}
+    },
+    "output": {
+        "box": "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
+        "scriptSignal": "continue",
+        "note": "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts for COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
+        "input": ""
+    }
+}

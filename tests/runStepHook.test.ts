@@ -85,6 +85,17 @@ test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
     assert.match(result.errors[0], /named by more than one diagram/);
 });
 
+// A box named in a diagram's next but not entered under that diagram falls back to any diagram that has it.
+test("test_runStepHook_fallsBackToAnotherDiagramWhenTheSameDiagramHasNoSuchBox", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["SHARED"] }],
+        "two.mmd": [{ box: "SHARED", script: writeStep("SHARED", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ran, ["one.mmd::A", "two.mmd::SHARED"]);
+});
+
 test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
     const writeShared = (from: string) => {
@@ -216,8 +227,8 @@ test("test_runStepHook_namesTheStepThatFollowsTheOneItStoppedAt", () => {
     assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::B");
 });
 
-// The block after a prompt reads packet plus answer, so the hook returns the packet the prompt block received.
-test("test_runStepHook_stopsBeforeAPromptBlockAndHandsItsOutputAsThePacket", () => {
+// The walk runs into a prompt block's own script and stops there, so the block's side effects still happen.
+test("test_runStepHook_walksIntoAPromptBlockAndHandsItsInputAsThePacket", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue", taskNumber: 7, runId: "run-1" }), next: ["B"] },
@@ -226,9 +237,9 @@ test("test_runStepHook_stopsBeforeAPromptBlockAndHandsItsOutputAsThePacket", () 
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
-    assert.deepEqual(result.ran, ["one.mmd::A"]);
-    assert.equal(result.outcome.scriptSignal, "continue");
-    assert.equal(result.outcome.next, "one.mmd::B");
+    assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
+    assert.equal(result.outcome.scriptSignal, "prompt");
+    assert.equal(result.outcome.next, "one.mmd::C");
     assert.equal("packet" in result.outcome, false);
     assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "" });
 });

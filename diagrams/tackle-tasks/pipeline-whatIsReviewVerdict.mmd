@@ -1,0 +1,28 @@
+flowchart TB
+%% One agent() call. /run-step starts at WHAT_IS_REVIEW_VERDICT; paths end at orange box or STOP; its answer feeds named diagram.
+
+  subgraph whatIsReviewVerdict ["Input: [CODEX_REVIEWS_PLAN]'s result"]
+    direction TB
+    WHAT_IS_REVIEW_VERDICT["what is the review verdict?<br/>update tasks.json entry<br/>2 codex reviews done?"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
+    PLAN_THE_TASK["PLAN_THE_TASK"]
+    FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
+    STOP["stop"]
+    COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>are the task tests skipped?<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
+    WHAT_DID_THE_PLANNER_RETURN["what did the planner return?<br/>2 clarify rounds done?<br/>write the clarify request"]
+  end
+  WHAT_IS_REVIEW_VERDICT -- "ACCEPT<br/>AMEND_THEN_ACCEPT" --> IMPLEMENT_TASK
+  WHAT_IS_REVIEW_VERDICT -- "AMEND or SCRAP<br/>replan with codex's notes" --> PLAN_THE_TASK
+  FAILURES_EXIT --> STOP
+  WHAT_IS_REVIEW_VERDICT -- "run-failed<br/>plan-scrapped" --> FAILURES_EXIT
+  IMPLEMENT_TASK --> COMMIT_IMPLEMENTATION_IF_NEEDED
+  PLAN_THE_TASK --> WHAT_DID_THE_PLANNER_RETURN
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class WHAT_IS_REVIEW_VERDICT,COMMIT_IMPLEMENTATION_IF_NEEDED,WHAT_DID_THE_PLANNER_RETURN script
+  class IMPLEMENT_TASK,PLAN_THE_TASK returns_a_prompt
+  class FAILURES_EXIT fail
+  class STOP output

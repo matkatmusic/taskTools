@@ -1,0 +1,12 @@
+{
+    "input": {
+        "message": "",
+        "additionalData": {}
+    },
+    "output": {
+        "box": "ARE_TESTS_FLAGGED",
+        "scriptSignal": "continue",
+        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
+        "input": ""
+    }
+}

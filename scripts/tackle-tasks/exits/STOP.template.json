@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "FAILURES_EXIT",
+        "scriptSignal": "continue",
+        "note": "FAILURES_EXIT.ts for FAILURES_EXIT",
+        "input": ""
+    },
+    "output": {
+        "box": "STOP",
+        "scriptSignal": "continue",
+        "note": "STOP.ts for STOP",
+        "input": ""
+    }
+}

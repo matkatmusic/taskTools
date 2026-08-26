@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { buildAgentSchemasByStartBlock, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
+import { assertStartStepIsInConfig, buildAgentSchemasByStartBlock, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
 import {
     buildAgentSchema,
     buildBlockSchemas,
@@ -156,7 +156,7 @@ test("test_buildWorkflowScript_refusesToRunWithoutATaskNumberAndATasksFileInArgs
 // AGENT_SCHEMAS holds one envelope per block a pass can start at: START_STEP and every prompt block.
 test("test_buildWorkflowScript_putsAnAgentSchemaKeyOnStartStepAndEveryPromptBlock", () => {
     const script = buildWorkflowScript();
-    assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_TASK_NUMBER_INPUT'/);
+    assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_STATUS_CHECK'/);
     assert.match(script, /^let blockToRun = START_STEP$/m);
     assert.match(script, /^let schema = AGENT_SCHEMAS\[START_STEP\]$/m);
     const listStart = script.indexOf("const AGENT_SCHEMAS = ") + "const AGENT_SCHEMAS = ".length;
@@ -191,6 +191,16 @@ test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
     const script = buildWorkflowScript();
     assert.match(script, /blockToRun = result\.outcome\.next/);
     assert.doesNotMatch(script, /NEXT_STEPS_BY_STEP/);
+});
+
+test("test_assertStartStepIsInConfig_throwsWhenTheStartStepIsMissing", () => {
+    const { config } = buildProject([{ box: "A", output: {} }]);
+    assert.throws(() => assertStartStepIsInConfig(config, "one.mmd::MISSING"), /is not a key in the config/);
+});
+
+test("test_assertStartStepIsInConfig_doesNotThrowWhenTheStartStepExists", () => {
+    const { config } = buildProject([{ box: "A", output: {} }]);
+    assert.doesNotThrow(() => assertStartStepIsInConfig(config, "one.mmd::A"));
 });
 
 test("test_generateWorkflow_writesTheScriptToTheGivenPath", () => {

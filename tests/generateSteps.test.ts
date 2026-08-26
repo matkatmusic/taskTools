@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,12 +51,6 @@ test("test_generateSteps_ignoresAFileThatIsNotADiagram", () => {
     assert.deepEqual(Object.keys(config), ["one.mmd"]);
 });
 
-test("test_generateSteps_givesEachDiagramItsOwnScriptFolder", () => {
-    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    SHARED --> B\n", "two.mmd": "flowchart TD\n    SHARED --> C\n" });
-    assert.match(config["one.mmd"]![0]!.script, /steps\/one\/SHARED\.ts$/);
-    assert.match(config["two.mmd"]![0]!.script, /steps\/two\/SHARED\.ts$/);
-});
-
 test("test_generateSteps_writesAStubForABoxWithNoScript", () => {
     const { stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    NEW_BOX --> B\n" });
     const stub = readFileSync(join(stepsRoot, "one/NEW_BOX.ts"), "utf8");
@@ -78,10 +72,11 @@ test("test_generateSteps_leavesAnExistingScriptAlone", () => {
     assert.equal(readFileSync(join(stepsRoot, "one/A.ts"), "utf8"), "// mine\n");
 });
 
-test("test_generateSteps_dropsABoxTheDiagramNoLongerNames", () => {
+// The orphan guard replaces the old silent-drop behavior: a box a diagram no longer names throws.
+test("test_generateSteps_throwsWhenADroppedBoxesStubIsStillOnDisk", () => {
     const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> GONE\n" });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
-    assert.deepEqual(run()["one.mmd"]!.map(entry => entry.box), ["A", "B"]);
+    assert.throws(run, /one\/GONE\.ts is named by no diagram/);
 });
 
 test("test_generateSteps_writesTheConfigAsBoxAndScriptPairs", () => {
@@ -115,13 +110,6 @@ test("test_generateSteps_writesTheNextBoxFromTheArrows", () => {
     assert.deepEqual(config["one.mmd"]!.map(entry => entry.next), [["B"], []]);
 });
 
-test("test_generateSteps_keepsAHandWrittenSeamIntoAnotherDiagram", () => {
-    const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    SWEEP --> DONE\n" });
-    config["one.mmd"]![1]!.next = ["two.mmd::SWEEP"];
-    writeFileSync(configPath, JSON.stringify(config, null, 4));
-    assert.deepEqual(run()["one.mmd"]![1]!.next, ["two.mmd::SWEEP"]);
-});
-
 test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
     const { config, configPath, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
     config["one.mmd"]![1]!.mutating = true;
@@ -129,10 +117,11 @@ test("test_generateSteps_keepsAHandWrittenMutatingFlag", () => {
     assert.equal(run()["one.mmd"]![1]!.mutating, true);
 });
 
-test("test_generateSteps_dropsASameDiagramNextTheArrowsNoLongerName", () => {
+// The orphan guard replaces the old silent-drop behavior: a renamed box's stale stub throws.
+test("test_generateSteps_throwsWhenARenamedBoxesOldStubIsStillOnDisk", () => {
     const { diagramFolder, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> C\n");
-    assert.deepEqual(run()["one.mmd"]![0]!.next, ["C"]);
+    assert.throws(run, /one\/B\.ts is named by no diagram/);
 });
 
 test("test_generateSteps_writesAStubThatReadsItsInputArgument", () => {
@@ -166,13 +155,54 @@ test("test_generateSteps_seedsANewInputTemplateFromThePredecessorsOutput", () =>
     assert.deepEqual(bTemplate.input, aTemplate.output);
 });
 
+// B has no outgoing arrow in one.mmd, and is two.mmd's first box, so A's arrow into it crosses diagrams.
 test("test_generateSteps_seedsANewInputTemplateAcrossASeam", () => {
-    const { config, configPath, stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    SWEEP --> DONE\n" });
-    config["one.mmd"]![1]!.next = ["two.mmd::SWEEP"];
-    writeFileSync(configPath, JSON.stringify(config, null, 4));
-    rmSync(join(stepsRoot, "two/SWEEP.template.json"));
-    run();
-    const sweepTemplate = JSON.parse(readFileSync(join(stepsRoot, "two/SWEEP.template.json"), "utf8"));
+    const { config, stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    B --> C\n" });
+    assert.deepEqual(config["one.mmd"]![0]!.next, ["two.mmd::B"]);
     const bTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/B.template.json"), "utf8"));
-    assert.deepEqual(sweepTemplate.input, bTemplate.output);
+    const aTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/A.template.json"), "utf8"));
+    assert.deepEqual(bTemplate.input, aTemplate.output);
+});
+
+test("test_generateSteps_rewritesAnArrowIntoAnotherDiagramsFirstBox", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    B --> C\n" });
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["two.mmd::B"]);
+});
+
+test("test_generateSteps_leavesArrowBareWhenTargetHasItsOwnOutgoingArrow", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n    B --> C\n", "two.mmd": "flowchart TD\n    B --> D\n" });
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["B"]);
+});
+
+test("test_generateSteps_leavesArrowBareWhenTargetIsNoDiagramsFirstBox", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> DEAD_END\n", "two.mmd": "flowchart TD\n    X --> DEAD_END\n" });
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["DEAD_END"]);
+});
+
+test("test_generateSteps_sharesOneScriptForABoxTwoDiagramsBothDraw", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    SHARED --> B\n", "two.mmd": "flowchart TD\n    SHARED --> C\n" });
+    const oneEntry = config["one.mmd"]!.find(entry => entry.box === "SHARED")!;
+    const twoEntry = config["two.mmd"]!.find(entry => entry.box === "SHARED")!;
+    assert.equal(oneEntry.script, twoEntry.script);
+    assert.equal(oneEntry.template, twoEntry.template);
+});
+
+test("test_generateSteps_throwsOnAnOrphanBoxScript", () => {
+    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    writeFileSync(join(stepsRoot, "one/GHOST.ts"), "// stray\n");
+    assert.throws(() => run(), (error: Error) => error.message.includes("GHOST.ts") && error.message.includes("is named by no diagram"));
+});
+
+test("test_generateSteps_doesNotThrowWhenEveryExistingScriptMatchesABox", () => {
+    const { run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    assert.doesNotThrow(() => run());
+});
+
+test("test_generateSteps_ignoresSharedFolderAndHiddenFilesInTheOrphanGuard", () => {
+    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
+    mkdirSync(join(stepsRoot, "shared"), { recursive: true });
+    writeFileSync(join(stepsRoot, "shared/NOT_A_BOX.ts"), "// helper\n");
+    writeFileSync(join(stepsRoot, "one/_packet.ts"), "// packet\n");
+    writeFileSync(join(stepsRoot, "one/A.test.ts"), "// test\n");
+    assert.doesNotThrow(() => run());
 });

@@ -73,7 +73,11 @@ function getStepKey(boxReference: string, fromDiagram: string): string {
     if (boxReference.includes("::")) {
         return boxReference;
     }
-    return `${fromDiagram}::${boxReference}`;
+    const sameDiagramKey = `${fromDiagram}::${boxReference}`;
+    if (STEPS_BY_KEY.has(sameDiagramKey)) {
+        return sameDiagramKey;
+    }
+    return getStepKeysNamingBox(boxReference)[0] ?? sameDiagramKey;
 }
 
 function getStepKeysNamingBox(boxId: string): string[] {
@@ -300,10 +304,6 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
         if (!STEPS_BY_KEY.has(nextStepKey)) {
             return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
-        }
-        // A prompt block gets a fresh agent, so the walk stops before it and names it as next.
-        if (STEPS_BY_KEY.get(nextStepKey)!.producesPrompt) {
-            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
         }
         stepKey = nextStepKey;
         // A box sees only the box before it, so anything further back has to be carried forward by hand.

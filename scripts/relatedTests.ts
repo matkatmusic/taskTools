@@ -1,7 +1,7 @@
 // relatedTests.ts: jot's post_tool_batch_test_hook.py, ported to batch by owning occurrence.
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { getOwningOccurrence } from "./repositoryGraph.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
 import { discoverTestPolicy } from "./testPolicy.ts";
@@ -15,7 +15,7 @@ const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdi
 
 type LanguageConfig = {
     isTest: (name: string) => boolean;
-    candidates: (occurrenceCwd: string, name: string) => string[];
+    candidates: (occurrenceCwd: string, name: string, sourceDir: string) => string[];
 };
 
 const LANGUAGES: Record<string, LanguageConfig> = {
@@ -29,7 +29,11 @@ const LANGUAGES: Record<string, LanguageConfig> = {
     },
     ".ts": {
         isTest: (name) => name.startsWith("test-") || name.endsWith(".test"),
-        candidates: (cwd, name) => [join(cwd, "tests", `test-${name}.ts`), join(cwd, "tests", `${name}.test.ts`)],
+        candidates: (cwd, name, sourceDir) => [
+            join(cwd, "tests", `test-${name}.ts`),
+            join(cwd, "tests", `${name}.test.ts`),
+            join(sourceDir, `${name}.test.ts`),
+        ],
     },
 };
 
@@ -62,7 +66,8 @@ function findTestFile(
 ): { testFile: string } | { searched: string } {
     const name = basename(filePath, extname(filePath));
     if (langConfig.isTest(name)) return { testFile: filePath };
-    const candidates = langConfig.candidates(occurrenceCwd, name);
+    const sourceDir = dirname(filePath);
+    const candidates = langConfig.candidates(occurrenceCwd, name, sourceDir);
     for (const candidate of candidates) {
         if (existsSync(candidate)) return { testFile: candidate };
     }

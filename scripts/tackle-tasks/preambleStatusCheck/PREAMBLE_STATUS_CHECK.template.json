@@ -1,0 +1,9 @@
+{
+    "input": {},
+    "output": {
+        "box": "PREAMBLE_STATUS_CHECK",
+        "scriptSignal": "continue",
+        "note": "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK",
+        "input": ""
+    }
+}

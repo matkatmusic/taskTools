@@ -1,0 +1,8 @@
+{
+    "input": {
+        "box": "RUN_FULL_SUITE",
+        "scriptSignal": "continue",
+        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
+        "input": ""
+    }
+}

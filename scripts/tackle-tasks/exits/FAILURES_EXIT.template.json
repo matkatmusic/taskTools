@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
+        "input": ""
+    },
+    "output": {
+        "box": "FAILURES_EXIT",
+        "scriptSignal": "continue",
+        "note": "FAILURES_EXIT.ts for FAILURES_EXIT",
+        "input": ""
+    }
+}

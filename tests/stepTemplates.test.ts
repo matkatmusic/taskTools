@@ -48,7 +48,7 @@ function runBlockScript(scriptPath: string, input: unknown, cwd: string): { comm
 }
 
 // Rebuilds every fixture's disposable .git repo before the tests read it; a .git can never be committed.
-const STEPS_DIR = join(PROJECT_ROOT, "scripts/steps");
+const STEPS_DIR = join(PROJECT_ROOT, "scripts/tackle-tasks");
 for (const pipelineDir of readdirSync(STEPS_DIR)) {
     const setupScript = join(STEPS_DIR, pipelineDir, "fixtures/setup.sh");
     if (!existsSync(setupScript)) continue;
@@ -118,4 +118,25 @@ for (const [diagramFile, entries] of Object.entries(config)) {
             assert.doesNotMatch(prompt, /\/run-step|invoke the skill/i);
         });
     }
+}
+
+// A block script picks its own branch, so every next: "X" literal it can print must be a declared edge.
+const allowedNextByScript = new Map<string, { box: string; allowedNext: Set<string> }>();
+for (const entries of Object.values(config)) {
+    for (const entry of entries) {
+        const existing = allowedNextByScript.get(entry.script) ?? { box: entry.box, allowedNext: new Set<string>() };
+        for (const target of entry.next) {
+            existing.allowedNext.add(target);
+        }
+        allowedNextByScript.set(entry.script, existing);
+    }
+}
+for (const [scriptPath, { box, allowedNext }] of allowedNextByScript) {
+    test(`test_stepTemplate_${box}_everyNextLiteralIsADeclaredEdge`, () => {
+        const source = readFileSync(join(PROJECT_ROOT, scriptPath), "utf8");
+        const literalNextValues = [...source.matchAll(/next:\s*"([\w.:]+)"/g)].map(match => match[1]!);
+        for (const value of literalNextValues) {
+            assert.ok(allowedNext.has(value), `${scriptPath} returns next: "${value}", not one of ${[...allowedNext].join(", ")}`);
+        }
+    });
 }

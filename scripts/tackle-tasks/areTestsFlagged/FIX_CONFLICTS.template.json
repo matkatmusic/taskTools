@@ -1,0 +1,8 @@
+{
+    "input": {
+        "box": "REBASE_ONTO_TARGET_BRANCH",
+        "scriptSignal": "continue",
+        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
+        "input": ""
+    }
+}

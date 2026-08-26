@@ -1,10 +1,10 @@
 {
   "type": "module",
   "scripts": {
-    "steps": "node --no-inspect scripts/generateSteps.ts plans/diagram && node --no-inspect scripts/generateWorkflow.ts",
+    "steps": "node --no-inspect scripts/generateSteps.ts diagrams/tackle-tasks && node --no-inspect scripts/generateWorkflow.ts",
     "workflow": "node --no-inspect scripts/generateWorkflow.ts",
-    "steps:watch": "node --no-inspect scripts/generateSteps.ts plans/diagram --watch",
-    "test": "node --test \"tests/**/*.test.ts\""
+    "steps:watch": "node --no-inspect scripts/generateSteps.ts diagrams/tackle-tasks --watch",
+    "test": "node --test \"tests/**/*.test.ts\" \"scripts/tackle-tasks/**/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "^26.2.0"

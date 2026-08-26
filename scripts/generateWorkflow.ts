@@ -9,7 +9,7 @@ import type { StepConfig } from "./generateSteps.ts";
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 export const WORKFLOW_FILE = join(PROJECT_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
-export const START_STEP = "pipeline-preambleStatusCheck.mmd::PREAMBLE_TASK_NUMBER_INPUT";
+export const START_STEP = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 
 /* retired: replaced by buildAgentSchemasByStartBlock, one envelope per block a pass can start at.
 export type OrderedBlockSchemas = {
@@ -41,9 +41,23 @@ export function buildOrderedBlockSchemas(): OrderedBlockSchemas {
 }
 */
 
+// Every regenerated START_STEP must resolve to a real box, or the workflow starts nowhere.
+export function assertStartStepIsInConfig(config: StepConfig, startStep: string): void {
+    const allStepKeys = new Set<string>();
+    for (const [diagram, entries] of Object.entries(config)) {
+        for (const entry of entries) {
+            allStepKeys.add(`${diagram}::${entry.box}`);
+        }
+    }
+    if (!allStepKeys.has(startStep)) {
+        throw new Error(`START_STEP ${startStep} is not a key in the config`);
+    }
+}
+
 // Keys = every block a pass can start at: START_STEP, every prompt block, and every prompt block's successor.
 export function buildAgentSchemasByStartBlock(): Record<string, Record<string, unknown>> {
     const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+    assertStartStepIsInConfig(config, START_STEP);
     const startBlockKeys = new Set<string>([START_STEP, ...getPromptStepKeys(config)]);
     for (const [diagram, entries] of Object.entries(config)) {
         for (const entry of entries) {

@@ -1,6 +1,9 @@
 // Behavioral checks for relatedTests.ts: per-occurrence batching of edited files.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { groupEditsByOccurrence } from "../scripts/relatedTests.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
@@ -68,4 +71,20 @@ test("test_editsSpanningTwoOccurrencesYieldTwoBatchesEachHoldingOnlyItsOwnFiles"
 test("test_fileDirectlyInRootRepoMapsToTheRootOccurrence", () => {
     const { batches } = groupEditsByOccurrence([rootFile], rootPath, manifest);
     assert.deepEqual([...batches.keys()], ["root"]);
+});
+
+test("test_aNonTestTsFileResolvesToATestFileInTheSameDirectory", () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), "relatedTests-"));
+    const srcDir = join(tmpRoot, "src");
+    mkdirSync(srcDir, { recursive: true });
+    const sourceFile = join(srcDir, "thing.ts");
+    const testFile = join(srcDir, "thing.test.ts");
+    writeFileSync(sourceFile, "export const thing = 1;\n");
+    writeFileSync(testFile, "// placeholder test\n");
+    const tmpOccurrence = makeOccurrence({ occurrenceId: "tmpRoot", checkoutPath: "" });
+    const tmpManifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: [tmpOccurrence] };
+    const { batches, warnings } = groupEditsByOccurrence([sourceFile], tmpRoot, tmpManifest);
+    assert.deepEqual(warnings, []);
+    const tests = [...batches.get("tmpRoot")!.byExtension.values()].flatMap((b) => b.tests);
+    assert.ok(tests.includes(testFile));
 });

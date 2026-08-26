@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "PREAMBLE_STATUS_CHECK",
+        "scriptSignal": "continue",
+        "note": "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK",
+        "input": ""
+    },
+    "output": {
+        "box": "REPORT_ONLY_EXIT",
+        "scriptSignal": "continue",
+        "note": "REPORT_ONLY_EXIT.ts for REPORT_ONLY_EXIT",
+        "input": ""
+    }
+}
