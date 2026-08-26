@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "RUN_TASK_TESTS",
+        "scriptSignal": "continue",
+        "note": "RUN_TASK_TESTS.ts for RUN_TASK_TESTS",
+        "input": ""
+    },
+    "output": {
+        "box": "DO_TASK_TESTS_PASS_Q",
+        "scriptSignal": "continue",
+        "note": "DO_TASK_TESTS_PASS_Q.ts for DO_TASK_TESTS_PASS_Q",
+        "input": ""
+    }
+}

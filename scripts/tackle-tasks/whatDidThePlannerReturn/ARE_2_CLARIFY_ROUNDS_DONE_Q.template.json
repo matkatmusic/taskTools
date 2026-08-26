@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "scriptSignal": "continue",
+        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_CLARIFY_ROUNDS_DONE_Q",
+        "scriptSignal": "continue",
+        "note": "ARE_2_CLARIFY_ROUNDS_DONE_Q.ts for ARE_2_CLARIFY_ROUNDS_DONE_Q",
+        "input": ""
+    }
+}

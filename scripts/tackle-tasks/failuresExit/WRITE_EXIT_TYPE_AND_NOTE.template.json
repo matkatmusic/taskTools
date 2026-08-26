@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DID_ANY_WORK_LAND_Q",
+        "scriptSignal": "continue",
+        "note": "DID_ANY_WORK_LAND_Q.ts for DID_ANY_WORK_LAND_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "WRITE_EXIT_TYPE_AND_NOTE",
+        "scriptSignal": "continue",
+        "note": "WRITE_EXIT_TYPE_AND_NOTE.ts for WRITE_EXIT_TYPE_AND_NOTE",
+        "input": ""
+    }
+}

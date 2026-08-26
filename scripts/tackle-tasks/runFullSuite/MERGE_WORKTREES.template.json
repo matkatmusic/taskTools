@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DID_CHANGES_STAY_INSIDE_FENCE_Q",
+        "scriptSignal": "continue",
+        "note": "DID_CHANGES_STAY_INSIDE_FENCE_Q.ts for DID_CHANGES_STAY_INSIDE_FENCE_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "MERGE_WORKTREES",
+        "scriptSignal": "continue",
+        "note": "MERGE_WORKTREES.ts for MERGE_WORKTREES",
+        "input": ""
+    }
+}

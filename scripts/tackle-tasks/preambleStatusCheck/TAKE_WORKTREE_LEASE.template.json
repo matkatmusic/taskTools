@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "CREATE_WORKTREE",
+        "scriptSignal": "continue",
+        "note": "CREATE_WORKTREE.ts for CREATE_WORKTREE",
+        "input": ""
+    },
+    "output": {
+        "box": "TAKE_WORKTREE_LEASE",
+        "scriptSignal": "continue",
+        "note": "TAKE_WORKTREE_LEASE.ts for TAKE_WORKTREE_LEASE",
+        "input": ""
+    }
+}

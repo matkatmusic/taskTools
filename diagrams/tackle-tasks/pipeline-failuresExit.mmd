@@ -1,0 +1,44 @@
+flowchart TB
+%% Not an agent() entry. The hook walks in from a dashed FAILURES_EXIT block with an exit type and note in the packet.
+
+  subgraph failuresExit ["Input: an exit type and note"]
+    direction TB
+    FAILURES_EXIT["FAILURES_EXIT"]
+    READ_FAILURES_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+    DID_ANY_WORK_LAND_Q["did any of this task's work land?"]
+    WRITE_PUBLICATION_OUTCOME["write the publication outcome:<br/>keep completed, else partially-published"]
+    WRITE_EXIT_TYPE_AND_NOTE["write the exit type and note to tasks.json"]
+    RECORD_MODIFIED_FILES_FAILURE["record the modified files to tasks.json"]
+    MARK_TASK_INACTIVE_FAILURE["mark the task inactive in tasks.json"]
+    DOES_RUN_HOLD_LEASE_Q["does this run still hold<br/>the worktree lease?"]
+    RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
+    DOES_RUN_HOLD_SOURCE_LOCK_Q["does this run still hold<br/>the source repo lock?"]
+    RELEASE_SOURCE_LOCK["release the source repo lock"]
+    REPORT_EXIT_TYPE_AND_NOTE["report the exit type and note"]
+    STOP["stop"]
+  end
+
+  FAILURES_EXIT --> READ_FAILURES_PUBLICATION_STATE
+  READ_FAILURES_PUBLICATION_STATE --> DID_ANY_WORK_LAND_Q
+  DID_ANY_WORK_LAND_Q -- "YES" --> WRITE_PUBLICATION_OUTCOME
+  DID_ANY_WORK_LAND_Q -- "NO" --> WRITE_EXIT_TYPE_AND_NOTE
+  WRITE_PUBLICATION_OUTCOME --> RECORD_MODIFIED_FILES_FAILURE
+  WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE
+  RECORD_MODIFIED_FILES_FAILURE --> MARK_TASK_INACTIVE_FAILURE
+  MARK_TASK_INACTIVE_FAILURE --> DOES_RUN_HOLD_LEASE_Q
+  DOES_RUN_HOLD_LEASE_Q -- "YES" --> RELEASE_WORKTREE_LEASE
+  DOES_RUN_HOLD_LEASE_Q -- "NO" --> DOES_RUN_HOLD_SOURCE_LOCK_Q
+  RELEASE_WORKTREE_LEASE --> DOES_RUN_HOLD_SOURCE_LOCK_Q
+  DOES_RUN_HOLD_SOURCE_LOCK_Q -- "YES" --> RELEASE_SOURCE_LOCK
+  DOES_RUN_HOLD_SOURCE_LOCK_Q -- "NO" --> REPORT_EXIT_TYPE_AND_NOTE
+  RELEASE_SOURCE_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
+  REPORT_EXIT_TYPE_AND_NOTE --> STOP
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class FAILURES_EXIT fail
+  class READ_FAILURES_PUBLICATION_STATE,DID_ANY_WORK_LAND_Q,WRITE_PUBLICATION_OUTCOME,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,DOES_RUN_HOLD_LEASE_Q,RELEASE_WORKTREE_LEASE,DOES_RUN_HOLD_SOURCE_LOCK_Q,RELEASE_SOURCE_LOCK,REPORT_EXIT_TYPE_AND_NOTE script
+  class STOP output

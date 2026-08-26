@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_PUBLICATION_STATE_Q",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_PUBLICATION_STATE_Q.ts for WHAT_IS_PUBLICATION_STATE_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "MERGE_SUCCEEDED_EXIT",
+        "scriptSignal": "continue",
+        "note": "MERGE_SUCCEEDED_EXIT.ts for MERGE_SUCCEEDED_EXIT",
+        "input": ""
+    }
+}

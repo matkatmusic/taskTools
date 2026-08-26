@@ -1,35 +1,32 @@
 flowchart TB
-%% One agent() call. /run-step starts at COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED; paths end at orange box or STOP; its answer feeds named diagram.
+%% One agent() call. /run-step starts at COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED. Every path ends at an orange block or a dashed block.
 
   subgraph commitMergeConflictFixIfNeeded ["Input: [FIX_CONFLICTS]'s result"]
     direction TB
-    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed<br/>continue the rebase<br/>is the rebase finished?"]
-    FIX_CONFLICTS["FIX_CONFLICTS"]
-    FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
-    STOP["stop"]
-    RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
-    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
-    REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED"]
+    CONTINUE_REBASE["continue the rebase"]
+    IS_REBASE_FINISHED_Q["is the rebase finished?"]
+    ARE_2_CONFLICT_FIXES_DONE_Q["2 conflict fixes done?"]
   end
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "stopped on new conflicts" --> FIX_CONFLICTS
-  FAILURES_EXIT --> STOP
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase-stuck" --> FAILURES_EXIT
-  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED -- "rebase finished" --> RUN_FULL_SUITE
-  RUN_FULL_SUITE -- "suite red" --> FIX_THE_CODEBASE_FOR_SUITE
-  RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> FAILURES_EXIT
-  RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> STOP
-  RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved<br/>attempts.merge bounds this loop" --> REBASE_ONTO_TARGET_BRANCH
-  REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> FIX_CONFLICTS
-  REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> FAILURES_EXIT
-  REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> RUN_FULL_SUITE
-  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED
-  FIX_THE_CODEBASE_FOR_SUITE --> RUN_FULL_SUITE
+  subgraph commitMergeConflictFixIfNeededNext ["next diagram"]
+    direction TB
+    FIX_CONFLICTS["FIX_CONFLICTS"]
+    RUN_FULL_SUITE["RUN_FULL_SUITE"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+  end
+  commitMergeConflictFixIfNeeded ~~~ commitMergeConflictFixIfNeededNext
+
+  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE
+  CONTINUE_REBASE --> IS_REBASE_FINISHED_Q
+  IS_REBASE_FINISHED_Q -- "YES" --> RUN_FULL_SUITE
+  IS_REBASE_FINISHED_Q -- "NO<br/>it stopped on new conflicts" --> ARE_2_CONFLICT_FIXES_DONE_Q
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "YES<br/>rebase-stuck" --> FAILURES_EXIT
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,RUN_FULL_SUITE,REBASE_ONTO_TARGET_BRANCH script
-  class FIX_CONFLICTS,FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt
-  class FAILURES_EXIT fail
-  class STOP output
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,CONTINUE_REBASE,IS_REBASE_FINISHED_Q,ARE_2_CONFLICT_FIXES_DONE_Q script
+  class FIX_CONFLICTS,RUN_FULL_SUITE,FAILURES_EXIT next_diagram

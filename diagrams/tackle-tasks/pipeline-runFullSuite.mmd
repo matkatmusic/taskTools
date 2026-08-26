@@ -1,32 +1,47 @@
 flowchart TB
-%% One agent() call. /run-step starts at RUN_FULL_SUITE; paths end at orange box or STOP; its answer feeds named diagram.
+%% One agent() call. /run-step starts at COMMIT_SUITE_FIX_IF_NEEDED; the rebase diagram walks in at RUN_FULL_SUITE. Every path ends at an orange block or a dashed block.
 
   subgraph runFullSuite ["Input: [FIX_THE_CODEBASE_FOR_SUITE]'s result"]
     direction TB
-    RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
-    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
-    FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
-    STOP["stop"]
-    REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
-    FIX_CONFLICTS["FIX_CONFLICTS"]
-    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed<br/>continue the rebase<br/>is the rebase finished?"]
+    COMMIT_SUITE_FIX_IF_NEEDED["COMMIT_SUITE_FIX_IF_NEEDED"]
+    RUN_FULL_SUITE["RUN_FULL_SUITE"]
+    DO_ALL_TESTS_PASS_Q["do all tests pass?"]
+    ARE_2_SUITE_FIXES_DONE_Q["2 suite fix attempts done?"]
+    DID_CHANGES_STAY_INSIDE_FENCE_Q["did every change stay inside<br/>the task's file fence?"]
+    MERGE_WORKTREES["merge worktrees and submodules,<br/>no fast-forward"]
+    READ_MERGE_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+    WHAT_IS_PUBLICATION_STATE_Q["what is the publication state?"]
+    ARE_2_MERGE_ATTEMPTS_DONE_Q["2 merge attempts done?"]
   end
-  RUN_FULL_SUITE -- "suite red" --> FIX_THE_CODEBASE_FOR_SUITE
-  FAILURES_EXIT --> STOP
-  RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> FAILURES_EXIT
-  RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> STOP
-  RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved<br/>attempts.merge bounds this loop" --> REBASE_ONTO_TARGET_BRANCH
-  REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> FIX_CONFLICTS
-  REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> FAILURES_EXIT
-  REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> RUN_FULL_SUITE
-  FIX_THE_CODEBASE_FOR_SUITE --> RUN_FULL_SUITE
-  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED
+  subgraph runFullSuiteNext ["next diagram"]
+    direction TB
+    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_FOR_SUITE"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    MERGE_SUCCEEDED_EXIT["MERGE_SUCCEEDED_EXIT"]
+    REBASE_ONTO_TARGET_BRANCH["REBASE_ONTO_TARGET_BRANCH"]
+  end
+  runFullSuite ~~~ runFullSuiteNext
+
+  COMMIT_SUITE_FIX_IF_NEEDED --> RUN_FULL_SUITE
+  RUN_FULL_SUITE --> DO_ALL_TESTS_PASS_Q
+  DO_ALL_TESTS_PASS_Q -- "NO" --> ARE_2_SUITE_FIXES_DONE_Q
+  ARE_2_SUITE_FIXES_DONE_Q -- "NO<br/>pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE
+  ARE_2_SUITE_FIXES_DONE_Q -- "YES<br/>suite-red" --> FAILURES_EXIT
+  DO_ALL_TESTS_PASS_Q -- "YES" --> DID_CHANGES_STAY_INSIDE_FENCE_Q
+  DID_CHANGES_STAY_INSIDE_FENCE_Q -- "NO<br/>fence-violation" --> FAILURES_EXIT
+  DID_CHANGES_STAY_INSIDE_FENCE_Q -- "YES" --> MERGE_WORKTREES
+  MERGE_WORKTREES --> READ_MERGE_PUBLICATION_STATE
+  READ_MERGE_PUBLICATION_STATE --> WHAT_IS_PUBLICATION_STATE_Q
+  WHAT_IS_PUBLICATION_STATE_Q -- "ALL LANDED" --> MERGE_SUCCEEDED_EXIT
+  WHAT_IS_PUBLICATION_STATE_Q -- "SOME LANDED<br/>partially-published" --> FAILURES_EXIT
+  WHAT_IS_PUBLICATION_STATE_Q -- "NONE LANDED" --> ARE_2_MERGE_ATTEMPTS_DONE_Q
+  ARE_2_MERGE_ATTEMPTS_DONE_Q -- "NO<br/>the target branch tip moved" --> REBASE_ONTO_TARGET_BRANCH
+  ARE_2_MERGE_ATTEMPTS_DONE_Q -- "YES<br/>merge-failed" --> FAILURES_EXIT
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class RUN_FULL_SUITE,REBASE_ONTO_TARGET_BRANCH,COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED script
-  class FIX_THE_CODEBASE_FOR_SUITE,FIX_CONFLICTS returns_a_prompt
-  class FAILURES_EXIT fail
-  class STOP output
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class COMMIT_SUITE_FIX_IF_NEEDED,RUN_FULL_SUITE,DO_ALL_TESTS_PASS_Q,ARE_2_SUITE_FIXES_DONE_Q,DID_CHANGES_STAY_INSIDE_FENCE_Q,MERGE_WORKTREES,READ_MERGE_PUBLICATION_STATE,WHAT_IS_PUBLICATION_STATE_Q,ARE_2_MERGE_ATTEMPTS_DONE_Q script
+  class FIX_THE_CODEBASE_FOR_SUITE,FAILURES_EXIT,MERGE_SUCCEEDED_EXIT,REBASE_ONTO_TARGET_BRANCH next_diagram

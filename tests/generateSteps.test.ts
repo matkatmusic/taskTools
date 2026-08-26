@@ -92,6 +92,12 @@ test("test_getEdgesInDiagram_ignoresAnEdgeLabel", () => {
     assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A -->|yes| B\n").next, { A: ["B"], B: [] });
 });
 
+test("test_getEdgesInDiagram_anInvisibleLinkMakesNoBoxAndNoEdge", () => {
+    const edges = getEdgesInDiagram("flowchart TD\n    A --> B\n    main ~~~ B\n");
+    assert.deepEqual(edges.boxes, ["A", "B"]);
+    assert.deepEqual(edges.next, { A: ["B"], B: [] });
+});
+
 test("test_getEdgesInDiagram_aDottedArrowMakesNoEdge", () => {
     assert.deepEqual(getEdgesInDiagram("flowchart TD\n    A -.-> B[\"note\"] --> C\n").next, { A: [], B: ["C"], C: [] });
 });
@@ -155,8 +161,8 @@ test("test_generateSteps_seedsANewInputTemplateFromThePredecessorsOutput", () =>
     assert.deepEqual(bTemplate.input, aTemplate.output);
 });
 
-// B has no outgoing arrow in one.mmd, and is two.mmd's first box, so A's arrow into it crosses diagrams.
-test("test_generateSteps_seedsANewInputTemplateAcrossASeam", () => {
+// B has no outgoing arrow in one.mmd but has one in two.mmd, so A's arrow into it crosses diagrams.
+test("test_generateSteps_seedsANewInputTemplateAcrossDiagrams", () => {
     const { config, stepsRoot } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    B --> C\n" });
     assert.deepEqual(config["one.mmd"]![0]!.next, ["two.mmd::B"]);
     const bTemplate = JSON.parse(readFileSync(join(stepsRoot, "one/B.template.json"), "utf8"));
@@ -164,9 +170,15 @@ test("test_generateSteps_seedsANewInputTemplateAcrossASeam", () => {
     assert.deepEqual(bTemplate.input, aTemplate.output);
 });
 
-test("test_generateSteps_rewritesAnArrowIntoAnotherDiagramsFirstBox", () => {
-    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    B --> C\n" });
+test("test_generateSteps_rewritesAnArrowIntoABoxWithArrowsInAnotherDiagram", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    X --> B\n    B --> C\n" });
     assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["two.mmd::B"]);
+});
+
+test("test_generateSteps_writesNoEntryForABoxThatOnlyPointsIntoAnotherDiagram", () => {
+    const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    B --> C\n" });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), ["A"]);
+    assert.deepEqual(config["two.mmd"]!.map(entry => entry.box), ["B", "C"]);
 });
 
 test("test_generateSteps_leavesArrowBareWhenTargetHasItsOwnOutgoingArrow", () => {
@@ -174,7 +186,7 @@ test("test_generateSteps_leavesArrowBareWhenTargetHasItsOwnOutgoingArrow", () =>
     assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["B"]);
 });
 
-test("test_generateSteps_leavesArrowBareWhenTargetIsNoDiagramsFirstBox", () => {
+test("test_generateSteps_leavesArrowBareWhenTargetHasNoArrowsAnywhere", () => {
     const { config } = generateFrom({ "one.mmd": "flowchart TD\n    A --> DEAD_END\n", "two.mmd": "flowchart TD\n    X --> DEAD_END\n" });
     assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["DEAD_END"]);
 });
@@ -191,6 +203,13 @@ test("test_generateSteps_throwsOnAnOrphanBoxScript", () => {
     const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n" });
     writeFileSync(join(stepsRoot, "one/GHOST.ts"), "// stray\n");
     assert.throws(() => run(), (error: Error) => error.message.includes("GHOST.ts") && error.message.includes("is named by no diagram"));
+});
+
+test("test_generateSteps_throwsOnAStubOutsideItsOwnerFolder", () => {
+    const { stepsRoot, run } = generateFrom({ "one.mmd": "flowchart TD\n    A --> B\n", "two.mmd": "flowchart TD\n    C --> D\n" });
+    mkdirSync(join(stepsRoot, "two"), { recursive: true });
+    writeFileSync(join(stepsRoot, "two/A.ts"), "// moved by hand\n");
+    assert.throws(() => run(), (error: Error) => error.message.includes("two/A.ts belongs in one/"));
 });
 
 test("test_generateSteps_doesNotThrowWhenEveryExistingScriptMatchesABox", () => {

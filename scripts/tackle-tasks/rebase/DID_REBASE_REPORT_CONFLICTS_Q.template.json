@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "REBASE_ONTO_TARGET_BRANCH",
+        "scriptSignal": "continue",
+        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
+        "input": ""
+    },
+    "output": {
+        "box": "DID_REBASE_REPORT_CONFLICTS_Q",
+        "scriptSignal": "continue",
+        "note": "DID_REBASE_REPORT_CONFLICTS_Q.ts for DID_REBASE_REPORT_CONFLICTS_Q",
+        "input": ""
+    }
+}

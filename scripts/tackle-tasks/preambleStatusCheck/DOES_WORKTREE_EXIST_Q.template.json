@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MARK_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "note": "MARK_TASK_ACTIVE.ts for MARK_TASK_ACTIVE",
+        "input": ""
+    },
+    "output": {
+        "box": "DOES_WORKTREE_EXIST_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_WORKTREE_EXIST_Q.ts for DOES_WORKTREE_EXIST_Q",
+        "input": ""
+    }
+}

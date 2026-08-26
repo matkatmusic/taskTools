@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "ARE_TASK_TESTS_SKIPPED_Q",
+        "scriptSignal": "continue",
+        "note": "ARE_TASK_TESTS_SKIPPED_Q.ts for ARE_TASK_TESTS_SKIPPED_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "RUN_TASK_TESTS",
+        "scriptSignal": "continue",
+        "note": "RUN_TASK_TESTS.ts for RUN_TASK_TESTS",
+        "input": ""
+    }
+}

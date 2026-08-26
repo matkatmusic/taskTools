@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WHAT_IS_PUBLICATION_STATE_Q",
+        "scriptSignal": "continue",
+        "note": "WHAT_IS_PUBLICATION_STATE_Q.ts for WHAT_IS_PUBLICATION_STATE_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_MERGE_ATTEMPTS_DONE_Q",
+        "scriptSignal": "continue",
+        "note": "ARE_2_MERGE_ATTEMPTS_DONE_Q.ts for ARE_2_MERGE_ATTEMPTS_DONE_Q",
+        "input": ""
+    }
+}

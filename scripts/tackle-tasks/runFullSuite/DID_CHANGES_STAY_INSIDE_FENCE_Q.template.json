@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DO_ALL_TESTS_PASS_Q",
+        "scriptSignal": "continue",
+        "note": "DO_ALL_TESTS_PASS_Q.ts for DO_ALL_TESTS_PASS_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "DID_CHANGES_STAY_INSIDE_FENCE_Q",
+        "scriptSignal": "continue",
+        "note": "DID_CHANGES_STAY_INSIDE_FENCE_Q.ts for DID_CHANGES_STAY_INSIDE_FENCE_Q",
+        "input": ""
+    }
+}

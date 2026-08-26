@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "IS_WORKTREE_SAFE_TO_USE_Q",
+        "scriptSignal": "continue",
+        "note": "IS_WORKTREE_SAFE_TO_USE_Q.ts for IS_WORKTREE_SAFE_TO_USE_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "scriptSignal": "continue",
+        "note": "TAKE_WORKTREE_LEASE_BEFORE_RESET.ts for TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "input": ""
+    }
+}

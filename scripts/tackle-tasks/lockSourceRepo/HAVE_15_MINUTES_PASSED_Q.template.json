@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WAS_LOCK_ACQUIRED_Q",
+        "scriptSignal": "continue",
+        "note": "WAS_LOCK_ACQUIRED_Q.ts for WAS_LOCK_ACQUIRED_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "HAVE_15_MINUTES_PASSED_Q",
+        "scriptSignal": "continue",
+        "note": "HAVE_15_MINUTES_PASSED_Q.ts for HAVE_15_MINUTES_PASSED_Q",
+        "input": ""
+    }
+}

@@ -1,42 +1,30 @@
 flowchart TB
-%% One agent() call. /run-step starts at ARE_TESTS_FLAGGED; paths end at orange box or STOP; its answer feeds named diagram.
+%% One agent() call. /run-step starts at ARE_TESTS_FLAGGED. Every path ends at an orange block or a dashed block.
 
   subgraph areTestsFlagged ["Input: [CODEX_REVIEWS_TESTS]'s result"]
     direction TB
-    ARE_TESTS_FLAGGED["are the tests flagged?<br/>2 codex test reviews done?<br/>amend entry with codex's notes"]
-    IMPLEMENT_TASK["IMPLEMENT_TASK"]
-    FAILURES_EXIT["did any work land? write the outcome<br/>mark inactive, release the lease and the lock<br/>report the exit type and note"]
-    STOP["stop"]
-    LOCK_SOURCE_REPO["lock the source repo, wait up to 15 minutes"]
-    REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch<br/>did the rebase report conflicts?<br/>2 conflict fixes done?"]
-    FIX_CONFLICTS["FIX_CONFLICTS"]
-    RUN_FULL_SUITE["commit the suite fix if needed<br/>run the full suite, do all tests pass?<br/>2 suite fixes done?<br/>did every change stay inside the fence?<br/>merge worktrees, read the publication state<br/>record hashes and files, clean up, archive, report"]
-    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_SO_THE_FULL_SUITE_PASSES"]
-    COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed<br/>are the task tests skipped?<br/>run task tests<br/>do the task tests pass?<br/>2 fixes done?<br/>amend entry with the failing tests"]
-    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed<br/>continue the rebase<br/>is the rebase finished?"]
+    ARE_TESTS_FLAGGED["TESTS_FLAGGED"]
+    ARE_2_TEST_REVIEWS_DONE_Q["2 codex test reviews done?"]
+    AMEND_ENTRY_WITH_CODEX_NOTES["amend the tasks.json entry<br/>with codex's notes and fixes"]
   end
-  ARE_TESTS_FLAGGED -- "flagged<br/>reimplement against the amended entry" --> IMPLEMENT_TASK
-  FAILURES_EXIT --> STOP
-  ARE_TESTS_FLAGGED -- "tests-flagged" --> FAILURES_EXIT
-  ARE_TESTS_FLAGGED -- "not flagged" --> LOCK_SOURCE_REPO
-  LOCK_SOURCE_REPO -- "run-failed" --> FAILURES_EXIT
-  LOCK_SOURCE_REPO -- "lock acquired" --> REBASE_ONTO_TARGET_BRANCH
-  REBASE_ONTO_TARGET_BRANCH -- "conflicts" --> FIX_CONFLICTS
-  REBASE_ONTO_TARGET_BRANCH -- "rebase-stuck" --> FAILURES_EXIT
-  REBASE_ONTO_TARGET_BRANCH -- "no conflicts" --> RUN_FULL_SUITE
-  RUN_FULL_SUITE -- "suite red" --> FIX_THE_CODEBASE_FOR_SUITE
-  RUN_FULL_SUITE -- "suite-red<br/>fence-violation<br/>partially-published<br/>merge-failed" --> FAILURES_EXIT
-  RUN_FULL_SUITE -- "ALL LANDED<br/>exit type: completed" --> STOP
-  RUN_FULL_SUITE -- "NONE LANDED<br/>the target branch tip moved<br/>attempts.merge bounds this loop" --> REBASE_ONTO_TARGET_BRANCH
-  IMPLEMENT_TASK --> COMMIT_IMPLEMENTATION_IF_NEEDED
-  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED
-  FIX_THE_CODEBASE_FOR_SUITE --> RUN_FULL_SUITE
+  subgraph areTestsFlaggedNext ["next diagram"]
+    direction TB
+    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
+  end
+  areTestsFlagged ~~~ areTestsFlaggedNext
+
+  ARE_TESTS_FLAGGED -- "NO" --> LOCK_SOURCE_REPO
+  ARE_TESTS_FLAGGED -- "YES" --> ARE_2_TEST_REVIEWS_DONE_Q
+  ARE_2_TEST_REVIEWS_DONE_Q -- "NO" --> AMEND_ENTRY_WITH_CODEX_NOTES
+  ARE_2_TEST_REVIEWS_DONE_Q -- "YES<br/>tests-flagged" --> FAILURES_EXIT
+  AMEND_ENTRY_WITH_CODEX_NOTES -- "reimplement against the amended entry" --> IMPLEMENT_TASK
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
-  class ARE_TESTS_FLAGGED,LOCK_SOURCE_REPO,REBASE_ONTO_TARGET_BRANCH,RUN_FULL_SUITE,COMMIT_IMPLEMENTATION_IF_NEEDED,COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED script
-  class IMPLEMENT_TASK,FIX_CONFLICTS,FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt
-  class FAILURES_EXIT fail
-  class STOP output
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class ARE_TESTS_FLAGGED,ARE_2_TEST_REVIEWS_DONE_Q,AMEND_ENTRY_WITH_CODEX_NOTES script
+  class LOCK_SOURCE_REPO,FAILURES_EXIT,IMPLEMENT_TASK next_diagram

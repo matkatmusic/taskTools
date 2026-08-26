@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DO_TASK_TESTS_PASS_Q",
+        "scriptSignal": "continue",
+        "note": "DO_TASK_TESTS_PASS_Q.ts for DO_TASK_TESTS_PASS_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_2_TEST_FIXES_DONE_Q",
+        "scriptSignal": "continue",
+        "note": "ARE_2_TEST_FIXES_DONE_Q.ts for ARE_2_TEST_FIXES_DONE_Q",
+        "input": ""
+    }
+}

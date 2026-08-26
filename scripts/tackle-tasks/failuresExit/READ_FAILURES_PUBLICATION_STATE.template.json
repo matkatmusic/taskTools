@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "FAILURES_EXIT",
+        "scriptSignal": "continue",
+        "note": "FAILURES_EXIT.ts for FAILURES_EXIT",
+        "input": ""
+    },
+    "output": {
+        "box": "READ_FAILURES_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "note": "READ_FAILURES_PUBLICATION_STATE.ts for READ_FAILURES_PUBLICATION_STATE",
+        "input": ""
+    }
+}

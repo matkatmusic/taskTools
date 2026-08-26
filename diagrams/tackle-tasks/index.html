@@ -39,12 +39,24 @@
   nav.innerHTML = [
     ['_pipeline-monolith.mmd', 'monolith, unrolled'],
     ['pipeline-preambleStatusCheck.mmd', '1 start of workflow'],
+    ['pipeline-planTheTask.mmd', 'PLAN_THE_TASK'],
     ['pipeline-whatDidThePlannerReturn.mmd', '2 after PLAN_THE_TASK'],
+    ['pipeline-codexReviewsPlan.mmd', 'CODEX_REVIEWS_PLAN'],
     ['pipeline-whatIsReviewVerdict.mmd', '3 after CODEX_REVIEWS_PLAN'],
+    ['pipeline-implementTask.mmd', 'IMPLEMENT_TASK'],
     ['pipeline-commitImplementationIfNeeded.mmd', '4 after IMPLEMENT_TASK'],
+    ['pipeline-fixImplementTaskTests.mmd', 'FIX_IMPLEMENT_TASK_TESTS'],
+    ['pipeline-codexReviewsTests.mmd', 'CODEX_REVIEWS_TESTS'],
     ['pipeline-areTestsFlagged.mmd', '5 after CODEX_REVIEWS_TESTS'],
+    ['pipeline-fixConflicts.mmd', 'FIX_CONFLICTS'],
     ['pipeline-commitMergeConflictFixIfNeeded.mmd', '6 after FIX_CONFLICTS'],
+    ['pipeline-fixTheCodebaseForSuite.mmd', 'FIX_THE_CODEBASE_FOR_SUITE'],
     ['pipeline-runFullSuite.mmd', '7 after FIX_THE_CODEBASE_FOR_SUITE'],
+    ['pipeline-lockSourceRepo.mmd', 'lock source repo'],
+    ['pipeline-rebase.mmd', 'rebase'],
+    ['pipeline-reportOnlyExit.mmd', 'report only exit'],
+    ['pipeline-failuresExit.mmd', 'failures exit'],
+    ['pipeline-mergeSucceededExit.mmd', 'merge succeeded exit'],
   ].map(([href, label]) =>
     `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   let last = null

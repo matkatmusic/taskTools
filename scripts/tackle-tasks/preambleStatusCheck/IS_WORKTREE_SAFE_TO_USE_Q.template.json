@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOES_WORKTREE_EXIST_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_WORKTREE_EXIST_Q.ts for DOES_WORKTREE_EXIST_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "IS_WORKTREE_SAFE_TO_USE_Q",
+        "scriptSignal": "continue",
+        "note": "IS_WORKTREE_SAFE_TO_USE_Q.ts for IS_WORKTREE_SAFE_TO_USE_Q",
+        "input": ""
+    }
+}

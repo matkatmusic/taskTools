@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "WRITE_EXIT_TYPE_COMPLETED",
+        "scriptSignal": "continue",
+        "note": "WRITE_EXIT_TYPE_COMPLETED.ts for WRITE_EXIT_TYPE_COMPLETED",
+        "input": ""
+    },
+    "output": {
+        "box": "RECORD_MODIFIED_FILES_SUCCESS",
+        "scriptSignal": "continue",
+        "note": "RECORD_MODIFIED_FILES_SUCCESS.ts for RECORD_MODIFIED_FILES_SUCCESS",
+        "input": ""
+    }
+}

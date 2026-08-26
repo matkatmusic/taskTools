@@ -7,28 +7,50 @@ import { AGENT_ANSWER_TEMPLATE } from "./contracts.ts";
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const REGENERATE_DELAY_MS = 50;
 
-// Every box name a diagram may draw, mapped to the one folder under scripts/tackle-tasks/ that owns its script.
-const BLOCK_OWNER_FOLDER: Record<string, string> = {
-    PREAMBLE_STATUS_CHECK: "preambleStatusCheck",
-    DOCUMENT_GENERATION: "preambleStatusCheck",
-    PLAN_THE_TASK: "preambleStatusCheck",
-    WHAT_DID_THE_PLANNER_RETURN: "whatDidThePlannerReturn",
-    CODEX_REVIEWS_PLAN: "whatDidThePlannerReturn",
-    WHAT_IS_REVIEW_VERDICT: "whatIsReviewVerdict",
-    IMPLEMENT_TASK: "whatIsReviewVerdict",
-    COMMIT_IMPLEMENTATION_IF_NEEDED: "commitImplementationIfNeeded",
-    CODEX_REVIEWS_TESTS: "commitImplementationIfNeeded",
-    ARE_TESTS_FLAGGED: "areTestsFlagged",
-    LOCK_SOURCE_REPO: "areTestsFlagged",
-    REBASE_ONTO_TARGET_BRANCH: "areTestsFlagged",
-    FIX_CONFLICTS: "areTestsFlagged",
-    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: "commitMergeConflictFixIfNeeded",
-    RUN_FULL_SUITE: "runFullSuite",
-    FIX_THE_CODEBASE_FOR_SUITE: "runFullSuite",
-    FAILURES_EXIT: "exits",
-    REPORT_ONLY_EXIT: "exits",
-    STOP: "exits",
+// The one folder under scripts/tackle-tasks/ that owns each block's script: the diagram the block belongs to.
+const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
+    preambleStatusCheck: [
+        "PREAMBLE_STATUS_CHECK", "IS_TASK_BLOCKED_Q", "IS_TASK_ACTIVE_Q", "MARK_TASK_ACTIVE", "DOES_WORKTREE_EXIST_Q",
+        "CREATE_WORKTREE", "TAKE_WORKTREE_LEASE", "IS_WORKTREE_SAFE_TO_USE_Q", "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+        "RESET_WORKTREE", "IS_PREVIOUS_RUN_RESUMABLE_Q", "DOES_FENCE_COVER_WORKTREE_Q", "INIT_SUBMODULES_RECURSIVELY",
+        "DOCUMENT_GENERATION",
+    ],
+    reportOnlyExit: ["REPORT_ONLY_EXIT", "STOP"],
+    planTheTask: ["PLAN_THE_TASK"],
+    whatDidThePlannerReturn: ["WHAT_DID_THE_PLANNER_RETURN", "ARE_2_CLARIFY_ROUNDS_DONE_Q", "WRITE_CLARIFY_REQUEST"],
+    codexReviewsPlan: ["CODEX_REVIEWS_PLAN"],
+    whatIsReviewVerdict: ["WHAT_IS_REVIEW_VERDICT", "UPDATE_TASKS_JSON", "TWO_CODEX_REVIEWS_COMPLETED_Q"],
+    implementTask: ["IMPLEMENT_TASK"],
+    commitImplementationIfNeeded: [
+        "COMMIT_IMPLEMENTATION_IF_NEEDED", "ARE_TASK_TESTS_SKIPPED_Q", "RUN_TASK_TESTS", "DO_TASK_TESTS_PASS_Q",
+        "ARE_2_TEST_FIXES_DONE_Q", "AMEND_ENTRY_WITH_FAILING_TESTS",
+    ],
+    fixImplementTaskTests: ["FIX_IMPLEMENT_TASK_TESTS"],
+    codexReviewsTests: ["CODEX_REVIEWS_TESTS"],
+    areTestsFlagged: ["ARE_TESTS_FLAGGED", "ARE_2_TEST_REVIEWS_DONE_Q", "AMEND_ENTRY_WITH_CODEX_NOTES"],
+    lockSourceRepo: ["LOCK_SOURCE_REPO", "WAS_LOCK_ACQUIRED_Q", "HAVE_15_MINUTES_PASSED_Q", "WAIT_FOR_LOCK"],
+    rebase: ["REBASE_ONTO_TARGET_BRANCH", "DID_REBASE_REPORT_CONFLICTS_Q", "ARE_2_CONFLICT_FIXES_DONE_Q"],
+    fixConflicts: ["FIX_CONFLICTS"],
+    commitMergeConflictFixIfNeeded: ["COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", "CONTINUE_REBASE", "IS_REBASE_FINISHED_Q"],
+    runFullSuite: [
+        "COMMIT_SUITE_FIX_IF_NEEDED", "RUN_FULL_SUITE", "DO_ALL_TESTS_PASS_Q", "ARE_2_SUITE_FIXES_DONE_Q",
+        "DID_CHANGES_STAY_INSIDE_FENCE_Q", "MERGE_WORKTREES", "READ_MERGE_PUBLICATION_STATE",
+        "WHAT_IS_PUBLICATION_STATE_Q", "ARE_2_MERGE_ATTEMPTS_DONE_Q",
+    ],
+    fixTheCodebaseForSuite: ["FIX_THE_CODEBASE_FOR_SUITE"],
+    mergeSucceededExit: [
+        "MERGE_SUCCEEDED_EXIT", "RECORD_MERGE_COMMIT_HASHES", "WRITE_EXIT_TYPE_COMPLETED", "RECORD_MODIFIED_FILES_SUCCESS",
+        "CLEAN_UP_WORKTREES", "BUILD_CLOSURE_NOTE", "MARK_TASK_INACTIVE_SUCCESS", "ARCHIVE_TASK", "REPORT_CLOSURE_NOTE",
+    ],
+    failuresExit: [
+        "FAILURES_EXIT", "READ_FAILURES_PUBLICATION_STATE", "DID_ANY_WORK_LAND_Q", "WRITE_PUBLICATION_OUTCOME",
+        "WRITE_EXIT_TYPE_AND_NOTE", "RECORD_MODIFIED_FILES_FAILURE", "MARK_TASK_INACTIVE_FAILURE", "DOES_RUN_HOLD_LEASE_Q",
+        "RELEASE_WORKTREE_LEASE", "DOES_RUN_HOLD_SOURCE_LOCK_Q", "RELEASE_SOURCE_LOCK", "REPORT_EXIT_TYPE_AND_NOTE",
+    ],
 };
+const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
+    Object.entries(BLOCKS_BY_OWNER_FOLDER).flatMap(([folder, blocks]) => blocks.map(block => [block, folder])),
+);
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
 export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; next: string[] };
@@ -53,6 +75,10 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
     for (const line of diagram.split("\n")) {
         const statement = line.split("%%")[0]!.trim();
         if (!statement || DIAGRAM_KEYWORDS.test(statement)) {
+            continue;
+        }
+        // An invisible link only places boxes on the page; it is not an edge.
+        if (statement.includes("~~~")) {
             continue;
         }
         // A dotted arrow is a side note, not an edge; each side parses alone.
@@ -188,30 +214,36 @@ function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
     return parsedByDiagramFile;
 }
 
-// An arrow into a box with no outgoing arrows here, that opens another diagram, exits into that diagram.
-function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, string[]>, firstBoxByDiagram: Map<string, string>): Record<string, string[]> {
+// The first diagram, in file order, that draws arrows out of this box; undefined when none does.
+function getDiagramWhereBoxHasArrows(box: string, parsedDiagrams: Map<string, ParsedDiagram>, exceptDiagramFile: string): string | undefined {
+    for (const [diagramFile, data] of parsedDiagrams) {
+        if (diagramFile === exceptDiagramFile) {
+            continue;
+        }
+        if ((data.next[box] ?? []).length > 0) {
+            return diagramFile;
+        }
+    }
+    return undefined;
+}
+
+// An arrow into a box with no outgoing arrows here, but with arrows in another diagram, exits into that diagram.
+function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, string[]>, parsedDiagrams: Map<string, ParsedDiagram>): Record<string, string[]> {
     const remapped: Record<string, string[]> = {};
     for (const [box, targets] of Object.entries(next)) {
         remapped[box] = targets.map(target => {
             if (next[target]!.length > 0) {
                 return target;
             }
-            for (const [otherDiagramFile, firstBox] of firstBoxByDiagram) {
-                if (otherDiagramFile === diagramFile) {
-                    continue;
-                }
-                if (firstBox === target) {
-                    return `${otherDiagramFile}::${target}`;
-                }
-            }
-            return target;
+            const homeDiagramFile = getDiagramWhereBoxHasArrows(target, parsedDiagrams, diagramFile);
+            return homeDiagramFile === undefined ? target : `${homeDiagramFile}::${target}`;
         });
     }
     return remapped;
 }
 
-// A stub file on disk whose box name no diagram draws any more is a rename or deletion the caller missed.
-function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>): void {
+// A stub on disk that no diagram draws is a missed rename; one outside its owner folder is a missed move.
+function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, getOwnerFolder: (box: string) => string): void {
     if (!existsSync(stepsRoot)) {
         return;
     }
@@ -233,17 +265,20 @@ function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>): 
             if (file.endsWith(".test.ts")) {
                 continue;
             }
-            if (allBoxNames.has(basename(file, ".ts"))) {
+            const box = basename(file, ".ts");
+            if (!allBoxNames.has(box)) {
+                orphans.push(`${join(ownerFolder.name, file)} is named by no diagram; git mv it to the new name or delete it`);
                 continue;
             }
-            orphans.push(join(ownerFolder.name, file));
+            if (getOwnerFolder(box) !== ownerFolder.name) {
+                orphans.push(`${join(ownerFolder.name, file)} belongs in ${getOwnerFolder(box)}/; git mv it there`);
+            }
         }
     }
     if (orphans.length === 0) {
         return;
     }
-    const lines = orphans.map(path => `${path} is named by no diagram; git mv it to the new name or delete it`);
-    throw new Error(lines.join("\n"));
+    throw new Error(orphans.join("\n"));
 }
 
 // A box outside the real 19 (only possible from a synthetic diagram) is owned by whichever diagram names it first.
@@ -261,23 +296,26 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
     const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
     const parsedDiagrams = parseDiagrams(diagramFolder);
 
-    const firstBoxByDiagram = new Map<string, string>();
     const allBoxNames = new Set<string>();
-    for (const [diagramFile, data] of parsedDiagrams) {
-        firstBoxByDiagram.set(diagramFile, data.boxes[0]!);
+    for (const data of parsedDiagrams.values()) {
         for (const box of data.boxes) {
             allBoxNames.add(box);
         }
     }
-    assertNoOrphanBoxScripts(stepsRoot, allBoxNames);
+    const getOwnerFolder = (box: string): string => BLOCK_OWNER_FOLDER[box] ?? getDefaultOwnerFolder(box, parsedDiagrams);
+    assertNoOrphanBoxScripts(stepsRoot, allBoxNames, getOwnerFolder);
 
     const newTemplatePaths = new Set<string>();
     const config: StepConfig = {};
     for (const [diagramFile, data] of parsedDiagrams) {
-        const remappedNext = remapNextAcrossDiagrams(diagramFile, data.next, firstBoxByDiagram);
+        const remappedNext = remapNextAcrossDiagrams(diagramFile, data.next, parsedDiagrams);
         const entries: StepConfigEntry[] = [];
         for (const box of data.boxes) {
-            const ownerFolder = BLOCK_OWNER_FOLDER[box] ?? getDefaultOwnerFolder(box, parsedDiagrams);
+            // A dashed box only points into another diagram; that diagram holds the step.
+            if (data.next[box]!.length === 0 && getDiagramWhereBoxHasArrows(box, parsedDiagrams, diagramFile) !== undefined) {
+                continue;
+            }
+            const ownerFolder = getOwnerFolder(box);
             const stepsDirectory = join(stepsRoot, ownerFolder);
             mkdirSync(stepsDirectory, { recursive: true });
             const producesPrompt = data.promptBoxes.includes(box);

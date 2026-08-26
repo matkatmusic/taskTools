@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "UPDATE_TASKS_JSON",
+        "scriptSignal": "continue",
+        "note": "UPDATE_TASKS_JSON.ts for UPDATE_TASKS_JSON",
+        "input": ""
+    },
+    "output": {
+        "box": "TWO_CODEX_REVIEWS_COMPLETED_Q",
+        "scriptSignal": "continue",
+        "note": "TWO_CODEX_REVIEWS_COMPLETED_Q.ts for TWO_CODEX_REVIEWS_COMPLETED_Q",
+        "input": ""
+    }
+}

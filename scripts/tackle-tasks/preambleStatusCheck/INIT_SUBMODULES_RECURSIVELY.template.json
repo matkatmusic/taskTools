@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOES_FENCE_COVER_WORKTREE_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_FENCE_COVER_WORKTREE_Q.ts for DOES_FENCE_COVER_WORKTREE_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "INIT_SUBMODULES_RECURSIVELY",
+        "scriptSignal": "continue",
+        "note": "INIT_SUBMODULES_RECURSIVELY.ts for INIT_SUBMODULES_RECURSIVELY",
+        "input": ""
+    }
+}

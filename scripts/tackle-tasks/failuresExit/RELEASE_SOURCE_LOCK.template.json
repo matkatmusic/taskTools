@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_RUN_HOLD_SOURCE_LOCK_Q.ts for DOES_RUN_HOLD_SOURCE_LOCK_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "RELEASE_SOURCE_LOCK",
+        "scriptSignal": "continue",
+        "note": "RELEASE_SOURCE_LOCK.ts for RELEASE_SOURCE_LOCK",
+        "input": ""
+    }
+}

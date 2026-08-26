@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "RELEASE_WORKTREE_LEASE",
+        "scriptSignal": "continue",
+        "note": "RELEASE_WORKTREE_LEASE.ts for RELEASE_WORKTREE_LEASE",
+        "input": ""
+    },
+    "output": {
+        "box": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_RUN_HOLD_SOURCE_LOCK_Q.ts for DOES_RUN_HOLD_SOURCE_LOCK_Q",
+        "input": ""
+    }
+}

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import { planPrompt } from "../shared/planPrompt.ts";
-import type { EntryPacket } from "./_packet.ts";
+import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as EntryPacket;

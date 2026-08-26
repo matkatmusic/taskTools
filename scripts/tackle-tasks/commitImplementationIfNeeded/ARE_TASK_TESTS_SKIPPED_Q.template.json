@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "scriptSignal": "continue",
+        "note": "COMMIT_IMPLEMENTATION_IF_NEEDED.ts for COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "input": ""
+    },
+    "output": {
+        "box": "ARE_TASK_TESTS_SKIPPED_Q",
+        "scriptSignal": "continue",
+        "note": "ARE_TASK_TESTS_SKIPPED_Q.ts for ARE_TASK_TESTS_SKIPPED_Q",
+        "input": ""
+    }
+}

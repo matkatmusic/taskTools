@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DOES_WORKTREE_EXIST_Q",
+        "scriptSignal": "continue",
+        "note": "DOES_WORKTREE_EXIST_Q.ts for DOES_WORKTREE_EXIST_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "CREATE_WORKTREE",
+        "scriptSignal": "continue",
+        "note": "CREATE_WORKTREE.ts for CREATE_WORKTREE",
+        "input": ""
+    }
+}

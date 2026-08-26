@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "MERGE_SUCCEEDED_EXIT",
+        "scriptSignal": "continue",
+        "note": "MERGE_SUCCEEDED_EXIT.ts for MERGE_SUCCEEDED_EXIT",
+        "input": ""
+    },
+    "output": {
+        "box": "RECORD_MERGE_COMMIT_HASHES",
+        "scriptSignal": "continue",
+        "note": "RECORD_MERGE_COMMIT_HASHES.ts for RECORD_MERGE_COMMIT_HASHES",
+        "input": ""
+    }
+}

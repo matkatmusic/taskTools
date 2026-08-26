@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "DID_ANY_WORK_LAND_Q",
+        "scriptSignal": "continue",
+        "note": "DID_ANY_WORK_LAND_Q.ts for DID_ANY_WORK_LAND_Q",
+        "input": ""
+    },
+    "output": {
+        "box": "WRITE_PUBLICATION_OUTCOME",
+        "scriptSignal": "continue",
+        "note": "WRITE_PUBLICATION_OUTCOME.ts for WRITE_PUBLICATION_OUTCOME",
+        "input": ""
+    }
+}
