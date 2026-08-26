@@ -76,7 +76,16 @@ for (const [diagramFile, entries] of Object.entries(config)) {
     }
 }
 
-// The edge contract: what a block hands on must be exactly what the next block says it takes.
+// next is routing metadata; every receiver discards it, so it is not part of the data contract.
+function withoutNext(value: unknown): unknown {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+    }
+    const { next: _next, ...rest } = value as Record<string, unknown>;
+    return rest;
+}
+
+// The edge contract: what a block hands on must be exactly what the next block says it takes, next aside.
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
         for (const target of entry.next) {
@@ -88,7 +97,7 @@ for (const [diagramFile, entries] of Object.entries(config)) {
                 assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
                 const producedTemplate = readBlockTemplate(entry.template);
                 const acceptedTemplate = readBlockTemplate(targetEntry!.template);
-                const mismatches = getTemplateShapeMismatches(acceptedTemplate.input, getHandedOnShape(entry, producedTemplate));
+                const mismatches = getTemplateShapeMismatches(withoutNext(acceptedTemplate.input), withoutNext(getHandedOnShape(entry, producedTemplate)));
                 assert.deepEqual(mismatches, [], `${targetBox} input does not match what ${entry.box} hands on:\n${mismatches.join("\n")}`);
             });
         }

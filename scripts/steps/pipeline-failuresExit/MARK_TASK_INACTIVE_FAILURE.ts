@@ -6,10 +6,10 @@ import { markTaskInactive } from "../../tackle-tasks/markTaskInactive.ts";
 import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
 import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
 
-type Input = FailuresExitEntryInput & { publicationState: PublicationState; modifiedFiles: string[] };
+type Input = FailuresExitEntryInput & { publicationState: PublicationState; modifiedFiles: string[]; next?: string };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as Input;
+    const { next: _next, ...packet } = JSON.parse(input) as Input;
     const { active, endedAt } = markTaskInactive({ taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot });
     return { ...packet, box: "MARK_TASK_INACTIVE_FAILURE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, active, endedAt };
 }

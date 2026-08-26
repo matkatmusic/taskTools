@@ -1,4 +1,4 @@
-// Phase 12 end-to-end proof: an agentless driver that walks plans/diagram/pipeline.mmd node for node against a real repository with a real submodule and a real `git worktree add`. Every green box is the real script; every yellow (prose) box is a deterministic fixture callback that writes the artifact a real agent would have written. No agents, no workflow harness.  Run alone: node --test tests/pipeline.e2e.test.ts
+// Phase 12 proof: an agentless driver walks pipeline.mmd against a real repo; green boxes run real code, yellow are fixtures.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -48,7 +48,7 @@ import { resolveTaskFiles } from "../scripts/taskFiles.ts";
 import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule } from "./support/gitFixtures.ts";
 
-// `node --test` sets NODE_TEST_CONTEXT on this file's process. Both test boxes spawn a nested `node --test`, which reports to its parent runner and exits 0 while it inherits that variable, so a red suite would look green here. The pipeline is never run under a test runner in production; the variable is dropped for the same reason a real invocation never has it.
+// `node --test` sets NODE_TEST_CONTEXT, making a nested `node --test` report success falsely; the variable is dropped before spawning.
 delete process.env.NODE_TEST_CONTEXT;
 
 // --- the fixture repository -------------------------------------------------------------
@@ -471,7 +471,7 @@ async function runPipeline(options: PipelineOptions): Promise<PipelineOutcome> {
                 }
                 case "TT": {
                     const taskTests = box("runTaskTests", () => runTaskTests(
-                        taskNumber, runId, outcome.worktree!, sourceBranch, nextStepId("runTaskTests"), projectRoot,
+                        taskNumber, runId, outcome.worktree!, nextStepId("runTaskTests"), projectRoot,
                     ));
                     if (!taskTests.passed) {
                         if (testFixes >= MAX_ATTEMPTS) {

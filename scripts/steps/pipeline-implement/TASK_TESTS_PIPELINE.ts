@@ -5,7 +5,7 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Record<string, unknown>;
-    const { box: _box, scriptSignal: _scriptSignal, ...rest } = packet;
+    const { box: _box, scriptSignal: _scriptSignal, next: _next, ...rest } = packet;
     return { box: "TASK_TESTS_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, ...rest };
 }
 

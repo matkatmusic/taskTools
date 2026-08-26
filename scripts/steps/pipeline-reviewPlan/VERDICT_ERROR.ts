@@ -19,7 +19,6 @@ export function main(input: string): Record<string, unknown> {
     return {
         box: "VERDICT_ERROR",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        next: "EXIT_WORKFLOW_REVIEW_PLAN",
         taskNumber: packet.taskNumber,
         taskStateRoot: packet.taskStateRoot,
         repoRoot: packet.repoRoot,

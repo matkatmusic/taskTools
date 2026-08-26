@@ -7,13 +7,12 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 const EXIT_NOTE = "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved.";
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as Record<string, unknown>;
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as Record<string, unknown> & { next?: string };
     return {
         ...packet,
         box: "PUBLICATION_PARTIAL",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        // Matches EXIT_WORKFLOW_MERGE's other predecessor, ARE_2_MERGE_ATTEMPTS_DONE, shape for shape.
-        next: "EXIT_WORKFLOW_MERGE",
         exitType: "partially-published",
         exitNote: EXIT_NOTE,
     };

@@ -6,7 +6,8 @@ import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "../..
 import type { DocsPacket } from "./WORKTREE_DOCS_MODE_INPUT.ts";
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as DocsPacket;
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as DocsPacket & { next?: string };
     configureGeneratedArtifactIsolation(packet.taskNumber, packet.worktree);
     const briefFile = writeTaskBriefToDisk(packet.taskNumber, packet.worktree, packet.projectRoot);
     return { ...packet, box: "AUTO_GENERATE_DOCS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, briefFile };

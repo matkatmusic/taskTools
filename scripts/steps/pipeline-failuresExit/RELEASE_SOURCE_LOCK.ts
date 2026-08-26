@@ -14,8 +14,7 @@ type Input = FailuresExitEntryInput & {
 export function main(input: string): Record<string, unknown> {
     const { next: _next, lockReleased: _lockReleased, ...packet } = JSON.parse(input) as Input;
     const { released } = releaseSourceRepoLock(packet.projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
-    // next is constant: this box's one successor matches DOES_RUN_HOLD_SOURCE_LOCK's NO branch.
-    return { ...packet, box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "REPORT_EXIT_TYPE_AND_NOTE", lockReleased: released };
+    return { ...packet, box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, lockReleased: released };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -201,7 +201,7 @@ export function emitAgentPrompt(taskNumber: number, role: string, payload: Agent
         case "fix-suite":
             return suiteFixPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.runId, payload.sourceBranch);
         case "review-tests":
-            return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot), payload.sourceBranch);
+            return reviewTestsPrompt(loadPreparedTask(taskNumber, worktree, projectRoot));
         // The lock box runs as one script, so this prompt carries no task brief.
         case "lock-source-repo":
             return lockSourceRepoPrompt({ taskNumber, runId: payload.runId, projectRoot });

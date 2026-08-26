@@ -1,6 +1,4 @@
-// "run task tests" — pipeline.mmd. Migrated to scripts/tackle-tasks/runTaskTestsImpl.ts (shared with
-// scripts/steps/pipeline-taskTests/RUN_TASK_TESTS.ts). This file stays as the old CLI entrypoint,
-// still dispatched by path from other, not-yet-migrated pipelines.
+// Old 'run task tests' entrypoint from pipeline.mmd; logic moved to runTaskTestsImpl.ts, still dispatched by path from unmigrated pipelines.
 import { readFileSync } from "node:fs";
 export { runTaskTests, type RunTaskTestsOutput } from "./runTaskTestsImpl.ts";
 import { runTaskTests } from "./runTaskTestsImpl.ts";
@@ -156,7 +154,6 @@ export type RunTaskTestsCliInput = {
     taskNumber: number;
     expectedRunId: string;
     worktreePath: string;
-    sourceBranch: string;
     stepId: string;
     projectRoot: string;
 };
@@ -164,7 +161,7 @@ export type RunTaskTestsCliInput = {
 if (process.argv[1]?.endsWith("runTaskTests.ts")) {
     const input = JSON.parse(readFileSync(0, "utf8")) as RunTaskTestsCliInput;
     const output = runTaskTests(
-        input.taskNumber, input.expectedRunId, input.worktreePath, input.sourceBranch, input.stepId, input.projectRoot,
+        input.taskNumber, input.expectedRunId, input.worktreePath, input.stepId, input.projectRoot,
     );
     process.stdout.write(`${JSON.stringify(output)}\n`);
 }

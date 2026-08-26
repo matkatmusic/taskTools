@@ -16,7 +16,6 @@
     "output": {
         "box": "VERDICT_ERROR",
         "scriptSignal": "continue",
-        "next": "EXIT_WORKFLOW_REVIEW_PLAN",
         "taskNumber": 42,
         "taskStateRoot": "/repo",
         "repoRoot": "/repo/.worktrees/task-42",

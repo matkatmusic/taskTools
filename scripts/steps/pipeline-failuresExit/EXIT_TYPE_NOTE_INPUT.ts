@@ -15,7 +15,7 @@ export type FailuresExitEntryInput = {
 };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as FailuresExitEntryInput;
+    const { next: _next, ...packet } = JSON.parse(input) as FailuresExitEntryInput & { next?: string };
     return { ...packet, box: "EXIT_TYPE_NOTE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 

@@ -78,7 +78,6 @@ test("test_REBASE_ONTO_TARGET_BRANCH_rebasesCleanlyAndRoutesToDidRebaseReportCon
     const output = await main(packet(rootOrigin, worktreePath, taskNumber, "run-1", "rebase-1"));
 
     assert.equal(output.box, "REBASE_ONTO_TARGET_BRANCH");
-    assert.equal(output.next, "DID_REBASE_REPORT_CONFLICTS");
     assert.equal(output.conflicted, false);
     assert.equal(output.stoppedOccurrenceId, "");
     assert.equal(output.stoppedCheckoutPath, "");

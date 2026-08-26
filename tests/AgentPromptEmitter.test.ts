@@ -58,6 +58,10 @@ function makeFixture(taskNumber = 42): { projectRoot: string; worktree: string; 
         },
     ]));
     writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
+    // review-tests derives the base branch from projectRoot's own current branch.
+    const rootGit = (...args: string[]) => execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" });
+    rootGit("init", "--quiet", "--initial-branch=main");
+    rootGit("commit", "--quiet", "--allow-empty", "-m", "base");
     // A real subdirectory, not projectRoot: aliasing them hides whether a write hit the worktree.
     const worktree = join(projectRoot, "worktree");
     mkdirSync(join(worktree, "plans"), { recursive: true });
@@ -104,7 +108,7 @@ function allRolePrompts(task: PreparedTask): Record<string, string> {
         plan: planPrompt(task),
         "review-plan": planReviewPrompt(task),
         implement: implementPrompt(task, "npx tsc --noEmit", 3, "run-1", "main"),
-        "review-tests": reviewTestsPrompt(task, "main"),
+        "review-tests": reviewTestsPrompt(task),
     };
 }
 
@@ -123,7 +127,7 @@ test("test_agentPromptEmitter_exitsNonZeroOnAnUnknownRole", () => {
 test("test_agentPromptEmitter_emitsTheSameCodexFallbackChainForBothReviewRoles", () => {
     // Setup: both review roles now carry their own copy of the chain, so assert they still agree.
     const { task } = makeFixture(47);
-    for (const chain of [planReviewPrompt(task), reviewTestsPrompt(task, "main")]) {
+    for (const chain of [planReviewPrompt(task), reviewTestsPrompt(task)]) {
         assert.match(chain, /codex exec -s read-only/);
         assert.match(chain, /claude -p .* --tools "Read" --model fable --effort medium/);
         assert.match(chain, /claude -p .* --tools "Read" --model claude-opus-4-8 --effort high/);
@@ -135,7 +139,7 @@ test("test_noPromptContainsAGitCommand", () => {
     const { task } = makeFixture(43);
     const prompts = allRolePrompts(task);
 
-    // One regex catches every actual git-invocation shape v1_1 used to run: `git -C`, `git add`, `git commit`, etc. Rule 1 says the commit box owns committing, so none may survive here.  A prose mention naming a git subcommand only to forbid running it (kept verbatim per the plan's mapping table, e.g. "do not run `git rebase --continue`") never matches this shape.
+    // Catches every git-invocation shape v1_1 used; rule 1 says only the commit box commits, prose git mentions don't match.
     const gitCommandPattern = /\bgit\s+(-C\b|add\b|commit\b|push\b|checkout\b|reset\b|merge\b|rm\b)/;
 
     for (const [role, prompt] of Object.entries(prompts)) {
@@ -144,7 +148,7 @@ test("test_noPromptContainsAGitCommand", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Phase 10 audit finding 6 — amendTestsPrompt must derive the pre-existing list from testFiles minus createdTestFiles (never trust the caller's subtraction), and must resolve every occurrence-tagged path to a real absolute path in the worktree, including inside a nested submodule occurrence. A real submodule and a real `git worktree add` are used throughout, per global rule 9 — no mock, no standalone repo standing in for a linked worktree.
+// Finding 6 — amendTestsPrompt derives testFiles minus createdTestFiles, then resolves each occurrence path to a real worktree path.
 // ---------------------------------------------------------------------------
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
@@ -195,7 +199,7 @@ function makeOccurrenceFixture(): { rootOrigin: string; worktree: string; task: 
     return { rootOrigin, worktree, task };
 }
 
-// Writes and commits a real file at relativePath inside checkoutPath, so occurrence resolution has something real on disk to point at (not just a string it happens to compute correctly).
+// Writes and commits a real file at relativePath, so occurrence resolution sees real disk content, not a computed string.
 function commitRealFile(checkoutPath: string, relativePath: string, contents: string): void {
     mkdirSync(join(checkoutPath, join(relativePath, "..")), { recursive: true });
     writeFileSync(join(checkoutPath, relativePath), contents);
@@ -203,7 +207,7 @@ function commitRealFile(checkoutPath: string, relativePath: string, contents: st
     git(checkoutPath, "commit", "-q", "-m", `add ${relativePath}`);
 }
 
-// Parses every "- taggedPath => absolutePath" edit-path line out of one DATA section of a rendered amend-tests prompt, so assertions test what the agent actually receives rather than a path recomputed independently in the test.
+// Parses "- taggedPath => absolutePath" lines from the DATA section, so assertions test what the agent actually receives.
 function parseEmittedTestFileEntries(section: string): Array<{ taggedPath: string; absolutePath: string }> {
     return section.split("\n")
         .map((line) => line.trim())
@@ -235,7 +239,7 @@ for (const [role, buildPrompt] of Object.entries({
     plan: (task: PreparedTask) => planPrompt(task),
     "review-plan": (task: PreparedTask) => planReviewPrompt(task),
     implement: (task: PreparedTask) => implementPrompt(task, "npx tsc --noEmit", 3, "run-1", "main"),
-    "review-tests": (task: PreparedTask) => reviewTestsPrompt(task, "main"),
+    "review-tests": (task: PreparedTask) => reviewTestsPrompt(task),
 })) {
     test(`test_${role.replace(/-([a-z])/g, (_, c) => c.toUpperCase())}Prompt_leavesNoUnresolvedInterpolation`, () => {
         const { task } = makeFixture();
@@ -246,11 +250,11 @@ for (const [role, buildPrompt] of Object.entries({
 }
 
 // ---------------------------------------------------------------------------
-// Finding 6 — loadPreparedTask must be read-only: it derives/validates the brief path but never writes it, and fails explicitly when the brief is missing.
+// Finding 6 — loadPreparedTask is read-only: it derives/validates the brief path, never writes it, and fails when missing.
 // ---------------------------------------------------------------------------
 
 test("test_loadPreparedTask_doesNotRewriteTheBriefFile", () => {
-    // Setup: a fixture whose brief file holds sentinel content that generateTaskBriefContents would never produce (it does not know about this exact sentence).
+    // Setup: a fixture whose brief file holds sentinel content that generateTaskBriefContents would never produce.
     const { worktree, task } = makeFixture(50);
     const before = readFileSync(task.briefFile, "utf8");
 
@@ -275,7 +279,7 @@ test("test_agentPromptEmitter_failsExplicitlyWhenTheBriefIsMissing", () => {
     // Test action: run the CLI for a role that loads the prepared task.
     const result = spawnSync("node", [cliPath, "51", "plan"], { input: payload, encoding: "utf8" });
 
-    // Verification: it fails loudly instead of silently writing the brief and succeeding. The old code called writeTaskBrief() here, would have exited 0, and left a brief on disk.
+    // Verification: it fails loudly instead of silently succeeding; old code called writeTaskBrief() here, exited 0, and left a brief.
     assert.notEqual(result.status, 0);
     assert.equal(existsSync(join(projectRoot, "plans", "brief-51.md")), false);
 });
@@ -325,7 +329,7 @@ test("test_agentPromptEmitter_mutatesNothingInTheWorktreeForAnyRole", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Finding 7 — every role's return instruction is exactly the Phase 9 table shape; the old v1.1 fields (task, status, planFile, question, missingFiles, summary) are gone.
+// Finding 7 — every role's return instruction matches the Phase 9 table shape; old v1.1 fields are gone.
 // ---------------------------------------------------------------------------
 
 test("test_planPrompt_pointsAtTheReturnShapeTemplate", () => {
@@ -362,7 +366,7 @@ test("test_planReviewPrompt_emitsOneQuestionEveryReviewerCanUse", () => {
     // Every field the schema requires must be present, or codex rejects the error response.
     assert.deepEqual(Object.keys(JSON.parse(errorTemplate)).sort(), [...schema.required].sort());
     // One question serves all three commands, so its body may only be emitted once.
-    assert.equal(prompt.split("## HOW TO JUDGE THE PLAN").length - 1, 1);
+    assert.equal(prompt.split("## WHAT TO OUTPUT").length - 1, 1);
     assert.equal(prompt.split("REVIEW_PROMPT=").length - 1, 1);
 });
 
@@ -371,7 +375,7 @@ test("test_planReviewPrompt_keepsTheHeredocAndItsCommandsInOneRunnableBlock", ()
     const prompt = planReviewPrompt(fakeTask);
     const fence = prompt.slice(prompt.indexOf("````sh"), prompt.lastIndexOf("````"));
     assert.match(fence, /REVIEW_PROMPT=\$\(cat <<'REVIEWEOF'/);
-    // -o keeps codex's banner out of the answer; </dev/null stops it blocking on stdin forever.  --output-schema is what makes codex emit bare JSON instead of a fenced block with prose.
+    // -o suppresses codex's banner; </dev/null prevents stdin blocking; --output-schema makes codex emit bare JSON, not a fenced block.
     assert.match(fence, /codex exec -s read-only --output-schema \S+review-plan-schema\.json -o "\$REVIEW_FILE" "\$REVIEW_PROMPT" <\/dev\/null/);
     for (const line of fence.split("\n").filter((l) => /^\s*(codex exec|\|\| claude -p)/.test(l))) {
         assert.match(line, /<\/dev\/null/, `reviewer command can hang on stdin: ${line}`);
@@ -399,7 +403,7 @@ test("test_planReviewPrompt_citesBothTemplatesInsteadOfInliningTheirJson", () =>
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Finding 9 — every builder puts static instructions and the return contract first, and appends all runtime/bulk data after a final "---- DATA ----" marker.
+// Finding 9 — every builder puts static instructions and return contract first, then appends runtime data after a marker.
 // ---------------------------------------------------------------------------
 
 
@@ -438,7 +442,7 @@ function assertSentinelsOnlyAfterFinalData(prompt: string, sentinels: string[]) 
     }
 }
 
-// A nested codex review carries its own DATA section because codex receives only the question string; that data cannot move to the outer final section. It must still come last within the question, so assert it against the first marker rather than the last.
+// A nested codex review's DATA section stays inside the question, so check it against the first marker, not the last.
 function assertNestedSentinelsOnlyAfterNestedData(prompt: string, sentinels: string[]) {
     const nestedIndex = prompt.indexOf("---- DATA ----");
     assert.notEqual(nestedIndex, -1, "prompt has no nested DATA marker");

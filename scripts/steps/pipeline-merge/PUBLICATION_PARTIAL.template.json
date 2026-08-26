@@ -47,7 +47,6 @@
                 "kind": "merge"
             }
         ],
-        "next": "EXIT_WORKFLOW_MERGE",
         "exitType": "partially-published",
         "exitNote": "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved."
     }

@@ -15,7 +15,8 @@ type Incoming = {
 // Try: merge worktrees and submodules, no fast-forward. Each landed layer writes its own merge ref;
 // publication is read back independently by READ_MERGE_PUBLICATION_STATE, never trusted from this return.
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as Incoming;
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as Incoming & { next?: string };
     const result = mergeTaskWorktree({
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktreePath,

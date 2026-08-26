@@ -1,9 +1,4 @@
-// "run task tests" — pipeline-taskTests.mmd. Diffs each occurrence's branch against its own baseRef
-// (rule 8: every occurrence, deepest first) to find the tests this task's branch touched,
-// then runs node --test on them inside each occurrence's own checkout.
-//
-// Shared by scripts/tackle-tasks/runTaskTests.ts (the old CLI entrypoint, still dispatched by
-// path elsewhere) and scripts/steps/pipeline-taskTests/RUN_TASK_TESTS.ts (the run-step block).
+// Implements pipeline-taskTests.mmd: diffs each occurrence's branch against its own baseRef, deepest first, to run node --test on touched tests.
 import { execFileSync } from "node:child_process";
 import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
@@ -34,8 +29,7 @@ type DiffChange = {
     runnablePath?: string;
 };
 
-// `-z` NUL-delimits every field, so a path containing whitespace and a rename/copy's three
-// fields (status, old path, new path) are never ambiguous with a naive whitespace split.
+// `-z` NUL-delimits fields, so whitespace in paths and rename/copy's three fields never look ambiguous under a whitespace split.
 function diffNameStatus(checkoutPath: string, baseRef: string): DiffChange[] {
     const raw = execFileSync("git", ["-C", checkoutPath, "diff", "--name-status", "-z", `${baseRef}...HEAD`], {
         encoding: "utf8",
@@ -86,13 +80,13 @@ export function runTaskTests(
     taskNumber: number,
     expectedRunId: string,
     worktreePath: string,
-    sourceBranch: string,
     stepId: string,
     projectRoot: string,
 ): RunTaskTestsOutput {
     requireAbsolutePath("projectRoot", projectRoot);
     requireAbsolutePath("worktreePath", worktreePath);
-    const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, sourceBranch);
+    const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, baseBranch);
 
     const testFiles: string[] = [];
     const createdTestFiles: string[] = [];
@@ -136,8 +130,7 @@ export function runTaskTests(
         outputParts.push(...runs.map((run) => run.output));
     }
 
-    // A deleted test is an explicit deterministic red, never an accidental
-    // "node --test" file-not-found on a path that no longer exists.
+    // A deleted test is an explicit deterministic red, never an accidental node --test file-not-found on a missing path.
     if (deletedTestFiles.length > 0) {
         passed = false;
         outputParts.push(`the branch deleted test file(s): ${deletedTestFiles.join(", ")}`);

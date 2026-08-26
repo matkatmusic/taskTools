@@ -16,7 +16,8 @@ export type DocsPacket = {
 };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as DocsPacket;
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as DocsPacket & { next?: string };
     return { ...packet, box: "WORKTREE_DOCS_MODE_INPUT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 

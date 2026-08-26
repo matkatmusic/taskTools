@@ -13,7 +13,7 @@ export type CommitImplementationIfNeededInput = {
 };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as CommitImplementationIfNeededInput;
+    const { next: _next, ...packet } = JSON.parse(input) as CommitImplementationIfNeededInput & { next?: string };
     const { commits } = commitTaskWork({ ...packet, rootSourceBranch: packet.sourceBranch, stepId: "implement" });
     return { ...packet, box: "COMMIT_IMPLEMENTATION_IF_NEEDED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, commits };
 }

@@ -15,6 +15,9 @@ const SOURCE_BRANCH = "main";
 function makeTaskFixture(): PreparedTask {
     const projectRoot = mkdtempSync(join(tmpdir(), "review-tests-"));
     const worktree = join(projectRoot, "worktree");
+    const rootGit = (...args: string[]) => execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" });
+    rootGit("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);
+    rootGit("commit", "--quiet", "--allow-empty", "-m", "base");
     const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
     for (const dir of ["plans", "src", "tests"]) mkdirSync(join(worktree, dir), { recursive: true });
     git("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);
@@ -76,15 +79,14 @@ test("test_reviewTestsErrorTemplateKeysMatchTheSchemaRequiredFields", () => {
 });
 
 test("test_reviewTestsQuestion_inlinesTheErrorTemplateVerbatim", () => {
-    // A paraphrased error shape would not validate against the schema codex is given.
     const errorTemplate = readFileSync(templatePath("review-tests-error-template.json"), "utf8").trim();
-    assert.ok(reviewTestsPrompt(fakeTask, SOURCE_BRANCH).includes(errorTemplate));
+    assert.ok(reviewTestsPrompt(fakeTask).includes(errorTemplate));
 });
 
 test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () => {
     // Codex cannot invoke the read-file skill, so every path it must open is listed in the question.
     const task: PreparedTask = { ...fakeTask, testFilePaths: ["/tmp/SENTINEL_TESTFILE_RT_a3/thing.test.ts"] };
-    const prompt = reviewTestsPrompt(task, SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(task);
     for (const path of [task.briefFile, task.planFile, task.testFilePaths[0]]) {
         assert.ok(prompt.includes(path), `prompt is missing ${path}`);
     }
@@ -93,7 +95,7 @@ test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () =>
 
 test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", () => {
     // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
-    const cliLines = reviewTestsPrompt(fakeTask, SOURCE_BRANCH).split("\n").filter((line) => /^(codex exec|\s*\|\| claude -p)/.test(line));
+    const cliLines = reviewTestsPrompt(fakeTask).split("\n").filter((line) => /^(codex exec|\s*\|\| claude -p)/.test(line));
     assert.equal(cliLines.length, 3);
     for (const line of cliLines) assert.match(line, /<\/dev\/null/);
     assert.match(cliLines[0], /--output-schema \S*review-tests-schema\.json/);
@@ -101,13 +103,12 @@ test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", (
 });
 
 test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
-    // This box judges what the tests assert; running them is the task-tests pipeline's job.
-    assert.match(reviewTestsPrompt(fakeTask, SOURCE_BRANCH), /Never run a test, and never run the full suite\./);
+    assert.match(reviewTestsPrompt(fakeTask), /Never run a test, and never run the full suite\./);
 });
 
 test("test_reviewTestsPrompt_citesTheOutputTemplateAndCarriesOneQuestionOnly", () => {
     // Earlier prompts emitted the same question body once per CLI; the heredoc must hold exactly one copy.
-    const prompt = reviewTestsPrompt(fakeTask, SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(fakeTask);
     assert.match(prompt, /review-tests-output-template\.json/);
     assert.equal(prompt.split("## STRICT INPUT ALLOWLIST").length, 2);
 });
@@ -115,21 +116,20 @@ test("test_reviewTestsPrompt_citesTheOutputTemplateAndCarriesOneQuestionOnly", (
 test("test_reviewTestsPrompt_writesTheImplementationDiffAndNamesItForTheReviewer", () => {
     // Codex is read-only and cannot run git, so the diff it judges against is written out for it.
     const task = makeTaskFixture();
-    const prompt = reviewTestsPrompt(task, SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(task);
     const diffPath = `${task.repoRoot}/plans/implementation-diff-99.patch`;
     assert.ok(prompt.includes(diffPath), "prompt is missing the diff path");
     assert.match(readFileSync(diffPath, "utf8"), /-export const thing = 1;/);
 });
 
 test("test_reviewTestsPrompt_separatesTestsThisTaskDidNotCreate", () => {
-    // A pre-existing test is judged against this task's diff only, never against what the task did not ask for.
-    const prompt = reviewTestsPrompt(makeTaskFixture(), SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(makeTaskFixture());
     assert.match(prompt, /## TESTS THIS TASK DID NOT CREATE\n\n- tests\/older\.test\.ts/);
     assert.equal(prompt.includes("- tests/thing.test.ts\n\nA test in that list"), false);
 });
 
 test("test_reviewTestsPrompt_carriesTheTestCommandAndItsRecordedOutput", () => {
-    const prompt = reviewTestsPrompt(makeTaskFixture(), SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(makeTaskFixture());
     assert.match(prompt, /ran as `node --test tests\/thing\.test\.ts`/);
     assert.match(prompt, /SENTINEL_TASK_TEST_OUTPUT/);
 });
@@ -138,13 +138,13 @@ test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
     // Running this box before the task tests is a caller error, not a review with no evidence.
     const task = makeTaskFixture();
     writeFileSync(join(task.taskStateRoot, "tasks.json"), JSON.stringify([{ taskNumber: 99, files: [], run: { active: true, worktree: null, leaseRunId: null, history: [{ runId: "r1", taskTests: null }] } }]));
-    assert.throws(() => reviewTestsPrompt(task, SOURCE_BRANCH), /no recorded task-test run/);
+    assert.throws(() => reviewTestsPrompt(task), /no recorded task-test run/);
 });
 
 test("test_reviewTestsPrompt_leavesTheFlaggedVerdictToTheRulingScript", () => {
     // The spawning agent used to derive flagged in prose; decideTestReview.ts owns that judgement now.
     const task = makeTaskFixture();
-    const prompt = reviewTestsPrompt(task, SOURCE_BRANCH);
+    const prompt = reviewTestsPrompt(task);
     assert.match(prompt, new RegExp(`node \\S*decideTestReview\\.ts ${task.taskStateRoot} ${task.number} ARE_TESTS_FLAGGED <"\\$REVIEW_FILE"`));
     assert.match(prompt, /never decide a verdict yourself/);
 });

@@ -36,6 +36,10 @@ function writeTaskState(projectRoot: string, worktree: string): void {
 function makePacket() {
     const projectRoot = mkdtempSync(join(tmpdir(), "review-tests-"));
     const worktree = join(projectRoot, "worktree");
+    // The block derives the diff base from projectRoot's own current branch, so it must be a repo.
+    const rootGit = (...args: string[]) => execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" });
+    rootGit("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);
+    rootGit("commit", "--quiet", "--allow-empty", "-m", "base");
     const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
     for (const dir of ["plans", "src", "tests"]) mkdirSync(join(worktree, dir), { recursive: true });
     git("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);
@@ -107,6 +111,10 @@ test("test_main_separatesTestsThisTaskDidNotCreate", () => {
     // older.test.ts pairs with the also-owned src/older.ts and predates the task branch; thing.test.ts is new on task-99.
     const projectRoot = mkdtempSync(join(tmpdir(), "review-tests-"));
     const worktree = join(projectRoot, "worktree");
+    // The block derives the diff base from projectRoot's own current branch, so it must be a repo.
+    const rootGit = (...args: string[]) => execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" });
+    rootGit("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);
+    rootGit("commit", "--quiet", "--allow-empty", "-m", "base");
     const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
     for (const dir of ["plans", "src", "tests"]) mkdirSync(join(worktree, dir), { recursive: true });
     git("init", "--quiet", `--initial-branch=${SOURCE_BRANCH}`);

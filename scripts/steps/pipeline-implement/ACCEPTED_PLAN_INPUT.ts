@@ -18,7 +18,7 @@ export type AcceptedPlanInput = {
 };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as AcceptedPlanInput;
+    const { next: _next, ...packet } = JSON.parse(input) as AcceptedPlanInput & { next?: string };
     if (!Number.isInteger(packet.taskNumber)) throw new Error("taskNumber is required");
     requireAbsolutePath("projectRoot", packet.projectRoot);
     requireAbsolutePath("worktreePath", packet.worktreePath);

@@ -5,7 +5,8 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import type { WorktreeCheckPacket } from "./_packet.ts";
 
 export function main(input: string): WorktreeCheckPacket & { clarifyRequest: string } {
-    const packet = JSON.parse(input) as WorktreeCheckPacket;
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as WorktreeCheckPacket & { next?: string };
     return { ...packet, box: "DOCUMENT_GENERATION_PIPELINE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, clarifyRequest: "" };
 }
 

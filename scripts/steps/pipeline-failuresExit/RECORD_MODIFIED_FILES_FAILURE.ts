@@ -6,10 +6,10 @@ import { recordTaskModifiedFiles } from "../../tackle-tasks/recordTaskModifiedFi
 import type { FailuresExitEntryInput } from "./EXIT_TYPE_NOTE_INPUT.ts";
 import type { PublicationState } from "../../tackle-tasks/readPublicationState.ts";
 
-type Input = FailuresExitEntryInput & { publicationState: PublicationState };
+type Input = FailuresExitEntryInput & { publicationState: PublicationState; next?: string };
 
 export function main(input: string): Record<string, unknown> {
-    const packet = JSON.parse(input) as Input;
+    const { next: _next, ...packet } = JSON.parse(input) as Input;
     const { modifiedFiles } = recordTaskModifiedFiles({
         taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot,
         worktree: packet.worktree, sourceBranch: packet.sourceBranch,

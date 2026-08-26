@@ -1,18 +1,15 @@
-// REBASE_ONTO_TARGET_BRANCH, from pipeline-rebase.mmd. Reuses rebaseTaskWorktree (the real,
-// tested git-mutating logic) rather than re-implementing the deepest-first walk here.
+// REBASE_ONTO_TARGET_BRANCH, from pipeline-rebase.mmd. Reuses rebaseTaskWorktree (the real, tested git-mutating logic) rather than re-implementing the deepest-first walk here.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { rebaseTaskWorktree } from "../../tackle-tasks/rebaseTaskWorktree.ts";
 import type { RebasePacket } from "./packet.ts";
 
-// rebaseTaskWorktree acquires (or re-enters) the lock and refreshes its heartbeat itself, so this
-// box does not refresh a lock it may not hold yet.
-export async function main(input: string): Promise<RebasePacket & { next: string }> {
-    const packet = JSON.parse(input) as RebasePacket;
+// rebaseTaskWorktree handles lock acquisition and heartbeat refresh itself, so this box skips refreshing a lock it may not hold.
+export async function main(input: string): Promise<RebasePacket> {
+    const { next: _next, ...packet } = JSON.parse(input) as RebasePacket & { next?: string };
 
-    // ponytail: a layer the merge already landed sits ref-identical to source and rebases as a
-    // natural no-op, so landedOccurrenceIds rides through unfiltered rather than being re-derived here.
+    // ponytail: a layer the merge already landed sits ref-identical to source and rebases as a natural no-op, so landedOccurrenceIds rides through unfiltered rather than being re-derived here.
     const outcome = await rebaseTaskWorktree({
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktreePath,
@@ -29,9 +26,6 @@ export async function main(input: string): Promise<RebasePacket & { next: string
         ...packet,
         box: "REBASE_ONTO_TARGET_BRANCH",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
-        // Named explicitly (not omitted) so this box's output shape matches IS_REBASE_FINISHED's,
-        // its co-producer into DID_REBASE_REPORT_CONFLICTS.
-        next: "DID_REBASE_REPORT_CONFLICTS",
         conflicted: outcome.conflicted,
         stoppedOccurrenceId: outcome.stoppedAt?.occurrenceId ?? "",
         stoppedCheckoutPath: outcome.stoppedAt?.checkoutPath ?? "",

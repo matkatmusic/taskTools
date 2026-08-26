@@ -73,7 +73,7 @@ test("test_runTaskTests_selectsTestFilesTheBranchAddedSinceTheSourceBranch", () 
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the newly added test file is selected and the run passes.
     assert.deepEqual(result.testFiles, ["tests/foo.test.ts"]);
@@ -93,7 +93,7 @@ test("test_runTaskTests_ignoresATestFileThatIsOnTheSourceBranch", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests without adding anything new.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the pre-existing test is not picked up.
     assert.deepEqual(result.testFiles, []);
@@ -113,7 +113,7 @@ test("test_runTaskTests_stillSelectsTheTestsWhenTheWorktreeIsClean", () => {
     assert.equal(git(worktreePath, "status", "--porcelain"), "");
 
     // Test action: run the task's tests against a clean worktree.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: discovery reads the branch, so a clean working tree still finds the test.
     assert.deepEqual(result.testFiles, ["tests/foo.test.ts"]);
@@ -138,7 +138,7 @@ test("test_runTaskTests_separatesCreatedTestsFromModifiedExistingTests", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: both are testFiles, only the new one is createdTestFiles.
     assert.deepEqual(result.testFiles.sort(), ["tests/existing.test.ts", "tests/new.test.ts"]);
@@ -158,7 +158,7 @@ test("test_runTaskTests_findsATestFileInsideASubmodule", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the submodule's test file is tagged with its occurrence id.
     assert.deepEqual(result.testFiles, ["child::tests/child.test.ts"]);
@@ -181,7 +181,7 @@ test("test_runTaskTests_runsASubmodulesTestsInsideThatSubmodule", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the test ran with the submodule as its cwd, so it passed.
     assert.equal(result.passed, true);
@@ -194,7 +194,7 @@ test("test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchA
     seedOpenTaskAndClaim(rootOrigin, 1, { tests: "add a test for the widget" });
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the empty set is a red result, not an automatic pass.
     assert.equal(result.missingTests, true);
@@ -213,7 +213,7 @@ test("test_runTaskTests_recordsItsWholeDecisionBeforePrinting", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-9", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-9", rootOrigin);
 
     // Verification: the stored run record's taskTests matches the returned decision.
     const stored = getCurrentTaskRun(1, rootOrigin)?.taskTests;
@@ -240,7 +240,7 @@ test("test_runTaskTests_runsTheDestinationOfARenamedTestAndDoesNotCallItCreated"
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the destination path ran and is not treated as a task-created test.
     assert.deepEqual(result.testFiles, ["tests/renamed.test.ts"]);
@@ -261,7 +261,7 @@ test("test_runTaskTests_reportsADeletedTestAsAnExplicitRedInsteadOfAFileNotFound
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: a deterministic, named red decision — never node's missing-file error.
     assert.deepEqual(result.deletedTestFiles, ["tests/doomed.test.ts"]);
@@ -280,7 +280,7 @@ test("test_runTaskTests_parsesATestFilenameContainingSpaces", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
 
     // Verification: the spaced filename is parsed and run correctly.
     assert.deepEqual(result.testFiles, ["tests/has spaces.test.ts"]);
@@ -306,7 +306,7 @@ test("test_runTaskTests_reportsARedSuiteAsRedEvenWhenTheParentProcessHasNodeTest
     // Test action: run the task's tests.
     let result;
     try {
-        result = runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+        result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
     } finally {
         delete process.env.NODE_TEST_CONTEXT;
     }
@@ -326,6 +326,6 @@ test("test_runTaskTests_throwsWhenTheExpectedRunIdIsStale", () => {
     assert.equal(outcome.status, "claimed");
 
     // Test action + verification: the stale run's write is rejected, and the new run is untouched.
-    assert.throws(() => runTaskTests(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /run-2/);
+    assert.throws(() => runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin), /run-2/);
     assert.equal(getCurrentTaskRun(1, rootOrigin)?.taskTests, null);
 });

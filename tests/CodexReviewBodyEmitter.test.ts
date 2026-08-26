@@ -33,7 +33,7 @@ test("test_planReviewPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () =>
 test("test_planReviewPrompt_asksExactlyOneQuestionOnce", () => {
     // One question, one copy: a spliced body that renders twice doubles the reviewer's cost.
     const prompt = planReviewPrompt(task);
-    assert.equal(prompt.split("You are a read-only review agent").length, 2);
+    assert.equal(prompt.split("Print the JSON as your final message").length, 2);
 });
 
 test("test_planReviewPrompt_leavesTheVerdictToTheRulingScript", () => {

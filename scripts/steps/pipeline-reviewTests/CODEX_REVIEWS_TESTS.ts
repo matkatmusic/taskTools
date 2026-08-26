@@ -15,9 +15,10 @@ const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-te
 const DECIDE_REVIEW_SCRIPT = fileURLToPath(new URL("../../tackle-tasks/decideTestReview.ts", import.meta.url));
 
 // The reviewer is read-only and cannot run git, so the diff it judges against is written out for it.
-function writeImplementationDiff(worktree: string, taskNumber: number, sourceBranch: string): { diffPath: string; mergeBase: string } {
+function writeImplementationDiff(worktree: string, taskNumber: number, projectRoot: string): { diffPath: string; mergeBase: string } {
     const git = (...args: string[]) => execFileSync("git", ["-C", worktree, ...args], { encoding: "utf8" });
-    const mergeBase = git("merge-base", sourceBranch, "HEAD").trim();
+    const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const mergeBase = git("merge-base", baseBranch, "HEAD").trim();
     const diffPath = `${worktree}/plans/implementation-diff-${taskNumber}.patch`;
     mkdirSync(dirname(diffPath), { recursive: true });
     writeFileSync(diffPath, git("diff", `${mergeBase}..HEAD`));
@@ -146,7 +147,7 @@ function reviewTestsPrompt(packet: ReviewTestsCorePacket): string {
     const testCommand = t.tests ?? "(no test command recorded)";
     const testOutput = taskTestRunOutput(packet.taskNumber, packet.projectRoot);
     const testReviewFile = t.testReviewFile;
-    const { diffPath, mergeBase } = writeImplementationDiff(worktree, packet.taskNumber, packet.sourceBranch);
+    const { diffPath, mergeBase } = writeImplementationDiff(worktree, packet.taskNumber, packet.projectRoot);
     const preExistingTestFiles = t.testFilePaths.filter((path) => wasPreExisting(worktree, mergeBase, path));
     const question = reviewTestsQuestion(t, diffPath, preExistingTestFiles, testCommand, testOutput);
     const promptFile = `${worktree}/plans/CODEX_REVIEWS_TESTS.prompt.md`;

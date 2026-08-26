@@ -22,9 +22,10 @@ const DECIDE_REVIEW_SCRIPT = fileURLToPath(new URL("./decideTestReview.ts", impo
 const diffFile = (t: PreparedTask, root: string) => `${root}/plans/implementation-diff-${t.number}.patch`;
 
 // The reviewer is read-only and cannot run git, so the diff it judges against is written out for it.
-function writeImplementationDiff(t: PreparedTask, root: string, sourceBranch: string): string {
+function writeImplementationDiff(t: PreparedTask, root: string): string {
     const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
-    const mergeBase = git("merge-base", sourceBranch, "HEAD").trim();
+    const baseBranch = execFileSync("git", ["-C", t.taskStateRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const mergeBase = git("merge-base", baseBranch, "HEAD").trim();
     const path = diffFile(t, root);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, git("diff", `${mergeBase}..HEAD`));
@@ -132,12 +133,12 @@ The command that runs you captures that message to \`${t.testReviewFile}\`, so d
 `;
 }
 
-export function reviewTestsPrompt(t: PreparedTask, sourceBranch: string): string {
+export function reviewTestsPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const taskTests = taskTestRun(t);
     // testFiles is every changed test; createdTestFiles is a subset. Derive pre-existing here.
     const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
-    const diffPath = writeImplementationDiff(t, root, sourceBranch);
+    const diffPath = writeImplementationDiff(t, root);
     return `You are spawning a review agent running in the CLI.
 You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape.
 The command runs a reviewing agent against this task's test files.

@@ -40,8 +40,7 @@ export function main(input: string): Record<string, unknown> {
         leaseReleased = true;
     }
 
-    // next is constant: this box's one successor matches DOES_RUN_HOLD_LEASE's NO branch.
-    return { ...packet, box: "RELEASE_WORKTREE_LEASE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "DOES_RUN_HOLD_SOURCE_LOCK", leaseReleased, leaseRetained };
+    return { ...packet, box: "RELEASE_WORKTREE_LEASE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, leaseReleased, leaseRetained };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

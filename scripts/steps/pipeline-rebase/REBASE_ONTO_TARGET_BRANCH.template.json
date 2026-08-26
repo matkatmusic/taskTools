@@ -22,7 +22,6 @@
     "output": {
         "box": "REBASE_ONTO_TARGET_BRANCH",
         "scriptSignal": "continue",
-        "next": "DID_REBASE_REPORT_CONFLICTS",
         "projectRoot": "/repo",
         "worktreePath": "/repo/.worktrees/task-1",
         "taskNumber": 1,

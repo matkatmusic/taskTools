@@ -20,7 +20,6 @@
     "output": {
         "box": "RELEASE_WORKTREE_LEASE",
         "scriptSignal": "continue",
-        "next": "DOES_RUN_HOLD_SOURCE_LOCK",
         "taskNumber": 169,
         "runId": "run-a",
         "projectRoot": "/repo",

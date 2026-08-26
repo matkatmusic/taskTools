@@ -8,7 +8,7 @@ import { readPacket } from "./packet.ts";
 export function main(input: string): Record<string, unknown> {
     const packet = readPacket(input);
     const result = runTaskTests(
-        packet.taskNumber, packet.runId, packet.worktreePath, packet.sourceBranch, "RUN_TASK_TESTS", packet.projectRoot,
+        packet.taskNumber, packet.runId, packet.worktreePath, "RUN_TASK_TESTS", packet.projectRoot,
     );
     return { ...packet, box: "RUN_TASK_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, passed: result.passed };
 }
