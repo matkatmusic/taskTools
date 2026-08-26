@@ -13,7 +13,8 @@ export type VerdictAmendThenAcceptPacket = {
     runId: string;
     sourceBranch: string;
     // plan: unknown;
-    review: PlanReview;
+    // review: PlanReview;
+    reviewOutputFile: string;
 };
 
 const fixNote = (fix: PlanReview["fixes"][number]) => `${fix.fix}\n\nDurable because: ${fix.durableBecause}`;
@@ -32,7 +33,8 @@ function applyFixesToPlan(planFile: string, review: PlanReview): void {
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as VerdictAmendThenAcceptPacket;
-    applyFixesToPlan(packet.planFile, packet.review);
+    const review = JSON.parse(readFileSync(packet.reviewOutputFile, "utf8")) as PlanReview;
+    applyFixesToPlan(packet.planFile, review);
     return {
         box: "VERDICT_AMEND_THEN_ACCEPT",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,

@@ -13,26 +13,6 @@
         "sourceBranch": "main"
     },
     "agentAnswer": {
-        "review": {
-            "outcome": "<OK when you reviewed the plan, ERROR when the review could not be run>",
-            "missingFiles": ["<only when outcome is ERROR: the exact paths you could not read. Empty otherwise.>"],
-            "message": "<only when outcome is ERROR: why the review did not happen. Empty otherwise.>",
-            "issues": [
-                {
-                    "sectionId": "<the id of the plan section this issue is in, exactly as the plan spells it>",
-                    "evidence": "<repo-relative path and the line numbers you read, as path/to/file.ts:12-40>",
-                    "planAsserts": "<quote or close paraphrase of what the plan says>",
-                    "actuallyTrue": "<what the source shows instead>"
-                }
-            ],
-            "fixes": [
-                {
-                    "sectionId": "<the id of the section this fix repairs; one fix per issue, same order>",
-                    "fix": "<the concrete edit to make to that section, written as an instruction>",
-                    "durableBecause": "<why this will not regress the same way>"
-                }
-            ],
-            "sectionsThatHoldUp": ["<section id> — verified against path/to/file.ts:12-40"]
-        }
+        "reviewFile": "<the exact REVIEW_FILE path the command wrote>"
     }
 }

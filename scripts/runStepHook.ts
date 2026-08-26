@@ -168,7 +168,7 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
+    appendFileSync(LOG_FILE, `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ invocation, ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 

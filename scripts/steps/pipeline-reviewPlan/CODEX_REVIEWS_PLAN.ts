@@ -136,9 +136,9 @@ codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_F
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
-Read \`$REVIEW_FILE\` (the file at \`${t.reviewOutputFile}\`) and return its JSON verbatim as the \`review\` field below; never decide a verdict yourself.
+Return \`{ "reviewFile": "${t.reviewOutputFile}" }\` — the path \`$REVIEW_FILE\` was set to, never its contents.
 
-If the command above could not be run at all, or the review file holds nothing usable, return \`review.outcome\` as \`"ERROR"\`, with \`message\` naming what went wrong and \`missingFiles\`, \`issues\`, \`fixes\`, and \`sectionsThatHoldUp\` empty.
+If the command above could not be run at all, return that same path anyway; the next block reads the file and fails loudly when it is missing or unusable.
 `;
 }
 

@@ -28,8 +28,11 @@ const review = (fixes: ReturnType<typeof fix>[]) => ({
 });
 
 function packet(taskStateRoot: string, planFile: string, review: unknown) {
+    const reviewOutputFile = join(taskStateRoot, "codex-review.json");
+    writeFileSync(reviewOutputFile, JSON.stringify(review));
     return {
-        taskNumber: 7, taskStateRoot, repoRoot: taskStateRoot, planFile, review,
+        taskNumber: 7, taskStateRoot, repoRoot: taskStateRoot, planFile,
+        reviewFile: reviewOutputFile, reviewOutputFile,
         runId: "run-1", sourceBranch: "main",
     };
 }
@@ -90,7 +93,8 @@ test("test_main_reportsErrorAsTheVerdictWhenTheReviewerCouldNotReadItsInputs", (
 
 test("test_main_readsNoPlanFileWhenOutcomeIsError", () => {
     // The reviewer never saw the plan, so this must not read a plan file that may not exist.
-    const output = main(JSON.stringify(packet("/nowhere", "/nowhere/plan.json", {
+    const taskStateRoot = mkdtempSync(join(tmpdir(), "what-is-review-verdict-"));
+    const output = main(JSON.stringify(packet(taskStateRoot, "/nowhere/plan.json", {
         outcome: "ERROR", missingFiles: ["x"], message: "m", issues: [], fixes: [], sectionsThatHoldUp: [],
     })));
     assert.equal(output.verdict, "ERROR");

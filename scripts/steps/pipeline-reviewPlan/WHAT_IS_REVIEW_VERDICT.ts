@@ -13,7 +13,9 @@ export type WhatIsReviewVerdictPacket = {
     runId: string;
     sourceBranch: string;
     // plan: unknown;
-    review: PlanReview;
+    // review: PlanReview;
+    reviewFile: string;
+    reviewOutputFile: string;
 };
 
 // Below this, absolute fix counts decide the ruling; at or above it, the efficacy percentage does.
@@ -25,7 +27,7 @@ const VERDICTS = ["ACCEPT", "AMEND_THEN_ACCEPT", "AMEND", "SCRAP"] as const;
 const fixNote = (fix: PlanReview["fixes"][number]) => `${fix.fix}\n\nDurable because: ${fix.durableBecause}`;
 
 function decideVerdict(packet: WhatIsReviewVerdictPacket): { verdict: string; notes: string } {
-    const review = packet.review;
+    const review = JSON.parse(readFileSync(packet.reviewOutputFile, "utf8")) as PlanReview;
     // The reviewer never saw the plan, so ERROR is reported as the verdict rather than ruled on.
     if (review.outcome === "ERROR") {
         return { verdict: "ERROR", notes: `${review.message} missing: ${review.missingFiles.join(", ")}` };
@@ -54,7 +56,8 @@ export function main(input: string): Record<string, unknown> {
         runId: packet.runId,
         sourceBranch: packet.sourceBranch,
         // plan: packet.plan,
-        review: packet.review,
+        // review: packet.review,
+        reviewOutputFile: packet.reviewOutputFile,
         verdict,
         notes,
     };

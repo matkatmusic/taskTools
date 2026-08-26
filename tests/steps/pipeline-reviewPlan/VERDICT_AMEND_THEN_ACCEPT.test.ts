@@ -24,10 +24,12 @@ function makeFixture(): { taskStateRoot: string; planFile: string } {
 }
 
 function packet(taskStateRoot: string, planFile: string, fixes: unknown[]) {
+    const reviewOutputFile = join(taskStateRoot, "codex-review.json");
+    writeFileSync(reviewOutputFile, JSON.stringify({ outcome: "OK", missingFiles: [], message: "", issues: [], fixes, sectionsThatHoldUp: [] }));
     return {
         taskNumber: 42, taskStateRoot, repoRoot: taskStateRoot, planFile,
         runId: "run-1", sourceBranch: "main",
-        review: { outcome: "OK", missingFiles: [], message: "", issues: [], fixes, sectionsThatHoldUp: [] },
+        reviewOutputFile,
     };
 }
 

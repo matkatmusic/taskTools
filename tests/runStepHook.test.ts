@@ -394,7 +394,7 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
 
 test("test_runStepHook_logsTheFailureWhenTheWalkCannotFinish", () => {
     const log = runHook("/run-step NOT_A_BLOCK").readLog();
-    assert.match(log, /^## ======= FAILURE =======\n```json\n\{\n    "ran": \[\],\n    "errors": \[\n        "no block named NOT_A_BLOCK; known: /m);
+    assert.match(log, /^## ======= FAILURE =======\n```json\n\{\n    "invocation": "\/run-step NOT_A_BLOCK",\n    "ran": \[\],\n    "errors": \[\n        "no block named NOT_A_BLOCK; known: /m);
 });
 
 test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {

@@ -52,9 +52,10 @@ test("test_main_neverTellsTheAgentToTypeARunStepCommand", () => {
     assert.equal(/\/run-step/.test(output.prompt as string), false);
 });
 
-test("test_main_tellsTheAgentToReportOutcomeErrorWhenTheCommandFails", () => {
+test("test_main_tellsTheAgentToReturnThePathEvenWhenTheCommandFails", () => {
     const output = main(JSON.stringify(packetFrom(makeFixture())));
-    assert.match(output.prompt as string, /outcome.*ERROR/);
+    assert.match(output.prompt as string, /"reviewFile"/);
+    assert.doesNotMatch(output.prompt as string, /review\.outcome/);
 });
 
 test("test_main_leavesNoUnresolvedInterpolation", () => {

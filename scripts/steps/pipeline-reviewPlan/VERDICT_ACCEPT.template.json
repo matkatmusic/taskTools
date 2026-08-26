@@ -9,7 +9,7 @@
         "planFile": "/repo/.worktrees/task-42/plans/plan.json",
         "runId": "run-1",
         "sourceBranch": "main",
-        "review": { "outcome": "OK", "missingFiles": [], "message": "", "issues": [], "fixes": [], "sectionsThatHoldUp": [] },
+        "reviewOutputFile": "/repo/.worktrees/task-42/plans/codex-review.json",
         "verdict": "ACCEPT",
         "notes": ""
     },

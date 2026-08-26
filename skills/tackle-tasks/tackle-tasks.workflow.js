@@ -479,91 +479,12 @@ const AGENT_SCHEMAS = {
                                     {
                                         "type": "object",
                                         "properties": {
-                                            "review": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "outcome": {
-                                                        "type": "string"
-                                                    },
-                                                    "missingFiles": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "message": {
-                                                        "type": "string"
-                                                    },
-                                                    "issues": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "sectionId": {
-                                                                    "type": "string"
-                                                                },
-                                                                "evidence": {
-                                                                    "type": "string"
-                                                                },
-                                                                "planAsserts": {
-                                                                    "type": "string"
-                                                                },
-                                                                "actuallyTrue": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "sectionId",
-                                                                "evidence",
-                                                                "planAsserts",
-                                                                "actuallyTrue"
-                                                            ],
-                                                            "additionalProperties": false
-                                                        }
-                                                    },
-                                                    "fixes": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "sectionId": {
-                                                                    "type": "string"
-                                                                },
-                                                                "fix": {
-                                                                    "type": "string"
-                                                                },
-                                                                "durableBecause": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "sectionId",
-                                                                "fix",
-                                                                "durableBecause"
-                                                            ],
-                                                            "additionalProperties": false
-                                                        }
-                                                    },
-                                                    "sectionsThatHoldUp": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "string"
-                                                        }
-                                                    }
-                                                },
-                                                "required": [
-                                                    "outcome",
-                                                    "missingFiles",
-                                                    "message",
-                                                    "issues",
-                                                    "fixes",
-                                                    "sectionsThatHoldUp"
-                                                ],
-                                                "additionalProperties": false
+                                            "reviewFile": {
+                                                "type": "string"
                                             }
                                         },
                                         "required": [
-                                            "review"
+                                            "reviewFile"
                                         ],
                                         "additionalProperties": false
                                     },
@@ -1006,91 +927,12 @@ const AGENT_SCHEMAS = {
                                     {
                                         "type": "object",
                                         "properties": {
-                                            "review": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "outcome": {
-                                                        "type": "string"
-                                                    },
-                                                    "missingFiles": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "string"
-                                                        }
-                                                    },
-                                                    "message": {
-                                                        "type": "string"
-                                                    },
-                                                    "issues": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "sectionId": {
-                                                                    "type": "string"
-                                                                },
-                                                                "evidence": {
-                                                                    "type": "string"
-                                                                },
-                                                                "planAsserts": {
-                                                                    "type": "string"
-                                                                },
-                                                                "actuallyTrue": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "sectionId",
-                                                                "evidence",
-                                                                "planAsserts",
-                                                                "actuallyTrue"
-                                                            ],
-                                                            "additionalProperties": false
-                                                        }
-                                                    },
-                                                    "fixes": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "sectionId": {
-                                                                    "type": "string"
-                                                                },
-                                                                "fix": {
-                                                                    "type": "string"
-                                                                },
-                                                                "durableBecause": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                            "required": [
-                                                                "sectionId",
-                                                                "fix",
-                                                                "durableBecause"
-                                                            ],
-                                                            "additionalProperties": false
-                                                        }
-                                                    },
-                                                    "sectionsThatHoldUp": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "string"
-                                                        }
-                                                    }
-                                                },
-                                                "required": [
-                                                    "outcome",
-                                                    "missingFiles",
-                                                    "message",
-                                                    "issues",
-                                                    "fixes",
-                                                    "sectionsThatHoldUp"
-                                                ],
-                                                "additionalProperties": false
+                                            "reviewFile": {
+                                                "type": "string"
                                             }
                                         },
                                         "required": [
-                                            "review"
+                                            "reviewFile"
                                         ],
                                         "additionalProperties": false
                                     },
