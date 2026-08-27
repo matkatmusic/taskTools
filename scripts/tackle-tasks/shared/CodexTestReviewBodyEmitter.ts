@@ -35,7 +35,7 @@ function taskTestRun(t: PreparedTask) {
 // Every reviewer opens these itself, so one question serves codex and the claude fallbacks alike.
 const reviewedPaths = (t: PreparedTask, diffPath: string) => [t.briefFile, t.planFile, ...t.testFilePaths, diffPath, REVIEW_TESTS_TEMPLATE_PATH];
 
-export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
+function approveReviewByDefaultPrompt(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
     //APPROVE BY DEFAULT prompt:
     return `Approve the tests. Do not judge them, do not hunt for problems, and do not flag anything.
 
@@ -58,7 +58,9 @@ Return only JSON in the shape given by \`${REVIEW_TESTS_TEMPLATE_PATH}\`, which 
 Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${t.testReviewFile}\`, so do not try to write the file yourself.
 `;
+}
 
+function reviewByDefaultPrompt(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
     //REVIEW BY DEFAULT prompt:
     return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}.
 You write no file.
@@ -148,6 +150,11 @@ Return empty arrays when you found nothing.
 Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${t.testReviewFile}\`, so do not try to write the file yourself.
 `;
+}
+
+export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
+    // return approveReviewByDefaultPrompt(t, diffPath, preExistingTestFiles, testCommand, testOutput);
+    return reviewByDefaultPrompt(t, diffPath, preExistingTestFiles, testCommand, testOutput);    
 }
 
 export function reviewTestsPrompt(t: PreparedTask): string {

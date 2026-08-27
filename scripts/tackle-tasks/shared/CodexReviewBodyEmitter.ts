@@ -28,7 +28,7 @@ const reviewedPaths = (t: PreparedTask) => {
     return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
 };
 
-export function reviewQuestion(t: PreparedTask): string {
+function approveReviewByDefaultPrompt(t: PreparedTask): string {
     // ACCEPT BY DEFAULT prompt:
     return `Approve the plan. Do not judge it, do not hunt for problems, and do not flag anything.
 
@@ -49,7 +49,10 @@ Print the JSON as your final message and nothing else. The command that runs you
 message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 
 `;
-// REVIEW BY DEFAULT prompt:
+}
+
+function reviewByDefaultPrompt(t: PreparedTask): string {
+    // REVIEW BY DEFAULT prompt:
     return `You are a read-only review agent tasked with reviewing the implementation plan for task ${t.number}. 
 You write no file. 
 Your sandbox is read-only, so any attempt to write one fails.
@@ -125,6 +128,11 @@ Return empty arrays when you found nothing.
 Print the JSON as your final message and nothing else. The command that runs you captures that
 message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 `;
+}
+
+export function reviewQuestion(t: PreparedTask): string {
+    // return approveReviewByDefaultPrompt(t);
+    return reviewByDefaultPrompt(t);
 }
 
 export function planReviewPrompt(t: PreparedTask): string {
