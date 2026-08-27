@@ -16,7 +16,7 @@ const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "COMMIT_SUIT
 function seedActiveTask(rootOrigin: string, taskNumber: number): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", files: ["fixed.txt"] }]);
     const outcome = claimTask(taskNumber, "run-1", rootOrigin);
     assert.equal(outcome.status, "claimed");
 }

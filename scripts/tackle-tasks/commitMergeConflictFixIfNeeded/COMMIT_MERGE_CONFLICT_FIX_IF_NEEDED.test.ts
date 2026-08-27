@@ -48,7 +48,7 @@ function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskN
 function seedTaskAndMarkActiveAndLock(projectRoot: string, taskNumber: number, title: string, runId: string): void {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title, files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title, files: ["resolved.txt"] }]);
     const outcome = claimTask(taskNumber, runId, projectRoot);
     assert.equal(outcome.status, "claimed");
     const lockOutcome = acquireSourceRepoLock(projectRoot, buildLockOwner(runId, taskNumber));

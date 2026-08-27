@@ -78,5 +78,5 @@ You are forbidden from doing any of the following actions:
 Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
 It is not a failure, and it is always better than a guess.
 
-${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every \\`<...>\\` with a real value", "")}`;
+${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
 }

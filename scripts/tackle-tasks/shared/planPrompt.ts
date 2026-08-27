@@ -171,5 +171,5 @@ You are allowed to read every file the read-file skill put into your context, an
 ---- TESTS_FIELD ("skip" means no TDD requirement) ----
 ${t.hasTests ? (t.tests ?? "(the task has tests; the user wrote no example)") : "skip"}
 
-${whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>" }`, "replacing every \\`<...>\\` with a real value", "")}`;
+${whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>" }`, "replacing every `<...>` with a real value", "")}`;
 }
