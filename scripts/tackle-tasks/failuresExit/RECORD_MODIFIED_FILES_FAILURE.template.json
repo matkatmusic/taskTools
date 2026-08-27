@@ -2,13 +2,26 @@
     "input": {
         "box": "WRITE_EXIT_TYPE_AND_NOTE",
         "scriptSignal": "continue",
-        "note": "WRITE_EXIT_TYPE_AND_NOTE.ts for WRITE_EXIT_TYPE_AND_NOTE",
-        "input": ""
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED"
     },
     "output": {
         "box": "RECORD_MODIFIED_FILES_FAILURE",
         "scriptSignal": "continue",
-        "note": "RECORD_MODIFIED_FILES_FAILURE.ts for RECORD_MODIFIED_FILES_FAILURE",
-        "input": ""
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED",
+        "modifiedFiles": []
     }
 }

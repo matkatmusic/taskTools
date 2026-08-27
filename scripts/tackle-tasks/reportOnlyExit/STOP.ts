@@ -1,11 +1,12 @@
-// STOP, from pipeline-areTestsFlagged.mmd
+// STOP, shared by pipeline-reportOnlyExit.mmd, pipeline-failuresExit.mmd, and pipeline-mergeSucceededExit.mmd. Ends the walk.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "STOP", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for STOP`, input };
+    const packet = JSON.parse(input) as EntryPacket;
+    return { ...packet, box: "STOP", scriptSignal: SCRIPT_SIGNAL.STOP };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

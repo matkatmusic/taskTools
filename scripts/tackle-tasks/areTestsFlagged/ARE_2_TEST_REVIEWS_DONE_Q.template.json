@@ -2,13 +2,29 @@
     "input": {
         "box": "ARE_TESTS_FLAGGED",
         "scriptSignal": "continue",
-        "note": "ARE_TESTS_FLAGGED.ts for ARE_TESTS_FLAGGED",
-        "input": ""
+        "next": "ARE_2_TEST_REVIEWS_DONE_Q",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     },
     "output": {
         "box": "ARE_2_TEST_REVIEWS_DONE_Q",
         "scriptSignal": "continue",
-        "note": "ARE_2_TEST_REVIEWS_DONE_Q.ts for ARE_2_TEST_REVIEWS_DONE_Q",
-        "input": ""
+        "next": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     }
 }

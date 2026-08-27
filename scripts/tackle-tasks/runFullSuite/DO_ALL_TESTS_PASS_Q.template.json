@@ -2,13 +2,28 @@
     "input": {
         "box": "RUN_FULL_SUITE",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": ""
     },
     "output": {
         "box": "DO_ALL_TESTS_PASS_Q",
         "scriptSignal": "continue",
-        "note": "DO_ALL_TESTS_PASS_Q.ts for DO_ALL_TESTS_PASS_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": "",
+        "next": "DID_CHANGES_STAY_INSIDE_FENCE_Q"
     }
 }

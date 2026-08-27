@@ -2,13 +2,29 @@
     "input": {
         "box": "IS_WORKTREE_SAFE_TO_USE_Q",
         "scriptSignal": "continue",
-        "note": "IS_WORKTREE_SAFE_TO_USE_Q.ts for IS_WORKTREE_SAFE_TO_USE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "IS_PREVIOUS_RUN_RESUMABLE_Q"
     },
     "output": {
         "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
         "scriptSignal": "continue",
-        "note": "IS_PREVIOUS_RUN_RESUMABLE_Q.ts for IS_PREVIOUS_RUN_RESUMABLE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "DOES_FENCE_COVER_WORKTREE_Q"
     }
 }

@@ -1,11 +1,14 @@
-// CREATE_WORKTREE, from pipeline-preambleStatusCheck.mmd
+// CREATE_WORKTREE, from pipeline-preambleStatusCheck.mmd. Mutating: creates a real git worktree. "create a worktree"
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
+import type { EntryPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "CREATE_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for CREATE_WORKTREE`, input };
+export function main(input: string): EntryPacket {
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
+    return { ...packet, box: "CREATE_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

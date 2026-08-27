@@ -1,11 +1,13 @@
 // REPORT_EXIT_TYPE_AND_NOTE, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { EntryPacket } from "./_packet.ts";
 
+// No underlying old function: this box only reports what earlier boxes already produced.
 export function main(input: string): Record<string, unknown> {
-    return { box: "REPORT_EXIT_TYPE_AND_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for REPORT_EXIT_TYPE_AND_NOTE`, input };
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    return { ...packet, box: "REPORT_EXIT_TYPE_AND_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

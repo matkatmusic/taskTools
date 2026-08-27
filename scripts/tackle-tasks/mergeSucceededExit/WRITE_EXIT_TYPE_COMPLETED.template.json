@@ -2,13 +2,20 @@
     "input": {
         "box": "RECORD_MERGE_COMMIT_HASHES",
         "scriptSignal": "continue",
-        "note": "RECORD_MERGE_COMMIT_HASHES.ts for RECORD_MERGE_COMMIT_HASHES",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "branch": "main",
+        "exitNote": "All layers merged successfully."
     },
     "output": {
         "box": "WRITE_EXIT_TYPE_COMPLETED",
         "scriptSignal": "continue",
-        "note": "WRITE_EXIT_TYPE_COMPLETED.ts for WRITE_EXIT_TYPE_COMPLETED",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "branch": "main"
     }
 }

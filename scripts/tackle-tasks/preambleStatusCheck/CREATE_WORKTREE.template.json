@@ -2,13 +2,28 @@
     "input": {
         "box": "DOES_WORKTREE_EXIST_Q",
         "scriptSignal": "continue",
-        "note": "DOES_WORKTREE_EXIST_Q.ts for DOES_WORKTREE_EXIST_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "CREATE_WORKTREE"
     },
     "output": {
         "box": "CREATE_WORKTREE",
         "scriptSignal": "continue",
-        "note": "CREATE_WORKTREE.ts for CREATE_WORKTREE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

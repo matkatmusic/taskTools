@@ -2,13 +2,13 @@
     "input": {
         "box": "ARCHIVE_TASK",
         "scriptSignal": "continue",
-        "note": "ARCHIVE_TASK.ts for ARCHIVE_TASK",
-        "input": ""
+        "taskNumber": 42,
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
     },
     "output": {
         "box": "REPORT_CLOSURE_NOTE",
         "scriptSignal": "continue",
-        "note": "REPORT_CLOSURE_NOTE.ts for REPORT_CLOSURE_NOTE",
-        "input": ""
+        "taskNumber": 42,
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
     }
 }

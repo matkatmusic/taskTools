@@ -2,13 +2,16 @@
     "input": {
         "box": "CLEAN_UP_WORKTREES",
         "scriptSignal": "continue",
-        "note": "CLEAN_UP_WORKTREES.ts for CLEAN_UP_WORKTREES",
-        "input": ""
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "taskNumber": 42,
+        "runId": "run-abc123"
     },
     "output": {
         "box": "BUILD_CLOSURE_NOTE",
         "scriptSignal": "continue",
-        "note": "BUILD_CLOSURE_NOTE.ts for BUILD_CLOSURE_NOTE",
-        "input": ""
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
     }
 }

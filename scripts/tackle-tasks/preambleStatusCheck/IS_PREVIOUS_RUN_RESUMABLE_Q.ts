@@ -1,11 +1,24 @@
-// IS_PREVIOUS_RUN_RESUMABLE_Q, from pipeline-preambleStatusCheck.mmd
+// IS_PREVIOUS_RUN_RESUMABLE_Q, from pipeline-preambleStatusCheck.mmd. Mutating: establishes lease ownership. "is the previous run's work resumable? adopt the lease for this run"
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { isTaskRunResumable } from "../shared/isTaskRunResumable.ts";
+import type { EntryPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for IS_PREVIOUS_RUN_RESUMABLE_Q`, input };
+export function main(input: string): EntryPacket & { next: string } {
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const { resumable } = isTaskRunResumable(packet.taskNumber, packet.worktree, packet.runId, packet.projectRoot);
+    if (resumable) {
+        return { ...packet, box: "IS_PREVIOUS_RUN_RESUMABLE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "DOES_FENCE_COVER_WORKTREE_Q" };
+    }
+    return {
+        ...packet,
+        box: "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        exitType: "not-resumable",
+        exitNote: "a safe worktree holds work no run recorded a stopping point for",
+        next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

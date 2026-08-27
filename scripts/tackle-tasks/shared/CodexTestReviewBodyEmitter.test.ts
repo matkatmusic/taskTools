@@ -106,10 +106,9 @@ test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
     assert.match(reviewTestsPrompt(fakeTask), /Never run a test, and never run the full suite\./);
 });
 
-test("test_reviewTestsPrompt_citesTheOutputTemplateAndCarriesOneQuestionOnly", () => {
+test("test_reviewTestsPrompt_carriesOneQuestionOnly", () => {
     // Earlier prompts emitted the same question body once per CLI; the heredoc must hold exactly one copy.
     const prompt = reviewTestsPrompt(fakeTask);
-    assert.match(prompt, /review-tests-output-template\.json/);
     assert.equal(prompt.split("## STRICT INPUT ALLOWLIST").length, 2);
 });
 
@@ -141,10 +140,10 @@ test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
     assert.throws(() => reviewTestsPrompt(task), /no recorded task-test run/);
 });
 
-test("test_reviewTestsPrompt_leavesTheFlaggedVerdictToTheRulingScript", () => {
-    // The spawning agent used to derive flagged in prose; decideTestReview.ts owns that judgement now.
+test("test_reviewTestsPrompt_tellsTheAgentToReturnTheReviewFilePathEvenWhenTheCommandFails", () => {
+    // The spawning agent returns the file path only; ARE_TESTS_FLAGGED reads it and rules on it.
     const task = makeTaskFixture();
     const prompt = reviewTestsPrompt(task);
-    assert.match(prompt, new RegExp(`node \\S*decideTestReview\\.ts ${task.taskStateRoot} ${task.number} ARE_TESTS_FLAGGED <"\\$REVIEW_FILE"`));
-    assert.match(prompt, /never decide a verdict yourself/);
+    assert.match(prompt, new RegExp(`"additionalData": \\{ "reviewFile": "${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" \\}`));
+    assert.match(prompt, /return that same shape anyway/);
 });

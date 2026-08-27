@@ -2,13 +2,37 @@
     "input": {
         "box": "WHAT_IS_PUBLICATION_STATE_Q",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_PUBLICATION_STATE_Q.ts for WHAT_IS_PUBLICATION_STATE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": false,
+        "failureReason": "",
+        "state": "NONE LANDED",
+        "landed": [""],
+        "notLanded": [""],
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "next": "ARE_2_MERGE_ATTEMPTS_DONE_Q"
     },
     "output": {
         "box": "ARE_2_MERGE_ATTEMPTS_DONE_Q",
         "scriptSignal": "continue",
-        "note": "ARE_2_MERGE_ATTEMPTS_DONE_Q.ts for ARE_2_MERGE_ATTEMPTS_DONE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": false,
+        "failureReason": "",
+        "state": "NONE LANDED",
+        "landed": [""],
+        "notLanded": [""],
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "next": "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH"
     }
 }

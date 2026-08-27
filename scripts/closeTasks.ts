@@ -4,7 +4,7 @@ import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
-import type { StepResultReceipt, TaskRunRecord, TaskRunState } from "./tackle-tasks/taskRunState.ts";
+import type { StepResultReceipt, TaskRunRecord, TaskRunState } from "./tackle-tasks/shared/taskRunState.ts";
 
 export interface CloseTasksResult {
   closed: number[];
@@ -12,9 +12,7 @@ export interface CloseTasksResult {
   unblocked: number[];
 }
 
-// F12: closeTaskRun's reconciled output. `ambiguous` is a separate array from `skipped` so a
-// completed-only mismatch (evidence exists but disagrees) is never mistaken for a task absent
-// from both files (no evidence at all).
+// F12: closeTaskRun's reconciled output. `ambiguous` is a separate array from `skipped` so a completed-only mismatch (evidence exists but disagrees) is never mistaken for a task absent from both files (no evidence at all).
 export interface CloseTaskRunOutput {
   closed: number[];
   skipped: number[];
@@ -77,10 +75,7 @@ export function closeTasks(
     closeTasksLocked(taskNumbers, closureNote, pair, commitHashes), { onAcquired });
 }
 
-// F6's checked archive primitive: decides eligibility from task.run under the SAME lock as
-// the write, instead of an unlocked precheck followed by a plain closeTasks call. The
-// specified run must be the newest record, inactive, ended, and exitType "completed" — commit
-// hashes are derived from that run's own chronological commits, never caller-supplied.
+// F6's checked archive primitive: decides eligibility from task.run under the SAME lock as the write, instead of an unlocked precheck followed by a plain closeTasks call. The specified run must be the newest record, inactive, ended, and exitType "completed" — commit hashes are derived from that run's own chronological commits, never caller-supplied.
 export function closeTaskRunChecked(
   taskNumber: number,
   runId: string,
@@ -133,10 +128,7 @@ function archiveIsWellFormed(archived: ArchivedTaskRecord): boolean {
     && (archived.commitHashes as unknown[]).every((hash) => typeof hash === "string");
 }
 
-// Shared with reconcileStep.ts's reconcileCloseTaskRun so the "does this archive really carry
-// this run's durable record" rule cannot drift between the two callers. Requires an EXACT match
-// of run identity, note, and derived hashes — anything else means the evidence disagrees, not
-// that it's absent.
+// Shared with reconcileStep.ts's reconcileCloseTaskRun so the "does this archive really carry this run's durable record" rule cannot drift between the two callers. Requires an EXACT match of run identity, note, and derived hashes — anything else means the evidence disagrees, not that it's absent.
 export function validateArchivedRun(
   archived: ArchivedTaskRecord, runId: string, closureNote: string,
 ): TaskRunRecord | null {
@@ -148,9 +140,7 @@ export function validateArchivedRun(
   return ended;
 }
 
-// Only-completed: reconciled success requires an EXACT match of run identity, note, and
-// derived hashes. Anything else is ambiguity, distinct from "not found" — evidence exists,
-// it just disagrees — and never a write.
+// Only-completed: reconciled success requires an EXACT match of run identity, note, and derived hashes. Anything else is ambiguity, distinct from "not found" — evidence exists, it just disagrees — and never a write.
 function reconcileArchivedOnly(
   archived: ArchivedTaskRecord, taskNumber: number, runId: string, closureNote: string,
 ): CloseTaskRunOutput {
@@ -160,8 +150,7 @@ function reconcileArchivedOnly(
   return { closed: [], skipped: [], ambiguous: [taskNumber], unblocked: [] };
 }
 
-// Both files, same run: the archived record is immutable durable evidence. Only the open
-// record's removal/unblocking is completed here — completedTasks.json is never written.
+// Both files, same run: the archived record is immutable durable evidence. Only the open record's removal/unblocking is completed here — completedTasks.json is never written.
 function archiveOpenTaskRemovalOnly(
   tasks: TaskRecord[], archived: ArchivedTaskRecord, taskNumber: number, runId: string, pair: TaskFilePair,
 ): CloseTaskRunOutput {
@@ -178,11 +167,7 @@ function archiveOpenTaskRemovalOnly(
   return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked };
 }
 
-// F10: writes the exact real return value of a fresh archive-and-close call onto the just-written
-// archived record's run.history, tagged by stepId — the only place `unblocked` is still knowable
-// once the task has left tasks.json. Only called for a fresh archive (case 1 below): the "both
-// files, same run" case must leave completedTasks.json byte-identical, so it never gets a receipt
-// written into it; that case's own return value is real and freshly computed, not reconstructed.
+// F10: writes the exact real return value of a fresh archive-and-close call onto the just-written archived record's run.history, tagged by stepId — the only place `unblocked` is still knowable once the task has left tasks.json. Only called for a fresh archive (case 1 below): the "both files, same run" case must leave completedTasks.json byte-identical, so it never gets a receipt written into it; that case's own return value is real and freshly computed, not reconstructed.
 function persistCloseStepReceipt(
   completedTasksPath: string, taskNumber: number, runId: string, stepId: string, result: CloseTaskRunOutput,
 ): void {
@@ -202,8 +187,7 @@ function persistCloseStepReceipt(
   writeJsonAtomically(completedTasksPath, completed);
 }
 
-// F12: the single locked transaction behind closeTaskRun.ts, covering all four presence
-// cases from one read of both task files.
+// F12: the single locked transaction behind closeTaskRun.ts, covering all four presence cases from one read of both task files.
 export function closeTaskRunReconciled(
   taskNumber: number,
   runId: string,

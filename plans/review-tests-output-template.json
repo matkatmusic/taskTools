@@ -1,4 +1,0 @@
-{
-  "flagged": "<true when the reviewer's outcome is ERROR or its issues array is not empty; false otherwise>",
-  "notes": "<when outcome is ERROR, copy its message and missingFiles. Otherwise copy every issue's problem and fix, verbatim. Empty string when nothing was flagged.>"
-}

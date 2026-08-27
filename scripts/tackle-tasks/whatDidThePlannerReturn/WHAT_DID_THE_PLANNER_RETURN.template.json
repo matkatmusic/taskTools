@@ -1,12 +1,35 @@
 {
     "input": {
+        "box": "PLAN_THE_TASK",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/fake-project",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "planFile": "plans/plan-1.json",
+        "exitType": "",
+        "exitNote": "",
         "message": "",
-        "additionalData": {}
+        "additionalData": {
+            "outcome": "PLAN",
+            "planFile": "",
+            "clarifyRequest": ""
+        }
     },
     "output": {
         "box": "WHAT_DID_THE_PLANNER_RETURN",
         "scriptSignal": "continue",
-        "note": "WHAT_DID_THE_PLANNER_RETURN.ts for WHAT_DID_THE_PLANNER_RETURN",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/fake-project",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "planFile": "plans/plan-1.json",
+        "exitType": "",
+        "exitNote": "",
+        "outcome": "PLAN",
+        "clarifyRequest": "",
+        "next": "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN"
     }
 }

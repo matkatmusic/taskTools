@@ -2,13 +2,26 @@
     "input": {
         "box": "ARE_2_TEST_REVIEWS_DONE_Q",
         "scriptSignal": "continue",
-        "note": "ARE_2_TEST_REVIEWS_DONE_Q.ts for ARE_2_TEST_REVIEWS_DONE_Q",
-        "input": ""
+        "next": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "taskNumber": 43,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
     },
     "output": {
         "box": "AMEND_ENTRY_WITH_CODEX_NOTES",
         "scriptSignal": "continue",
-        "note": "AMEND_ENTRY_WITH_CODEX_NOTES.ts for AMEND_ENTRY_WITH_CODEX_NOTES",
-        "input": ""
+        "taskNumber": 43,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": ""
     }
 }

@@ -1,11 +1,30 @@
-// ARE_2_CONFLICT_FIXES_DONE_Q, from pipeline-commitMergeConflictFixIfNeeded.mmd
+// ARE_2_CONFLICT_FIXES_DONE_Q, from pipeline-rebase.mmd and pipeline-commitMergeConflictFixIfNeeded.mmd. Mutating: raises the conflict-fix attempt counter before sending another fix.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { getAttemptCount, raiseAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
+import { refreshLockHeartbeat, type RebasePacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "ARE_2_CONFLICT_FIXES_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for ARE_2_CONFLICT_FIXES_DONE_Q`, input };
+const CONFLICT_FIX_COUNTER = "pipeline-rebase-conflict-fix";
+
+export function main(input: string): RebasePacket & { next: string } {
+    const packet = JSON.parse(input) as RebasePacket;
+    refreshLockHeartbeat(packet.projectRoot, packet.runId, packet.taskNumber);
+
+    const attemptsSoFar = getAttemptCount(packet.taskNumber, CONFLICT_FIX_COUNTER, packet.projectRoot);
+    if (attemptsSoFar >= MAX_ATTEMPTS) {
+        return {
+            ...packet,
+            box: "ARE_2_CONFLICT_FIXES_DONE_Q",
+            scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+            next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+            exitType: "rebase-stuck",
+            exitNote: "the rebase did not advance after 2 conflict fixes",
+        };
+    }
+
+    raiseAttemptCount(packet.taskNumber, packet.runId, CONFLICT_FIX_COUNTER, packet.projectRoot);
+    return { ...packet, box: "ARE_2_CONFLICT_FIXES_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "pipeline-fixConflicts.mmd::FIX_CONFLICTS" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

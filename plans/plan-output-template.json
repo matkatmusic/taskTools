@@ -1,5 +1,9 @@
 {
-  "outcome": "<PLAN|CLARIFY>",
-  "planFile": "<the exact absolute path the prompt named for the plan; the plan is written there when outcome is PLAN>",
-  "clarifyRequest": "<string, null when outcome is PLAN>"
+  "agentAnswer": {
+    "additionalData": {
+      "outcome": "<PLAN|CLARIFY>",
+      "planFile": "<the exact absolute path the prompt named for the plan; the plan is written there when outcome is PLAN>",
+      "clarifyRequest": "<string, null when outcome is PLAN>"
+    }
+  }
 }

@@ -1,11 +1,24 @@
-// TWO_CODEX_REVIEWS_COMPLETED_Q, from pipeline-whatIsReviewVerdict.mmd
+// TWO_CODEX_REVIEWS_COMPLETED_Q, from pipeline-reviewPlan.mmd. 2 codex reviews done? NO replans; YES scraps the task.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
+import type { WhatIsReviewVerdictPacket } from "./_packet.ts";
+
+type Input = WhatIsReviewVerdictPacket & { verdict: string; notes: string };
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "TWO_CODEX_REVIEWS_COMPLETED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for TWO_CODEX_REVIEWS_COMPLETED_Q`, input };
+    const packet = JSON.parse(input) as Input;
+    const reviewsDone = getAttemptCount(packet.taskNumber, "planReview", packet.projectRoot) >= MAX_ATTEMPTS;
+    const output = { ...packet, box: "TWO_CODEX_REVIEWS_COMPLETED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+
+    if (reviewsDone) {
+        return {
+            ...output, exitType: "plan-scrapped", exitNote: "codex did not accept the plan in two reviews",
+            next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+        };
+    }
+    return { ...output, next: "pipeline-planTheTask.mmd::PLAN_THE_TASK" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

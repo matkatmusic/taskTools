@@ -2,13 +2,30 @@
     "input": {
         "box": "ARE_2_CLARIFY_ROUNDS_DONE_Q",
         "scriptSignal": "continue",
-        "note": "ARE_2_CLARIFY_ROUNDS_DONE_Q.ts for ARE_2_CLARIFY_ROUNDS_DONE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatDidThePlannerReturn/fixtures",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "outcome": "CLARIFY",
+        "clarifyRequest": "which database should task 1 use?"
     },
     "output": {
         "box": "WRITE_CLARIFY_REQUEST",
         "scriptSignal": "continue",
-        "note": "WRITE_CLARIFY_REQUEST.ts for WRITE_CLARIFY_REQUEST",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatDidThePlannerReturn/fixtures",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "outcome": "CLARIFY",
+        "clarifyRequest": "which database should task 1 use?"
     }
 }

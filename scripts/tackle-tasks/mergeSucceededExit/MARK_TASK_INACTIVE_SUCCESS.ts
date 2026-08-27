@@ -1,11 +1,25 @@
-// MARK_TASK_INACTIVE_SUCCESS, from pipeline-mergeSucceededExit.mmd
+// MARK_TASK_INACTIVE_SUCCESS, from pipeline-mergeSucceededExit.mmd "mark the task inactive in tasks.json". Mutating: shared with pipeline-failuresExit.mmd's exit tail, ending the run there too.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { markTaskInactive } from "../shared/markTaskInactive.ts";
+
+export type MarkTaskInactiveSuccessInput = {
+    box: string;
+    scriptSignal: string;
+    projectRoot: string;
+    taskNumber: number;
+    runId: string;
+    closureNote: string;
+};
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "MARK_TASK_INACTIVE_SUCCESS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for MARK_TASK_INACTIVE_SUCCESS`, input };
+    const packet = JSON.parse(input) as MarkTaskInactiveSuccessInput;
+    markTaskInactive({ taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot });
+    return {
+        box: "MARK_TASK_INACTIVE_SUCCESS", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        projectRoot: packet.projectRoot, taskNumber: packet.taskNumber, runId: packet.runId, closureNote: packet.closureNote,
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -2,13 +2,24 @@
     "input": {
         "box": "RUN_TASK_TESTS",
         "scriptSignal": "continue",
-        "note": "RUN_TASK_TESTS.ts for RUN_TASK_TESTS",
-        "input": ""
+        "taskNumber": 5,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/withRun",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/withRun/worktree",
+        "branch": "task-5",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "DO_TASK_TESTS_PASS_Q",
         "scriptSignal": "continue",
-        "note": "DO_TASK_TESTS_PASS_Q.ts for DO_TASK_TESTS_PASS_Q",
-        "input": ""
+        "taskNumber": 5,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/withRun",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/withRun/worktree",
+        "branch": "task-5",
+        "exitType": "",
+        "exitNote": "",
+        "next": "pipeline-codexReviewsTests.mmd::CODEX_REVIEWS_TESTS"
     }
 }

@@ -2,13 +2,24 @@
     "input": {
         "box": "MERGE_SUCCEEDED_EXIT",
         "scriptSignal": "continue",
-        "note": "MERGE_SUCCEEDED_EXIT.ts for MERGE_SUCCEEDED_EXIT",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "branch": "main",
+        "exitNote": "All layers merged successfully.",
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ]
     },
     "output": {
         "box": "RECORD_MERGE_COMMIT_HASHES",
         "scriptSignal": "continue",
-        "note": "RECORD_MERGE_COMMIT_HASHES.ts for RECORD_MERGE_COMMIT_HASHES",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "branch": "main",
+        "exitNote": "All layers merged successfully."
     }
 }

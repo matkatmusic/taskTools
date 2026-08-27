@@ -2,13 +2,29 @@
     "input": {
         "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
         "scriptSignal": "continue",
-        "note": "IS_PREVIOUS_RUN_RESUMABLE_Q.ts for IS_PREVIOUS_RUN_RESUMABLE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "DOES_FENCE_COVER_WORKTREE_Q"
     },
     "output": {
         "box": "DOES_FENCE_COVER_WORKTREE_Q",
         "scriptSignal": "continue",
-        "note": "DOES_FENCE_COVER_WORKTREE_Q.ts for DOES_FENCE_COVER_WORKTREE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "INIT_SUBMODULES_RECURSIVELY"
     }
 }

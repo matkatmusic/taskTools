@@ -2,13 +2,27 @@
     "input": {
         "box": "DID_CHANGES_STAY_INSIDE_FENCE_Q",
         "scriptSignal": "continue",
-        "note": "DID_CHANGES_STAY_INSIDE_FENCE_Q.ts for DID_CHANGES_STAY_INSIDE_FENCE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "next": "MERGE_WORKTREES",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "MERGE_WORKTREES",
         "scriptSignal": "continue",
-        "note": "MERGE_WORKTREES.ts for MERGE_WORKTREES",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": true,
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "failureReason": ""
     }
 }

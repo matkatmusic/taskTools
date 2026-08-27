@@ -68,11 +68,3 @@ test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {
     const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.match(prompt, /Never run `git rebase --continue` or `git rebase --abort`/);
 });
-
-test("test_fixConflictsPrompt_tellsTheAgentToCommitViaTheScriptAsItsFinalStep", () => {
-    // Rule 1 folded the commit into this box's own prompt instead of a separate committer box.
-    const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
-    assert.match(prompt, /node \S*commitTaskWork\.ts <<'TTCOMMIT'/);
-    assert.equal(prompt.includes("Leave every edit unstaged and uncommitted"), false);
-    assert.match(prompt, /stage or commit anything by hand/);
-});

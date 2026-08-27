@@ -2,13 +2,38 @@
     "input": {
         "box": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
         "scriptSignal": "continue",
-        "note": "DOES_RUN_HOLD_SOURCE_LOCK_Q.ts for DOES_RUN_HOLD_SOURCE_LOCK_Q",
-        "input": ""
+        "next": "RELEASE_SOURCE_LOCK",
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00",
+        "leaseReleased": false,
+        "leaseRetained": true,
+        "lockReleased": false
     },
     "output": {
         "box": "RELEASE_SOURCE_LOCK",
         "scriptSignal": "continue",
-        "note": "RELEASE_SOURCE_LOCK.ts for RELEASE_SOURCE_LOCK",
-        "input": ""
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00",
+        "leaseReleased": false,
+        "leaseRetained": true,
+        "lockReleased": false
     }
 }

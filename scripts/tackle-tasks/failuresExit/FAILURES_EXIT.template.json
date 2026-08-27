@@ -2,13 +2,23 @@
     "input": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "taskNumber": 900001,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900001",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts"
     },
     "output": {
         "box": "FAILURES_EXIT",
         "scriptSignal": "continue",
-        "note": "FAILURES_EXIT.ts for FAILURES_EXIT",
-        "input": ""
+        "taskNumber": 900001,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900001",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts"
     }
 }

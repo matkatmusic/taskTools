@@ -2,13 +2,27 @@
     "input": {
         "box": "WAS_LOCK_ACQUIRED_Q",
         "scriptSignal": "continue",
-        "note": "WAS_LOCK_ACQUIRED_Q.ts for WAS_LOCK_ACQUIRED_Q",
-        "input": ""
+        "next": "HAVE_15_MINUTES_PASSED_Q",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     },
     "output": {
         "box": "HAVE_15_MINUTES_PASSED_Q",
         "scriptSignal": "continue",
-        "note": "HAVE_15_MINUTES_PASSED_Q.ts for HAVE_15_MINUTES_PASSED_Q",
-        "input": ""
+        "next": "WAIT_FOR_LOCK",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

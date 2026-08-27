@@ -6,17 +6,9 @@ import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
 
-// The receipt that box hands back.
-export type TestReviewReceipt = {
-    flagged: boolean;
-    notes: string;
-};
-
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
 const REVIEW_TESTS_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-error-template.json", import.meta.url));
-const REVIEW_TESTS_OUTPUT_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-output-template.json", import.meta.url));
-const DECIDE_REVIEW_SCRIPT = fileURLToPath(new URL("./decideTestReview.ts", import.meta.url));
 
 // A generated artifact, matching plans/implementation-diff-*.patch in .gitignore.
 const diffFile = (t: PreparedTask, root: string) => `${root}/plans/implementation-diff-${t.number}.patch`;
@@ -143,13 +135,6 @@ export function reviewTestsPrompt(t: PreparedTask): string {
 You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape.
 The command runs a reviewing agent against this task's test files.
 
-## YOUR RETURN SHAPE
-
-To put the required return shape into your context, Invoke the following skill verbatim:
-\`\`\`
-/read-file "${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}"
-\`\`\`
-
 ## THE COMMAND
 
 Run the following multi-line command using Bash(), verbatim, as one single call.
@@ -165,7 +150,6 @@ REVIEW_FILE=${t.testReviewFile}
 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
-node ${DECIDE_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.number} ARE_TESTS_FLAGGED <"$REVIEW_FILE"
 \`\`\`\`
 
 The \`||\` chain is the fallback.
@@ -173,7 +157,7 @@ A non-zero exit means that reviewer was unavailable, not that the tests are bad,
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
-Use the exact JSON shape given by \`${REVIEW_TESTS_OUTPUT_TEMPLATE_PATH}\`, which the read-file skill put into your context.
-Replace every <...> with a real value.
-Copy what the node command printed; never decide a verdict yourself.`;
+Return \`{ "message": "", "additionalData": { "reviewFile": "${t.testReviewFile}" } }\` — the path \`$REVIEW_FILE\` was set to, never its contents.
+
+If the command above could not be run at all, return that same shape anyway; the next block reads the file and fails loudly when it is missing or unusable.`;
 }

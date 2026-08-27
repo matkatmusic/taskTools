@@ -191,14 +191,14 @@ test("test_runStepHook_failsWhenAnUnmarkedBlockPrintsAPrompt", () => {
 test("test_runStepHook_failsWhenABlockBreaksItsOutputContract", () => {
     const configFile = configWith((writeStep, folder) => {
         const brokenScript = join(folder, "A-broken.ts");
-        writeFileSync(brokenScript, `console.log(JSON.stringify({ box: "A", scriptSignal: "stop", input: "", surprise: true }));\n`);
+        writeFileSync(brokenScript, `console.log(JSON.stringify({ box: "A", scriptSignal: "stop", input: 5 }));\n`);
         writeStep("A", { scriptSignal: "stop", input: "" });
         return { "one.mmd": [{ box: "A", script: brokenScript, next: [] }] };
     });
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, false);
     assert.match(result.errors[0], /one\.mmd::A output breaks its contract/);
-    assert.match(result.errors[1], /surprise is not in the template/);
+    assert.match(result.errors[1], /input should be string, got number/);
 });
 
 // The walk's first input crosses a trust boundary, so it must match the start block's declared input.

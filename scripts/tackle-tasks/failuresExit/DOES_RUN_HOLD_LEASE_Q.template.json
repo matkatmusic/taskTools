@@ -2,13 +2,34 @@
     "input": {
         "box": "MARK_TASK_INACTIVE_FAILURE",
         "scriptSignal": "continue",
-        "note": "MARK_TASK_INACTIVE_FAILURE.ts for MARK_TASK_INACTIVE_FAILURE",
-        "input": ""
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00"
     },
     "output": {
         "box": "DOES_RUN_HOLD_LEASE_Q",
         "scriptSignal": "continue",
-        "note": "DOES_RUN_HOLD_LEASE_Q.ts for DOES_RUN_HOLD_LEASE_Q",
-        "input": ""
+        "next": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
+        "taskNumber": 900003,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900003",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "SOME LANDED",
+        "modifiedFiles": [],
+        "active": false,
+        "endedAt": "2026-08-23T12:00:00-07:00",
+        "leaseReleased": false,
+        "leaseRetained": false
     }
 }

@@ -2,13 +2,18 @@
     "input": {
         "box": "WRITE_EXIT_TYPE_COMPLETED",
         "scriptSignal": "continue",
-        "note": "WRITE_EXIT_TYPE_COMPLETED.ts for WRITE_EXIT_TYPE_COMPLETED",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42",
+        "branch": "main"
     },
     "output": {
         "box": "RECORD_MODIFIED_FILES_SUCCESS",
         "scriptSignal": "continue",
-        "note": "RECORD_MODIFIED_FILES_SUCCESS.ts for RECORD_MODIFIED_FILES_SUCCESS",
-        "input": ""
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "/tmp/example-project/.worktrees/task-42"
     }
 }

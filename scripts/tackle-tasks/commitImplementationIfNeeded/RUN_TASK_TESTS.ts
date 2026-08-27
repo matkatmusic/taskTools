@@ -1,11 +1,14 @@
-// RUN_TASK_TESTS, from pipeline-commitImplementationIfNeeded.mmd
+// RUN_TASK_TESTS, from pipeline-taskTests.mmd. Runs the task's own tests and records the result for DO_TASK_TESTS_PASS_Q to read.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { runTaskTests } from "../shared/runTaskTestsImpl.ts";
+import type { CommitImplementationIfNeededPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "RUN_TASK_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for RUN_TASK_TESTS`, input };
+export function main(input: string): CommitImplementationIfNeededPacket {
+    const packet = JSON.parse(input) as CommitImplementationIfNeededPacket;
+    runTaskTests(packet.taskNumber, packet.runId, packet.worktree, "RUN_TASK_TESTS", packet.projectRoot);
+    return { ...packet, box: "RUN_TASK_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

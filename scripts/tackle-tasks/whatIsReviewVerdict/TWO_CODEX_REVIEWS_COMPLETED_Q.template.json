@@ -2,13 +2,32 @@
     "input": {
         "box": "UPDATE_TASKS_JSON",
         "scriptSignal": "continue",
-        "note": "UPDATE_TASKS_JSON.ts for UPDATE_TASKS_JSON",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/plan.json",
+        "reviewOutputFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/codex-review.json",
+        "exitType": "",
+        "exitNote": "",
+        "verdict": "AMEND",
+        "notes": "[step-1] repair step-1.\n\nDurable because: reason"
     },
     "output": {
         "box": "TWO_CODEX_REVIEWS_COMPLETED_Q",
         "scriptSignal": "continue",
-        "note": "TWO_CODEX_REVIEWS_COMPLETED_Q.ts for TWO_CODEX_REVIEWS_COMPLETED_Q",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/plan.json",
+        "reviewOutputFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/codex-review.json",
+        "exitType": "",
+        "exitNote": "",
+        "verdict": "AMEND",
+        "notes": "[step-1] repair step-1.\n\nDurable because: reason",
+        "next": "pipeline-planTheTask.mmd::PLAN_THE_TASK"
     }
 }

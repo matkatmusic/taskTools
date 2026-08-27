@@ -1,11 +1,33 @@
-// ARCHIVE_TASK, from pipeline-mergeSucceededExit.mmd
+// ARCHIVE_TASK, from pipeline-mergeSucceededExit.mmd "move the task to completedTasks.json and update tasks blocked by it". Mutating.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { closeTaskRun } from "../shared/closeTaskRun.ts";
+
+const STEP_ID = "merge-succeeded-exit";
+
+export type ArchiveTaskInput = {
+    box: string;
+    scriptSignal: string;
+    projectRoot: string;
+    taskNumber: number;
+    runId: string;
+    closureNote: string;
+};
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "ARCHIVE_TASK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for ARCHIVE_TASK`, input };
+    const packet = JSON.parse(input) as ArchiveTaskInput;
+    const result = closeTaskRun({
+        taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot,
+        closureNote: packet.closureNote, stepId: STEP_ID,
+    });
+    if (!result.closed.includes(packet.taskNumber)) {
+        throw new Error(
+            `ARCHIVE_TASK: task ${packet.taskNumber} was not archived `
+            + `(skipped: ${JSON.stringify(result.skipped)}, ambiguous: ${JSON.stringify(result.ambiguous)})`,
+        );
+    }
+    return { box: "ARCHIVE_TASK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, taskNumber: packet.taskNumber, closureNote: packet.closureNote };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

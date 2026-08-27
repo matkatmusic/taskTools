@@ -1,6 +1,10 @@
 {
-  "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>",
-  "unresolvedPaths": [
-    "<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"
-  ]
+  "agentAnswer": {
+    "additionalData": {
+      "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>",
+      "unresolvedPaths": [
+        "<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"
+      ]
+    }
+  }
 }

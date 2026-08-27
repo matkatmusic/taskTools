@@ -1,8 +1,19 @@
 {
     "input": {
-        "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "box": "DO_TASK_TESTS_PASS_Q",
         "scriptSignal": "continue",
-        "note": "COMMIT_IMPLEMENTATION_IF_NEEDED.ts for COMMIT_IMPLEMENTATION_IF_NEEDED",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree/plans/test-review.json"
+        }
     }
 }

@@ -1,12 +1,34 @@
 {
     "input": {
+        "box": "CODEX_REVIEWS_PLAN",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/plan.json",
+        "exitType": "",
+        "exitNote": "",
         "message": "",
-        "additionalData": {}
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/codex-review.json"
+        }
     },
     "output": {
         "box": "WHAT_IS_REVIEW_VERDICT",
         "scriptSignal": "continue",
-        "note": "WHAT_IS_REVIEW_VERDICT.ts for WHAT_IS_REVIEW_VERDICT",
-        "input": ""
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/plan.json",
+        "reviewOutputFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatIsReviewVerdict/fixtures/codex-review.json",
+        "exitType": "",
+        "exitNote": "",
+        "verdict": "ACCEPT",
+        "notes": "",
+        "next": "pipeline-implementTask.mmd::IMPLEMENT_TASK"
     }
 }

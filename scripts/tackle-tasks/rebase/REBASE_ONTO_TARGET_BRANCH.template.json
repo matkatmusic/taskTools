@@ -1,14 +1,29 @@
 {
     "input": {
-        "box": "RUN_FULL_SUITE",
+        "box": "WAS_LOCK_ACQUIRED_Q",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "REBASE_ONTO_TARGET_BRANCH",
         "scriptSignal": "continue",
-        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [""],
+        "failureReason": ""
     }
 }

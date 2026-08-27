@@ -117,6 +117,7 @@
             "script": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts",
             "template": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "CONTINUE_REBASE"
             ]
@@ -126,6 +127,7 @@
             "script": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.ts",
             "template": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "IS_REBASE_FINISHED_Q"
             ]
@@ -370,6 +372,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "WRITE_EXIT_TYPE_COMPLETED"
             ]
@@ -379,6 +382,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "RECORD_MODIFIED_FILES_SUCCESS"
             ]
@@ -388,6 +392,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "CLEAN_UP_WORKTREES"
             ]
@@ -397,6 +402,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "BUILD_CLOSURE_NOTE"
             ]
@@ -415,6 +421,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "ARCHIVE_TASK"
             ]
@@ -424,6 +431,7 @@
             "script": "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.ts",
             "template": "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "REPORT_CLOSURE_NOTE"
             ]
@@ -493,6 +501,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOES_WORKTREE_EXIST_Q"
             ]
@@ -502,6 +511,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "CREATE_WORKTREE",
                 "IS_WORKTREE_SAFE_TO_USE_Q"
@@ -512,6 +522,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "TAKE_WORKTREE_LEASE"
             ]
@@ -521,6 +532,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "INIT_SUBMODULES_RECURSIVELY"
             ]
@@ -530,6 +542,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "TAKE_WORKTREE_LEASE_BEFORE_RESET",
                 "IS_PREVIOUS_RUN_RESUMABLE_Q"
@@ -549,6 +562,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "INIT_SUBMODULES_RECURSIVELY"
             ]
@@ -568,6 +582,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "pipeline-failuresExit.mmd::FAILURES_EXIT",
                 "INIT_SUBMODULES_RECURSIVELY"
@@ -578,6 +593,7 @@
             "script": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DOCUMENT_GENERATION"
             ]
@@ -599,6 +615,7 @@
             "script": "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts",
             "template": "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "DID_REBASE_REPORT_CONFLICTS_Q"
             ]
@@ -696,6 +713,7 @@
             "script": "scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.ts",
             "template": "scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "READ_MERGE_PUBLICATION_STATE"
             ]
@@ -737,7 +755,6 @@
             "script": "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts",
             "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.template.json",
             "producesPrompt": false,
-            "mutating": true,
             "next": [
                 "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN",
                 "ARE_2_CLARIFY_ROUNDS_DONE_Q"
@@ -758,6 +775,7 @@
             "script": "scripts/tackle-tasks/whatDidThePlannerReturn/WRITE_CLARIFY_REQUEST.ts",
             "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WRITE_CLARIFY_REQUEST.template.json",
             "producesPrompt": false,
+            "mutating": true,
             "next": [
                 "pipeline-preambleStatusCheck.mmd::DOCUMENT_GENERATION"
             ]

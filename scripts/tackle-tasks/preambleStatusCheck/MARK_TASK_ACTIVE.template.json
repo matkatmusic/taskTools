@@ -2,13 +2,28 @@
     "input": {
         "box": "IS_TASK_ACTIVE_Q",
         "scriptSignal": "continue",
-        "note": "IS_TASK_ACTIVE_Q.ts for IS_TASK_ACTIVE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "MARK_TASK_ACTIVE"
     },
     "output": {
         "box": "MARK_TASK_ACTIVE",
         "scriptSignal": "continue",
-        "note": "MARK_TASK_ACTIVE.ts for MARK_TASK_ACTIVE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
     }
 }

@@ -1,0 +1,6 @@
+[
+    {
+        "taskNumber": 42,
+        "files": ["src/owned.ts"]
+    }
+]

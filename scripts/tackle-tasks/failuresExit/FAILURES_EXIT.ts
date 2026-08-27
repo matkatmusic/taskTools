@@ -1,11 +1,12 @@
-// FAILURES_EXIT, from pipeline-areTestsFlagged.mmd
+// FAILURES_EXIT, from pipeline-failuresExit.mmd. Absorbs the archive's EXIT_TYPE_NOTE_INPUT.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "FAILURES_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for FAILURES_EXIT`, input };
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    return { ...packet, box: "FAILURES_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

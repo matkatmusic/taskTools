@@ -1,11 +1,19 @@
-// MARK_TASK_ACTIVE, from pipeline-preambleStatusCheck.mmd
+// MARK_TASK_ACTIVE, from pipeline-preambleStatusCheck.mmd. Mutating: writes tasks.json. "mark the task active in tasks.json"
+import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { claimTask } from "../shared/taskRunState.ts";
+import type { EntryPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for MARK_TASK_ACTIVE`, input };
+export function main(input: string): EntryPacket {
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const runId = randomUUID();
+    const active = claimTask(packet.taskNumber, runId, packet.projectRoot);
+    if (active.status !== "claimed") {
+        throw new Error(`task ${packet.taskNumber} could not be marked active: ${active.status}`);
+    }
+    return { ...packet, box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, runId };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

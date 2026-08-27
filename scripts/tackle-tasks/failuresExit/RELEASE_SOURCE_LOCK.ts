@@ -1,11 +1,14 @@
 // RELEASE_SOURCE_LOCK, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { buildLockOwner, releaseSourceRepoLock } from "../shared/sourceRepoLock.ts";
+import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for RELEASE_SOURCE_LOCK`, input };
+    const { next: _next, lockReleased: _lockReleased, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const { released } = releaseSourceRepoLock(packet.projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
+    return { ...packet, box: "RELEASE_SOURCE_LOCK", scriptSignal: SCRIPT_SIGNAL.CONTINUE, lockReleased: released };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

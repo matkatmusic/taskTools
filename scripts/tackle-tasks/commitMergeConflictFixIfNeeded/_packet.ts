@@ -11,4 +11,10 @@ export type CommitMergeConflictFixIfNeededPacket = {
     exitNote: string;
     message: string;
     additionalData: Record<string, unknown>;
+    stoppedOccurrenceId: string;
+    stoppedCheckoutPath: string;
+    conflictedFilePaths: string[];
+    conflicted: boolean;
+    finished: boolean;
+    failureReason: string;
 };

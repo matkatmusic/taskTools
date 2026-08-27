@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/SkillBodyEmitter.ts.  Run: node --test tests/SkillBodyEmitter.test.ts
+// Behavioral checks for scripts/tackle-tasks/shared/SkillBodyEmitter.ts.  Run: node --test tests/SkillBodyEmitter.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -81,7 +81,7 @@ test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
     const skillMd = readFileSync(skillMdPath, "utf8");
 
     // Verification: the emitter is called, and $ARGUMENTS arrives on single-quoted-heredoc stdin.
-    assert.match(skillMd, /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/tackle-tasks\/SkillBodyEmitter\.ts" <<'TACKLETASKSEOF'\n\$ARGUMENTS\nTACKLETASKSEOF/);
+    assert.match(skillMd, /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/tackle-tasks\/shared\/SkillBodyEmitter\.ts" <<'TACKLETASKSEOF'\n\$ARGUMENTS\nTACKLETASKSEOF/);
 });
 
 test("test_skillBody_namesNoDataScript", () => {

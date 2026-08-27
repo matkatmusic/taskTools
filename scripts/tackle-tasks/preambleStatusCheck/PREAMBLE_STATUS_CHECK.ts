@@ -1,25 +1,14 @@
-// PREAMBLE_STATUS_CHECK, from _pipeline-monolith.mmd. Absorbs pipeline-preambleStatusCheck.mmd and pipeline-worktreeCheck.mmd.
-import { randomUUID } from "node:crypto";
+// PREAMBLE_STATUS_CHECK, from pipeline-preambleStatusCheck.mmd. "is the task number valid?"
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { deleteTaskMergePersistence, removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
-import { releaseTaskWorktreeLease } from "../../prepareTasks.ts";
-import { checkResumedWorktreeFence } from "../shared/checkResumedWorktreeFence.ts";
-import { checkTaskWorktreeSafe } from "../shared/checkTaskWorktreeSafe.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
-import { doesTaskWorktreeExist } from "../shared/doesTaskWorktreeExist.ts";
-import { initTaskSubmodules } from "../shared/initTaskSubmodules.ts";
-import { isTaskBlocked } from "../shared/isTaskBlocked.ts";
 import { isTaskNumberValid } from "../shared/isTaskNumberValid.ts";
-import { isTaskRunResumable } from "../shared/isTaskRunResumable.ts";
-import { claimTask, readTaskRunState, transitionWorktreeLease, updateCurrentTaskRun } from "../shared/taskRunState.ts";
 import { taskFilesProjectRoot } from "../../taskFiles.ts";
-import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
 import type { EntryPacket } from "./_packet.ts";
 
-// The workflow's first input: the same two fields PREAMBLE_TASK_NUMBER_INPUT took.
+// The workflow's first input.
 type Input = { taskNumber: number; tasksFile: string };
 
 export function main(input: string): EntryPacket & { next: string } {
@@ -38,70 +27,10 @@ export function main(input: string): EntryPacket & { next: string } {
         exitType: "",
         exitNote: "",
     };
-
-    // Task status: three report-only exits, then mark the task active.
     if (!isTaskNumberValid(taskNumber, projectRoot).valid) {
-        return { ...packet, exitType: "invalid-number", exitNote: "task number is not in tasks.json", next: "REPORT_ONLY_EXIT" };
+        return { ...packet, exitType: "invalid-number", exitNote: "task number is not in tasks.json", next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
     }
-    if (isTaskBlocked(taskNumber, projectRoot).blocked) {
-        return { ...packet, exitType: "blocked", exitNote: "an open blocker remains", next: "REPORT_ONLY_EXIT" };
-    }
-    if (readTaskRunState(taskNumber, projectRoot).active) {
-        return { ...packet, exitType: "already-active", exitNote: "a previous run left the task active", next: "REPORT_ONLY_EXIT" };
-    }
-    const runId = randomUUID();
-    const claim = claimTask(taskNumber, runId, projectRoot);
-    if (claim.status !== "claimed") {
-        throw new Error(`task ${taskNumber} could not be marked active: ${claim.status}`);
-    }
-
-    // Worktree status: fresh, resumed, or reset. Each path settles worktree and docsMode.
-    let worktree: string;
-    let docsMode: string;
-    const existing = doesTaskWorktreeExist(taskNumber, projectRoot);
-    if (!existing.exists) {
-        worktree = createFreshTaskWorktree(taskNumber, runId, projectRoot);
-        updateCurrentTaskRun(taskNumber, runId, { worktree, leaseRunId: runId }, projectRoot);
-        docsMode = "AUTOGEN";
-    } else if (!checkTaskWorktreeSafe(taskNumber, existing.worktree as string).safe) {
-        const existingWorktree = existing.worktree as string;
-        const lease = transitionWorktreeLease(taskNumber, runId, projectRoot);
-        if (lease.status === "refused-owner-mismatch") {
-            throw new Error(`worktree lease for task ${taskNumber} is held by run "${lease.heldByRunId}", refusing reset`);
-        }
-        if (lease.status === "adopted") {
-            const state = readTaskRunState(taskNumber, projectRoot);
-            if (state.worktree !== null) {
-                releaseTaskWorktreeLease({ worktreePath: state.worktree, runId });
-            }
-        }
-        deleteTaskMergePersistence(projectRoot, packet.branch);
-        removeWorktreeAndBranch(projectRoot, existingWorktree, packet.branch);
-        worktree = createFreshTaskWorktree(taskNumber, runId, projectRoot);
-        updateCurrentTaskRun(taskNumber, runId, { worktree, leaseRunId: runId }, projectRoot);
-        docsMode = "AUTOGEN";
-    } else {
-        const existingWorktree = existing.worktree as string;
-        // isTaskRunResumable adopts the lease before it answers.
-        if (!isTaskRunResumable(taskNumber, existingWorktree, runId, projectRoot).resumable) {
-            return {
-                ...packet, runId, worktree: existingWorktree, exitType: "not-resumable",
-                exitNote: "a safe worktree holds work no run recorded a stopping point for", next: "FAILURES_EXIT",
-            };
-        }
-        const fence = checkResumedWorktreeFence({ projectRoot, worktreePath: existingWorktree, taskNumber });
-        if (!fence.inside) {
-            return {
-                ...packet, runId, worktree: existingWorktree, exitType: "fence-violation",
-                exitNote: `the resumed worktree touched files the task does not own: ${fence.violations.join(", ")}`, next: "FAILURES_EXIT",
-            };
-        }
-        worktree = existingWorktree;
-        docsMode = "UPDATE";
-    }
-
-    initTaskSubmodules({ worktreePath: worktree, taskNumber, runId, projectRoot, stepId: "init-submodules" });
-    return { ...packet, runId, worktree, docsMode, next: "DOCUMENT_GENERATION" };
+    return { ...packet, next: "IS_TASK_BLOCKED_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

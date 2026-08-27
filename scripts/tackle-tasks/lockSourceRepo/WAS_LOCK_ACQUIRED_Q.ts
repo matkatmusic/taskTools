@@ -1,11 +1,29 @@
-// WAS_LOCK_ACQUIRED_Q, from pipeline-lockSourceRepo.mmd
+// WAS_LOCK_ACQUIRED_Q, from pipeline-rebasePreamble/WAS_LOCK_ACQUIRED.ts
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { EntryPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "WAS_LOCK_ACQUIRED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for WAS_LOCK_ACQUIRED_Q`, input };
+type Input = EntryPacket & { acquired: boolean; heldByOwner: string };
+
+export function main(input: string): EntryPacket & { next: string } {
+    const parsed = JSON.parse(input) as Input;
+    const packet: EntryPacket = {
+        box: "WAS_LOCK_ACQUIRED_Q",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        taskNumber: parsed.taskNumber,
+        runId: parsed.runId,
+        projectRoot: parsed.projectRoot,
+        worktree: parsed.worktree,
+        branch: parsed.branch,
+        exitType: parsed.exitType,
+        exitNote: parsed.exitNote,
+        lockWaitStartedAt: parsed.lockWaitStartedAt,
+    };
+    if (parsed.acquired) {
+        return { ...packet, next: "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH" };
+    }
+    return { ...packet, next: "HAVE_15_MINUTES_PASSED_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

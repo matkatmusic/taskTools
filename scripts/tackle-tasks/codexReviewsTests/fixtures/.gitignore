@@ -1,0 +1,4 @@
+.git/
+worktree/
+tasks.json
+.fixture-marker

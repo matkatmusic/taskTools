@@ -1,14 +1,24 @@
 {
     "input": {
-        "box": "REBASE_ONTO_TARGET_BRANCH",
+        "box": "COMMIT_SUITE_FIX_IF_NEEDED",
         "scriptSignal": "continue",
-        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1"
     },
     "output": {
         "box": "RUN_FULL_SUITE",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": ""
     }
 }

@@ -1,11 +1,30 @@
-// ARE_2_SUITE_FIXES_DONE_Q, from pipeline-runFullSuite.mmd
+// ARE_2_SUITE_FIXES_DONE_Q, from pipeline-runFullSuite.mmd. Counts fix attempts, persisted per run.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { MAX_ATTEMPTS, raiseAttemptCount } from "../shared/taskRunState.ts";
+
+type Input = {
+    taskNumber: number;
+    runId: string;
+    projectRoot: string;
+    worktree: string;
+    branch: string;
+    output: string;
+};
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "ARE_2_SUITE_FIXES_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for ARE_2_SUITE_FIXES_DONE_Q`, input };
+    const packet = JSON.parse(input) as Input;
+    const attempts = raiseAttemptCount(packet.taskNumber, packet.runId, "suiteFix", packet.projectRoot);
+    const done = attempts >= MAX_ATTEMPTS;
+    return {
+        ...packet,
+        box: "ARE_2_SUITE_FIXES_DONE_Q",
+        scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        next: done ? "pipeline-failuresExit.mmd::FAILURES_EXIT" : "pipeline-fixTheCodebaseForSuite.mmd::FIX_THE_CODEBASE_FOR_SUITE",
+        exitType: done ? "suite-red" : "",
+        exitNote: done ? "full suite still red after 2 fix attempts. merge aborted. worktree preserved." : "",
+    };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

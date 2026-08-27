@@ -1,8 +1,22 @@
 {
     "input": {
-        "box": "RUN_FULL_SUITE",
+        "box": "ARE_2_SUITE_FIXES_DONE_Q",
         "scriptSignal": "continue",
-        "note": "RUN_FULL_SUITE.ts for RUN_FULL_SUITE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "ownedFilePaths": ["{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree/src/thing.ts"],
+        "testFilePaths": ["{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree/tests/thing.test.ts"],
+        "output": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "fixSummary": ""
+        }
     }
 }

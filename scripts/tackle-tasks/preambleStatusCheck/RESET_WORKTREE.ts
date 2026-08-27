@@ -1,11 +1,23 @@
-// RESET_WORKTREE, from pipeline-preambleStatusCheck.mmd
+// RESET_WORKTREE, from pipeline-preambleStatusCheck.mmd. Mutating: tears down and recreates the worktree. "reset the worktree"
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { deleteTaskMergePersistence, removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
+import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
+import { readTaskRunState, updateCurrentTaskRun } from "../shared/taskRunState.ts";
+import type { EntryPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for RESET_WORKTREE`, input };
+export function main(input: string): EntryPacket {
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const state = readTaskRunState(packet.taskNumber, packet.projectRoot);
+    if (state.leaseRunId !== packet.runId) {
+        throw new Error(`worktree lease for task ${packet.taskNumber} is not held by run "${packet.runId}", refusing reset`);
+    }
+    deleteTaskMergePersistence(packet.projectRoot, packet.branch);
+    removeWorktreeAndBranch(packet.projectRoot, packet.worktree, packet.branch);
+    const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
+    updateCurrentTaskRun(packet.taskNumber, packet.runId, { worktree, leaseRunId: packet.runId }, packet.projectRoot);
+    return { ...packet, box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree, docsMode: "AUTOGEN" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

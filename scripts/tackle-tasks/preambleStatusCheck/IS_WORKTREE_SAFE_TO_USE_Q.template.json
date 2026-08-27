@@ -2,13 +2,29 @@
     "input": {
         "box": "DOES_WORKTREE_EXIST_Q",
         "scriptSignal": "continue",
-        "note": "DOES_WORKTREE_EXIST_Q.ts for DOES_WORKTREE_EXIST_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/not-a-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "IS_WORKTREE_SAFE_TO_USE_Q"
     },
     "output": {
         "box": "IS_WORKTREE_SAFE_TO_USE_Q",
         "scriptSignal": "continue",
-        "note": "IS_WORKTREE_SAFE_TO_USE_Q.ts for IS_WORKTREE_SAFE_TO_USE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/not-a-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "TAKE_WORKTREE_LEASE_BEFORE_RESET"
     }
 }

@@ -2,13 +2,40 @@
     "input": {
         "box": "CONTINUE_REBASE",
         "scriptSignal": "continue",
-        "note": "CONTINUE_REBASE.ts for CONTINUE_REBASE",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "message": "resolved the conflict",
+        "additionalData": {},
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "conflicted": false,
+        "finished": true,
+        "failureReason": ""
     },
     "output": {
         "box": "IS_REBASE_FINISHED_Q",
         "scriptSignal": "continue",
-        "note": "IS_REBASE_FINISHED_Q.ts for IS_REBASE_FINISHED_Q",
-        "input": ""
+        "next": "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "message": "resolved the conflict",
+        "additionalData": {},
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "conflicted": false,
+        "finished": true,
+        "failureReason": ""
     }
 }

@@ -14,13 +14,13 @@ test("test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind", () => {
     assert.deepEqual(getTemplateShapeMismatches({ files: 0 }, { files: "twelve" }), ["files should be number, got string"]);
 });
 
-test("test_getTemplateShapeMismatches_namesAKeyTheTemplateDoesNotHave", () => {
-    assert.deepEqual(getTemplateShapeMismatches({ box: "A" }, { box: "B", extra: 1 }), ["extra is not in the template"]);
+test("test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave", () => {
+    assert.deepEqual(getTemplateShapeMismatches({ box: "A" }, { box: "B", extra: 1 }), []);
 });
 
-test("test_getTemplateShapeMismatches_namesAnUnexpectedKeyInsideANestedObject", () => {
+test("test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject", () => {
     const mismatches = getTemplateShapeMismatches({ task: { number: 0 } }, { task: { number: 1, name: "x" } });
-    assert.deepEqual(mismatches, ["task.name is not in the template"]);
+    assert.deepEqual(mismatches, []);
 });
 
 test("test_getTemplateShapeMismatches_looksInsideANestedObject", () => {
@@ -42,5 +42,5 @@ test("test_getTemplateShapeMismatches_tellsNullApartFromAnObject", () => {
 });
 
 test("test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty", () => {
-    assert.deepEqual(getTemplateShapeMismatches({}, { anything: 1 }), ["anything is not in the template"]);
+    assert.deepEqual(getTemplateShapeMismatches({}, { anything: 1 }), []);
 });

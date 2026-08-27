@@ -1,11 +1,16 @@
-// AMEND_ENTRY_WITH_FAILING_TESTS, from pipeline-commitImplementationIfNeeded.mmd
+// AMEND_ENTRY_WITH_FAILING_TESTS, from pipeline-taskTests.mmd. Writes failing-test notes into tasks.json and raises the fix-attempt counter.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { amendEntryWithFailingTests } from "../shared/amendEntryWithFailingTestsImpl.ts";
+import { raiseAttemptCount } from "../shared/taskRunState.ts";
+import type { CommitImplementationIfNeededPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "AMEND_ENTRY_WITH_FAILING_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for AMEND_ENTRY_WITH_FAILING_TESTS`, input };
+export function main(input: string): CommitImplementationIfNeededPacket {
+    const packet = JSON.parse(input) as CommitImplementationIfNeededPacket;
+    amendEntryWithFailingTests({ projectRoot: packet.projectRoot, taskNumber: packet.taskNumber });
+    raiseAttemptCount(packet.taskNumber, packet.runId, "testFixes", packet.projectRoot);
+    return { ...packet, box: "AMEND_ENTRY_WITH_FAILING_TESTS", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

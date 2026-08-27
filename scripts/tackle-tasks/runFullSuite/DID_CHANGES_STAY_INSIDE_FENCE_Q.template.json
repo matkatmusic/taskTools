@@ -2,13 +2,26 @@
     "input": {
         "box": "DO_ALL_TESTS_PASS_Q",
         "scriptSignal": "continue",
-        "note": "DO_ALL_TESTS_PASS_Q.ts for DO_ALL_TESTS_PASS_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": ""
     },
     "output": {
         "box": "DID_CHANGES_STAY_INSIDE_FENCE_Q",
         "scriptSignal": "continue",
-        "note": "DID_CHANGES_STAY_INSIDE_FENCE_Q.ts for DID_CHANGES_STAY_INSIDE_FENCE_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "next": "MERGE_WORKTREES",
+        "exitType": "",
+        "exitNote": ""
     }
 }

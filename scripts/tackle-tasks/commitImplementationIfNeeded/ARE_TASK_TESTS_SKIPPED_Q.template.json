@@ -2,13 +2,24 @@
     "input": {
         "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
         "scriptSignal": "continue",
-        "note": "COMMIT_IMPLEMENTATION_IF_NEEDED.ts for COMMIT_IMPLEMENTATION_IF_NEEDED",
-        "input": ""
+        "taskNumber": 4,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/plain",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/plain/worktree",
+        "branch": "task-4",
+        "exitType": "",
+        "exitNote": ""
     },
     "output": {
         "box": "ARE_TASK_TESTS_SKIPPED_Q",
         "scriptSignal": "continue",
-        "note": "ARE_TASK_TESTS_SKIPPED_Q.ts for ARE_TASK_TESTS_SKIPPED_Q",
-        "input": ""
+        "taskNumber": 4,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/plain",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/static/plain/worktree",
+        "branch": "task-4",
+        "exitType": "",
+        "exitNote": "",
+        "next": "RUN_TASK_TESTS"
     }
 }

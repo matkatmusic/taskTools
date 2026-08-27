@@ -1,14 +1,12 @@
 {
     "input": {
-        "box": "FAILURES_EXIT",
+        "box": "",
         "scriptSignal": "continue",
-        "note": "FAILURES_EXIT.ts for FAILURES_EXIT",
-        "input": ""
+        "taskNumber": 1
     },
     "output": {
         "box": "STOP",
-        "scriptSignal": "continue",
-        "note": "STOP.ts for STOP",
-        "input": ""
+        "scriptSignal": "stop",
+        "taskNumber": 1
     }
 }

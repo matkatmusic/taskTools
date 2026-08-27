@@ -1,12 +1,38 @@
 {
     "input": {
-        "message": "",
-        "additionalData": {}
+        "box": "FIX_CONFLICTS",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "message": "resolved the conflict",
+        "additionalData": {},
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "/repo/.worktrees/task-1",
+        "conflictedFilePaths": ["package.json"],
+        "conflicted": true,
+        "failureReason": ""
     },
     "output": {
         "box": "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
         "scriptSignal": "continue",
-        "note": "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts for COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "message": "resolved the conflict",
+        "additionalData": {},
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "/repo/.worktrees/task-1",
+        "conflictedFilePaths": ["package.json"],
+        "conflicted": true,
+        "failureReason": ""
     }
 }

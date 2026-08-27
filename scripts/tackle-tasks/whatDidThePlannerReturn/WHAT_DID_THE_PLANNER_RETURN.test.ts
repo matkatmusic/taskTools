@@ -1,0 +1,26 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { main } from "./WHAT_DID_THE_PLANNER_RETURN.ts";
+
+const base = {
+    taskNumber: 35, runId: "run-1", worktree: "/tmp/fake-worktree", branch: "task-35",
+    projectRoot: "/tmp/fake-project", docsMode: "", planFile: "", exitType: "", exitNote: "", message: "",
+};
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToCodexReviewsPlan", () => {
+    const output = main(JSON.stringify({ ...base, additionalData: { outcome: "PLAN", planFile: "plans/plan-35.json", clarifyRequest: "" } }));
+    assert.equal(output.next, "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN");
+    assert.equal(output.scriptSignal, "continue");
+    assert.equal(output.planFile, "plans/plan-35.json");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesClarifyOutcomeToTheRoundsCheck", () => {
+    const output = main(JSON.stringify({ ...base, additionalData: { outcome: "CLARIFY", planFile: "", clarifyRequest: "which database?" } }));
+    assert.equal(output.next, "ARE_2_CLARIFY_ROUNDS_DONE_Q");
+    assert.equal(output.clarifyRequest, "which database?");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_throwsOnAnUnknownOutcome", () => {
+    assert.throws(() => main(JSON.stringify({ ...base, additionalData: { outcome: "ERROR", planFile: "", clarifyRequest: "" } })), /unknown planner outcome/);
+    assert.throws(() => main(JSON.stringify({ ...base, additionalData: { outcome: "MAYBE", planFile: "", clarifyRequest: "" } })), /unknown planner outcome/);
+});

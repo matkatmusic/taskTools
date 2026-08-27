@@ -2,13 +2,28 @@
     "input": {
         "box": "LOCK_SOURCE_REPO",
         "scriptSignal": "continue",
-        "note": "LOCK_SOURCE_REPO.ts for LOCK_SOURCE_REPO",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
     },
     "output": {
         "box": "WAS_LOCK_ACQUIRED_Q",
         "scriptSignal": "continue",
-        "note": "WAS_LOCK_ACQUIRED_Q.ts for WAS_LOCK_ACQUIRED_Q",
-        "input": ""
+        "next": "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     }
 }

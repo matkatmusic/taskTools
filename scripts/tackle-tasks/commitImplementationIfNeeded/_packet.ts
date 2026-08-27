@@ -9,6 +9,4 @@ export type CommitImplementationIfNeededPacket = {
     branch: string;
     exitType: string;
     exitNote: string;
-    message: string;
-    additionalData: Record<string, unknown>;
 };

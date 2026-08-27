@@ -1,0 +1,8 @@
+{
+    "task": 42,
+    "revision": 1,
+    "createsFiles": [],
+    "sections": [
+        { "id": "step-1", "title": "one", "body": "b" }
+    ]
+}

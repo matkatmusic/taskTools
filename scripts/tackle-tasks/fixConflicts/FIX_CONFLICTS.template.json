@@ -1,8 +1,25 @@
 {
     "input": {
-        "box": "REBASE_ONTO_TARGET_BRANCH",
+        "box": "ARE_2_CONFLICT_FIXES_DONE_Q",
         "scriptSignal": "continue",
-        "note": "REBASE_ONTO_TARGET_BRANCH.ts for REBASE_ONTO_TARGET_BRANCH",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixConflicts/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixConflicts/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixConflicts/fixtures/worktree",
+        "conflictedFilePaths": ["package.json"],
+        "failureReason": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "resolved": true,
+            "unresolvedPaths": []
+        }
     }
 }

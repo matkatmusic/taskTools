@@ -1,11 +1,19 @@
 // WRITE_PUBLICATION_OUTCOME, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { writeTaskExitNotes } from "../shared/writeTaskExitNotes.ts";
+import { getCurrentTaskRun, updateCurrentTaskRun } from "../shared/taskRunState.ts";
+import type { EntryPacket } from "./_packet.ts";
 
+// Work landed: keep completed if it is already there, else write partially-published. Never run-failed.
 export function main(input: string): Record<string, unknown> {
-    return { box: "WRITE_PUBLICATION_OUTCOME", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for WRITE_PUBLICATION_OUTCOME`, input };
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const alreadyCompleted = getCurrentTaskRun(packet.taskNumber, packet.projectRoot)?.exitType === "completed";
+    const exitType = alreadyCompleted ? "completed" : "partially-published";
+    writeTaskExitNotes({ taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot, exitType, exitNote: packet.exitNote });
+    updateCurrentTaskRun(packet.taskNumber, packet.runId, { cleanupIncomplete: true }, packet.projectRoot);
+    return { ...packet, box: "WRITE_PUBLICATION_OUTCOME", scriptSignal: SCRIPT_SIGNAL.CONTINUE, exitType };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

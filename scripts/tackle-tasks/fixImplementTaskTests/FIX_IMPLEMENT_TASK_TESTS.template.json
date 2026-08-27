@@ -2,7 +2,18 @@
     "input": {
         "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
         "scriptSignal": "continue",
-        "note": "AMEND_ENTRY_WITH_FAILING_TESTS.ts for AMEND_ENTRY_WITH_FAILING_TESTS",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixImplementTaskTests/fixtures/projectRoot",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/fixImplementTaskTests/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "fixSummary": ""
+        }
     }
 }

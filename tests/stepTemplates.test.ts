@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import type { StepConfig, StepConfigEntry } from "../scripts/generateSteps.ts";
 import { buildPromptOutputTemplate } from "../scripts/contracts.ts";
 import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
@@ -47,6 +47,15 @@ function runBlockScript(scriptPath: string, input: unknown, cwd: string): { comm
     }
 }
 
+// A fixture .git makes git treat that folder as another repo, hiding its setup.sh from every git command.
+after(() => {
+    for (const pipelineDir of readdirSync(STEPS_DIR)) {
+        const cleanupScript = join(STEPS_DIR, pipelineDir, "fixtures/cleanup.sh");
+        if (!existsSync(cleanupScript)) continue;
+        spawnSync("bash", [cleanupScript], { cwd: dirname(cleanupScript), encoding: "utf8" });
+    }
+});
+
 // Rebuilds every fixture's disposable .git repo before the tests read it; a .git can never be committed.
 const STEPS_DIR = join(PROJECT_ROOT, "scripts/tackle-tasks");
 for (const pipelineDir of readdirSync(STEPS_DIR)) {
@@ -85,7 +94,7 @@ function withoutNext(value: unknown): unknown {
     return rest;
 }
 
-// The edge contract: what a block hands on must be exactly what the next block says it takes, next aside.
+// The edge contract: what a block hands on must cover every key the next block's input template lists.
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
         for (const target of entry.next) {
@@ -134,9 +143,36 @@ for (const entries of Object.values(config)) {
 for (const [scriptPath, { box, allowedNext }] of allowedNextByScript) {
     test(`test_stepTemplate_${box}_everyNextLiteralIsADeclaredEdge`, () => {
         const source = readFileSync(join(PROJECT_ROOT, scriptPath), "utf8");
-        const literalNextValues = [...source.matchAll(/next:\s*"([\w.:]+)"/g)].map(match => match[1]!);
+        const literalNextValues = [...source.matchAll(/next:\s*"([\w.:-]+)"/g)].map(match => match[1]!);
         for (const value of literalNextValues) {
             assert.ok(allowedNext.has(value), `${scriptPath} returns next: "${value}", not one of ${[...allowedNext].join(", ")}`);
         }
+    });
+}
+
+// A block after a prompt block inherits that block's packet, which still holds the next that routed into it.
+// Source-only check: running these blocks would commit real repositories.
+const boxesAfterAPromptBlock = new Map<string, string>();
+for (const entries of Object.values(config)) {
+    for (const entry of entries) {
+        if (!entry.producesPrompt) continue;
+        for (const target of entry.next) {
+            const targetBox = target.slice(target.indexOf("::") + 2);
+            for (const candidates of Object.values(config)) {
+                for (const candidate of candidates) {
+                    if (candidate.box === targetBox) boxesAfterAPromptBlock.set(candidate.script, candidate.box);
+                }
+            }
+        }
+    }
+}
+for (const [scriptPath, box] of boxesAfterAPromptBlock) {
+    test(`test_stepTemplate_${box}_neverHandsOnAStaleNext`, () => {
+        const source = readFileSync(join(PROJECT_ROOT, scriptPath), "utf8");
+        const spreadsItsInput = /\.\.\.(packet|core)\b/.test(source);
+        const dropsInheritedNext = /next:\s*_next/.test(source);
+        const writesItsOwnNext = /next:\s*"/.test(source);
+        assert.ok(!spreadsItsInput || dropsInheritedNext || writesItsOwnNext,
+            `${scriptPath} follows a prompt block and spreads its input without dropping next; the walker will reject the inherited value`);
     });
 }

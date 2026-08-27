@@ -1,11 +1,13 @@
-// IS_REBASE_FINISHED_Q, from pipeline-commitMergeConflictFixIfNeeded.mmd
+// IS_REBASE_FINISHED_Q, from pipeline-rebase.mmd. Decision: read-only, no lock refresh needed.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import type { CommitMergeConflictFixIfNeededPacket } from "./_packet.ts";
 
-export function main(input: string): Record<string, unknown> {
-    return { box: "IS_REBASE_FINISHED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for IS_REBASE_FINISHED_Q`, input };
+export function main(input: string): CommitMergeConflictFixIfNeededPacket & { next: string } {
+    const packet = JSON.parse(input) as CommitMergeConflictFixIfNeededPacket;
+    const next = packet.finished ? "pipeline-runFullSuite.mmd::RUN_FULL_SUITE" : "ARE_2_CONFLICT_FIXES_DONE_Q";
+    return { ...packet, box: "IS_REBASE_FINISHED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -2,13 +2,34 @@
     "input": {
         "box": "DID_REBASE_REPORT_CONFLICTS_Q",
         "scriptSignal": "continue",
-        "note": "DID_REBASE_REPORT_CONFLICTS_Q.ts for DID_REBASE_REPORT_CONFLICTS_Q",
-        "input": ""
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures/worktree",
+        "conflictedFilePaths": ["package.json"],
+        "failureReason": ""
     },
     "output": {
         "box": "ARE_2_CONFLICT_FIXES_DONE_Q",
         "scriptSignal": "continue",
-        "note": "ARE_2_CONFLICT_FIXES_DONE_Q.ts for ARE_2_CONFLICT_FIXES_DONE_Q",
-        "input": ""
+        "next": "pipeline-fixConflicts.mmd::FIX_CONFLICTS",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "{{PROJECT_ROOT}}/scripts/tackle-tasks/rebase/fixtures/worktree",
+        "conflictedFilePaths": ["package.json"],
+        "failureReason": ""
     }
 }

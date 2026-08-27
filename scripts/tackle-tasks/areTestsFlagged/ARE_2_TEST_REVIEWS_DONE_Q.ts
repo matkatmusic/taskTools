@@ -1,11 +1,31 @@
-// ARE_2_TEST_REVIEWS_DONE_Q, from pipeline-areTestsFlagged.mmd
+// ARE_2_TEST_REVIEWS_DONE_Q, from pipeline-areTestsFlagged.mmd. Ported from archive pipeline-reviewTests/ARE_2_TEST_REVIEWS_DONE.ts.
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import type { AreTestsFlaggedPacket } from "./_packet.ts";
+
+type Input = AreTestsFlaggedPacket & { next: string };
+
+// A non-empty codexReviewNotes means a prior flagged review already amended this entry once.
+function hasAlreadyBeenAmended(projectRoot: string, taskNumber: number): boolean {
+    const pair = resolveTaskFiles(projectRoot);
+    const entry = readTaskFile(pair.tasksPath).find((task) => task.taskNumber === taskNumber);
+    if (!entry) throw new Error(`task ${taskNumber} not found in ${pair.tasksPath}`);
+    return typeof entry.codexReviewNotes === "string" && entry.codexReviewNotes.trim() !== "";
+}
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "ARE_2_TEST_REVIEWS_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for ARE_2_TEST_REVIEWS_DONE_Q`, input };
+    const { box: _box, scriptSignal: _scriptSignal, next: _next, notes, ...core } = JSON.parse(input) as Input;
+    const reviewsDone = hasAlreadyBeenAmended(core.projectRoot, core.taskNumber);
+    const output = { ...core, box: "ARE_2_TEST_REVIEWS_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
+    if (reviewsDone) {
+        return {
+            ...output, notes: "", exitType: "tests-flagged", exitNote: "task tests failed codex review",
+            next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
+        };
+    }
+    return { ...output, notes, next: "AMEND_ENTRY_WITH_CODEX_NOTES" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

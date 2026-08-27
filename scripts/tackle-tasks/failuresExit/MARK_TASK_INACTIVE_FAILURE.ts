@@ -1,11 +1,14 @@
 // MARK_TASK_INACTIVE_FAILURE, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
-import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { markTaskInactive } from "../shared/markTaskInactive.ts";
+import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
-    return { box: "MARK_TASK_INACTIVE_FAILURE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, note: `${basename(fileURLToPath(import.meta.url))} for MARK_TASK_INACTIVE_FAILURE`, input };
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const { active, endedAt } = markTaskInactive({ taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot });
+    return { ...packet, box: "MARK_TASK_INACTIVE_FAILURE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, active, endedAt };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
