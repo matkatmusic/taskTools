@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
+import { whatToReturnSection } from "../shared/whatToReturn.ts";
 import type { CommitImplementationIfNeededPacket } from "../commitImplementationIfNeeded/_packet.ts";
 
 // Double-quoted for the read-file hook's parser; deduped so a path is never listed twice.
@@ -62,9 +63,7 @@ You are forbidden from doing any of the following actions:
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
 It is not a failure, and it is always better than a guess.
 
-## WHAT TO RETURN
-
-Return \`{ "message": "", "additionalData": { "fixSummary": "..." } }\`, where \`fixSummary\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why.
+${whatToReturnSection('{ "fixSummary": "..." }', "where \\`fixSummary\\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why", "")}
 
 ## FAILING TASK TESTS
 

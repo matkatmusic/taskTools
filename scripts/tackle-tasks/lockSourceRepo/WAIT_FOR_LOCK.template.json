@@ -2,7 +2,6 @@
     "input": {
         "box": "HAVE_15_MINUTES_PASSED_Q",
         "scriptSignal": "continue",
-        "next": "WAIT_FOR_LOCK",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "/abs/project",

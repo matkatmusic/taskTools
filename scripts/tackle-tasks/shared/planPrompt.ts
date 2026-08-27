@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
 import type { PlanReview } from "./recordPlanReview.ts";
+import { whatToReturnSection } from "./whatToReturn.ts";
 
 const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is the literal string "skip", do not require TDD; write ordinary
 verification commands instead. Otherwise the task has tests: the plan's verification section
@@ -16,7 +17,6 @@ functions/subparts it touches.`;
 const readFileArgs = (paths: string[]) => paths.map((path) => `"${path}"`).join(" ");
 
 const PLAN_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/plan-template.json", import.meta.url));
-const PLAN_OUTPUT_PATH = fileURLToPath(new URL("../../../plans/plan-output-template.json", import.meta.url));
 // Resolved here because the read-file hook stats the raw string and never expands a tilde.
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 
@@ -103,7 +103,7 @@ The plan must be formatted in the exact shape shown under **FORMATTING THE PLAN*
 Run this, which puts the brief, the files this task owns, the guides you must follow,
 and the return shape you must produce into your context:
 \`\`\`
-/read-file ${readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md"), PLAN_OUTPUT_PATH])}
+/read-file ${readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}
 \`\`\`
 
 ${absolutePathsSection(t.repoRoot)}
@@ -168,9 +168,8 @@ You are forbidden from doing any of the following actions:
 
 You are allowed to read every file the read-file skill put into your context, and nothing else.
 
-## WHAT TO RETURN:
-Return the shape given by \`${PLAN_OUTPUT_PATH}\`, which the read-file skill put into your context, replacing every \`<...>\` with a real value.
-
 ---- TESTS_FIELD ("skip" means no TDD requirement) ----
-${t.hasTests ? (t.tests ?? "(the task has tests; the user wrote no example)") : "skip"}`;
+${t.hasTests ? (t.tests ?? "(the task has tests; the user wrote no example)") : "skip"}
+
+${whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>" }`, "replacing every \\`<...>\\` with a real value", "")}`;
 }

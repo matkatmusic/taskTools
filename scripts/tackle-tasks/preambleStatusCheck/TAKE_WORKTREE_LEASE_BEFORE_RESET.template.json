@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "TAKE_WORKTREE_LEASE_BEFORE_RESET"
+        "exitNote": ""
     },
     "output": {
         "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",

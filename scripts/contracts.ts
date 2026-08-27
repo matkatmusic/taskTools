@@ -12,14 +12,6 @@ export type ScriptSignal = typeof SCRIPT_SIGNAL[keyof typeof SCRIPT_SIGNAL];
 
 export const KNOWN_SCRIPT_SIGNALS: ScriptSignal[] = [SCRIPT_SIGNAL.CONTINUE, SCRIPT_SIGNAL.STOP, SCRIPT_SIGNAL.PROMPT];
 
-// workflowSignal: set by the hook in its outcome, read by the workflow loop.
-export const WORKFLOW_SIGNAL = {
-    CONTINUE: "continue",
-    DONE: "done",
-} as const;
-
-export type WorkflowSignal = typeof WORKFLOW_SIGNAL[keyof typeof WORKFLOW_SIGNAL];
-
 // What every returns_a_prompt block prints. Only box varies.
 export function buildPromptOutputTemplate(box: string): Record<string, unknown> {
     return { box, scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: "" };

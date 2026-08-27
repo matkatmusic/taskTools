@@ -2,7 +2,6 @@
     "input": {
         "box": "ARE_2_TEST_REVIEWS_DONE_Q",
         "scriptSignal": "continue",
-        "next": "AMEND_ENTRY_WITH_CODEX_NOTES",
         "taskNumber": 43,
         "runId": "run-1",
         "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures",

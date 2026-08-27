@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "IS_PREVIOUS_RUN_RESUMABLE_Q"
+        "exitNote": ""
     },
     "output": {
         "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",

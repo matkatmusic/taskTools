@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "IS_WORKTREE_SAFE_TO_USE_Q"
+        "exitNote": ""
     },
     "output": {
         "box": "IS_WORKTREE_SAFE_TO_USE_Q",

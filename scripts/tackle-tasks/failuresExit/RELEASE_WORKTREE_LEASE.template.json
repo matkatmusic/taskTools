@@ -2,7 +2,6 @@
     "input": {
         "box": "DOES_RUN_HOLD_LEASE_Q",
         "scriptSignal": "continue",
-        "next": "RELEASE_WORKTREE_LEASE",
         "taskNumber": 900003,
         "runId": "run-fixture",
         "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",

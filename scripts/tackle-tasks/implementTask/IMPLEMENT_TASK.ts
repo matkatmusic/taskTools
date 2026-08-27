@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
+import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
@@ -112,11 +113,7 @@ You are forbidden from doing any of the following actions:
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
 
-## WHAT TO RETURN
-
-Return JSON with two fields, \`message\` and \`additionalData\`.
-\`message\`: a one-line summary of what you did.
-\`additionalData\`: \`{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }\`.`;
+${whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", "")}`;
 }
 
 export function main(input: string): Record<string, unknown> {

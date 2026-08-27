@@ -1,32 +1,18 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StepConfig } from "../scripts/generateSteps.ts";
-import { assertStartStepIsInConfig, buildAgentSchemasByStartBlock, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
-import {
-    buildAgentSchema,
-    buildBlockSchemas,
-    buildNextStepsByStep,
-    buildWalkResultSchema,
-    getPayloadFromOutput,
-    getPromptStepKeys,
-    getSchemaFromTemplate,
-    getStepsReachableFrom,
-} from "../scripts/buildRunStepSchemas.ts";
+import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
+import { buildHookOutputSchema } from "../scripts/buildRunStepSchemas.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
-function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[]; agentAnswer?: Record<string, unknown> }[]) {
+function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
     const projectRoot = mkdtempSync(join(tmpdir(), "generate-workflow-"));
     mkdirSync(join(projectRoot, "steps"));
     const entries = blocks.map(block => {
-        const template: Record<string, unknown> = { input: {}, output: block.output };
-        if (block.agentAnswer !== undefined) {
-            template.agentAnswer = block.agentAnswer;
-        }
-        writeFileSync(join(projectRoot, "steps", `${block.box}.template.json`), JSON.stringify(template));
+        writeFileSync(join(projectRoot, "steps", `${block.box}.template.json`), JSON.stringify({ input: {}, output: block.output }));
         return {
             box: block.box,
             script: `steps/${block.box}.ts`,
@@ -41,88 +27,19 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; pr
     return { projectRoot, config, configFile };
 }
 
-test("test_buildWalkResultSchema_closesTheEnvelopeTheHookReturns", () => {
-    const schema = buildWalkResultSchema() as Record<string, any>;
+// The agent copies two strings; a payload path, never a payload object, so there is nothing to retype.
+test("test_buildHookOutputSchema_closesTheObjectTheHookReturns", () => {
+    const schema = buildHookOutputSchema() as Record<string, any>;
     const outcome = schema.properties.outcome.anyOf[0];
-    assert.deepEqual(outcome.required, ["box", "scriptSignal", "workflowSignal", "next", "payload", "packetFile"]);
+    assert.deepEqual(outcome.required, ["next", "payload"]);
+    assert.deepEqual(outcome.properties.payload, { type: "string" });
     assert.equal(outcome.additionalProperties, false);
 });
 
-// The envelope is shared, so the block shapes are left out until buildPossibleSchemas picks them.
-test("test_buildWalkResultSchema_leavesThePayloadShapesEmpty", () => {
-    const schema = buildWalkResultSchema() as Record<string, any>;
-    assert.deepEqual(schema.properties.outcome.anyOf[0].properties.payload.anyOf, []);
-});
-
 // A walk that never reached a block has nothing to report, so outcome has to allow null.
-test("test_buildWalkResultSchema_allowsAnOutcomeOfNull", () => {
-    const schema = buildWalkResultSchema() as Record<string, any>;
+test("test_buildHookOutputSchema_allowsAnOutcomeOfNull", () => {
+    const schema = buildHookOutputSchema() as Record<string, any>;
     assert.deepEqual(schema.properties.outcome.anyOf[1], { type: "null" });
-});
-
-// The agent answers with a prompt block's answer shape; a continue or stop block has no schema.
-test("test_buildBlockSchemas_namesASchemaOnlyForABlockTheWalkCanStopAt", () => {
-    const { config, projectRoot } = buildProject([
-        { box: "A", output: { box: "A", scriptSignal: "continue", files: 0 } },
-        { box: "B", output: { box: "B", scriptSignal: "stop" } },
-        { box: "C", output: {}, producesPrompt: true, agentAnswer: { answer: "" } },
-    ]);
-    const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas.map(blockSchema => blockSchema.name), ["PAYLOAD_C_SCHEMA"]);
-});
-
-// A prompt block's pass hands on the agent's answer, so its schema comes from the block's own declared shape.
-test("test_buildBlockSchemas_usesTheAgentAnswerShapeForAPromptBlock", () => {
-    const agentAnswer = { outcome: "" };
-    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true, agentAnswer }]);
-    const blockSchemas = buildBlockSchemas(config, projectRoot);
-    assert.deepEqual(blockSchemas[0]!.schema, getSchemaFromTemplate(agentAnswer));
-});
-
-// Every producesPrompt block must declare its answer shape; there is no global fallback to drift against.
-test("test_buildBlockSchemas_throwsWhenAPromptBlockDeclaresNoAgentAnswer", () => {
-    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true }]);
-    assert.throws(() => buildBlockSchemas(config, projectRoot), /declares no agentAnswer/);
-});
-
-// A pass ending before a prompt block, or at a STOP block, still needs a payload shape.
-test("test_buildAgentSchema_endsThePayloadAnyOfWithTheEmptyObjectAlternative", () => {
-    const { config, projectRoot } = buildProject([{ box: "A", output: {}, producesPrompt: true, agentAnswer: { answer: "" } }]);
-    const schema = buildAgentSchema(config, projectRoot, "one.mmd::A") as Record<string, any>;
-    const payloadSchemas = schema.properties.outcome.anyOf[0].properties.payload.anyOf;
-    assert.deepEqual(payloadSchemas.at(-1), { type: "object", maxProperties: 0 });
-});
-
-// box, scriptSignal and next belong to the envelope, so a payload never repeats them.
-test("test_getPayloadFromOutput_dropsTheKeysTheEnvelopeOwns", () => {
-    assert.deepEqual(getPayloadFromOutput({ box: "A", scriptSignal: "continue", next: "B", files: 0 }), { files: 0 });
-});
-
-test("test_buildNextStepsByStep_keysEveryBoxByDiagramAndBox", () => {
-    const { config } = buildProject([{ box: "A", output: {}, next: ["B"] }, { box: "B", output: {} }]);
-    assert.deepEqual(buildNextStepsByStep(config), { "one.mmd::A": ["one.mmd::B"], "one.mmd::B": [] });
-});
-
-// A prompt block is a stopping block, so the walk does not follow its arrows.
-test("test_buildNextStepsByStep_dropsTheArrowsOutOfAPromptBlock", () => {
-    const { config } = buildProject([{ box: "A", output: {}, producesPrompt: true, next: ["B"] }, { box: "B", output: {} }]);
-    assert.deepEqual(buildNextStepsByStep(config), { "one.mmd::A": [], "one.mmd::B": [] });
-});
-
-test("test_getStepsReachableFrom_followsASingleChainToItsEnd", () => {
-    const nextStepsByStep = { A: ["B"], B: ["C"], C: [] };
-    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B", "C"]);
-});
-
-// A block script picks its own branch, so both arms belong in the same schema.
-test("test_getStepsReachableFrom_takesEveryArmOfABranch", () => {
-    const nextStepsByStep = { A: ["B"], B: ["C", "D"], C: [], D: [] };
-    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B", "C", "D"]);
-});
-
-test("test_getStepsReachableFrom_stopsWhenTheArrowsLoopBack", () => {
-    const nextStepsByStep = { A: ["B"], B: ["A"] };
-    assert.deepEqual(getStepsReachableFrom("A", nextStepsByStep), ["A", "B"]);
 });
 
 // The harness rejects a script unless meta is the first statement, so the generated comment comes after it.
@@ -138,11 +55,11 @@ test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
     assert.match(script, /if \(result === null\) \{/);
     assert.match(script, /if \(result\.ok === false\) \{/);
     assert.match(script, /if \(result\.ran\.length === 0\) \{/);
-    assert.match(script, /if \(result\.outcome\.workflowSignal === 'done'\) \{/);
+    assert.match(script, /if \(result\.outcome\.next === null\) \{/);
 });
 
 // Every return names the prompt that produced it, so a failure says what was asked.
-test("test_buildWorkflowScript_returnsTheEnvelopeAndThePromptThatMadeIt", () => {
+test("test_buildWorkflowScript_returnsTheHookOutputAndThePromptThatMadeIt", () => {
     const script = buildWorkflowScript();
     assert.match(script, /return \{ ok: true, ran, errors: \[\], prompt, outcome: result\.outcome \}/);
     assert.doesNotMatch(script, /throw new Error\(`/);
@@ -153,33 +70,26 @@ test("test_buildWorkflowScript_refusesToRunWithoutATaskNumberAndATasksFileInArgs
     assert.match(buildWorkflowScript(), /if \(!Number\.isInteger\(args\?\.task\) \|\| !args\?\.tasksFile\)/);
 });
 
-// AGENT_SCHEMAS holds one envelope per block a pass can start at: START_STEP and every prompt block.
-test("test_buildWorkflowScript_putsAnAgentSchemaKeyOnStartStepAndEveryPromptBlock", () => {
+// One schema for every pass, so no field the agent returns depends on which block it stopped at.
+test("test_buildWorkflowScript_usesOneHookOutputSchemaForEveryPass", () => {
     const script = buildWorkflowScript();
     assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_STATUS_CHECK'/);
     assert.match(script, /^let blockToRun = START_STEP$/m);
-    assert.match(script, /^let schema = AGENT_SCHEMAS\[START_STEP\]$/m);
-    const listStart = script.indexOf("const AGENT_SCHEMAS = ") + "const AGENT_SCHEMAS = ".length;
-    const agentSchemaKeys = Object.keys(JSON.parse(script.slice(listStart, script.indexOf("\n\n// Required:"))));
-    const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const config = JSON.parse(readFileSync(join(projectRoot, "scripts", "steps.json"), "utf8")) as StepConfig;
-    const expectedKeys = Object.keys(buildAgentSchemasByStartBlock());
-    assert.ok(agentSchemaKeys.includes(START_STEP));
-    for (const promptStepKey of getPromptStepKeys(config)) {
-        assert.ok(agentSchemaKeys.includes(promptStepKey), `missing ${promptStepKey}`);
-    }
-    assert.deepEqual(agentSchemaKeys.sort(), expectedKeys.sort());
+    assert.match(script, /schema: HOOK_OUTPUT_SCHEMA \}\)/);
+    assert.doesNotMatch(script, /AGENT_SCHEMAS/);
+    assert.doesNotMatch(script, /scriptSignal/);
+    const listStart = script.indexOf("const HOOK_OUTPUT_SCHEMA = ") + "const HOOK_OUTPUT_SCHEMA = ".length;
+    assert.deepEqual(JSON.parse(script.slice(listStart, script.indexOf("\n\n// Required:"))), buildHookOutputSchema());
 });
 
-// After a prompt pass the next block reads the packetFile plus the answer.
-test("test_buildWorkflowScript_mergesAPromptAnswerOntoTheHooksPacket", () => {
+// After every pass the next block reads the packet file the hook named; the answer is already inside it.
+test("test_buildWorkflowScript_handsThePacketFileToTheNextBlock", () => {
     const script = buildWorkflowScript();
-    assert.match(script, /input = \{ packetFile: result\.outcome\.packetFile, \.\.\.result\.outcome\.payload \}/);
-    assert.match(script, /input = \{ packetFile: result\.outcome\.packetFile \}$/m);
-    assert.doesNotMatch(script, /lastPacket/);
+    assert.match(script, /input = \{ packetFile: result\.outcome\.payload \}$/m);
+    assert.doesNotMatch(script, /\.\.\.result\.outcome\.payload/);
 });
 
-// An agent that answers with text instead of the envelope must not crash the loop and lose that text.
+// An agent that answers with text instead of the hook output must not crash the loop and lose that text.
 test("test_buildWorkflowScript_reportsATextAnswerInsteadOfSpreadingIt", () => {
     const script = buildWorkflowScript();
     const textGuard = script.indexOf("if (typeof result === 'string') {");
@@ -213,4 +123,10 @@ test("test_generateWorkflow_writesTheScriptToTheGivenPath", () => {
 // npm run steps regenerates it; a hand edit or a stale copy shows up here.
 test("test_generateWorkflow_theCommittedWorkflowIsUpToDate", () => {
     assert.equal(readFileSync(WORKFLOW_FILE, "utf8"), buildWorkflowScript());
+});
+
+// START_STEP is a constant in this file; the config is the only thing that can drift away from it.
+test("test_START_STEP_isAKeyInTheRepoConfig", () => {
+    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "steps.json"), "utf8")) as StepConfig;
+    assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
 });

@@ -55,12 +55,13 @@ test("test_fixConflictsPrompt_throwsWhenNoRebaseIsStopped", () => {
     assert.throws(() => fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main"), /no unmerged paths/);
 });
 
-test("test_fixConflictsPrompt_citesTheOutputTemplateAndCarriesNoDataBlock", () => {
+test("test_fixConflictsPrompt_endsWithTheSharedWhatToReturnSectionAndCarriesNoDataBlock", () => {
     // The old prompt returned its shape from a trailing DATA block full of ALL_CAPS placeholders.
     const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/\b(CHECKOUT_PATH|CONFLICTED_PATHS)\b/.test(prompt), false);
-    assert.match(prompt, /fix-conflicts-output-template\.json/);
+    assert.match(prompt, /Return `\{ "message": "", "additionalData": \{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \} \}`, replacing every `<\.\.\.>` with a real value\./);
+    assert.match(prompt, /return that same shape anyway/);
 });
 
 test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {

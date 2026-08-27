@@ -17,8 +17,10 @@ function runHook(prompt: string, configFile?: string) {
         env: { ...process.env, RUN_STEP_LOG: logFile, ...(configFile ? { RUN_STEP_CONFIG: configFile } : {}) },
     });
     const injected = spawned.stdout.trim();
-    const result = injected ? JSON.parse(JSON.parse(injected).hookSpecificOutput.additionalContext) : null;
-    return { injected, result, readLog: () => readFileSync(logFile, "utf8") };
+    // The hook output is the first line; after a prompt stop, the agent's instructions follow it.
+    const [resultLine, ...instructionLines] = injected ? String(JSON.parse(injected).hookSpecificOutput.additionalContext).split("\n") : [];
+    const result = resultLine ? JSON.parse(resultLine) : null;
+    return { injected, result, instructions: instructionLines.join("\n"), readLog: () => readFileSync(logFile, "utf8") };
 }
 
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
@@ -108,7 +110,7 @@ test("test_runStepHook_startsAtABoxNamedWithItsDiagram", () => {
     const configFile = join(folder, "steps.json");
     writeFileSync(configFile, JSON.stringify({ "one.mmd": [writeShared("one")], "two.mmd": [writeShared("two")] }));
     const { result } = runHook("/run-step two.mmd::SHARED", configFile);
-    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).from, "two");
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).from, "two");
 });
 
 test("test_runStepHook_walksUntilAStepSignalsStop", () => {
@@ -121,8 +123,7 @@ test("test_runStepHook_walksUntilAStepSignalsStop", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::C"]);
-    assert.equal(result.outcome.box, "one.mmd::C");
-    assert.equal(result.outcome.scriptSignal, "stop");
+    assert.equal(result.outcome.next, null);
 });
 
 test("test_runStepHook_walksAcrossASeamIntoAnotherDiagram", () => {
@@ -148,11 +149,10 @@ test("test_runStepHook_endsCleanlyWhenATerminalBoxSignalsStop", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.outcome.scriptSignal, "stop");
-    assert.equal(result.outcome.workflowSignal, "done");
+    assert.equal(result.outcome.next, null);
 });
 
-// A block that prints a prompt hands off to an agent, so the walk stops without ending the path.
+// A block that prints a prompt stops the walk; the prompt waits in the packet file for an agent.
 test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
@@ -162,10 +162,29 @@ test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true);
-    assert.equal(result.outcome.scriptSignal, "prompt");
-    assert.equal(result.outcome.workflowSignal, "continue");
+    assert.equal(result.outcome.next, "one.mmd::B");
     assert.deepEqual(result.ran, ["one.mmd::A"]);
-    assert.equal(result.outcome.payload.prompt, "read the plan and answer");
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).prompt, "read the plan and answer");
+});
+
+// The skill body says nothing about prompts; the hook output itself tells the agent what to do with the file.
+test("test_runStepHook_tellsTheAgentToAnswerIntoThePacketFileAfterAPromptStop", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result, instructions } = runHook("/run-step A", configFile);
+    assert.match(instructions, new RegExp(`The file at ${result.outcome.payload} holds a prompt`));
+    assert.match(instructions, /Write the object the prompt asks you to return into that same file/);
+});
+
+test("test_runStepHook_givesNoInstructionsAfterAStopBlock", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    assert.equal(runHook("/run-step A", configFile).instructions, "");
 });
 
 // The diagram's returns_a_prompt mark and the printed scriptSignal must agree, both ways.
@@ -238,10 +257,8 @@ test("test_runStepHook_walksIntoAPromptBlockAndHandsItsInputAsThePacket", () => 
     }));
     const { result } = runHook("/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
-    assert.equal(result.outcome.scriptSignal, "prompt");
     assert.equal(result.outcome.next, "one.mmd::C");
-    assert.equal("packet" in result.outcome, false);
-    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "" });
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.payload, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "", prompt: "answer" });
 });
 
 // A pass starting at the prompt block runs it; the packet is that pass's given input.
@@ -253,9 +270,7 @@ test("test_runStepHook_handsAPromptBlocksOwnInputAsThePacket", () => {
         ],
     }));
     const { result } = runHook(`/run-step B {"box":"A","scriptSignal":"continue","taskNumber":7}`, configFile);
-    assert.equal(result.outcome.scriptSignal, "prompt");
-    assert.equal("packet" in result.outcome, false);
-    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7 });
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.payload, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, prompt: "answer" });
 });
 
 // After a stop block the packet is that block's whole output, box and scriptSignal included.
@@ -264,22 +279,20 @@ test("test_runStepHook_handsAStopBlocksOutputAsThePacket", () => {
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook("/run-step A just words", configFile);
-    assert.equal("packet" in result.outcome, false);
-    assert.deepEqual(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")), { box: "A", scriptSignal: "stop", input: "just words" });
+    assert.deepEqual(JSON.parse(readFileSync(result.outcome.payload, "utf8")), { box: "A", scriptSignal: "stop", input: "just words" });
 });
 
-// A start input naming a packetFile expands to that file's contents plus the fields alongside it.
+// A start input naming a packetFile expands to that file, with the answer the agent wrote into it.
 test("test_runStepHook_expandsAPacketFileIntoTheStartInput", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-packet-"));
     const packetFile = join(folder, "task-packet.json");
-    writeFileSync(packetFile, JSON.stringify({ taskNumber: 7 }));
+    writeFileSync(packetFile, JSON.stringify({ taskNumber: 7, prompt: "say x", answer: "x" }));
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step A {"packetFile":"${packetFile}","answer":"x"}`, configFile);
-    const startInput = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
-    assert.equal(startInput.taskNumber, 7);
-    assert.equal(startInput.answer, "x");
+    const { result } = runHook(`/run-step A {"packetFile":"${packetFile}"}`, configFile);
+    const startInput = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input);
+    assert.deepEqual(startInput, { taskNumber: 7, answer: "x" });
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
@@ -332,6 +345,25 @@ test("test_runStepHook_takesTheBranchTheOutputNames", () => {
         ],
     }));
     assert.deepEqual(runHook("/run-step A", configFile).result.ran, ["one.mmd::A", "one.mmd::C"]);
+});
+
+// A box after a decision box spreads its input; the decision's next must not ride along and re-route the walk.
+test("test_runStepHook_dropsTheChosenNextBeforeHandingTheOutputToTheNextBox", () => {
+    const configFile = configWith((writeStep, folder) => {
+        const spreadingScript = join(folder, "B-spreads.ts");
+        writeFileSync(spreadingScript, `console.log(JSON.stringify({ ...JSON.parse(process.argv[2]), box: "B", scriptSignal: "continue" }));\n`);
+        writeStep("B", { scriptSignal: "continue" });
+        return {
+            "one.mmd": [
+                { box: "A", script: writeStep("A", { scriptSignal: "continue", next: "B" }), next: ["B", "C"] },
+                { box: "B", script: spreadingScript, next: ["D"] },
+                { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+                { box: "D", script: writeStep("D", { scriptSignal: "stop" }), next: [] },
+            ],
+        };
+    });
+    const { result } = runHook("/run-step A", configFile);
+    assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::D"]);
 });
 
 test("test_runStepHook_failsWhenTheChosenBranchIsNotInNext", () => {
@@ -413,7 +445,7 @@ test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook(`/run-step A {"name":"matt"}`, configFile);
-    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, `{"name":"matt"}`);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => {
@@ -421,7 +453,7 @@ test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => 
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runHook("/run-step A", configFile);
-    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, "");
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, "");
 });
 
 test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
@@ -440,7 +472,7 @@ test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
         ],
     }));
     const { result } = runHook("/run-step A first-input", configFile);
-    const received = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
+    const received = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input);
     assert.equal(received.box, "A");
     assert.equal(received.greeting, "hello");
     assert.equal(received.input, "first-input");
@@ -455,7 +487,7 @@ test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
         ],
     }));
     const { result } = runHook("/run-step A", configFile);
-    const seenByC = JSON.parse(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input);
+    const seenByC = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input);
     assert.equal(seenByC.box, "B");
     assert.equal(JSON.parse(seenByC.input).box, "A");
 });
@@ -480,7 +512,7 @@ function runSkillHook(skill: string, args: string, configFile?: string) {
         env: { ...process.env, RUN_STEP_LOG: logFile, ...(configFile ? { RUN_STEP_CONFIG: configFile } : {}) },
     });
     const injected = spawned.stdout.trim();
-    const result = injected ? JSON.parse(JSON.parse(injected).hookSpecificOutput.additionalContext) : null;
+    const result = injected ? JSON.parse(String(JSON.parse(injected).hookSpecificOutput.additionalContext).split("\n")[0]) : null;
     return { injected, result };
 }
 
@@ -507,7 +539,7 @@ test("test_runStepHook_handsTheSkillArgsToTheFirstBlock", () => {
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const { result } = runSkillHook("run-step", `A {"name":"matt"}`, configFile);
-    assert.equal(JSON.parse(readFileSync(result.outcome.packetFile, "utf8")).input, `{"name":"matt"}`);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, `{"name":"matt"}`);
 });
 
 test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {

@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
+import { whatToReturnSection } from "./whatToReturn.ts";
 
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
@@ -155,9 +156,5 @@ codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_
 The \`||\` chain is the fallback.
 A non-zero exit means that reviewer was unavailable, not that the tests are bad, so the next one runs.
 
-## WHAT YOU, THE SPAWNING AGENT, RETURNS
-
-Return \`{ "message": "", "additionalData": { "reviewFile": "${t.testReviewFile}" } }\` — the path \`$REVIEW_FILE\` was set to, never its contents.
-
-If the command above could not be run at all, return that same shape anyway; the next block reads the file and fails loudly when it is missing or unusable.`;
+${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}`;
 }

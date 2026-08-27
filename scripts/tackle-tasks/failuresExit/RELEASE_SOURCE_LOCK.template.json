@@ -2,7 +2,6 @@
     "input": {
         "box": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
         "scriptSignal": "continue",
-        "next": "RELEASE_SOURCE_LOCK",
         "taskNumber": 900003,
         "runId": "run-fixture",
         "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",

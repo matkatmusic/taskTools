@@ -7,7 +7,6 @@
         "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
         "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
         "branch": "task-1",
-        "next": "MERGE_WORKTREES",
         "exitType": "",
         "exitNote": ""
     },
@@ -22,7 +21,13 @@
         "exitType": "",
         "exitNote": "",
         "merged": true,
-        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "",
+                "kind": "merge"
+            }
+        ],
         "failureReason": ""
     }
 }

@@ -1,4 +1,4 @@
-// Behavioral checks for scripts/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts.  Ported from tests/commitTaskWork.test.ts, against the new agent-answer envelope contract.  Run: node --test tests/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.test.ts
+// Behavioral checks for scripts/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts.  Ported from tests/commitTaskWork.test.ts, against the new agent-answer payload/packet/output contract.  Run: node --test tests/steps/pipeline-rebase/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";

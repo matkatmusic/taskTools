@@ -12,10 +12,19 @@
         "merged": false,
         "failureReason": "",
         "state": "NONE LANDED",
-        "landed": [""],
-        "notLanded": [""],
-        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
-        "next": "ARE_2_MERGE_ATTEMPTS_DONE_Q"
+        "landed": [
+            ""
+        ],
+        "notLanded": [
+            ""
+        ],
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "",
+                "kind": "merge"
+            }
+        ]
     },
     "output": {
         "box": "ARE_2_MERGE_ATTEMPTS_DONE_Q",
@@ -30,9 +39,19 @@
         "merged": false,
         "failureReason": "",
         "state": "NONE LANDED",
-        "landed": [""],
-        "notLanded": [""],
-        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "landed": [
+            ""
+        ],
+        "notLanded": [
+            ""
+        ],
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "",
+                "kind": "merge"
+            }
+        ],
         "next": "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH"
     }
 }

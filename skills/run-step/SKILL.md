@@ -4,8 +4,6 @@ description: run one diagram block and every block that follows it, then print t
 argument-hint: <blockName> [input]
 ---
 
-do nothing. Don't even respond.
+do nothing on your own. Don't even respond.
 
-One exception. When the injected result has `outcome.scriptSignal` of `prompt`,
-read `outcome.payload.prompt` and follow it. Return the whole injected result,
-with your answer as `outcome.payload`. Change no other field.
+The hook output from runStepHook.ts will provide you with instructions. Follow them.

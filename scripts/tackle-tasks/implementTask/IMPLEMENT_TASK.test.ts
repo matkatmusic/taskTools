@@ -56,7 +56,7 @@ test("test_buildImplementPrompt_readFileListNamesAnOwnedTestFileOnlyOnce", () =>
 
 test("test_buildImplementPrompt_tellsTheAgentToReturnMessageAndAdditionalData", () => {
     const prompt = buildImplementPrompt(fakeTask, "npx tsc --noEmit", 3);
-    assert.match(prompt, /`message` and `additionalData`/);
+    assert.match(prompt, /"message": "", "additionalData": \{ "implemented": </);
     assert.match(prompt, /"implemented"/);
 });
 

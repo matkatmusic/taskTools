@@ -2,14 +2,13 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { absolutePathsSection } from "./promptSections.ts";
+import { whatToReturnSection } from "./whatToReturn.ts";
 
 // The receipt that box hands back.
 export type ConflictFixReceipt = {
     resolved: boolean;
     unresolvedPaths: string[];
 };
-
-const FIX_CONFLICTS_OUTPUT_PATH = fileURLToPath(new URL("../../../plans/fix-conflicts-output-template.json", import.meta.url));
 
 // Double-quoted for the read-file hook's parser; deduped so a path is never listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
@@ -35,7 +34,7 @@ Resolve every conflict in the files listed under WHAT YOU MAY EDIT, and nothing 
 
 Run this, verbatim:
 \`\`\`
-/read-file ${readFileArgs([...absolutePaths, FIX_CONFLICTS_OUTPUT_PATH])}
+/read-file ${readFileArgs(absolutePaths)}
 \`\`\`
 This skill puts the files into your context without spending a Read tool call, so you can read them all at once.
 
@@ -79,8 +78,5 @@ You are forbidden from doing any of the following actions:
 Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
 It is not a failure, and it is always better than a guess.
 
-## WHAT TO RETURN
-
-Return the shape given by \`${FIX_CONFLICTS_OUTPUT_PATH}\`, which the read-file skill put into your
-context, replacing every \`<...>\` with a real value.`;
+${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every \\`<...>\\` with a real value", "")}`;
 }

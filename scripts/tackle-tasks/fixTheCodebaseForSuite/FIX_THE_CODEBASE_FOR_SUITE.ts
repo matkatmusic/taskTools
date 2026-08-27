@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
+import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 type Input = {
     box: string;
@@ -74,9 +75,7 @@ You are forbidden from doing any of the following actions:
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
 It is not a failure, and it is always better than a guess.
 
-## WHAT TO RETURN
-
-Return \`{ "message": "", "additionalData": { "fixSummary": "..." } }\`, where \`fixSummary\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why.
+${whatToReturnSection('{ "fixSummary": "..." }', "where \\`fixSummary\\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why", "")}
 
 ## FAILING SUITE OUTPUT
 

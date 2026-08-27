@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "CREATE_WORKTREE"
+        "exitNote": ""
     },
     "output": {
         "box": "CREATE_WORKTREE",

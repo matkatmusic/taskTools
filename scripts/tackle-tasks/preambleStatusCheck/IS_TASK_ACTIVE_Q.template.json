@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "IS_TASK_ACTIVE_Q"
+        "exitNote": ""
     },
     "output": {
         "box": "IS_TASK_ACTIVE_Q",

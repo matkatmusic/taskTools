@@ -10,8 +10,7 @@
         "docsMode": "",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "DOES_FENCE_COVER_WORKTREE_Q"
+        "exitNote": ""
     },
     "output": {
         "box": "DOES_FENCE_COVER_WORKTREE_Q",

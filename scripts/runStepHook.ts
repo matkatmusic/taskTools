@@ -3,11 +3,8 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, WORKFLOW_SIGNAL, type ScriptSignal } from "./contracts.ts";
+import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type ScriptSignal } from "./contracts.ts";
 import { getTemplateShapeMismatches } from "./templateShape.ts";
-// Imported, not copied, so the hook and the workflow generator build the same schema.
-// import { buildAgentSchema, getPayloadFromOutput } from "./buildRunStepSchemas.ts";
-import { getPayloadFromOutput } from "./buildRunStepSchemas.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
@@ -36,17 +33,12 @@ type StepRun = {
     stdout: string;
     result: Record<string, unknown> | null;
 };
+// payload is the path of the packet file the next block starts from; an agent answers a prompt into it.
 type Outcome = {
-    box: string;
-    scriptSignal: string;
-    workflowSignal: string;
     next: string | null;
-    payload: Record<string, unknown>;
-    // packet: Record<string, unknown>;
-    // schema: Record<string, unknown> | null;
-    packetFile: string;
+    payload: string;
 };
-type WalkResult = {
+type HookOutput = {
     ok: boolean;
     ran: string[];
     errors: string[];
@@ -170,7 +162,7 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
 }
 
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
-function buildFailure(boxesRun: string[], errors: string[]): WalkResult {
+function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
     appendFileSync(LOG_FILE, `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ invocation, ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
@@ -215,34 +207,23 @@ function getPacketFromInput(input: string): Record<string, unknown> {
 }
 
 // A stop ends the run whatever the graph says, so only a prompt hands a next box back.
-function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>, input: string): WalkResult {
+function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>, input: string): HookOutput {
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
-    // Built here from the same templates the generator reads, so the two can never disagree.
-    // const schema = next === null ? null : buildAgentSchema(CONFIG, PROJECT_ROOT, next);
-    // What the next block starts from: after a prompt, that block's input; otherwise this block's output.
-    const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPacketFromInput(input) : output;
-    const packetFile = join(dirname(LOG_FILE), "packets", `${String(output.box)}-${process.pid}.json`);
-    mkdirSync(dirname(packetFile), { recursive: true });
-    writeFileSync(packetFile, JSON.stringify(packet));
-    const outcome = {
-        box: stoppedAt,
-        scriptSignal: String(output.scriptSignal),
-        workflowSignal: next === null ? WORKFLOW_SIGNAL.DONE : WORKFLOW_SIGNAL.CONTINUE,
-        next,
-        payload: output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? getPayloadFromOutput(output) : {},
-        // packet,
-        packetFile,
-    };
-    return { ok: true, ran: boxesRun, errors: [], outcome };
+    // What the next block starts from: after a prompt, that block's input plus the prompt; otherwise this block's output.
+    const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt } : output;
+    const payload = join(dirname(LOG_FILE), "packets", `${String(output.box)}-${process.pid}.json`);
+    mkdirSync(dirname(payload), { recursive: true });
+    writeFileSync(payload, JSON.stringify(packet));
+    return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload } };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
-function walkFromStep(startStepKey: string, startInput: string, invocation: string): WalkResult {
-    // A packetFile in the input expands to the packet plus the answer fields alongside it.
+function walkFromStep(startStepKey: string, startInput: string, invocation: string): HookOutput {
+    // A packetFile in the input expands to that file; the prompt an agent answered into it is not block input.
     const startPacket = getPacketFromInput(startInput);
     if (typeof startPacket.packetFile === "string") {
-        const { packetFile, ...answer } = startPacket;
-        startInput = JSON.stringify({ ...JSON.parse(readFileSync(packetFile, "utf8")), ...answer });
+        const { prompt: _prompt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
+        startInput = JSON.stringify(packet);
     }
     const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
     if (startInputMismatches.length > 0) {
@@ -306,8 +287,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
         }
         stepKey = nextStepKey;
-        // A box sees only the box before it, so anything further back has to be carried forward by hand.
-        input = JSON.stringify(stepRun.result);
+        // A box sees only the box before it, so anything further back has to be carried forward by hand.  next is routing, consumed here; a box that spreads its input must never inherit the choice that reached it.
+        const { next: _next, ...resultWithoutNext } = stepRun.result;
+        input = JSON.stringify(resultWithoutNext);
     }
 }
 
@@ -324,10 +306,24 @@ if (!isTypedCommand && !isSkillCall) {
     process.exit(0);
 }
 
-function injectResult(result: unknown): void {
+// A next box after a stop means a prompt is waiting in the packet file, so the agent has work to do.
+function getInstructionsForAgent(result: HookOutput): string {
+    if (result.outcome === null || result.outcome.next === null) {
+        return "";
+    }
+    return [
+        `The file at ${result.outcome.payload} holds a prompt under the key "prompt".`,
+        "Read that file and follow the prompt.",
+        "Write the object the prompt asks you to return into that same file, next to the keys already there.",
+        "Change no key you did not add. Then return the JSON object above verbatim.",
+    ].join(" ");
+}
+
+function injectResult(result: HookOutput): void {
+    const additionalContext = `${JSON.stringify(result)}\n${getInstructionsForAgent(result)}`.trimEnd();
     const injected = JSON.stringify({
         // Echoed from the payload: a name that disagrees with the firing event gets the output dropped.
-        hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: JSON.stringify(result) },
+        hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext },
     });
     process.stdout.write(`${injected}\n`);
 }

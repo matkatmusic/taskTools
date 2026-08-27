@@ -5,6 +5,7 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import { reviewQuestion } from "../shared/CodexReviewBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
+import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 const REVIEW_PLAN_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-plan-schema.json", import.meta.url));
 
@@ -30,11 +31,7 @@ codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_F
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
 \`\`\`\`
 
-## WHAT YOU, THE SPAWNING AGENT, RETURNS
-
-Return \`{ "message": "", "additionalData": { "reviewFile": "${t.reviewOutputFile}" } }\` — the path \`$REVIEW_FILE\` was set to, never its contents.
-
-If the command above could not be run at all, return that same shape anyway; the next block reads the file and fails loudly when it is missing or unusable.
+${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}
 `;
 }
 

@@ -10,8 +10,7 @@
         "docsMode": "UPDATE",
         "planFile": "",
         "exitType": "",
-        "exitNote": "",
-        "next": "INIT_SUBMODULES_RECURSIVELY"
+        "exitNote": ""
     },
     "output": {
         "box": "INIT_SUBMODULES_RECURSIVELY",
