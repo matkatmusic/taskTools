@@ -177,7 +177,8 @@ test("test_runStepHook_tellsTheAgentToAnswerIntoThePacketFileAfterAPromptStop", 
     }));
     const { result, instructions } = runHook("/run-step A", configFile);
     assert.match(instructions, new RegExp(`The file at ${result.outcome.payload} holds a prompt`));
-    assert.match(instructions, /Write the object the prompt asks you to return into that same file/);
+    assert.match(instructions, new RegExp(`3\\. Write the object the prompt asks you to return into ${result.outcome.payload}`));
+    assert.match(instructions, /4\. Only after step 3 is done, return the JSON object above verbatim/);
 });
 
 test("test_runStepHook_givesNoInstructionsAfterAStopBlock", () => {

@@ -312,10 +312,12 @@ function getInstructionsForAgent(result: HookOutput): string {
         return "";
     }
     return [
-        `The file at ${result.outcome.payload} holds a prompt under the key "prompt".`,
-        "Read that file and follow the prompt.",
-        "Write the object the prompt asks you to return into that same file, next to the keys already there.",
-        "Change no key you did not add. Then return the JSON object above verbatim.",
+        `The file at ${result.outcome.payload} holds a prompt under the key "prompt". Do these four steps in order.`,
+        "1. Read that file.",
+        "2. Follow the prompt.",
+        `3. Write the object the prompt asks you to return into ${result.outcome.payload}, next to the keys already there. Change no key you did not add.`,
+        "4. Only after step 3 is done, return the JSON object above verbatim.",
+        "The next block reads that file and fails when message and additionalData are missing, so step 3 is not optional.",
     ].join(" ");
 }
 
