@@ -24,6 +24,17 @@ type ImplementTaskInput = {
 // Double-quoted for the read-file hook's parser; deduped so an owned test file is not listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 
+const testsSection = (t: PreparedTask) => {
+    if (t.tests === "skip" || !t.hasTests) return `## DO NOT CREATE TESTS
+
+this task does not require any tests to be created.`;
+    return `## TESTS
+
+Each owned file is paired with \`tests/<its base name>.test.ts\`.
+The paired files that already exist are in your context from the read-file skill above.
+Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.`;
+};
+
 const ownedPathMap = (t: PreparedTask) => t.files
     .map((file) => `- \`${file}\` => \`${t.repoRoot.replace(/\/+$/, "")}/${file}\``)
     .join("\n");
@@ -68,11 +79,7 @@ ${ownedPathMap(t)}
 
 You are forbidden from editing any other file not listed above.
 
-## TESTS
-
-Each owned file is paired with \`tests/<its base name>.test.ts\`.
-The paired files that already exist are in your context from the read-file skill above.
-Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.
+${testsSection(t)}
 
 ## HOW TO IMPLEMENT
 
