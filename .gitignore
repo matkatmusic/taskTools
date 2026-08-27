@@ -17,9 +17,7 @@ plans/implementation-notes-*.md
 .claude/skills/rebase-worktree
 .claude/skills/continue-rebase
 .claude/skills/run-step
-plans/diagrams/runs/run-log.md
-plans/diagram/runs/run-log.md
-plans/diagram/runs/packets/
+.taskTools/runs/
 scripts/steps/pipeline-suite/fixtures/.fixture-marker
 scripts/steps/pipeline-suite/fixtures/worktree/src/thing.ts
 scripts/steps/pipeline-rebase/fixtures/worktree/

@@ -37,7 +37,7 @@ export function resolveTaskFiles(root: string): TaskFilePair {
   }
 }
 
-const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store"];
+const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/"];
 
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
   const taskFolder = dirname(pair.tasksPath);

@@ -1,6 +1,6 @@
 // Spawns the hook the way Claude Code does: one JSON payload on stdin, one JSON line on stdout.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -553,4 +553,93 @@ test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {
         env: { ...process.env, RUN_STEP_CONFIG: configFile },
     });
     assert.equal(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.hookEventName, "PostToolUse");
+});
+
+// Spawns the hook with no RUN_STEP_LOG override, from a throwaway repo folder, so the real run layout is what gets tested.
+function runHookIn(cwd: string, prompt: string, configFile: string) {
+    const { RUN_STEP_LOG: _unset, ...env } = process.env;
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        cwd,
+        input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }),
+        encoding: "utf8",
+        env: { ...env, RUN_STEP_CONFIG: configFile },
+    });
+    const injected = spawned.stdout.trim();
+    const result = injected ? JSON.parse(String(JSON.parse(injected).hookSpecificOutput.additionalContext).split("\n")[0]) : null;
+    const runsFolder = join(cwd, ".taskTools", "runs");
+    return { result, runsFolder, runsEntries: () => readdirSync(runsFolder).sort() };
+}
+
+const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-run-log\.md$/;
+
+test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
+    // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.
+    // Steps:
+    // A continues into B, which stops on a prompt, so the hook writes one packet.
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "do it" }), producesPrompt: true, next: ["A"] },
+        ],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
+    // The runs folder holds exactly <stamp>-run-log.md and the <stamp> folder.
+    const [stampFolder, logName] = runsEntries();
+    assert.match(logName, STAMPED_LOG);
+    assert.equal(logName, `${stampFolder}-run-log.md`);
+    // The packet sits under <stamp>/packets.
+    assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
+    assert.match(readFileSync(join(runsFolder, logName), "utf8"), /======= A =======/);
+});
+
+test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => {
+    // Scenario: a later pass names a packet file; the hook logs into that run's log, not a new one.
+    // Steps:
+    // A packet from run S already exists.
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
+    mkdirSync(packetsFolder, { recursive: true });
+    const packetFile = join(packetsFolder, "A-1.json");
+    writeFileSync(packetFile, JSON.stringify({ prompt: "old" }));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] }],
+    }));
+    // The pass that consumes it logs to S-run-log.md and writes its packet under S/packets.
+    const { result, runsFolder, runsEntries } = runHookIn(cwd, `/run-step C ${JSON.stringify({ packetFile })}`, configFile);
+    assert.deepEqual(runsEntries(), ["S", "S-run-log.md"]);
+    assert.match(readFileSync(join(runsFolder, "S-run-log.md"), "utf8"), /======= C =======/);
+    assert.equal(dirname(result.outcome.payload), packetsFolder);
+});
+
+test("test_runStepHook_removesThePacketsOfARunThatCompletedAndKeepsItsLog", () => {
+    // Scenario: the STOP of the merge-succeeded chain ends a completed run.
+    // Steps:
+    // Run S has packets; the success STOP consumes one.
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
+    mkdirSync(packetsFolder, { recursive: true });
+    const packetFile = join(packetsFolder, "X-1.json");
+    writeFileSync(packetFile, "{}");
+    const configFile = configWith(writeStep => ({
+        "pipeline-mergeSucceededExit.mmd": [{ box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { runsEntries } = runHookIn(cwd, `/run-step pipeline-mergeSucceededExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
+    // The packets folder is gone; the log stays.
+    assert.equal(existsSync(packetsFolder), false);
+    assert.deepEqual(runsEntries(), ["S", "S-run-log.md"]);
+});
+
+test("test_runStepHook_keepsThePacketsOfARunThatFailed", () => {
+    // Scenario: the STOP of the failures chain ends a failed run; its packets stay for a resume.
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
+    mkdirSync(packetsFolder, { recursive: true });
+    const packetFile = join(packetsFolder, "X-1.json");
+    writeFileSync(packetFile, "{}");
+    const configFile = configWith(writeStep => ({
+        "pipeline-failuresExit.mmd": [{ box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] }],
+    }));
+    runHookIn(cwd, `/run-step pipeline-failuresExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
+    assert.equal(existsSync(packetFile), true);
 });

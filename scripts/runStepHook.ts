@@ -1,6 +1,6 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type ScriptSignal } from "./contracts.ts";
@@ -11,16 +11,27 @@ import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps
 process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, `## ======= HOOK EXCEPTION =======\n\`\`\`\n${reason}\n\`\`\`\n${"=".repeat(36)}\n`);
+    mkdirSync(dirname(logFile()), { recursive: true });
+    appendFileSync(logFile(), `## ======= HOOK EXCEPTION =======\n\`\`\`\n${reason}\n\`\`\`\n${"=".repeat(36)}\n`);
     process.exit(0);
 });
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
-// Overrides let tests use own files; the log lives in the hook's cwd (skill's repo), not the plugin folder.
-const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), "plans/diagram/runs/run-log.md");
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
+const SUCCESS_DIAGRAM = "pipeline-mergeSucceededExit.mmd";
+
+// Local time, filesystem-safe: 2026-08-27T10-08-19.
+function runStamp(): string {
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+}
+// One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.
+// RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
+let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
+const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.md`;
+const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
 const STEP_TIMEOUT_MS = 10_000;
 
@@ -84,7 +95,7 @@ function getStepKeysNamingBox(boxId: string): string[] {
 }
 
 function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown): void {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
+    mkdirSync(dirname(logFile()), { recursive: true });
     const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
     const logBlock = `## ======= ${boxId} =======\n`
         + `Source ${sourceLabel}\n`
@@ -109,7 +120,7 @@ function appendStepToRunLog(boxId: string, invocation: string, command: string, 
         + `### end output ======\n`
         + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
-    appendFileSync(LOG_FILE, logBlock);
+    appendFileSync(logFile(), logBlock);
 }
 
 // Single quotes for the log line only: the spawn itself passes an argument list, never a shell string.
@@ -163,8 +174,8 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
 
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ invocation, ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
+    mkdirSync(dirname(logFile()), { recursive: true });
+    appendFileSync(logFile(), `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ invocation, ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 
@@ -211,9 +222,11 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<stri
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
     // What the next block starts from: after a prompt, that block's input plus the prompt; otherwise this block's output.
     const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt } : output;
-    const payload = join(dirname(LOG_FILE), "packets", `${String(output.box)}-${process.pid}.json`);
+    const payload = join(packetsDirectory(), `${String(output.box)}-${process.pid}.json`);
     mkdirSync(dirname(payload), { recursive: true });
     writeFileSync(payload, JSON.stringify(packet));
+    // A run that completed has no next pass to feed; its log stays, its packets go.
+    if (next === null && stoppedAt.startsWith(`${SUCCESS_DIAGRAM}::`)) rmSync(packetsDirectory(), { recursive: true, force: true });
     return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload } };
 }
 
@@ -222,6 +235,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     // A packetFile in the input expands to that file; the prompt an agent answered into it is not block input.
     const startPacket = getPacketFromInput(startInput);
     if (typeof startPacket.packetFile === "string") {
+        if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));
         const { prompt: _prompt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
         startInput = JSON.stringify(packet);
     }
