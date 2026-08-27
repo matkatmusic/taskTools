@@ -32,6 +32,7 @@ this task does not require any tests to be created.`;
 
 Each owned file is paired with \`tests/<its base name>.test.ts\`.
 The paired files that already exist are in your context from the read-file skill above.
+Import \`test\` from \`node:test\` and \`assert\` from \`node:assert\`; never import from \`bun:test\`.
 Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.`;
 };
 
