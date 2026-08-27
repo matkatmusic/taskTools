@@ -47,10 +47,10 @@ function createLinkedWorktree(rootOrigin: string): string {
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 
-function seedTaskAndClaim(rootOrigin: string, taskNumber: number, title: string, runId: string): void {
+function seedTaskAndClaim(rootOrigin: string, taskNumber: number, title: string, runId: string, files: string[]): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title, files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title, files }]);
     const outcome = claimTask(taskNumber, runId, rootOrigin);
     assert.equal(outcome.status, "claimed");
 }
@@ -59,7 +59,7 @@ test("test_commitTaskWork_commitsDeepestFirstAndBumpsTheParentGitlink", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
     const taskNumber = 9001;
-    seedTaskAndClaim(rootOrigin, taskNumber, "add a widget", "run-1");
+    seedTaskAndClaim(rootOrigin, taskNumber, "add a widget", "run-1", ["child/widget.txt", "root-widget.txt"]);
 
     writeFileSync(join(worktreePath, "child", "widget.txt"), "widget\n");
     writeFileSync(join(worktreePath, "root-widget.txt"), "root widget\n");
@@ -79,7 +79,7 @@ test("test_commitTaskWork_returnsNoCommitsWhenEveryLayerIsClean", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
     const taskNumber = 9002;
-    seedTaskAndClaim(rootOrigin, taskNumber, "no-op task", "run-1");
+    seedTaskAndClaim(rootOrigin, taskNumber, "no-op task", "run-1", []);
 
     const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
 
@@ -90,7 +90,7 @@ test("test_commitTaskWork_usesTheWorkKindForTheFirstCommitAndRepairForEveryLater
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
     const taskNumber = 9003;
-    seedTaskAndClaim(rootOrigin, taskNumber, "fix the thing", "run-1");
+    seedTaskAndClaim(rootOrigin, taskNumber, "fix the thing", "run-1", ["first.txt", "second.txt"]);
 
     writeFileSync(join(worktreePath, "first.txt"), "first\n");
     const first = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });

@@ -1,5 +1,5 @@
 // Resolves tasks.json/completedTasks.json: .taskTools/ if present, else project root, else .taskTools/ (seeded on first task).
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
@@ -37,13 +37,27 @@ export function resolveTaskFiles(root: string): TaskFilePair {
   }
 }
 
+const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store"];
+
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
-  mkdirSync(dirname(pair.tasksPath), { recursive: true });
+  const taskFolder = dirname(pair.tasksPath);
+  if (!existsSync(taskFolder)) seedGitignore(dirname(taskFolder));
+  mkdirSync(taskFolder, { recursive: true });
   withTaskStateLock(pair.tasksPath, () => {
     for (const path of [pair.tasksPath, pair.completedTasksPath]) {
       if (!existsSync(path)) writeJsonAtomically(path, []);
     }
   });
+}
+
+// Appends only the patterns the project's .gitignore does not have yet.
+function seedGitignore(projectRoot: string): void {
+  const path = join(projectRoot, ".gitignore");
+  const present = existsSync(path) ? readFileSync(path, "utf8").split("\n") : [];
+  const missing = DEFAULT_IGNORE_PATTERNS.filter((pattern) => !present.includes(pattern));
+  if (missing.length === 0) return;
+  const separator = present.length === 0 || present.at(-1) === "" ? "" : "\n";
+  appendFileSync(path, `${separator}${missing.join("\n")}\n`);
 }
 
 // Task numbers lead a skill invocation; free text (closureNote, flags) may follow.  Stop at the first non-numeric token so digits inside prose — dates, "task 162", durations — aren't mistaken for task numbers.  Brackets and stray quotes are tolerated so a single no-space JSON array token — [268,270,281], the shell-safe form skills pass as "$1" — parses like bare numbers.

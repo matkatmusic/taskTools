@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { getOccurrencesDeepestFirst } from "./occurrences.ts";
+import { buildOwnedOccurrencePaths, getOccurrencesDeepestFirst, parseOccurrencePath, type Occurrence } from "./occurrences.ts";
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 import { appendTaskCommits, getCurrentTaskRun, type TaskCommit } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
@@ -26,8 +26,22 @@ function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
 }
 
-function isDirty(checkoutPath: string): boolean {
-    return git(checkoutPath, "status", "--porcelain").trim() !== "";
+// Only the task's own files get staged, so a stray __pycache__ or node_modules never reaches the fence.
+function changedOwnedPaths(occurrence: Occurrence, occurrences: Occurrence[], ownedOccurrencePaths: string[]): string[] {
+    const ownedHere = ownedOccurrencePaths
+        .map(parseOccurrencePath)
+        .filter((owned) => owned.occurrenceId === occurrence.occurrenceId)
+        .map((owned) => owned.relativePath);
+    // A child submodule's gitlink lives in this layer too; an occurrenceId is its path from the root.
+    const prefix = occurrence.occurrenceId === "" ? "" : `${occurrence.occurrenceId}/`;
+    const childGitlinks = occurrences
+        .map((other) => other.occurrenceId)
+        .filter((id) => id !== "" && id.startsWith(prefix) && !id.slice(prefix.length).includes("/"))
+        .map((id) => id.slice(prefix.length));
+    ownedHere.push(...childGitlinks);
+    if (ownedHere.length === 0) return [];
+    return git(occurrence.checkoutPath, "status", "--porcelain", "-z", "--untracked-files=all", "--", ...ownedHere)
+        .split("\0").filter(Boolean).map((entry) => entry.slice(3));
 }
 
 // F2: a commit's step is embedded in its message, so an unrecorded-but-landed commit is still recognizable on rerun.
@@ -47,6 +61,13 @@ function readTaskTitle(taskNumber: number, projectRoot: string): string {
     return typeof task.title === "string" ? task.title : `task ${taskNumber}`;
 }
 
+function declaredFiles(taskNumber: number, projectRoot: string): string[] {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
+    if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+    return Array.isArray(task.files) ? (task.files as string[]) : [];
+}
+
 export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput {
     const projectRoot = requireAbsolutePath("projectRoot", input.projectRoot);
     const worktreePath = requireAbsolutePath("worktreePath", input.worktreePath);
@@ -62,6 +83,7 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
     const kind: TaskCommit["kind"] = hasEarlierCommit ? "repair" : "work";
 
     const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, rootSourceBranch);
+    const ownedOccurrencePaths = buildOwnedOccurrencePaths(declaredFiles(taskNumber, projectRoot), occurrences);
     const commits: TaskCommit[] = [];
     for (const occurrence of occurrences) {
         // Idempotent rerun: this step already has a durable record entry for this layer.
@@ -70,8 +92,9 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
         );
         if (alreadyRecorded) continue;
 
-        if (isDirty(occurrence.checkoutPath)) {
-            git(occurrence.checkoutPath, "add", "-A");
+        const changed = changedOwnedPaths(occurrence, occurrences, ownedOccurrencePaths);
+        if (changed.length > 0) {
+            git(occurrence.checkoutPath, "add", "-A", "--", ...changed);
             git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId));
             const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
             commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind, stepId });
