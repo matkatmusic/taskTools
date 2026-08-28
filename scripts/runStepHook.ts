@@ -103,7 +103,7 @@ function getStepKeysNamingBox(boxId: string): string[] {
     return matchingKeys;
 }
 
-function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown): void {
+function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
     const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
     const logBlock = `## ======= ${boxId} =======\n`
@@ -126,7 +126,7 @@ function appendStepToRunLog(boxId: string, invocation: string, command: string, 
         + `\`\`\`json\n`
         + `${JSON.stringify(output, null, 4)}\n`
         + `\`\`\`\n`
-        + `### end output ======\n`
+        + `### end output ====== ${boxId} took ${tookMs} ms\n`
         + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
     appendFileSync(logFile(), logBlock);
@@ -155,7 +155,9 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     // Logged whole so the line in run-log.md is one you can paste into a terminal.
     const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
     const command = `node --no-inspect ${step.script}${quotedInput}`;
+    const startedAt = Date.now();
     const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: STEP_TIMEOUT_MS });
+    const tookMs = Date.now() - startedAt;
     const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
     const stepRun = {
         ok: spawnResult.status === 0,
@@ -166,7 +168,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
         // stderr is chatter (git prints "Reset branch" there), so the result line is read from stdout alone.
         result: parseStepResult((spawnResult.stdout ?? "").trimEnd()),
     };
-    appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun);
+    appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun, tookMs);
     return stepRun;
 }
 

@@ -449,6 +449,20 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
     assert.match(log, /### output ======\n```json\n\{\n    "ok": true,\n/);
 });
 
+test("test_runStepHook_logsHowLongEachBlockTook", () => {
+    // Steps: run the hook on the two-block fixture, A continuing into B.
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const log = runHook("/run-step A", configFile).readLog();
+    // Every block entry logs one line with how long that block took.
+    const blockTookLines = log.split("\n").filter(line => /^block took \d+ ms$/.test(line));
+    assert.equal(blockTookLines.length, 2);
+});
+
 test("test_runStepHook_logsTheFailureWhenTheWalkCannotFinish", () => {
     const log = runHook("/run-step NOT_A_BLOCK").readLog();
     assert.match(log, /^## ======= FAILURE =======\n```json\n\{\n    "invocation": "\/run-step NOT_A_BLOCK",\n    "ran": \[\],\n    "errors": \[\n        "no block named NOT_A_BLOCK; known: /m);
