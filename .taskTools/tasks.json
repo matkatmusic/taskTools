@@ -829,5 +829,28 @@
     ],
     "tests": "Run the skill on a small fixture folder, then feed the .mmd it writes into scripts/mmdGraph.ts. The graph must parse, every node must have a class, and every decision node must have exactly a Yes edge and a No edge.",
     "difficulty": 6
+  },
+  {
+    "taskNumber": 191,
+    "version": "229b706f661221a74ff2784f8574cec5f61114f7",
+    "title": "Read the diagram folder for tackle-tasks from .taskTools/settings.json",
+    "userDescription": "The ability to define which set of diagrams to use for tackle-tasks.  this ability makes the skill and pipeline runner generic, allowing the end user to provide their own diagrams.  the default diagram would be the current pipeline.  .taskTools/settings.json is where this diagram setting would live.",
+    "goal": [
+      "- With no .taskTools/settings.json, `/tackle-tasks [N]` runs the current pipeline block for block: the run-log's ran[] matches today's.",
+      "- With settings.json holding `{ \"diagramFolder\": \"<path>\" }`, generateSteps, the workflow and the hook all read that folder; the run-log names that folder's blocks and none of the default pipeline's.",
+      "- A diagramFolder that does not exist or holds no .mmd stops the run at launch with a message naming the path. No fallback.",
+      "- Not in scope: a guide for users who author their own diagrams. A later task owns it."
+    ],
+    "description": "generateSteps.ts (invoked as `node scripts/generateSteps.ts diagrams/tackle-tasks` from package.json's \"steps\"/\"steps:watch\" scripts) resolves the diagram folder from process.argv, falling back to the dead default `plans/diagrams` (diagrams actually live at diagrams/tackle-tasks/*.mmd) when no CLI arg is given. It walks that folder into scripts/steps.json plus per-box stub scripts under scripts/tackle-tasks/, using a hardcoded BLOCKS_BY_OWNER_FOLDER box-name map tied to the current pipeline's diagram set. generateWorkflow.ts and runStepHook.ts consume the already-generated scripts/steps.json and are diagram-folder-agnostic, so they don't need to change. No .taskTools/settings.json file or reader exists anywhere in the codebase yet (grepped scripts/, skills/, tests/) — this would be a new config file and a new settings-read helper, most naturally added in generateSteps.ts's CLI entrypoint (diagramFolder resolution) ahead of its current argv/hardcoded-default fallback, with the current diagrams/tackle-tasks folder becoming the default when no setting is present.\n\nSetting shape settled with the user: `{ \"diagramFolder\": \"<path>\" }`. The folder holds the .mmd files plus each block's script and template. An absent file or key means diagrams/tackle-tasks.",
+    "files": [
+      "scripts/generateSteps.ts",
+      "tests/generateSteps.test.ts",
+      "package.json",
+      ".taskTools/settings.json",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "scripts/runStepHook.ts"
+    ],
+    "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
+    "difficulty": 6
   }
 ]
