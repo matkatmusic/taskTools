@@ -276,7 +276,10 @@ test("test_runStepHook_walksIntoAPromptBlockAndHandsItsInputAsThePacket", () => 
     const { result } = runHook("/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
     assert.equal(result.outcome.next, "one.mmd::C");
-    assert.deepEqual(JSON.parse(readFileSync(result.outcome.payload, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "", prompt: "answer" });
+    // The prompt packet also carries when the prompt block started, so the next pass can log the agent's time.
+    const { startedAt, ...packet } = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
+    assert.equal(typeof startedAt, "number");
+    assert.deepEqual(packet, { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "", prompt: "answer" });
 });
 
 // A pass starting at the prompt block runs it; the packet is that pass's given input.
@@ -288,7 +291,8 @@ test("test_runStepHook_handsAPromptBlocksOwnInputAsThePacket", () => {
         ],
     }));
     const { result } = runHook(`/run-step B {"box":"A","scriptSignal":"continue","taskNumber":7}`, configFile);
-    assert.deepEqual(JSON.parse(readFileSync(result.outcome.payload, "utf8")), { box: "A", scriptSignal: "continue", taskNumber: 7, prompt: "answer" });
+    const { startedAt: _startedAt, ...packet } = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
+    assert.deepEqual(packet, { box: "A", scriptSignal: "continue", taskNumber: 7, prompt: "answer" });
 });
 
 // After a stop block the packet is that block's whole output, box and scriptSignal included.
@@ -311,6 +315,23 @@ test("test_runStepHook_expandsAPacketFileIntoTheStartInput", () => {
     const { result } = runHook(`/run-step A {"packetFile":"${packetFile}"}`, configFile);
     const startInput = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input);
     assert.deepEqual(startInput, { taskNumber: 7, answer: "x" });
+});
+
+// The block script returns a prompt in milliseconds; the agent's own work runs after the hook returns, until the next call consumes the packet.
+test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
+    // Setup: the packet block A wrote, holding when A started three seconds ago and the agent's answer.
+    const folder = mkdtempSync(join(tmpdir(), "run-step-packet-"));
+    const packetFile = join(folder, "A-1.json");
+    writeFileSync(packetFile, JSON.stringify({ taskNumber: 7, prompt: "say x", answer: "x", startedAt: Date.now() - 3000 }));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] }],
+    }));
+    // Action: the next call consumes that packet.
+    const log = runHook(`/run-step B {"packetFile":"${packetFile}"}`, configFile).readLog();
+    // Verification: the log says how long the agent took on A, measured from the startedAt in the packet.
+    const agentLine = log.split("\n").find(line => /^A agent took \d+ ms$/.test(line));
+    assert.ok(agentLine, log);
+    assert.ok(Number(agentLine!.match(/\d+/)![0]) >= 3000, agentLine);
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
@@ -1062,7 +1083,7 @@ test("test_runStepHook_movesTheCheckpointToTheBlockAfterAPromptOnceItSucceeds", 
     const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
     assert.equal(checkpoint?.block, "one.mmd::C");
     assert.equal(checkpoint?.state, "running");
-    const { prompt: _prompt, ...packetC } = JSON.parse(readFileSync(first.result.outcome.payload, "utf8"));
+    const { prompt: _prompt, startedAt: _startedAt, ...packetC } = JSON.parse(readFileSync(first.result.outcome.payload, "utf8"));
     assert.equal(checkpoint?.input, JSON.stringify(packetC));
 });
 

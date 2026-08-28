@@ -1,7 +1,7 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type ScriptSignal } from "./contracts.ts";
@@ -49,6 +49,7 @@ type Step = StepConfigEntry & { diagram: string };
 type StepRun = {
     ok: boolean;
     box: string;
+    startedAt: number;
     command: string;
     exitCode: number | null;
     stdout: string;
@@ -163,6 +164,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     const stepRun = {
         ok: spawnResult.status === 0,
         box: step.box,
+        startedAt,
         command,
         exitCode: spawnResult.status,
         stdout: commandOutput,
@@ -250,10 +252,11 @@ function getPacketFromInput(input: string): Record<string, unknown> {
 }
 
 // A stop ends the run whatever the graph says, so only a prompt hands a next box back.
-function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<string, unknown>, input: string): HookOutput {
+function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, input: string): HookOutput {
+    const output = stepRun.result!;
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
-    // What the next block starts from: after a prompt, that block's input plus the prompt; otherwise this block's output.
-    const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt } : output;
+    // What the next block starts from: after a prompt, that block's input plus the prompt and when the block started; otherwise this block's output.
+    const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt, startedAt: stepRun.startedAt } : output;
     const payload = join(packetsDirectory(), `${String(output.box)}-${process.pid}.json`);
     mkdirSync(dirname(payload), { recursive: true });
     writeFileSync(payload, JSON.stringify(packet));
@@ -269,7 +272,11 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     const startedFromPacketFile = typeof startPacket.packetFile === "string";
     if (typeof startPacket.packetFile === "string") {
         if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));
-        const { prompt: _prompt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
+        const { prompt: _prompt, startedAt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
+        // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
+        const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
+        mkdirSync(dirname(logFile()), { recursive: true });
+        appendFileSync(logFile(), `### ${promptBox} agent took ${Date.now() - Number(startedAt)} ms\n`);
         startInput = JSON.stringify(packet);
     }
     // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.
@@ -347,11 +354,11 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches]);
         }
         if (scriptSignal === SCRIPT_SIGNAL.STOP) {
-            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
+            return buildSuccess(boxesRun, stepKey, stepRun, input);
         }
         // The block printed a prompt instead of data, so an agent takes over here.
         if (scriptSignal === SCRIPT_SIGNAL.PROMPT) {
-            return buildSuccess(boxesRun, stepKey, stepRun.result, input);
+            return buildSuccess(boxesRun, stepKey, stepRun, input);
         }
         if (step.next.length === 0) {
             return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`]);
