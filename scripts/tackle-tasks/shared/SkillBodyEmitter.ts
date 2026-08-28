@@ -7,17 +7,17 @@ import { generateWorkflow } from "../../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
-const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url));
+// const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 
 export const skillBody = (argsValue: string, projectRoot: string): string => {
-    // `reset N [BLOCK]` runs the reset script instead of a workflow; the agent runs it from the target repository.
+    // `reset N [BLOCK]`: the run-step hook already ran the reset on this prompt and injected its lines above.
     const tokens = argsValue.trim().split(/\s+/);
     if (tokens[0] === "reset") {
         parseTaskNumberArgument(tokens[1] ?? "");
-        return `execute \`node "${RESET_TASK_PATH}" ${tokens.slice(1).join(" ")}\` with Bash from ${projectRoot}, then say its output.\n`;
+        return `The hook ran the reset for task ${tokens[1]}. Say the lines it injected above. Run nothing.\n`;
     }
-    // ponytail: one task at a time for now — multiple tasks come later.
-    const [taskNumber] = parseTaskNumberArgument(argsValue);
+    // retired: // ponytail: one task at a time for now — multiple tasks come later.
+    const taskNumbers = parseTaskNumberArgument(argsValue);
     /* retired: the hook walks the preamble from PREAMBLE_TASK_NUMBER_INPUT now, so the body runs none of it.
     const run = resolveTaskRun(argsValue, projectRoot);
     const preambleResult = runPreamble(taskNumber, run.runId, projectRoot);
@@ -30,22 +30,32 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
 
     // Made fresh on every run, so the shapes in it always match the diagrams on disk.
     generateWorkflow(TASK_WORKFLOW_PATH);
-    const workflowArgs: Record<string, unknown> = {
-        task: taskNumber,
-        tasksFile: resolveTaskFiles(projectRoot).tasksPath,
-        // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
-    };
     const startingBlock = parseStartingBlockArgument(argsValue);
-    if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
-    // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
-    const workflowCall = JSON.stringify({
-        scriptPath: TASK_WORKFLOW_PATH,
-        args: workflowArgs,
+    const workflowLines = taskNumbers.map((taskNumber, index) => {
+        const workflowArgs: Record<string, unknown> = {
+            task: taskNumber,
+            tasksFile: resolveTaskFiles(projectRoot).tasksPath,
+            // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
+        };
+        if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
+        // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
+        const workflowCall = JSON.stringify({
+            scriptPath: TASK_WORKFLOW_PATH,
+            args: workflowArgs,
+        });
+        return `WORKFLOW ${index + 1}: ${workflowCall}`;
     });
+    const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
 
-    return `WORKFLOW: ${workflowCall}
+    return `Launch every one of the following as a background workflow, in the same message, so they run concurrently:
 
-execute \`Workflow(WORKFLOW)\`
+${workflowLines.join("\n\n")}
+
+execute ${executeCalls} in one message.
+
+Never serialize the runs yourself: each run takes the source-repository lock around its own rebase and merge, and that lock is what makes concurrent merge tails safe.
+
+Wait for every launched run's completion notification, then report one line per task in the order given.
 `;
 };
 

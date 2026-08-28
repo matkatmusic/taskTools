@@ -329,9 +329,29 @@ test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     // Action: the next call consumes that packet.
     const log = runHook(`/run-step B {"packetFile":"${packetFile}"}`, configFile).readLog();
     // Verification: the log says how long the agent took on A, measured from the startedAt in the packet.
-    const agentLine = log.split("\n").find(line => /^A agent took \d+ ms$/.test(line));
+    const agentLine = log.split("\n").find(line => /^### A agent took \d+ ms$/.test(line));
     assert.ok(agentLine, log);
     assert.ok(Number(agentLine!.match(/\d+/)![0]) >= 3000, agentLine);
+});
+
+// A typed `/tackle-tasks reset N` is the hook's job, not the agent's: the hook runs the reset and hands back its lines.
+test("test_runStepHook_runsTheResetForATackleTasksResetPrompt", () => {
+    // Setup: a repository whose tasks.json holds open task 7 with run state from an earlier run.
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-reset-")));
+    spawnSync("git", ["-C", cwd, "init", "-q"]);
+    mkdirSync(join(cwd, ".taskTools"), { recursive: true });
+    writeFileSync(join(cwd, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t", run: { active: false, history: [] }, codexReviewNotes: [] }]));
+    writeFileSync(join(cwd, ".taskTools", "completedTasks.json"), "[]");
+    // Action: the user types the reset line.
+    const { RUN_STEP_LOG: _unset, ...env } = process.env;
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        cwd, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: "/tackle-tasks reset 7" }), encoding: "utf8", env,
+    });
+    // Verification: the hook reports the reset and tasks.json no longer holds the run state.
+    const additionalContext = String(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.additionalContext);
+    assert.match(additionalContext, /task 7 run state cleared/);
+    const [task] = JSON.parse(readFileSync(join(cwd, ".taskTools", "tasks.json"), "utf8"));
+    assert.equal("run" in task, false);
 });
 
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
@@ -647,7 +667,7 @@ function runHookIn(cwd: string, prompt: string, configFile: string) {
     return { result, runsFolder, runsEntries: () => readdirSync(runsFolder).sort() };
 }
 
-const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-run-log\.md$/;
+const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+-run-log\.md$/;
 
 test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.  Steps: A continues into B, which stops on a prompt, so the hook writes one packet.
@@ -666,6 +686,23 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     // The packet sits under <stamp>/packets.
     assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
     assert.match(readFileSync(join(runsFolder, logName), "utf8"), /======= A =======/);
+});
+
+test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
+    // Scenario: the run folder name ends with the hook process's own pid, so two runs launched in the same second still land in different folders.
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { result, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
+    // Step: read the hook process's pid out of the packet file name it already checks.
+    const packetsFolder = dirname(result.outcome.payload);
+    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
+    const pid = packetName.match(/^A-(\d+)-1\.json$/)![1];
+    // Step: the run folder name is a timestamp followed by that pid.
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    assert.match(stampFolder, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+$/);
+    assert.ok(stampFolder.endsWith(`-${pid}`));
 });
 
 test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {

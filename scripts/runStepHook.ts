@@ -8,6 +8,7 @@ import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type Sc
 import { getTemplateShapeMismatches } from "./templateShape.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 import { readCheckpoint, writeCheckpoint } from "./tackle-tasks/shared/checkpoint.ts";
+import { resetTask } from "./tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
 import { resetAttemptCounts } from "./tackle-tasks/shared/taskRunState.ts";
@@ -26,11 +27,11 @@ const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
 const SUCCESS_DIAGRAM = "pipeline-mergeSucceededExit.mmd";
 
-// Local time, filesystem-safe: 2026-08-27T10-08-19.
+// Local time, filesystem-safe, one per process: 2026-08-27T10-08-19-4213.
 function runStamp(): string {
     const now = new Date();
     const pad = (value: number) => String(value).padStart(2, "0");
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${process.pid}`;
 }
 // One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.  RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
@@ -434,6 +435,13 @@ const skillName = String(toolInput.skill ?? "").replace(/^[\w-]+:/, "");
 // A person types the whole line. An agent calls the skill, so the name and the args arrive apart.
 const isTypedCommand = promptText.startsWith("/run-step");
 const isSkillCall = skillName === "run-step";
+// `/tackle-tasks reset N [BLOCK]` is the hook's job: it runs the reset here and hands the lines back, so the agent runs nothing.
+const resetMatch = promptText.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
+if (resetMatch !== null) {
+    const said = resetTask(Number(resetMatch[1]), resetMatch[2] ?? "");
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: said } })}\n`);
+    process.exit(0);
+}
 if (!isTypedCommand && !isSkillCall) {
     process.exit(0);
 }

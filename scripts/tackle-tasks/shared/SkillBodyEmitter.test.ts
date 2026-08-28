@@ -61,8 +61,8 @@ test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () =>
     const root = makeTargetRepository([74]);
     const brief = skillBody("[74]", root);
 
-    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
-    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
     assert.deepEqual(call.args, { task: 74, tasksFile: join(root, ".taskTools", "tasks.json") });
     assert.match(call.scriptPath, /skills\/tackle-tasks\/tackle-tasks\.workflow\.js$/);
 });
@@ -71,8 +71,8 @@ test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () =>
 test("test_skillBody_writesTheWorkflowFileFromTheGenerator", () => {
     const root = makeTargetRepository([74]);
     const brief = skillBody("[74]", root);
-    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
-    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
     assert.equal(readFileSync(call.scriptPath, "utf8"), buildWorkflowScript());
 });
 
@@ -82,8 +82,8 @@ test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {
     const brief = skillBody("[74] IMPLEMENT_TASK", root);
 
     // Step: pull the WORKFLOW JSON out of the returned text.
-    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
-    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
     assert.equal(call.args.startingBlock, "IMPLEMENT_TASK");
 });
 
@@ -93,9 +93,27 @@ test("test_skillBody_omitsStartingBlockWhenNoneIsGiven", () => {
     const brief = skillBody("[74]", root);
 
     // Step: the starting block key must not be present at all.
-    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
-    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
     assert.ok(!("startingBlock" in call.args));
+});
+
+test("test_skillBody_launchesOneWorkflowPerTaskNumberInTheOrderGiven", () => {
+    // Setup: three task numbers, in order.
+    const root = makeTargetRepository([3, 5, 8]);
+    // Action: run the emitter with all three task numbers.
+    const brief = skillBody("[3,5,8]", root);
+
+    // Step: one WORKFLOW line per task number.
+    const workflowLines = brief.split("\n").filter((line) => /^WORKFLOW \d+: /.test(line));
+    assert.equal(workflowLines.length, 3);
+
+    // Step: each line's JSON carries its task number, in the order given.
+    const taskNumbers = workflowLines.map((line) => JSON.parse(line.replace(/^WORKFLOW \d+: /, "")).args.task);
+    assert.deepEqual(taskNumbers, [3, 5, 8]);
+
+    // Step: the body launches every workflow in one message.
+    assert.match(brief, /execute `Workflow\(WORKFLOW 1\)`, `Workflow\(WORKFLOW 2\)`, `Workflow\(WORKFLOW 3\)` in one message\./);
 });
 
 test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
@@ -138,13 +156,12 @@ test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
 });
 
-test("test_skillBody_resetEmitsTheResetCommandForTheTaskAndBlock", () => {
+test("test_skillBody_resetTellsTheAgentToRunNothingBecauseTheHookRanIt", () => {
     // Setup: a target repository with task 2.
     const root = makeTargetRepository([2]);
     // Action: the skill is invoked as `reset 2 LOCK_SOURCE_REPO`.
     const brief = skillBody("reset 2 LOCK_SOURCE_REPO", root);
-    // Verification: the body runs resetTask.ts with the task number and the block, and launches no workflow.
-    const resetTaskPath = fileURLToPath(new URL("../resetTask.ts", import.meta.url));
-    assert.match(brief, new RegExp(`node "${resetTaskPath}" 2 LOCK_SOURCE_REPO`));
-    assert.doesNotMatch(brief, /WORKFLOW/);
+    // Verification: the body names no command to run and no workflow; the hook already ran the reset.
+    assert.doesNotMatch(brief, /node |WORKFLOW/);
+    assert.match(brief, /Run nothing/);
 });
