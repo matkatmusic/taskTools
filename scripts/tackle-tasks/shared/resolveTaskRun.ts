@@ -1,5 +1,4 @@
-// Replaces bootstrap's "prepare" mode front-end for the box before "is task number valid?".
-// Mutates nothing: no worktree, no tasks.json write. See plans/tackle-tasks-v1_5-plan.md §Phase 2.
+// Replaces bootstrap's "prepare" mode front-end for the box before "is task number valid?".  Mutates nothing: no worktree, no tasks.json write. See plans/tackle-tasks-v1_5-plan.md §Phase 2.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { generateRunId } from "../../prepareTasks.ts";
@@ -15,9 +14,7 @@ export type ResolveTaskRunOutput = {
 
 const TASK_NUMBER_TOKEN = /^-?\d+$/;
 
-// M2: accepted grammar is a delimiter-separated list of positive safe integers, optionally
-// wrapped in one matching pair of outer brackets — "[1,2]" and "1 2" both work; "[1" and "1]"
-// do not, and neither does an integer beyond Number.MAX_SAFE_INTEGER. Text after "]" is ignored. Text after "]" is ignored.
+// M2: accepted grammar is a delimiter-separated list of positive safe integers, optionally wrapped in one matching pair of outer brackets — "[1,2]" and "1 2" both work; "[1" and "1]" do not, and neither does an integer beyond Number.MAX_SAFE_INTEGER. Text after "]" is ignored. Text after "]" is ignored.
 export function parseTaskNumberArgument(args: string): number[] {
     const trimmed = args.trim();
     const hasLeadingBracket = trimmed.startsWith("[");
@@ -43,6 +40,15 @@ export function parseTaskNumberArgument(args: string): number[] {
     return numbers;
 }
 
+// The block name to start the workflow walk from, if the caller named one after the task list.
+export function parseStartingBlockArgument(args: string): string {
+    const closingBracket = args.indexOf("]");
+    if (closingBracket === -1) return "";
+    const rest = args.slice(closingBracket + 1).trim();
+    if (rest === "") return "";
+    return rest.split(/\s+/)[0];
+}
+
 export function resolveTaskRun(args: string, projectRoot: string): ResolveTaskRunOutput {
     requireAbsolutePath("projectRoot", projectRoot);
     const taskNumbers = parseTaskNumberArgument(args);
@@ -54,9 +60,7 @@ export function resolveTaskRun(args: string, projectRoot: string): ResolveTaskRu
     };
 }
 
-// The invoking shell may sit in any subdirectory of the repository, and every downstream consumer —
-// sourceRepoLock's <projectRoot>/.git path above all — needs the repository top level, never that
-// subdirectory. This is the one place a working directory is read, and it is normalized here.
+// The invoking shell may sit in any subdirectory of the repository, and every downstream consumer — sourceRepoLock's <projectRoot>/.git path above all — needs the repository top level, never that subdirectory. This is the one place a working directory is read, and it is normalized here.
 export function repositoryTopLevel(startDirectory: string): string {
     const topLevel = execFileSync("git", ["-C", startDirectory, "rev-parse", "--show-toplevel"], {
         encoding: "utf8",

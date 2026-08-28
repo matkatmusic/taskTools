@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planReviewPrompt } from "./CodexReviewBodyEmitter.ts";
+import { planReviewPrompt, reviewQuestion } from "./CodexReviewBodyEmitter.ts";
+import { writeCheckpoint } from "./checkpoint.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
 const task: PreparedTask = {
@@ -18,9 +19,15 @@ const task: PreparedTask = {
 test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
     // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
     const prompt = planReviewPrompt(task);
-    for (const line of prompt.split("\n").filter((l) => /^(codex exec|\s*\|\| claude -p)/.test(l))) {
+    for (const line of prompt.split("\n").filter((l) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(l))) {
         assert.match(line, /<\/dev\/null/, `reviewer command does not close stdin: ${line}`);
     }
+});
+
+test("test_planReviewPrompt_capsCodexExecWithAPerlAlarm", () => {
+    // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
+    const codexLine = planReviewPrompt(task).split("\n").find((line) => line.includes("codex exec"));
+    assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });
 
 test("test_planReviewPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () => {
@@ -64,4 +71,17 @@ test("test_planReviewPrompt_excludesAnOwnedPathThePlanDeclaresItWillCreate", () 
     };
     const prompt = planReviewPrompt(createsTask);
     assert.equal(prompt.includes(join(repoRoot, "src/thing.ts")), false);
+});
+
+test("test_reviewQuestion_approvesOnTheRelaunchAfterAScrap", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-resumed-"));
+    const resumedTask: PreparedTask = { ...task, repoRoot };
+    assert.match(reviewQuestion(resumedTask), /read-only review agent/);
+    writeCheckpoint(repoRoot, {
+        taskNumber: 42, passId: "p", runId: "run-1", projectRoot: repoRoot,
+        block: "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN", input: "", state: "running",
+        sourceLockHeld: false, exitType: "", exitNote: "",
+        resumedFrom: { block: "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q", exitType: "plan-scrapped", exitNote: "n" },
+    });
+    assert.match(reviewQuestion(resumedTask), /^Approve the plan\./);
 });

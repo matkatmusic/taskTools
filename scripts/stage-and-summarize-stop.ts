@@ -32,10 +32,10 @@ if (emitReflows("Stop", reflowed, sid)) process.exit(0);
 
 if (!unstaged) process.exit(0);
 
-process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: "Stop",
-    additionalContext:
-      "Files were changed. Stage the changes made this session in each affected repo or submodule, but do not commit; then invoke the commit-message skill.",
-  },
-}));
+// process.stdout.write(JSON.stringify({
+//   hookSpecificOutput: {
+//     hookEventName: "Stop",
+//     additionalContext:
+//       "Files were changed. Stage the changes made this session in each affected repo or submodule, but do not commit; then invoke the commit-message skill.",
+//   },
+// }));

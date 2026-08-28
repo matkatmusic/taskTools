@@ -104,6 +104,20 @@ test("test_main_readsNoPlanFileWhenOutcomeIsError", () => {
     assert.equal(output.verdict, "ERROR");
 });
 
+test("test_main_runsTwiceWithTheSameInputWithoutBumpingRevisionTwice", () => {
+    const { projectRoot, planFile } = makeFixture();
+    const input = JSON.stringify(packet(projectRoot, planFile, review([fix("step-2")])));
+
+    const firstOutput = main(input);
+    const firstPlan = readFileSync(planFile, "utf8");
+    const secondOutput = main(input);
+    const secondPlan = readFileSync(planFile, "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondPlan, firstPlan);
+    assert.equal(JSON.parse(secondPlan).revision, 2);
+});
+
 test("test_main_carriesTaskIdentityForward", () => {
     const { projectRoot, planFile } = makeFixture();
     const output = main(JSON.stringify(packet(projectRoot, planFile, review([]))));

@@ -1,12 +1,11 @@
-// resolveTaskRun.ts replaces bootstrap's "prepare" front-end. It mutates nothing.
-// Run alone: node --test tests/resolveTaskRun.test.ts
+// resolveTaskRun.ts replaces bootstrap's "prepare" front-end. It mutates nothing.  Run alone: node --test tests/resolveTaskRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskRun, parseTaskNumberArgument } from "./resolveTaskRun.ts";
+import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument } from "./resolveTaskRun.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
@@ -100,6 +99,21 @@ test("test_parseTaskNumberArgument_rejectsInnerBracketToken", () => {
 
 test("test_resolveTaskRun_rejectsRelativeProjectRoot", () => {
     assert.throws(() => resolveTaskRun("[1]", "relative/path"), /projectRoot must be an absolute path/);
+});
+
+test("test_parseStartingBlockArgument_returnsTheWordAfterTheClosingBracket", () => {
+    // Step: text after the closing bracket names the block to start from.
+    assert.equal(parseStartingBlockArgument("[1] IMPLEMENT_TASK"), "IMPLEMENT_TASK");
+    assert.equal(
+        parseStartingBlockArgument("[1, 2]  pipeline-fixConflicts.mmd::FIX_CONFLICTS extra"),
+        "pipeline-fixConflicts.mmd::FIX_CONFLICTS",
+    );
+});
+
+test("test_parseStartingBlockArgument_returnsEmptyWhenNothingFollowsTheBracket", () => {
+    // Step: no closing bracket, or nothing after it, means no starting block was given.
+    assert.equal(parseStartingBlockArgument("[1]"), "");
+    assert.equal(parseStartingBlockArgument("1 2 3"), "");
 });
 
 test("test_resolveTaskRun_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {

@@ -3,7 +3,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { releaseTaskWorktreeLease } from "../../prepareTasks.ts";
+import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
 import type { EntryPacket } from "./_packet.ts";
 
@@ -30,7 +30,7 @@ export function main(input: string): Record<string, unknown> {
     let leaseRetained = false;
     if (worktreeRemains || branchRemains) {
         leaseRetained = true;
-    } else {
+    } else if (readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(packet.worktree)) !== null) {
         releaseTaskWorktreeLease({ worktreePath: packet.worktree, runId: packet.runId });
         leaseReleased = true;
     }

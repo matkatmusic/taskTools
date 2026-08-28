@@ -122,6 +122,48 @@ test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", 
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_CONTINUE_REBASE_runsTwiceWithTheSameInput", async () => {
+    const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActive(rootOrigin, taskNumber, "run-3");
+    const childCheckoutPath = join(worktreePath, "child");
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "child-worktree\n");
+    git(childCheckoutPath, "add", "shared.txt");
+    git(childCheckoutPath, "commit", "-q", "-m", "child worktree edit");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+    advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
+
+    const first = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-3", stepId: "rebase-3", rootSourceBranch: "main",
+    });
+    assert.equal(first.conflicted, true);
+
+    writeFileSync(join(childCheckoutPath, "shared.txt"), "resolved\n");
+    git(childCheckoutPath, "add", "shared.txt");
+
+    const input = JSON.stringify(packet(
+        rootOrigin, worktreePath, taskNumber, "run-3", first.stoppedAt?.occurrenceId ?? "", first.stoppedAt?.checkoutPath ?? "",
+    ));
+
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const firstOutput = main(input);
+    const worktreeLogAfterFirst = git(worktreePath, "log", "--format=%H %s");
+    const childLogAfterFirst = git(childCheckoutPath, "log", "--format=%H %s");
+    const tasksJsonAfterFirst = readFileSync(tasksPath, "utf8");
+
+    const secondOutput = main(input);
+    const worktreeLogAfterSecond = git(worktreePath, "log", "--format=%H %s");
+    const childLogAfterSecond = git(childCheckoutPath, "log", "--format=%H %s");
+    const tasksJsonAfterSecond = readFileSync(tasksPath, "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(worktreeLogAfterSecond, worktreeLogAfterFirst);
+    assert.equal(childLogAfterSecond, childLogAfterFirst);
+    assert.equal(tasksJsonAfterSecond, tasksJsonAfterFirst);
+});
+
 test("test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing", async () => {
     const { rootOrigin, rootOriginChildPath } = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);

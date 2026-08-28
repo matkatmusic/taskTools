@@ -69,3 +69,21 @@ test("test_RECORD_MODIFIED_FILES_FAILURE_includesPathsChangedInARealWorktree", (
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
+
+test("test_RECORD_MODIFIED_FILES_FAILURE_runsTwiceWithTheSameInput", () => {
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    writeFileSync(join(worktreePath, "changed.txt"), "change\n");
+    git(worktreePath, "add", "changed.txt");
+    git(worktreePath, "commit", "-q", "-m", "work");
+    writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: [], run: activeRun() });
+    const input = packet(rootOrigin, worktreePath);
+
+    const first = main(input);
+    const tasksAfterFirst = readTasksJson(rootOrigin);
+    const second = main(input);
+    const tasksAfterSecond = readTasksJson(rootOrigin);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(tasksAfterSecond, tasksAfterFirst);
+});

@@ -60,3 +60,17 @@ test("test_main_returnsCleanlyWhenTheWorktreeIsAlreadyClean", () => {
 
     assert.deepEqual(getCurrentTaskRun(taskNumber, projectRoot)?.commits, []);
 });
+
+test("test_COMMIT_IMPLEMENTATION_IF_NEEDED_runsTwiceWithTheSameInput", () => {
+    const taskNumber = 9103;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+    writeFileSync(join(worktree, "widget.txt"), "widget\n");
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { ok: true } };
+    const firstOutput = main(JSON.stringify(input));
+    const secondOutput = main(JSON.stringify(input));
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(getCurrentTaskRun(taskNumber, projectRoot)?.commits.length, 1);
+    assert.equal(git(worktree, "log", "--oneline").split("\n").length, 2);
+});

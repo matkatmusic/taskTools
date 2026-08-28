@@ -81,6 +81,22 @@ test("test_FIX_CONFLICTS_promptNeverMentionsRunStepOrInvokingTheSkill", () => {
     assert.doesNotMatch(String(output.prompt), /\/run-step|invoke the skill/i);
 });
 
+test("test_FIX_CONFLICTS_runsTwiceWithTheSameInput", () => {
+    const projectRoot = makeSourceRepo();
+    const worktree = makeConflictedRepo("conflicted.ts");
+    acquireSourceRepoLock(projectRoot, buildLockOwner("run-5", 5));
+    const input = JSON.stringify(packet(projectRoot, worktree, 5, "run-5"));
+
+    const first = main(input);
+    const promptAfterFirst = readFileSync(join(worktree, "plans", "FIX_CONFLICTS.prompt.md"), "utf8");
+
+    const second = main(input);
+    const promptAfterSecond = readFileSync(join(worktree, "plans", "FIX_CONFLICTS.prompt.md"), "utf8");
+
+    assert.deepEqual(second, first);
+    assert.equal(promptAfterSecond, promptAfterFirst);
+});
+
 test("test_FIX_CONFLICTS_throwsWhenTheWorktreeHasNothingUnmerged", () => {
     const projectRoot = makeSourceRepo();
     const worktree = mkdtempSync(join(tmpdir(), "fix-conflicts-clean-"));

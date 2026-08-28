@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./CODEX_REVIEWS_TESTS.ts";
@@ -98,6 +98,19 @@ test("test_main_throwsWhenProjectRootIsNotAbsolute", () => {
 test("test_main_throwsWhenWorktreeIsNotAbsolute", () => {
     const packet = { ...makePacket(), worktree: "relative/worktree" };
     assert.throws(() => main(JSON.stringify(packet)), /worktree must be an absolute path/);
+});
+
+test("test_CODEX_REVIEWS_TESTS_runsTwiceWithTheSameInput", () => {
+    const packet = makePacket();
+    const input = JSON.stringify(packet);
+
+    const firstOutput = main(input);
+    const firstDiff = readFileSync(join(packet.worktree, "plans", "implementation-diff-99.patch"), "utf8");
+    const secondOutput = main(input);
+    const secondDiff = readFileSync(join(packet.worktree, "plans", "implementation-diff-99.patch"), "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondDiff, firstDiff);
 });
 
 test("test_main_leavesTheContinuationToTheEngineNotTheAgent", () => {

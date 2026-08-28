@@ -1,5 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/markTaskInactive.ts.
-// Run: node --test tests/markTaskInactive.test.ts
+// Behavioral checks for scripts/tackle-tasks/markTaskInactive.ts.  Run: node --test tests/markTaskInactive.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -44,6 +43,20 @@ test("test_markTaskInactive_leavesTheExitNotesAndModifiedFilesInPlace", () => {
     assert.deepEqual(record.modifiedFiles, ["a.ts"]);
     assert.deepEqual(record.commits, [{ occurrenceId: "", hash: "abc123", kind: "merge" }]);
     assert.equal(record.implementationNotesFile, "plans/notes-1.md");
+});
+
+test("test_markTaskInactive_returnsTheSameAnswerOnASecondRun", () => {
+    // Scenario: the block runs twice with the same input, e.g. a resume re-running a killed block.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [activeRunRecord()] },
+    }]);
+
+    const first = markTaskInactive({ taskNumber: 1, runId: "run-a", projectRoot: root });
+    const second = markTaskInactive({ taskNumber: 1, runId: "run-a", projectRoot: root });
+
+    // Verification: the second call returns the same answer without throwing.
+    assert.deepEqual(second, first);
 });
 
 test("test_markTaskInactive_throwsWithASiblingRunId", () => {

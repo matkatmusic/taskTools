@@ -37,3 +37,20 @@ test("test_TAKE_WORKTREE_LEASE_BEFORE_RESET_refusesWhenTheSiblingLeaseNamesAnoth
     writeFileSync(`${worktree}.lease`, JSON.stringify({ runId: "run-b", pid: 1, createdAt: 1 }));
     assert.throws(() => main(packet(1, "run-a", root)), /held by run "run-b", refusing reset/);
 });
+
+test("test_TAKE_WORKTREE_LEASE_BEFORE_RESET_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRoot([{ taskNumber: 1, title: "t1", files: [] }]);
+    const worktree = mkdtempSync(join(tmpdir(), "TAKE_WORKTREE_LEASE_BEFORE_RESET-worktree-"));
+    claimTask(1, "run-a", root);
+    updateCurrentTaskRun(1, "run-a", { worktree, leaseRunId: "run-a" }, root);
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ runId: "run-a", pid: 1, createdAt: 1 }));
+    const input = packet(1, "run-a", root);
+
+    const firstOutput = main(input);
+    const firstState = readTaskRunState(1, root);
+    const secondOutput = main(input);
+    const secondState = readTaskRunState(1, root);
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondState, firstState);
+});

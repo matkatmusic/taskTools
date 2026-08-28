@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
+import { resumedRunSection } from "../shared/resumedRunSection.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 type Input = {
@@ -53,6 +54,8 @@ This list is complete.
 Every other path in the tree belongs to another task, including every test file.
 
 If fixing the cause needs an edit outside this list, make no edit at all and say so.
+
+${resumedRunSection(root)}
 
 ## HOW TO FIX
 

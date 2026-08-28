@@ -59,3 +59,20 @@ test("test_RELEASE_WORKTREE_LEASE_retainsTheLeaseWhileARetainedTaskBranchRemains
     assert.equal(output.leaseReleased, false);
     assert.equal(output.leaseRetained, true);
 });
+
+test("test_RELEASE_WORKTREE_LEASE_runsTwiceWithTheSameInput", () => {
+    const root = makeCommittedRepo("releaseWorktreeLease-twice-");
+    const worktreePath = join(root, "gone-worktree");
+    writeFileSync(taskWorktreeLeasePath(worktreePath), JSON.stringify({ runId: "run-a", pid: 1, createdAt: 0 }));
+    const input = packet(root, worktreePath);
+
+    const first = main(input);
+    const leaseAfterFirst = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(worktreePath));
+    const second = main(input);
+    const leaseAfterSecond = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(worktreePath));
+
+    assert.equal(first.leaseReleased, true);
+    assert.equal(second.leaseReleased, false);
+    assert.deepEqual(second, { ...first, leaseReleased: false });
+    assert.deepEqual(leaseAfterSecond, leaseAfterFirst);
+});

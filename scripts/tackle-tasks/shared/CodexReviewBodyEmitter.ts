@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isPlanProblem, readAndValidatePlan, type CodexReview } from "./planArtifacts.ts";
 import type { PreparedTask } from "./preparedTask.ts";
+import { readCheckpoint } from "./checkpoint.ts";
 
 export type CodexReviewReceipt = CodexReview;
 
@@ -130,8 +131,9 @@ message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 `;
 }
 
+// The relaunch after a plan-scrapped exit gets the approve prompt, so codex's review stops blocking the task.
 export function reviewQuestion(t: PreparedTask): string {
-    // return approveReviewByDefaultPrompt(t);
+    if (readCheckpoint(t.repoRoot)?.resumedFrom?.exitType === "plan-scrapped") return approveReviewByDefaultPrompt(t);
     return reviewByDefaultPrompt(t);
 }
 
@@ -159,7 +161,7 @@ ${reviewQuestion(t)}
 REVIEWEOF
 )
 REVIEW_FILE=${t.reviewOutputFile}
-codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
+perl -e 'alarm shift; exec @ARGV' 300 codex exec -s read-only --output-schema ${REVIEW_PLAN_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
 node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"

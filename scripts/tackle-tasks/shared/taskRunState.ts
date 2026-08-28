@@ -71,6 +71,8 @@ export type TaskRunRecord = {
     cleanupIncomplete?: boolean;
     // Persisted retry counters, keyed by name. Absent counter reads as zero.
     attempts?: Record<string, number>;
+    // Hook passIds already counted per counter, so a re-run of the same block counts once.
+    countedPasses?: Record<string, string[]>;
 };
 
 // Every retry in this pipeline caps at two attempts.
@@ -552,11 +554,12 @@ export function getAttemptCount(taskNumber: number, counter: string, projectRoot
     return newest?.attempts?.[counter] ?? 0;
 }
 
-// Raises the current run's counter by one and persists it, returning the new value.
+// Raises the current run's counter by one and persists it, returning the new value.  Idempotent per passId: a re-run of the same hook block counts once, not twice.
 export function raiseAttemptCount(
     taskNumber: number,
     expectedRunId: string,
     counter: string,
+    passId: string,
     projectRoot: string,
 ): number {
     const { tasksPath } = resolveTaskFiles(projectRoot);
@@ -569,12 +572,42 @@ export function raiseAttemptCount(
         if (newest === undefined || newest.runId !== expectedRunId) {
             throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
         }
-        const nextValue = (newest.attempts?.[counter] ?? 0) + 1;
-        const nextRecord: TaskRunRecord = { ...newest, attempts: { ...newest.attempts, [counter]: nextValue } };
+        const currentValue = newest.attempts?.[counter] ?? 0;
+        if (newest.countedPasses?.[counter]?.includes(passId)) return currentValue;
+        const nextValue = currentValue + 1;
+        const nextRecord: TaskRunRecord = {
+            ...newest,
+            attempts: { ...newest.attempts, [counter]: nextValue },
+            countedPasses: { ...newest.countedPasses, [counter]: [...(newest.countedPasses?.[counter] ?? []), passId] },
+        };
         const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
         writeJsonAtomically(tasksPath, tasks);
         return nextValue;
+    });
+}
+
+// A run started again from a block gets fresh retry rounds.
+export function resetAttemptCounts(
+    taskNumber: number,
+    expectedRunId: string,
+    projectRoot: string,
+): TaskRunState {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const task = findTask(tasks, taskNumber);
+        if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+        const state = getRunState(task);
+        const newest = state.history[state.history.length - 1];
+        if (newest === undefined || newest.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
+        }
+        const { attempts, countedPasses, ...nextRecord } = newest;
+        const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
+        task.run = nextState;
+        writeJsonAtomically(tasksPath, tasks);
+        return nextState;
     });
 }
 
@@ -617,6 +650,26 @@ export function endTaskRun(taskNumber: number, expectedRunId: string, projectRoo
         }
         const nextRecord: TaskRunRecord = { ...currentRecord, endedAt: getLocalIsoTimestamp() };
         const nextState: TaskRunState = { ...state, active: false, history: [...state.history.slice(0, -1), nextRecord] };
+        task.run = nextState;
+        writeJsonAtomically(tasksPath, tasks);
+        return nextState;
+    });
+}
+
+export function reopenTaskRun(taskNumber: number, expectedRunId: string, projectRoot: string): TaskRunState {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const task = findTask(tasks, taskNumber);
+        if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+        const state = getRunState(task);
+        const currentRecord = state.history[state.history.length - 1];
+        if (currentRecord === undefined || currentRecord.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
+        }
+        if (state.active) return state;
+        const nextRecord: TaskRunRecord = { ...currentRecord, endedAt: null, exitType: null, exitNote: null };
+        const nextState: TaskRunState = { ...state, active: true, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
         writeJsonAtomically(tasksPath, tasks);
         return nextState;

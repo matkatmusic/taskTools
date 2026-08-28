@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
+import { resumedRunSection } from "../shared/resumedRunSection.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
@@ -79,6 +80,8 @@ ${ownedPathMap(t)}
 - the test file paired with each owned file, at \`${t.repoRoot}/tests/<owned file's base name>.test.ts\`
 
 You are forbidden from editing any other file not listed above.
+
+${resumedRunSection(t.repoRoot)}
 
 ${testsSection(t)}
 

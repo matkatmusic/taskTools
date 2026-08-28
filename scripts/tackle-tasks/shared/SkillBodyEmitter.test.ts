@@ -76,6 +76,28 @@ test("test_skillBody_writesTheWorkflowFileFromTheGenerator", () => {
     assert.equal(readFileSync(call.scriptPath, "utf8"), buildWorkflowScript());
 });
 
+test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {
+    // Step: run the emitter with a starting block named after the task list.
+    const root = makeTargetRepository([74]);
+    const brief = skillBody("[74] IMPLEMENT_TASK", root);
+
+    // Step: pull the WORKFLOW JSON out of the returned text.
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    assert.equal(call.args.startingBlock, "IMPLEMENT_TASK");
+});
+
+test("test_skillBody_omitsStartingBlockWhenNoneIsGiven", () => {
+    // Step: run the emitter with no starting block named.
+    const root = makeTargetRepository([74]);
+    const brief = skillBody("[74]", root);
+
+    // Step: the starting block key must not be present at all.
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW: ".length));
+    assert.ok(!("startingBlock" in call.args));
+});
+
 test("test_skillMd_invokesTheSkillBodyEmitterOnAQuotedHeredoc", () => {
     // Setup: the skill body is nothing but the dynamic-injection call.
     const skillMd = readFileSync(skillMdPath, "utf8");

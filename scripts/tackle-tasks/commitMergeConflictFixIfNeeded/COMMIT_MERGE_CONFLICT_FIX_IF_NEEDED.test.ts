@@ -81,6 +81,26 @@ test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_commitsWhateverTheFixLeftDirty", 
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-3");
+    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    const input = answer(rootOrigin, worktreePath, taskNumber, "run-3");
+
+    const first = main(input);
+    const logAfterFirst = git(worktreePath, "log", "--format=%H %s");
+    const runAfterFirst = getCurrentTaskRun(taskNumber, rootOrigin);
+
+    const second = main(input);
+    const logAfterSecond = git(worktreePath, "log", "--format=%H %s");
+    const runAfterSecond = getCurrentTaskRun(taskNumber, rootOrigin);
+
+    assert.deepEqual(second, first);
+    assert.equal(logAfterSecond, logAfterFirst);
+    assert.deepEqual(runAfterSecond, runAfterFirst);
+});
+
 test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_carriesTheStoppedLayerThroughUnchangedForContinueRebase", () => {
     const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);

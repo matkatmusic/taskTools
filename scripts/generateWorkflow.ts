@@ -37,7 +37,7 @@ const START_STEP = '${START_STEP}'
 // One shape for every pass: the answer to a prompt lives in the packet file, never in this object.
 const HOOK_OUTPUT_SCHEMA = ${hookOutputSchemaText}
 
-// Required: the task number and the tasks.json the preamble reads.
+// Required: the task number and the tasks.json the preamble reads. args.startingBlock is optional.
 if (!Number.isInteger(args?.task) || !args?.tasksFile) {
     throw new Error('tackle-tasks needs args.task (a task number) and args.tasksFile (the path of tasks.json)')
 }
@@ -52,16 +52,16 @@ function createPromptForAgent(blockToRun, input) {
     ].join('\\n')
 }
 
-let blockToRun = START_STEP
+let blockToRun = args.startingBlock ?? START_STEP
 let input = { taskNumber: args.task, tasksFile: args.tasksFile }
 // Only ran accumulates across passes. Everything else belongs to the pass that produced it.
 const ran = []
 let currentDiagram = ''
 while (true) {
-    // One progress group per diagram visit: two agents in the same diagram share a box.
+    // One progress group per diagram visit, titled by the block that starts it.
     const diagram = blockToRun.split('::')[0]
     if (diagram !== currentDiagram) {
-        phase(diagram)
+        phase(blockToRun.split('::').pop())
         currentDiagram = diagram
     }
     const prompt = createPromptForAgent(blockToRun, input)

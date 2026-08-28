@@ -3,7 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-mkdir -p worktree
+mkdir -p worktree/plans
+cat > worktree/plans/checkpoint.json <<'EOF'
+{
+  "taskNumber": 42, "passId": "fixture-pass", "runId": "run-1", "projectRoot": "scripts/tackle-tasks/whatIsReviewVerdict/fixtures",
+  "block": "pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON", "input": "",
+  "state": "running", "sourceLockHeld": false, "exitType": "", "exitNote": "", "resumedFrom": null
+}
+EOF
 
 cat > tasks.json <<'EOF'
 [

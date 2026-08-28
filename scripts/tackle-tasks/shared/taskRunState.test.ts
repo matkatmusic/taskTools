@@ -1,5 +1,4 @@
-// Behavioral checks for taskRunState.ts, the only module that reads/writes task.run.
-// Run alone: node --test tests/taskRunState.test.ts
+// Behavioral checks for taskRunState.ts, the only module that reads/writes task.run.  Run alone: node --test tests/taskRunState.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -19,13 +18,16 @@ import {
     endTaskRun,
     getCurrentTaskRun,
     readTaskRunState,
+    reopenTaskRun,
     replaceEndedRunOutcome,
+    resetAttemptCounts,
     transitionWorktreeLease,
     updateCurrentTaskRun,
     type TaskRunRecord,
 } from "./taskRunState.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { closeTaskRunChecked } from "../../closeTasks.ts";
+import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "taskRunState-"));
@@ -190,6 +192,39 @@ test("test_endTaskRun_stampsEndedAtAndClearsActive", () => {
     // The state is no longer active and the record now has an end timestamp.
     assert.equal(state.active, false);
     assert.notEqual(state.history[state.history.length - 1].endedAt, null);
+});
+
+test("test_reopenTaskRun_setsTheEndedRecordActiveAgain", () => {
+    // Scenario: a run ended with exit notes recorded, then gets reopened.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    writeTaskExitNotes({ taskNumber: 1, runId: "run-a", projectRoot: root, exitType: "tests-red", exitNote: "n" });
+    endTaskRun(1, "run-a", root);
+    // Reopen it.
+    const state = reopenTaskRun(1, "run-a", root);
+    assert.equal(state.active, true);
+    const record = state.history[state.history.length - 1];
+    assert.equal(record.endedAt, null);
+    assert.equal(record.exitType, null);
+    assert.equal(record.runId, "run-a");
+    assert.deepEqual(record.commits, []);
+});
+
+test("test_reopenTaskRun_refusesARunIdThatIsNotTheNewest", () => {
+    // Scenario: the newest run is "run-a", but the caller asks to reopen "other".
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    endTaskRun(1, "run-a", root);
+    assert.throws(() => reopenTaskRun(1, "other", root));
+});
+
+test("test_reopenTaskRun_leavesAnAlreadyActiveRunAlone", () => {
+    // Scenario: reopening a run that never ended.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    const before = readTaskRunState(1, root);
+    const after = reopenTaskRun(1, "run-a", root);
+    assert.deepEqual(after, before);
 });
 
 test("test_replaceEndedRunOutcome_overwritesCompletedWithRunFailedInOneWrite", () => {
@@ -477,10 +512,7 @@ async function runAdoptionInChildAndKillAfter(
     });
     const [, signal] = await once(child, "exit");
     assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
-    // ponytail: the lock/guard files a killed process leaves behind are a separate, already
-    // documented recovery concern (rule 9's explicit-recovery stance), not this finding's
-    // split-brain. Clear them the way a supervisor already would, then let the next lease
-    // operation reconcile the intent/lease/tasks.json split this finding is about.
+    // ponytail: the lock/guard files a killed process leaves behind are a separate, already documented recovery concern (rule 9's explicit-recovery stance), not this finding's split-brain. Clear them the way a supervisor already would, then let the next lease operation reconcile the intent/lease/tasks.json split this finding is about.
     for (const staleLock of [join(root, "task-state.lock"), `${join(root, "worktree")}.lease.guard`]) {
         if (existsSync(staleLock)) unlinkSync(staleLock);
     }
@@ -528,8 +560,7 @@ test("test_adoptWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRightAfterU
 // already ended and replaced. ---
 
 test("test_appendTaskCommits_throwsAndLeavesTheNewerRunUnchangedWhenTargetingAnEndedSiblingRun", () => {
-    // Scenario: a paused commit-recording call from an old run wakes up after the workflow
-    // ended that run and a later invocation claimed the task.
+    // Scenario: a paused commit-recording call from an old run wakes up after the workflow ended that run and a later invocation claimed the task.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-old", root);
     endTaskRun(1, "run-old", root);
@@ -801,8 +832,7 @@ async function runAcquisitionInChildAndKillAfter(
     });
     const [, signal] = await once(child, "exit");
     assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
-    // ponytail: same already-documented stale-lock cleanup as the adoption kill tests (rule 9's
-    // explicit-recovery stance) — not part of this finding's split-brain being proven here.
+    // ponytail: same already-documented stale-lock cleanup as the adoption kill tests (rule 9's explicit-recovery stance) — not part of this finding's split-brain being proven here.
     for (const staleLock of [join(root, "task-state.lock"), `${join(root, "worktree")}.lease.guard`]) {
         if (existsSync(staleLock)) unlinkSync(staleLock);
     }
@@ -851,9 +881,7 @@ test("test_acquireAbsentWorktreeLease_reconcilesToOneOwnerAfterAChildIsKilledRig
 // that legitimately appeared during the recovery window between the kill and the retry. ---
 
 test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsInTheRecoveryWindowAfterTheLeaseIsAlreadyWritten", async () => {
-    // Scenario: the process dies right after replacing the physical lease. A supervisor clears
-    // only the deliberately stale guards, exactly as the existing kill/retry tests do. Before the
-    // retry, another owner legitimately takes the physical lease.
+    // Scenario: the process dies right after replacing the physical lease. A supervisor clears only the deliberately stale guards, exactly as the existing kill/retry tests do. Before the retry, another owner legitimately takes the physical lease.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
     await runAdoptionInChildAndKillAfter(root, "lease");
@@ -868,8 +896,7 @@ test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsInTheRe
 });
 
 test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsAfterAnIntentOnlySurvivor", async () => {
-    // Scenario: the process dies right after journaling the intent, before either authority
-    // changed. A different physical owner appears before the retry.
+    // Scenario: the process dies right after journaling the intent, before either authority changed. A different physical owner appears before the retry.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     writeFileSync(leasePath, JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 }));
     await runAdoptionInChildAndKillAfter(root, "intent");
@@ -883,10 +910,7 @@ test("test_adoptWorktreeLease_refusesReconciliationWhenAThirdOwnerAppearsAfterAn
 });
 
 test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePriorLeaseBytes", () => {
-    // Scenario: a retained intent whose finish condition is false (its recorded new owner is
-    // not the currently active run, so reconciliation must roll back) finds a third owner
-    // holding the physical lease instead of either the recorded prior state or its own new
-    // owner. Rolling back must not stomp that third owner with previousLeaseBytes.
+    // Scenario: a retained intent whose finish condition is false (its recorded new owner is not the currently active run, so reconciliation must roll back) finds a third owner holding the physical lease instead of either the recorded prior state or its own new owner. Rolling back must not stomp that third owner with previousLeaseBytes.
     const { root, worktreePath, leasePath } = makeAdoptionFixture();
     const priorOwnerBytes = JSON.stringify({ runId: "run-old", pid: 1, createdAt: 1 });
     const intent = {
@@ -898,8 +922,7 @@ test("test_adoptWorktreeLease_rollbackPathRefusesToOverwriteAThirdOwnerWithThePr
     const otherOwnerBytes = JSON.stringify({ runId: "run-other", pid: 999, createdAt: 987654 });
     writeFileSync(leasePath, otherOwnerBytes);
     const tasksBefore = readFileSync(join(root, "tasks.json"), "utf8");
-    // run-new is the active run in this fixture, not "run-stale", so reconciliation would take
-    // the rollback branch if it were allowed to proceed at all.
+    // run-new is the active run in this fixture, not "run-stale", so reconciliation would take the rollback branch if it were allowed to proceed at all.
     assert.throws(() => adoptWorktreeLease(1, "run-new", root));
     assert.equal(readFileSync(leasePath, "utf8"), otherOwnerBytes);
     assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), tasksBefore);
@@ -920,9 +943,9 @@ test("test_raiseAttemptCount_incrementsAndReturnsTheNewValue", () => {
     // Setup: a task with an active run.
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
-    // Test action: raise the same counter twice.
-    const first = raiseAttemptCount(1, "run-a", "testFixes", root);
-    const second = raiseAttemptCount(1, "run-a", "testFixes", root);
+    // Test action: raise the same counter twice, each from a different hook pass.
+    const first = raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    const second = raiseAttemptCount(1, "run-a", "testFixes", "pass-2", root);
     // Verification: each call returns the counter's new value.
     assert.equal(first, 1);
     assert.equal(second, 2);
@@ -933,7 +956,7 @@ test("test_raiseAttemptCount_persistsToTasksJson", () => {
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
     // Test action: raise a counter, then read it back through getAttemptCount.
-    raiseAttemptCount(1, "run-a", "mergeAttempts", root);
+    raiseAttemptCount(1, "run-a", "mergeAttempts", "pass-1", root);
     const count = getAttemptCount(1, "mergeAttempts", root);
     // Verification: the raise was written to disk, not just returned in memory.
     assert.equal(count, 1);
@@ -944,10 +967,10 @@ test("test_raiseAttemptCount_tracksEachCounterNameIndependently", () => {
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
     // Test action: raise one counter three times and a different counter once.
-    raiseAttemptCount(1, "run-a", "conflictFixes", root);
-    raiseAttemptCount(1, "run-a", "conflictFixes", root);
-    raiseAttemptCount(1, "run-a", "conflictFixes", root);
-    raiseAttemptCount(1, "run-a", "reviews", root);
+    raiseAttemptCount(1, "run-a", "conflictFixes", "pass-1", root);
+    raiseAttemptCount(1, "run-a", "conflictFixes", "pass-2", root);
+    raiseAttemptCount(1, "run-a", "conflictFixes", "pass-3", root);
+    raiseAttemptCount(1, "run-a", "reviews", "pass-4", root);
     // Verification: the two counters hold separate values.
     assert.equal(getAttemptCount(1, "conflictFixes", root), 3);
     assert.equal(getAttemptCount(1, "reviews", root), 1);
@@ -958,10 +981,65 @@ test("test_raiseAttemptCount_throwsWhenExpectedRunIdIsNotTheNewestRun", () => {
     const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
     claimTask(1, "run-a", root);
     // Test action: raising with a stale runId throws.
-    assert.throws(() => raiseAttemptCount(1, "run-stale", "testFixes", root));
+    assert.throws(() => raiseAttemptCount(1, "run-stale", "testFixes", "pass-1", root));
+});
+
+test("test_raiseAttemptCount_countsAPassIdOnlyOnce", () => {
+    // Scenario: the same hook pass calls raiseAttemptCount twice, e.g. a re-run of a killed block.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    const second = raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    // Verification: the second call with the same passId does not raise the count again.
+    assert.equal(second, 1);
+    assert.equal(getAttemptCount(1, "testFixes", root), 1);
+});
+
+test("test_raiseAttemptCount_countsEachNewPassId", () => {
+    // Scenario: two distinct hook passes each call raiseAttemptCount once.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    const second = raiseAttemptCount(1, "run-a", "testFixes", "pass-2", root);
+    // Verification: each distinct passId raises the count.
+    assert.equal(second, 2);
+});
+
+test("test_raiseAttemptCount_recordsThePassIdItCounted", () => {
+    // Scenario: raising a counter persists the passId that was counted.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    const state = readTaskRunState(1, root);
+    const record = state.history[state.history.length - 1];
+    assert.deepEqual(record.countedPasses?.testFixes, ["pass-1"]);
 });
 
 test("test_MAX_ATTEMPTS_isTwo", () => {
     // Verification: the pipeline's retry cap is two.
     assert.equal(MAX_ATTEMPTS, 2);
+});
+
+test("test_resetAttemptCounts_clearsEveryCounterAndCountedPass", () => {
+    // Setup: a task with an active run holding two raised counters.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    raiseAttemptCount(1, "run-a", "testFixes", "pass-1", root);
+    raiseAttemptCount(1, "run-a", "mergeAttempts", "pass-2", root);
+    const before = readTaskRunState(1, root).history[0];
+    // Test action: reset the run's attempt counters.
+    const state = resetAttemptCounts(1, "run-a", root);
+    // Verification: attempts and countedPasses are gone, every other field is unchanged.
+    const record = state.history[state.history.length - 1];
+    assert.equal(record.attempts, undefined);
+    assert.equal(record.countedPasses, undefined);
+    assert.deepEqual({ ...record, attempts: undefined, countedPasses: undefined }, { ...before, attempts: undefined, countedPasses: undefined });
+});
+
+test("test_resetAttemptCounts_refusesARunIdThatIsNotTheNewest", () => {
+    // Setup: a task with an active run under a different runId.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: resetting with a stale runId throws.
+    assert.throws(() => resetAttemptCounts(1, "run-stale", root));
 });

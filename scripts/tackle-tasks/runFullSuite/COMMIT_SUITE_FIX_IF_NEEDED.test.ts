@@ -40,6 +40,26 @@ test("test_COMMIT_SUITE_FIX_IF_NEEDED_commitsDirtyWorkAndForwardsTheCorePacket",
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_COMMIT_SUITE_FIX_IF_NEEDED_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeCommittedRepo();
+    const worktree = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 803;
+    seedActiveTask(rootOrigin, taskNumber);
+    writeFileSync(join(worktree, "fixed.txt"), "fixed\n");
+
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+
+    const first = main(input);
+    const logAfterFirst = git(worktree, "log", "--format=%H %s");
+
+    const second = main(input);
+    const logAfterSecond = git(worktree, "log", "--format=%H %s");
+
+    assert.deepEqual(second, first);
+    assert.equal(logAfterSecond, logAfterFirst);
+    assert.equal(git(worktree, "status", "--porcelain"), "");
+});
+
 test("test_COMMIT_SUITE_FIX_IF_NEEDED_isIdempotentWhenNothingIsDirty", () => {
     const rootOrigin = makeCommittedRepo();
     const worktree = makeLinkedWorktree(rootOrigin);

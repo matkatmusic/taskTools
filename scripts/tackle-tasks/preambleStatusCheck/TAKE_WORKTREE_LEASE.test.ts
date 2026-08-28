@@ -29,3 +29,22 @@ test("test_TAKE_WORKTREE_LEASE_recordsTheWorktreePathAndLeaseRunIdAndSetsDocsMod
     assert.equal(state.worktree, worktree);
     assert.equal(state.leaseRunId, "run-a");
 });
+
+test("test_TAKE_WORKTREE_LEASE_runsTwiceWithTheSameInput", () => {
+    const root = makeCommittedRepo("TAKE_WORKTREE_LEASE-");
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    claimTask(1, "run-a", root);
+    const worktree = join(root, "..", "task-1-worktree");
+    const input = JSON.stringify({
+        box: "CREATE_WORKTREE", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,
+        worktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
+    });
+
+    const firstOutput = main(input);
+    const firstState = readTaskRunState(1, root);
+    const secondOutput = main(input);
+    const secondState = readTaskRunState(1, root);
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondState, firstState);
+});

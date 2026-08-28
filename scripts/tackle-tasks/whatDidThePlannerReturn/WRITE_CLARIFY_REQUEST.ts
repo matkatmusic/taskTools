@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
 import type { WhatDidThePlannerReturnPacket } from "./_packet.ts";
@@ -27,7 +28,9 @@ function writeClarifyRequest(projectRoot: string, taskNumber: number, clarifyReq
 export function main(input: string): WhatDidThePlannerReturnPacket {
     const packet = JSON.parse(input) as WhatDidThePlannerReturnPacket;
     writeClarifyRequest(packet.projectRoot, packet.taskNumber, packet.clarifyRequest);
-    raiseAttemptCount(packet.taskNumber, packet.runId, "clarify", packet.projectRoot);
+    const checkpoint = readCheckpoint(packet.worktree);
+    if (checkpoint === null) throw new Error(`WRITE_CLARIFY_REQUEST: no checkpoint in ${packet.worktree}`);
+    raiseAttemptCount(packet.taskNumber, packet.runId, "clarify", checkpoint.passId, packet.projectRoot);
     return { ...packet, box: "WRITE_CLARIFY_REQUEST", scriptSignal: SCRIPT_SIGNAL.CONTINUE, docsMode: "UPDATE", planFile: "" };
 }
 

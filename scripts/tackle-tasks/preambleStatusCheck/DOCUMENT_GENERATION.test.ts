@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./DOCUMENT_GENERATION.ts";
@@ -61,6 +61,27 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInUpdateMode", () => {
     const { next: _next, ...expected } = packet;
     assert.deepEqual(output, { ...expected, box: "DOCUMENT_GENERATION", scriptSignal: "continue" });
     assert.ok(existsSync(join(worktreePath, "plans", "brief-9.md")));
+});
+
+test("test_DOCUMENT_GENERATION_runsTwiceWithTheSameInput", () => {
+    const repoRoot = makeTempRepo();
+    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", files: ["fileA.txt"] }]);
+    const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    const input = JSON.stringify({
+        box: "INIT_SUBMODULES_RECURSIVELY", scriptSignal: "continue", taskNumber: 9, runId: "run-a",
+        projectRoot: repoRoot, worktree: worktreePath, branch: "task-9", docsMode: "AUTOGEN",
+        planFile: "", exitType: "", exitNote: "",
+    });
+    const briefFile = join(worktreePath, "plans", "brief-9.md");
+
+    const firstOutput = main(input);
+    const firstBrief = readFileSync(briefFile, "utf8");
+    const secondOutput = main(input);
+    const secondBrief = readFileSync(briefFile, "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondBrief, firstBrief);
 });
 
 test("test_DOCUMENT_GENERATION_throwsOnAnUnknownDocsMode", () => {

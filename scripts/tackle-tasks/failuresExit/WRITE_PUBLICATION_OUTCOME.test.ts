@@ -57,3 +57,16 @@ test("test_WRITE_PUBLICATION_OUTCOME_keepsCompletedWhenAlreadyWritten", () => {
     const state = readTaskRunState(1, root);
     assert.equal(state.history[0].exitType, "completed");
 });
+
+test("test_WRITE_PUBLICATION_OUTCOME_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRootWithActiveRun(null);
+    const input = packet(root);
+
+    const first = main(input);
+    const stateAfterFirst = readTaskRunState(1, root);
+    const second = main(input);
+    const stateAfterSecond = readTaskRunState(1, root);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(stateAfterSecond, stateAfterFirst);
+});

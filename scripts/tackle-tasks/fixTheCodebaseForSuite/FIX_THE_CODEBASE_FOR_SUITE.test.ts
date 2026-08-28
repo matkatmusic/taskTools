@@ -32,6 +32,20 @@ test("test_FIX_THE_CODEBASE_FOR_SUITE_namesTheOwnedFilesAndTheFailingOutput", ()
     assert.match(promptFileContents, /the failing suite text/);
 });
 
+test("test_FIX_THE_CODEBASE_FOR_SUITE_runsTwiceWithTheSameInput", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "fix-suite-"));
+    const input = packet(worktree);
+
+    const first = main(input);
+    const promptAfterFirst = readFileSync(join(worktree, "plans", "FIX_THE_CODEBASE_FOR_SUITE.prompt.md"), "utf8");
+
+    const second = main(input);
+    const promptAfterSecond = readFileSync(join(worktree, "plans", "FIX_THE_CODEBASE_FOR_SUITE.prompt.md"), "utf8");
+
+    assert.deepEqual(second, first);
+    assert.equal(promptAfterSecond, promptAfterFirst);
+});
+
 test("test_FIX_THE_CODEBASE_FOR_SUITE_asksForFixSummaryInsideAdditionalData", () => {
     const worktree = mkdtempSync(join(tmpdir(), "fix-suite-"));
     main(packet(worktree));

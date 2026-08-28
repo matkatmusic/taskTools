@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./WRITE_CLARIFY_REQUEST.ts";
 import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { writeCheckpoint, type Checkpoint } from "../shared/checkpoint.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "WRITE_CLARIFY_REQUEST.template.json");
 
@@ -31,13 +32,25 @@ function makeProjectRoot(): string {
 
 const entryOf = (root: string) => JSON.parse(readFileSync(join(root, ".taskTools", "tasks.json"), "utf8"))[0];
 
+const worktreeOf = (projectRoot: string) => join(projectRoot, "worktree");
+
 const packet = (projectRoot: string, clarifyRequest: string) => JSON.stringify({
-    taskNumber: 35, runId: "run-1", worktree: "/tmp/fake-worktree", branch: "task-35", projectRoot,
+    taskNumber: 35, runId: "run-1", worktree: worktreeOf(projectRoot), branch: "task-35", projectRoot,
     docsMode: "", planFile: "", exitType: "", exitNote: "", outcome: "CLARIFY", clarifyRequest,
 });
 
+function seedCheckpoint(worktree: string, passId: string): void {
+    const checkpoint: Checkpoint = {
+        taskNumber: 35, passId, runId: "run-1", projectRoot: worktree,
+        block: "pipeline-plan.mmd::WHAT_DID_THE_PLANNER_RETURN", input: "{}",
+        state: "running", sourceLockHeld: false, exitType: "", exitNote: "", resumedFrom: null,
+    };
+    writeCheckpoint(worktree, checkpoint);
+}
+
 test("test_WRITE_CLARIFY_REQUEST_writesTheRequestWhereTheNextPlannerReadsIt", () => {
     const root = makeProjectRoot();
+    seedCheckpoint(worktreeOf(root), "pass-0");
 
     const output = main(packet(root, "SENTINEL_WHICH_DATABASE"));
 
@@ -50,6 +63,7 @@ test("test_WRITE_CLARIFY_REQUEST_writesTheRequestWhereTheNextPlannerReadsIt", ()
 
 test("test_WRITE_CLARIFY_REQUEST_raisesTheClarifyAttemptCounter", () => {
     const root = makeProjectRoot();
+    seedCheckpoint(worktreeOf(root), "pass-0");
 
     main(packet(root, "SENTINEL_WHICH_DATABASE"));
 
@@ -58,6 +72,7 @@ test("test_WRITE_CLARIFY_REQUEST_raisesTheClarifyAttemptCounter", () => {
 
 test("test_WRITE_CLARIFY_REQUEST_setsDocsModeToUpdate", () => {
     const root = makeProjectRoot();
+    seedCheckpoint(worktreeOf(root), "pass-0");
 
     const output = main(packet(root, "SENTINEL_WHICH_DATABASE"));
 
@@ -67,6 +82,7 @@ test("test_WRITE_CLARIFY_REQUEST_setsDocsModeToUpdate", () => {
 
 test("test_WRITE_CLARIFY_REQUEST_leavesTheCodexReviewNotesChannelAlone", () => {
     const root = makeProjectRoot();
+    seedCheckpoint(worktreeOf(root), "pass-0");
 
     main(packet(root, "SENTINEL_WHICH_DATABASE"));
 
@@ -80,8 +96,23 @@ test("test_WRITE_CLARIFY_REQUEST_throwsOnAnEmptyRequest", () => {
 test("test_WRITE_CLARIFY_REQUEST_throwsWhenTheTaskIsNotInTasksJson", () => {
     const root = makeProjectRoot();
     const badPacket = JSON.stringify({
-        taskNumber: 999, runId: "run-1", worktree: "/tmp/fake-worktree", branch: "task-35", projectRoot: root,
+        taskNumber: 999, runId: "run-1", worktree: worktreeOf(root), branch: "task-35", projectRoot: root,
         docsMode: "", planFile: "", exitType: "", exitNote: "", outcome: "CLARIFY", clarifyRequest: "anything",
     });
     assert.throws(() => main(badPacket), /task 999 not found/);
+});
+
+test("test_WRITE_CLARIFY_REQUEST_countsOnceWhenRunTwiceWithTheSameCheckpoint", () => {
+    const root = makeProjectRoot();
+    seedCheckpoint(worktreeOf(root), "pass-1");
+
+    main(packet(root, "SENTINEL_WHICH_DATABASE"));
+    main(packet(root, "SENTINEL_WHICH_DATABASE"));
+
+    assert.equal(entryOf(root).run.history[0].attempts.clarify, 1);
+});
+
+test("test_WRITE_CLARIFY_REQUEST_throwsWithoutACheckpoint", () => {
+    const root = makeProjectRoot();
+    assert.throws(() => main(packet(root, "SENTINEL_WHICH_DATABASE")), /no checkpoint/);
 });

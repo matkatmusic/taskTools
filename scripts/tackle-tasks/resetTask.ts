@@ -40,8 +40,16 @@ for (const f of [".git/taskTools-source.lock", ".git/taskTools-source.lock.mutat
     const p = join(repoRoot, f);
     if (existsSync(p)) rmSync(p);
 }
-for (const entry of existsSync(join(repoRoot, ".taskTools", "runs")) ? readdirSync(join(repoRoot, ".taskTools", "runs")) : []) {
-    rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
+// for (const entry of existsSync(join(repoRoot, ".taskTools", "runs")) ? readdirSync(join(repoRoot, ".taskTools", "runs")) : []) {
+//     rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
+// }
+// Only this task's packets go: each packet JSON names its taskNumber; *-run-log.md names have no packets folder.
+const runsDirectory = join(repoRoot, ".taskTools", "runs");
+for (const packetsDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry, "packets")) : []) {
+    if (!existsSync(packetsDirectory)) continue;
+    const packetNamesThisTask = readdirSync(packetsDirectory)
+        .some((packetFile) => JSON.parse(readFileSync(join(packetsDirectory, packetFile), "utf-8")).taskNumber === taskNumber);
+    if (packetNamesThisTask) rmSync(packetsDirectory, { recursive: true, force: true });
 }
 
 if (completedIndex !== -1) {

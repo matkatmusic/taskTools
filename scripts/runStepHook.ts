@@ -1,11 +1,16 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type ScriptSignal } from "./contracts.ts";
 import { getTemplateShapeMismatches } from "./templateShape.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
+import { readCheckpoint, writeCheckpoint } from "./tackle-tasks/shared/checkpoint.ts";
+import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
+import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
+import { resetAttemptCounts } from "./tackle-tasks/shared/taskRunState.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
@@ -27,13 +32,17 @@ function runStamp(): string {
     const pad = (value: number) => String(value).padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
 }
-// One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.
-// RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
+// One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.  RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
 const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.md`;
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
 const STEP_TIMEOUT_MS = 10_000;
+const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
+const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
+const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
+// Both exit tails release the source lock, so a block inside them starts without it.
+const EXIT_DIAGRAMS = ["pipeline-failuresExit.mmd", SUCCESS_DIAGRAM];
 
 type Step = StepConfigEntry & { diagram: string };
 type StepRun = {
@@ -172,6 +181,22 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
     return getStepKey(String(chosenNextBox), step.diagram);
 }
 
+// A block holds the source lock when the walk can reach it from LOCK_SOURCE_REPO without entering an exit diagram.
+function isInsideSourceLock(stepKey: string): boolean {
+    const lockStepKey = getStepKeysNamingBox(LOCK_SOURCE_REPO_BOX)[0];
+    if (lockStepKey === undefined) return false;
+    const reached = new Set<string>();
+    const toVisit = [...STEPS_BY_KEY.get(lockStepKey)!.next.map((box) => getStepKey(box, STEPS_BY_KEY.get(lockStepKey)!.diagram))];
+    while (toVisit.length > 0) {
+        const visiting = toVisit.pop()!;
+        const step = STEPS_BY_KEY.get(visiting);
+        if (step === undefined || reached.has(visiting) || EXIT_DIAGRAMS.includes(step.diagram)) continue;
+        reached.add(visiting);
+        toVisit.push(...step.next.map((box) => getStepKey(box, step.diagram)));
+    }
+    return reached.has(stepKey);
+}
+
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     mkdirSync(dirname(logFile()), { recursive: true });
@@ -234,10 +259,26 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<stri
 function walkFromStep(startStepKey: string, startInput: string, invocation: string): HookOutput {
     // A packetFile in the input expands to that file; the prompt an agent answered into it is not block input.
     const startPacket = getPacketFromInput(startInput);
+    const startedFromPacketFile = typeof startPacket.packetFile === "string";
     if (typeof startPacket.packetFile === "string") {
         if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));
         const { prompt: _prompt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
         startInput = JSON.stringify(packet);
+    }
+    // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.
+    if (startStepKey !== START_STEP_KEY && typeof startPacket.tasksFile === "string") {
+        const taskNumber = Number(startPacket.taskNumber);
+        const entry = findStartAtBlockEntry(taskNumber, String(startPacket.tasksFile), STEPS_BY_KEY.get(startStepKey)!.box, dirname(logFile()));
+        if (entry === null) return walkFromStep(START_STEP_KEY, startInput, invocation);
+        prepareResume({ taskNumber, runId: entry.runId, projectRoot: entry.projectRoot, sourceLockHeld: isInsideSourceLock(startStepKey) });
+        resetAttemptCounts(taskNumber, entry.runId, entry.projectRoot);
+        startInput = entry.input;
+    }
+    if (startStepKey === START_STEP_KEY) {
+        const entry = findResumeEntry(Number(startPacket.taskNumber), String(startPacket.tasksFile));
+        if (entry !== null) {
+            return walkFromStep(entry.block, entry.input, invocation);
+        }
     }
     const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
     if (startInputMismatches.length > 0) {
@@ -246,8 +287,30 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     const boxesRun: string[] = [];
     let stepKey = startStepKey;
     let input = startInput;
+    let inFailureChain = false;
     while (true) {
         const step = STEPS_BY_KEY.get(stepKey)!;
+        const packet = getPacketFromInput(input);
+        const worktree = typeof packet.worktree === "string" ? packet.worktree : "";
+        const worktreeExists = worktree !== "" && existsSync(worktree);
+        // A prompt block and the block that consumes its answer leave the checkpoint at the block that feeds the prompt, so a resume reproduces the prompt.
+        const answersAPrompt = startedFromPacketFile && boxesRun.length === 0;
+        if (!inFailureChain && worktreeExists && !step.producesPrompt && !answersAPrompt) {
+            const existing = readCheckpoint(worktree);
+            writeCheckpoint(worktree, {
+                taskNumber: Number(packet.taskNumber),
+                passId: existing?.block === stepKey && existing?.input === input ? existing.passId : randomUUID(),
+                runId: String(packet.runId ?? ""),
+                projectRoot: String(packet.projectRoot ?? ""),
+                block: stepKey,
+                input,
+                state: "running",
+                sourceLockHeld: false,
+                exitType: "",
+                exitNote: "",
+                resumedFrom: existing?.resumedFrom ?? null,
+            });
+        }
         const stepRun = runStepScript(step, input, invocation);
         boxesRun.push(stepKey);
 
@@ -299,6 +362,47 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
         if (!STEPS_BY_KEY.has(nextStepKey)) {
             return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
+        }
+        if (nextStepKey === FAILURES_EXIT_KEY && !inFailureChain) {
+            if (worktreeExists) {
+                const existing = readCheckpoint(worktree);
+                const sourceLockHeld = readSourceRepoLock(String(packet.projectRoot ?? ""))?.owner
+                    === buildLockOwner(String(packet.runId ?? ""), Number(packet.taskNumber));
+                // The block that consumed a prompt answer fails back to the block that fed the prompt.
+                const consumedAPrompt = startedFromPacketFile && boxesRun.length === 1;
+                if (consumedAPrompt && existing === null) throw new Error(`${stepKey} answered a prompt but ${worktree} holds no checkpoint`);
+                writeCheckpoint(worktree, {
+                    taskNumber: Number(packet.taskNumber),
+                    passId: existing?.passId ?? randomUUID(),
+                    runId: String(packet.runId ?? ""),
+                    projectRoot: String(packet.projectRoot ?? ""),
+                    block: consumedAPrompt ? existing!.block : stepKey,
+                    input: consumedAPrompt ? existing!.input : input,
+                    state: "failed",
+                    sourceLockHeld,
+                    exitType: String(stepRun.result.exitType ?? ""),
+                    exitNote: String(stepRun.result.exitNote ?? ""),
+                    resumedFrom: existing?.resumedFrom ?? null,
+                });
+            }
+            inFailureChain = true;
+        }
+        // The block that consumed a prompt answer earns its checkpoint once it succeeds; a prompt block after it resumes from there.
+        if (answersAPrompt && !step.producesPrompt && worktreeExists && !inFailureChain) {
+            const existing = readCheckpoint(worktree);
+            writeCheckpoint(worktree, {
+                taskNumber: Number(packet.taskNumber),
+                passId: existing?.block === stepKey && existing?.input === input ? existing.passId : randomUUID(),
+                runId: String(packet.runId ?? ""),
+                projectRoot: String(packet.projectRoot ?? ""),
+                block: stepKey,
+                input,
+                state: "running",
+                sourceLockHeld: false,
+                exitType: "",
+                exitNote: "",
+                resumedFrom: existing?.resumedFrom ?? null,
+            });
         }
         stepKey = nextStepKey;
         // A box sees only the box before it, so anything further back has to be carried forward by hand.  next is routing, consumed here; a box that spreads its input must never inherit the choice that reached it.

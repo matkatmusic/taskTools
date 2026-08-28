@@ -56,6 +56,27 @@ test("test_RECORD_MERGE_COMMIT_HASHES_keepsTheWorkAndRepairCommitsThatCameBefore
     assert.deepEqual(run?.commits.map((commit) => commit.hash), ["work-hash", "repair-hash", "merge-child-hash", "merge-root-hash"]);
 });
 
+test("test_RECORD_MERGE_COMMIT_HASHES_runsTwiceWithTheSameInput", () => {
+    const projectRoot = tmpMkdir("record-merge-commit-hashes-");
+    const taskNumber = 41;
+    const runId = "run-41";
+    seedTaskAndMarkActive(projectRoot, taskNumber, runId);
+    acquireSourceRepoLock(projectRoot, buildLockOwner(runId, taskNumber));
+    appendTaskCommits(taskNumber, runId, [{ occurrenceId: "", hash: "work-hash", kind: "work" }], projectRoot);
+
+    const input = JSON.stringify(samplePacket(projectRoot, taskNumber, runId, [
+        { occurrenceId: "", hash: "merge-root-hash", kind: "merge" },
+    ]));
+
+    const first = main(input);
+    const runAfterFirst = getCurrentTaskRun(taskNumber, projectRoot);
+    const second = main(input);
+    const runAfterSecond = getCurrentTaskRun(taskNumber, projectRoot);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(runAfterSecond, runAfterFirst);
+});
+
 test("test_RECORD_MERGE_COMMIT_HASHES_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", () => {
     const projectRoot = tmpMkdir("record-merge-commit-hashes-");
     const taskNumber = 42;

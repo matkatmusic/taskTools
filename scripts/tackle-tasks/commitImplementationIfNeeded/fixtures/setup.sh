@@ -141,6 +141,14 @@ cat > amend/root/.taskTools/tasks.json <<'JSON'
   }
 ]
 JSON
+mkdir -p amend/worktree/plans
+cat > amend/worktree/plans/checkpoint.json <<'JSON'
+{
+  "taskNumber": 3, "passId": "fixture-pass", "runId": "run-1", "projectRoot": "amend/root",
+  "block": "pipeline-commitImplementationIfNeeded.mmd::AMEND_ENTRY_WITH_FAILING_TESTS", "input": "",
+  "state": "running", "sourceLockHeld": false, "exitType": "", "exitNote": "", "resumedFrom": null
+}
+JSON
 
 # --- static/: read-only fixtures for ARE_TASK_TESTS_SKIPPED_Q, DO_TASK_TESTS_PASS_Q, ARE_2_TEST_FIXES_DONE_Q. No git; tasks.json only. ---
 rm -rf static

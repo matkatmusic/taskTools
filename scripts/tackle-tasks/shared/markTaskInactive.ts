@@ -1,6 +1,6 @@
 // "mark task inactive in tasks.json" — pipeline.mmd, both chains.
 import { readFileSync } from "node:fs";
-import { endTaskRun } from "./taskRunState.ts";
+import { endTaskRun, readTaskRunState } from "./taskRunState.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type MarkTaskInactiveInput = { taskNumber: number; runId: string; projectRoot: string };
@@ -8,6 +8,11 @@ export type MarkTaskInactiveOutput = { active: false; endedAt: string };
 
 export function markTaskInactive(input: MarkTaskInactiveInput): MarkTaskInactiveOutput {
     requireAbsolutePath("projectRoot", input.projectRoot);
+    const existing = readTaskRunState(input.taskNumber, input.projectRoot);
+    const newest = existing.history[existing.history.length - 1];
+    if (!existing.active && newest?.runId === input.runId && newest.endedAt !== null) {
+        return { active: false, endedAt: newest.endedAt };
+    }
     const state = endTaskRun(input.taskNumber, input.runId, input.projectRoot);
     const current = state.history[state.history.length - 1];
     return { active: false, endedAt: current.endedAt as string };

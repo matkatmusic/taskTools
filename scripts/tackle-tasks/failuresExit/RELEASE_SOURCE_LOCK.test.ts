@@ -38,3 +38,19 @@ test("test_RELEASE_SOURCE_LOCK_releasesTheLockThisRunOwns", () => {
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
+
+test("test_RELEASE_SOURCE_LOCK_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRoot();
+    acquireSourceRepoLock(root, buildLockOwner("run-a", 1));
+    const input = packet(root);
+
+    const first = main(input);
+    const lockAfterFirst = readSourceRepoLock(root);
+    const second = main(input);
+    const lockAfterSecond = readSourceRepoLock(root);
+
+    assert.equal(first.lockReleased, true);
+    assert.equal(second.lockReleased, false);
+    assert.deepEqual(second, { ...first, lockReleased: false });
+    assert.deepEqual(lockAfterSecond, lockAfterFirst);
+});

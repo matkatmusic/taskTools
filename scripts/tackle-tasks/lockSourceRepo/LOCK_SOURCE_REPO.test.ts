@@ -77,3 +77,17 @@ test("test_lockSourceRepo_stampsTheWaitClockOnceOnFirstEntry", () => {
 test("test_lockSourceRepo_rejectsARelativeProjectRoot", () => {
     assert.throws(() => main(JSON.stringify({ ...BASE_INPUT, runId: "run-a", projectRoot: "relative/path", lockWaitStartedAt: LOCK_WAIT_STARTED_AT })));
 });
+
+test("test_LOCK_SOURCE_REPO_runsTwiceWithTheSameInput", () => {
+    // Setup: a repo whose lock is free.
+    const projectRoot = projectRootWithGit();
+    const input = JSON.stringify({ ...BASE_INPUT, runId: "run-a", projectRoot, lockWaitStartedAt: LOCK_WAIT_STARTED_AT });
+
+    // Test action: acquire the lock, then run the same block again (a resumed run re-taking its own lock).
+    const firstOutput = main(input);
+    const secondOutput = main(input);
+
+    // Verification: the second call still reports the lock as its own, no throw, same answer.
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondOutput.acquired, true);
+});

@@ -63,6 +63,30 @@ test("test_REBASE_ONTO_TARGET_BRANCH_rebasesCleanlyAndRoutesToDidRebaseReportCon
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_REBASE_ONTO_TARGET_BRANCH_runsTwiceWithTheSameInput", async () => {
+    const root = makeProjectRoot();
+    seedTasksFile(root, 3);
+    claimTask(3, "run-3", root);
+    const { worktree } = createTaskWorktree(3, "run-3", root);
+
+    writeFileSync(join(worktree, "task-work.txt"), "task work\n");
+    git(worktree, "add", "task-work.txt");
+    git(worktree, "commit", "-q", "-m", "task work");
+
+    const input = packet(root, worktree, 3, "run-3");
+    const first = await main(input);
+    const worktreeLogAfterFirst = git(worktree, "log", "--format=%H %s");
+    const tasksJsonAfterFirst = readFileSync(join(root, "tasks.json"), "utf8");
+
+    const second = await main(input);
+    const worktreeLogAfterSecond = git(worktree, "log", "--format=%H %s");
+    const tasksJsonAfterSecond = readFileSync(join(root, "tasks.json"), "utf8");
+
+    assert.deepEqual(second, first);
+    assert.equal(worktreeLogAfterSecond, worktreeLogAfterFirst);
+    assert.equal(tasksJsonAfterSecond, tasksJsonAfterFirst);
+});
+
 test("test_REBASE_ONTO_TARGET_BRANCH_reportsTheStoppedOccurrenceAndConflictedPathsOnAConflict", async () => {
     const root = makeProjectRoot();
     seedTasksFile(root, 2);

@@ -6,6 +6,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./TWO_CODEX_REVIEWS_COMPLETED_Q.ts";
 import { claimTask, raiseAttemptCount } from "../shared/taskRunState.ts";
+import { writeCheckpoint } from "../shared/checkpoint.ts";
+
+function writeCheckpointResumedFrom(worktree: string, exitType: string | null): void {
+    writeCheckpoint(worktree, {
+        taskNumber: 42, passId: "pass-3", runId: "run-1", projectRoot: worktree,
+        block: "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q", input: "", state: "running",
+        sourceLockHeld: false, exitType: "", exitNote: "",
+        resumedFrom: exitType === null ? null : { block: "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q", exitType, exitNote: "n" },
+    });
+}
 
 function makeFixture(): string {
     const projectRoot = mkdtempSync(join(tmpdir(), "two-codex-reviews-done-"));
@@ -33,17 +43,35 @@ test("test_main_replansWhenTheCounterHasNeverBeenRaised", () => {
 
 test("test_main_replansWhenOnlyOneReviewHasHappened", () => {
     const projectRoot = makeFixture();
-    raiseAttemptCount(42, "run-1", "planReview", projectRoot);
+    raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
     const output = main(JSON.stringify(packet(projectRoot)));
     assert.equal(output.next, "pipeline-planTheTask.mmd::PLAN_THE_TASK");
 });
 
 test("test_main_scrapsTheTaskWhenTwoReviewsAreDone", () => {
     const projectRoot = makeFixture();
-    raiseAttemptCount(42, "run-1", "planReview", projectRoot);
-    raiseAttemptCount(42, "run-1", "planReview", projectRoot);
+    raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
+    raiseAttemptCount(42, "run-1", "planReview", "pass-2", projectRoot);
+    writeCheckpointResumedFrom(projectRoot, null);
     const output = main(JSON.stringify(packet(projectRoot)));
     assert.equal(output.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
     assert.equal(output.exitType, "plan-scrapped");
     assert.match(output.exitNote as string, /two reviews/);
+});
+
+test("test_main_replansOnceMoreOnTheRelaunchAfterAScrap", () => {
+    const projectRoot = makeFixture();
+    raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
+    raiseAttemptCount(42, "run-1", "planReview", "pass-2", projectRoot);
+    writeCheckpointResumedFrom(projectRoot, "plan-scrapped");
+    const output = main(JSON.stringify(packet(projectRoot)));
+    assert.equal(output.next, "pipeline-planTheTask.mmd::PLAN_THE_TASK");
+    assert.equal(output.exitType, "");
+});
+
+test("test_main_throwsWithoutACheckpointAtTheCap", () => {
+    const projectRoot = makeFixture();
+    raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
+    raiseAttemptCount(42, "run-1", "planReview", "pass-2", projectRoot);
+    assert.throws(() => main(JSON.stringify(packet(projectRoot))), /no checkpoint/);
 });

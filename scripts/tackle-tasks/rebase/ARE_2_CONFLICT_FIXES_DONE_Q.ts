@@ -2,6 +2,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 import { getAttemptCount, raiseAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import { refreshLockHeartbeat, type RebasePacket } from "./_packet.ts";
 
@@ -23,7 +24,9 @@ export function main(input: string): RebasePacket & { next: string } {
         };
     }
 
-    raiseAttemptCount(packet.taskNumber, packet.runId, CONFLICT_FIX_COUNTER, packet.projectRoot);
+    const checkpoint = readCheckpoint(packet.worktree);
+    if (checkpoint === null) throw new Error(`ARE_2_CONFLICT_FIXES_DONE_Q: no checkpoint in ${packet.worktree}`);
+    raiseAttemptCount(packet.taskNumber, packet.runId, CONFLICT_FIX_COUNTER, checkpoint.passId, packet.projectRoot);
     return { ...packet, box: "ARE_2_CONFLICT_FIXES_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "pipeline-fixConflicts.mmd::FIX_CONFLICTS" };
 }
 

@@ -49,6 +49,22 @@ test("test_MARK_TASK_INACTIVE_SUCCESS_endsTheRunAndCarriesTheClosureNoteForward"
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_MARK_TASK_INACTIVE_SUCCESS_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [activeRunRecord()] },
+    }]);
+    const input = JSON.stringify(samplePacket(root, 1, "run-a", "Task 1 completed."));
+
+    const first = main(input);
+    const stateAfterFirst = readTaskRunState(1, root);
+    const second = main(input);
+    const stateAfterSecond = readTaskRunState(1, root);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(stateAfterSecond, stateAfterFirst);
+});
+
 test("test_MARK_TASK_INACTIVE_SUCCESS_throwsWithASiblingRunId", () => {
     const root = makeProjectRootWithTasks([{
         taskNumber: 1, title: "t",

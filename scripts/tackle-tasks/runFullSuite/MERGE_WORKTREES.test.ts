@@ -103,6 +103,25 @@ test("test_MERGE_WORKTREES_mergesEveryLayerAndReturnsMergeCommits", async () => 
     assert.deepEqual(commits.map((commit) => commit.occurrenceId).sort(), ["", "child"]);
 });
 
+test("test_MERGE_WORKTREES_runsTwiceWithTheSameInput", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
+    await markActiveCommitAndRebase(rootOrigin, taskNumber, worktree, "run-40");
+    const input = packet({ projectRoot: rootOrigin, worktree, taskNumber, runId: "run-40" });
+
+    const first = main(input);
+    const rootOriginHeadAfterFirst = git(rootOrigin, "rev-parse", "HEAD");
+    const runAfterFirst = getCurrentTaskRun(taskNumber, rootOrigin);
+
+    const second = main(input);
+    const rootOriginHeadAfterSecond = git(rootOrigin, "rev-parse", "HEAD");
+    const runAfterSecond = getCurrentTaskRun(taskNumber, rootOrigin);
+
+    assert.deepEqual(second, first);
+    assert.equal(rootOriginHeadAfterSecond, rootOriginHeadAfterFirst);
+    assert.deepEqual(runAfterSecond, runAfterFirst);
+});
+
 test("test_MERGE_WORKTREES_createsAMergeCommitWithTwoParents", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);

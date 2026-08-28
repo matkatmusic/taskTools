@@ -1,16 +1,23 @@
 // Spawns the hook the way Claude Code does: one JSON payload on stdin, one JSON line on stdout.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { checkpointPath, readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
+import { START_STEP } from "../scripts/generateWorkflow.ts";
+import { buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 
 const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/runStepHook.ts");
+const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
+const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
-function runHook(prompt: string, configFile?: string) {
+function runHook(prompt: string, configFile?: string, worktree?: string, priorRunLogText?: string) {
     const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
+    // An earlier run's log sits beside this run's log, the way .taskTools/runs/ holds every run.
+    if (priorRunLogText !== undefined) writeFileSync(join(dirname(logFile), "0000-run-log.md"), priorRunLogText);
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }),
         encoding: "utf8",
@@ -20,7 +27,13 @@ function runHook(prompt: string, configFile?: string) {
     // The hook output is the first line; after a prompt stop, the agent's instructions follow it.
     const [resultLine, ...instructionLines] = injected ? String(JSON.parse(injected).hookSpecificOutput.additionalContext).split("\n") : [];
     const result = resultLine ? JSON.parse(resultLine) : null;
-    return { injected, result, instructions: instructionLines.join("\n"), readLog: () => readFileSync(logFile, "utf8") };
+    return {
+        injected,
+        result,
+        instructions: instructionLines.join("\n"),
+        readLog: () => readFileSync(logFile, "utf8"),
+        checkpoint: worktree ? readCheckpoint(worktree) : null,
+    };
 }
 
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
@@ -573,9 +586,7 @@ function runHookIn(cwd: string, prompt: string, configFile: string) {
 const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-run-log\.md$/;
 
 test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
-    // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.
-    // Steps:
-    // A continues into B, which stops on a prompt, so the hook writes one packet.
+    // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.  Steps: A continues into B, which stops on a prompt, so the hook writes one packet.
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
@@ -594,9 +605,7 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
 });
 
 test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => {
-    // Scenario: a later pass names a packet file; the hook logs into that run's log, not a new one.
-    // Steps:
-    // A packet from run S already exists.
+    // Scenario: a later pass names a packet file; the hook logs into that run's log, not a new one.  Steps: A packet from run S already exists.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
     mkdirSync(packetsFolder, { recursive: true });
@@ -613,9 +622,7 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
 });
 
 test("test_runStepHook_removesThePacketsOfARunThatCompletedAndKeepsItsLog", () => {
-    // Scenario: the STOP of the merge-succeeded chain ends a completed run.
-    // Steps:
-    // Run S has packets; the success STOP consumes one.
+    // Scenario: the STOP of the merge-succeeded chain ends a completed run.  Steps: Run S has packets; the success STOP consumes one.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
     mkdirSync(packetsFolder, { recursive: true });
@@ -642,4 +649,386 @@ test("test_runStepHook_keepsThePacketsOfARunThatFailed", () => {
     }));
     runHookIn(cwd, `/run-step pipeline-failuresExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
     assert.equal(existsSync(packetFile), true);
+});
+
+// A checkpoint lets a killed run pick up where it stopped; the hook writes one before every block that has a worktree.
+test("test_runStepHook_keepsTheCheckpointAtTheBlockBeforeAPromptBlock", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const { checkpoint } = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "one.mmd::A");
+    assert.equal(checkpoint?.state, "running");
+    assert.equal(checkpoint?.input, startInput);
+});
+
+test("test_runStepHook_keepsTheCheckpointWhenTheBlockAfterAPromptDies", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const configFile = configWith((writeStep, folder) => {
+        const dyingScript = join(folder, "C.ts");
+        writeFileSync(dyingScript, "process.exit(1);\n");
+        return {
+            "one.mmd": [
+                { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
+                { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+                { box: "C", script: dyingScript, next: [] },
+            ],
+        };
+    });
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const { result, checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    assert.equal(result.ok, false);
+    assert.equal(checkpoint?.block, "one.mmd::A");
+    assert.equal(checkpoint?.state, "running");
+    assert.equal(checkpoint?.input, startInput);
+});
+
+test("test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "continue", next: FAILURES_EXIT_KEY, exitType: "run-failed", exitNote: "n", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: [FAILURES_EXIT_KEY] },
+        ],
+        "pipeline-failuresExit.mmd": [
+            { box: "FAILURES_EXIT", script: writeStep("FAILURES_EXIT", { scriptSignal: "continue" }), next: ["STOP"] },
+            { box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "one.mmd::A");
+    assert.equal(checkpoint?.state, "failed");
+    assert.equal(checkpoint?.exitType, "run-failed");
+    assert.equal(checkpoint?.input, startInput);
+});
+
+test("test_runStepHook_writesNoCheckpointBeforeAWorktreeExists", () => {
+    const missingWorktree = join(tmpdir(), `run-step-missing-${process.pid}-${Date.now()}`);
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree: missingWorktree, runId: "r1", taskNumber: 7, projectRoot: missingWorktree }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const startInput = JSON.stringify({ taskNumber: 7, worktree: missingWorktree, runId: "r1", projectRoot: missingWorktree });
+    runHook(`/run-step A ${startInput}`, configFile);
+    assert.equal(existsSync(checkpointPath(missingWorktree)), false);
+});
+
+test("test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", next: FAILURES_EXIT_KEY, exitType: "tests-red", exitNote: "n", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: [FAILURES_EXIT_KEY] },
+        ],
+        "pipeline-failuresExit.mmd": [
+            { box: "FAILURES_EXIT", script: writeStep("FAILURES_EXIT", { scriptSignal: "continue" }), next: ["STOP"] },
+            { box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const { checkpoint } = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "one.mmd::A");
+    assert.equal(checkpoint?.state, "failed");
+    assert.equal(checkpoint?.exitType, "tests-red");
+    assert.equal(checkpoint?.input, startInput);
+});
+
+// A run that starts at the preamble redirects to the checkpoint block instead of building a new worktree.
+test("test_runStepHook_resumesAtTheCheckpointBlockWhenTheStartBlockIsThePreamble", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 7, passId: "orig-pass", runId: "r1", projectRoot: dirname(tasksFile),
+        block: "x.mmd::X", input: "", state: "running", sourceLockHeld: false,
+        exitType: "", exitNote: "", resumedFrom: null,
+    }));
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
+    assert.deepEqual(result.ran, ["x.mmd::X"]);
+});
+
+test("test_runStepHook_marksTheCheckpointResumedBeforeWalking", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 7, passId: "orig-pass", runId: "r1", projectRoot: dirname(tasksFile),
+        block: "x.mmd::X", input: "", state: "running", sourceLockHeld: false,
+        exitType: "", exitNote: "", resumedFrom: null,
+    }));
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    assert.equal(checkpoint?.state, "running");
+    assert.equal(checkpoint?.resumedFrom?.block, "x.mmd::X");
+});
+
+test("test_runStepHook_carriesResumedFromThroughLaterWrites", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    const resumeInput = JSON.stringify({ worktree, runId: "r1", taskNumber: 7, projectRoot: dirname(tasksFile) });
+    writeFileSync(join(worktree, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 7, passId: "orig-pass", runId: "r1", projectRoot: dirname(tasksFile),
+        block: "one.mmd::A", input: resumeInput, state: "failed", sourceLockHeld: false,
+        exitType: "tests-red", exitNote: "n", resumedFrom: null,
+    }));
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: dirname(tasksFile) }), next: ["A2"] },
+            { box: "A2", script: writeStep("A2", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: dirname(tasksFile) }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "one.mmd::A2");
+    assert.deepEqual(checkpoint?.resumedFrom, { block: "one.mmd::A", exitType: "tests-red", exitNote: "n" });
+});
+
+test("test_runStepHook_keepsThePassIdWhenItRerunsTheCheckpointBlock", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    const resumeInput = JSON.stringify({ worktree, runId: "r1", taskNumber: 7, projectRoot: dirname(tasksFile) });
+    writeFileSync(join(worktree, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 7, passId: "kept-pass-id", runId: "r1", projectRoot: dirname(tasksFile),
+        block: "x.mmd::X", input: resumeInput, state: "running", sourceLockHeld: false,
+        exitType: "", exitNote: "", resumedFrom: null,
+    }));
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    assert.equal(checkpoint?.passId, "kept-pass-id");
+});
+
+// Reads its own just-written checkpoint at runtime so the test can see the passId a resumed block was actually given.
+test("test_runStepHook_givesEveryNewBlockExecutionItsOwnPassId", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    const resumeInput = JSON.stringify({ worktree, runId: "r1", taskNumber: 7, projectRoot: worktree });
+    writeFileSync(join(worktree, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 7, passId: "orig-pass-id", runId: "r1", projectRoot: dirname(tasksFile),
+        block: "one.mmd::A", input: resumeInput, state: "running", sourceLockHeld: false,
+        exitType: "", exitNote: "", resumedFrom: null,
+    }));
+    const checkpointFile = join(worktree, "plans", "checkpoint.json");
+    const configFile = configWith(writeStep => {
+        const aScript = writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree });
+        writeFileSync(aScript, [
+            `import { readFileSync } from "node:fs";`,
+            `const seenPassId = JSON.parse(readFileSync(${JSON.stringify(checkpointFile)}, "utf8")).passId;`,
+            `console.log(JSON.stringify({ box: "A", scriptSignal: "continue", worktree: ${JSON.stringify(worktree)}, runId: "r1", taskNumber: 7, projectRoot: ${JSON.stringify(worktree)}, seenPassId, input: process.argv[2] ?? "" }));`,
+        ].join("\n"));
+        return {
+            [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+            "one.mmd": [
+                { box: "A", script: aScript, next: ["A2"] },
+                { box: "A2", script: writeStep("A2", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
+                { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+                { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+            ],
+        };
+    });
+    const { result, checkpoint } = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile, worktree);
+    // A2 echoes A's output under input, so A's seenPassId sits one level down in B's packet.
+    const seenPassId = JSON.parse(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input).seenPassId;
+    assert.equal(seenPassId, "orig-pass-id");
+    assert.notEqual(checkpoint?.passId, seenPassId);
+});
+
+test("test_runStepHook_startStepKeyMatchesTheWorkflowsStartStep", () => {
+    const hookSource = readFileSync(HOOK, "utf8");
+    const match = hookSource.match(/const START_STEP_KEY = "([^"]+)"/);
+    assert.equal(match?.[1], START_STEP);
+});
+
+test("test_runStepHook_movesTheCheckpointToTheBlockAfterAPromptOnceItSucceeds", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["D"] },
+            { box: "D", script: writeStep("D", { scriptSignal: "prompt", prompt: "answer again" }), producesPrompt: true, next: ["E"] },
+            { box: "E", script: writeStep("E", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "one.mmd::C");
+    assert.equal(checkpoint?.state, "running");
+    const { prompt: _prompt, ...packetC } = JSON.parse(readFileSync(first.result.outcome.payload, "utf8"));
+    assert.equal(checkpoint?.input, JSON.stringify(packetC));
+});
+
+// A launch that names a block after the preamble: an ended run whose worktree, plan, brief and logged block input all exist.
+function seedAnEndedRunReadyToStartAtABlock(loggedInput: Record<string, unknown>) {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    const projectRoot = dirname(tasksFile);
+    mkdirSync(join(projectRoot, ".git"));
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: false,
+            worktree,
+            leaseRunId: "r1",
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                attempts: { testFixes: 2 }, countedPasses: { testFixes: ["p1", "p2"] },
+            }],
+        },
+    }]));
+    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", "plan.json"), "{}");
+    writeFileSync(join(worktree, "plans", "brief-7.md"), "brief");
+    const payload = JSON.stringify({ ...loggedInput, taskNumber: 7, runId: "r1", projectRoot, worktree });
+    const priorRunLogText = `## ======= X =======\nSource scripts/steps.json\nBox: X\n### === input ======\n\`\`\`json\n{ "invocation": "/run-step X" }\n\`\`\`\n### end input ======\n### === command ======\nnode --no-inspect /steps/X.ts '${payload}'\n### end command ======\n`;
+    return { worktree, tasksFile, projectRoot, payload, priorRunLogText };
+}
+
+test("test_runStepHook_startsAtTheNamedBlockWithTheInputFromTheRunLog", () => {
+    // The launch names X. X's state exists, so the walk starts at X with X's last logged input, the run is active again, and its counters are cleared.
+    const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    assert.deepEqual(result.ran, ["x.mmd::X"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, seeded.payload);
+    const run = JSON.parse(readFileSync(seeded.tasksFile, "utf8"))[0].run;
+    assert.equal(run.active, true);
+    assert.equal(run.history[0].attempts, undefined);
+    assert.equal(run.history[0].countedPasses, undefined);
+});
+
+test("test_runStepHook_startsAtThePreambleWhenTheNamedBlockHasNoState", () => {
+    // The launch names X, but the plan file is missing, so the hook ignores X and walks from the preamble.
+    const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
+    rmSync(join(seeded.worktree, "plans", "plan.json"));
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    assert.deepEqual(result.ran, [START_STEP]);
+    assert.equal(JSON.parse(readFileSync(seeded.tasksFile, "utf8"))[0].run.active, false);
+});
+
+test("test_runStepHook_takesTheSourceLockWhenTheNamedBlockSitsInsideTheLock", () => {
+    // X is reachable from LOCK_SOURCE_REPO, so starting at X takes the source lock for run r1 first.
+    const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    assert.deepEqual(result.ran, ["x.mmd::X"]);
+    assert.equal(readSourceRepoLock(seeded.projectRoot)?.owner, buildLockOwner("r1", 7));
+});
+
+test("test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram", () => {
+    // X lives in the failures-exit diagram. The exit tails release the lock, so a start there takes none.
+    const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
+    const configFile = configWith(writeStep => ({
+        [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
+        "pipeline-failuresExit.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    assert.deepEqual(result.ran, ["pipeline-failuresExit.mmd::X"]);
+    assert.equal(readSourceRepoLock(seeded.projectRoot), null);
 });

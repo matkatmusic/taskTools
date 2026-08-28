@@ -1,7 +1,7 @@
 // The tackle-tasks skill body: one workflow launch, with the task number and the tasks file the preamble reads.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseTaskNumberArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
+import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { generateWorkflow } from "../../generateWorkflow.ts";
 
@@ -22,14 +22,17 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
 
     // Made fresh on every run, so the shapes in it always match the diagrams on disk.
     generateWorkflow(TASK_WORKFLOW_PATH);
+    const workflowArgs: Record<string, unknown> = {
+        task: taskNumber,
+        tasksFile: resolveTaskFiles(projectRoot).tasksPath,
+        // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
+    };
+    const startingBlock = parseStartingBlockArgument(argsValue);
+    if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
     // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
     const workflowCall = JSON.stringify({
         scriptPath: TASK_WORKFLOW_PATH,
-        args: {
-            task: taskNumber,
-            tasksFile: resolveTaskFiles(projectRoot).tasksPath,
-            // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
-        },
+        args: workflowArgs,
     });
 
     return `WORKFLOW: ${workflowCall}

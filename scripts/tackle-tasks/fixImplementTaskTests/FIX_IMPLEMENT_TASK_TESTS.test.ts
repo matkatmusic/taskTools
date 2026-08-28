@@ -42,3 +42,16 @@ test("test_FIX_IMPLEMENT_TASK_TESTS_namesTheOwnedFilesAndTheFailingNotes", () =>
     assert.match(promptFileContents, new RegExp(`${worktree}/a\\.ts`));
     assert.match(promptFileContents, /the failing test notes text/);
 });
+
+test("test_FIX_IMPLEMENT_TASK_TESTS_runsTwiceWithTheSameInput", () => {
+    const { projectRoot, worktree } = setupFixture();
+    const input = packet(projectRoot, worktree);
+
+    const firstOutput = main(input);
+    const firstPrompt = readFileSync(join(worktree, "plans", "FIX_IMPLEMENT_TASK_TESTS.prompt.md"), "utf8");
+    const secondOutput = main(input);
+    const secondPrompt = readFileSync(join(worktree, "plans", "FIX_IMPLEMENT_TASK_TESTS.prompt.md"), "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondPrompt, firstPrompt);
+});

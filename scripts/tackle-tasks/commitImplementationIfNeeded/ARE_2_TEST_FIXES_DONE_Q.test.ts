@@ -29,8 +29,8 @@ test("test_main_continuesToAmendWhenNoFixHasBeenAttempted", () => {
 
 test("test_main_exitsTestsRedAfter2Attempts", () => {
     const root = makeClaimedProjectRoot(2);
-    raiseAttemptCount(2, "run-1", "testFixes", root);
-    raiseAttemptCount(2, "run-1", "testFixes", root);
+    raiseAttemptCount(2, "run-1", "testFixes", "pass-1", root);
+    raiseAttemptCount(2, "run-1", "testFixes", "pass-2", root);
     const input = packet(root, 2);
     const output = main(JSON.stringify(input));
     assert.deepEqual(output, {

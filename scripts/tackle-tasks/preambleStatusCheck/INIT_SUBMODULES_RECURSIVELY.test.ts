@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main } from "./INIT_SUBMODULES_RECURSIVELY.ts";
-import { claimTask } from "../shared/taskRunState.ts";
+import { claimTask, readTaskRunState } from "../shared/taskRunState.ts";
 import { makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
@@ -28,4 +28,25 @@ test("test_INIT_SUBMODULES_RECURSIVELY_isANoOpAfterCreateWorktreeForGroupAlready
     assert.equal(output.box, "INIT_SUBMODULES_RECURSIVELY");
     assert.ok(existsSync(join(worktreePath, "child", "seed.txt")));
     assert.ok(existsSync(join(worktreePath, "child", "grandchild", "seed.txt")));
+});
+
+test("test_INIT_SUBMODULES_RECURSIVELY_runsTwiceWithTheSameInput", () => {
+    const { rootOrigin } = makeLayeredSubmoduleFixture();
+    const groupId = 900_302;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", files: [] }]);
+    claimTask(groupId, "run-a", rootOrigin);
+    const input = JSON.stringify({
+        box: "DOES_FENCE_COVER_WORKTREE_Q", scriptSignal: "continue", taskNumber: groupId, runId: "run-a",
+        projectRoot: rootOrigin, worktree: worktreePath, branch: `task-${groupId}`, docsMode: "UPDATE",
+        planFile: "", exitType: "", exitNote: "", next: "INIT_SUBMODULES_RECURSIVELY",
+    });
+
+    const firstOutput = main(input);
+    const firstState = readTaskRunState(groupId, rootOrigin);
+    const secondOutput = main(input);
+    const secondState = readTaskRunState(groupId, rootOrigin);
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondState, firstState);
 });

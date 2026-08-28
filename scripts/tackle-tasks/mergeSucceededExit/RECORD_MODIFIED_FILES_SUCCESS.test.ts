@@ -34,12 +34,12 @@ function readTasksJson(projectRoot: string): any[] {
     return JSON.parse(readFileSync(tasksPath, "utf8"));
 }
 
-function activeRun() {
+function activeRun(commits: { occurrenceId: string; hash: string; kind: "work" | "merge" }[] = []) {
     return {
         active: true, worktree: null, leaseRunId: null,
         history: [{
             runId: "run-a", startedAt: "2026-08-01T00:00:00-07:00", endedAt: null,
-            exitType: null, exitNote: null, modifiedFiles: [] as string[], commits: [],
+            exitType: null, exitNote: null, modifiedFiles: [] as string[], commits,
             implementationNotesFile: null, taskTests: null, fullSuite: null,
         }],
     };
@@ -48,7 +48,7 @@ function activeRun() {
 function samplePacket(projectRoot: string, taskNumber: number, worktree: string): Record<string, unknown> {
     return {
         box: "WRITE_EXIT_TYPE_COMPLETED", scriptSignal: "continue", projectRoot, taskNumber,
-        runId: "run-a", worktree, branch: "main",
+        runId: "run-a", worktree, branch: git(worktree, "rev-parse", "--abbrev-ref", "HEAD").trim(),
     };
 }
 
@@ -60,7 +60,16 @@ test("test_RECORD_MODIFIED_FILES_SUCCESS_includesPathsChangedInsideASubmodule", 
     git(join(worktreePath, "child"), "commit", "-q", "-m", "child change");
     git(worktreePath, "add", "child");
     git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
-    writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: [], run: activeRun() });
+    // The block runs after the merge landed, so a branch diff would be empty; the recorded commits must name the files.
+    const childHash = git(join(worktreePath, "child"), "rev-parse", "HEAD").trim();
+    const rootHash = git(worktreePath, "rev-parse", "HEAD").trim();
+    git(rootOrigin, "merge", "--no-ff", "-q", "-m", "merge task-1", rootHash);
+    const mergeHash = git(rootOrigin, "rev-parse", "HEAD").trim();
+    writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: [], run: activeRun([
+        { occurrenceId: "child", hash: childHash, kind: "work" },
+        { occurrenceId: "", hash: rootHash, kind: "work" },
+        { occurrenceId: "", hash: mergeHash, kind: "merge" },
+    ]) });
 
     const output = main(JSON.stringify(samplePacket(rootOrigin, 1, worktreePath)));
 
@@ -72,6 +81,34 @@ test("test_RECORD_MODIFIED_FILES_SUCCESS_includesPathsChangedInsideASubmodule", 
 
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
+});
+
+test("test_RECORD_MODIFIED_FILES_SUCCESS_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    writeFileSync(join(worktreePath, "child", "newfile.txt"), "change\n");
+    git(join(worktreePath, "child"), "add", "newfile.txt");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "child change");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+    const childHash = git(join(worktreePath, "child"), "rev-parse", "HEAD").trim();
+    const rootHash = git(worktreePath, "rev-parse", "HEAD").trim();
+    git(rootOrigin, "merge", "--no-ff", "-q", "-m", "merge task-1", rootHash);
+    const mergeHash = git(rootOrigin, "rev-parse", "HEAD").trim();
+    writeTasksJson(rootOrigin, { taskNumber: 1, title: "t", files: [], run: activeRun([
+        { occurrenceId: "child", hash: childHash, kind: "work" },
+        { occurrenceId: "", hash: rootHash, kind: "work" },
+        { occurrenceId: "", hash: mergeHash, kind: "merge" },
+    ]) });
+    const input = JSON.stringify(samplePacket(rootOrigin, 1, worktreePath));
+
+    const first = main(input);
+    const tasksAfterFirst = readTasksJson(rootOrigin);
+    const second = main(input);
+    const tasksAfterSecond = readTasksJson(rootOrigin);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(tasksAfterSecond, tasksAfterFirst);
 });
 
 test("test_RECORD_MODIFIED_FILES_SUCCESS_throwsWithASiblingRunId", () => {

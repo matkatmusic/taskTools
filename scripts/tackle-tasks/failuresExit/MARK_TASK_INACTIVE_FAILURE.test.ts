@@ -50,3 +50,16 @@ test("test_MARK_TASK_INACTIVE_FAILURE_marksTheTaskInactiveAndLeavesExitNotesInPl
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
+
+test("test_MARK_TASK_INACTIVE_FAILURE_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRootWithActiveRun();
+    const input = packet(root);
+
+    const first = main(input);
+    const stateAfterFirst = readTaskRunState(1, root);
+    const second = main(input);
+    const stateAfterSecond = readTaskRunState(1, root);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(stateAfterSecond, stateAfterFirst);
+});

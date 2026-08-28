@@ -45,3 +45,16 @@ test("test_main_dropsFlaggedAndNotesFromTheOutput", () => {
     assert.equal("flagged" in output, false);
     assert.equal("notes" in output, false);
 });
+
+test("test_AMEND_ENTRY_WITH_CODEX_NOTES_runsTwiceWithTheSameInput", () => {
+    const projectRoot = makeProjectRoot();
+    const input = packetFor(projectRoot, "SENTINEL_PROBLEM\n\nFix: SENTINEL_FIX");
+
+    const firstOutput = main(JSON.stringify(input));
+    const firstEntry = entryOf(projectRoot);
+    const secondOutput = main(JSON.stringify(input));
+    const secondEntry = entryOf(projectRoot);
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondEntry, firstEntry);
+});

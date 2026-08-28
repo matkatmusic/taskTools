@@ -46,3 +46,21 @@ test("test_WRITE_EXIT_TYPE_AND_NOTE_writesTheIncomingExitTypeAndNoteAsIs", () =>
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
+
+test("test_WRITE_EXIT_TYPE_AND_NOTE_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRootWithActiveRun();
+    const input = JSON.stringify({
+        box: "DID_ANY_WORK_LAND_Q", scriptSignal: "continue", next: "WRITE_EXIT_TYPE_AND_NOTE",
+        taskNumber: 1, runId: "run-a", projectRoot: root, worktree: join(root, "worktree"),
+        branch: "task-1", exitType: "run-failed", exitNote: "a script failed operationally",
+        publicationState: "NONE LANDED",
+    });
+
+    const first = main(input);
+    const stateAfterFirst = readTaskRunState(1, root);
+    const second = main(input);
+    const stateAfterSecond = readTaskRunState(1, root);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(stateAfterSecond, stateAfterFirst);
+});

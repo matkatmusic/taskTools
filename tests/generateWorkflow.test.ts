@@ -74,7 +74,7 @@ test("test_buildWorkflowScript_refusesToRunWithoutATaskNumberAndATasksFileInArgs
 test("test_buildWorkflowScript_usesOneHookOutputSchemaForEveryPass", () => {
     const script = buildWorkflowScript();
     assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_STATUS_CHECK'/);
-    assert.match(script, /^let blockToRun = START_STEP$/m);
+    assert.match(script, /^let blockToRun = args\.startingBlock \?\? START_STEP$/m);
     assert.match(script, /schema: HOOK_OUTPUT_SCHEMA \}\)/);
     assert.doesNotMatch(script, /AGENT_SCHEMAS/);
     assert.doesNotMatch(script, /scriptSignal/);
@@ -103,6 +103,12 @@ test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
     assert.doesNotMatch(script, /NEXT_STEPS_BY_STEP/);
 });
 
+// A caller-named starting block skips ahead of the preamble; no name given still starts at START_STEP.
+test("test_buildWorkflowScript_startsAtArgsStartingBlockWhenGiven", () => {
+    const script = buildWorkflowScript();
+    assert.match(script, /let blockToRun = args\.startingBlock \?\? START_STEP/);
+});
+
 test("test_assertStartStepIsInConfig_throwsWhenTheStartStepIsMissing", () => {
     const { config } = buildProject([{ box: "A", output: {} }]);
     assert.throws(() => assertStartStepIsInConfig(config, "one.mmd::MISSING"), /is not a key in the config/);
@@ -129,4 +135,9 @@ test("test_generateWorkflow_theCommittedWorkflowIsUpToDate", () => {
 test("test_START_STEP_isAKeyInTheRepoConfig", () => {
     const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "steps.json"), "utf8")) as StepConfig;
     assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
+});
+
+test("test_buildWorkflowScript_titlesEveryPhaseWithTheBlockNameAlone", () => {
+    // A phase title is the box after the last "::"; a bare block name is its own title.
+    assert.match(buildWorkflowScript(), /^        phase\(blockToRun\.split\('::'\)\.pop\(\)\)$/m);
 });

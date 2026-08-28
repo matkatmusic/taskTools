@@ -1,7 +1,8 @@
-// TWO_CODEX_REVIEWS_COMPLETED_Q, from pipeline-reviewPlan.mmd. 2 codex reviews done? NO replans; YES scraps the task.
+// TWO_CODEX_REVIEWS_COMPLETED_Q, from pipeline-reviewPlan.mmd. 2 codex reviews done? NO replans; YES scraps the task, or replans once more on the relaunch after a scrap.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";
 
@@ -13,6 +14,12 @@ export function main(input: string): Record<string, unknown> {
     const output = { ...packet, box: "TWO_CODEX_REVIEWS_COMPLETED_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 
     if (reviewsDone) {
+        const checkpoint = readCheckpoint(packet.worktree);
+        if (checkpoint === null) throw new Error(`TWO_CODEX_REVIEWS_COMPLETED_Q: no checkpoint in ${packet.worktree}`);
+        // The relaunch after a scrap replans once more; reviewQuestion() then approves that plan.
+        if (checkpoint.resumedFrom?.exitType === "plan-scrapped") {
+            return { ...output, next: "pipeline-planTheTask.mmd::PLAN_THE_TASK" };
+        }
         return {
             ...output, exitType: "plan-scrapped", exitNote: "codex did not accept the plan in two reviews",
             next: "pipeline-failuresExit.mmd::FAILURES_EXIT",

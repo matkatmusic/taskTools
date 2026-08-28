@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
 import type { PlanReview } from "./recordPlanReview.ts";
+import { resumedRunSection } from "./resumedRunSection.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 
 const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is the literal string "skip", do not require TDD; write ordinary
@@ -111,6 +112,8 @@ ${absolutePathsSection(t.repoRoot)}
 Read the owned files — a plan that guesses at their contents will be rejected.
 Follow \`~/.claude/guides/planning.md\` and write the plan as JSON to exactly \`${t.planFile}\`
 Do not change any source file — this is planning only, not implementation.
+
+${resumedRunSection(t.repoRoot)}
 
 ## FORMATTING THE PLAN
 

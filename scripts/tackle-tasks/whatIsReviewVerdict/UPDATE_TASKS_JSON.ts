@@ -5,6 +5,7 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";
 
 type Input = WhatIsReviewVerdictPacket & { verdict: string; notes: string };
@@ -23,7 +24,9 @@ function writeCodexReviewNotes(projectRoot: string, taskNumber: number, notes: s
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
     writeCodexReviewNotes(packet.projectRoot, packet.taskNumber, packet.notes);
-    raiseAttemptCount(packet.taskNumber, packet.runId, "planReview", packet.projectRoot);
+    const checkpoint = readCheckpoint(packet.worktree);
+    if (checkpoint === null) throw new Error(`UPDATE_TASKS_JSON: no checkpoint in ${packet.worktree}`);
+    raiseAttemptCount(packet.taskNumber, packet.runId, "planReview", checkpoint.passId, packet.projectRoot);
     return { ...packet, box: "UPDATE_TASKS_JSON", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 

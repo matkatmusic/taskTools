@@ -38,11 +38,15 @@ function decideVerdict(planFile: string, review: PlanReview): { verdict: string;
 // Writes codex's fixes straight into the plan file, so implement reads them.
 function applyFixesToPlan(planFile: string, fixes: PlanReviewFix[]): void {
     const plan = JSON.parse(readFileSync(planFile, "utf8"));
+    let changed = false;
     for (const fix of fixes) {
         const section = plan.sections.find((entry: { id: string }) => entry.id === fix.sectionId);
         if (!section) throw new Error(`review fix names section "${fix.sectionId}", which the plan does not have`);
-        section.codexNotes = fixNote(fix);
+        const notes = fixNote(fix);
+        if (section.codexNotes !== notes) changed = true;
+        section.codexNotes = notes;
     }
+    if (!changed) return;
     plan.revision += 1;
     writeJsonAtomically(planFile, plan);
 }

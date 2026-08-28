@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { mergeTaskWorktree } from "../shared/mergeTaskWorktree.ts";
+import { readPublicationState } from "../shared/readPublicationState.ts";
 
 type Input = {
     taskNumber: number;
@@ -20,13 +21,25 @@ function baseBranch(projectRoot: string): string {
 // Each landed layer writes its merge ref; publication is read back independently by READ_MERGE_PUBLICATION_STATE, never trusted from this box's return.
 export function main(input: string): Record<string, unknown> {
     const { next: _next, ...packet } = JSON.parse(input) as Input & { next?: string };
-    const result = mergeTaskWorktree({
+    // A resumed run whose merge ref already names the tip must not merge again: the source tip has since moved.
+    const publicationState = readPublicationState({
+        taskNumber: packet.taskNumber,
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktree,
-        taskNumber: packet.taskNumber,
-        runId: packet.runId,
-        rootSourceBranch: baseBranch(packet.projectRoot),
     });
+    // Deepest-first, matching the order mergeTaskWorktree returns: children before the root.
+    const deepestFirstCommits = publicationState.commits
+        .slice()
+        .sort((a, b) => (a.occurrenceId === "" ? 1 : 0) - (b.occurrenceId === "" ? 1 : 0));
+    const result = publicationState.state === "ALL LANDED"
+        ? { merged: true, commits: deepestFirstCommits, failureReason: "" }
+        : mergeTaskWorktree({
+            projectRoot: packet.projectRoot,
+            worktreePath: packet.worktree,
+            taskNumber: packet.taskNumber,
+            runId: packet.runId,
+            rootSourceBranch: baseBranch(packet.projectRoot),
+        });
     return { ...packet, ...result, box: "MERGE_WORKTREES", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 

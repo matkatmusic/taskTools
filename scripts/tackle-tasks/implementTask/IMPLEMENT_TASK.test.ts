@@ -82,6 +82,46 @@ test("test_main_printsAPromptSignalAndMentionsTheTaskFromDisk", () => {
     assertMatchesTemplate("IMPLEMENT_TASK", { box: "", scriptSignal: "prompt", prompt: "" }, output);
 });
 
+test("test_implementTaskPrompt_carriesTheResumedRunNotice", () => {
+    const worktreePath = tmpMkdir("implement-task-");
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "plans", "brief-9.md"), "brief\n");
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 9, title: "widget", files: ["a.ts"] }]));
+    writeFileSync(join(worktreePath, "plans", "checkpoint.json"), JSON.stringify({
+        taskNumber: 9, passId: "pass-1", runId: "run-1", projectRoot: worktreePath,
+        block: "diagram.mmd::OLD_BOX", input: "{}", state: "running",
+        sourceLockHeld: false, exitType: "tests-red", exitNote: "n",
+        resumedFrom: { block: "diagram.mmd::OLD_BOX", exitType: "tests-red", exitNote: "n" },
+    }));
+
+    const input = JSON.stringify({
+        taskNumber: 9, projectRoot: worktreePath, worktree: worktreePath,
+        typecheckCommand: "npx tsc --noEmit", maxFixRounds: 3,
+    });
+    main(input);
+    const promptFileContents = readFileSync(join(worktreePath, "plans", "IMPLEMENT_TASK.prompt.md"), "utf8");
+    assert.match(promptFileContents, /## RESUMED RUN/);
+});
+
+test("test_IMPLEMENT_TASK_runsTwiceWithTheSameInput", () => {
+    const worktreePath = tmpMkdir("implement-task-");
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "plans", "brief-11.md"), "brief\n");
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 11, title: "widget", files: ["a.ts"] }]));
+
+    const input = JSON.stringify({
+        taskNumber: 11, projectRoot: worktreePath, worktree: worktreePath,
+        typecheckCommand: "npx tsc --noEmit", maxFixRounds: 3,
+    });
+    const firstOutput = main(input);
+    const firstPrompt = readFileSync(join(worktreePath, "plans", "IMPLEMENT_TASK.prompt.md"), "utf8");
+    const secondOutput = main(input);
+    const secondPrompt = readFileSync(join(worktreePath, "plans", "IMPLEMENT_TASK.prompt.md"), "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondPrompt, firstPrompt);
+});
+
 test("test_main_defaultsMaxFixRoundsWhenTheSenderOmitsIt", () => {
     const worktreePath = tmpMkdir("implement-task-");
     mkdirSync(join(worktreePath, "plans"), { recursive: true });

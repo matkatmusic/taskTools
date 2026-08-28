@@ -40,3 +40,20 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
     assert.match(promptFileContents, /task 35/);
     assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
 });
+
+test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {
+    const { projectRoot, worktree } = makeFixture();
+    const input = JSON.stringify({
+        box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber: 35, runId: "run-1",
+        projectRoot, worktree, branch: "task-35", docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
+    });
+    const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+
+    const firstOutput = main(input);
+    const firstPrompt = readFileSync(promptFile, "utf8");
+    const secondOutput = main(input);
+    const secondPrompt = readFileSync(promptFile, "utf8");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.equal(secondPrompt, firstPrompt);
+});

@@ -51,6 +51,21 @@ test("test_CLEAN_UP_WORKTREES_leavesEverySourceCheckoutClean", () => {
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
+test("test_CLEAN_UP_WORKTREES_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const runId = "run-52";
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin, runId);
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner(runId, taskNumber)).status, "acquired");
+    const input = JSON.stringify(samplePacket(rootOrigin, taskNumber, runId, worktreePath));
+
+    const first = main(input);
+    const second = main(input);
+
+    assert.deepEqual(second, first);
+    assert.equal(existsSync(worktreePath), false);
+    assert.equal(readSourceRepoLock(rootOrigin), null);
+});
+
 // A lock owned by another run must refuse before any mutation.
 test("test_CLEAN_UP_WORKTREES_refusesAndMutatesNothingWhenTheSourceLockIsOwnedByAnotherRun", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();

@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { MAX_ATTEMPTS, raiseAttemptCount } from "../shared/taskRunState.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 
 type Input = {
     taskNumber: number;
@@ -14,7 +15,9 @@ type Input = {
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
-    const attempts = raiseAttemptCount(packet.taskNumber, packet.runId, "merge", packet.projectRoot);
+    const checkpoint = readCheckpoint(packet.worktree);
+    if (checkpoint === null) throw new Error(`ARE_2_MERGE_ATTEMPTS_DONE_Q: no checkpoint in ${packet.worktree}`);
+    const attempts = raiseAttemptCount(packet.taskNumber, packet.runId, "merge", checkpoint.passId, packet.projectRoot);
     const done = attempts >= MAX_ATTEMPTS;
     return {
         ...packet,

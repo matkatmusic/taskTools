@@ -179,7 +179,7 @@ ${reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test co
 REVIEWEOF
 )
 REVIEW_FILE=${t.testReviewFile}
-codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
+perl -e 'alarm shift; exec @ARGV' 300 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
 \`\`\`\`

@@ -37,3 +37,12 @@ cat > tasks.json <<'EOF'
   }
 ]
 EOF
+
+mkdir -p worktree/plans
+cat > worktree/plans/checkpoint.json <<'EOF'
+{
+  "taskNumber": 1, "passId": "fixture-pass", "runId": "run-1", "projectRoot": ".",
+  "block": "pipeline-rebase.mmd::ARE_2_CONFLICT_FIXES_DONE_Q", "input": "",
+  "state": "running", "sourceLockHeld": false, "exitType": "", "exitNote": "", "resumedFrom": null
+}
+EOF

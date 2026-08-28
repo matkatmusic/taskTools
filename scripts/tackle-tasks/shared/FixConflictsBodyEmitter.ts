@@ -2,6 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { absolutePathsSection } from "./promptSections.ts";
+import { resumedRunSection } from "./resumedRunSection.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 
 // The receipt that box hands back.
@@ -49,8 +50,10 @@ ${absolutePaths.map((path) => `- \`${path}\``).join("\n")}
 You may also edit a file in a DIFFERENT repository when resolving a conflict requires it. 
 Resolving a conflict often means updating a call site, and a call site can live in another repository.
 
-This list is complete. 
+This list is complete.
 Never search the repository for more conflicted files.
+
+${resumedRunSection(root)}
 
 ## HOW TO RESOLVE
 

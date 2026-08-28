@@ -64,3 +64,10 @@ echo "export const thing = 2;" > src/thing.ts
 git commit -q -am "task edit"
 echo "brief" > plans/brief-1.md
 echo "fixed" > fixed.txt
+cat > plans/checkpoint.json <<'EOF'
+{
+  "taskNumber": 1, "passId": "fixture-pass", "runId": "run-1", "projectRoot": "scripts/tackle-tasks/runFullSuite/fixtures",
+  "block": "pipeline-runFullSuite.mmd::ARE_2_SUITE_FIXES_DONE_Q", "input": "",
+  "state": "running", "sourceLockHeld": false, "exitType": "", "exitNote": "", "resumedFrom": null
+}
+EOF

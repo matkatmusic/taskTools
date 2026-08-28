@@ -38,3 +38,29 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
     assert.equal(git(output.worktree, "branch", "--show-current"), "task-1");
     assert.equal(readTaskRunState(1, root).worktree, output.worktree);
 });
+
+test("test_RESET_WORKTREE_runsTwiceWithTheSameInput", () => {
+    const root = makeCommittedRepo("RESET_WORKTREE-root2-");
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    claimTask(1, "run-old", root);
+    const firstWorktree = createFreshTaskWorktree(1, "run-old", root);
+    updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);
+
+    const beforeReset = takeLeaseBeforeReset(JSON.stringify({
+        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-old", projectRoot: root,
+        worktree: firstWorktree, branch: taskBranchName(1), docsMode: "", planFile: "", exitType: "", exitNote: "",
+    }));
+    const input = JSON.stringify(beforeReset);
+
+    const firstOutput = main(input);
+    const firstState = readTaskRunState(1, root);
+    const firstLog = git(firstOutput.worktree, "log", "--oneline", "-1");
+    const secondOutput = main(input);
+    const secondState = readTaskRunState(1, root);
+    const secondLog = git(secondOutput.worktree, "log", "--oneline", "-1");
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondState, firstState);
+    assert.equal(secondLog, firstLog);
+    assert.ok(existsSync(secondOutput.worktree));
+});

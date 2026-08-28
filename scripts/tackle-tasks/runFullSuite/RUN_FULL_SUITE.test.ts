@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./RUN_FULL_SUITE.ts";
-import { claimTask } from "../shared/taskRunState.ts";
+import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 import { getTemplateShapeMismatches } from "../../templateShape.ts";
@@ -51,4 +51,25 @@ test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", () => 
 
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
+});
+
+test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeCommittedRepo();
+    writeFileSync(join(rootOrigin, "package.json"), FIXTURE_PACKAGE_JSON);
+    git(rootOrigin, "add", "package.json");
+    git(rootOrigin, "commit", "-q", "-m", "add fixture test script");
+    const worktree = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 602;
+    seedActiveTaskWithBrief(rootOrigin, worktree, taskNumber);
+
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+
+    const first = main(input);
+    const { checkedAt: _checkedAtFirst, ...fullSuiteAfterFirst } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
+
+    const second = main(input);
+    const { checkedAt: _checkedAtSecond, ...fullSuiteAfterSecond } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(fullSuiteAfterSecond, fullSuiteAfterFirst);
 });

@@ -1,8 +1,9 @@
 // RESET_WORKTREE, from pipeline-preambleStatusCheck.mmd. Mutating: tears down and recreates the worktree. "reset the worktree"
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { deleteTaskMergePersistence, removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
+import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
 import { readTaskRunState, updateCurrentTaskRun } from "../shared/taskRunState.ts";
 import type { EntryPacket } from "./_packet.ts";
@@ -15,6 +16,10 @@ export function main(input: string): EntryPacket {
     }
     deleteTaskMergePersistence(packet.projectRoot, packet.branch);
     removeWorktreeAndBranch(packet.projectRoot, packet.worktree, packet.branch);
+    // A rerun of a killed pass leaves the physical lease from the worktree this just tore down.
+    if (existsSync(taskWorktreeLeasePath(packet.worktree))) {
+        releaseTaskWorktreeLease({ worktreePath: packet.worktree, runId: packet.runId });
+    }
     const worktree = createFreshTaskWorktree(packet.taskNumber, packet.runId, packet.projectRoot);
     updateCurrentTaskRun(packet.taskNumber, packet.runId, { worktree, leaseRunId: packet.runId }, packet.projectRoot);
     return { ...packet, box: "RESET_WORKTREE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, worktree, docsMode: "AUTOGEN" };

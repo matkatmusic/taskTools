@@ -70,3 +70,23 @@ test("test_main_recordsAFailWhenTheTaskDeclaresTestsAndTheBranchAddedNone", () =
     assert.deepEqual(output, { ...input, box: "RUN_TASK_TESTS" });
     assert.equal(getCurrentTaskRun(2, rootOrigin)?.taskTests?.passed, false);
 });
+
+test("test_RUN_TASK_TESTS_runsTwiceWithTheSameInput", () => {
+    const rootOrigin = makeTempRepoWithCommit();
+    const worktree = createLinkedWorktree(rootOrigin);
+    mkdirSync(join(worktree, "tests"), { recursive: true });
+    writeFileSync(join(worktree, "tests", "foo.test.ts"), `import { test } from "node:test";\nimport assert from "node:assert/strict";\ntest("t", () => { assert.ok(true); });\n`);
+    git(worktree, "add", "tests/foo.test.ts");
+    git(worktree, "commit", "-q", "-m", "add test");
+    seedOpenTaskAndClaim(rootOrigin, 3);
+
+    const input = packet(rootOrigin, worktree, 3);
+    // checkedAt and output embed real wall-clock timing (node --test stamps its own duration); everything else must match.
+    const firstOutput = main(JSON.stringify(input));
+    const { checkedAt: _firstCheckedAt, output: _firstOutputText, ...firstTaskTests } = getCurrentTaskRun(3, rootOrigin)?.taskTests ?? {};
+    const secondOutput = main(JSON.stringify(input));
+    const { checkedAt: _secondCheckedAt, output: _secondOutputText, ...secondTaskTests } = getCurrentTaskRun(3, rootOrigin)?.taskTests ?? {};
+
+    assert.deepEqual(secondOutput, firstOutput);
+    assert.deepEqual(secondTaskTests, firstTaskTests);
+});

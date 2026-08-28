@@ -84,6 +84,24 @@ test("test_ARCHIVE_TASK_throwsWhenTheRunIsNotEndedAndCompleted", () => {
     assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), completedBefore);
 });
 
+test("test_ARCHIVE_TASK_runsTwiceWithTheSameInput", () => {
+    const root = makeProjectRoot([
+        { taskNumber: 1, title: "finished", run: completedRunState() },
+    ]);
+    const input = JSON.stringify(samplePacket(root, 1, "run-a", "Task 1 completed."));
+
+    const first = main(input);
+    const tasksAfterFirst = readTasksJson(root);
+    const completedAfterFirst = readCompletedJson(root);
+    const second = main(input);
+    const tasksAfterSecond = readTasksJson(root);
+    const completedAfterSecond = readCompletedJson(root);
+
+    assert.deepEqual(second, first);
+    assert.deepEqual(tasksAfterSecond, tasksAfterFirst);
+    assert.deepEqual(completedAfterSecond, completedAfterFirst);
+});
+
 // The box throws rather than reporting skipped/ambiguous silently: a failed archive must never reach REPORT_CLOSURE_NOTE.
 test("test_ARCHIVE_TASK_throwsWhenTheTaskIsInNeitherFile", () => {
     const root = makeProjectRoot([], []);

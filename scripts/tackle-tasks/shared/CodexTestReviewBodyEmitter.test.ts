@@ -95,11 +95,17 @@ test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () =>
 
 test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", () => {
     // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
-    const cliLines = reviewTestsPrompt(fakeTask).split("\n").filter((line) => /^(codex exec|\s*\|\| claude -p)/.test(line));
+    const cliLines = reviewTestsPrompt(fakeTask).split("\n").filter((line) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(line));
     assert.equal(cliLines.length, 3);
     for (const line of cliLines) assert.match(line, /<\/dev\/null/);
     assert.match(cliLines[0], /--output-schema \S*review-tests-schema\.json/);
     assert.match(cliLines[0], /-o "\$REVIEW_FILE"/);
+});
+
+test("test_reviewTestsPrompt_capsCodexExecWithAPerlAlarm", () => {
+    // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
+    const codexLine = reviewTestsPrompt(fakeTask).split("\n").find((line) => line.includes("codex exec"));
+    assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });
 
 test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
@@ -145,5 +151,5 @@ test("test_reviewTestsPrompt_tellsTheAgentToReturnTheReviewFilePathEvenWhenTheCo
     const task = makeTaskFixture();
     const prompt = reviewTestsPrompt(task);
     assert.match(prompt, new RegExp(`"additionalData": \\{ "reviewFile": "${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" \\}`));
-    assert.match(prompt, /return that same shape anyway/);
+    assert.match(prompt, /write that same shape anyway/);
 });
