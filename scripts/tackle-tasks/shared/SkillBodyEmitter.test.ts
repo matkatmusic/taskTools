@@ -137,3 +137,14 @@ test("test_skillBody_namesNeitherTheResolverScriptNorItsPathKey", () => {
     assert.doesNotMatch(brief, /resolveTaskRun\.ts/);
     assert.doesNotMatch(brief, /resolveTaskRunPath/);
 });
+
+test("test_skillBody_resetEmitsTheResetCommandForTheTaskAndBlock", () => {
+    // Setup: a target repository with task 2.
+    const root = makeTargetRepository([2]);
+    // Action: the skill is invoked as `reset 2 LOCK_SOURCE_REPO`.
+    const brief = skillBody("reset 2 LOCK_SOURCE_REPO", root);
+    // Verification: the body runs resetTask.ts with the task number and the block, and launches no workflow.
+    const resetTaskPath = fileURLToPath(new URL("../resetTask.ts", import.meta.url));
+    assert.match(brief, new RegExp(`node "${resetTaskPath}" 2 LOCK_SOURCE_REPO`));
+    assert.doesNotMatch(brief, /WORKFLOW/);
+});

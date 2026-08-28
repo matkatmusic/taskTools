@@ -14,10 +14,14 @@ const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/run
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
-function runHook(prompt: string, configFile?: string, worktree?: string, priorRunLogText?: string) {
+function runHook(prompt: string, configFile?: string, worktree?: string, priorPacketCommand?: string) {
     const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
-    // An earlier run's log sits beside this run's log, the way .taskTools/runs/ holds every run.
-    if (priorRunLogText !== undefined) writeFileSync(join(dirname(logFile), "0000-run-log.md"), priorRunLogText);
+    // An earlier pass's packet sits beside this run's log, the way .taskTools/runs/ holds every run.
+    if (priorPacketCommand !== undefined) {
+        const packetsFolder = join(dirname(logFile), "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        writeFileSync(join(packetsFolder, "X-0-1.json"), JSON.stringify({ input: {}, command: priorPacketCommand, commandOutput: "", output: {} }));
+    }
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }),
         encoding: "utf8",
@@ -444,9 +448,6 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
     }));
     const log = runHook("/run-step A", configFile).readLog();
     assert.match(log, /^## ======= A =======$[\s\S]*^## ======= B =======$/m);
-    assert.match(log, /### === command ======\nnode --no-inspect .*A\.ts\n### end command ======/);
-    assert.match(log, /### command output ======\n```json\n\{"box":"A","scriptSignal":"continue","input":""\}\n```\n### end command output ======/);
-    assert.match(log, /### output ======\n```json\n\{\n    "ok": true,\n/);
 });
 
 test("test_runStepHook_logsHowLongEachBlockTook", () => {
@@ -459,7 +460,8 @@ test("test_runStepHook_logsHowLongEachBlockTook", () => {
     }));
     const log = runHook("/run-step A", configFile).readLog();
     // Every block entry logs one line with how long that block took.
-    const blockTookLines = log.split("\n").filter(line => /^block took \d+ ms$/.test(line));
+    // const blockTookLines = log.split("\n").filter(line => /^### end output ====== \S+ took \d+ ms$/.test(line));
+    const blockTookLines = log.split("\n").filter(line => /^### \S+ took \d+ ms$/.test(line));
     assert.equal(blockTookLines.length, 2);
 });
 
@@ -484,12 +486,24 @@ test("test_runStepHook_givesTheFirstBlockAnEmptyInputWhenTheLineHasNone", () => 
     assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, "");
 });
 
-test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
+// Obsolete: the command line moved out of the log and into the packet. See the "stores" test below.
+// test("test_runStepHook_logsTheInputAsPartOfThePasteableCommand", () => {
+//     const configFile = configWith(writeStep => ({
+//         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+//     }));
+//     const log = runHook(`/run-step A it's here`, configFile).readLog();
+//     assert.match(log, /### === command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n### end command ======/);
+// });
+
+test("test_runStepHook_storesTheInputAsPartOfThePasteableCommand", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
-    const log = runHook(`/run-step A it's here`, configFile).readLog();
-    assert.match(log, /### === command ======\nnode --no-inspect .*A\.ts 'it'\\''s here'\n### end command ======/);
+    const { result } = runHook(`/run-step A it's here`, configFile);
+    const packetsFolder = dirname(result.outcome.payload);
+    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
+    const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+    assert.match(packet.command, /^node --no-inspect .*A\.ts 'it'\\''s here'$/);
 });
 
 test("test_runStepHook_handsOneBlocksOutputToTheNextBlock", () => {
@@ -520,15 +534,30 @@ test("test_runStepHook_threadsOutputThroughEveryHopOfAWalk", () => {
     assert.equal(JSON.parse(seenByC.input).box, "A");
 });
 
-test("test_runStepHook_logsTheThreadedOutputAsThePasteableCommand", () => {
+// Obsolete: the command line moved out of the log and into the packet. See the "stores" test below.
+// test("test_runStepHook_logsTheThreadedOutputAsThePasteableCommand", () => {
+//     const configFile = configWith(writeStep => ({
+//         "one.mmd": [
+//             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+//             { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+//         ],
+//     }));
+//     const log = runHook("/run-step A", configFile).readLog();
+//     assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
+// });
+
+test("test_runStepHook_storesTheThreadedOutputAsThePasteableCommand", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
             { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    const log = runHook("/run-step A", configFile).readLog();
-    assert.match(log, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
+    const { result } = runHook("/run-step A", configFile);
+    const packetsFolder = dirname(result.outcome.payload);
+    const packetName = readdirSync(packetsFolder).find(name => /^B-\d+-2\.json$/.test(name))!;
+    const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+    assert.match(packet.command, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
 });
 
 // PostToolUse names the skill and its args apart. That is how an agent reaches the hook.
@@ -618,6 +647,81 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     assert.match(readFileSync(join(runsFolder, logName), "utf8"), /======= A =======/);
 });
 
+test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
+    // Scenario: a two-block walk writes one packet per block pass, named by box, pid, and pass order.
+    // Steps: A continues into B, and B stops.
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
+    // List the packets folder under the run's stamp folder.
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const packetsFolder = join(runsFolder, stampFolder, "packets");
+    const packetNames = readdirSync(packetsFolder);
+    // One packet per block ran, named by box, pid, and the order it ran in: A is 1, B is 2.
+    const aPacketName = packetNames.find(name => /^A-\d+-1\.json$/.test(name))!;
+    const bPacketName = packetNames.find(name => /^B-\d+-2\.json$/.test(name))!;
+    assert.ok(aPacketName);
+    assert.ok(bPacketName);
+    for (const packetName of [aPacketName, bPacketName]) {
+        const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+        // Each packet holds exactly the four values the log used to print.
+        assert.deepEqual(Object.keys(packet).sort(), ["command", "commandOutput", "input", "output"]);
+        assert.equal(packet.input.invocation, "/run-step A");
+        assert.match(packet.command, /^node --no-inspect/);
+    }
+});
+
+test("test_runStepHook_writesAPacketForABlockThatFailed", () => {
+    // Scenario: a block that exits non-zero still gets a packet, holding its stderr text.
+    const configFile = configWith((_writeStep, folder) => {
+        const scriptPath = join(folder, "A.ts");
+        writeFileSync(scriptPath, `console.error("boom from A");\nprocess.exit(3);\n`);
+        return { "one.mmd": [{ box: "A", script: scriptPath, next: [] }] };
+    });
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
+    assert.equal(result.ok, false);
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const packetsFolder = join(runsFolder, stampFolder, "packets");
+    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
+    const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+    assert.match(packet.commandOutput, /boom from A/);
+});
+
+test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
+    // Scenario: the graph loops back through the same box; each pass writes its own packet.
+    // Steps: A continues into B; B continues back into A, which this time stops.
+    const configFile = configWith((writeStep, folder) => {
+        const aScript = join(folder, "A.ts");
+        writeFileSync(aScript, [
+            `const input = process.argv[2] ?? "";`,
+            `const visited = input.includes('"visited":true');`,
+            `console.log(JSON.stringify(visited ? { box: "A", scriptSignal: "stop", input } : { box: "A", scriptSignal: "continue", next: "B", input }));`,
+        ].join("\n"));
+        return {
+            "one.mmd": [
+                { box: "A", script: aScript, next: ["B"] },
+                { box: "B", script: writeStep("B", { scriptSignal: "continue", next: "A", visited: true }), next: ["A"] },
+            ],
+        };
+    });
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
+    assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::A"]);
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const packetsFolder = join(runsFolder, stampFolder, "packets");
+    // Two packet files for box A; the pass number differs between them.
+    const aPacketNames = readdirSync(packetsFolder).filter(name => /^A-\d+-\d+\.json$/.test(name));
+    assert.equal(aPacketNames.length, 2);
+    const passNumbers = aPacketNames.map(name => Number(name.match(/^A-\d+-(\d+)\.json$/)![1])).sort((a, b) => a - b);
+    assert.notEqual(passNumbers[0], passNumbers[1]);
+});
+
 test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => {
     // Scenario: a later pass names a packet file; the hook logs into that run's log, not a new one.  Steps: A packet from run S already exists.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
@@ -635,8 +739,8 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
     assert.equal(dirname(result.outcome.payload), packetsFolder);
 });
 
-test("test_runStepHook_removesThePacketsOfARunThatCompletedAndKeepsItsLog", () => {
-    // Scenario: the STOP of the merge-succeeded chain ends a completed run.  Steps: Run S has packets; the success STOP consumes one.
+test("test_runStepHook_keepsThePacketsOfARunThatCompleted", () => {
+    // Scenario: the STOP of the merge-succeeded chain ends a completed run; its packets stay too.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
     mkdirSync(packetsFolder, { recursive: true });
@@ -645,10 +749,8 @@ test("test_runStepHook_removesThePacketsOfARunThatCompletedAndKeepsItsLog", () =
     const configFile = configWith(writeStep => ({
         "pipeline-mergeSucceededExit.mmd": [{ box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { runsEntries } = runHookIn(cwd, `/run-step pipeline-mergeSucceededExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
-    // The packets folder is gone; the log stays.
-    assert.equal(existsSync(packetsFolder), false);
-    assert.deepEqual(runsEntries(), ["S", "S-run-log.md"]);
+    runHookIn(cwd, `/run-step pipeline-mergeSucceededExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
+    assert.equal(existsSync(packetFile), true);
 });
 
 test("test_runStepHook_keepsThePacketsOfARunThatFailed", () => {
@@ -988,8 +1090,8 @@ function seedAnEndedRunReadyToStartAtABlock(loggedInput: Record<string, unknown>
     writeFileSync(join(worktree, "plans", "plan.json"), "{}");
     writeFileSync(join(worktree, "plans", "brief-7.md"), "brief");
     const payload = JSON.stringify({ ...loggedInput, taskNumber: 7, runId: "r1", projectRoot, worktree });
-    const priorRunLogText = `## ======= X =======\nSource scripts/steps.json\nBox: X\n### === input ======\n\`\`\`json\n{ "invocation": "/run-step X" }\n\`\`\`\n### end input ======\n### === command ======\nnode --no-inspect /steps/X.ts '${payload}'\n### end command ======\n`;
-    return { worktree, tasksFile, projectRoot, payload, priorRunLogText };
+    const priorPacketCommand = `node --no-inspect /steps/X.ts '${payload}'`;
+    return { worktree, tasksFile, projectRoot, payload, priorPacketCommand };
 }
 
 test("test_runStepHook_startsAtTheNamedBlockWithTheInputFromTheRunLog", () => {
@@ -999,7 +1101,7 @@ test("test_runStepHook_startsAtTheNamedBlockWithTheInputFromTheRunLog", () => {
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
     assert.deepEqual(result.ran, ["x.mmd::X"]);
     assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).input, seeded.payload);
     const run = JSON.parse(readFileSync(seeded.tasksFile, "utf8"))[0].run;
@@ -1016,7 +1118,7 @@ test("test_runStepHook_startsAtThePreambleWhenTheNamedBlockHasNoState", () => {
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
     assert.deepEqual(result.ran, [START_STEP]);
     assert.equal(JSON.parse(readFileSync(seeded.tasksFile, "utf8"))[0].run.active, false);
 });
@@ -1029,7 +1131,7 @@ test("test_runStepHook_takesTheSourceLockWhenTheNamedBlockSitsInsideTheLock", ()
         "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
         "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
     assert.deepEqual(result.ran, ["x.mmd::X"]);
     assert.equal(readSourceRepoLock(seeded.projectRoot)?.owner, buildLockOwner("r1", 7));
 });
@@ -1042,7 +1144,7 @@ test("test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram", () => {
         "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue" }), next: ["X"] }],
         "pipeline-failuresExit.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
     }));
-    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorRunLogText);
+    const { result } = runHook(`/run-step X ${JSON.stringify({ taskNumber: 7, tasksFile: seeded.tasksFile })}`, configFile, undefined, seeded.priorPacketCommand);
     assert.deepEqual(result.ran, ["pipeline-failuresExit.mmd::X"]);
     assert.equal(readSourceRepoLock(seeded.projectRoot), null);
 });

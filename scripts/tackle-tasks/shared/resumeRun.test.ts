@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./resumeRun.ts";
@@ -68,30 +68,13 @@ function quoteArgumentLikeTheHook(argument: string): string {
     return `'${argument.replaceAll("'", `'\\''`)}'`;
 }
 
-// One appendStepToRunLog-shaped entry, written by hand for a test log file.
-function runLogEntryText(box: string, inputJson: string): string {
-    return `## ======= ${box} =======\n`
-        + `Source scripts/steps.json\n`
-        + `Box: ${box}\n`
-        + `### === input ======\n`
-        + "```json\n"
-        + `${JSON.stringify({ invocation: "test" }, null, 4)}\n`
-        + "```\n"
-        + `### end input ======\n`
-        + `### === command ======\n`
-        + `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(inputJson)}\n`
-        + `### end command ======\n`
-        + `### command output ======\n`
-        + "```json\n"
-        + `{}\n`
-        + "```\n"
-        + `### end command output ======\n`
-        + `### output ======\n`
-        + "```json\n"
-        + `{}\n`
-        + "```\n"
-        + `### end output ======\n`
-        + `${"=".repeat(36)}\n`;
+// One block-pass packet, written by hand for a test run folder: <runsFolder>/<stamp>/packets/<box>-<pid>-<n>.json.
+function writePacketFile(runsFolder: string, stamp: string, box: string, pid: number, n: number, command: string): string {
+    const packetsFolder = join(runsFolder, stamp, "packets");
+    mkdirSync(packetsFolder, { recursive: true });
+    const packetPath = join(packetsFolder, `${box}-${pid}-${n}.json`);
+    writeFileSync(packetPath, JSON.stringify({ input: {}, command, commandOutput: "", output: {} }));
+    return packetPath;
 }
 
 function baseCheckpoint(taskNumber: number, runId: string, projectRoot: string): Checkpoint {
@@ -326,7 +309,7 @@ test("test_findStartAtBlockEntry_returnsNullWhenThePlanOrBriefIsMissing", () => 
     assert.equal(entry, null);
 });
 
-test("test_findStartAtBlockEntry_returnsNullWhenNoLogEntryNamesTheBlockForThisRun", () => {
+test("test_findStartAtBlockEntry_returnsNullWhenNoPacketNamesTheBlockForThisRun", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = 9213;
     const runId = "run-9213";
@@ -339,7 +322,8 @@ test("test_findStartAtBlockEntry_returnsNullWhenNoLogEntryNamesTheBlockForThisRu
 
     const runLogFolder = tmpMkdir("run-log-");
     const otherRunInput = JSON.stringify({ taskNumber, runId: "some-other-run", note: "not this run" });
-    writeFileSync(join(runLogFolder, "run-log.md"), runLogEntryText("SOME_BOX", otherRunInput));
+    const command = `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(otherRunInput)}`;
+    writePacketFile(runLogFolder, "stamp-1", "SOME_BOX", 1, 1, command);
 
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     const entry = findStartAtBlockEntry(taskNumber, tasksPath, "SOME_BOX", runLogFolder);
@@ -347,7 +331,7 @@ test("test_findStartAtBlockEntry_returnsNullWhenNoLogEntryNamesTheBlockForThisRu
     assert.equal(entry, null);
 });
 
-test("test_findStartAtBlockEntry_returnsTheLastLoggedInputForTheBlock", () => {
+test("test_findStartAtBlockEntry_returnsTheNewestPacketInputForTheBlock", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = 9214;
     const runId = "run-9214";
@@ -361,13 +345,46 @@ test("test_findStartAtBlockEntry_returnsTheLastLoggedInputForTheBlock", () => {
     const runLogFolder = tmpMkdir("run-log-");
     const earlierInput = JSON.stringify({ taskNumber, runId, note: "earlier pass" });
     const laterInput = JSON.stringify({ taskNumber, runId, note: "later pass with a 'quoted' word" });
-    writeFileSync(join(runLogFolder, "1-run-log.md"), runLogEntryText("SOME_BOX", earlierInput));
-    writeFileSync(join(runLogFolder, "2-run-log.md"), runLogEntryText("SOME_BOX", laterInput));
+    const earlierCommand = `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(earlierInput)}`;
+    const laterCommand = `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(laterInput)}`;
+    const earlierPacket = writePacketFile(runLogFolder, "stamp-1", "SOME_BOX", 1, 1, earlierCommand);
+    const laterPacket = writePacketFile(runLogFolder, "stamp-1", "SOME_BOX", 1, 2, laterCommand);
+    const now = Date.now();
+    utimesSync(earlierPacket, now / 1000, now / 1000);
+    utimesSync(laterPacket, now / 1000 + 1, now / 1000 + 1);
 
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     const entry = findStartAtBlockEntry(taskNumber, tasksPath, "SOME_BOX", runLogFolder);
 
     assert.deepEqual(entry, { input: laterInput, runId, projectRoot: rootOrigin });
+});
+
+test("test_findStartAtBlockEntry_ignoresANewerPacketFromAnotherRun", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const taskNumber = 9216;
+    const runId = "run-9216";
+    const worktreePath = createLinkedWorktree(rootOrigin, runId);
+    seedTaskAndClaim(rootOrigin, taskNumber, "ignores a newer packet from another run", runId, []);
+    updateCurrentTaskRun(taskNumber, runId, { worktree: worktreePath }, rootOrigin);
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "plans", "plan.json"), "{}\n");
+    writeFileSync(join(worktreePath, "plans", `brief-${taskNumber}.md`), "# brief\n");
+
+    const runLogFolder = tmpMkdir("run-log-");
+    const thisRunInput = JSON.stringify({ taskNumber, runId, note: "this run" });
+    const otherRunInput = JSON.stringify({ taskNumber, runId: "some-other-run", note: "another task's run" });
+    const thisRunCommand = `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(thisRunInput)}`;
+    const otherRunCommand = `node --no-inspect scripts/tackle-tasks/fake/FAKE_SCRIPT.ts ${quoteArgumentLikeTheHook(otherRunInput)}`;
+    const thisRunPacket = writePacketFile(runLogFolder, "stamp-1", "SOME_BOX", 1, 1, thisRunCommand);
+    const otherRunPacket = writePacketFile(runLogFolder, "stamp-2", "SOME_BOX", 2, 1, otherRunCommand);
+    const now = Date.now();
+    utimesSync(thisRunPacket, now / 1000, now / 1000);
+    utimesSync(otherRunPacket, now / 1000 + 1, now / 1000 + 1);
+
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const entry = findStartAtBlockEntry(taskNumber, tasksPath, "SOME_BOX", runLogFolder);
+
+    assert.deepEqual(entry, { input: thisRunInput, runId, projectRoot: rootOrigin });
 });
 
 test("test_prepareResume_acceptsTheFourFieldsAlone", () => {

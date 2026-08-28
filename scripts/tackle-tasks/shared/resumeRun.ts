@@ -1,5 +1,5 @@
 // "where are we?" — decides how /run-step continues a task that has already started once. plans/resume-failed-run-plan.md §0/§3.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { taskFilesProjectRoot } from "../../taskFiles.ts";
@@ -83,23 +83,37 @@ export function findStartAtBlockEntry(
     if (!existsSync(join(worktree, "plans", "plan.json"))) return null;
     if (!existsSync(join(worktree, "plans", `brief-${taskNumber}.md`))) return null;
 
-    const header = `## ======= ${box} =======`;
+    // const header = `## ======= ${box} =======`;
     let foundInput: string | null = null;
 
-    const logFileNames = readdirSync(runLogFolder).filter((name) => name.endsWith("run-log.md")).sort();
-    for (const logFileName of logFileNames) {
-        const lines = readFileSync(join(runLogFolder, logFileName), "utf8").split("\n");
-        for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-            if (lines[lineIndex] !== header) continue;
+    // const logFileNames = readdirSync(runLogFolder).filter((name) => name.endsWith("run-log.md")).sort();
+    // for (const logFileName of logFileNames) {
+    //     const lines = readFileSync(join(runLogFolder, logFileName), "utf8").split("\n");
+    //     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    //         if (lines[lineIndex] !== header) continue;
+    //
+    //         let commandLine: string | null = null;
+    //         for (let searchIndex = lineIndex + 1; searchIndex < lines.length; searchIndex++) {
+    //             if (lines[searchIndex] === "### === command ======") {
+    //                 commandLine = lines[searchIndex + 1];
+    //                 break;
+    //             }
+    //         }
+    //         if (commandLine === null) continue;
+    //         ...
+    //     }
+    // }
 
-            let commandLine: string | null = null;
-            for (let searchIndex = lineIndex + 1; searchIndex < lines.length; searchIndex++) {
-                if (lines[searchIndex] === "### === command ======") {
-                    commandLine = lines[searchIndex + 1];
-                    break;
-                }
-            }
-            if (commandLine === null) continue;
+    // The command string now comes from the newest packet naming this box, for this run, across every stamp folder in the runs folder.
+    const packetNamePattern = new RegExp(`^${box}-\\d+-\\d+\\.json$`);
+    let newestMtimeMs = -Infinity;
+    for (const stampEntry of readdirSync(runLogFolder)) {
+        const packetsFolder = join(runLogFolder, stampEntry, "packets");
+        if (!existsSync(packetsFolder)) continue; // a stamp folder with no packets folder is a normal state after a run that died before its first block
+        for (const packetName of readdirSync(packetsFolder)) {
+            if (!packetNamePattern.test(packetName)) continue;
+            const packetPath = join(packetsFolder, packetName);
+            const commandLine = (JSON.parse(readFileSync(packetPath, "utf8")) as { command: string }).command;
 
             const quoteStart = commandLine.indexOf("'");
             if (quoteStart === -1) continue;
@@ -118,7 +132,12 @@ export function findStartAtBlockEntry(
             }
 
             const parsed = JSON.parse(raw) as { runId?: string };
-            if (parsed.runId === newest.runId) foundInput = raw;
+            if (parsed.runId !== newest.runId) continue;
+
+            const mtimeMs = statSync(packetPath).mtimeMs;
+            if (mtimeMs <= newestMtimeMs) continue;
+            newestMtimeMs = mtimeMs;
+            foundInput = raw;
         }
     }
 

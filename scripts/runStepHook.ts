@@ -34,6 +34,7 @@ function runStamp(): string {
 }
 // One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.  RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
+let packetSequence = 0;
 const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.md`;
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
@@ -107,26 +108,26 @@ function appendStepToRunLog(boxId: string, invocation: string, command: string, 
     mkdirSync(dirname(logFile()), { recursive: true });
     const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
     const logBlock = `## ======= ${boxId} =======\n`
-        + `Source ${sourceLabel}\n`
-        + `Box: ${boxId}\n`
-        + `### === input ======\n`
-        + `\`\`\`json\n`
-        + `${JSON.stringify({ invocation }, null, 4)}\n`
-        + `\`\`\`\n`
-        + `### end input ======\n`
-        + `### === command ======\n`
-        + `${command}\n`
-        + `### end command ======\n`
-        + `### command output ======\n`
-        + `\`\`\`json\n`
-        + `${commandOutput}\n`
-        + `\`\`\`\n`
-        + `### end command output ======\n`
-        + `### output ======\n`
-        + `\`\`\`json\n`
-        + `${JSON.stringify(output, null, 4)}\n`
-        + `\`\`\`\n`
-        + `### end output ====== ${boxId} took ${tookMs} ms\n`
+        // + `Source ${sourceLabel}\n`
+        // + `Box: ${boxId}\n`
+        // + `### === input ======\n`
+        // + `\`\`\`json\n`
+        // + `${JSON.stringify({ invocation }, null, 4)}\n`
+        // + `\`\`\`\n`
+        // + `### end input ======\n`
+        // + `### === command ======\n`
+        // + `${command}\n`
+        // + `### end command ======\n`
+        // + `### command output ======\n`
+        // + `\`\`\`json\n`
+        // + `${commandOutput}\n`
+        // + `\`\`\`\n`
+        // + `### end command output ======\n`
+        // + `### output ======\n`
+        // + `\`\`\`json\n`
+        // + `${JSON.stringify(output, null, 4)}\n`
+        // + `\`\`\`\n`
+        + `### ${boxId} took ${tookMs} ms\n`
         + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
     appendFileSync(logFile(), logBlock);
@@ -168,6 +169,10 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
         // stderr is chatter (git prints "Reset branch" there), so the result line is read from stdout alone.
         result: parseStepResult((spawnResult.stdout ?? "").trimEnd()),
     };
+    // The log dropped these four values; this per-block packet is where they live now.
+    packetSequence += 1;
+    mkdirSync(packetsDirectory(), { recursive: true });
+    writeFileSync(join(packetsDirectory(), `${step.box}-${process.pid}-${packetSequence}.json`), JSON.stringify({ input: { invocation }, command, commandOutput, output: stepRun }, null, 4));
     appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun, tookMs);
     return stepRun;
 }
@@ -253,7 +258,7 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, output: Record<stri
     mkdirSync(dirname(payload), { recursive: true });
     writeFileSync(payload, JSON.stringify(packet));
     // A run that completed has no next pass to feed; its log stays, its packets go.
-    if (next === null && stoppedAt.startsWith(`${SUCCESS_DIAGRAM}::`)) rmSync(packetsDirectory(), { recursive: true, force: true });
+    // if (next === null && stoppedAt.startsWith(`${SUCCESS_DIAGRAM}::`)) rmSync(packetsDirectory(), { recursive: true, force: true });
     return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload } };
 }
 

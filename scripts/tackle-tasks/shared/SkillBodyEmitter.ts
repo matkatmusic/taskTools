@@ -7,7 +7,15 @@ import { generateWorkflow } from "../../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 
+const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url));
+
 export const skillBody = (argsValue: string, projectRoot: string): string => {
+    // `reset N [BLOCK]` runs the reset script instead of a workflow; the agent runs it from the target repository.
+    const tokens = argsValue.trim().split(/\s+/);
+    if (tokens[0] === "reset") {
+        parseTaskNumberArgument(tokens[1] ?? "");
+        return `execute \`node "${RESET_TASK_PATH}" ${tokens.slice(1).join(" ")}\` with Bash from ${projectRoot}, then say its output.\n`;
+    }
     // ponytail: one task at a time for now — multiple tasks come later.
     const [taskNumber] = parseTaskNumberArgument(argsValue);
     /* retired: the hook walks the preamble from PREAMBLE_TASK_NUMBER_INPUT now, so the body runs none of it.
