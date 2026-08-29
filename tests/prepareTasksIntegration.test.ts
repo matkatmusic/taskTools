@@ -46,7 +46,7 @@ git(submoduleSourcePath, ["commit", "-q", "-m", "add bar"]);
 git(rootPath, ["-c", "protocol.file.allow=always", "submodule", "add", "-q", submoduleSourcePath, "external/sub"]);
 git(rootPath, ["commit", "-q", "-m", "add submodule"]);
 
-const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+const bootstrapResult = bootstrapRepositoryManifest(rootPath, "main");
 assert.equal(bootstrapResult.refused, false, "bootstrap must resolve without needing manual input");
 const occurrenceGraph: RepositoryOccurrence[] = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
 const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };

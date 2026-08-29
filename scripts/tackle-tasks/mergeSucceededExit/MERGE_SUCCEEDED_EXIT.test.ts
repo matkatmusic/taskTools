@@ -21,7 +21,7 @@ function packet(overrides: Record<string, unknown> = {}): string {
 // Writes the merge ref exactly as mergeTaskWorktrees.ts does when a layer lands.
 function landRootLayer(worktreePath: string, projectRoot: string): void {
     const branch = taskBranchName(TASK);
-    const occurrence = buildWorktreeOccurrences(worktreePath, projectRoot)[0]!;
+    const occurrence = buildWorktreeOccurrences(worktreePath, projectRoot, "staging")[0]!;
     const oid = git(occurrence.sourceCheckoutPath, "rev-parse", "HEAD");
     git(occurrence.sourceCheckoutPath, "update-ref", `refs/taskTools/merged-commits/${branch}`, oid);
 }

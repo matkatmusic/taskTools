@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "codex-test-review-body-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-test-review-body-run-log.json");
 
 const SOURCE_BRANCH = "main";
 

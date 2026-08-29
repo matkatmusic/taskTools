@@ -42,16 +42,16 @@ function makeTempRepoWithLocalSubmodule(): { repoRoot: string; submoduleOrigin: 
 
 test("test_submodulePathsListsTheParentRepositorysSubmodules", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
-    assert.deepEqual(submodulePaths(repoRoot), ["vendor"]);
+    assert.deepEqual(submodulePaths(repoRoot, currentBranchName(repoRoot)), ["vendor"]);
     const noSubmodulesRepo = makeTempRepoWithCommit();
-    assert.deepEqual(submodulePaths(noSubmodulesRepo), []);
+    assert.deepEqual(submodulePaths(noSubmodulesRepo, currentBranchName(noSubmodulesRepo)), []);
 });
 
 test("test_collectRepositorySourcesIncludesTheParentAndEverySubmodule", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
     const parentBranch = currentBranchName(repoRoot);
     const submoduleBranch = currentBranchName(join(repoRoot, "vendor"));
-    const sources = collectRepositorySources(repoRoot);
+    const sources = collectRepositorySources(repoRoot, parentBranch);
     assert.deepEqual(
         sources.find((source) => source.path === ""),
         { path: "", sourceBranch: parentBranch },
@@ -65,11 +65,11 @@ test("test_collectRepositorySourcesIncludesTheParentAndEverySubmodule", () => {
 test("test_collectRepositorySourcesThrowsNamingEveryDetachedRepository", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
     git(join(repoRoot, "vendor"), "checkout", "--detach", "HEAD");
-    assert.throws(() => collectRepositorySources(repoRoot), /vendor/);
+    assert.throws(() => collectRepositorySources(repoRoot, currentBranchName(repoRoot)), /vendor/);
 
     const { repoRoot: parentDetachedRepo } = makeTempRepoWithLocalSubmodule();
     git(parentDetachedRepo, "checkout", "--detach", "HEAD");
-    assert.throws(() => collectRepositorySources(parentDetachedRepo), /\(parent\)/);
+    assert.throws(() => collectRepositorySources(parentDetachedRepo, currentBranchName(parentDetachedRepo)), /\(parent\)/);
 });
 
 test("test_createBranchInEveryRepositoryChecksOutTheBranchInParentAndSubmodule", () => {
@@ -94,7 +94,7 @@ test("test_collectRepositorySourcesCreatesNoBranchAndLeavesEveryWorkingDirectory
     const parentBranchListBefore = git(repoRoot, "branch", "--list");
     const vendorBranchListBefore = git(vendorPath, "branch", "--list");
 
-    collectRepositorySources(repoRoot);
+    collectRepositorySources(repoRoot, parentBranchBefore);
 
     assert.equal(currentBranchName(repoRoot), parentBranchBefore);
     assert.equal(currentBranchName(vendorPath), vendorBranchBefore);
@@ -113,7 +113,7 @@ test("test_collectRepositorySourcesSurfacesABootstrapRefusalAsACleanError", () =
     git(vendorPath, "add", "extra.txt");
     git(vendorPath, "commit", "-q", "-m", "extra");
 
-    assert.throws(() => collectRepositorySources(repoRoot), (error: unknown) => {
+    assert.throws(() => collectRepositorySources(repoRoot, currentBranchName(repoRoot)), (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.notEqual((error as Error).message, "");
         return true;

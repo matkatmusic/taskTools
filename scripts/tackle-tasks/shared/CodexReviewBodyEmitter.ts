@@ -140,9 +140,39 @@ export function reviewQuestion(t: PreparedTask): string {
 }
 
 // Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
-const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-codex-review.log");
+const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
 
+// Failed experiment: a tool-spawned shell has no controlling terminal, so /dev/tty cannot open;
+// `[ -w /dev/tty ]` still says yes (it checks mode bits), `exec 3>/dev/tty` then fails, and `2>&3`
+// makes codex fail before it starts. Kept for the record; the live version logs to a file instead.
 function createCodexShellInvocationTTY(t: PreparedTask): string {
+    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+${reviewQuestion(t)}
+REVIEWEOF
+)
+REVIEW_FILE=${t.reviewOutputFile}
+
+if [ -w /dev/tty ]; then
+  exec 3>/dev/tty
+else
+  exec 3>&2
+fi
+
+perl -e 'alarm shift; exec @ARGV' 300 \\
+  codex exec \\
+    -s read-only \\
+    --output-schema ${REVIEW_PLAN_SCHEMA_PATH} \\
+    -o "$REVIEW_FILE" \\
+    "$REVIEW_PROMPT" \\
+    </dev/null >/dev/null 2>&3 \\
+  || ${spawnClaudeFableCli("medium")} \\
+  || ${spawnClaudeOpus48Cli("high")}
+
+node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+    `;
+}
+
+function createCodexShellInvocationLive(t: PreparedTask): string {
     return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
 REVIEWEOF
@@ -173,7 +203,8 @@ node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE
 
 export function createCodexShellInvocation(t: PreparedTask) : string {
     // return createCodexShellInvocationOriginal(t);
-    return createCodexShellInvocationTTY(t);
+    // return createCodexShellInvocationTTY(t);
+    return createCodexShellInvocationLive(t);
 }
 
 export function planReviewPrompt(t: PreparedTask): string {

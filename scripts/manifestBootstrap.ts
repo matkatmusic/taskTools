@@ -15,13 +15,13 @@ export type ManifestBootstrapResult =
     | { refused: false; occurrenceGraph: RepositoryOccurrence[] }
     | ManifestBootstrapRefusal;
 
-export function bootstrapRepositoryManifest(repoRoot: string): ManifestBootstrapResult {
+export function bootstrapRepositoryManifest(repoRoot: string, rootBranch: string): ManifestBootstrapResult {
     const manifest: DiscoveryManifest = {
         repositoryManifest: { version: REPOSITORY_MANIFEST_VERSION, occurrences: [] },
         resolutionManifest: createEmptyResolutionManifest(),
     };
 
-    const result = discoverRepositoryTree(repoRoot, manifest);
+    const result = discoverRepositoryTree(repoRoot, manifest, rootBranch);
 
     if (result.status === "resolved") {
         return { refused: false, occurrenceGraph: result.graph };

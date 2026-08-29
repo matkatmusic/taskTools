@@ -8,7 +8,7 @@ import { planReviewPrompt, reviewQuestion } from "./CodexReviewBodyEmitter.ts";
 import { writeCheckpoint } from "./checkpoint.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.json");
 
 const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",

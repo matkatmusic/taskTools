@@ -27,6 +27,7 @@ export function main(input: string): Record<string, unknown> {
         taskNumber: packet.taskNumber,
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktree,
+        rootSourceBranch: baseBranch(packet.projectRoot),
     });
     // Deepest-first, matching the order mergeTaskWorktree returns: children before the root.
     const deepestFirstCommits = publicationState.commits

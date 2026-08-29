@@ -57,7 +57,7 @@ test("test_getOccurrencesDeepestFirst_putsTheRootLast", () => {
     const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: walk the occurrence tree.
-    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "main");
 
     // Verification: the deepest occurrence (the submodule) comes first, the root comes last.
     assert.equal(occurrences.length, 2);
@@ -66,19 +66,17 @@ test("test_getOccurrencesDeepestFirst_putsTheRootLast", () => {
 });
 
 test("test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceManifest", () => {
-    // Setup: a source repo with an unchanged submodule, checked out into a linked worktree
-    // where both layers sit on task-N, not on their own source branches.
+    // Setup: a source repo with an unchanged submodule, checked out into a linked worktree where both layers sit on task-N, not on their own source branches.
     const { rootOrigin } = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: walk the occurrence tree, supplying the root's own source branch.
-    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "main");
     const root = occurrences.find((occurrence) => occurrence.occurrenceId === "");
     const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
 
-    // Verification: the root uses the supplied root source branch. The submodule resolves its
-    // own base branch from the source repository, never "" and never the shared task branch.
-    assert.equal(root?.baseRef, "root-base");
+    // Verification: the root uses the supplied root source branch. The submodule resolves its own base branch from the source repository, never "" and never the shared task branch.
+    assert.equal(root?.baseRef, "main");
     assert.equal(child?.baseRef, "child-main");
     assert.notEqual(child?.baseRef, "");
     assert.ok(!child?.baseRef.startsWith("task-"));
@@ -90,26 +88,23 @@ test("test_getOccurrencesDeepestFirst_keepsChildBaseRefStableAfterASubmoduleChan
     const { rootOrigin } = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
 
-    // Test action: commit a change on the child's task branch, then stage and commit its
-    // updated gitlink in the parent, mirroring a real task edit.
+    // Test action: commit a change on the child's task branch, then stage and commit its updated gitlink in the parent, mirroring a real task edit.
     writeFileSync(join(worktreePath, "child", "newfile.txt"), "change\n");
     git(join(worktreePath, "child"), "add", "newfile.txt");
     git(join(worktreePath, "child"), "commit", "-q", "-m", "child change");
     git(worktreePath, "add", "child");
     git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
-    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "root-base");
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, rootOrigin, "main");
     const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
 
-    // Verification: the child's base ref is still its unchanged source branch, and diffing
-    // against it (not against task-N) actually reports the submodule change.
+    // Verification: the child's base ref is still its unchanged source branch, and diffing against it (not against task-N) actually reports the submodule change.
     assert.equal(child?.baseRef, "child-main");
     const diff = git(join(worktreePath, "child"), "diff", `${child?.baseRef}...HEAD`, "--stat");
     assert.match(diff, /newfile\.txt/);
 });
 
 test("test_resolveOccurrenceBaseRef_throwsNamingTheOccurrenceWhenNoBaseIsResolvable", () => {
-    // Setup: a non-root occurrence with no source-manifest base branch, checked out somewhere
-    // with no upstream tracking branch configured either.
+    // Setup: a non-root occurrence with no source-manifest base branch, checked out somewhere with no upstream tracking branch configured either.
     const checkoutPath = makeTempRepoWithCommit("detached-child");
     const occurrence = {
         occurrenceId: "child",
@@ -184,7 +179,7 @@ test("test_buildDiscoveryManifest_populatesBothSubManifests", () => {
     const worktreePath = createLinkedWorktree(rootOrigin);
 
     // Test action: build the discovery manifest.
-    const manifest = buildDiscoveryManifest(worktreePath, rootOrigin);
+    const manifest = buildDiscoveryManifest(worktreePath, rootOrigin, "main");
 
     // Verification: both halves are real, populated structures, not undefined.
     assert.equal(manifest.repositoryManifest.occurrences.length, 2);
@@ -198,13 +193,12 @@ test("test_buildDiscoveryManifest_preservesSourceBaseBranchAndRemapsCheckoutPath
     // Setup: a source repo with one submodule, checked out into a real linked worktree.
     const { rootOrigin } = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
-    const sourceManifest = buildDiscoveryManifest(rootOrigin, rootOrigin);
+    const sourceManifest = buildDiscoveryManifest(rootOrigin, rootOrigin, "main");
 
     // Test action: build the discovery manifest against the linked worktree.
-    const manifest = buildDiscoveryManifest(worktreePath, rootOrigin);
+    const manifest = buildDiscoveryManifest(worktreePath, rootOrigin, "main");
 
-    // Verification: every occurrence keeps the source manifest's baseBranch/baseOid, but its
-    // checkoutPath is remapped to point inside the linked worktree, not the source repo.
+    // Verification: every occurrence keeps the source manifest's baseBranch/baseOid, but its checkoutPath is remapped to point inside the linked worktree, not the source repo.
     for (const occurrence of manifest.repositoryManifest.occurrences) {
         const sourceOccurrence = sourceManifest.repositoryManifest.occurrences.find(
             (candidate) => candidate.occurrenceId === occurrence.occurrenceId,

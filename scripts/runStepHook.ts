@@ -36,7 +36,7 @@ function runStamp(): string {
 // One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.  RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
 let packetSequence = 0;
-const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.md`;
+const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.json`;
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
 const STEP_TIMEOUT_MS = 10_000;
@@ -140,7 +140,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     if (input) {
         nodeArguments.push(input);
     }
-    // Logged whole so the line in run-log.md is one you can paste into a terminal.
+    // Logged whole so the line in run-log.json is one you can paste into a terminal.
     const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
     const command = `node --no-inspect ${step.script}${quotedInput}`;
     const startedAt = Date.now();

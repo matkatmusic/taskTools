@@ -18,6 +18,7 @@ export function main(input: string): Record<string, unknown> {
         taskNumber: packet.taskNumber,
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktree,
+        rootSourceBranch: "staging",
     });
     return { ...packet, ...result, box: "READ_MERGE_PUBLICATION_STATE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }

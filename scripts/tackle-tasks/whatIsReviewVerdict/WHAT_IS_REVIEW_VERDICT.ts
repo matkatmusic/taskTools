@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 import { efficacyPercentage, rulingByFixCount, rulingByPercentage } from "../../planReviewRuling.ts";
+import { readReviewJson } from "../shared/readReviewJson.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";
 
@@ -54,7 +55,7 @@ function applyFixesToPlan(planFile: string, fixes: PlanReviewFix[]): void {
 export function main(input: string): Record<string, unknown> {
     const { message: _message, additionalData, ...rest } = JSON.parse(input) as Input;
     const packet: WhatIsReviewVerdictPacket = { ...rest, reviewOutputFile: additionalData.reviewFile };
-    const review = JSON.parse(readFileSync(packet.reviewOutputFile, "utf8")) as PlanReview;
+    const review = readReviewJson(packet.reviewOutputFile) as PlanReview;
     const { verdict, notes } = decideVerdict(packet.planFile, review);
     const output = { ...packet, box: "WHAT_IS_REVIEW_VERDICT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, verdict, notes };
 

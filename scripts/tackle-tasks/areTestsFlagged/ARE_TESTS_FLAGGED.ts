@@ -3,6 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { decideTestReview, type TestReview } from "../shared/decideTestReview.ts";
+import { readReviewJson } from "../shared/readReviewJson.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";
 
 type CorePacket = Omit<AreTestsFlaggedPacket, "flagged" | "notes">;
@@ -11,7 +12,7 @@ type Input = CorePacket & { message: string; additionalData: { reviewFile: strin
 
 export function main(input: string): Record<string, unknown> {
     const { box: _box, scriptSignal: _scriptSignal, message: _message, additionalData, ...core } = JSON.parse(input) as Input;
-    const review = JSON.parse(readFileSync(additionalData.reviewFile, "utf8")) as TestReview;
+    const review = readReviewJson(additionalData.reviewFile) as TestReview;
     const { flagged, notes } = decideTestReview(review);
     const output = { ...core, box: "ARE_TESTS_FLAGGED", scriptSignal: SCRIPT_SIGNAL.CONTINUE, flagged };
     if (flagged) {

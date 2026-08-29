@@ -60,7 +60,7 @@ export function resetTask(taskNumber: number, block: string): string {
     // for (const entry of existsSync(join(repoRoot, ".taskTools", "runs")) ? readdirSync(join(repoRoot, ".taskTools", "runs")) : []) {
     //     rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
     // }
-    // Only this task's packets go: each packet JSON names its taskNumber; *-run-log.md names have no packets folder.
+    // Only this task's packets go: each packet JSON names its taskNumber; *-run-log.json names have no packets folder.
     const runsDirectory = join(repoRoot, ".taskTools", "runs");
     for (const packetsDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry, "packets")) : []) {
         if (!existsSync(packetsDirectory)) continue;

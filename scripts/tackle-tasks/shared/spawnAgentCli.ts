@@ -2,7 +2,7 @@
 import { whatToReturnSection } from "./whatToReturn.ts";
 
 // Beside the run-log, so `tail -f` on it shows the spawned agent working. The hook sets RUN_STEP_LOG for every block.
-const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
+const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-agents.log");
 
 // Expects the caller's shell to have set REVIEW_PROMPT, REVIEW_FILE and CODEX_LOG.
 export function codexExecCommand(schemaPath: string): string {

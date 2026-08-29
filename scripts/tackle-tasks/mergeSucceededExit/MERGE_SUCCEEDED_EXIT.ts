@@ -10,7 +10,7 @@ export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as MergeSucceededExitPacket;
     const projectRoot = requireAbsolutePath("projectRoot", packet.projectRoot);
     const worktree = requireAbsolutePath("worktree", packet.worktree);
-    const state = readPublicationState({ taskNumber: packet.taskNumber, projectRoot, worktreePath: worktree });
+    const state = readPublicationState({ taskNumber: packet.taskNumber, projectRoot, worktreePath: worktree, rootSourceBranch: "staging" });
     if (state.state !== "ALL LANDED") {
         throw new Error(`MERGE_SUCCEEDED_EXIT: task ${packet.taskNumber} is not ALL LANDED (${state.state}); refusing to archive`);
     }

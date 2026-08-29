@@ -25,8 +25,7 @@ export type DiscoveryResult =
 
 function readOriginUrl(checkoutPath: string): string {
     try {
-        // stdio: caught below on purpose (no origin is a normal case), so its stderr must not
-        // leak to the parent process — a leak was corrupting run-step's "last line" output parsing.
+        // stdio: caught below on purpose (no origin is a normal case), so its stderr must not leak to the parent process — a leak was corrupting run-step's "last line" output parsing.
         return execFileSync("git", ["-C", checkoutPath, "remote", "get-url", "origin"], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
@@ -39,17 +38,17 @@ function readOriginUrl(checkoutPath: string): string {
     }
 }
 
-function readRootBranchAndOid(rootPath: string): { branch: string; oid: string } {
-    let branch: string;
-    try {
-        branch = execFileSync("git", ["-C", rootPath, "symbolic-ref", "--short", "HEAD"], {
-            encoding: "utf8",
-        }).trim();
-    } catch {
-        throw new Error(`root repository at "${rootPath}" is not on a branch (detached HEAD)`);
-    }
-    const oid = execFileSync("git", ["-C", rootPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    return { branch, oid };
+function readRootBranchAndOid(rootPath: string, rootBranch: string): { branch: string; oid: string } {
+    // let branch: string;
+    // try {
+    //     branch = execFileSync("git", ["-C", rootPath, "symbolic-ref", "--short", "HEAD"], {
+    //         encoding: "utf8",
+    //     }).trim();
+    // } catch {
+    //     throw new Error(`root repository at "${rootPath}" is not on a branch (detached HEAD)`);
+    // }
+    const oid = execFileSync("git", ["-C", rootPath, "rev-parse", rootBranch], { encoding: "utf8" }).trim();
+    return { branch: rootBranch, oid };
 }
 
 function resolveOccurrenceBaseBranch(
@@ -83,6 +82,7 @@ function discoverOccurrenceAndDescendants(
     gitlinkOid: string,
     manifest: DiscoveryManifest,
     pendingResolutionRequests: ResolutionRequest[],
+    rootBranch: string,
 ): void {
     const occurrenceId = relativePath;
     const checkoutPath = join(rootPath, relativePath);
@@ -96,7 +96,7 @@ function discoverOccurrenceAndDescendants(
         baseOid = existing.baseOid;
         baseBranch = existing.baseBranch;
     } else if (parentOccurrenceId === null) {
-        const rootIdentity = readRootBranchAndOid(rootPath);
+        const rootIdentity = readRootBranchAndOid(rootPath, rootBranch);
         baseOid = rootIdentity.oid;
         baseBranch = rootIdentity.branch;
     } else {
@@ -146,13 +146,14 @@ function discoverOccurrenceAndDescendants(
             gitlink.oid,
             manifest,
             pendingResolutionRequests,
+            rootBranch,
         );
     }
 }
 
-export function discoverRepositoryTree(rootPath: string, manifest: DiscoveryManifest): DiscoveryResult {
+export function discoverRepositoryTree(rootPath: string, manifest: DiscoveryManifest, rootBranch: string): DiscoveryResult {
     const pendingResolutionRequests: ResolutionRequest[] = [];
-    discoverOccurrenceAndDescendants(rootPath, "", null, null, 0, "", manifest, pendingResolutionRequests);
+    discoverOccurrenceAndDescendants(rootPath, "", null, null, 0, "", manifest, pendingResolutionRequests, rootBranch);
 
     if (pendingResolutionRequests.length > 0) {
         return { status: "needsResolution", resolutionRequests: pendingResolutionRequests };

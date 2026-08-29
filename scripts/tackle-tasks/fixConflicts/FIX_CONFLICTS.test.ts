@@ -11,7 +11,7 @@ import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { getTemplateShapeMismatches } from "../../templateShape.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "fix-conflicts-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "fix-conflicts-run-log.json");
 
 const git = (repo: string, ...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
 

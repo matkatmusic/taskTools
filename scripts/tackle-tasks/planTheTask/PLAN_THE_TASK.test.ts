@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./PLAN_THE_TASK.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.json");
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

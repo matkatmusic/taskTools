@@ -40,10 +40,11 @@ function readGitlinkOidAtHead(checkoutPath: string, pathInParent: string): strin
 export function computeExemptGitlinkPaths(
     worktreePath: string,
     projectRoot: string,
+    rootSourceBranch: string,
     changedPathsByOccurrenceId: Map<string, string[]>,
     ownedPaths: Set<string>,
 ): Set<string> {
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, rootSourceBranch);
     const occurrencesById = new Map(manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence]));
     const deepestFirst = [...manifest.repositoryManifest.occurrences].sort((a, b) => b.depth - a.depth);
 
@@ -92,7 +93,7 @@ export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFil
         allChangedPaths.push(...taggedPaths);
     }
 
-    const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, changedPathsByOccurrenceId, ownedPaths);
+    const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, input.rootSourceBranch, changedPathsByOccurrenceId, ownedPaths);
 
     const violations = allChangedPaths.filter((path) => !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
     return { inside: violations.length === 0, violations };

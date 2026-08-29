@@ -17,6 +17,7 @@ export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as CleanUpWorktreesInput;
     cleanupTaskWorktree({
         projectRoot: packet.projectRoot, worktreePath: packet.worktree, taskNumber: packet.taskNumber, runId: packet.runId,
+        rootSourceBranch: "staging",
     });
     return {
         box: "CLEAN_UP_WORKTREES", scriptSignal: SCRIPT_SIGNAL.CONTINUE,

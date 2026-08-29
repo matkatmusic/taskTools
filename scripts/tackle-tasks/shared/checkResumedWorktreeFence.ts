@@ -46,7 +46,7 @@ export function checkResumedWorktreeFence(input: CheckResumedWorktreeFenceInput)
         allChangedPaths.push(...taggedPaths);
     }
 
-    const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, changedPathsByOccurrenceId, ownedPaths);
+    const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, rootSourceBranch, changedPathsByOccurrenceId, ownedPaths);
 
     const violations = allChangedPaths.filter((path) => !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
     return { inside: violations.length === 0, violations };

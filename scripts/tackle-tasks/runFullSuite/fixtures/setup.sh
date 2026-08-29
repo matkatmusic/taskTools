@@ -13,6 +13,7 @@ git config user.email fixture@example.com
 echo "fixture root" > .fixture-marker
 git add -f .fixture-marker
 git commit -q -m "root"
+git branch staging
 cat > .git/taskTools-source.lock <<'EOF'
 {"owner":"run-1:1","acquiredAt":"2026-01-01T00:00:00.000Z","heartbeatAt":"2026-01-01T00:00:00.000Z"}
 EOF

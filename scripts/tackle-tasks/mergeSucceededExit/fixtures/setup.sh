@@ -8,6 +8,7 @@ git init -q -b main
 git config user.name fixture
 git config user.email fixture@example.com
 git commit -q --allow-empty -m "fixture root commit"
+git branch staging
 git update-ref refs/taskTools/merged-commits/task-42 HEAD
 
 mkdir -p .taskTools

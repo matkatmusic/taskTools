@@ -65,9 +65,9 @@ function sourceCheckoutStatusPaths(checkoutPath: string): string[] {
 }
 
 // F3: checks each receipt's baseBranch against the tip rebase recorded, then confirms the checkout is clean and usable.
-function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[]): void {
+function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot: string, rootSourceBranch: string, receipts: SourceTipReceipt[]): void {
     const sourceCheckoutPathByOccurrenceId = new Map<string, string>([["", projectRoot]]);
-    for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot)) {
+    for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot, rootSourceBranch)) {
         sourceCheckoutPathByOccurrenceId.set(occurrence.occurrenceId, occurrence.sourceCheckoutPath);
     }
 
@@ -129,7 +129,7 @@ export function mergeTaskWorktree(input: MergeTaskWorktreeInput): MergeTaskWorkt
     refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
     const receipts = readSourceTipReceipts(input.taskNumber, input.runId, projectRoot);
-    verifySourceTipsUnchangedSinceRebase(worktreePath, projectRoot, receipts);
+    verifySourceTipsUnchangedSinceRebase(worktreePath, projectRoot, input.rootSourceBranch, receipts);
 
     // pipeline-suite.mmd already ran the suite, so the merge itself runs no tests.
     const report = mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, defaultMergeStepOperations, null, false);

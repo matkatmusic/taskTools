@@ -44,8 +44,8 @@ export function mapSourceOccurrencesToWorktree(
     }));
 }
 
-export function buildWorktreeOccurrences(worktreePath: string, projectRoot: string): WorktreeOccurrence[] {
-    return mapSourceOccurrencesToWorktree(worktreePath, loadRepositoryManifest(projectRoot).occurrences);
+export function buildWorktreeOccurrences(worktreePath: string, projectRoot: string, rootSourceBranch: string): WorktreeOccurrence[] {
+    return mapSourceOccurrencesToWorktree(worktreePath, loadRepositoryManifest(projectRoot, rootSourceBranch).occurrences);
 }
 
 // Fetches each occurrence's base branch from source into worktree, never origin; run before discovery walks source-recorded OIDs.
@@ -64,8 +64,8 @@ export function fetchWorktreeBaseBranchesFromSource(occurrences: WorktreeOccurre
 const OCCURRENCE_PATH_SEPARATOR = "::";
 
 // The source repository, not the worktree, is the base-branch authority; createWorktreeForGroup checks out task-N everywhere, hiding layer branches.
-export function buildDiscoveryManifest(worktreePath: string, projectRoot: string): DiscoveryManifest {
-    const sourceManifest = loadRepositoryManifest(projectRoot);
+export function buildDiscoveryManifest(worktreePath: string, projectRoot: string, rootSourceBranch: string): DiscoveryManifest {
+    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
     return {
         repositoryManifest: {
             ...sourceManifest,
@@ -95,7 +95,7 @@ export function getOccurrencesDeepestFirst(
     projectRoot: string,
     rootSourceBranch: string,
 ): Occurrence[] {
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, rootSourceBranch);
     return manifest.repositoryManifest.occurrences
         .slice()
         .sort((a, b) => b.depth - a.depth)
@@ -149,11 +149,12 @@ export function rebaseWorktreeSubmoduleLayersDeepestFirst(
     worktreePath: string,
     projectRoot: string,
     taskNumber: number,
+    rootSourceBranch: string,
     leaveConflictLive: boolean = false,
     typecheckCommand: string | null = null,
     runTests: boolean = true,
 ): SubmoduleLayerWalkReport {
-    const sourceManifest = loadRepositoryManifest(projectRoot);
+    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber);
     return rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, leaveConflictLive, typecheckCommand, runTests);
@@ -169,7 +170,7 @@ export function mergeWorktreeTaskDeepestFirst(
     typecheckCommand: string | null = null,
     runTests: boolean = true,
 ): MergeTaskWalkReport {
-    const sourceManifest = loadRepositoryManifest(projectRoot);
+    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const occurrencesWithRootSourceBranch = sourceManifest.occurrences.map((occurrence) =>
         occurrence.occurrenceId === "" ? { ...occurrence, baseBranch: rootSourceBranch } : occurrence,

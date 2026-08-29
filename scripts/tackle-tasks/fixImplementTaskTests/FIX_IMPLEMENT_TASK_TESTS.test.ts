@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./FIX_IMPLEMENT_TASK_TESTS.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "fix-implement-task-tests-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "fix-implement-task-tests-run-log.json");
 
 function setupFixture(): { projectRoot: string; worktree: string } {
     const projectRoot = mkdtempSync(join(tmpdir(), "fix-implement-task-tests-project-"));

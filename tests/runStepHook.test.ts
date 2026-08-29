@@ -15,7 +15,7 @@ const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
 function runHook(prompt: string, configFile?: string, worktree?: string, priorPacketCommand?: string) {
-    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
+    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.json");
     // An earlier pass's packet sits beside this run's log, the way .taskTools/runs/ holds every run.
     if (priorPacketCommand !== undefined) {
         const packetsFolder = join(dirname(logFile), "0000", "packets");
@@ -610,7 +610,7 @@ test("test_runStepHook_storesTheThreadedOutputAsThePasteableCommand", () => {
 
 // PostToolUse names the skill and its args apart. That is how an agent reaches the hook.
 function runSkillHook(skill: string, args: string, configFile?: string) {
-    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.md");
+    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.json");
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill, args } }),
         encoding: "utf8",
@@ -674,7 +674,7 @@ function runHookIn(cwd: string, prompt: string, configFile: string) {
     return { result, runsFolder, runsEntries: () => readdirSync(runsFolder).sort() };
 }
 
-const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+-run-log\.md$/;
+const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+-run-log\.json$/;
 
 test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.  Steps: A continues into B, which stops on a prompt, so the hook writes one packet.
@@ -686,10 +686,10 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     }));
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
-    // The runs folder holds exactly <stamp>-run-log.md and the <stamp> folder.
+    // The runs folder holds exactly <stamp>-run-log.json and the <stamp> folder.
     const [stampFolder, logName] = runsEntries();
     assert.match(logName, STAMPED_LOG);
-    assert.equal(logName, `${stampFolder}-run-log.md`);
+    assert.equal(logName, `${stampFolder}-run-log.json`);
     // The packet sits under <stamp>/packets.
     assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
     assert.match(readFileSync(join(runsFolder, logName), "utf8"), /"block":"one\.mmd::A"/);
@@ -707,7 +707,7 @@ test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
     const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
     const pid = packetName.match(/^A-(\d+)-1\.json$/)![1];
     // Step: the run folder name is a timestamp followed by that pid.
-    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     assert.match(stampFolder, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+$/);
     assert.ok(stampFolder.endsWith(`-${pid}`));
 });
@@ -723,7 +723,7 @@ test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
     // List the packets folder under the run's stamp folder.
-    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     const packetNames = readdirSync(packetsFolder);
     // One packet per block ran, named by box, pid, and the order it ran in: A is 1, B is 2.
@@ -750,7 +750,7 @@ test("test_runStepHook_writesAPacketForABlockThatFailed", () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
     assert.equal(result.ok, false);
-    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
     const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
@@ -776,7 +776,7 @@ test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B", "one.mmd::A"]);
-    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.md"))!;
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     // Two packet files for box A; the pass number differs between them.
     const aPacketNames = readdirSync(packetsFolder).filter(name => /^A-\d+-\d+\.json$/.test(name));
@@ -798,10 +798,10 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
             { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    // The pass that consumes it logs to S-run-log.md and writes its packet under S/packets.
+    // The pass that consumes it logs to S-run-log.json and writes its packet under S/packets.
     const { result, runsFolder, runsEntries } = runHookIn(cwd, `/run-step C ${JSON.stringify({ packetFile })}`, configFile);
-    assert.deepEqual(runsEntries(), ["S", "S-run-log.md"]);
-    assert.match(readFileSync(join(runsFolder, "S-run-log.md"), "utf8"), /"block":"one\.mmd::C"/);
+    assert.deepEqual(runsEntries(), ["S", "S-run-log.json"]);
+    assert.match(readFileSync(join(runsFolder, "S-run-log.json"), "utf8"), /"block":"one\.mmd::C"/);
     assert.equal(dirname(result.outcome.payload), packetsFolder);
 });
 

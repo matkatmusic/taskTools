@@ -15,12 +15,12 @@ const unblockedTaskNumbers = execSync(
 export const brief = `- \`$tasks\`: ${tasks}
 - \`$unblockedTaskNumbers\`: ${unblockedTaskNumbers}
 
-If the line above says \`none\`, report that every open task is blocked and stop.
-
-otherwise:
-Invoke the \`tackle-tasks $unblockedTaskNumbers valid\` skill.
-example: \`[30,32,35] valid\`. 
-Pass it verbatim; do not re-derive or filter it.
+Loop through every task in tasks.json until it contains no more entries. For each task found that is unblocked, spawn the workflow pipeline to complete the task:
+1. Run \`node "${checkBlockersPath}" --unblocked\` to get the unblocked task numbers.
+2. If tasks.json has no entries, report that and stop.
+3. If no numbers come back, report that every open task is blocked and stop.
+4. Invoke the \`tackle-tasks [the numbers just returned]\` skill. Pass the list verbatim; do not re-derive or filter it. Wait for every launched run's completion notification. The notification, not polling, is how you learn a run is done.
+5. Go back to step 1.
 
 `;
 

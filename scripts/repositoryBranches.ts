@@ -17,24 +17,24 @@ export function currentBranchName(repoRoot: string): string {
     return git(repoRoot, "branch", "--show-current");
 }
 
-function loadOccurrenceGraph(repoRoot: string): RepositoryOccurrence[] {
-    const result = bootstrapRepositoryManifest(repoRoot);
+function loadOccurrenceGraph(repoRoot: string, rootBranch: string): RepositoryOccurrence[] {
+    const result = bootstrapRepositoryManifest(repoRoot, rootBranch);
     if (result.refused) {
         throw new Error(`repository at "${repoRoot}" needs branch resolution before it can be discovered`);
     }
     return result.occurrenceGraph;
 }
 
-export function submodulePaths(repoRoot: string): string[] {
-    return loadOccurrenceGraph(repoRoot)
+export function submodulePaths(repoRoot: string, rootBranch: string): string[] {
+    return loadOccurrenceGraph(repoRoot, rootBranch)
         .filter((occurrence) => occurrence.parentOccurrenceId !== null)
         .map((occurrence) => occurrence.occurrenceId);
 }
 
-export function collectRepositorySources(repoRoot: string): RepositorySource[] {
+export function collectRepositorySources(repoRoot: string, rootBranch: string): RepositorySource[] {
     let occurrences: RepositoryOccurrence[];
     try {
-        occurrences = loadOccurrenceGraph(repoRoot);
+        occurrences = loadOccurrenceGraph(repoRoot, rootBranch);
     } catch (error) {
         // ponytail: a detached root throws here (not via needsResolution); reuse the guard's message.
         if (currentBranchName(repoRoot) === "") {

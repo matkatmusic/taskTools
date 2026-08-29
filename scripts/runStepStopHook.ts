@@ -8,11 +8,11 @@ import type { BlockTemplate, StepConfig } from "./generateSteps.ts";
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/steps.json");
 // Same log the run-step hook writes, so a run shows whether this hook fired at all.
-const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.md");
+const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.json");
 
 function log(note: string): void {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, `## ======= STOP HOOK =======\n${new Date().toISOString()} ${note}\n${"=".repeat(36)}\n`);
+    appendFileSync(LOG_FILE, `${JSON.stringify({ block: "STOP HOOK", at: new Date().toISOString(), note })}\n`);
 }
 
 const input: { agent_transcript_path?: unknown } = JSON.parse(readFileSync(0, "utf8"));

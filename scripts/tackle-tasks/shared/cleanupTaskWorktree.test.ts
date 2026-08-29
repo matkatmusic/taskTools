@@ -54,7 +54,7 @@ test("test_cleanupTaskWorktree_deletesPersistenceRefsInEverySourceOccurrence", (
     markPersistenceRefs(join(rootOrigin, "child"), branchName);
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner(runId, taskNumber)).status, "acquired");
 
-    const result = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId });
+    const result = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" });
 
     assert.equal(result.removed, true);
     assert.equal(hasRef(rootOrigin, `refs/taskTools/merged-commits/${branchName}`), false);
@@ -69,7 +69,7 @@ test("test_cleanupTaskWorktree_leavesEverySourceCheckoutClean", () => {
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin, runId);
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner(runId, taskNumber)).status, "acquired");
 
-    const result = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId });
+    const result = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" });
 
     assert.equal(result.removed, true);
     assert.equal(git(rootOrigin, "status", "--porcelain"), "");
@@ -89,7 +89,7 @@ test("test_cleanupTaskWorktree_keepsTheLeaseWhenWorktreeRemovalFails", () => {
     git(rootOrigin, "worktree", "lock", worktreePath, "--reason", "test");
 
     assert.throws(
-        () => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId }),
+        () => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" }),
         (error: Error) => error.message.includes("retained artifacts") && error.message.includes(worktreePath),
     );
 
@@ -107,12 +107,12 @@ test("test_cleanupTaskWorktree_succeedsWhenRunTwice", () => {
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin, runId);
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner(runId, taskNumber)).status, "acquired");
 
-    const first = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId });
+    const first = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" });
     assert.equal(first.removed, true);
     assert.equal(existsSync(worktreePath), false);
 
     // Simulate a lost stdout result: call again with nothing left to observe from the first call.
-    const second = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId });
+    const second = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" });
     assert.equal(second.removed, true);
     assert.deepEqual(second.retainedArtifacts, []);
 });
@@ -127,7 +127,7 @@ test("test_cleanupTaskWorktree_refusesAndMutatesNothingWhenTheSourceLockIsOwnedB
     const otherOwner = buildLockOwner("run-other", 999);
     assert.equal(acquireSourceRepoLock(rootOrigin, otherOwner).status, "acquired");
 
-    assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId }));
+    assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" }));
 
     assert.equal(existsSync(worktreePath), true);
     assert.equal(hasBranch(rootOrigin, branchName), true);
@@ -145,7 +145,7 @@ test("test_cleanupTaskWorktree_aNewRunAdoptsTheRetainedLeaseAfterCleanupFailure"
     assert.equal(acquireSourceRepoLock(rootOrigin, owner).status, "acquired");
     git(rootOrigin, "worktree", "lock", worktreePath, "--reason", "test");
 
-    assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: oldRunId }));
+    assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: oldRunId, rootSourceBranch: "staging" }));
     git(rootOrigin, "worktree", "unlock", worktreePath);
 
     // Seed tasks.json the way the pipeline would have left it: the old run ended run-failed,
@@ -175,7 +175,7 @@ test("test_cleanupTaskWorktree_aNewRunAdoptsTheRetainedLeaseAfterCleanupFailure"
 
     // Cleanup by the new run now succeeds and releases everything.
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner(newRunId, taskNumber)).status, "acquired");
-    const finalResult = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: newRunId });
+    const finalResult = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: newRunId, rootSourceBranch: "staging" });
     assert.equal(finalResult.removed, true);
     assert.equal(existsSync(worktreePath), false);
 });

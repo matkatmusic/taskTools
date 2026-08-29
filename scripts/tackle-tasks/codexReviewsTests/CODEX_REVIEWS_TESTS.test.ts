@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./CODEX_REVIEWS_TESTS.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "codex-reviews-tests-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-reviews-tests-run-log.json");
 
 const SOURCE_BRANCH = "main";
 
@@ -25,6 +25,7 @@ function makePacket() {
     writeFileSync(join(worktree, "src", "thing.ts"), "export const thing = 1;\n");
     git("add", "-A");
     git("commit", "--quiet", "-m", "base");
+    git("branch", "staging");
     git("checkout", "--quiet", "-b", "task-99");
     writeFileSync(join(worktree, "src", "thing.ts"), "export const thing = 2;\n");
     writeFileSync(join(worktree, "tests", "thing.test.ts"), "// SENTINEL_TASK_TEST\n");

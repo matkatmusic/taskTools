@@ -116,7 +116,7 @@ function makeDetachedOidFixture(): { rootPath: string } {
 test("test_discoverRootOnlyRepository_recordsRootBranchAndOidAsBase", () => {
     const rootPath = makeTempRepoWithCommit();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     assert.equal(result.graph.length, 1);
@@ -130,7 +130,7 @@ test("test_discoverRootOnlyRepository_recordsRootBranchAndOidAsBase", () => {
 test("test_discoverThreeLevelFixture_producesCorrectParentEdgesAndDepths", () => {
     const { rootPath } = makeThreeLevelFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     assert.equal(result.graph.length, 3);
@@ -149,7 +149,7 @@ test("test_discoverThreeLevelFixture_producesCorrectParentEdgesAndDepths", () =>
 test("test_discoverSubmoduleAtJfredExternalTmuxLib_recordsParentAsJfred", () => {
     const { rootPath } = makeJfredWithTmuxLibFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     const tmuxLib = findOccurrence(result.graph, "jfred/external/tmux_lib");
@@ -159,7 +159,7 @@ test("test_discoverSubmoduleAtJfredExternalTmuxLib_recordsParentAsJfred", () => 
 test("test_discoverSubmoduleBelowJfredToolsPlugin_recordsThatRepositoryAsParent", () => {
     const { rootPath } = makeJfredFullFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     const inner = findOccurrence(result.graph, "jfred/jfredToolsPlugin/innerSubmodule");
@@ -169,7 +169,7 @@ test("test_discoverSubmoduleBelowJfredToolsPlugin_recordsThatRepositoryAsParent"
 test("test_discoverTree_neverRecordsSyntheticIntermediateDirectoryAsRepository", () => {
     const { rootPath } = makeJfredWithTmuxLibFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     assert.equal(
@@ -181,7 +181,7 @@ test("test_discoverTree_neverRecordsSyntheticIntermediateDirectoryAsRepository",
 test("test_discoverTreeWithAmbiguousBranchTip_returnsResolutionRequestNotGraph", () => {
     const { rootPath } = makeAmbiguousBranchFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "needsResolution");
     if (result.status !== "needsResolution") return;
     assert.equal(result.resolutionRequests.length, 1);
@@ -191,7 +191,7 @@ test("test_discoverTreeWithAmbiguousBranchTip_returnsResolutionRequestNotGraph",
 test("test_discoverTreeWithDetachedOid_returnsResolutionRequestNotGraph", () => {
     const { rootPath } = makeDetachedOidFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "needsResolution");
     if (result.status !== "needsResolution") return;
     assert.equal(result.resolutionRequests.length, 1);
@@ -201,7 +201,7 @@ test("test_discoverTreeWithDetachedOid_returnsResolutionRequestNotGraph", () => 
 test("test_discoverTreeWithUnresolvedRepository_stopsBeforeCreatingOperationBranches", () => {
     const { rootPath } = makeAmbiguousBranchFixture();
     const manifest = emptyDiscoveryManifest();
-    discoverRepositoryTree(rootPath, manifest);
+    discoverRepositoryTree(rootPath, manifest, "main");
     for (const occurrence of manifest.repositoryManifest.occurrences) {
         assert.equal(occurrence.operationBranch, "");
     }
@@ -213,7 +213,7 @@ test("test_discoverRepositoryTree_createsNoNewBranches", () => {
     const checkoutPaths = [rootPath, join(rootPath, "child"), join(rootPath, "child", "grandchild")];
     const branchesBefore = checkoutPaths.map((path) => git(path, "branch", "--list"));
 
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
 
     assert.equal(result.status, "resolved");
     checkoutPaths.forEach((path, index) => {
@@ -227,7 +227,7 @@ test("test_discoverRepositoryTree_leavesCurrentBranchUnchanged", () => {
     const checkoutPaths = [rootPath, join(rootPath, "child"), join(rootPath, "child", "grandchild")];
     const currentBranchesBefore = checkoutPaths.map((path) => git(path, "branch", "--show-current"));
 
-    discoverRepositoryTree(rootPath, manifest);
+    discoverRepositoryTree(rootPath, manifest, "main");
 
     checkoutPaths.forEach((path, index) => {
         assert.equal(git(path, "branch", "--show-current"), currentBranchesBefore[index]);
@@ -237,7 +237,7 @@ test("test_discoverRepositoryTree_leavesCurrentBranchUnchanged", () => {
 test("test_discoverRepositoryTree_leavesOperationBranchEmptyOnResolvedOccurrences", () => {
     const { rootPath } = makeThreeLevelFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
     for (const occurrence of result.graph) {
@@ -248,13 +248,13 @@ test("test_discoverRepositoryTree_leavesOperationBranchEmptyOnResolvedOccurrence
 test("test_resumedDiscoveryRun_reusesPersistedAnswerWithoutReResolving", () => {
     const { rootPath } = makeAmbiguousBranchFixture();
     const manifest = emptyDiscoveryManifest();
-    const firstResult = discoverRepositoryTree(rootPath, manifest);
+    const firstResult = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(firstResult.status, "needsResolution");
     if (firstResult.status !== "needsResolution") return;
     const request = firstResult.resolutionRequests[0];
     manifest.resolutionManifest.resolutionAnswers[request.id] = request.candidateBaseBranches[0];
 
-    const secondResult = discoverRepositoryTree(rootPath, manifest);
+    const secondResult = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(secondResult.status, "resolved");
     if (secondResult.status !== "resolved") return;
     const child = findOccurrence(secondResult.graph, "child");
@@ -264,7 +264,7 @@ test("test_resumedDiscoveryRun_reusesPersistedAnswerWithoutReResolving", () => {
 test("test_resumedDiscoveryRun_doesNotRecreateCompletedOperationBranches", () => {
     const { rootPath } = makeThreeLevelFixture();
     const manifest = emptyDiscoveryManifest();
-    const firstResult = discoverRepositoryTree(rootPath, manifest);
+    const firstResult = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(firstResult.status, "resolved");
     if (firstResult.status !== "resolved") return;
 
@@ -272,7 +272,7 @@ test("test_resumedDiscoveryRun_doesNotRecreateCompletedOperationBranches", () =>
     git(child.checkoutPath, "checkout", "-q", child.baseBranch);
     const branchAfterManualCheckout = git(child.checkoutPath, "branch", "--show-current");
 
-    const secondResult = discoverRepositoryTree(rootPath, manifest);
+    const secondResult = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(secondResult.status, "resolved");
     if (secondResult.status !== "resolved") return;
 
@@ -282,7 +282,7 @@ test("test_resumedDiscoveryRun_doesNotRecreateCompletedOperationBranches", () =>
 test("test_discoverUniqueDeeplyNestedTree_isReadyForDryRunIntegration", () => {
     const { rootPath } = makeJfredFullFixture();
     const manifest = emptyDiscoveryManifest();
-    const result = discoverRepositoryTree(rootPath, manifest);
+    const result = discoverRepositoryTree(rootPath, manifest, "main");
     assert.equal(result.status, "resolved");
     if (result.status !== "resolved") return;
 

@@ -119,8 +119,8 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): A
 }
 
 // Verifies finished by reading the world, not an exit code; no layer may still be rebasing (worktree-only check, F1).
-function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: string): void {
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
+function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: string, rootSourceBranch: string): void {
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, rootSourceBranch);
     for (const occurrence of manifest.repositoryManifest.occurrences) {
         if (rebaseInProgress(occurrence.checkoutPath)) {
             throw new Error(`rebase reported finished but occurrence "${occurrence.occurrenceId}" still has one in progress`);
@@ -136,19 +136,19 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
 
     const freshConflict = advanceStoppedLayer(input.stoppedAt);
     if (freshConflict !== null) {
-        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, freshConflict);
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, input.rootSourceBranch, freshConflict);
         return freshConflict;
     }
 
     // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
-    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null, false);
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, true, null, false);
     if (submoduleReport.stoppedAt !== null) {
         const result = mapSubmoduleStop(submoduleReport.stoppedAt);
-        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, result);
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, input.rootSourceBranch, result);
         return result;
     }
 
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, input.rootSourceBranch);
     const parentOutcome = rebaseParentOntoSourceAndTest(
         "",
         worktreePath,
@@ -161,11 +161,11 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
     );
     const result = mapParentOutcome(worktreePath, parentOutcome);
     if (result.finished) {
-        verifyNoRebaseInProgressAnywhere(worktreePath, projectRoot);
+        verifyNoRebaseInProgressAnywhere(worktreePath, projectRoot, input.rootSourceBranch);
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
-        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
+        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
     }
-    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, result);
+    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, input.rootSourceBranch, result);
     return result;
 }
 

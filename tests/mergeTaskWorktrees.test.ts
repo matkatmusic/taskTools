@@ -576,7 +576,7 @@ test("test_productionShapedNestedFinalizationSucceeds", () => {
     git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
     git(rootPath, "commit", "-q", "-m", "add submodule");
 
-    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath, currentBranchName(rootPath));
     assert.equal(bootstrapResult.refused, false);
     const occurrenceGraph = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
     const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
@@ -649,7 +649,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
     git(rootPath, "commit", "-q", "-m", "add submodule");
 
-    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath, currentBranchName(rootPath));
     assert.equal(bootstrapResult.refused, false);
     const manifest: RepositoryManifest = {
         version: REPOSITORY_MANIFEST_VERSION,

@@ -454,7 +454,7 @@ const makeQueueFixtureRepo = (taskNumber: number) => {
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
     writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
-    const manifest = loadRepositoryManifest(root);
+    const manifest = loadRepositoryManifest(root, "staging");
     const repositoryManifest: RepositoryManifest = { ...manifest, occurrences: attachOperationBranch(manifest.occurrences, operationBranch) };
     return { root, worktreePath, repositoryManifest };
 };
@@ -618,7 +618,7 @@ test("test_endToEndQueueDrivesARealTaskThroughRebaseTestThenMergeAndReportsItMer
         // Assert cleanup before teardown, not silently in finally.
         const openTasks = readTasks(root);
         assert.deepEqual(openTasks, []);
-        assert.equal(git(root, "show", "main:taskfile.txt"), "task change");
+        assert.equal(git(root, "show", "staging:taskfile.txt"), "task change");
         assert.equal(existsSync(worktreePath), false);
         assert.throws(() => git(root, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));
         // C86-30: the worktree-local brief/plan never existed in source and are gone with the worktree.
@@ -916,7 +916,7 @@ const makeQueueFixtureRepoWithTwoTasks = (taskA: number, taskB: number) => {
         symlinkSync(join(REPO_ROOT, "scripts"), join(worktreePath, "scripts"));
         mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
         writeFileSync(join(worktreePath, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber, title: "fixture", files: [], blockedBy: [] }]));
-        const manifest = loadRepositoryManifest(root);
+        const manifest = loadRepositoryManifest(root, "staging");
         const repositoryManifest: RepositoryManifest = { ...manifest, occurrences: attachOperationBranch(manifest.occurrences, operationBranch) };
         return { worktreePath, repositoryManifest, runId };
     };
@@ -1141,7 +1141,7 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
 
         // Assert close/cleanup before teardown, not silently in finally.
         assert.equal(git(join(root, "vendor"), "show", "main:vendor-new.txt"), "vendor new");
-        assert.equal(git(root, "rev-parse", "main:vendor"), git(join(root, "vendor"), "rev-parse", "main"));
+        assert.equal(git(root, "rev-parse", "staging:vendor"), git(join(root, "vendor"), "rev-parse", "main"));
         assert.equal(existsSync(worktreePath), false);
         for (const repo of [root, join(root, "vendor")]) {
             assert.throws(() => git(repo, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));

@@ -9,7 +9,7 @@ import { assertMatchesTemplate } from "../../contracts.ts";
 import { buildImplementPrompt, main } from "./IMPLEMENT_TASK.ts";
 import type { PreparedTask } from "../shared/preparedTask.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "implement-task-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "implement-task-run-log.json");
 
 const fakeTask: PreparedTask = {
     number: 99,

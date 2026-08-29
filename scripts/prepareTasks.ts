@@ -322,7 +322,7 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     // A submodule-init or branch-creation failure gets the same treatment: release, don't orphan.
     try {
         initializeSubmodulesInWorktree(worktreePath);
-        createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath)], branchName);
+        createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath, currentBranchName(worktreePath))], branchName);
     } catch (error) {
         releaseTaskWorktreeLease(lease);
         throw error;
@@ -374,7 +374,11 @@ export function buildWorkflowArguments(
     tasks: TaskRecord[],
     runId: string = generateRunId(),
 ): WorkflowArguments {
-    const repositorySources = collectRepositorySources(repoRoot);
+    const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+    if (stagingVerify.status !== 0) {
+        execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+    }
+    const repositorySources = collectRepositorySources(repoRoot, "staging");
     const preparedGroups: PreparedGroup[] = [];
     try {
         for (const task of tasks) {
@@ -418,8 +422,8 @@ export function buildWorkflowArguments(
     }
 }
 
-export function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
-    const result = bootstrapRepositoryManifest(repoRoot);
+export function loadRepositoryManifest(repoRoot: string, rootBranch: string): RepositoryManifest {
+    const result = bootstrapRepositoryManifest(repoRoot, rootBranch);
     if (result.refused) {
         throw new Error(`repository at "${repoRoot}" needs branch resolution before it can be discovered`);
     }
@@ -454,7 +458,11 @@ function runAsCli(): void {
     let workflowArguments: WorkflowArguments | null = null;
     let ownershipTransferred = false;
     try {
-        const manifest = loadRepositoryManifest(repoRoot);
+        const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+        if (stagingVerify.status !== 0) {
+            execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+        }
+        const manifest = loadRepositoryManifest(repoRoot, "staging");
         workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
         // startTimestamp is stamped here because workflow scripts cannot call Date.now().
         const pipelineArguments = {

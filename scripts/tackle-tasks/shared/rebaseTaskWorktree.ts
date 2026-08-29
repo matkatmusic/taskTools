@@ -90,7 +90,7 @@ function directChildPathsInParent(manifest: ReturnType<typeof buildDiscoveryMani
 export function captureSourceTipReceipts(worktreePath: string, projectRoot: string, rootSourceBranch: string): SourceTipReceipt[] {
     const rootTip = execFileSync("git", ["-C", projectRoot, "rev-parse", rootSourceBranch], { encoding: "utf8" }).trim();
     const receipts: SourceTipReceipt[] = [{ occurrenceId: "", baseBranch: rootSourceBranch, sourceTip: rootTip }];
-    for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot)) {
+    for (const occurrence of buildWorktreeOccurrences(worktreePath, projectRoot, rootSourceBranch)) {
         if (occurrence.occurrenceId === "") continue;
         const sourceTip = execFileSync(
             "git", ["-C", occurrence.sourceCheckoutPath, "rev-parse", occurrence.baseBranch], { encoding: "utf8" },
@@ -101,8 +101,8 @@ export function captureSourceTipReceipts(worktreePath: string, projectRoot: stri
 }
 
 // F3: each worktree layer's HEAD after the step finished; paired with occurrence set walked, lets reconciliation spot stale receipts.
-function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string): { occurrenceId: string; head: string }[] {
-    return buildWorktreeOccurrences(worktreePath, projectRoot).map((occurrence) => ({
+function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string, rootSourceBranch: string): { occurrenceId: string; head: string }[] {
+    return buildWorktreeOccurrences(worktreePath, projectRoot, rootSourceBranch).map((occurrence) => ({
         occurrenceId: occurrence.occurrenceId,
         head: execFileSync("git", ["-C", occurrence.worktreeCheckoutPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     }));
@@ -111,9 +111,9 @@ function captureWorktreeHeadReceipts(worktreePath: string, projectRoot: string):
 // F3: durable evidence for every outcome, not just clean finishes; occurrenceIds/worktreeHeads captured with result so reconciliation spots stale receipts.
 export function persistRebaseStepResult(
     taskNumber: number, runId: string, stepId: string, script: string, worktreePath: string, projectRoot: string,
-    result: Record<string, unknown>,
+    rootSourceBranch: string, result: Record<string, unknown>,
 ): void {
-    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot);
+    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot, rootSourceBranch);
     appendStepResult(taskNumber, runId, {
         stepId, script, result,
         occurrenceIds: worktreeHeads.map((entry) => entry.occurrenceId).sort(),
@@ -122,9 +122,9 @@ export function persistRebaseStepResult(
 }
 
 export function persistSourceTipReceipts(
-    taskNumber: number, runId: string, stepId: string, worktreePath: string, projectRoot: string, receipts: SourceTipReceipt[],
+    taskNumber: number, runId: string, stepId: string, worktreePath: string, projectRoot: string, rootSourceBranch: string, receipts: SourceTipReceipt[],
 ): void {
-    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot);
+    const worktreeHeads = captureWorktreeHeadReceipts(worktreePath, projectRoot, rootSourceBranch);
     const rebaseStepReceipt: RebaseStepReceipt = {
         stepId,
         occurrenceIds: worktreeHeads.map((entry) => entry.occurrenceId).sort(),
@@ -188,16 +188,16 @@ export async function rebaseTaskWorktree(
     refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
     // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
-    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, true, null, false);
+    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, true, null, false);
     if (submoduleReport.stoppedAt !== null) {
         const result: RebaseTaskWorktreeOutput = {
             lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt),
         };
-        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, result);
+        persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
         return result;
     }
 
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot);
+    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, input.rootSourceBranch);
     const parentOutcome = rebaseParentOntoSourceAndTest(
         "",
         worktreePath,
@@ -211,10 +211,10 @@ export async function rebaseTaskWorktree(
     const mapped = mapParentOutcome(worktreePath, parentOutcome);
     if (mapped.stoppedAt === null && mapped.failureReason === null) {
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
-        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, receipts);
+        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
     }
     const result: RebaseTaskWorktreeOutput = { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
-    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, result);
+    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
     return result;
 }
 

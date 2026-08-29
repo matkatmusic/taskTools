@@ -26,7 +26,7 @@ function buildAgent(packet: Record<string, unknown>, hookOutputInTranscript = tr
 }
 
 function runStopHook(transcriptFile: string, configFile: string) {
-    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-stop-log-")), "run-log.md");
+    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-stop-log-")), "run-log.json");
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "SubagentStop", agent_transcript_path: transcriptFile }),
         encoding: "utf8",
@@ -64,5 +64,5 @@ test("test_runStepStopHook_blocksTheStopWhenTheAnswerIsMissingFromThePacketFile"
 // Every invocation leaves a line, so a run shows whether the hook fired at all, even when it says nothing.
 test("test_runStepStopHook_logsEveryTimeItFires", () => {
     const { configFile, transcriptFile } = buildAgent({ taskNumber: 7, prompt: "answer" }, false);
-    assert.match(runStopHook(transcriptFile, configFile).readLog(), new RegExp(`^## ======= STOP HOOK =======\\n\\S+ fired for "${transcriptFile}"\\n`));
+    assert.match(runStopHook(transcriptFile, configFile).readLog(), new RegExp(`^\\{"block":"STOP HOOK","at":"[^"]+","note":"fired for \\\\"${transcriptFile}\\\\""\\}\\n`));
 });

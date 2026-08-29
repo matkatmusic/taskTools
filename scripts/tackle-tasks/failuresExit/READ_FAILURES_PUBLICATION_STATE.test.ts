@@ -19,7 +19,7 @@ function packet(rootOrigin: string, worktreePath: string) {
 // Writes the merge ref for the first `count` layers, exactly as mergeTaskWorktrees does when one lands.
 function landLayers(worktreePath: string, projectRoot: string, count: number): void {
     const branch = taskBranchName(TASK);
-    const occurrences = buildWorktreeOccurrences(worktreePath, projectRoot);
+    const occurrences = buildWorktreeOccurrences(worktreePath, projectRoot, "staging");
     for (const occurrence of occurrences.slice(0, count)) {
         const oid = git(occurrence.sourceCheckoutPath, "rev-parse", "HEAD");
         git(occurrence.sourceCheckoutPath, "update-ref", `refs/taskTools/merged-commits/${branch}`, oid);
@@ -48,7 +48,7 @@ test("test_READ_FAILURES_PUBLICATION_STATE_reportsSomeLandedWhenOneLayerLandedAn
 test("test_READ_FAILURES_PUBLICATION_STATE_reportsAllLandedWhenEveryLayerWroteItsMergeRef", () => {
     const { rootOrigin } = makeLayeredSubmoduleFixture();
     const worktreePath = makeLinkedWorktree(rootOrigin);
-    const layerCount = buildWorktreeOccurrences(worktreePath, rootOrigin).length;
+    const layerCount = buildWorktreeOccurrences(worktreePath, rootOrigin, "staging").length;
     landLayers(worktreePath, rootOrigin, layerCount);
 
     const output = main(packet(rootOrigin, worktreePath));

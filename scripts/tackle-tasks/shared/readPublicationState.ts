@@ -12,6 +12,7 @@ export type ReadPublicationStateInput = {
     taskNumber: number;
     projectRoot: string;
     worktreePath: string;
+    rootSourceBranch: string;
 };
 
 export type ReadPublicationStateOutput = {
@@ -24,7 +25,7 @@ export type ReadPublicationStateOutput = {
 // A merge ref is written as its layer lands, so it survives a crash the return value cannot.
 export function readPublicationState(input: ReadPublicationStateInput): ReadPublicationStateOutput {
     const branch = taskBranchName(input.taskNumber);
-    const occurrences = buildWorktreeOccurrences(input.worktreePath, input.projectRoot);
+    const occurrences = buildWorktreeOccurrences(input.worktreePath, input.projectRoot, input.rootSourceBranch);
     const landed: string[] = [];
     const notLanded: string[] = [];
     const commits: TaskCommit[] = [];

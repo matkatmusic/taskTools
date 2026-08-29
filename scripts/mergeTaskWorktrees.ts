@@ -344,7 +344,7 @@ export function rebaseSubmoduleLayersDeepestFirst(worktreePath: string, manifest
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
     );
 
-    const discovery = discoverRepositoryTree(worktreePath, manifest);
+    const discovery = discoverRepositoryTree(worktreePath, manifest, currentBranchName(worktreePath));
     if (discovery.status === "needsResolution") {
         throw new Error(`repository tree discovery needs resolution for: ${discovery.resolutionRequests.map((request) => request.occurrenceId).join(", ")}`);
     }
@@ -706,7 +706,7 @@ export function mergeTaskDeepestFirst(
         manifest.repositoryManifest.occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]),
     );
 
-    const discovery = discoverRepositoryTree(worktreePath, manifest);
+    const discovery = discoverRepositoryTree(worktreePath, manifest, currentBranchName(worktreePath));
     if (discovery.status === "needsResolution") {
         throw new Error(`repository tree discovery needs resolution for: ${discovery.resolutionRequests.map((request) => request.occurrenceId).join(", ")}`);
     }
@@ -865,7 +865,7 @@ function runDiscoverCli(): void {
 
 function runMergeCli(worktreePath: string): void {
     const repoRoot = process.cwd();
-    const repositorySources = collectRepositorySources(repoRoot);
+    const repositorySources = collectRepositorySources(repoRoot, "staging");
     const parentSource = repositorySources.find((source) => source.path === "");
     if (!parentSource) throw new Error(`no recorded source branch for repository path "${repoRoot}"`);
     const submodulePathsDeepestFirst = repositorySources

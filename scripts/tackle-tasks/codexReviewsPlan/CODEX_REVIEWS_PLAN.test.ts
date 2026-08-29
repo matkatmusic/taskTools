@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./CODEX_REVIEWS_PLAN.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "codex-reviews-plan-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-reviews-plan-run-log.json");
 
 function makeFixture(): { worktree: string; projectRoot: string } {
     const repoRoot = mkdtempSync(join(tmpdir(), "codex-reviews-plan-"));

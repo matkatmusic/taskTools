@@ -1595,7 +1595,7 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
   mkdirSync(join(worktreePath, 'plans'), { recursive: true })
   // Real production manifest; its empty operationBranch forces task.workflow.js to supply the branch.
-  const repositoryManifest = loadRepositoryManifest(root)
+  const repositoryManifest = loadRepositoryManifest(root, 'staging')
   assert.equal(repositoryManifest.occurrences[0].operationBranch, '')
   seedTaskFiles(root, taskNumber)
   try {

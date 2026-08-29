@@ -72,6 +72,8 @@ function advanceSourceChildBranch(rootOrigin: string, rootOriginChildPath: strin
     git(rootOriginChildPath, "commit", "-q", "-m", "advance source child");
     git(rootOrigin, "add", "child");
     git(rootOrigin, "commit", "-q", "-m", "bump child gitlink");
+    // CONTINUE_REBASE.ts discovers the root from "staging"; keep it pointed at the bumped gitlink.
+    git(rootOrigin, "update-ref", "refs/heads/staging", "HEAD");
 }
 
 function packet(

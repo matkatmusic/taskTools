@@ -160,7 +160,7 @@ export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExisti
 }
 
 // Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
-const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-codex-review.log");
+const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
 
 export function reviewTestsPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");

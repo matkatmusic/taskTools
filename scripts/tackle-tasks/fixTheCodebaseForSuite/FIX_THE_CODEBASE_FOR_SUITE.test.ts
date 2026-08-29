@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./FIX_THE_CODEBASE_FOR_SUITE.ts";
 
-process.env.RUN_STEP_LOG = join(tmpdir(), "fix-the-codebase-for-suite-run-log.md");
+process.env.RUN_STEP_LOG = join(tmpdir(), "fix-the-codebase-for-suite-run-log.json");
 
 function packet(worktree: string): string {
     return JSON.stringify({
