@@ -2,6 +2,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import type { WhatDidThePlannerReturnPacket } from "./_packet.ts";
 
@@ -12,6 +13,11 @@ export function main(input: string): WhatDidThePlannerReturnPacket & { next: str
     const { outcome, planFile, clarifyRequest } = additionalData;
     const output: WhatDidThePlannerReturnPacket = { ...packet, box: "WHAT_DID_THE_PLANNER_RETURN", scriptSignal: SCRIPT_SIGNAL.CONTINUE, planFile, outcome, clarifyRequest };
     if (outcome === "PLAN") {
+        const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
+        if (entry === undefined) throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
+        if (Number(entry.difficulty) <= 2) {
+            return { ...output, next: "pipeline-implementTask.mmd::IMPLEMENT_TASK" };
+        }
         return { ...output, next: "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN" };
     }
     if (outcome === "CLARIFY") {

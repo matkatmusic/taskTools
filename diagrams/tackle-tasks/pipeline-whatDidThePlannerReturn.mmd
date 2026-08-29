@@ -10,12 +10,14 @@ flowchart TB
   subgraph whatDidThePlannerReturnNext ["next diagram"]
     direction TB
     CODEX_REVIEWS_PLAN["CODEX_REVIEWS_PLAN"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
     DOCUMENT_GENERATION["write the task brief"]
     FAILURES_EXIT["FAILURES_EXIT"]
   end
   whatDidThePlannerReturn ~~~ whatDidThePlannerReturnNext
 
   WHAT_DID_THE_PLANNER_RETURN -- "PLAN" --> CODEX_REVIEWS_PLAN
+  WHAT_DID_THE_PLANNER_RETURN -- "PLAN<br/>difficulty 2 or less" --> IMPLEMENT_TASK
   WHAT_DID_THE_PLANNER_RETURN -- "CLARIFY" --> ARE_2_CLARIFY_ROUNDS_DONE_Q
   ARE_2_CLARIFY_ROUNDS_DONE_Q -- "NO" --> WRITE_CLARIFY_REQUEST
   ARE_2_CLARIFY_ROUNDS_DONE_Q -- "YES<br/>clarify-stuck" --> FAILURES_EXIT
@@ -27,4 +29,4 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
   class WHAT_DID_THE_PLANNER_RETURN,ARE_2_CLARIFY_ROUNDS_DONE_Q,WRITE_CLARIFY_REQUEST script
-  class CODEX_REVIEWS_PLAN,DOCUMENT_GENERATION,FAILURES_EXIT next_diagram
+  class CODEX_REVIEWS_PLAN,IMPLEMENT_TASK,DOCUMENT_GENERATION,FAILURES_EXIT next_diagram

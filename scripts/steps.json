@@ -88,6 +88,7 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-codexReviewsTests.mmd::CODEX_REVIEWS_TESTS",
+                "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
                 "ARE_2_TEST_FIXES_DONE_Q"
             ]
         },
@@ -757,6 +758,7 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN",
+                "pipeline-implementTask.mmd::IMPLEMENT_TASK",
                 "ARE_2_CLARIFY_ROUNDS_DONE_Q"
             ]
         },
