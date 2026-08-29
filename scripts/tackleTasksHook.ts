@@ -1,9 +1,10 @@
 // UserPromptSubmit hook: reports /tackle-tasks blockers and injects the skill body for the rest, so SKILL.md never re-runs.
+// Unregistered from hooks.json: this task-84 hook predates the v1.6 launch path, where SKILL.md emits skillBody itself.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { leadingTaskNumbers } from "./taskFiles.ts";
-import { tackleTasksBrief } from "./tackleTasksBrief.ts";
+import { skillBody } from "./tackle-tasks/shared/SkillBodyEmitter.ts";
 
 const checkBlockersPath = fileURLToPath(new URL("./checkBlockers.ts", import.meta.url));
 
@@ -69,7 +70,7 @@ if (report.unblockedTasks.length > 0) {
   const splitIndex = tokens.findIndex(t => !/^["'[\]\d,]+$/.test(t));
   const trailing = splitIndex === -1 ? "" : tokens.slice(splitIndex).join(" ");
   const argsValue = JSON.stringify(report.unblockedTasks) + (trailing ? ` ${trailing}` : "");
-  const blockedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8", cwd: root }).trimEnd();
-  result.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: tackleTasksBrief(argsValue, blockedStatus) };
+  // const blockedStatus = execFileSync("node", [checkBlockersPath, argsValue], { encoding: "utf8", cwd: root }).trimEnd();
+  result.hookSpecificOutput = { hookEventName: "UserPromptSubmit", additionalContext: skillBody(argsValue, root) };
 }
 process.stdout.write(JSON.stringify(result) + "\n");

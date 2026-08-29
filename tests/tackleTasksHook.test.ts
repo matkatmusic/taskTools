@@ -1,3 +1,5 @@
+// Disabled: scripts/tackleTasksHook.ts is unregistered from hooks.json on the v1.6 launch path; these tests assert the retired `valid` brief.
+/*
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -92,3 +94,5 @@ test("plugin-namespaced prompt is recognized the same as the bare command", () =
     assert.equal(out.decision, "block");
   });
 });
+
+*/

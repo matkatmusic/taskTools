@@ -24,14 +24,6 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskStatsHook.ts\""
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tackleTasksHook.ts\""
-          }
-        ]
       }
     ],
     "PostToolUse": [
