@@ -15,7 +15,8 @@ type Input = {
 };
 
 function baseBranch(projectRoot: string): string {
-    return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    return "staging";
 }
 
 // Narrows down to the core packet, plus the task's own branch, which every later box in this folder carries through.

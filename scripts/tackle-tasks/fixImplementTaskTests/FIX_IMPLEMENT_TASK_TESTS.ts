@@ -7,6 +7,7 @@ import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
 import { resumedRunSection } from "../shared/resumedRunSection.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
+// import { spawnClaudeCliPrompt } from "../shared/spawnAgentCli.ts"; // retired: the agent follows the prompt itself, no CLI spawn.
 import type { CommitImplementationIfNeededPacket } from "../commitImplementationIfNeeded/_packet.ts";
 
 // Double-quoted for the read-file hook's parser; deduped so a path is never listed twice.
@@ -75,12 +76,15 @@ ${prepared.codexReviewNotes}
 \`\`\``;
 }
 
+// const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
+
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as CommitImplementationIfNeededPacket;
     const prepared = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const promptFile = `${prepared.repoRoot.replace(/\/+$/, "")}/plans/FIX_IMPLEMENT_TASK_TESTS.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
     writeFileSync(promptFile, buildFixTaskTestsPrompt(prepared));
+    // const prompt = spawnClaudeCliPrompt(...): retired, the workflow agent reads the prompt file and follows it.
     const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { ...buildPromptOutputTemplate("FIX_IMPLEMENT_TASK_TESTS"), prompt };
 }

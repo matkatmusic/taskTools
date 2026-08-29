@@ -1,5 +1,5 @@
 // Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -305,9 +305,13 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
         mkdirSync(dirname(worktreePath), { recursive: true });
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         try {
+            const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+            if (stagingVerify.status !== 0) {
+                execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+            }
             execFileSync(
                 "git",
-                ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "HEAD"],
+                ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "staging"],
                 { stdio: "ignore" },
             );
         } catch (error) {

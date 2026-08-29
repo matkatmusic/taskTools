@@ -8,7 +8,8 @@ import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {
     const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
-    const sourceBranch = execFileSync("git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // const sourceBranch = execFileSync("git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const sourceBranch = "staging";
     const { modifiedFiles } = recordTaskModifiedFiles({
         taskNumber: packet.taskNumber, runId: packet.runId, projectRoot: packet.projectRoot,
         worktree: packet.worktree, sourceBranch,

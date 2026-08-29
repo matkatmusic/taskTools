@@ -105,6 +105,38 @@ test("test_createWorktreeForGroupCreatesACheckoutOnItsOwnBranch", () => {
     assert.equal(branch, "task-1");
 });
 
+test("test_createWorktreeForGroupCutsTheWorktreeFromStaging", () => {
+    // repo has an original branch and a staging branch one commit ahead
+    const repoRoot = makeTempRepoWithCommit();
+    const originalBranch = git(repoRoot, "branch", "--show-current").trim();
+    git(repoRoot, "checkout", "-q", "-b", "staging");
+    writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
+    git(repoRoot, "add", "staging-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "staging work");
+    const stagingTip = git(repoRoot, "rev-parse", "staging").trim();
+    git(repoRoot, "checkout", "-q", originalBranch);
+
+    // cut a new worktree for a group
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+
+    // the new worktree's HEAD is staging's tip, not the original branch's
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), stagingTip);
+});
+
+test("test_createWorktreeForGroupCreatesStagingFromHeadWhenItIsMissing", () => {
+    // repo has no staging branch yet
+    const repoRoot = makeTempRepoWithCommit();
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+
+    // cut a new worktree for a group
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    createWorktreeForGroup(repoRoot, group);
+
+    // staging now exists, created from HEAD
+    assert.equal(git(repoRoot, "rev-parse", "staging").trim(), headTip);
+});
+
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };

@@ -237,9 +237,11 @@ test("test_mergeGroupBranchIntoRepoContinuesToLaterGroupsAfterAnEarlierConflict"
     assert.equal(outcome2.merged, true);
 });
 
-test("test_mergeGroupBranchIntoRepoChecksOutTheSourceBranchBeforeMerging", () => {
+test("test_mergeGroupBranchIntoRepoMergesIntoTheNamedBranchWithoutMovingTheCheckout", () => {
+    // repo starts on sourceBranch, then checks out a different branch
     const repoRoot = makeTempRepoWithCommit();
     const sourceBranch = currentBranchName(repoRoot);
+    // a group worktree branch has a new commit with new.txt
     const group = makeGroup(repoRoot, 1);
     writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
     git(group.worktree, "add", "new.txt");
@@ -247,10 +249,35 @@ test("test_mergeGroupBranchIntoRepoChecksOutTheSourceBranchBeforeMerging", () =>
 
     git(repoRoot, "checkout", "-b", "some-other-branch");
 
+    // merge the group branch into sourceBranch
     const outcome = mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []);
+    // the merge succeeds
     assert.equal(outcome.merged, true);
-    assert.equal(currentBranchName(repoRoot), sourceBranch);
-    assert.equal(existsSync(join(repoRoot, "new.txt")), true);
+    // the checkout never moved off the branch it was found on
+    assert.equal(currentBranchName(repoRoot), "some-other-branch");
+    // the named branch holds the merge
+    assert.equal(git(repoRoot, "show", `${sourceBranch}:new.txt`).trim(), "brand new");
+});
+
+test("test_mergeGroupBranchIntoRepoReturnsToTheBranchItFoundAfterMerging", () => {
+    // repo starts on some-other-branch, with a staging branch present
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    git(repoRoot, "checkout", "-b", "some-other-branch");
+    // a group worktree branch has a new commit with new.txt
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    // merge the group branch into staging
+    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, "staging", []);
+    // the merge succeeds
+    assert.equal(outcome.merged, true);
+    // the checkout returns to the branch it was found on
+    assert.equal(currentBranchName(repoRoot), "some-other-branch");
+    // staging now contains new.txt
+    assert.equal(git(repoRoot, "show", "staging:new.txt").trim(), "brand new");
 });
 
 test("test_mergeSubmoduleBranchSurvivesEvenWhenTheGroupConflicts", () => {
@@ -539,7 +566,7 @@ test("test_noEvidenceCausesNoFinalizationMutation", () => {
     const refs = git(repoRoot, "for-each-ref", "--format=%(refname)").split("\n");
     assert.equal(refs.some((ref) => ref.startsWith("refs/finalize/")), false);
     assert.equal(refs.some((ref) => ref.startsWith("refs/heads/operations/")), false);
-    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}`), []);
+    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}` && ref !== "refs/heads/staging"), []);
 });
 
 test("test_productionShapedNestedFinalizationSucceeds", () => {

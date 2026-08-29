@@ -9,3 +9,11 @@ Do these three steps in order.
 
 If the command above could not be run at all, write that same shape anyway. ${explanationOfReturnShape}`.trimEnd();
 }
+
+// The section a spawned `claude -p` ends with: it prints the JSON; the spawning agent copies it into the packet.
+export function printAsFinalMessageSection(value: string, explanationOfValue: string): string {
+    return `## WHAT YOU PRINT
+
+Print \`${value}\` as your final message and nothing else, ${explanationOfValue}.
+The command that runs you captures that message; do not write it to a file yourself.`;
+}

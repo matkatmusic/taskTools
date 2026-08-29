@@ -57,3 +57,10 @@ test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () =>
     assert.equal(prompt.includes('"sections": ['), false);
     assert.match(prompt, /with `task` set to 99\./);
 });
+
+// test("test_planPrompt_tellsThePlannerToVerifyNamedIdentifiersAgainstTheCode", () => {
+//     // Setup: the default planner prompt.
+//     const prompt = planPrompt(fakeTask);
+//     // Verification: the prompt says a name in the task description is unverified until the planner finds it in the owned files.
+//     assert.match(prompt, /Treat every such name as unverified: search the owned files for it before you plan against it\./);
+// });

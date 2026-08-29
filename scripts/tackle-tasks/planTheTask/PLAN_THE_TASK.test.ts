@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./PLAN_THE_TASK.ts";
 
+process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.md");
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // Sets up a project root and worktree with a brief file, since loadPreparedTask is read-only and never creates one.

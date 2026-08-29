@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./CODEX_REVIEWS_TESTS.ts";
 
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-reviews-tests-run-log.md");
+
 const SOURCE_BRANCH = "main";
 
 function makePacket() {

@@ -23,7 +23,8 @@ type EntryInput = {
 // next is routing metadata from the predecessor; discarded, never carried into this box's own output.
 export async function main(input: string): Promise<RebasePacket> {
     const { next: _next, ...packet } = JSON.parse(input) as EntryInput & { next?: string };
-    const rootSourceBranch = execFileSync("git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // const rootSourceBranch = execFileSync("git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const rootSourceBranch = "staging";
 
     const outcome = await rebaseTaskWorktree({
         projectRoot: packet.projectRoot,

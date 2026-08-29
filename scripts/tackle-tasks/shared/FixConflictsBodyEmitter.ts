@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { absolutePathsSection } from "./promptSections.ts";
 import { resumedRunSection } from "./resumedRunSection.ts";
-import { whatToReturnSection } from "./whatToReturn.ts";
+import { printAsFinalMessageSection } from "./whatToReturn.ts";
 
 // The receipt that box hands back.
 export type ConflictFixReceipt = {
@@ -81,5 +81,5 @@ You are forbidden from doing any of the following actions:
 Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
 It is not a failure, and it is always better than a guess.
 
-${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
+${printAsFinalMessageSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value")}`;
 }

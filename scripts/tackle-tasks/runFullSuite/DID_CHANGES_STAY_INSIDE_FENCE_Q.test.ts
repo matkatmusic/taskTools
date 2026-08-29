@@ -28,6 +28,7 @@ function packet(taskNumber: number, projectRoot: string, worktree: string): stri
 
 test("test_DID_CHANGES_STAY_INSIDE_FENCE_Q_choosesMergeWhenNothingChanged", () => {
     const rootOrigin = makeCommittedRepo("git-fixture-", "main");
+    git(rootOrigin, "branch", "staging");
     const worktree = makeLinkedWorktree(rootOrigin);
     const taskNumber = 701;
     seedTask(rootOrigin, taskNumber, ["seed.txt"]);
@@ -45,6 +46,7 @@ test("test_DID_CHANGES_STAY_INSIDE_FENCE_Q_choosesMergeWhenNothingChanged", () =
 
 test("test_DID_CHANGES_STAY_INSIDE_FENCE_Q_choosesExitWhenAnUnownedFileChanged", () => {
     const rootOrigin = makeCommittedRepo("git-fixture-", "main");
+    git(rootOrigin, "branch", "staging");
     const worktree = makeLinkedWorktree(rootOrigin);
     const taskNumber = 702;
     seedTask(rootOrigin, taskNumber, []);

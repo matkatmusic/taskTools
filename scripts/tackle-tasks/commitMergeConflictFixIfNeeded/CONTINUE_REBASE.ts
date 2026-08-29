@@ -7,7 +7,8 @@ import { advanceTaskRebase } from "../shared/advanceTaskRebase.ts";
 import type { CommitMergeConflictFixIfNeededPacket } from "./_packet.ts";
 
 function baseBranch(projectRoot: string): string {
-    return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    return "staging";
 }
 
 // advanceTaskRebase refreshes the lock's heartbeat itself before touching anything.

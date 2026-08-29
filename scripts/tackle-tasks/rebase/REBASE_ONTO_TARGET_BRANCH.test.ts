@@ -27,6 +27,7 @@ function makeProjectRoot(): string {
     writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "seed");
+    git(root, "branch", "staging");
     return root;
 }
 
@@ -87,6 +88,32 @@ test("test_REBASE_ONTO_TARGET_BRANCH_runsTwiceWithTheSameInput", async () => {
     assert.equal(tasksJsonAfterSecond, tasksJsonAfterFirst);
 });
 
+test("test_REBASE_ONTO_TARGET_BRANCH_rebasesOntoStaging", async () => {
+    // project root starts on main, with a task worktree carrying its own commit
+    const root = makeProjectRoot();
+    seedTasksFile(root, 4);
+    claimTask(4, "run-4", root);
+    const { worktree } = createTaskWorktree(4, "run-4", root);
+
+    writeFileSync(join(worktree, "task-work.txt"), "task work\n");
+    git(worktree, "add", "task-work.txt");
+    git(worktree, "commit", "-q", "-m", "task work");
+
+    // staging moves one commit ahead of main
+    git(root, "checkout", "staging");
+    writeFileSync(join(root, "staging-only.txt"), "staging work\n");
+    git(root, "add", "staging-only.txt");
+    git(root, "commit", "-q", "-m", "staging work");
+    git(root, "checkout", "main");
+
+    await main(packet(root, worktree, 4, "run-4"));
+
+    // the worktree ends rebased onto staging's tip, not main's
+    const stagingTip = git(root, "rev-parse", "staging");
+    assert.equal(git(worktree, "merge-base", "HEAD", stagingTip), stagingTip);
+    assert.equal(readFileSync(join(worktree, "staging-only.txt"), "utf8"), "staging work\n");
+});
+
 test("test_REBASE_ONTO_TARGET_BRANCH_reportsTheStoppedOccurrenceAndConflictedPathsOnAConflict", async () => {
     const root = makeProjectRoot();
     seedTasksFile(root, 2);
@@ -96,6 +123,7 @@ test("test_REBASE_ONTO_TARGET_BRANCH_reportsTheStoppedOccurrenceAndConflictedPat
     writeFileSync(join(worktree, "package.json"), JSON.stringify({ x: "worktree" }));
     git(worktree, "add", "package.json");
     git(worktree, "commit", "-q", "-m", "worktree edit");
+    git(root, "checkout", "staging");
     writeFileSync(join(root, "package.json"), JSON.stringify({ x: "source" }));
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "source edit");

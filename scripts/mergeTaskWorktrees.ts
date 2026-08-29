@@ -429,17 +429,24 @@ export function mergeGroupBranchIntoRepo(
     sourceBranch: string,
     submodulePaths: string[] = [],
 ): MergeOutcome {
+    const foundBranch = git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD").trim();
     git(repoRoot, "checkout", sourceBranch);
-    const outcome = { groupId: group.groupId, submoduleConflicts: [], worktree: group.worktree };
+    const shared = { groupId: group.groupId, submoduleConflicts: [], worktree: group.worktree };
+    let outcome: MergeOutcome;
     try {
         git(repoRoot, "merge", "--no-ff", group.branch, "-m", `merge ${group.branch}`);
-        return { ...outcome, merged: true, conflictedFilePaths: [], failureReason: null };
+        outcome = { ...shared, merged: true, conflictedFilePaths: [], failureReason: null };
     } catch (error) {
         const resolution = resolveGitlinkConflicts(repoRoot, submodulePaths);
-        if (resolution.resolved) return { ...outcome, merged: true, conflictedFilePaths: [], failureReason: null };
-        const failureReason = resolution.startFailed ? gitErrorText(error) : null;
-        return { ...outcome, merged: false, conflictedFilePaths: resolution.unexpectedConflicts, failureReason };
+        if (resolution.resolved) {
+            outcome = { ...shared, merged: true, conflictedFilePaths: [], failureReason: null };
+        } else {
+            const failureReason = resolution.startFailed ? gitErrorText(error) : null;
+            outcome = { ...shared, merged: false, conflictedFilePaths: resolution.unexpectedConflicts, failureReason };
+        }
     }
+    git(repoRoot, "checkout", foundBranch);
+    return outcome;
 }
 
 export function resolveGitlinkConflicts(
@@ -465,18 +472,25 @@ export function mergeSubmoduleBranchIntoRepo(
     sourceBranch: string,
 ): { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null } {
     const groupBranch = currentBranchName(worktreeSubmodulePath);
+    const foundBranch = git(mainSubmodulePath, "rev-parse", "--abbrev-ref", "HEAD").trim();
     git(mainSubmodulePath, "fetch", worktreeSubmodulePath, `${groupBranch}:refs/heads/${groupBranch}`);
     git(mainSubmodulePath, "checkout", sourceBranch);
+    let outcome: { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null };
     try {
         git(mainSubmodulePath, "merge", "--no-ff", groupBranch, "-m", `merge ${groupBranch}`);
-        return { merged: true, conflictedFilePaths: [], failureReason: null };
+        outcome = { merged: true, conflictedFilePaths: [], failureReason: null };
     } catch (error) {
         const conflictedFilePaths = git(mainSubmodulePath, "diff", "--name-only", "--diff-filter=U").split("\n").filter(Boolean);
         // Same rule as the parent repo: with no unmerged paths there is no merge in progress to abort.
-        if (conflictedFilePaths.length === 0) return { merged: false, conflictedFilePaths, failureReason: gitErrorText(error) };
-        git(mainSubmodulePath, "merge", "--abort");
-        return { merged: false, conflictedFilePaths, failureReason: null };
+        if (conflictedFilePaths.length === 0) {
+            outcome = { merged: false, conflictedFilePaths, failureReason: gitErrorText(error) };
+        } else {
+            git(mainSubmodulePath, "merge", "--abort");
+            outcome = { merged: false, conflictedFilePaths, failureReason: null };
+        }
     }
+    git(mainSubmodulePath, "checkout", foundBranch);
+    return outcome;
 }
 
 export function removeWorktreeAndBranch(repoRoot: string, worktreePath: string, branchName: string): void {

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
+import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
 
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
@@ -17,7 +18,8 @@ const diffFile = (t: PreparedTask, root: string) => `${root}/plans/implementatio
 // The reviewer is read-only and cannot run git, so the diff it judges against is written out for it.
 function writeImplementationDiff(t: PreparedTask, root: string): string {
     const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" });
-    const baseBranch = execFileSync("git", ["-C", t.taskStateRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // const baseBranch = execFileSync("git", ["-C", t.taskStateRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const baseBranch = "staging";
     const mergeBase = git("merge-base", baseBranch, "HEAD").trim();
     const path = diffFile(t, root);
     mkdirSync(dirname(path), { recursive: true });
@@ -157,21 +159,16 @@ export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExisti
     return reviewByDefaultPrompt(t, diffPath, preExistingTestFiles, testCommand, testOutput);    
 }
 
+// Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
+const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-codex-review.log");
+
 export function reviewTestsPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const taskTests = taskTestRun(t);
     // testFiles is every changed test; createdTestFiles is a subset. Derive pre-existing here.
     const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
     const diffPath = writeImplementationDiff(t, root);
-    return `You are spawning a review agent running in the CLI.
-You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape.
-The command runs a reviewing agent against this task's test files.
-
-## THE COMMAND
-
-Run the following multi-line command using Bash(), verbatim, as one single call.
-It takes a few minutes; wait for it rather than abandoning it.
-\`</dev/null\` matters — codex hangs forever waiting on stdin without it. \`-o\` keeps codex from mixing its banner into the answer, and \`--output-schema\` makes it bare JSON.
+    return `${spawnAgentHeader("review", true)}
 
 \`\`\`\`sh
 REVIEW_PROMPT=$(cat <<'REVIEWEOF'
@@ -179,9 +176,10 @@ ${reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test co
 REVIEWEOF
 )
 REVIEW_FILE=${t.testReviewFile}
-perl -e 'alarm shift; exec @ARGV' 300 codex exec -s read-only --output-schema ${REVIEW_TESTS_SCHEMA_PATH} -o "$REVIEW_FILE" "$REVIEW_PROMPT" </dev/null >/dev/null \\
-  || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
-  || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
+CODEX_LOG=${codexLogFile()}
+${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)} \\
+  || ${spawnClaudeFableCli("medium")} \\
+  || ${spawnClaudeOpus48Cli("high")}
 \`\`\`\`
 
 The \`||\` chain is the fallback.

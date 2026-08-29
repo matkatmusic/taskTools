@@ -54,6 +54,7 @@ test("test_RECORD_MODIFIED_FILES_FAILURE_leavesAnExistingRecordAloneWhenTheWorkt
 
 test("test_RECORD_MODIFIED_FILES_FAILURE_includesPathsChangedInARealWorktree", () => {
     const { rootOrigin } = makeLayeredSubmoduleFixture();
+    git(rootOrigin, "branch", "staging");
     const worktreePath = makeLinkedWorktree(rootOrigin);
     writeFileSync(join(worktreePath, "changed.txt"), "change\n");
     git(worktreePath, "add", "changed.txt");
@@ -72,6 +73,7 @@ test("test_RECORD_MODIFIED_FILES_FAILURE_includesPathsChangedInARealWorktree", (
 
 test("test_RECORD_MODIFIED_FILES_FAILURE_runsTwiceWithTheSameInput", () => {
     const { rootOrigin } = makeLayeredSubmoduleFixture();
+    git(rootOrigin, "branch", "staging");
     const worktreePath = makeLinkedWorktree(rootOrigin);
     writeFileSync(join(worktreePath, "changed.txt"), "change\n");
     git(worktreePath, "add", "changed.txt");

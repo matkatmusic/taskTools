@@ -8,6 +8,8 @@ import { planReviewPrompt, reviewQuestion } from "./CodexReviewBodyEmitter.ts";
 import { writeCheckpoint } from "./checkpoint.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.md");
+
 const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
@@ -18,7 +20,7 @@ const task: PreparedTask = {
 
 test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
     // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
-    const prompt = planReviewPrompt(task);
+    const prompt = planReviewPrompt(task).replace(/\\\n\s*/g, "");
     for (const line of prompt.split("\n").filter((l) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(l))) {
         assert.match(line, /<\/dev\/null/, `reviewer command does not close stdin: ${line}`);
     }
@@ -26,7 +28,7 @@ test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
 
 test("test_planReviewPrompt_capsCodexExecWithAPerlAlarm", () => {
     // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
-    const codexLine = planReviewPrompt(task).split("\n").find((line) => line.includes("codex exec"));
+    const codexLine = planReviewPrompt(task).replace(/\\\n\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
     assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });
 
@@ -43,11 +45,12 @@ test("test_planReviewPrompt_asksExactlyOneQuestionOnce", () => {
     assert.equal(prompt.split("Print the JSON as your final message").length, 2);
 });
 
-test("test_planReviewPrompt_leavesTheVerdictToTheRulingScript", () => {
-    // review-plan has recordPlanReview.ts, so the spawning agent never derives the verdict in prose.
-    const prompt = planReviewPrompt(task);
-    assert.match(prompt, /recordPlanReview\.ts/);
-});
+// WHAT_IS_REVIEW_VERDICT rules on the review file now, so the command no longer runs recordPlanReview.ts.
+// test("test_planReviewPrompt_leavesTheVerdictToTheRulingScript", () => {
+//     // review-plan has recordPlanReview.ts, so the spawning agent never derives the verdict in prose.
+//     const prompt = planReviewPrompt(task);
+//     assert.match(prompt, /recordPlanReview\.ts/);
+// });
 
 test("test_planReviewPrompt_leavesNoUnresolvedInterpolation", () => {
     assert.equal(planReviewPrompt(task).includes("${"), false);

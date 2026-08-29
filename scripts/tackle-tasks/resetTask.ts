@@ -78,10 +78,13 @@ export function resetTask(taskNumber: number, block: string): string {
         const workCommit = entry.commitHashes?.[0];
         const mergeCommit = entry.commitHashes?.[entry.commitHashes.length - 1];
         if (!workCommit || !mergeCommit) throw new Error(`task ${taskNumber}'s completedTasks.json entry has no commitHashes; can't compute a reset point`);
-        const head = execSync("git rev-parse HEAD", { cwd: repoRoot }).toString().trim();
-        if (head !== mergeCommit) throw new Error(`refusing: HEAD (${head}) is not task ${taskNumber}'s merge commit (${mergeCommit}) — something else was merged after it. Reset manually.`);
+        const foundBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot }).toString().trim();
+        const stagingTip = execSync("git rev-parse staging", { cwd: repoRoot }).toString().trim();
+        if (stagingTip !== mergeCommit) throw new Error(`refusing: staging (${stagingTip}) is not task ${taskNumber}'s merge commit (${mergeCommit}) — something else was merged after it. Reset manually.`);
         const resetTarget = execSync(`git rev-parse ${workCommit}^`, { cwd: repoRoot }).toString().trim();
+        execSync(`git checkout staging`, { cwd: repoRoot, stdio: "pipe" });
         execSync(`git reset --hard ${resetTarget}`, { cwd: repoRoot, stdio: "pipe" });
+        execSync(`git checkout ${foundBranch}`, { cwd: repoRoot, stdio: "pipe" });
 
         const { completionDate, commitHashes, closureNote, run, ...restored } = entry;
         completed.splice(completedIndex, 1);

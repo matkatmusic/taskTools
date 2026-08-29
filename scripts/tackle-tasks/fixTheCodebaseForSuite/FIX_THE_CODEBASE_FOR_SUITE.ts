@@ -6,6 +6,7 @@ import { buildPromptOutputTemplate } from "../../contracts.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
 import { resumedRunSection } from "../shared/resumedRunSection.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
+// import { spawnClaudeCliPrompt } from "../shared/spawnAgentCli.ts"; // retired: the agent follows the prompt itself, no CLI spawn.
 
 type Input = {
     box: string;
@@ -87,11 +88,14 @@ ${packet.output}
 \`\`\``;
 }
 
+// const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
+
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
     const promptFile = `${packet.worktree.replace(/\/+$/, "")}/plans/FIX_THE_CODEBASE_FOR_SUITE.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
     writeFileSync(promptFile, buildSuiteFixPrompt(packet));
+    // const prompt = spawnClaudeCliPrompt(...): retired, the workflow agent reads the prompt file and follows it.
     const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { ...buildPromptOutputTemplate("FIX_THE_CODEBASE_FOR_SUITE"), prompt };
 }

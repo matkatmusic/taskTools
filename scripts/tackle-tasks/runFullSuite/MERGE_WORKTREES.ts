@@ -15,7 +15,8 @@ type Input = {
 };
 
 function baseBranch(projectRoot: string): string {
-    return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // return execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    return "staging";
 }
 
 // Each landed layer writes its merge ref; publication is read back independently by READ_MERGE_PUBLICATION_STATE, never trusted from this box's return.

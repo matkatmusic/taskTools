@@ -329,9 +329,9 @@ test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     // Action: the next call consumes that packet.
     const log = runHook(`/run-step B {"packetFile":"${packetFile}"}`, configFile).readLog();
     // Verification: the log says how long the agent took on A, measured from the startedAt in the packet.
-    const agentLine = log.split("\n").find(line => /^### A agent took \d+ ms$/.test(line));
+    const agentLine = log.split("\n").find(line => /^### A agent took \d+\.\d\d s$/.test(line));
     assert.ok(agentLine, log);
-    assert.ok(Number(agentLine!.match(/\d+/)![0]) >= 3000, agentLine);
+    assert.ok(Number(agentLine!.match(/[\d.]+/)![0]) >= 3, agentLine);
 });
 
 // A typed `/tackle-tasks reset N` is the hook's job, not the agent's: the hook runs the reset and hands back its lines.

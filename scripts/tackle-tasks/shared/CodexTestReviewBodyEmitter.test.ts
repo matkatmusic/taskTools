@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-test-review-body-run-log.md");
+
 const SOURCE_BRANCH = "main";
 
 // A real branched repo plus a recorded task-test run, because the emitter derives a diff and reads that run.
@@ -26,6 +28,7 @@ function makeTaskFixture(): PreparedTask {
     writeFileSync(join(worktree, "src", "thing.ts"), "export const thing = 1;\n");
     git("add", "-A");
     git("commit", "--quiet", "-m", "base");
+    git("branch", "staging");
     git("checkout", "--quiet", "-b", "task-99");
     writeFileSync(join(worktree, "src", "thing.ts"), "export const thing = 2;\n");
     writeFileSync(join(worktree, "tests", "thing.test.ts"), "// SENTINEL_TASK_TEST\n");
@@ -95,7 +98,7 @@ test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () =>
 
 test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", () => {
     // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
-    const cliLines = reviewTestsPrompt(fakeTask).split("\n").filter((line) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(line));
+    const cliLines = reviewTestsPrompt(fakeTask).replace(/\\\n(?!\s*\|\|)\s*/g, "").split("\n").filter((line) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(line));
     assert.equal(cliLines.length, 3);
     for (const line of cliLines) assert.match(line, /<\/dev\/null/);
     assert.match(cliLines[0], /--output-schema \S*review-tests-schema\.json/);
@@ -104,7 +107,7 @@ test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", (
 
 test("test_reviewTestsPrompt_capsCodexExecWithAPerlAlarm", () => {
     // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
-    const codexLine = reviewTestsPrompt(fakeTask).split("\n").find((line) => line.includes("codex exec"));
+    const codexLine = reviewTestsPrompt(fakeTask).replace(/\\\n(?!\s*\|\|)\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
     assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });
 

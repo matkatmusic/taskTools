@@ -7,6 +7,7 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
 import { resumedRunSection } from "../shared/resumedRunSection.ts";
+// import { spawnClaudeCliPrompt } from "../shared/spawnAgentCli.ts"; // retired: the agent follows the prompt itself, no CLI spawn.
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
@@ -127,12 +128,15 @@ Returning \`implemented: false\` is a correct outcome when the plan is impossibl
 ${whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", "")}`;
 }
 
+// const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
+
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as ImplementTaskInput;
     const t = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const promptFile = `${packet.worktree.replace(/\/+$/, "")}/plans/IMPLEMENT_TASK.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
     writeFileSync(promptFile, buildImplementPrompt(t, packet.typecheckCommand || DEFAULT_TYPECHECK_COMMAND, packet.maxFixRounds ?? DEFAULT_MAX_FIX_ROUNDS));
+    // const prompt = spawnClaudeCliPrompt(...): retired, the workflow agent reads the prompt file and follows it.
     const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { box: "IMPLEMENT_TASK", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };
 }

@@ -47,6 +47,7 @@ function makeSourceRepoWithSubmodule(): { rootOrigin: string; rootOriginChildPat
     const rootOrigin = makeTempRepoWithTestScript("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
     git(rootOrigin, "commit", "-q", "-m", "add submodule child");
+    git(rootOrigin, "branch", "staging");
     return { rootOrigin, rootOriginChildPath: join(rootOrigin, "child") };
 }
 

@@ -37,6 +37,7 @@ function runBlockScript(scriptPath: string, input: unknown, cwd: string): { comm
     const spawnResult = spawnSync("node", ["--no-inspect", scriptPath, JSON.stringify(input)], {
         cwd,
         encoding: "utf8",
+        env: { ...process.env, RUN_STEP_LOG: join(cwd, "step-templates-run-log.md") },
     });
     const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
     const lastLine = commandOutput.split("\n").at(-1) ?? "";

@@ -60,8 +60,8 @@ test("test_fixConflictsPrompt_endsWithTheSharedWhatToReturnSectionAndCarriesNoDa
     const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/\b(CHECKOUT_PATH|CONFLICTED_PATHS)\b/.test(prompt), false);
-    assert.match(prompt, /1\. Build `\{ "message": "", "additionalData": \{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \} \}`, replacing every `<\.\.\.>` with a real value\./);
-    assert.match(prompt, /write that same shape anyway/);
+    assert.match(prompt, /## WHAT YOU PRINT/);
+    assert.match(prompt, /Print `\{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \}` as your final message and nothing else, replacing every `<\.\.\.>` with a real value\./);
 });
 
 test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {

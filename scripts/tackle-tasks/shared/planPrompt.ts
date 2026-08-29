@@ -110,6 +110,7 @@ and the return shape you must produce into your context:
 ${absolutePathsSection(t.repoRoot)}
 
 Read the owned files — a plan that guesses at their contents will be rejected.
+The task description may name identifiers, files, or shapes it expects to exist; it was written before other tasks landed. Treat every such name as unverified: search the owned files for it before you plan against it. When a name is not there, plan against what the code holds now and say in the plan which name the description got wrong.
 Follow \`~/.claude/guides/planning.md\` and write the plan as JSON to exactly \`${t.planFile}\`
 Do not change any source file — this is planning only, not implementation.
 

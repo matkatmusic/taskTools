@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { isPlanProblem, readAndValidatePlan, type CodexReview } from "./planArtifacts.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 import { readCheckpoint } from "./checkpoint.ts";
+import { whatToReturnSection } from "./whatToReturn.ts";
+import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
 
 export type CodexReviewReceipt = CodexReview;
 
@@ -137,26 +139,27 @@ export function reviewQuestion(t: PreparedTask): string {
     return reviewByDefaultPrompt(t);
 }
 
-export function planReviewPrompt(t: PreparedTask): string {
-    return `You are spawning a review agent running in the CLI. 
-You do not edit any files; Your job is to run the following command, and return exactly what was printed, in a specific JSON shape. 
-The command runs a reviewing agent against a plan file. 
-    
-## YOUR RETURN SHAPE
+// Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
+const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-codex-review.log");
 
-To put the required return shape into your context, Invoke the following skill verbatim: 
-\`\`\`
-/read-file "${REVIEW_PLAN_OUTPUT_TEMPLATE_PATH}"
-\`\`\`
+function createCodexShellInvocationTTY(t: PreparedTask): string {
+    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+${reviewQuestion(t)}
+REVIEWEOF
+)
+REVIEW_FILE=${t.reviewOutputFile}
+CODEX_LOG=${codexLogFile()}
 
-## THE COMMAND
+${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)} \\
+  || ${spawnClaudeFableCli("medium")} \\
+  || ${spawnClaudeOpus48Cli("high")}
+    `;
+// WHAT_IS_REVIEW_VERDICT records the review; running it here too would apply the fixes twice.
+// node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+}
 
-Run the following multi-line command using Bash(), verbatim, as one single call. It takes a few
-minutes; wait for it rather than abandoning it. \`</dev/null\` matters — codex hangs forever
-waiting on stdin without it. \`-o\` keeps codex from mixing its banner into the answer, and \`--output-schema\` makes it bare JSON.
-
-\`\`\`\`sh
-REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+function createCodexShellInvocationOriginal(t: PreparedTask): string {
+    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
 REVIEWEOF
 )
@@ -165,11 +168,21 @@ perl -e 'alarm shift; exec @ARGV' 300 codex exec -s read-only --output-schema ${
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \\
   || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
 node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+    `;
+}
+
+export function createCodexShellInvocation(t: PreparedTask) : string {
+    // return createCodexShellInvocationOriginal(t);
+    return createCodexShellInvocationTTY(t);
+}
+
+export function planReviewPrompt(t: PreparedTask): string {
+    return `${spawnAgentHeader("review", true)}
+
+\`\`\`\`sh
+${createCodexShellInvocation(t)}
 \`\`\`\`
 
-## WHAT YOU, THE SPAWNING AGENT, RETURNS
-
-Use the exact JSON shape given by \`${REVIEW_PLAN_OUTPUT_TEMPLATE_PATH}\`, which the read-file skill put into your context. 
-Replace every <...> with a real value. 
-Copy what the node command printed; never decide a verdict yourself.`;
+${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}
+`;
 }

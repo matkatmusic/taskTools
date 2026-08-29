@@ -106,6 +106,14 @@ function getStepKeysNamingBox(boxId: string): string[] {
     return matchingKeys;
 }
 
+function took(ms: number): string {
+    if (ms > 60_000)
+        return `${Math.floor(ms / 60_000)}:${(ms % 60_000 / 1000).toFixed(2).padStart(5, "0")}`;
+    if (ms > 1000)
+        return `${(ms / 1000).toFixed(2)} s`;
+    return `${ms} ms`;
+}
+
 function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
     const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
@@ -129,7 +137,7 @@ function appendStepToRunLog(boxId: string, invocation: string, command: string, 
         // + `\`\`\`json\n`
         // + `${JSON.stringify(output, null, 4)}\n`
         // + `\`\`\`\n`
-        + `### ${boxId} took ${tookMs} ms\n`
+        + `### ${boxId} took ${took(tookMs)}\n`
         + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
     appendFileSync(logFile(), logBlock);
@@ -159,7 +167,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
     const command = `node --no-inspect ${step.script}${quotedInput}`;
     const startedAt = Date.now();
-    const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: STEP_TIMEOUT_MS });
+    const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: STEP_TIMEOUT_MS, env: { ...process.env, RUN_STEP_LOG: logFile() } });
     const tookMs = Date.now() - startedAt;
     const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
     const stepRun = {
@@ -277,7 +285,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
         const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
         mkdirSync(dirname(logFile()), { recursive: true });
-        appendFileSync(logFile(), `### ${promptBox} agent took ${Date.now() - Number(startedAt)} ms\n`);
+        appendFileSync(logFile(), `### ${promptBox} agent took ${took(Date.now() - Number(startedAt))}\n`);
         startInput = JSON.stringify(packet);
     }
     // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.
