@@ -83,20 +83,21 @@ let currentDiagram = ''
 while (true) {
     // One progress group per diagram visit, titled by the block that starts it.
     const diagram = blockToRun.split('::')[0]
+    const blockName = blockToRun.split('::').pop()
     if (diagram !== currentDiagram) {
-        phase(blockToRun.split('::').pop())
+        phase(blockName)
         currentDiagram = diagram
     }
     const prompt = createPromptForAgent(blockToRun, input)
-    const result = await agent(prompt, { label: `run-step:${blockToRun}`, schema: HOOK_OUTPUT_SCHEMA })
+    const result = await agent(prompt, { label: `run-step:${blockName}`, schema: HOOK_OUTPUT_SCHEMA })
 
     // API error. the only shape agent() produces that is not the hook output.
     if (result === null) {
-        return { ok: false, ran, errors: [`${blockToRun}: agent died or was skipped`], prompt, outcome: null }
+        return { ok: false, ran, errors: [`${blockName}: agent died or was skipped`], prompt, outcome: null }
     }
     // A string here is an agent that skipped StructuredOutput; keep its text, or the real error is lost.
     if (typeof result === 'string') {
-        return { ok: false, ran, errors: [`${blockToRun}: agent answered with text, not the hook output`, result], prompt, outcome: null }
+        return { ok: false, ran, errors: [`${blockName}: agent answered with text, not the hook output`, result], prompt, outcome: null }
     }
     ran.push(...result.ran)
 
@@ -107,7 +108,7 @@ while (true) {
 
     // agent never ran /run-step, made up fields, or reworded them; hook threw or returned nothing.
     if (result.ran.length === 0) {
-        return { ok: false, ran, errors: [`${blockToRun}: agent answered without a hook output/payload/packet`], prompt, outcome: null }
+        return { ok: false, ran, errors: [`${blockName}: agent answered without a hook output/payload/packet`], prompt, outcome: null }
     }
 
     // the hook says nothing follows the block the walk stopped at, so this run is done.

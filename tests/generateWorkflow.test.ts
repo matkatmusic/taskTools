@@ -139,5 +139,11 @@ test("test_START_STEP_isAKeyInTheRepoConfig", () => {
 
 test("test_buildWorkflowScript_titlesEveryPhaseWithTheBlockNameAlone", () => {
     // A phase title is the box after the last "::"; a bare block name is its own title.
-    assert.match(buildWorkflowScript(), /^        phase\(blockToRun\.split\('::'\)\.pop\(\)\)$/m);
+    assert.match(buildWorkflowScript(), /^    const blockName = blockToRun\.split\('::'\)\.pop\(\)$/m);
+    assert.match(buildWorkflowScript(), /^        phase\(blockName\)$/m);
+});
+
+test("test_buildWorkflowScript_labelsEveryAgentWithTheBlockNameAlone", () => {
+    // The agent label is the box after the last "::", the same name the phase shows.
+    assert.match(buildWorkflowScript(), /label: `run-step:\$\{blockName\}`/);
 });
