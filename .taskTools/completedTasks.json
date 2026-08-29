@@ -3293,5 +3293,49 @@
       "ffa1555"
     ],
     "closureNote": "the double-sanitize bug lives only in mergePipeline and operationBranches, which v1.6 never reaches"
+  },
+  {
+    "taskNumber": 35,
+    "schemaVersion": "1.0.0",
+    "title": "Activate the new manifest and workflow version after the cutover suite is green",
+    "description": "Final step of the recursive repository-discovery cutover, after the split into tasks 45 to 51.\n\nEvery call-site migration now lives in its own task: 45 manifest bootstrap, 46 repositoryBranches, 47 taskGroups, 48 prepareTasks, 49 mergeTaskWorktrees finalization, 50 workflow and SKILL approval split, 51 legacy manifest routing. This task is only the version flip that activates the new manifest and workflow version once all of them have landed.\n\nFlip the version only after the complete end-to-end suite passes: a full node --test tests/ run plus npx tsc --noEmit, both green, in the same commit. Isolate the flip as its own commit so it can be reverted without unwinding the migration.\n\nThis task was attempted three times as a single whole-cutover unit and refused each time for a different verified reason: detached-HEAD resolution semantics, discoverRepositoryTree checking out working directories (fixed by task 44), and the absence of any manifest bootstrap (now task 45). Do not re-merge the split steps back into this task.\n\nTests: the version constant advances only with the full suite green, and a guard refuses the flip on any nonzero exit.",
+    "files": [
+      "scripts/repositoryManifest.ts",
+      "tests/repositoryManifest.test.ts"
+    ],
+    "handoffFilePaths": [
+      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
+    ],
+    "difficulty": 6,
+    "completionDate": "2026-08-29",
+    "commitHashes": [],
+    "closureNote": "stale: REPOSITORY_MANIFEST_VERSION has been 1 since the file was created and every run already builds the real manifest; there is no old version to flip away from"
+  },
+  {
+    "taskNumber": 187,
+    "schemaVersion": "1.0.0",
+    "version": "29940cdfb844f7c06c08289fcdfb605fb3a36ec4",
+    "title": "Add a .done file watcher so a waiting agent starts on its own",
+    "userDescription": "use a '.done' file to signal when work is done, have another agent that is depending on that work monitor for that file, so that when the file lands, the waiting agent can begin their work without being instructed.  use a monitoring script that triggers when the file lands, and deletes the file after signaling that it landed.",
+    "goal": [
+      "- Running the watcher against a path exits 0 within its timeout once a '.done' file appears at that path",
+      "- After the watcher signals, the '.done' file no longer exists on disk",
+      "- The dependent agent starts its work from the watcher's signal alone, with no human instruction",
+      "- If no '.done' file lands within the 24 hour timeout, the watcher exits non-zero and prints a clear message naming the path it watched, instead of hanging",
+      "- NOT in scope: wiring this handshake into skills/tackle-tasks/tackle-tasks.workflow.js or the blockedBy chain — a later follow-up task owns that"
+    ],
+    "description": "Build a standalone done-file handshake as reusable scripts. Nothing in the repo does this today: a search of scripts/, skills/tackle-tasks/*.workflow.js, and tests/ for \"monitor\"/\".done\"/\"waitFor\"/\"poll\" returns no matches. Agent handoffs today are driven explicitly by the orchestrating workflow script, never by a watched filesystem event.\n\nAdd scripts/doneFileMonitor.ts: it watches for a sentinel '.done' file at a given path, signals the moment the file appears, then deletes the file so the next run starts clean. The waiting agent runs the watcher and begins its work when the watcher signals, with no human telling it to start.\n\nThe watcher takes a timeout of 24 hours. If the '.done' file never lands inside that window, the watcher exits non-zero with a clear message instead of hanging forever.\n\nOut of scope for this task: wiring the handshake into skills/tackle-tasks/tackle-tasks.workflow.js or into the existing blockedBy chain. This task ships the standalone scripts only; a later task does the pipeline wiring.\n\nFollows the repo scripts/ naming convention (mergePipeline.ts, occurrenceSync.ts). No existing file needs to change.",
+    "files": [
+      "scripts/doneFileMonitor.ts",
+      "tests/doneFileMonitor.test.ts"
+    ],
+    "tests": "An end-to-end test: spawn the watcher as a child process against a temp path, have a separate process write the '.done' file to that path, then assert the watcher fired exactly once, exited 0, and that the '.done' file is gone afterward. A second case asserts a short timeout produces a non-zero exit and a clear message.",
+    "difficulty": 5,
+    "completionDate": "2026-08-29",
+    "commitHashes": [
+      "3972244",
+      "5e2a4a3"
+    ],
+    "closureNote": "same intent as the tackle-unblocked-tasks loop: the brief waits for each run completion notification and repeats until tasks.json is empty; a standalone done-file watcher also exists in phase-loop/done-monitor.ts"
   }
 ]

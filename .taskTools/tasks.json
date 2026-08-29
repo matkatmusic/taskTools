@@ -1,19 +1,5 @@
 [
   {
-    "taskNumber": 35,
-    "schemaVersion": "1.0.0",
-    "title": "Activate the new manifest and workflow version after the cutover suite is green",
-    "description": "Final step of the recursive repository-discovery cutover, after the split into tasks 45 to 51.\n\nEvery call-site migration now lives in its own task: 45 manifest bootstrap, 46 repositoryBranches, 47 taskGroups, 48 prepareTasks, 49 mergeTaskWorktrees finalization, 50 workflow and SKILL approval split, 51 legacy manifest routing. This task is only the version flip that activates the new manifest and workflow version once all of them have landed.\n\nFlip the version only after the complete end-to-end suite passes: a full node --test tests/ run plus npx tsc --noEmit, both green, in the same commit. Isolate the flip as its own commit so it can be reverted without unwinding the migration.\n\nThis task was attempted three times as a single whole-cutover unit and refused each time for a different verified reason: detached-HEAD resolution semantics, discoverRepositoryTree checking out working directories (fixed by task 44), and the absence of any manifest bootstrap (now task 45). Do not re-merge the split steps back into this task.\n\nTests: the version constant advances only with the full suite green, and a guard refuses the flip on any nonzero exit.",
-    "files": [
-      "scripts/repositoryManifest.ts",
-      "tests/repositoryManifest.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "difficulty": 6
-  },
-  {
     "taskNumber": 36,
     "schemaVersion": "1.0.0",
     "title": "RevEng-shaped end-to-end fixture and Phase 4 acceptance run",
@@ -24,12 +10,6 @@
     ],
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      {
-        "taskNum": 35,
-        "reason": "reason not recorded (migrated from legacy blockedBy format)"
-      }
     ],
     "difficulty": 8
   },
@@ -60,12 +40,7 @@
     ],
     "tests": "Same as tasks 71 through 78: byte-for-byte snapshot. Pin two commit hashes in the test — the pre-refactor commit whose `git show <hash>:skills/update-tasks/SKILL.md` body is the source text, and the post-refactor commit whose emitted brief is the expected output — then assert the script's stdout matches that expected text exactly, proving the copy was lossless. The test must also assert no unexpanded `${CLAUDE_PLUGIN_ROOT}` survives anywhere in the emitted brief.",
     "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 62,
-        "reason": "reason not recorded (migrated from legacy blockedBy format)"
-      }
-    ]
+    "blockedBy": []
   },
   {
     "taskNumber": 80,
@@ -170,9 +145,9 @@
     "description": "Step 2 of the 6-way split of task 58. Scope is the authoring surfaces that EMIT the read fence plus the two workflow prompts that CONSUME it for reading only. The runtime accessors live in scripts/prepareTasks.ts (child 93) and must be imported, never re-implemented; the edit-fence rename is a sibling child; the close-tasks migration is another.\n\nWhy this exists: the workflow prompts today conflate 'files you own' with 'files you may look at'. skills/tackle-tasks/plan.workflow.js line 28 literally says the agent may READ its owned files 'and nothing else', and skills/tackle-tasks/verify.workflow.js line 25 repeats it. That is what broke task 50 — its planner wrote a plan against a file that had already been deleted, because it could not read the rest of the project to notice. Reading is widened here; writing stays exactly as narrow as it is today.\n\nSurfaces to change:\n- skills/create-task/template/taskTemplate.json: add readOnlyFiles next to the existing file fence, with the ['*'] = whole project meaning stated in the template itself so every task author sees it.\n- skills/update-task-files/SKILL.md: backfilling a task's fence must now maintain readOnlyFiles too, not just the editable list.\n- skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js: state the read fence separately from the edit fence — readOnlyFiles, or the entire project when it is ['*'].\n\nInvariant that must survive this change: readOnlyFiles never affects grouping. Task groups and worktree scope key off the editable fence only, so a wide read fence must not merge two groups or make two tasks collide. Enforcement lives in scripts/taskGroups.ts (a sibling child); this child must not state anything in the prompts or template that contradicts it.",
     "files": [
       "skills/create-task/template/taskTemplate.json",
-      "skills/update-task-files/SKILL.md",
-      "skills/tackle-tasks/plan.workflow.js",
-      "skills/tackle-tasks/verify.workflow.js"
+      "scripts/updateTaskFilesBrief.ts",
+      "scripts/tackle-tasks/shared/planPrompt.ts",
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts"
     ],
     "tests": "Assert skills/create-task/template/taskTemplate.json carries a readOnlyFiles key with its ['*'] = every project file meaning documented in the template. Assert the prompt text emitted by skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js states a read fence of readOnlyFiles (or the whole project when ['*']) and no longer contains the phrase restricting reads to owned files and nothing else.",
     "difficulty": 4
@@ -185,9 +160,9 @@
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/implement.workflow.js\", \"skills/tackle-tasks/test.workflow.js\", \"skills/create-task/SKILL.md\"]`.\n\nChild 3 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 3: change 'files' to 'modifiableFiles', meaning 'only these files are editable by the subagents'.\n\nRequired behavior:\n1. skills/create-task/SKILL.md emits and documents 'modifiableFiles' in place of 'files' when authoring a task, stating plainly that it is the edit fence — only these paths may be edited or git-added by the subagents.\n2. The two write-oriented workflow prompts state the edit fence and the read fence separately, where today they conflate them: skills/tackle-tasks/implement.workflow.js lines 38 and 73, and skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Only modifiableFiles may be edited or git-added; readOnlyFiles (or the whole project when it is [\"*\"]) may be read.\n\nDo NOT edit scripts/prepareTasks.ts (child 93 defines and exports the shared accessor pair — import it, never re-implement it), scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, skills/tackle-tasks/plan.workflow.js, skills/tackle-tasks/verify.workflow.js, or skills/close-tasks/SKILL.md — those belong to siblings.\n\nNote the compatibility rule owned by a sibling child: readers still accept a legacy task that declares only 'files', so this rename must not make an old task unreadable. Grouping and worktree scope key off modifiableFiles only.\n\nFiles: skills/tackle-tasks/implement.workflow.js, skills/tackle-tasks/test.workflow.js, skills/create-task/SKILL.md\n\nTests: assert the implement and test workflow prompts name modifiableFiles as the only paths that may be edited or git-added, and separately name readOnlyFiles (or the whole project when [\"*\"]) as readable; assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files.\n\nDifficulty: 2",
     "description": "Step 3 of the 6-way split of task 58. Scope is the write-side surfaces: the authoring instructions in skills/create-task/SKILL.md and the two workflow prompts that actually edit and git-add files. The template JSON, the read-side prompts, the runtime accessors, and the close-tasks migration all belong to siblings.\n\nThe rename is semantic, not cosmetic: `files` currently means both 'what this task owns' and 'what the agent may look at'. Splitting it makes `modifiableFiles` mean exactly one thing — the only paths that may be edited or git-added — so the read fence can be widened independently without loosening ownership.\n\nSites that conflate the two fences today and must state them separately: skills/tackle-tasks/implement.workflow.js lines 38 and 73; skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Each needs an explicit edit fence (modifiableFiles only) and an explicit read fence (readOnlyFiles, or the entire project when it is ['*']).\n\nCompatibility constraint, enforced by a sibling child in the shared accessors: a legacy task declaring only `files` must keep working, with `files` read as the modifiable fence. So this rename changes what new tasks emit and what the prompts say, and must not be written as though the old key were invalid.\n\nInvariant to preserve: grouping and worktree scope key off the modifiable fence only. readOnlyFiles must never widen a group or make two tasks collide, so nothing in these prompts may imply that a wide read fence grants ownership.",
     "files": [
-      "skills/tackle-tasks/implement.workflow.js",
-      "skills/tackle-tasks/test.workflow.js",
-      "skills/create-task/SKILL.md"
+      "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts",
+      "scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts",
+      "scripts/createTaskBrief.ts"
     ],
     "tests": "Assert the prompt text emitted by skills/tackle-tasks/implement.workflow.js and skills/tackle-tasks/test.workflow.js names modifiableFiles as the only paths that may be edited or git-added, and separately names readOnlyFiles (or the whole project when ['*']) as readable — the two fences must appear as distinct statements, not one combined sentence. Assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files, while still describing legacy `files` as accepted.",
     "difficulty": 4
@@ -240,7 +215,7 @@
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/close-tasks/SKILL.md\"]`.\n\nChild 6 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 6: when close-tasks is invoked, replace 'files' with 'modifiableFiles' in the project's tasks.json.\n\nRequired behavior:\n1. Add a migration step to skills/close-tasks/SKILL.md: on each invocation, rename any remaining 'files' key to 'modifiableFiles' across the project's tasks.json, so the legacy key drains out over time even though readers still accept it.\n2. The migration is a rename only — it must not reorder tasks, renumber them, touch any other key, or invent a readOnlyFiles value for a task that does not declare one. A task with no readOnlyFiles keeps having none, and the accessor's [\"*\"] default covers it at read time.\n3. A task that already declares 'modifiableFiles' is left alone. If a task somehow declares both keys, keep 'modifiableFiles' and drop the legacy 'files' — never merge the two lists.\n4. This migration is why readers must keep accepting the legacy key: the two must ship together, or a half-migrated tasks.json breaks.\n\nDo NOT edit scripts/prepareTasks.ts, scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, any skills/tackle-tasks/ file, skills/create-task/SKILL.md, skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, or any tests/ file — those belong to siblings.\n\nFiles: skills/close-tasks/SKILL.md\n\nTests: run close-tasks against a tasks.json holding one legacy task declaring only 'files', one task already declaring 'modifiableFiles', and one declaring both. Assert the legacy task's key is renamed with its list unchanged, the already-migrated task is untouched, the both-keys task keeps modifiableFiles and loses files with no list merging, no task gains a readOnlyFiles key it did not have, and task order and numbering are unchanged.\n\nDifficulty: 2",
     "description": "Step 6 of the 6-way split of task 58, and the one that makes the rename eventually complete. Scope is skills/close-tasks/SKILL.md only.\n\nThe strategy: readers accept both keys forever (the shared accessor in scripts/prepareTasks.ts falls back to `files`), so nothing breaks mid-migration, and close-tasks does an opportunistic rename on every invocation so the legacy key drains out of tasks.json over normal use instead of needing a flag-day rewrite. That is why this child and the reader-fallback child must both land — the fallback without the drain leaves the old key forever, and the drain without the fallback breaks any task not yet migrated.\n\nRename-only constraints, all of which are ways this could quietly corrupt tasks.json: no reordering, no renumbering, no touching any other key, and specifically no inventing a readOnlyFiles value for a task that does not declare one. An absent readOnlyFiles is meaningful — the accessor resolves it to ['*'] at read time — so materialising it here would freeze a default that should stay implicit.\n\nCollision handling: a task already carrying modifiableFiles is left alone. A task carrying both keys keeps modifiableFiles and drops files, with no merging of the two lists — merging would silently widen an edit fence, which is the one thing this whole change exists to keep narrow.\n\nclose-tasks already rewrites tasks.json when it moves closed tasks to completedTasks.json, so the migration rides along on a write that is already happening rather than adding a new pass.\n\nRelated memory: close-tasks runs its archiving bookkeeping in a subagent while the verification gate stays in the main agent — the migration belongs with the bookkeeping half.",
     "files": [
-      "skills/close-tasks/SKILL.md"
+      "scripts/closeTasks.ts"
     ],
     "tests": "Run close-tasks against a tasks.json holding three tasks: one legacy task declaring only `files`, one already declaring `modifiableFiles`, and one declaring both. Assert the legacy task's key is renamed with its list byte-identical; the already-migrated task is untouched; the both-keys task keeps modifiableFiles, loses files, and shows no merging of the two lists; no task gains a readOnlyFiles key it did not already have; and task order and numbering are unchanged.",
     "difficulty": 4
@@ -410,7 +385,7 @@
     "description": "Root cause traced to commit 67aff6e (task 60), which split the raw prompt into userDescription and redefined description. Before: \"the task in the user's own wording, plus any refinements gathered\". After: \"only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions\". The word \"fleshed-out\" plus the five-item shopping list reads as an instruction to write an essay, and no length cap exists anywhere in the skill.\n\nMeasured: tasks predating the change (#35, #36) have ~1.2k-char descriptions. Every task from #71 on runs 1.4k-8.2k, median 2.9k, max 8.2k (#80). The tests field grew the same way, up to 1.1k.\n\nThe wording is duplicated in two places and both must change together: skills/create-task/template/taskTemplate.json:6 and skills/create-task/SKILL.md:24. Drop \"fleshed-out\", trim the enumerated list to what is actually load-bearing (file paths and line numbers), and add an explicit cap, e.g. \"at most 6 sentences; link to code rather than restating it\".\n\nSecondary ratchet: skills/update-tasks/SKILL.md:19 instructs the agent to extend an existing task's description when de-duplicating, which only ever grows it. Add the same cap there.\n\nScope decided with the user: wording fix only. The 37 existing long descriptions are left alone and age out as tasks close.",
     "files": [
       "skills/create-task/template/taskTemplate.json",
-      "skills/create-task/SKILL.md",
+      "scripts/createTaskBrief.ts",
       "skills/update-tasks/SKILL.md"
     ],
     "tests": "skip",
@@ -513,8 +488,11 @@
     ],
     "description": "The audit-loop/ directory in this repository documents a review-and-repair pattern that proved itself on the task-86 audit. Read audit-loop/audit-loop-workflow.md, audit-loop/codex-review-prompt.md, audit-loop/sonnet-implementation-prompt.md and audit-loop/codex-audit-schema.md before planning; they are the specification for this task.\n\nWHAT MAKES AUDIT-LOOP DIFFERENT from the loop tackle-tasks runs today:\n- Rejections are DURABLE NUMBERED FINDINGS in a JSON file governed by a schema, not a free-text notes blob. Each finding carries .acceptanceCriteria, .provingTest, .suggestedFixApproach (containing actual code, so the fixer does not guess), and .resolvedBoundaryReference / .resolvedBoundaryExample which must be preserved.\n- The fixer is told to implement ONLY the selected findings and to do no work beyond them.\n- On ACCEPT the reviewer removes exactly those findings and stages the audit update alongside the implementation.\n- On REJECT the reviewer UNSTAGES the implementation paths (without discarding the working tree), rewrites the unresolved findings to describe only what remains, and stages only the audit file. A rejected implementation is never committed.\n- The reviewer is explicitly told NOT TO NITPICK, not to reject for optional improvements, and not to accept a partial fix merely because the suite is green.\n\nTWO PARTS, both requested by the user.\n\nPART 1 -- restructure the existing PLAN review loop. skills/tackle-tasks/tackle-tasks.workflow.js:390-403 runs runVerify (line 363, VERIFY_SCHEMA at :87) up to MAX_REVIEW_ROUNDS (:279), and on rejection passes verify.notes as a prose string to an apply-feedback agent (:400, APPLY_FEEDBACK_SCHEMA at :99). Replace that notes-passing with audit-loop-shaped findings: numbered, schema-governed, carrying acceptance criteria and required-fix code, cleared only when actually resolved. This half keeps its existing reviewer (codex, with the current fallback).\n\nPART 2 -- add a NEW code review after the implement stage. Today the implement stage (:422-473) produces staged changes and nothing reviews them; only fence violations are checked. Add an audit-loop-shaped review of the staged diff, following the accept/reject/unstage protocol above.\n\nREVIEWER CHOICE, settled with the user: the new code review in Part 2 uses ANOTHER SUBAGENT, not codex. Part 1 keeps codex.\n\nThe reviewer and fixer prompts are emitted by scripts/tackle-tasks_AgentPromptEmitter.ts via the emitterInstruction helper (workflow line 40, roles 'verify' and 'apply-feedback'); the new role(s) belong there too.\n\nADAPTATION NOTE: audit-loop as written stops for a human to review and commit each staged handoff. tackle-tasks runs unattended. Keep the accept/reject/unstage discipline and the durable findings, but the workflow must reach a terminal state on its own rather than waiting for a human.\n\nOVERLAP: open task 120 (\"Tell the codex plan reviewer which classes of issue are not...\") covers similar ground to audit-loop's do-not-nitpick rule. Check it before planning and fold it in or close it out rather than duplicating.",
     "files": [
-      "skills/tackle-tasks/tackle-tasks.workflow.js",
-      "scripts/tackle-tasks_AgentPromptEmitter.ts",
+      "scripts/tackle-tasks/whatIsReviewVerdict/WHAT_IS_REVIEW_VERDICT.ts",
+      "scripts/planReviewRuling.ts",
+      "plans/review-plan-schema.json",
+      "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts",
+      "diagrams/tackle-tasks/pipeline-implementTask.mmd",
       "tests/taskWorkflowPlanImplementStage.test.ts",
       "tests/tackleTasksRetry.test.ts"
     ],
@@ -557,27 +535,6 @@
         "reason": "skipping plan review is only safe once 185's audit-loop code review exists to catch a bad implementation that the skipped plan review would have caught"
       }
     ]
-  },
-  {
-    "taskNumber": 187,
-    "schemaVersion": "1.0.0",
-    "version": "29940cdfb844f7c06c08289fcdfb605fb3a36ec4",
-    "title": "Add a .done file watcher so a waiting agent starts on its own",
-    "userDescription": "use a '.done' file to signal when work is done, have another agent that is depending on that work monitor for that file, so that when the file lands, the waiting agent can begin their work without being instructed.  use a monitoring script that triggers when the file lands, and deletes the file after signaling that it landed.",
-    "goal": [
-      "- Running the watcher against a path exits 0 within its timeout once a '.done' file appears at that path",
-      "- After the watcher signals, the '.done' file no longer exists on disk",
-      "- The dependent agent starts its work from the watcher's signal alone, with no human instruction",
-      "- If no '.done' file lands within the 24 hour timeout, the watcher exits non-zero and prints a clear message naming the path it watched, instead of hanging",
-      "- NOT in scope: wiring this handshake into skills/tackle-tasks/tackle-tasks.workflow.js or the blockedBy chain — a later follow-up task owns that"
-    ],
-    "description": "Build a standalone done-file handshake as reusable scripts. Nothing in the repo does this today: a search of scripts/, skills/tackle-tasks/*.workflow.js, and tests/ for \"monitor\"/\".done\"/\"waitFor\"/\"poll\" returns no matches. Agent handoffs today are driven explicitly by the orchestrating workflow script, never by a watched filesystem event.\n\nAdd scripts/doneFileMonitor.ts: it watches for a sentinel '.done' file at a given path, signals the moment the file appears, then deletes the file so the next run starts clean. The waiting agent runs the watcher and begins its work when the watcher signals, with no human telling it to start.\n\nThe watcher takes a timeout of 24 hours. If the '.done' file never lands inside that window, the watcher exits non-zero with a clear message instead of hanging forever.\n\nOut of scope for this task: wiring the handshake into skills/tackle-tasks/tackle-tasks.workflow.js or into the existing blockedBy chain. This task ships the standalone scripts only; a later task does the pipeline wiring.\n\nFollows the repo scripts/ naming convention (mergePipeline.ts, occurrenceSync.ts). No existing file needs to change.",
-    "files": [
-      "scripts/doneFileMonitor.ts",
-      "tests/doneFileMonitor.test.ts"
-    ],
-    "tests": "An end-to-end test: spawn the watcher as a child process against a temp path, have a separate process write the '.done' file to that path, then assert the watcher fired exactly once, exited 0, and that the '.done' file is gone afterward. A second case asserts a short timeout produces a non-zero exit and a clear message.",
-    "difficulty": 5
   },
   {
     "taskNumber": 188,
