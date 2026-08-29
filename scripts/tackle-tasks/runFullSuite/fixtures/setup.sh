@@ -59,6 +59,7 @@ EOF
 echo "export const thing = 1;" > src/thing.ts
 git add package.json src/thing.ts
 git commit -q -m "base"
+git branch staging
 git checkout -q -b task-1
 echo "export const thing = 2;" > src/thing.ts
 git commit -q -am "task edit"

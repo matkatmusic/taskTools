@@ -132,7 +132,7 @@ export function mergeTaskWorktree(input: MergeTaskWorktreeInput): MergeTaskWorkt
     verifySourceTipsUnchangedSinceRebase(worktreePath, projectRoot, receipts);
 
     // pipeline-suite.mmd already ran the suite, so the merge itself runs no tests.
-    const report = mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, input.taskNumber, defaultMergeStepOperations, null, false);
+    const report = mergeWorktreeTaskDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, defaultMergeStepOperations, null, false);
     return mapReport(report);
 }
 

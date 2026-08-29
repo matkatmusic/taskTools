@@ -20,6 +20,7 @@ git config user.email fixture@example.com
 echo "export const thing = 1;" > src/thing.ts
 git add src/thing.ts
 git commit -q -m "base"
+git branch staging
 git checkout -q -b task-1
 echo "export const thing = 2;" > src/thing.ts
 echo "// SENTINEL_TASK_TEST" > tests/thing.test.ts

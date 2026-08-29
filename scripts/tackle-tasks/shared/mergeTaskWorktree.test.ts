@@ -44,8 +44,7 @@ function makeSourceRepoWithSubmodule(): string {
 }
 
 let nextGroupId = 1;
-// operationBranch is attached as "task-<taskNumber>" by the script under test, so taskNumber
-// here must equal the worktree's real groupId - matching production's one-task-per-group.
+// operationBranch is attached as "task-<taskNumber>" by the script under test, so taskNumber here must equal the worktree's real groupId - matching production's one-task-per-group.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
@@ -71,8 +70,7 @@ function commitTaskWorkInWorktree(worktreePath: string): void {
     git(worktreePath, "commit", "-q", "-m", "root work");
 }
 
-// The full precondition for a merge under F3: the task must have been claimed and rebased
-// first, so the current run carries the source-tip receipt the merge box verifies.
+// The full precondition for a merge under F3: the task must have been claimed and rebased first, so the current run carries the source-tip receipt the merge box verifies.
 async function claimCommitAndRebase(rootOrigin: string, taskNumber: number, worktreePath: string, runId: string): Promise<string> {
     seedTaskAndClaim(rootOrigin, taskNumber, runId);
     commitTaskWorkInWorktree(worktreePath);
@@ -133,9 +131,7 @@ test("test_mergeTaskWorktree_refusesWhenAnUnrelatedCleanRootCommitLandedAfterReb
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-33");
 
-    // A clean, committed, unrelated root change lands in the source checkout after rebase.
-    // The branch name is unchanged and the checkout is clean, so the old branch-name+dirty
-    // check alone would miss this (F3).
+    // A clean, committed, unrelated root change lands in the source checkout after rebase.  The branch name is unchanged and the checkout is clean, so the old branch-name+dirty check alone would miss this (F3).
     writeFileSync(join(rootOrigin, "unrelated.txt"), "unrelated\n");
     git(rootOrigin, "add", "unrelated.txt");
     git(rootOrigin, "commit", "-q", "-m", "unrelated clean root change");
@@ -169,8 +165,7 @@ test("test_mergeTaskWorktree_refusesBeforeMovingAnySourceRefWhenUnrelatedFileSit
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-40");
     const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
 
-    // An unrelated untracked file lands beside tasks.json/completedTasks.json in the same
-    // ignored .taskTools/ directory - the exemption must be exact-path, not directory-wide.
+    // An unrelated untracked file lands beside tasks.json/completedTasks.json in the same ignored .taskTools/ directory - the exemption must be exact-path, not directory-wide.
     writeFileSync(join(rootOrigin, ".taskTools", "rogue.txt"), "rogue\n");
 
     assert.throws(() => mergeTaskWorktree({
@@ -188,8 +183,7 @@ test("test_mergeTaskWorktree_refusesOnAWhitespacePathRenameViaTheNulSafeParser",
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-41");
     const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
 
-    // A staged rename to a path containing whitespace, still at the recorded tip - only a
-    // NUL-safe parser reports this as one exact dirty path rather than mangling it.
+    // A staged rename to a path containing whitespace, still at the recorded tip - only a NUL-safe parser reports this as one exact dirty path rather than mangling it.
     git(rootOrigin, "mv", "package.json", "package renamed.json");
 
     assert.throws(() => mergeTaskWorktree({
@@ -207,8 +201,7 @@ test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-35");
     const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
 
-    // Recover/reassign the lock to a different run entirely, then a delayed run-35 merge call
-    // must refuse before touching anything.
+    // Recover/reassign the lock to a different run entirely, then a delayed run-35 merge call must refuse before touching anything.
     releaseSourceRepoLock(rootOrigin, buildLockOwner("run-35", taskNumber));
     acquireSourceRepoLock(rootOrigin, buildLockOwner("other-run", taskNumber));
 
@@ -219,6 +212,32 @@ test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     assert.equal(git(rootOrigin, "rev-parse", "HEAD"), beforeHead);
     const run = getCurrentTaskRun(taskNumber, rootOrigin);
     assert.deepEqual(run?.commits, []);
+});
+
+test("test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheCheckedOutBranch", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+
+    // The root origin stays checked out on "main". createLinkedWorktree already created "staging" as a side effect - a separate real merge target, not HEAD's branch.
+    const mainTipBeforeMerge = git(rootOrigin, "rev-parse", "main");
+
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-50");
+    commitTaskWorkInWorktree(worktreePath);
+    const rebaseResult = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-50", stepId: "rebase-run-50", rootSourceBranch: "staging",
+    });
+    assert.equal(rebaseResult.conflicted, false);
+    assert.equal(rebaseResult.stoppedAt, null);
+
+    const result = mergeTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-50", rootSourceBranch: "staging",
+    });
+
+    assert.equal(result.merged, true);
+    const rootMergeCommit = result.commits.find((commit) => commit.occurrenceId === "")!;
+    assert.equal(git(rootOrigin, "rev-parse", "staging"), rootMergeCommit.hash);
+    assert.equal(git(rootOrigin, "rev-parse", "main"), mainTipBeforeMerge);
+    assert.equal(git(rootOrigin, "rev-parse", "--abbrev-ref", "HEAD"), "main");
 });
 
 test("test_mergeTaskWorktree_mergesARootWithNoTestSuite", async () => {

@@ -307,7 +307,7 @@ test("test_runStepHook_handsAStopBlocksOutputAsThePacket", () => {
 // A start input naming a packetFile expands to that file, with the answer the agent wrote into it.
 test("test_runStepHook_expandsAPacketFileIntoTheStartInput", () => {
     const folder = mkdtempSync(join(tmpdir(), "run-step-packet-"));
-    const packetFile = join(folder, "task-packet.json");
+    const packetFile = join(folder, "A-1.json");
     writeFileSync(packetFile, JSON.stringify({ taskNumber: 7, prompt: "say x", answer: "x" }));
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
@@ -324,14 +324,18 @@ test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     const packetFile = join(folder, "A-1.json");
     writeFileSync(packetFile, JSON.stringify({ taskNumber: 7, prompt: "say x", answer: "x", startedAt: Date.now() - 3000 }));
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] }],
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
     }));
     // Action: the next call consumes that packet.
     const log = runHook(`/run-step B {"packetFile":"${packetFile}"}`, configFile).readLog();
     // Verification: the log says how long the agent took on A, measured from the startedAt in the packet.
-    const agentLine = log.split("\n").find(line => /^### A agent took \d+\.\d\d s$/.test(line));
-    assert.ok(agentLine, log);
-    assert.ok(Number(agentLine!.match(/[\d.]+/)![0]) >= 3, agentLine);
+    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const agentBlock = blocks.find(block => block.block === "one.mmd::A agent");
+    assert.ok(agentBlock, log);
+    assert.ok(agentBlock.durationMs >= 3000, JSON.stringify(agentBlock));
 });
 
 // A typed `/tackle-tasks reset N` is the hook's job, not the agent's: the hook runs the reset and hands back its lines.
@@ -488,7 +492,8 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
         ],
     }));
     const log = runHook("/run-step A", configFile).readLog();
-    assert.match(log, /^## ======= A =======$[\s\S]*^## ======= B =======$/m);
+    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    assert.deepEqual(blocks.map(block => block.block), ["one.mmd::A", "one.mmd::B"]);
 });
 
 test("test_runStepHook_logsHowLongEachBlockTook", () => {
@@ -501,14 +506,16 @@ test("test_runStepHook_logsHowLongEachBlockTook", () => {
     }));
     const log = runHook("/run-step A", configFile).readLog();
     // Every block entry logs one line with how long that block took.
-    // const blockTookLines = log.split("\n").filter(line => /^### end output ====== \S+ took \d+ ms$/.test(line));
-    const blockTookLines = log.split("\n").filter(line => /^### \S+ took \d+ ms$/.test(line));
-    assert.equal(blockTookLines.length, 2);
+    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    assert.equal(blocks.filter(block => typeof block.durationMs === "number").length, 2);
 });
 
 test("test_runStepHook_logsTheFailureWhenTheWalkCannotFinish", () => {
     const log = runHook("/run-step NOT_A_BLOCK").readLog();
-    assert.match(log, /^## ======= FAILURE =======\n```json\n\{\n    "invocation": "\/run-step NOT_A_BLOCK",\n    "ran": \[\],\n    "errors": \[\n        "no block named NOT_A_BLOCK; known: /m);
+    const failureBlock = log.split("\n").filter(Boolean).map(line => JSON.parse(line)).find(block => block.block === "FAILURE");
+    assert.equal(failureBlock.invocation, "/run-step NOT_A_BLOCK");
+    assert.deepEqual(failureBlock.ran, []);
+    assert.match(failureBlock.errors[0], /no block named NOT_A_BLOCK; known: /);
 });
 
 test("test_runStepHook_handsTheRestOfTheLineToTheFirstBlock", () => {
@@ -685,7 +692,7 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     assert.equal(logName, `${stampFolder}-run-log.md`);
     // The packet sits under <stamp>/packets.
     assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
-    assert.match(readFileSync(join(runsFolder, logName), "utf8"), /======= A =======/);
+    assert.match(readFileSync(join(runsFolder, logName), "utf8"), /"block":"one\.mmd::A"/);
 });
 
 test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
@@ -706,8 +713,7 @@ test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
 });
 
 test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
-    // Scenario: a two-block walk writes one packet per block pass, named by box, pid, and pass order.
-    // Steps: A continues into B, and B stops.
+    // Scenario: a two-block walk writes one packet per block pass, named by box, pid, and pass order.  Steps: A continues into B, and B stops.
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
@@ -752,8 +758,7 @@ test("test_runStepHook_writesAPacketForABlockThatFailed", () => {
 });
 
 test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
-    // Scenario: the graph loops back through the same box; each pass writes its own packet.
-    // Steps: A continues into B; B continues back into A, which this time stops.
+    // Scenario: the graph loops back through the same box; each pass writes its own packet.  Steps: A continues into B; B continues back into A, which this time stops.
     const configFile = configWith((writeStep, folder) => {
         const aScript = join(folder, "A.ts");
         writeFileSync(aScript, [
@@ -788,12 +793,15 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
     const packetFile = join(packetsFolder, "A-1.json");
     writeFileSync(packetFile, JSON.stringify({ prompt: "old" }));
     const configFile = configWith(writeStep => ({
-        "one.mmd": [{ box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] }],
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
     }));
     // The pass that consumes it logs to S-run-log.md and writes its packet under S/packets.
     const { result, runsFolder, runsEntries } = runHookIn(cwd, `/run-step C ${JSON.stringify({ packetFile })}`, configFile);
     assert.deepEqual(runsEntries(), ["S", "S-run-log.md"]);
-    assert.match(readFileSync(join(runsFolder, "S-run-log.md"), "utf8"), /======= C =======/);
+    assert.match(readFileSync(join(runsFolder, "S-run-log.md"), "utf8"), /"block":"one\.mmd::C"/);
     assert.equal(dirname(result.outcome.payload), packetsFolder);
 });
 
@@ -805,7 +813,10 @@ test("test_runStepHook_keepsThePacketsOfARunThatCompleted", () => {
     const packetFile = join(packetsFolder, "X-1.json");
     writeFileSync(packetFile, "{}");
     const configFile = configWith(writeStep => ({
-        "pipeline-mergeSucceededExit.mmd": [{ box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] }],
+        "pipeline-mergeSucceededExit.mmd": [
+            { box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] },
+            { box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] },
+        ],
     }));
     runHookIn(cwd, `/run-step pipeline-mergeSucceededExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
     assert.equal(existsSync(packetFile), true);
@@ -819,7 +830,10 @@ test("test_runStepHook_keepsThePacketsOfARunThatFailed", () => {
     const packetFile = join(packetsFolder, "X-1.json");
     writeFileSync(packetFile, "{}");
     const configFile = configWith(writeStep => ({
-        "pipeline-failuresExit.mmd": [{ box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] }],
+        "pipeline-failuresExit.mmd": [
+            { box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] },
+            { box: "STOP", script: writeStep("STOP", { scriptSignal: "stop" }), next: [] },
+        ],
     }));
     runHookIn(cwd, `/run-step pipeline-failuresExit.mmd::STOP ${JSON.stringify({ packetFile })}`, configFile);
     assert.equal(existsSync(packetFile), true);

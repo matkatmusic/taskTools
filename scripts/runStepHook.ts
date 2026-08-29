@@ -18,7 +18,7 @@ process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
     mkdirSync(dirname(logFile()), { recursive: true });
-    appendFileSync(logFile(), `## ======= HOOK EXCEPTION =======\n\`\`\`\n${reason}\n\`\`\`\n${"=".repeat(36)}\n`);
+    appendFileSync(logFile(), `${JSON.stringify({ block: "HOOK EXCEPTION", reason })}\n`);
     process.exit(0);
 });
 
@@ -114,33 +114,10 @@ function took(ms: number): string {
     return `${ms} ms`;
 }
 
-function appendStepToRunLog(boxId: string, invocation: string, command: string, commandOutput: string, output: unknown, tookMs: number): void {
+function appendStepToRunLog(stepKey: string, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
-    const sourceLabel = CONFIG_FILE === DEFAULT_CONFIG_FILE ? "scripts/steps.json" : CONFIG_FILE;
-    const logBlock = `## ======= ${boxId} =======\n`
-        // + `Source ${sourceLabel}\n`
-        // + `Box: ${boxId}\n`
-        // + `### === input ======\n`
-        // + `\`\`\`json\n`
-        // + `${JSON.stringify({ invocation }, null, 4)}\n`
-        // + `\`\`\`\n`
-        // + `### end input ======\n`
-        // + `### === command ======\n`
-        // + `${command}\n`
-        // + `### end command ======\n`
-        // + `### command output ======\n`
-        // + `\`\`\`json\n`
-        // + `${commandOutput}\n`
-        // + `\`\`\`\n`
-        // + `### end command output ======\n`
-        // + `### output ======\n`
-        // + `\`\`\`json\n`
-        // + `${JSON.stringify(output, null, 4)}\n`
-        // + `\`\`\`\n`
-        + `### ${boxId} took ${took(tookMs)}\n`
-        + `${"=".repeat(36)}\n`;
     // One write, one string: many processes append to this file concurrently.
-    appendFileSync(logFile(), logBlock);
+    appendFileSync(logFile(), `${JSON.stringify({ block: stepKey, duration: took(tookMs), durationMs: tookMs })}\n`);
 }
 
 // Single quotes for the log line only: the spawn itself passes an argument list, never a shell string.
@@ -184,7 +161,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     packetSequence += 1;
     mkdirSync(packetsDirectory(), { recursive: true });
     writeFileSync(join(packetsDirectory(), `${step.box}-${process.pid}-${packetSequence}.json`), JSON.stringify({ input: { invocation }, command, commandOutput, output: stepRun }, null, 4));
-    appendStepToRunLog(step.box, invocation, command, commandOutput, stepRun, tookMs);
+    appendStepToRunLog(`${step.diagram}::${step.box}`, tookMs);
     return stepRun;
 }
 
@@ -218,7 +195,7 @@ function isInsideSourceLock(stepKey: string): boolean {
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     mkdirSync(dirname(logFile()), { recursive: true });
-    appendFileSync(logFile(), `## ======= FAILURE =======\n\`\`\`json\n${JSON.stringify({ invocation, ran: boxesRun, errors }, null, 4)}\n\`\`\`\n${"=".repeat(36)}\n`);
+    appendFileSync(logFile(), `${JSON.stringify({ block: "FAILURE", invocation, ran: boxesRun, errors })}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 
@@ -284,8 +261,13 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const { prompt: _prompt, startedAt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
         // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
         const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
+        const promptBoxStepKey = getStepKeysNamingBox(promptBox)[0];
+        if (promptBoxStepKey === undefined) {
+            throw new Error(`no block named ${promptBox}`);
+        }
+        const agentTookMs = Date.now() - Number(startedAt);
         mkdirSync(dirname(logFile()), { recursive: true });
-        appendFileSync(logFile(), `### ${promptBox} agent took ${took(Date.now() - Number(startedAt))}\n`);
+        appendFileSync(logFile(), `${JSON.stringify({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs })}\n`);
         startInput = JSON.stringify(packet);
     }
     // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.
