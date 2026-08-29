@@ -332,7 +332,7 @@ test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     // Action: the next call consumes that packet.
     const log = runHook(`/run-step B {"packetFile":"${packetFile}"}`, configFile).readLog();
     // Verification: the log says how long the agent took on A, measured from the startedAt in the packet.
-    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const blocks: { block: string; durationMs: number }[] = JSON.parse(log);
     const agentBlock = blocks.find(block => block.block === "one.mmd::A agent");
     assert.ok(agentBlock, log);
     assert.ok(agentBlock.durationMs >= 3000, JSON.stringify(agentBlock));
@@ -492,7 +492,7 @@ test("test_runStepHook_logsOneBlockForEveryStepItRan", () => {
         ],
     }));
     const log = runHook("/run-step A", configFile).readLog();
-    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const blocks: { block: string; durationMs: number }[] = JSON.parse(log);
     assert.deepEqual(blocks.map(block => block.block), ["one.mmd::A", "one.mmd::B"]);
 });
 
@@ -506,13 +506,13 @@ test("test_runStepHook_logsHowLongEachBlockTook", () => {
     }));
     const log = runHook("/run-step A", configFile).readLog();
     // Every block entry logs one line with how long that block took.
-    const blocks = log.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    const blocks: { block: string; durationMs: number }[] = JSON.parse(log);
     assert.equal(blocks.filter(block => typeof block.durationMs === "number").length, 2);
 });
 
 test("test_runStepHook_logsTheFailureWhenTheWalkCannotFinish", () => {
     const log = runHook("/run-step NOT_A_BLOCK").readLog();
-    const failureBlock = log.split("\n").filter(Boolean).map(line => JSON.parse(line)).find(block => block.block === "FAILURE");
+    const failureBlock = (JSON.parse(log) as { block: string; invocation: string; ran: string[]; errors: string[] }[]).find(block => block.block === "FAILURE")!;
     assert.equal(failureBlock.invocation, "/run-step NOT_A_BLOCK");
     assert.deepEqual(failureBlock.ran, []);
     assert.match(failureBlock.errors[0], /no block named NOT_A_BLOCK; known: /);
@@ -692,7 +692,7 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     assert.equal(logName, `${stampFolder}-run-log.json`);
     // The packet sits under <stamp>/packets.
     assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
-    assert.match(readFileSync(join(runsFolder, logName), "utf8"), /"block":"one\.mmd::A"/);
+    assert.ok(JSON.parse(readFileSync(join(runsFolder, logName), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::A"));
 });
 
 test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
@@ -801,7 +801,7 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
     // The pass that consumes it logs to S-run-log.json and writes its packet under S/packets.
     const { result, runsFolder, runsEntries } = runHookIn(cwd, `/run-step C ${JSON.stringify({ packetFile })}`, configFile);
     assert.deepEqual(runsEntries(), ["S", "S-run-log.json"]);
-    assert.match(readFileSync(join(runsFolder, "S-run-log.json"), "utf8"), /"block":"one\.mmd::C"/);
+    assert.ok(JSON.parse(readFileSync(join(runsFolder, "S-run-log.json"), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::C"));
     assert.equal(dirname(result.outcome.payload), packetsFolder);
 });
 

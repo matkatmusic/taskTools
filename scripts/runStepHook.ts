@@ -18,7 +18,9 @@ process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
     mkdirSync(dirname(logFile()), { recursive: true });
-    appendFileSync(logFile(), `${JSON.stringify({ block: "HOOK EXCEPTION", reason })}\n`);
+    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+    runLogEntries.push({ block: "HOOK EXCEPTION", reason });
+    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
     process.exit(0);
 });
 
@@ -116,8 +118,10 @@ function took(ms: number): string {
 
 function appendStepToRunLog(stepKey: string, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
-    // One write, one string: many processes append to this file concurrently.
-    appendFileSync(logFile(), `${JSON.stringify({ block: stepKey, duration: took(tookMs), durationMs: tookMs })}\n`);
+    // The log is one JSON array; each pass of this run rewrites it whole. Passes of one run never overlap.
+    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+    runLogEntries.push({ block: stepKey, duration: took(tookMs), durationMs: tookMs });
+    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
 }
 
 // Single quotes for the log line only: the spawn itself passes an argument list, never a shell string.
@@ -195,7 +199,9 @@ function isInsideSourceLock(stepKey: string): boolean {
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     mkdirSync(dirname(logFile()), { recursive: true });
-    appendFileSync(logFile(), `${JSON.stringify({ block: "FAILURE", invocation, ran: boxesRun, errors })}\n`);
+    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+    runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
+    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
     return { ok: false, ran: boxesRun, errors, outcome: null };
 }
 
@@ -267,7 +273,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         }
         const agentTookMs = Date.now() - Number(startedAt);
         mkdirSync(dirname(logFile()), { recursive: true });
-        appendFileSync(logFile(), `${JSON.stringify({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs })}\n`);
+        const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+        runLogEntries.push({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs });
+        writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
         startInput = JSON.stringify(packet);
     }
     // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.

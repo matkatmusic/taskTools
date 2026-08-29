@@ -64,5 +64,8 @@ test("test_runStepStopHook_blocksTheStopWhenTheAnswerIsMissingFromThePacketFile"
 // Every invocation leaves a line, so a run shows whether the hook fired at all, even when it says nothing.
 test("test_runStepStopHook_logsEveryTimeItFires", () => {
     const { configFile, transcriptFile } = buildAgent({ taskNumber: 7, prompt: "answer" }, false);
-    assert.match(runStopHook(transcriptFile, configFile).readLog(), new RegExp(`^\\{"block":"STOP HOOK","at":"[^"]+","note":"fired for \\\\"${transcriptFile}\\\\""\\}\\n`));
+    // The log file is one JSON array; its first entry is the "fired" note of this invocation.
+    const entries = JSON.parse(runStopHook(transcriptFile, configFile).readLog());
+    assert.equal(entries[0].block, "STOP HOOK");
+    assert.equal(entries[0].note, `fired for "${transcriptFile}"`);
 });

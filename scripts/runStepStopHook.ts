@@ -1,5 +1,5 @@
 // SubagentStop hook: an agent that got a prompt from /run-step may not stop until its answer is in the packet file.
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTemplateShapeMismatches } from "./templateShape.ts";
@@ -12,7 +12,9 @@ const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/run
 
 function log(note: string): void {
     mkdirSync(dirname(LOG_FILE), { recursive: true });
-    appendFileSync(LOG_FILE, `${JSON.stringify({ block: "STOP HOOK", at: new Date().toISOString(), note })}\n`);
+    const runLogEntries = existsSync(LOG_FILE) ? JSON.parse(readFileSync(LOG_FILE, "utf8")) : [];
+    runLogEntries.push({ block: "STOP HOOK", at: new Date().toISOString(), note });
+    writeFileSync(LOG_FILE, `${JSON.stringify(runLogEntries, null, 4)}\n`);
 }
 
 const input: { agent_transcript_path?: unknown } = JSON.parse(readFileSync(0, "utf8"));
