@@ -1,8 +1,8 @@
-// The task record every agent prompt is built from. Its own module so no prompt file
-// has to import the dispatch hub, which would make the imports circular.
+// The task record every agent prompt is built from; its own module avoids a circular dispatch-hub import.
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
+import { modifiableFiles, readOnlyFiles } from "../../prepareTasks.ts";
 
 function fail(problem: string): never {
     process.stderr.write(`AgentPromptEmitter: ${problem}\n`);
@@ -19,6 +19,7 @@ export type PreparedTask = {
     testReviewFile: string;
     notesFile: string;
     files: string[];
+    readOnlyFiles: string[];
     // The same files as absolute paths, so a prompt can name them without rebuilding the join.
     ownedFilePaths: string[];
     // The test file paired with each owned file by the naming convention, kept to the ones that exist.
@@ -47,7 +48,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     if (!existsSync(briefFile)) {
         fail(`brief not found at ${briefFile} — the docs box must write it before this role runs; this emitter is read-only and never creates it`);
     }
-    const files: string[] = Array.isArray((task as any).files) ? (task as any).files : [];
+    const files: string[] = modifiableFiles(task);
     const root = worktree.replace(/\/+$/, "");
     return {
         number: taskNumber,
@@ -58,6 +59,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         testReviewFile: `${worktree}/plans/test-review.json`,
         notesFile: `${worktree}/plans/implementation-notes-${taskNumber}.md`,
         files,
+        readOnlyFiles: readOnlyFiles(task),
         ownedFilePaths: files.map((file) => `${root}/${file}`),
         testFilePaths: files.map((file) => pairedTestPath(root, file)).filter((path) => existsSync(path)),
         hasTests: taskHasTests(task),
