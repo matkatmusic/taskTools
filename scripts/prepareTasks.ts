@@ -17,6 +17,7 @@ export type PreparedTask = {
     briefFile: string;
     planFile: string;
     files: string[];
+    readOnlyFiles: string[];
 };
 
 export type PreparedGroup = {
@@ -110,8 +111,17 @@ export function attachOperationBranch(occurrences: RepositoryOccurrence[], branc
     return occurrences.map((occurrence) => ({ ...occurrence, operationBranch: branch }));
 }
 
-function declaredFiles(task: TaskRecord): string[] {
+export function modifiableFiles(task: TaskRecord): string[] {
+    if (Array.isArray((task as any).modifiableFiles)) return (task as any).modifiableFiles as string[];
     return Array.isArray(task.files) ? (task.files as string[]) : [];
+}
+
+export function readOnlyFiles(task: TaskRecord): string[] {
+    return Array.isArray((task as any).readOnlyFiles) ? (task as any).readOnlyFiles as string[] : ["*"];
+}
+
+function declaredFiles(task: TaskRecord): string[] {
+    return modifiableFiles(task);
 }
 
 export function renderTaskBriefContent(task: TaskRecord, repoRoot: string): string {
@@ -413,6 +423,7 @@ export function buildWorkflowArguments(
                     briefFile: join(worktree, "plans", `brief-${task.taskNumber}.md`),
                     planFile: join(worktree, "plans", `task-${task.taskNumber}-plan.md`),
                     files: declaredFiles(task),
+                    readOnlyFiles: readOnlyFiles(task),
                 }],
             });
         }
@@ -483,6 +494,7 @@ function runAsCli(): void {
                         throw new Error(`prepareTasks: task ${preparedTask.number} changed or closed during preparation`);
                     }
                     preparedTask.files = declaredFiles(latest);
+                    preparedTask.readOnlyFiles = readOnlyFiles(latest);
                 }
             }
             writeJsonAtomically(argumentsFile, pipelineArguments);

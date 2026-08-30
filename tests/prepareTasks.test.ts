@@ -14,6 +14,8 @@ import {
     currentWorkflowOutputPath,
     generateRunId,
     materializeTaskWorkflow,
+    modifiableFiles,
+    readOnlyFiles,
     recoverStaleTaskWorktreeLease,
     releaseTaskWorktreeLease,
     resolveMergeScriptPath,
@@ -24,6 +26,7 @@ import {
     withTaskWorktreeLeaseGuard,
     writeTaskBriefFile,
 } from "../scripts/prepareTasks.ts";
+import { loadPreparedTask } from "../scripts/tackle-tasks/shared/preparedTask.ts";
 import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import type { TaskGroup } from "../scripts/taskGroups.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
@@ -395,6 +398,49 @@ test("test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists
     assert.ok(existsSync(join(import.meta.dirname, "..", "skills", "update-task-files", "SKILL.md")));
 });
 
+test("test_modifiableFilesFallsBackToTheLegacyFilesKeyWhenModifiableFilesIsAbsent", () => {
+    // Verification: a legacy task with only "files" still resolves through the modifiable accessor.
+    assert.deepEqual(modifiableFiles({ taskNumber: 1, files: ["a.ts"] }), ["a.ts"]);
+});
+
+test("test_modifiableFilesPrefersTheModifiableFilesKeyWhenPresent", () => {
+    // Verification: the new "modifiableFiles" key takes precedence over the legacy "files" key, even when both are declared.
+    assert.deepEqual(modifiableFiles({ taskNumber: 1, modifiableFiles: ["a.ts"], files: ["legacy.ts"] } as TaskRecord), ["a.ts"]);
+});
+
+test("test_readOnlyFilesDefaultsToWildcardWhenAbsent", () => {
+    // Verification: an absent read fence widens to "*" rather than narrowing to the modifiable files.
+    assert.deepEqual(readOnlyFiles({ taskNumber: 1, files: ["a.ts"] }), ["*"]);
+});
+
+test("test_readOnlyFilesReturnsTheDeclaredReadOnlyFilesKeyWhenPresent", () => {
+    // Verification: a declared "readOnlyFiles" key is returned as-is.
+    assert.deepEqual(readOnlyFiles({ taskNumber: 1, readOnlyFiles: ["b.ts"] } as TaskRecord), ["b.ts"]);
+});
+
+test("test_modifiableFilesAndReadOnlyFilesResolveIdenticallyForAModernTaskAndItsLegacyEquivalent", () => {
+    // Setup: a modern task that declares both keys, and a legacy task that only declares "files".
+    const modernTask = { taskNumber: 1, modifiableFiles: ["a.ts"], readOnlyFiles: ["*"] } as TaskRecord;
+    const legacyTask = { taskNumber: 2, files: ["a.ts"] } as TaskRecord;
+    // Verification: the legacy fallback is invisible downstream — both resolve to the same values.
+    assert.deepEqual(modifiableFiles(modernTask), modifiableFiles(legacyTask));
+    assert.deepEqual(readOnlyFiles(modernTask), readOnlyFiles(legacyTask));
+});
+
+test("test_loadPreparedTaskCarriesReadOnlyFilesFromTheTaskRecordThroughToThePreparedTask", () => {
+    // Setup: a task declaring readOnlyFiles, its brief, and the .taskTools files loadPreparedTask reads.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 1, title: "t1", description: "desc", files: ["a.ts"], readOnlyFiles: ["b.ts"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: the field survives from the task record through loadPreparedTask's construction site.
+    const prepared = loadPreparedTask(1, repoRoot, repoRoot);
+    assert.deepEqual(prepared.readOnlyFiles, ["b.ts"]);
+});
+
 test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
@@ -430,6 +476,14 @@ test("test_buildWorkflowArgumentsGivesEachTaskItsOwnFilesNotTheCombinedList", ()
     const tasks = workflowArguments.groups.flatMap((g) => g.tasks);
     assert.deepEqual(tasks.find((t) => t.number === 1)!.files, ["a.ts"]);
     assert.deepEqual(tasks.find((t) => t.number === 2)!.files, ["b.ts"]);
+});
+
+test("test_buildWorkflowArgumentsCarriesReadOnlyFilesThroughToThePrintedPipelineArgs", () => {
+    // Verification: readOnlyFiles survives from the type through buildWorkflowArguments's construction site.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"], readOnlyFiles: ["b.ts"] } as TaskRecord];
+    const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
+    assert.deepEqual(workflowArguments.groups[0]!.tasks[0]!.readOnlyFiles, ["b.ts"]);
 });
 
 test("test_buildWorkflowArgumentsGivesEachTaskItsOwnWorktreeAndBranchAsASingletonGroup", () => {
