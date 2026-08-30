@@ -1,7 +1,7 @@
 // Behavioral checks for DOES_RUN_HOLD_SOURCE_LOCK_Q.ts. Run: node --test scripts/tackle-tasks/failuresExit/DOES_RUN_HOLD_SOURCE_LOCK_Q.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./DOES_RUN_HOLD_SOURCE_LOCK_Q.ts";
@@ -17,7 +17,9 @@ function packet(projectRoot: string, taskNumber: number, runId: string) {
 }
 
 function makeProjectRoot(): string {
-    return mkdtempSync(join(tmpdir(), "doesRunHoldSourceLockQ-"));
+    const root = mkdtempSync(join(tmpdir(), "doesRunHoldSourceLockQ-"));
+    mkdirSync(join(root, ".git"));
+    return root;
 }
 
 test("test_DOES_RUN_HOLD_SOURCE_LOCK_Q_choosesReleaseWhenThisRunOwnsTheLock", () => {

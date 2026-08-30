@@ -16,7 +16,9 @@ import { getTemplateShapeMismatches } from "../../templateShape.ts";
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "RECORD_MERGE_COMMIT_HASHES.template.json");
 
 function tmpMkdir(prefix: string): string {
-    return execFileSync("mktemp", ["-d", join(tmpdir(), `${prefix}XXXXXX`)], { encoding: "utf8" }).trim();
+    const dir = execFileSync("mktemp", ["-d", join(tmpdir(), `XXXXXX`)], { encoding: "utf8" }).trim();
+    mkdirSync(join(dir, ".git"));
+    return dir;
 }
 
 function seedTaskAndMarkActive(projectRoot: string, taskNumber: number, runId: string): void {

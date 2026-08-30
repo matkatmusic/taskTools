@@ -1,8 +1,7 @@
-// sourceRepoLock.ts holds one durable, heartbeat-based lock on the source repository
-// across many short-lived processes. See plans/diagram/pipeline.mmd rule 9.
+// sourceRepoLock.ts holds one durable, heartbeat-based lock on the source repository across many short-lived processes. See plans/diagram/pipeline.mmd rule 9.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,9 +25,7 @@ function makeProjectRoot(): string {
 
 const sourceRepoLockModulePath = fileURLToPath(new URL("./sourceRepoLock.ts", import.meta.url));
 
-// Runs `functionCall` (an expression referencing the imported lock functions, plus a
-// `waitForFile(path)` busy-wait helper) in its own node process, and resolves with its
-// JSON-parsed stdout. Used to force real cross-process interleavings the audit calls for.
+// Runs `functionCall` in its own node process; resolves its JSON-parsed stdout, for real cross-process interleavings.
 function spawnLockCall(functionCall: string): Promise<unknown> {
     const script = `
         import {
@@ -92,6 +89,18 @@ test("test_acquireSourceRepoLock_isANoOpForTheSameOwner", () => {
     assert.deepEqual(outcome, { status: "already-held-by-me" });
 });
 
+test("test_acquireSourceRepoLock_resolvesWorktreeGitFile", () => {
+    // Step: projectRoot's .git is a file pointing at a separate real git dir, like a linked worktree.
+    const root = mkdtempSync(join(tmpdir(), "taskTools-sourceLock-"));
+    const gitDir = mkdtempSync(join(tmpdir(), "taskTools-sourceLock-gitdir-"));
+    writeFileSync(join(root, ".git"), `gitdir: ${gitDir}\n`);
+    const owner = buildLockOwner("run-400", 400);
+    // Step: acquiring must resolve through the .git file, not fail treating .git as a directory.
+    const outcome = acquireSourceRepoLock(root, owner);
+    assert.deepEqual(outcome, { status: "acquired" });
+    assert.ok(existsSync(join(gitDir, "taskTools-source.lock")));
+});
+
 test("test_releaseSourceRepoLock_refusesToReleaseAnotherOwnersLock", () => {
     // Step: owner A holds the lock.
     const root = makeProjectRoot();
@@ -139,8 +148,7 @@ test("test_acquireSourceRepoLock_reportsHeldWhileTheHeartbeatStaysWarm", () => {
     const owner = buildLockOwner("run-7", 70);
     const startMs = Date.parse("2026-01-01T00:00:00.000Z");
     acquireSourceRepoLock(root, owner, { nowMs: startMs });
-    // Step: the run refreshes its heartbeat every few minutes, crossing what would
-    // otherwise be the stale threshold if measured from acquisition alone.
+    // Step: the run refreshes its heartbeat every few minutes, crossing what would otherwise be the stale threshold if measured from acquisition alone.
     const refreshTimes = [startMs + 5 * 60 * 1000, startMs + 10 * 60 * 1000, startMs + 16 * 60 * 1000];
     for (const refreshMs of refreshTimes) {
         const refreshOutcome = refreshSourceRepoLock(root, owner, { nowMs: refreshMs });

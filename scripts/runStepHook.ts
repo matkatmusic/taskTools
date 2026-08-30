@@ -40,8 +40,8 @@ let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) 
 let packetSequence = 0;
 const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.json`;
 const packetsDirectory = () => join(runDirectory, "packets");
-// ponytail: one flat cap per block. Claude Code kills the whole hook at 60s, so a walk of many blocks needs headroom.
-const STEP_TIMEOUT_MS = 10_000;
+// ponytail: one flat cap per block; the full suite takes about 2 minutes, and the hook ceiling is 10 minutes.
+const STEP_TIMEOUT_MS = 300_000;
 const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";

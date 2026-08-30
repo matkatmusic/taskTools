@@ -173,7 +173,7 @@ test("test_isTaskRunResumable_returnsFalseWhenADifferentPhysicalOwnerHoldsTheLea
     assert.equal(lease.runId, "run-someone-else");
 });
 
-test("test_isTaskRunResumable_adoptsAnEndedRunsLeaseWhenThereAreNoNotes", () => {
+test("test_isTaskRunResumable_resumesAnEndedRunThatRecordedNoWork", () => {
     // Setup: an ended run holds the lease, but it recorded no implementation notes at all —
     // this is the "safe, no notes" recovery path finding 1 covers: ownership must still transfer.
     const worktreePath = mkdtempSync(join(tmpdir(), "isTaskRunResumable-wt-"));
@@ -184,9 +184,9 @@ test("test_isTaskRunResumable_adoptsAnEndedRunsLeaseWhenThereAreNoNotes", () => 
     // Test action: check resumability.
     const result = isTaskRunResumable(1, worktreePath, "run-new", root);
 
-    // Verification: not resumable (no notes to resume from), but ownership is established and
+    // Verification: resumable (the run recorded no work to lose); ownership is established and
     // both lease records — the physical lease file and task.run.leaseRunId — now name the new run.
-    assert.deepEqual(result, { resumable: false, implementationNotesFile: null, leaseEstablished: true });
+    assert.deepEqual(result, { resumable: true, implementationNotesFile: null, leaseEstablished: true });
     const lease = JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8"));
     assert.equal(lease.runId, "run-new");
     const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
