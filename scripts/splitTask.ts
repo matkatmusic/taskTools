@@ -171,7 +171,10 @@ function toPositiveInt(value: string, label: string): number {
     return parsed;
 }
 
-function runInfo(taskNumberArg: string, numSplitsArg: string): void {
+export function runInfo(taskNumberArg: string, numSplitsArg: string): void {
+    if (numSplitsArg === undefined) {
+        throw new Error("Usage: /split-task <taskNum> <numSplits> [guidance]");
+    }
     const taskNumber = toPositiveInt(taskNumberArg, "taskNum");
     const numSplits = toPositiveInt(numSplitsArg, "numSplits");
     const parent = readParentTask(taskNumber);
@@ -195,7 +198,15 @@ export function parseFileGroups(raw: string): string[][] {
     return parsed as string[][];
 }
 
-function runClose(parentNumberArg: string, numSplitsArg: string, childNumbersArg: string, fileGroupsArg: string): void {
+export function runClose(
+    parentNumberArg: string,
+    numSplitsArg: string,
+    childNumbersArg: string,
+    fileGroupsArg: string,
+): void {
+    if (numSplitsArg === undefined) {
+        throw new Error("Usage: splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson>");
+    }
     const parentNumber = toPositiveInt(parentNumberArg, "parentNum");
     const numSplits = toPositiveInt(numSplitsArg, "numSplits");
     const childNumbers = (childNumbersArg ?? "").split(",").map((raw) => toPositiveInt(raw.trim(), "childNumber"));
