@@ -4,7 +4,7 @@ Written 2026-08-25 for the agent that rewrites the real workflow. Source code is
 
 ## The guide
 
-`scripts/tackle-tasks/monolith-pipeline.ts` is the design. `plans/diagram/pipeline-monolith.mmd` draws its 17 blocks. Run it with:
+`scripts/tackle-tasks/monolith-pipeline.ts` is the design. `plans/diagram/_pipeline-monolith.mmd` draws its 18 blocks. Run it with:
 
 ```
 bun scripts/tackle-tasks/monolith-pipeline.ts <1..8> scripts/tackle-tasks/monolith-pipeline.fixture/tasks.json
@@ -39,7 +39,7 @@ The generated file must come from `pipelines.ts` (`generateTaskWorkflow.ts` + `t
 
 - **One loop.** `main()` calls `agent()` once per hook stop, never per block. `agent()` invokes `/run-step <block>`; the hook walks until a prompt or a stop. Fixture task 1: 12 blocks, 5 `agent()` calls.
 - **Prompt blocks are exactly these 6:** `PLAN_THE_TASK`, `CODEX_REVIEWS_PLAN`, `IMPLEMENT_TASK`, `CODEX_REVIEWS_TESTS`, `FIX_CONFLICTS`, `FIX_THE_CODEBASE_FOR_SUITE`. Marked `returns_a_prompt` in the diagrams; `steps.json` carries it as `producesPrompt`. Every other box runs as a script. The user ruled: no other box becomes a prompt box.
-- **Schema per call.** The hook's outcome carries the schema of every block reachable from `next` before the next prompt or stop (`getSchemaReachableFrom`; real: `buildRunStepSchemas.ts:buildAgentSchema(next)`). The workflow passes it to the next `agent()` as its structured output. `agent()` refuses a stop at a block the schema did not list.
+- **Schema per call.** The first `agent()` gets the schema of every block in the pipeline. `agent()` passes that list into `/run-step`. At the stop, the hook returns the same list with every block the run can no longer reach dropped (`runStep` filters it with `getSchemaReachableFrom(next)`, which walks through prompt blocks). A block on a retry path stays until the run passes it for good. The list only shrinks. The workflow passes the returned list to the next `agent()` as its structured output. `agent()` refuses a stop at a block the list did not name. Fixture task 9 shows `IMPLEMENT_TASK` stopping twice with the same 10-block list. Real: `buildRunStepSchemas.ts:buildAgentSchema(next)` rebuilds from scratch and stops at prompts; the hook must take the list in and filter it instead.
 - **Null `agent()`** → the failures exit with `agent-failed`, like `pipelines.ts:406` does today. No new block.
 - **Hook failure** (`ok: false`) → the agent returns the error unchanged; the loop prints it and stops with exit code 1.
 - **Counters.** `attempts.clarify`, `attempts.testFixes`, `attempts.testReviews`, `attempts["pipeline-rebase-conflict-fix"]`, `attempts.merge`, `suiteFixAttempts` (payload only), `planReviewCount` on the entry. All cap at 2. Real ones live in `task.run.history[last].attempts` via `taskRunState.ts:getAttemptCount/raiseAttemptCount`.
@@ -55,7 +55,7 @@ The generated file must come from `pipelines.ts` (`generateTaskWorkflow.ts` + `t
 | 8 | plans with 12+ sections graded by efficacy percentage | already `scripts/planReviewRuling.ts`; keep it |
 | 1, 2 | `agent-failed` and `run-failed` exits | new generic loop in `pipelines.ts` |
 | 5, 9 | plan is `plans/plan.json`, brief is `plans/brief-N.md` | already `preparedTask.ts` |
-| 11 | schema = blocks reachable from `next` | already `buildRunStepSchemas.ts`; the workflow must use `outcome.schema` |
+| 11 | schema list is passed in, filtered to blocks still reachable, and returned | `runStepHook.ts` must take the list in; `buildRunStepSchemas.ts:getStepsReachableFrom` must walk through prompt blocks; the workflow must use `outcome.schema` |
 | 13 | `not-resumable` is an exit type | `_pipeline.mmd` fixed; `writeTaskExitNotes.ts` EXIT_TYPES must list it |
 
 ## Dead code the rewrite may delete
