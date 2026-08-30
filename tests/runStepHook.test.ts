@@ -880,6 +880,7 @@ test("test_runStepHook_keepsTheCheckpointWhenTheBlockAfterAPromptDies", () => {
 
 test("test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt", () => {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    mkdirSync(join(worktree, ".git"));
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: ["B"] },
@@ -916,6 +917,7 @@ test("test_runStepHook_writesNoCheckpointBeforeAWorktreeExists", () => {
 
 test("test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain", () => {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    mkdirSync(join(worktree, ".git"));
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue", next: FAILURES_EXIT_KEY, exitType: "tests-red", exitNote: "n", worktree, runId: "r1", taskNumber: 7, projectRoot: worktree }), next: [FAILURES_EXIT_KEY] },

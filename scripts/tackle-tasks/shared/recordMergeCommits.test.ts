@@ -12,7 +12,9 @@ import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 
 function tmpMkdir(prefix: string): string {
-    return execFileSync("mktemp", ["-d", join(tmpdir(), `${prefix}XXXXXX`)], { encoding: "utf8" }).trim();
+    const dir = execFileSync("mktemp", ["-d", join(tmpdir(), `XXXXXX`)], { encoding: "utf8" }).trim();
+    mkdirSync(join(dir, ".git"));
+    return dir;
 }
 
 function seedTaskAndClaim(projectRoot: string, taskNumber: number, runId: string): void {

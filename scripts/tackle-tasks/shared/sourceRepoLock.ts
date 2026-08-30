@@ -1,12 +1,10 @@
-// A durable, heartbeat-based lock on the source repository, held across many
-// short-lived processes for the whole "rebase onto target branch" tail of a
-// task workflow run. See plans/diagram/pipeline.mmd rule 9.
+// Durable heartbeat lock on the source repo, held through a task workflow run's rebase tail. See plans/diagram/pipeline.mmd rule 9.
 import {
     closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync,
-    renameSync, unlinkSync, writeFileSync,
+    renameSync, statSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export type LockOwner = string; // `${runId}:${taskNumber}`
 export type LockFile = { owner: LockOwner; acquiredAt: string; heartbeatAt: string };
@@ -27,16 +25,21 @@ export function buildLockOwner(runId: string, taskNumber: number): LockOwner {
     return `${runId}:${taskNumber}`;
 }
 
-// Lives under <projectRoot>/.git, never inside a linked worktree's own .git file,
-// so it survives process exit and is keyed to the one real source repository.
-function sourceRepoLockPath(projectRoot: string): string {
-    return join(projectRoot, ".git", "taskTools-source.lock");
+// A linked worktree's .git is a file holding "gitdir: <path>"; the lock lives in that path.
+function sourceRepoGitDir(projectRoot: string): string {
+    const dotGit = join(projectRoot, ".git");
+    if (statSync(dotGit).isDirectory()) return dotGit;
+    return resolve(projectRoot, readFileSync(dotGit, "utf8").replace(/^gitdir:\s*/, "").trim());
 }
 
-// Own path, distinct from the durable lock and from taskStateLockPath: this guard
-// only makes one read/validate/write transition indivisible, it never spans boxes.
+// Under <projectRoot>/.git, resolved via a linked worktree's .git file, so it keys to the one real source repo.
+function sourceRepoLockPath(projectRoot: string): string {
+    return join(sourceRepoGitDir(projectRoot), "taskTools-source.lock");
+}
+
+// Own path, distinct from the durable lock and from taskStateLockPath: this guard only makes one read/validate/write transition indivisible, it never spans boxes.
 function sourceRepoLockMutationGuardPath(projectRoot: string): string {
-    return join(projectRoot, ".git", "taskTools-source.lock.mutation-guard");
+    return join(sourceRepoGitDir(projectRoot), "taskTools-source.lock.mutation-guard");
 }
 
 export function readSourceRepoLock(projectRoot: string): LockFile | null {
@@ -45,8 +48,7 @@ export function readSourceRepoLock(projectRoot: string): LockFile | null {
     return JSON.parse(readFileSync(lockPath, "utf8")) as LockFile;
 }
 
-// Test-only pause seam: busy-wait until `signalPath` exists. Lets a test hold this
-// process inside the guard while a concurrent process observes or queues behind it.
+// Test-only pause seam: busy-wait until `signalPath` exists. Lets a test hold this process inside the guard while a concurrent process observes or queues behind it.
 function waitForTestSignal(signalPath: string | undefined): void {
     if (signalPath === undefined) return;
     while (!existsSync(signalPath)) {
@@ -60,9 +62,7 @@ export type SourceRepoLockTestHooks = {
     failTempWriteBeforeFsync?: boolean;
 };
 
-// Same wx/wait/finally shape as withTaskStateLock, but its own path and never shared
-// with the task-state lock. Held by one short-lived process, so PID liveness is a
-// meaningful diagnostic here even though it is meaningless for the durable source lock.
+// Same wx/wait/finally shape as withTaskStateLock, but its own path and never shared with the task-state lock. Held by one short-lived process, so PID liveness is a meaningful diagnostic here even though it is meaningless for the durable source lock.
 export function withSourceRepoLockMutationGuard<T>(
     projectRoot: string,
     action: () => T,
@@ -99,9 +99,7 @@ export function withSourceRepoLockMutationGuard<T>(
     }
 }
 
-// Never creates the final lock path before its complete contents exist: builds the
-// complete file in a unique same-directory temp file, fsyncs, then renames onto the
-// final path. Removes the temp file on every failure path.
+// Never creates the final lock path before its complete contents exist: builds the complete file in a unique same-directory temp file, fsyncs, then renames onto the final path. Removes the temp file on every failure path.
 function writeSourceRepoLockAtomically(
     projectRoot: string,
     lock: LockFile,
@@ -175,8 +173,7 @@ export function refreshSourceRepoLock(
     }, { timeoutMs: options.timeoutMs });
 }
 
-// F2: the one guard every tail-script box calls before doing any work. A discarded
-// {refreshed:false} is exactly the bug — this makes ignoring it impossible.
+// F2: the one guard every tail-script box calls before doing any work. A discarded {refreshed:false} is exactly the bug — this makes ignoring it impossible.
 export function refreshOwnedSourceRepoLockOrThrow(projectRoot: string, owner: LockOwner): void {
     const { refreshed } = refreshSourceRepoLock(projectRoot, owner);
     if (!refreshed) throw new Error(`source repository lock is no longer owned by "${owner}"`);
@@ -196,10 +193,7 @@ export function releaseSourceRepoLock(
     }, { timeoutMs: options.timeoutMs });
 }
 
-// Recovery is never automatic: acquireSourceRepoLock only ever reports "recoverable".
-// This is the sole path that removes a cold lock, gated on an exact confirmation string,
-// and now shares the common mutation guard with acquire/refresh/release so no mutator
-// ever decides from a snapshot taken outside that guard.
+// Recovery is never automatic: acquireSourceRepoLock only ever reports "recoverable".  This is the sole path that removes a cold lock, gated on an exact confirmation string, and now shares the common mutation guard with acquire/refresh/release so no mutator ever decides from a snapshot taken outside that guard.
 export function recoverSourceRepoLock(
     projectRoot: string,
     expectedStaleOwner: LockOwner,
