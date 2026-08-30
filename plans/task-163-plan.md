@@ -412,7 +412,7 @@ Becomes:
 ```
 
 No other edits to this file — the "Bug found while grilling" section at the
-bottom (lines 275–291) is left as-is: it is a historical note about task 156
+bottom (lines 275–291) is left as-is: it is a historical note about task 162
 that this task does not touch.
 
 ### 5. Delete the five superseded workflow files
