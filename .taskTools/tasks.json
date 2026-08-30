@@ -19,15 +19,60 @@
     "version": "091d78289befe634ccb151ace4f284a4568e46b5",
     "title": "Introduce the readOnlyFiles read fence in the task template, update-task-files, and the plan/verify workflow prompts",
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children \u2014 skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/create-task/template/taskTemplate.json\", \"skills/update-task-files/SKILL.md\", \"skills/tackle-tasks/plan.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nChild 2 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 2: add 'readOnlyFiles' to the keys of each task to provide the list of files to be read by the agent, with 'readOnlyFiles: [*]' meaning every file in the project is readable by the subagents.\n\nRequired behavior:\n1. skills/create-task/template/taskTemplate.json gains a readOnlyFiles key alongside the existing file fence, documented as the list of paths the subagents may READ, where [\"*\"] means every file in the project.\n2. skills/update-task-files/SKILL.md is updated so backfilling a task's file fence also maintains readOnlyFiles, not just the editable list.\n3. The two read-oriented workflow prompts stop conflating the read fence with the edit fence: skills/tackle-tasks/plan.workflow.js line 28 currently says \"You may also READ these owned files, and nothing else\" \u2014 the planner must be told it may read readOnlyFiles (or the whole project when it is [\"*\"]). skills/tackle-tasks/verify.workflow.js line 25 has the same conflation and needs the same widening.\n\nDo NOT edit scripts/prepareTasks.ts (child 93 defines and exports the shared accessor pair \u2014 import it, never re-implement it), scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, skills/create-task/SKILL.md, skills/tackle-tasks/implement.workflow.js, skills/tackle-tasks/test.workflow.js, or skills/close-tasks/SKILL.md \u2014 those belong to siblings.\n\nMotivation: task 50's planner produced a plan against a file that no longer existed because its read fence was scoped to its own owned files. Widening reads while keeping writes narrow fixes that without loosening ownership. Note that readOnlyFiles must never widen a task group or make two tasks collide \u2014 grouping keys off the editable fence only.\n\nFiles: skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, skills/tackle-tasks/plan.workflow.js, skills/tackle-tasks/verify.workflow.js\n\nTests: assert the template carries readOnlyFiles with its [\"*\"] meaning documented, and that the plan and verify workflow prompts state a read fence that is readOnlyFiles (or the whole project when [\"*\"]) rather than \"these owned files, and nothing else\".\n\nDifficulty: 2",
-    "description": "Step 2 of the 6-way split of task 58. Scope is the authoring surfaces that EMIT the read fence plus the two workflow prompts that CONSUME it for reading only. The runtime accessors live in scripts/prepareTasks.ts (child 93) and must be imported, never re-implemented; the edit-fence rename is a sibling child; the close-tasks migration is another.\n\nWhy this exists: the workflow prompts today conflate 'files you own' with 'files you may look at'. skills/tackle-tasks/plan.workflow.js line 28 literally says the agent may READ its owned files 'and nothing else', and skills/tackle-tasks/verify.workflow.js line 25 repeats it. That is what broke task 50 \u2014 its planner wrote a plan against a file that had already been deleted, because it could not read the rest of the project to notice. Reading is widened here; writing stays exactly as narrow as it is today.\n\nSurfaces to change:\n- skills/create-task/template/taskTemplate.json: add readOnlyFiles next to the existing file fence, with the ['*'] = whole project meaning stated in the template itself so every task author sees it.\n- skills/update-task-files/SKILL.md: backfilling a task's fence must now maintain readOnlyFiles too, not just the editable list.\n- skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js: state the read fence separately from the edit fence \u2014 readOnlyFiles, or the entire project when it is ['*'].\n\nInvariant that must survive this change: readOnlyFiles never affects grouping. Task groups and worktree scope key off the editable fence only, so a wide read fence must not merge two groups or make two tasks collide. Enforcement lives in scripts/taskGroups.ts (a sibling child); this child must not state anything in the prompts or template that contradicts it.",
+    "description": "Step 2 of the 6-way split of task 58. Scope is the authoring surfaces that EMIT the read fence plus the two workflow prompts that CONSUME it for reading only. The runtime accessors live in scripts/prepareTasks.ts (child 93) and must be imported, never re-implemented; the edit-fence rename is a sibling child; the close-tasks migration is another.\n\nWhy this exists: the workflow prompts today conflate 'files you own' with 'files you may look at'. skills/tackle-tasks/plan.workflow.js line 28 literally says the agent may READ its owned files 'and nothing else', and skills/tackle-tasks/verify.workflow.js line 25 repeats it. That is what broke task 50 \u2014 its planner wrote a plan against a file that had already been deleted, because it could not read the rest of the project to notice. Reading is widened here; writing stays exactly as narrow as it is today.\n\nSurfaces to change:\n- skills/create-task/template/taskTemplate.json: add readOnlyFiles next to the existing file fence, with the ['*'] = whole project meaning stated in the template itself so every task author sees it.\n- skills/update-task-files/SKILL.md: backfilling a task's fence must now maintain readOnlyFiles too, not just the editable list.\n- skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js: state the read fence separately from the edit fence \u2014 readOnlyFiles, or the entire project when it is ['*'].\n\nInvariant that must survive this change: readOnlyFiles never affects grouping. Task groups and worktree scope key off the editable fence only, so a wide read fence must not merge two groups or make two tasks collide. Enforcement lives in scripts/taskGroups.ts (a sibling child); this child must not state anything in the prompts or template that contradicts it.\n\n## Clarification answer (2026-08-29)\n\nThe accessor pair does not exist yet. Task 93 shipped only its part 1 (the brief lists file pointers). Its parts 2 and 3 \u2014 the exported modifiableFiles/readOnlyFiles accessors in scripts/prepareTasks.ts and the readOnlyFiles field on PreparedTask \u2014 moved to task 154, which is open. This task is now blocked by 154; there is nothing to import until it lands.\n\nWhen 154 lands: import the accessors from scripts/prepareTasks.ts under the names 154 exports; never re-implement them. PreparedTask lives in scripts/tackle-tasks/shared/preparedTask.ts (not prepareTasks.ts). Today it carries `files` and `ownedFilePaths` only; no field represents the [\"*\"] whole-project marker anywhere \u2014 154 decides that shape. Both files are now in this task's `files` so the brief hands them to you.\n\nExact edit points for requirement 3: scripts/tackle-tasks/shared/planPrompt.ts builds its read-file argument list from `t.ownedFilePaths`; scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts builds \"WHAT YOU READ\" from `reviewedPaths(t)`. Widen both with the resolved read fence from PreparedTask.",
     "files": [
       "skills/create-task/template/taskTemplate.json",
       "scripts/updateTaskFilesBrief.ts",
       "scripts/tackle-tasks/shared/planPrompt.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts"
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/tackle-tasks/shared/preparedTask.ts"
     ],
     "tests": "Assert skills/create-task/template/taskTemplate.json carries a readOnlyFiles key with its ['*'] = every project file meaning documented in the template. Assert the prompt text emitted by skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js states a read fence of readOnlyFiles (or the whole project when ['*']) and no longer contains the phrase restricting reads to owned files and nothing else.",
-    "difficulty": 4
+    "difficulty": 4,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-94",
+      "leaseRunId": "7536be1b-ebe3-46fd-9a21-a28c48bbf241",
+      "history": [
+        {
+          "runId": "7536be1b-ebe3-46fd-9a21-a28c48bbf241",
+          "startedAt": "2026-08-29T18:06:40-07:00",
+          "endedAt": "2026-08-29T18:17:10-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "3f069a04-9d85-4bad-aad6-5fec70a06c68",
+              "8932b6c0-6ea0-446a-8a53-723029bb563a"
+            ]
+          }
+        }
+      ]
+    },
+    "blockedBy": [
+      {
+        "taskNum": 154,
+        "reason": "exports the modifiableFiles/readOnlyFiles accessors from prepareTasks.ts and adds readOnlyFiles to PreparedTask; this task imports both"
+      }
+    ]
   },
   {
     "taskNumber": 95,
@@ -35,14 +80,54 @@
     "version": "091d78289befe634ccb151ace4f284a4568e46b5",
     "title": "Rename the edit fence to modifiableFiles in create-task and state it separately from the read fence in the implement and test workflows",
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children \u2014 skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/implement.workflow.js\", \"skills/tackle-tasks/test.workflow.js\", \"skills/create-task/SKILL.md\"]`.\n\nChild 3 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 3: change 'files' to 'modifiableFiles', meaning 'only these files are editable by the subagents'.\n\nRequired behavior:\n1. skills/create-task/SKILL.md emits and documents 'modifiableFiles' in place of 'files' when authoring a task, stating plainly that it is the edit fence \u2014 only these paths may be edited or git-added by the subagents.\n2. The two write-oriented workflow prompts state the edit fence and the read fence separately, where today they conflate them: skills/tackle-tasks/implement.workflow.js lines 38 and 73, and skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Only modifiableFiles may be edited or git-added; readOnlyFiles (or the whole project when it is [\"*\"]) may be read.\n\nDo NOT edit scripts/prepareTasks.ts (child 93 defines and exports the shared accessor pair \u2014 import it, never re-implement it), scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, skills/tackle-tasks/plan.workflow.js, skills/tackle-tasks/verify.workflow.js, or skills/close-tasks/SKILL.md \u2014 those belong to siblings.\n\nNote the compatibility rule owned by a sibling child: readers still accept a legacy task that declares only 'files', so this rename must not make an old task unreadable. Grouping and worktree scope key off modifiableFiles only.\n\nFiles: skills/tackle-tasks/implement.workflow.js, skills/tackle-tasks/test.workflow.js, skills/create-task/SKILL.md\n\nTests: assert the implement and test workflow prompts name modifiableFiles as the only paths that may be edited or git-added, and separately name readOnlyFiles (or the whole project when [\"*\"]) as readable; assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files.\n\nDifficulty: 2",
-    "description": "Step 3 of the 6-way split of task 58. Scope is the write-side surfaces: the authoring instructions in skills/create-task/SKILL.md and the two workflow prompts that actually edit and git-add files. The template JSON, the read-side prompts, the runtime accessors, and the close-tasks migration all belong to siblings.\n\nThe rename is semantic, not cosmetic: `files` currently means both 'what this task owns' and 'what the agent may look at'. Splitting it makes `modifiableFiles` mean exactly one thing \u2014 the only paths that may be edited or git-added \u2014 so the read fence can be widened independently without loosening ownership.\n\nSites that conflate the two fences today and must state them separately: skills/tackle-tasks/implement.workflow.js lines 38 and 73; skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Each needs an explicit edit fence (modifiableFiles only) and an explicit read fence (readOnlyFiles, or the entire project when it is ['*']).\n\nCompatibility constraint, enforced by a sibling child in the shared accessors: a legacy task declaring only `files` must keep working, with `files` read as the modifiable fence. So this rename changes what new tasks emit and what the prompts say, and must not be written as though the old key were invalid.\n\nInvariant to preserve: grouping and worktree scope key off the modifiable fence only. readOnlyFiles must never widen a group or make two tasks collide, so nothing in these prompts may imply that a wide read fence grants ownership.",
+    "description": "Step 3 of the 6-way split of task 58. Scope is the write-side surfaces: the authoring instructions in skills/create-task/SKILL.md and the two workflow prompts that actually edit and git-add files. The template JSON, the read-side prompts, the runtime accessors, and the close-tasks migration all belong to siblings.\n\nThe rename is semantic, not cosmetic: `files` currently means both 'what this task owns' and 'what the agent may look at'. Splitting it makes `modifiableFiles` mean exactly one thing \u2014 the only paths that may be edited or git-added \u2014 so the read fence can be widened independently without loosening ownership.\n\nSites that conflate the two fences today and must state them separately: skills/tackle-tasks/implement.workflow.js lines 38 and 73; skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Each needs an explicit edit fence (modifiableFiles only) and an explicit read fence (readOnlyFiles, or the entire project when it is ['*']).\n\nCompatibility constraint, enforced by a sibling child in the shared accessors: a legacy task declaring only `files` must keep working, with `files` read as the modifiable fence. So this rename changes what new tasks emit and what the prompts say, and must not be written as though the old key were invalid.\n\nInvariant to preserve: grouping and worktree scope key off the modifiable fence only. readOnlyFiles must never widen a group or make two tasks collide, so nothing in these prompts may imply that a wide read fence grants ownership.\n\n## Clarification answer (2026-08-29)\n\nYes \u2014 the old workflow files are gone and `files` is updated. The prompt text now lives in:\n- scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts \u2014 \"WHAT TO READ\" (ownedFilePaths + testFilePaths) and \"WHAT YOU MAY EDIT\" (the same owned paths); the implement prompt also writes the tests, there is no separate test-writing block.\n- scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts \u2014 the test-fix prompt; its read fence is already the whole tree, its \"WHAT YOU MAY EDIT\" is still the owned list.\n\nFor create-task: skills/create-task/SKILL.md only shells out to scripts/create-task_SkillBodyEmitter.ts, so the \"emit modifiableFiles instead of files\" authoring instruction belongs in that emitter. The field name also appears in scripts/create-task_AgentPromptEmitter.ts (the files-research prompt), skills/create-task/createTask.workflow.js (schema key `files`), and scripts/appendTask.ts (`buildTaskEntry` copies `payload.files` to `entry.files`); the rename touches all of them, and they are all in `files` now. scripts/createTaskBrief.ts is retired (commented out) and must not be edited.",
     "files": [
       "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts",
       "scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts",
-      "scripts/createTaskBrief.ts"
+      "scripts/create-task_SkillBodyEmitter.ts",
+      "scripts/create-task_AgentPromptEmitter.ts",
+      "skills/create-task/createTask.workflow.js",
+      "scripts/appendTask.ts"
     ],
     "tests": "Assert the prompt text emitted by skills/tackle-tasks/implement.workflow.js and skills/tackle-tasks/test.workflow.js names modifiableFiles as the only paths that may be edited or git-added, and separately names readOnlyFiles (or the whole project when ['*']) as readable \u2014 the two fences must appear as distinct statements, not one combined sentence. Assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files, while still describing legacy `files` as accepted.",
-    "difficulty": 4
+    "difficulty": 4,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-95",
+      "leaseRunId": "85cdd397-cca1-414a-8f35-c1a19763c5f0",
+      "history": [
+        {
+          "runId": "85cdd397-cca1-414a-8f35-c1a19763c5f0",
+          "startedAt": "2026-08-29T18:06:42-07:00",
+          "endedAt": "2026-08-29T18:17:13-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "49636a45-cbc1-4f0f-ac6c-f31a343fa8d2",
+              "eedb70eb-6cd2-4bf6-917f-6a3ce9459912"
+            ]
+          }
+        }
+      ]
+    }
   },
   {
     "taskNumber": 96,
@@ -50,14 +135,57 @@
     "version": "091d78289befe634ccb151ace4f284a4568e46b5",
     "title": "Grouping accepts legacy files as modifiableFiles via the shared accessor, and never groups on readOnlyFiles",
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children \u2014 skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/taskGroups.ts\", \"tests/taskGroups.test.ts\"]`.\n\nChild 4 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 4: when a task only has 'files' but not 'modifiableFiles', accept 'files'.\n\nRequired behavior:\n1. scripts/taskGroups.ts declaredFiles (line 16) currently reads the raw 'files' key. Route it through the shared accessor pair that child 93 defines and exports from scripts/prepareTasks.ts, so a task declaring only the legacy 'files' key is read exactly as if it had declared 'modifiableFiles'. Import that accessor \u2014 never re-implement the fallback here, because grouping and preparation diverging is the specific bug this centralisation prevents.\n2. Grouping and worktree-scope decisions key off modifiableFiles ONLY. readOnlyFiles must never widen a group or make two tasks collide, even when it is [\"*\"].\n\nDo NOT edit scripts/prepareTasks.ts (child 93 owns it), scripts/approvalGate.ts, scripts/mergePipeline.ts, any skills/ file, tests/prepareTasks.test.ts, or tests/prepareTasksIntegration.test.ts \u2014 those belong to siblings.\n\nFiles: scripts/taskGroups.ts, tests/taskGroups.test.ts\n\nTests: group a task declaring modifiableFiles alongside a legacy task declaring only files, and assert they group identically to the way the legacy pair grouped before the rename. Assert that two tasks whose readOnlyFiles overlap \u2014 including when both are [\"*\"] \u2014 do NOT get merged into one group and do not collide, because grouping keys off modifiableFiles only.\n\nDifficulty: 2",
-    "description": "Step 4 of the 6-way split of task 58. Scope is scripts/taskGroups.ts and its test. The accessor itself is defined and exported by child 93 from scripts/prepareTasks.ts; this child is the second consumer of it.\n\nWhy the accessor is shared rather than duplicated: scripts/prepareTasks.ts declaredFiles (line 100) and scripts/taskGroups.ts declaredFiles (line 16) are two independent readers of the same fence. If they resolve the legacy key differently \u2014 even by one edge case, such as an empty array or a task carrying both keys \u2014 grouping and preparation disagree about which files a group owns, and a worktree gets scoped to a different set than the brief describes. Routing both through one exported accessor makes that divergence impossible by construction.\n\nFallback semantics being consumed here: modifiableFiles when present, otherwise the legacy files key. A legacy task must group exactly as it grouped before the rename \u2014 this is a pure compatibility requirement, not a behavior change.\n\nHard invariant this child enforces: grouping and worktree scope key off the modifiable fence ONLY. readOnlyFiles is deliberately allowed to be wide (['*'] means the whole project), so if grouping ever consulted it, every task with a default read fence would collide with every other task and collapse into a single group. The read fence must be invisible to grouping.\n\nSource files are capped at 250 lines \u2014 split rather than grow past the cap.",
+    "description": "Step 4 of the 6-way split of task 58. Scope is scripts/taskGroups.ts and its test. The accessor itself is defined and exported by child 93 from scripts/prepareTasks.ts; this child is the second consumer of it.\n\nWhy the accessor is shared rather than duplicated: scripts/prepareTasks.ts declaredFiles (line 100) and scripts/taskGroups.ts declaredFiles (line 16) are two independent readers of the same fence. If they resolve the legacy key differently \u2014 even by one edge case, such as an empty array or a task carrying both keys \u2014 grouping and preparation disagree about which files a group owns, and a worktree gets scoped to a different set than the brief describes. Routing both through one exported accessor makes that divergence impossible by construction.\n\nFallback semantics being consumed here: modifiableFiles when present, otherwise the legacy files key. A legacy task must group exactly as it grouped before the rename \u2014 this is a pure compatibility requirement, not a behavior change.\n\nHard invariant this child enforces: grouping and worktree scope key off the modifiable fence ONLY. readOnlyFiles is deliberately allowed to be wide (['*'] means the whole project), so if grouping ever consulted it, every task with a default read fence would collide with every other task and collapse into a single group. The read fence must be invisible to grouping.\n\nSource files are capped at 250 lines \u2014 split rather than grow past the cap.\n\n## Clarification answer (2026-08-29)\n\nThe accessor pair does not exist yet. Task 93 shipped only its part 1; the exported modifiableFiles/readOnlyFiles accessors in scripts/prepareTasks.ts moved to task 154, which is open. This task is now blocked by 154. When 154 lands, import the accessors from scripts/prepareTasks.ts under the names 154 exports and route scripts/taskGroups.ts's `declaredFiles` (line 15) through the modifiable accessor; never re-implement the fallback. scripts/prepareTasks.ts is now in this task's `files` so the brief hands it to you.",
     "files": [
       "scripts/taskGroups.ts",
-      "tests/taskGroups.test.ts"
+      "tests/taskGroups.test.ts",
+      "scripts/prepareTasks.ts"
     ],
     "tests": "Group a task declaring modifiableFiles alongside a legacy task declaring only files, and assert they group identically to the way the legacy pair grouped before the rename \u2014 same groups, same membership, same order. Assert that two tasks with disjoint modifiable fences but overlapping readOnlyFiles, including the case where both are ['*'], stay in separate groups and do not collide. Assert a task carrying both keys resolves to modifiableFiles, so the legacy key never silently wins.",
     "difficulty": 4,
-    "blockedBy": []
+    "blockedBy": [
+      {
+        "taskNum": 154,
+        "reason": "exports the shared modifiableFiles/readOnlyFiles accessors from prepareTasks.ts; taskGroups.ts imports them"
+      }
+    ],
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-96",
+      "leaseRunId": "be49df4d-b713-4d54-a842-89b35d156efd",
+      "history": [
+        {
+          "runId": "be49df4d-b713-4d54-a842-89b35d156efd",
+          "startedAt": "2026-08-29T18:06:43-07:00",
+          "endedAt": "2026-08-29T18:17:13-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "2bd58c50-c834-49dc-9528-4be6618bf8eb",
+              "992d6784-9073-414b-9ac4-00560b650ed5"
+            ]
+          }
+        }
+      ]
+    }
   },
   {
     "taskNumber": 113,
@@ -82,10 +210,11 @@
     "version": "da88f2fe6d1007b25fc5fabbabe87b4be16e450d",
     "title": "Export the shared modifiableFiles/readOnlyFiles accessors from prepareTasks and add readOnlyFiles to PreparedTask",
     "userDescription": "Export the shared modifiableFiles/readOnlyFiles accessor pair from scripts/prepareTasks.ts and add readOnlyFiles to PreparedTask. This is parts 2 and 3 of task 93, which closed with only part 1 (the brief file-pointer change) implemented. Required behavior: (1) Define and EXPORT two accessors from scripts/prepareTasks.ts \u2014 one returning a task's modifiable paths, falling back to the legacy `files` key when `modifiableFiles` is absent; the other returning a task's readable paths, defaulting to ['*'] when `readOnlyFiles` is absent. The existing private declaredFiles at scripts/prepareTasks.ts:101 must route through the modifiable accessor. Siblings import this pair and must never re-implement it. (2) Add readOnlyFiles to the PreparedTask type at scripts/prepareTasks.ts:14 (currently number/briefFile/planFile/files) and to its construction site at scripts/prepareTasks.ts:178 (`files: group.filePaths`), so downstream consumers can see the read fence. Wiring scripts/approvalGate.ts and scripts/mergePipeline.ts to actually consume it belongs to a sibling task, not this one. Concrete evidence this is needed now: `declaredFiles` is ALREADY duplicated \u2014 scripts/prepareTasks.ts:101 and scripts/taskGroups.ts:15 each define their own copy. Centralising is what stops grouping and preparation from diverging, which is the specific failure mode task 93 named. Grouping and worktree-scope decisions must continue to key off the modifiable fence only \u2014 readOnlyFiles must never widen a group or make two tasks collide. Task 96 is now unblocked and is one of the five siblings that expects to import this pair, so it will hit a missing import until this lands. Files: scripts/prepareTasks.ts, tests/prepareTasks.test.ts. Do NOT edit scripts/taskGroups.ts, scripts/approvalGate.ts, or scripts/mergePipeline.ts \u2014 those belong to siblings. Tests: assert a task declaring modifiableFiles plus readOnlyFiles and a legacy task declaring only files both resolve identically through the accessors; assert a task omitting readOnlyFiles resolves to ['*']; assert PreparedTask carries readOnlyFiles through buildWorkflowArguments. Difficulty 3.",
-    "description": "Carries the unfinished remainder of task 93. Task 93 shipped only its part 1 \u2014 writeTaskBriefFile (scripts/prepareTasks.ts:105-128) now emits a file pointer per declared path instead of pasting file bodies, landed in commit da88f2f. Its parts 2 and 3 were never implemented, so this task owns them.\n\nPart 2, the shared accessors. Today scripts/prepareTasks.ts:101 declares a PRIVATE `declaredFiles(task)` returning `Array.isArray(task.files) ? task.files : []`. It has two callers in that file: selectRequestedTasks at :55, which uses an empty result to reject a task that declares no files, and writeTaskBriefFile at :108, which maps it into the brief's pointer list. Both must keep working unchanged once declaredFiles routes through the new modifiable accessor.\n\nThe duplication task 93 predicted has already happened and is verifiable now: scripts/taskGroups.ts:15 exports its own `declaredFiles` with the same body, and taskGroups.ts calls it at :32 (file-to-task index), :38 (rejecting file-less tasks) and :51 (computing a group's filePaths). Two copies of the fence rule is exactly the grouping-vs-preparation divergence the centralisation exists to prevent. This task defines the canonical pair in prepareTasks.ts and exports it; retargeting taskGroups.ts to import it belongs to task 96, not here.\n\nPart 3, the PreparedTask shape. The type at scripts/prepareTasks.ts:14 currently carries number, briefFile, planFile and files. Add the read fence to it, and populate it at the construction site inside buildWorkflowArguments \u2014 scripts/prepareTasks.ts:178, `files: group.filePaths`. PreparedGroup (:21) wraps PreparedTask[] and flows out through WorkflowArguments (:29), which prepareTasks.ts prints as the pipeline args JSON, so the field becomes visible to every downstream stage once added. Making the field available is all this task does; scripts/approvalGate.ts and scripts/mergePipeline.ts actually consuming it is a sibling's work.\n\nSemantics fixed by task 93 and not open for redecision: the modifiable accessor falls back to the legacy `files` key when `modifiableFiles` is absent, so every task already in tasks.json keeps working; the readable accessor defaults to ['*'] when `readOnlyFiles` is absent, deliberately widening reads while leaving writes narrow. That default is the fix for task 50's failure, where a planner wrote a plan against an already-deleted file because its read fence was scoped to its own owned files.\n\nHard constraint carried over from task 93: readOnlyFiles must never influence grouping or worktree scope. Groups collide on the modifiable fence only \u2014 a wide read fence must not merge two otherwise-disjoint tasks into one worktree. taskGroups.ts is where that is enforced, and it is out of this task's fence, but the accessor defined here is what makes the distinction expressible at all.\n\nSequencing: task 96 was unblocked by task 93's closure and is one of the five task-58 siblings that expects to import this pair. Until this lands, task 96 has no accessor to import.\n\nSource files are capped at 250 lines; scripts/prepareTasks.ts is already near that, so split it rather than growing it past the cap.",
+    "description": "Carries the unfinished remainder of task 93. Task 93 shipped only its part 1 \u2014 writeTaskBriefFile (scripts/prepareTasks.ts:105-128) now emits a file pointer per declared path instead of pasting file bodies, landed in commit da88f2f. Its parts 2 and 3 were never implemented, so this task owns them.\n\nPart 2, the shared accessors. Today scripts/prepareTasks.ts:101 declares a PRIVATE `declaredFiles(task)` returning `Array.isArray(task.files) ? task.files : []`. It has two callers in that file: selectRequestedTasks at :55, which uses an empty result to reject a task that declares no files, and writeTaskBriefFile at :108, which maps it into the brief's pointer list. Both must keep working unchanged once declaredFiles routes through the new modifiable accessor.\n\nThe duplication task 93 predicted has already happened and is verifiable now: scripts/taskGroups.ts:15 exports its own `declaredFiles` with the same body, and taskGroups.ts calls it at :32 (file-to-task index), :38 (rejecting file-less tasks) and :51 (computing a group's filePaths). Two copies of the fence rule is exactly the grouping-vs-preparation divergence the centralisation exists to prevent. This task defines the canonical pair in prepareTasks.ts and exports it; retargeting taskGroups.ts to import it belongs to task 96, not here.\n\nPart 3, the PreparedTask shape. The type at scripts/prepareTasks.ts:14 currently carries number, briefFile, planFile and files. Add the read fence to it, and populate it at the construction site inside buildWorkflowArguments \u2014 scripts/prepareTasks.ts:178, `files: group.filePaths`. PreparedGroup (:21) wraps PreparedTask[] and flows out through WorkflowArguments (:29), which prepareTasks.ts prints as the pipeline args JSON, so the field becomes visible to every downstream stage once added. Making the field available is all this task does; scripts/approvalGate.ts and scripts/mergePipeline.ts actually consuming it is a sibling's work.\n\nSemantics fixed by task 93 and not open for redecision: the modifiable accessor falls back to the legacy `files` key when `modifiableFiles` is absent, so every task already in tasks.json keeps working; the readable accessor defaults to ['*'] when `readOnlyFiles` is absent, deliberately widening reads while leaving writes narrow. That default is the fix for task 50's failure, where a planner wrote a plan against an already-deleted file because its read fence was scoped to its own owned files.\n\nHard constraint carried over from task 93: readOnlyFiles must never influence grouping or worktree scope. Groups collide on the modifiable fence only \u2014 a wide read fence must not merge two otherwise-disjoint tasks into one worktree. taskGroups.ts is where that is enforced, and it is out of this task's fence, but the accessor defined here is what makes the distinction expressible at all.\n\nSequencing: task 96 was unblocked by task 93's closure and is one of the five task-58 siblings that expects to import this pair. Until this lands, task 96 has no accessor to import.\n\nSource files are capped at 250 lines; scripts/prepareTasks.ts is already near that, so split it rather than growing it past the cap.\n\n## Target update (2026-08-29)\n\nTwo locations in the text above are stale after the v1.6 rebase:\n- PreparedTask no longer lives at scripts/prepareTasks.ts:14. It is `export type PreparedTask` in scripts/tackle-tasks/shared/preparedTask.ts (fields today: number, briefFile, planFile, reviewFile, reviewOutputFile, testReviewFile, notesFile, files, ownedFilePaths, testFilePaths, ...). Part 3 adds the read fence there. That file is now in this task's `files`.\n- scripts/approvalGate.ts and scripts/mergePipeline.ts are dead code; nothing on the v1.6 path reaches them. The live consumers of the read fence are the files owned by tasks 94, 96 and 97 (planPrompt.ts, CodexReviewBodyEmitter.ts, taskGroups.ts, checkTaskFileFence.ts, checkResumedWorktreeFence.ts, _createFreshTaskWorktree.ts). Those tasks wait on this one; this task only exports the accessors and adds the field.\nPart 2 stands as written: the private `declaredFiles` in scripts/prepareTasks.ts and the exported copy in scripts/taskGroups.ts:15 still duplicate the same body.",
     "files": [
       "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts"
+      "tests/prepareTasks.test.ts",
+      "scripts/tackle-tasks/shared/preparedTask.ts"
     ],
     "tests": "Unit-test the two accessors directly, then one integration assertion for the type change.\n\nassert modifiableFiles({files: [\"a.ts\"]})            -> [\"a.ts\"]     // legacy key still honoured\nassert modifiableFiles({modifiableFiles: [\"a.ts\"]})  -> [\"a.ts\"]     // new key\n\nassert readOnlyFiles({files: [\"a.ts\"]})              -> [\"*\"]        // absent read fence defaults wide\nassert readOnlyFiles({readOnlyFiles: [\"b.ts\"]})      -> [\"b.ts\"]\n\nThen: build a task declaring modifiableFiles plus readOnlyFiles and a legacy task declaring only files, and assert both prepare identically, so the legacy fallback is invisible downstream.\n\nFinally, run buildWorkflowArguments over a prepared group and assert groups[0].tasks[0].readOnlyFiles is present, proving the field survives from the type through the construction site into the printed pipeline args.",
     "difficulty": 3
