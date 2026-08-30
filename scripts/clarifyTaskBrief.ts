@@ -23,7 +23,7 @@ node "${clarifyTaskPath}" <<'CLARIFYEOF'
 CLARIFYEOF
 \`\`\`
 
-\`files\` and \`blockedBy\` are optional: omit \`files\` when the answer names nothing new, omit \`blockedBy\` to leave the task's blockers as they are. The script appends the answer to the task's \`description\` under a dated "Clarification answer" heading, widens \`files\`, sets \`blockedBy\`, removes \`clarifyRequest\`, and clears every entry of \`run.history\`'s \`attempts\` and \`countedPasses\` so the next run gets fresh clarify rounds.
+\`files\` and \`blockedBy\` are optional: omit \`files\` when the answer names nothing new, omit \`blockedBy\` to leave the task's blockers as they are. The script appends the answer to the task's \`description\` under a dated "Clarification answer" heading, widens \`files\`, sets \`blockedBy\`, removes \`clarifyRequest\`, clears every entry of \`run.history\`'s \`attempts\` and \`countedPasses\`, and deletes the worktree's \`plans/checkpoint.json\` so the next launch starts at the preamble with a fresh planner instead of replaying the old CLARIFY packet.
 
 Stage .taskTools/tasks.json but do not commit. Provide a short commit message to the user, similar to "Answer clarify requests on tasks [94,95,96]", naming the numbers you actually answered.
 `;

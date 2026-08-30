@@ -1,5 +1,6 @@
-// Answers one task's clarifyRequest under the task-state lock: appends the answer to description, widens files, sets blockedBy, drops clarifyRequest, and clears every run.history entry's attempts and countedPasses.
-import { readFileSync } from "node:fs";
+// Answers one task's clarifyRequest under the task-state lock: appends the answer to description, widens files, sets blockedBy, drops clarifyRequest, clears every run.history entry's attempts and countedPasses, and removes the worktree checkpoint so the next launch starts at the preamble instead of replaying the old CLARIFY packet.
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { checkpointPath } from "./tackle-tasks/shared/checkpoint.ts";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
@@ -27,11 +28,12 @@ export function clarifyTask(input: ClarifyAnswer, projectRoot: string = process.
     task.files = [...files, ...(input.files ?? []).filter((f) => !files.includes(f))];
     if (input.blockedBy !== undefined) task.blockedBy = input.blockedBy;
     delete task.clarifyRequest;
-    const run = task.run as { history?: HistoryRecord[] } | undefined;
+    const run = task.run as { worktree?: unknown; history?: HistoryRecord[] } | undefined;
     for (const record of run?.history ?? []) {
       delete record.attempts;
       delete record.countedPasses;
     }
+    if (typeof run?.worktree === "string" && existsSync(checkpointPath(run.worktree))) unlinkSync(checkpointPath(run.worktree));
     writeJsonAtomically(tasksPath, tasks);
     return task;
   });
@@ -53,5 +55,5 @@ if (process.argv[1]?.endsWith("clarifyTask.ts")) {
     fail("taskNumber (number) and answer (non-empty string) are required");
   }
   const task = clarifyTask(input);
-  process.stdout.write(`answered task ${task.taskNumber}; files: ${JSON.stringify(task.files)}; blockedBy: ${JSON.stringify(task.blockedBy ?? [])}; run attempts cleared\n`);
+  process.stdout.write(`answered task ${task.taskNumber}; files: ${JSON.stringify(task.files)}; blockedBy: ${JSON.stringify(task.blockedBy ?? [])}; run attempts cleared; checkpoint removed\n`);
 }

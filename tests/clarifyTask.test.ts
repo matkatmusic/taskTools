@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,9 +12,12 @@ const scriptPath = fileURLToPath(new URL("../scripts/clarifyTask.ts", import.met
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "clarifyTask-"));
   mkdirSync(join(root, ".taskTools"));
+  const worktree = join(root, "task-1");
+  mkdirSync(join(worktree, "plans"), { recursive: true });
+  writeFileSync(join(worktree, "plans", "checkpoint.json"), "{}\n");
   const tasks = [
     { taskNumber: 1, title: "answered later", description: "body", files: ["a.ts"], clarifyRequest: "where is X?",
-      run: { active: false, history: [
+      run: { active: false, worktree, history: [
         { runId: "r1", attempts: { clarify: 1 }, countedPasses: { clarify: ["p1"] } },
         { runId: "r2", attempts: { clarify: 2 }, countedPasses: { clarify: ["p2", "p3"] } },
       ] } },
@@ -42,6 +45,7 @@ test("test_clarifyTaskRecordsTheAnswerAndClearsEveryHistoryEntrysAttemptCounters
     assert.equal("countedPasses" in record, false);
   }
   assert.deepEqual(task.run.history.map((r: any) => r.runId), ["r1", "r2"]);
+  assert.equal(existsSync(join(task.run.worktree, "plans", "checkpoint.json")), false);
 });
 
 test("test_clarifyTaskRefusesATaskWithNoClarifyRequest", () => {
@@ -53,6 +57,6 @@ test("test_clarifyTaskRefusesATaskWithNoClarifyRequest", () => {
 test("test_clarifyTaskScriptReadsTheAnswerFromStdin", () => {
   const root = makeProjectRoot();
   const out = execFileSync("node", [scriptPath], { cwd: root, encoding: "utf8", input: JSON.stringify({ taskNumber: 1, answer: "via stdin" }) });
-  assert.match(out, /^answered task 1; files: \["a\.ts"\]; blockedBy: \[\]; run attempts cleared\n$/);
+  assert.match(out, /^answered task 1; files: \["a\.ts"\]; blockedBy: \[\]; run attempts cleared; checkpoint removed\n$/);
   assert.match(readTasks(root)[0].description, /via stdin$/);
 });
