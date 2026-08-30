@@ -54,6 +54,9 @@ export function isTaskRunResumable(
     const endedRuns = state.history.filter((run) => run.endedAt !== null);
     const newest = endedRuns[endedRuns.length - 1];
     const notesFile = newest?.implementationNotesFile ?? null;
+    // An ended run that never implemented anything left no work to lose, so a fresh plan may start here.
+    const noWorkRecorded = newest !== undefined && notesFile === null && newest.modifiedFiles.length === 0 && newest.commits.length === 0;
+    if (noWorkRecorded) return { resumable: true, implementationNotesFile: null, leaseEstablished: true };
     if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
         return { resumable: false, implementationNotesFile: null, leaseEstablished: true };
     }

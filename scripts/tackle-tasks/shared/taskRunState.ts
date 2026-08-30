@@ -9,7 +9,7 @@ export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed"
-    | "clarify-stuck" | "agent-failed" | "partially-published";
+    | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable";
 
 // F2: `stepId` names the logical step that produced this commit. Merge-kind commits omit it.
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };

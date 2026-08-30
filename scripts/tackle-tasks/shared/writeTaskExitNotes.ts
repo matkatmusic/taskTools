@@ -7,7 +7,7 @@ const EXIT_TYPES: readonly TaskExitType[] = [
     "completed", "invalid-number", "already-active", "blocked",
     "plan-scrapped", "tests-red", "tests-flagged", "suite-red",
     "rebase-stuck", "merge-failed", "fence-violation", "run-failed",
-    "clarify-stuck", "agent-failed", "partially-published",
+    "clarify-stuck", "agent-failed", "partially-published", "not-resumable",
 ];
 
 export type WriteTaskExitNotesInput = {
