@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { recordMergeCommits } from "../shared/recordMergeCommits.ts";
 import { getCurrentTaskRun, type TaskCommit } from "../shared/taskRunState.ts";
+import { MERGE_COMMITS_ALREADY_RECORDED, MERGE_COMMITS_NOT_RECORDED } from "../../resultCodes.ts";
 
 export type RecordMergeCommitHashesInput = {
     box: string;
@@ -17,17 +18,18 @@ export type RecordMergeCommitHashesInput = {
     commits: TaskCommit[];
 };
 
-// A resumed run hands this box the same commits list it already appended; appendTaskCommits always appends, so a retry must skip the write when the run's tail already holds these exact commits.
-function alreadyRecorded(projectRoot: string, taskNumber: number, commits: TaskCommit[]): boolean {
-    if (commits.length === 0) return false;
+// A resumed run resends the same commits; skip appending when the run's tail already holds them.
+function alreadyRecorded(projectRoot: string, taskNumber: number, commits: TaskCommit[]): number {
+    if (commits.length === 0) return MERGE_COMMITS_NOT_RECORDED;
     const existing = getCurrentTaskRun(taskNumber, projectRoot)?.commits ?? [];
-    if (existing.length < commits.length) return false;
-    return existing.slice(-commits.length).every((commit, i) => commit.hash === commits[i].hash);
+    if (existing.length < commits.length) return MERGE_COMMITS_NOT_RECORDED;
+    return existing.slice(-commits.length).every((commit, i) => commit.hash === commits[i].hash)
+        ? MERGE_COMMITS_ALREADY_RECORDED : MERGE_COMMITS_NOT_RECORDED;
 }
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as RecordMergeCommitHashesInput;
-    if (!alreadyRecorded(packet.projectRoot, packet.taskNumber, packet.commits)) {
+    if (alreadyRecorded(packet.projectRoot, packet.taskNumber, packet.commits) !== MERGE_COMMITS_ALREADY_RECORDED) {
         recordMergeCommits({
             projectRoot: packet.projectRoot, taskNumber: packet.taskNumber, runId: packet.runId, commits: packet.commits,
         });

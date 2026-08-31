@@ -1,5 +1,6 @@
 // hookOverride.ts: explicit per-run hook override plus pre-approval complete-suite enforcement.
 import type { RepositoryManifest } from "./repositoryManifest.ts";
+import { HOOK_OVERRIDE_REQUESTED, HOOK_OVERRIDE_NOT_REQUESTED, ALL_SUITES_PASSED, SUITE_FAILURE_DETECTED } from "./resultCodes.ts";
 
 export type HookOverrideInput = { hookOverride?: boolean };
 
@@ -10,8 +11,8 @@ export type SuiteResult = { id: string; passed: boolean; reason?: string };
 export type CompleteSuiteRunner = (id: string) => SuiteResult;
 
 // True only when the explicit override input is present; a disabled hook never implies it.
-export function isHookOverrideRequested(input: HookOverrideInput): boolean {
-    return input.hookOverride === true;
+export function isHookOverrideRequested(input: HookOverrideInput): number {
+    return input.hookOverride === true ? HOOK_OVERRIDE_REQUESTED : HOOK_OVERRIDE_NOT_REQUESTED;
 }
 
 // Persists the flag on the run manifest so it round-trips through save/load (resume).
@@ -40,6 +41,6 @@ export function runCompleteSuitesBeforeApproval(
 }
 
 // Approval proceeds only when every complete-suite result passed; the override never skips this.
-export function blockApprovalOnSuiteFailure(results: SuiteResult[]): boolean {
-    return results.every((result) => result.passed);
+export function blockApprovalOnSuiteFailure(results: SuiteResult[]): number {
+    return results.every((result) => result.passed) ? ALL_SUITES_PASSED : SUITE_FAILURE_DETECTED;
 }

@@ -2,6 +2,11 @@
 import { spawnSync } from "node:child_process";
 import { checkAuthorizationDrift } from "./approvalGate.ts";
 import type { RunState } from "./approvalGate.ts";
+import {
+    ROOT_INTEGRATION_OID_EXISTS, ROOT_INTEGRATION_OID_MISSING, APPROVAL_INPUTS_STILL_AUTHORIZED, APPROVAL_INPUTS_DRIFTED,
+    CHECKOUT_TRANSITION_OK, CHECKOUT_TRANSITION_FAILED,
+} from "./resultCodes.ts";
+import { AUTHORIZATION_DRIFT_NOT_DETECTED } from "./resultCodes.ts";
 
 export type PublicationTarget = {
     name: string;
@@ -56,8 +61,8 @@ export function readCurrentRefOid(repoPath: string, refName: string): string | n
     return result.ok ? result.stdout.trim() : null;
 }
 
-export function checkRootIntegrationOidExists(repoPath: string, rootIntegrationRef: string): boolean {
-    return readCurrentRefOid(repoPath, rootIntegrationRef) !== null;
+export function checkRootIntegrationOidExists(repoPath: string, rootIntegrationRef: string): number {
+    return readCurrentRefOid(repoPath, rootIntegrationRef) !== null ? ROOT_INTEGRATION_OID_EXISTS : ROOT_INTEGRATION_OID_MISSING;
 }
 
 export function revalidateRecordedBaseOids(repos: PublicationTarget[]): { ok: boolean; moved: PublicationTarget[] } {
@@ -67,8 +72,8 @@ export function revalidateRecordedBaseOids(repos: PublicationTarget[]): { ok: bo
     return { ok: moved.length === 0, moved };
 }
 
-export function revalidateApprovalInputs(approvalState: RunState): boolean {
-    return checkAuthorizationDrift(approvalState);
+export function revalidateApprovalInputs(approvalState: RunState): number {
+    return checkAuthorizationDrift(approvalState) === AUTHORIZATION_DRIFT_NOT_DETECTED ? APPROVAL_INPUTS_STILL_AUTHORIZED : APPROVAL_INPUTS_DRIFTED;
 }
 
 export function publishCanonicalRef(repo: PublicationTarget): { ok: boolean; updated?: UpdatedRef } {
@@ -144,18 +149,18 @@ function runCheckoutTransition(
     oldOid: string,
     newOid: string,
     dryRun: boolean,
-): boolean {
+): number {
     const args = ["read-tree", "--no-recurse-submodules"];
     if (dryRun) args.push("-n");
     args.push("-u", "-m", oldOid, newOid);
-    return runGit(transition.occurrencePath, args).ok;
+    return runGit(transition.occurrencePath, args).ok ? CHECKOUT_TRANSITION_OK : CHECKOUT_TRANSITION_FAILED;
 }
 
-function preflightCheckoutTransition(transition: CheckoutTransition): boolean {
+function preflightCheckoutTransition(transition: CheckoutTransition): number {
     return runCheckoutTransition(transition, transition.oldOid, transition.newOid, true);
 }
 
-function applyCheckoutTransition(transition: CheckoutTransition): boolean {
+function applyCheckoutTransition(transition: CheckoutTransition): number {
     return runCheckoutTransition(transition, transition.oldOid, transition.newOid, false);
 }
 
@@ -166,14 +171,14 @@ function formatCheckoutRecoveryCommand(transition: CheckoutTransition): string {
 function rollbackCheckoutTransitions(applied: CheckoutTransition[]): CheckoutRollbackOutcome[] {
     return [...applied].reverse().map((transition) => ({
         transition,
-        rolledBack: runCheckoutTransition(transition, transition.newOid, transition.oldOid, false),
+        rolledBack: runCheckoutTransition(transition, transition.newOid, transition.oldOid, false) === CHECKOUT_TRANSITION_OK,
         recoveryCommand: formatCheckoutRecoveryCommand(transition),
     }));
 }
 
 export type CheckoutOperations = {
-    preflight: (transition: CheckoutTransition) => boolean;
-    apply: (transition: CheckoutTransition) => boolean;
+    preflight: (transition: CheckoutTransition) => number;
+    apply: (transition: CheckoutTransition) => number;
     rollback: (applied: CheckoutTransition[]) => CheckoutRollbackOutcome[];
 };
 
@@ -195,10 +200,10 @@ export function publishBases(
         checkoutRollback: [],
     });
 
-    if (!checkRootIntegrationOidExists(rootIntegration.repoPath, rootIntegration.refName)) {
+    if (checkRootIntegrationOidExists(rootIntegration.repoPath, rootIntegration.refName) !== ROOT_INTEGRATION_OID_EXISTS) {
         return notPublished();
     }
-    if (!revalidateApprovalInputs(approvalState)) {
+    if (revalidateApprovalInputs(approvalState) !== APPROVAL_INPUTS_STILL_AUTHORIZED) {
         return notPublished();
     }
     if (!revalidateRecordedBaseOids(repos).ok) {
@@ -209,7 +214,7 @@ export function publishBases(
         const transition = checkedOutTransition(repo);
         return transition === null ? [] : [transition];
     });
-    if (!checkoutTransitions.every((transition) => checkoutOperations.preflight(transition))) {
+    if (!checkoutTransitions.every((transition) => checkoutOperations.preflight(transition) === CHECKOUT_TRANSITION_OK)) {
         return notPublished();
     }
 
@@ -238,7 +243,7 @@ export function publishBases(
 
     const appliedTransitions: CheckoutTransition[] = [];
     for (const transition of checkoutTransitions) {
-        if (!checkoutOperations.apply(transition)) {
+        if (checkoutOperations.apply(transition) !== CHECKOUT_TRANSITION_OK) {
             const checkoutRollback = checkoutOperations.rollback(appliedTransitions);
             const rollback = rollbackUpdatedRefs(updatedSoFar);
             return { published: false, rollback, checkoutRollback };

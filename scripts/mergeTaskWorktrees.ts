@@ -15,6 +15,7 @@ import type { DiscoveryManifest } from "./repositoryDiscovery.ts";
 import type { RepositoryOccurrence } from "./repositoryManifest.ts";
 import { discoverTestPolicy } from "./testPolicy.ts";
 import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
+import { REBASE_IN_PROGRESS, REBASE_NOT_IN_PROGRESS, REF_PRESENT, REF_ABSENT } from "./resultCodes.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], {
@@ -120,8 +121,10 @@ function rebaseGitPath(worktreePath: string, relativePath: string): string {
     return isAbsolute(output) ? output : join(worktreePath, output);
 }
 
-export function rebaseInProgress(worktreePath: string): boolean {
-    return existsSync(rebaseGitPath(worktreePath, "rebase-merge")) || existsSync(rebaseGitPath(worktreePath, "rebase-apply"));
+export function rebaseInProgress(worktreePath: string): number {
+    return existsSync(rebaseGitPath(worktreePath, "rebase-merge")) || existsSync(rebaseGitPath(worktreePath, "rebase-apply"))
+        ? REBASE_IN_PROGRESS
+        : REBASE_NOT_IN_PROGRESS;
 }
 
 function collectConflictedRebasePaths(worktreePath: string): string[] {
@@ -156,7 +159,7 @@ export function rebaseGroupOntoSource(
     }
 
     while (true) {
-        let inProgress: boolean;
+        let inProgress: number;
         try {
             inProgress = rebaseInProgress(worktreePath);
         } catch (stateError) {
@@ -165,7 +168,7 @@ export function rebaseGroupOntoSource(
             return { status: "cleanup-failed", failureReason: combineFailureReasons(pendingReason, gitErrorText(stateError), abortFailure) };
         }
 
-        if (!inProgress) return { status: "cleanup-failed", failureReason: pendingReason };
+        if (inProgress === REBASE_NOT_IN_PROGRESS) return { status: "cleanup-failed", failureReason: pendingReason };
 
         let conflictedFilePaths: string[];
         try {
@@ -594,8 +597,8 @@ export function deleteTaskMergePersistence(repoRoot: string, operationBranch: st
     }
 }
 
-function refExists(repoRoot: string, refName: string): boolean {
-    return readOptionalRef(repoRoot, refName) !== null;
+function refExists(repoRoot: string, refName: string): number {
+    return readOptionalRef(repoRoot, refName) !== null ? REF_PRESENT : REF_ABSENT;
 }
 
 export type RetainedArtifactTarget = {
@@ -611,17 +614,17 @@ export function collectRetainedTaskArtifacts(target: RetainedArtifactTarget): st
     const artifacts: string[] = [];
     if (existsSync(target.worktreePath)) artifacts.push(target.worktreePath);
     if (existsSync(target.leasePath)) artifacts.push(target.leasePath);
-    if (refExists(target.mainRepoRoot, `refs/heads/${target.branch}`)) artifacts.push(`refs/heads/${target.branch}`);
-    if (refExists(target.mainRepoRoot, mergedCommitRefName(target.branch))) artifacts.push(mergedCommitRefName(target.branch));
-    if (refExists(target.mainRepoRoot, mergeIntentRefName(target.branch))) artifacts.push(mergeIntentRefName(target.branch));
+    if (refExists(target.mainRepoRoot, `refs/heads/${target.branch}`) === REF_PRESENT) artifacts.push(`refs/heads/${target.branch}`);
+    if (refExists(target.mainRepoRoot, mergedCommitRefName(target.branch)) === REF_PRESENT) artifacts.push(mergedCommitRefName(target.branch));
+    if (refExists(target.mainRepoRoot, mergeIntentRefName(target.branch)) === REF_PRESENT) artifacts.push(mergeIntentRefName(target.branch));
     for (const submodule of [...target.sourceSubmodules].sort((a, b) => b.depth - a.depth)) {
-        if (refExists(submodule.checkoutPath, `refs/heads/${target.branch}`)) {
+        if (refExists(submodule.checkoutPath, `refs/heads/${target.branch}`) === REF_PRESENT) {
             artifacts.push(`${submodule.checkoutPath}:refs/heads/${target.branch}`);
         }
-        if (refExists(submodule.checkoutPath, mergedCommitRefName(target.branch))) {
+        if (refExists(submodule.checkoutPath, mergedCommitRefName(target.branch)) === REF_PRESENT) {
             artifacts.push(`${submodule.checkoutPath}:${mergedCommitRefName(target.branch)}`);
         }
-        if (refExists(submodule.checkoutPath, mergeIntentRefName(target.branch))) {
+        if (refExists(submodule.checkoutPath, mergeIntentRefName(target.branch)) === REF_PRESENT) {
             artifacts.push(`${submodule.checkoutPath}:${mergeIntentRefName(target.branch)}`);
         }
     }

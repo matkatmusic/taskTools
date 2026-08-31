@@ -9,6 +9,7 @@ import { getCurrentTaskRun, type TaskCommit, type SourceTipReceipt } from "./tas
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { defaultMergeStepOperations, type MergeLayerOutcome, type MergeTaskWalkReport } from "../../mergeTaskWorktrees.ts";
 import { logStepOutput } from "./logStepOutput.ts";
+import { STATUS_PATH_IGNORABLE, STATUS_PATH_NOT_IGNORABLE } from "../../resultCodes.ts";
 
 export type MergeTaskWorktreeInput = {
     projectRoot: string;
@@ -47,8 +48,8 @@ function taskStateIgnorablePaths(checkoutPath: string, projectRoot: string): str
     return [relative(checkoutPath, tasksPath), relative(checkoutPath, completedTasksPath)];
 }
 
-function isIgnorableStatusPath(path: string, ignorablePaths: string[]): boolean {
-    return ignorablePaths.includes(path);
+function isIgnorableStatusPath(path: string, ignorablePaths: string[]): number {
+    return ignorablePaths.includes(path) ? STATUS_PATH_IGNORABLE : STATUS_PATH_NOT_IGNORABLE;
 }
 
 // NUL-safe: `-z` parses paths intact; a rename or copy entry's second NUL-terminated "from" path belongs to that same entry.
@@ -90,7 +91,7 @@ function verifySourceTipsUnchangedSinceRebase(worktreePath: string, projectRoot:
             );
         }
         const ignorablePaths = taskStateIgnorablePaths(checkoutPath, projectRoot);
-        const relevantPaths = sourceCheckoutStatusPaths(checkoutPath).filter((path) => !isIgnorableStatusPath(path, ignorablePaths));
+        const relevantPaths = sourceCheckoutStatusPaths(checkoutPath).filter((path) => isIgnorableStatusPath(path, ignorablePaths) !== STATUS_PATH_IGNORABLE);
         if (relevantPaths.length > 0) {
             throw new Error(`source checkout at "${checkoutPath}" is dirty, refusing to merge over unrelated changes:\n${relevantPaths.join("\n")}`);
         }

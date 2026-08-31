@@ -15,6 +15,7 @@ import { rebaseInProgress } from "../../mergeTaskWorktrees.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { REBASE_NOT_IN_PROGRESS } from "../../resultCodes.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -118,8 +119,8 @@ test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", 
     assert.equal(output.conflicted, false);
     assert.equal(output.stoppedOccurrenceId, "");
     assert.equal(output.stoppedCheckoutPath, "");
-    assert.equal(rebaseInProgress(childCheckoutPath), false);
-    assert.equal(rebaseInProgress(worktreePath), false);
+    assert.equal(rebaseInProgress(childCheckoutPath), REBASE_NOT_IN_PROGRESS);
+    assert.equal(rebaseInProgress(worktreePath), REBASE_NOT_IN_PROGRESS);
 
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);

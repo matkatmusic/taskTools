@@ -10,6 +10,7 @@ import { adoptWorktreeLease, claimTask } from "./taskRunState.ts";
 import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
+import { GIT_REF_EXISTS, GIT_REF_NOT_FOUND } from "../../resultCodes.ts";
 
 function makeSourceRepoWithSubmodule(): string {
     const childOrigin = makeCommittedRepo("cleanup-worktree-child-", "child-main");
@@ -33,16 +34,16 @@ function markPersistenceRefs(checkoutPath: string, branchName: string): void {
     git(checkoutPath, "update-ref", `refs/taskTools/merge-intents/${branchName}`, head);
 }
 
-function hasRef(checkoutPath: string, ref: string): boolean {
+function hasRef(checkoutPath: string, ref: string): number {
     try {
         git(checkoutPath, "rev-parse", "--verify", ref);
-        return true;
+        return GIT_REF_EXISTS;
     } catch {
-        return false;
+        return GIT_REF_NOT_FOUND;
     }
 }
 
-function hasBranch(checkoutPath: string, branchName: string): boolean {
+function hasBranch(checkoutPath: string, branchName: string): number {
     return hasRef(checkoutPath, `refs/heads/${branchName}`);
 }
 
@@ -57,10 +58,10 @@ test("test_cleanupTaskWorktree_deletesPersistenceRefsInEverySourceOccurrence", (
     const result = cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" });
 
     assert.equal(result.removed, true);
-    assert.equal(hasRef(rootOrigin, `refs/taskTools/merged-commits/${branchName}`), false);
-    assert.equal(hasRef(rootOrigin, `refs/taskTools/merge-intents/${branchName}`), false);
-    assert.equal(hasRef(join(rootOrigin, "child"), `refs/taskTools/merged-commits/${branchName}`), false);
-    assert.equal(hasRef(join(rootOrigin, "child"), `refs/taskTools/merge-intents/${branchName}`), false);
+    assert.equal(hasRef(rootOrigin, `refs/taskTools/merged-commits/${branchName}`), GIT_REF_NOT_FOUND);
+    assert.equal(hasRef(rootOrigin, `refs/taskTools/merge-intents/${branchName}`), GIT_REF_NOT_FOUND);
+    assert.equal(hasRef(join(rootOrigin, "child"), `refs/taskTools/merged-commits/${branchName}`), GIT_REF_NOT_FOUND);
+    assert.equal(hasRef(join(rootOrigin, "child"), `refs/taskTools/merge-intents/${branchName}`), GIT_REF_NOT_FOUND);
 });
 
 test("test_cleanupTaskWorktree_leavesEverySourceCheckoutClean", () => {
@@ -76,9 +77,7 @@ test("test_cleanupTaskWorktree_leavesEverySourceCheckoutClean", () => {
     assert.equal(git(join(rootOrigin, "child"), "status", "--porcelain"), "");
 });
 
-// F5: worktree-removal failure is an operational failure, never a returned {removed:false}. It
-// must throw with the original cause and the retained artifacts, and it must not release the
-// worktree lease - only the source lock.
+// Worktree-removal failure must throw with cause and retained artifacts, releasing only the source lock, not the worktree lease.
 test("test_cleanupTaskWorktree_keepsTheLeaseWhenWorktreeRemovalFails", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const runId = "run-52";
@@ -117,9 +116,7 @@ test("test_cleanupTaskWorktree_succeedsWhenRunTwice", () => {
     assert.deepEqual(second.retainedArtifacts, []);
 });
 
-// F2 consumer half: a lock owned by another run must refuse before any mutation, since retained
-// artifacts (the worktree, its branch) still exist - a missing lock alone is not proof of
-// completion, but an unowned lock must still stop the script cold.
+// A lock owned by another run must refuse before mutating; a missing lock isn't proof of completion.
 test("test_cleanupTaskWorktree_refusesAndMutatesNothingWhenTheSourceLockIsOwnedByAnotherRun", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const runId = "run-54";
@@ -130,13 +127,12 @@ test("test_cleanupTaskWorktree_refusesAndMutatesNothingWhenTheSourceLockIsOwnedB
     assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId, rootSourceBranch: "staging" }));
 
     assert.equal(existsSync(worktreePath), true);
-    assert.equal(hasBranch(rootOrigin, branchName), true);
+    assert.equal(hasBranch(rootOrigin, branchName), GIT_REF_EXISTS);
     assert.notEqual(readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(worktreePath)), null);
     assert.equal(readSourceRepoLock(rootOrigin)?.owner, otherOwner);
 });
 
-// F5 lease lifecycle: after a cleanup failure retains the lease, a resumed run must be able to
-// adopt it atomically before doing any new work - the whole point of not releasing it.
+// After a cleanup failure retains the lease, a resumed run must adopt it atomically before new work.
 test("test_cleanupTaskWorktree_aNewRunAdoptsTheRetainedLeaseAfterCleanupFailure", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const oldRunId = "run-55-old";
@@ -148,8 +144,7 @@ test("test_cleanupTaskWorktree_aNewRunAdoptsTheRetainedLeaseAfterCleanupFailure"
     assert.throws(() => cleanupTaskWorktree({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: oldRunId, rootSourceBranch: "staging" }));
     git(rootOrigin, "worktree", "unlock", worktreePath);
 
-    // Seed tasks.json the way the pipeline would have left it: the old run ended run-failed,
-    // still naming the worktree and the retained lease.
+    // Seed tasks.json as the pipeline left it: old run ended run-failed, still naming the worktree and lease.
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
     writeFileSync(tasksPath, JSON.stringify([{

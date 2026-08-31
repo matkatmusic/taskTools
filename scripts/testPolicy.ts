@@ -8,6 +8,7 @@ import {
     recordResolutionRequest,
 } from "./resolutionRequests.ts";
 import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
+import { RESOLUTION_ANSWER_PRESENT } from "./resultCodes.ts";
 
 export const REASON_NO_TEST_CONFIGURATION = "no-test-configuration";
 export const REASON_AMBIGUOUS_RELATED_TEST_COMMAND = "ambiguous-related-test-command";
@@ -53,7 +54,7 @@ function resolveWithAnswerOrRequest(
     buildPolicyFromAnswer: (answer: string) => TestPolicy
 ): TestPolicyResult {
     const requestId = createResolutionRequestId(occurrenceId, reason);
-    if (hasResolutionAnswer(resolutionManifest, requestId)) {
+    if (hasResolutionAnswer(resolutionManifest, requestId) === RESOLUTION_ANSWER_PRESENT) {
         return { status: "resolved", policy: buildPolicyFromAnswer(resolutionManifest.resolutionAnswers[requestId]) };
     }
     const request = createResolutionRequest(occurrenceId, "", candidateScriptKeys, reason);

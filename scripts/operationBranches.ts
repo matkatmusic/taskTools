@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { RepositoryOccurrence } from "./repositoryManifest.ts";
 import { normalizeRepositoryIdentity } from "./submoduleUrlIdentity.ts";
+import { HEAD_DETACHED, HEAD_ON_BRANCH } from "./resultCodes.ts";
 
 export class OperationBranchSetupError extends Error {}
 export class OperationBranchConflictError extends Error {}
@@ -11,19 +12,19 @@ function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();
 }
 
-function isDetachedHead(repoPath: string): boolean {
+function isDetachedHead(repoPath: string): number {
     try {
         execFileSync("git", ["-C", repoPath, "symbolic-ref", "-q", "HEAD"], { stdio: "ignore" });
-        return false;
+        return HEAD_ON_BRANCH;
     } catch {
-        return true;
+        return HEAD_DETACHED;
     }
 }
 
 function validateOccurrencesReadyForBranching(occurrences: RepositoryOccurrence[]): void {
     const problems: string[] = [];
     for (const occurrence of occurrences) {
-        if (isDetachedHead(occurrence.checkoutPath)) {
+        if (isDetachedHead(occurrence.checkoutPath) === HEAD_DETACHED) {
             problems.push(`  - ${occurrence.checkoutPath}: detached HEAD`);
         } else if (occurrence.baseBranch === "") {
             problems.push(`  - ${occurrence.checkoutPath}: baseBranch not resolved`);

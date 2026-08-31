@@ -9,6 +9,7 @@ import {
     finalizeApprovedRun,
 } from "../scripts/approvalGate.ts";
 import type { ApprovalDigestInput, RunState } from "../scripts/approvalGate.ts";
+import { AUTHORIZATION_DRIFT_DETECTED } from "../scripts/resultCodes.ts";
 
 function baselineDigestInput(): ApprovalDigestInput {
     return {
@@ -137,7 +138,7 @@ test("test_driftInvalidatesAuthorization_whenFileChanges", () => {
     const runState = approvedAndAuthorizedRunState();
     runState.digestInput.files = [...runState.digestInput.files, "new-file.ts"];
     const valid = checkAuthorizationDrift(runState);
-    assert.equal(valid, false);
+    assert.equal(valid, AUTHORIZATION_DRIFT_DETECTED);
     assert.equal(runState.authorization, undefined);
     assert.equal(runState.status, "review");
 });
@@ -147,7 +148,7 @@ test("test_driftInvalidatesAuthorization_whenRefChanges", () => {
     const runState = approvedAndAuthorizedRunState();
     runState.digestInput.baseRef = "refs/heads/mutated";
     const valid = checkAuthorizationDrift(runState);
-    assert.equal(valid, false);
+    assert.equal(valid, AUTHORIZATION_DRIFT_DETECTED);
     assert.equal(runState.authorization, undefined);
     assert.equal(runState.status, "review");
 });
@@ -157,7 +158,7 @@ test("test_driftInvalidatesAuthorization_whenOccurrenceDigestChanges", () => {
     const runState = approvedAndAuthorizedRunState();
     runState.digestInput.occurrenceDigests = ["occ-digest-mutated"];
     const valid = checkAuthorizationDrift(runState);
-    assert.equal(valid, false);
+    assert.equal(valid, AUTHORIZATION_DRIFT_DETECTED);
     assert.equal(runState.authorization, undefined);
     assert.equal(runState.status, "review");
 });
@@ -167,7 +168,7 @@ test("test_driftInvalidatesAuthorization_whenTestReceiptChanges", () => {
     const runState = approvedAndAuthorizedRunState();
     runState.digestInput.testReceipts = [{ groupId: "group-1", status: "red" }];
     const valid = checkAuthorizationDrift(runState);
-    assert.equal(valid, false);
+    assert.equal(valid, AUTHORIZATION_DRIFT_DETECTED);
     assert.equal(runState.authorization, undefined);
     assert.equal(runState.status, "review");
 });
@@ -177,7 +178,7 @@ test("test_driftInvalidatesAuthorization_whenReviewHandoffChanges", () => {
     const runState = approvedAndAuthorizedRunState();
     runState.digestInput.reviewHandoffs = ["handoff-mutated"];
     const valid = checkAuthorizationDrift(runState);
-    assert.equal(valid, false);
+    assert.equal(valid, AUTHORIZATION_DRIFT_DETECTED);
     assert.equal(runState.authorization, undefined);
     assert.equal(runState.status, "review");
 });

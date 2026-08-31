@@ -16,6 +16,12 @@ import type {
     TreeEntry,
 } from "../scripts/syncVerification.ts";
 import type { TestPolicy } from "../scripts/testPolicy.ts";
+import {
+    RELATED_TESTS_PASSED,
+    RELATED_TESTS_FAILED,
+    COMPLETE_SUITE_PASSED,
+    COMPLETE_SUITE_FAILED,
+} from "../scripts/resultCodes.ts";
 
 function makeTreeEntry(overrides: Partial<TreeEntry> = {}): TreeEntry {
     return { path: "src/index.ts", mode: "100644", byteHash: "abc123", ...overrides };
@@ -51,8 +57,8 @@ function makeRunners(overrides: Partial<SyncVerificationRunners> = {}): SyncVeri
     return {
         resolveExpectedBranch: (occurrence) => occurrence.branch,
         resolveTestPolicy: () => okPolicy,
-        runRelatedTests: () => true,
-        runCompleteSuite: () => true,
+        runRelatedTests: () => RELATED_TESTS_PASSED,
+        runCompleteSuite: () => COMPLETE_SUITE_PASSED,
         ...overrides,
     };
 }
@@ -121,7 +127,7 @@ test("test_missingTestPolicyFailsWithMissingTestPolicyKind", async () => {
 test("test_failingRelatedTestsFailsWithTestFailureKind", async () => {
     const baseDir = useTempDir();
     const receipt = makeReceipt();
-    const runners = makeRunners({ runRelatedTests: () => false });
+    const runners = makeRunners({ runRelatedTests: () => RELATED_TESTS_FAILED });
     await assertRejectsWithKind(verifySync(receipt, runners, baseDir), "test-failure");
 });
 
@@ -129,7 +135,7 @@ test("test_failingCompleteSuiteFailsWithTestFailureKind", async () => {
     const baseDir = useTempDir();
     const occurrence = makeOccurrence({ parentChain: ["parent"] });
     const receipt = makeReceipt({ occurrences: [occurrence] });
-    const runners = makeRunners({ runCompleteSuite: () => false });
+    const runners = makeRunners({ runCompleteSuite: () => COMPLETE_SUITE_FAILED });
     await assertRejectsWithKind(verifySync(receipt, runners, baseDir), "test-failure");
 });
 
@@ -142,7 +148,7 @@ test("test_sharedParentPathRunsCompleteSuiteExactlyOnce", async () => {
     const runners = makeRunners({
         runCompleteSuite: () => {
             callCount += 1;
-            return true;
+            return COMPLETE_SUITE_PASSED;
         },
     });
     await verifySync(receipt, runners, baseDir);
@@ -157,7 +163,7 @@ test("test_sameOccurrencePathListedTwiceRunsRelatedTestsExactlyOnce", async () =
     const runners = makeRunners({
         runRelatedTests: () => {
             callCount += 1;
-            return true;
+            return RELATED_TESTS_PASSED;
         },
     });
     await verifySync(receipt, runners, baseDir);
@@ -173,7 +179,7 @@ test("test_distinctParentsWithSameLogicalChildBothRunCompleteSuite", async () =>
     const runners = makeRunners({
         runCompleteSuite: () => {
             callCount += 1;
-            return true;
+            return COMPLETE_SUITE_PASSED;
         },
     });
     await verifySync(receipt, runners, baseDir);

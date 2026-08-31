@@ -11,6 +11,7 @@ import type { TaskGroup, TaskGroupScope } from "./taskGroups.ts";
 import { goalText, leadingTaskNumbers, readTaskFile, resolveTaskFiles, taskFilesProjectRoot, type TaskRecord } from "./taskFiles.ts";
 import { collectRepositorySources, createBranchInEveryRepository, currentBranchName, submodulePaths, type RepositorySource } from "./repositoryBranches.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
+import { ORIGIN_REMOTE_ABSENT, ORIGIN_REMOTE_PRESENT, WORKTREE_HOLDS_NO_RETAINED_WORK, WORKTREE_HOLDS_RETAINED_WORK } from "./resultCodes.ts";
 
 export type PreparedTask = {
     number: number;
@@ -155,17 +156,17 @@ export function initializeSubmodulesInWorktree(worktreePath: string): void {
 }
 
 // A two-lap failure can leave commits or edits in the worktree for inspection/recovery.
-function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): boolean {
+function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): number {
     const status = execFileSync("git", ["-C", worktreePath, "status", "--porcelain"], { encoding: "utf8" });
-    if (status.trim().length > 0) return true;
+    if (status.trim().length > 0) return WORKTREE_HOLDS_RETAINED_WORK;
     const worktreeHead = execFileSync("git", ["-C", worktreePath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
     const sourceTip = execFileSync("git", ["-C", repoRoot, "rev-parse", currentBranchName(repoRoot)], { encoding: "utf8" }).trim();
-    if (worktreeHead === sourceTip) return false;
+    if (worktreeHead === sourceTip) return WORKTREE_HOLDS_NO_RETAINED_WORK;
     try {
         execFileSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", worktreeHead, sourceTip], { stdio: "ignore" });
-        return false;
+        return WORKTREE_HOLDS_NO_RETAINED_WORK;
     } catch {
-        return true;
+        return WORKTREE_HOLDS_RETAINED_WORK;
     }
 }
 
@@ -265,7 +266,7 @@ export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: st
         unlinkSync(leasePath);
         return;
     }
-    if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
+    if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
         throw new Error(`worktree at "${worktreePath}" holds retained work; resolve or remove it before releasing its stale lease`);
     }
     unlinkSync(leasePath);
@@ -283,7 +284,7 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     const branchName = branchNameForGroup(group.groupId);
     let lease: TaskWorktreeLease;
     if (existsSync(worktreePath)) {
-        if (worktreeHoldsRetainedWork(worktreePath, repoRoot)) {
+        if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
             throw new Error(
                 `worktree at "${worktreePath}" holds retained work from a previous run; `
                 + `resolve or remove it before re-preparing task-${group.groupId}`,
@@ -430,12 +431,12 @@ export function loadRepositoryManifest(repoRoot: string, rootBranch: string): Re
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: result.occurrenceGraph };
 }
 
-function hasOriginRemote(repoRoot: string): boolean {
+function hasOriginRemote(repoRoot: string): number {
     try {
         execFileSync("git", ["-C", repoRoot, "remote", "get-url", "origin"], { stdio: "ignore" });
-        return true;
+        return ORIGIN_REMOTE_PRESENT;
     } catch {
-        return false;
+        return ORIGIN_REMOTE_ABSENT;
     }
 }
 
@@ -446,7 +447,7 @@ function runAsCli(): void {
     const requestedNumbers = leadingTaskNumbers(process.argv.slice(2));
     let tasks: TaskRecord[];
     try {
-        if (!hasOriginRemote(repoRoot)) {
+        if (hasOriginRemote(repoRoot) !== ORIGIN_REMOTE_PRESENT) {
             throw new Error("this repository does not have an origin remote. set one to continue to use 'tackle-tasks'");
         }
         tasks = selectRequestedTasks(openTasks, requestedNumbers);

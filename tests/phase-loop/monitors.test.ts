@@ -13,6 +13,7 @@ import {
     parseFeedbackMarker,
     waitForImplementorSignal,
 } from "../../phase-loop/feedback-monitor.ts";
+import { DONE_MARKER_NOT_STAGED } from "../../scripts/resultCodes.ts";
 
 function git(projectRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" }).trim();
@@ -45,7 +46,7 @@ test("test_doneMonitor_consumesTheStagedMarkerBeforeFiring", async () => {
         contents: "implementation staged\n",
     });
     assert.equal(existsSync(markerPath), false);
-    assert.equal(isRootDoneMarkerStaged(root), false);
+    assert.equal(isRootDoneMarkerStaged(root), DONE_MARKER_NOT_STAGED);
     assert.equal(git(root, "diff", "--cached", "--name-only"), "");
 });
 

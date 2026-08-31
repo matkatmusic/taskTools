@@ -13,6 +13,7 @@ import { rebaseInProgress } from "../../mergeTaskWorktrees.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { REBASE_NOT_IN_PROGRESS } from "../../resultCodes.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -38,7 +39,7 @@ function makeTempRepoWithTestScript(branchName: string): string {
     return repoPath;
 }
 
-// F1: rootOriginChildPath is the real source child checkout - the local, possibly-unpushed authority the rebase now fetches from. It is distinct from the worktree's own child checkout.
+// F1: rootOriginChildPath is the real, possibly-unpushed source child checkout the rebase fetches from.
 function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: string; rootOriginChildPath: string } {
     const childOrigin = makeTempRepoWithTestScript("child-main");
     const rootOrigin = makeTempRepoWithTestScript("main");
@@ -48,7 +49,7 @@ function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: strin
 }
 
 let nextGroupId = 1;
-// operationBranch is attached as "task-<taskNumber>" by the scripts under test, so taskNumber here must equal the worktree's real groupId - matching production's one-task-per-group.
+// taskNumber must equal the worktree's groupId, matching production's one-task-per-group branch naming.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
@@ -63,7 +64,7 @@ function seedTaskAndClaim(projectRoot: string, taskNumber: number, runId: string
     assert.equal(outcome.status, "claimed");
 }
 
-// Independently commits in the source's child checkout, never in the worktree's own child clone - simulating the source repository advancing while the task worktree exists.
+// Commits in the source's child checkout, not the worktree's, simulating the source repo advancing independently.
 function advanceSourceChildBranch(rootOrigin: string, rootOriginChildPath: string, content: string): void {
     writeFileSync(join(rootOriginChildPath, "shared.txt"), content);
     git(rootOriginChildPath, "add", "shared.txt");
@@ -139,8 +140,8 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
     assert.equal(second.finished, true);
     assert.equal(second.conflicted, false);
     assert.equal(second.stoppedAt, null);
-    assert.equal(rebaseInProgress(childCheckoutPath), false);
-    assert.equal(rebaseInProgress(worktreePath), false);
+    assert.equal(rebaseInProgress(childCheckoutPath), REBASE_NOT_IN_PROGRESS);
+    assert.equal(rebaseInProgress(worktreePath), REBASE_NOT_IN_PROGRESS);
 
     // F3: the finished rebase persisted its source-tip receipt.
     const run = getCurrentTaskRun(taskNumber, rootOrigin) as { sourceTipsAtRebase?: { occurrenceId: string; baseBranch: string; sourceTip: string }[] } | null;
@@ -160,7 +161,7 @@ test("test_advanceTaskRebase_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherR
     }));
 
     assert.equal(git(worktreePath, "rev-parse", "HEAD"), beforeHead);
-    assert.equal(rebaseInProgress(worktreePath), false);
+    assert.equal(rebaseInProgress(worktreePath), REBASE_NOT_IN_PROGRESS);
     const run = getCurrentTaskRun(taskNumber, rootOrigin) as { sourceTipsAtRebase?: unknown } | null;
     assert.equal(run?.sourceTipsAtRebase, undefined);
 });

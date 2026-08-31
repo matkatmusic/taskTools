@@ -17,6 +17,11 @@ import { pushOperationBranches } from "./operationPush.ts";
 import { publishBases, readCurrentRefOid, type PublicationTarget } from "./basePublication.ts";
 import { summarizeTaskMergeResults, type RawTaskRepoOutcome, type ArchiveRequest } from "./taskArchival.ts";
 import { runFinalization } from "./runAuthorization.ts";
+import {
+    PATH_EXISTS_IN_TREE, PATH_MISSING_FROM_TREE, CONSOLIDATION_CHANGED_FROM_BASE, CONSOLIDATION_UNCHANGED_FROM_BASE,
+    MERGE_PIPELINE_FOLD_FAILED, MERGE_PIPELINE_CONSOLIDATION_ABORTED, MERGE_PIPELINE_BASE_DRIFTED,
+    MERGE_PIPELINE_ARCHIVAL_VALIDATION_FAILED, MERGE_PIPELINE_PUBLICATION_FAILED, MERGE_PIPELINE_COMPLETED,
+} from "./resultCodes.ts";
 export type CliInput = WorkflowArguments & {
     runId?: string; startTimestamp?: string; doneCount?: number; partialCount?: number; blockedCount?: number;
     needsClarificationCount?: number; requeueCount?: number; testReceipts?: TestReceipt[]; reviewHandoffs?: string[];
@@ -62,16 +67,18 @@ function ownerLogicalIdForPath(path: string, manifest: RepositoryManifest, coord
 export function taskFilesByLogicalId(files: string[], manifest: RepositoryManifest, coordinates: Map<string, Coordinate>, logicalGroups: LogicalGroup[]): Set<string> {
     return new Set(files.map((path) => ownerLogicalIdForPath(path, manifest, coordinates, logicalGroups).logicalId));
 }
-function pathExistsInTree(repoRoot: string, commitHash: string, path: string): boolean {
+function pathExistsInTree(repoRoot: string, commitHash: string, path: string): number {
     try {
         execFileSync("git", ["-C", repoRoot, "cat-file", "-e", `${commitHash}:${path}`], { stdio: ["ignore", "ignore", "ignore"] });
-        return true;
+        return PATH_EXISTS_IN_TREE;
     } catch {
-        return false;
+        return PATH_MISSING_FROM_TREE;
     }
 }
-function consolidationChangedFromBase(repoRoot: string, recordedBaseOid: string, preparedIntegrationOid: string): boolean {
-    return git(repoRoot, "rev-parse", `${recordedBaseOid}^{tree}`).trim() !== git(repoRoot, "rev-parse", `${preparedIntegrationOid}^{tree}`).trim();
+function consolidationChangedFromBase(repoRoot: string, recordedBaseOid: string, preparedIntegrationOid: string): number {
+    return git(repoRoot, "rev-parse", `${recordedBaseOid}^{tree}`).trim() !== git(repoRoot, "rev-parse", `${preparedIntegrationOid}^{tree}`).trim()
+        ? CONSOLIDATION_CHANGED_FROM_BASE
+        : CONSOLIDATION_UNCHANGED_FROM_BASE;
 }
 // Returns an abortReason for the first failing task/repository pair, or null if every declared file is verified.
 export function findTaskArchivalValidationFailure(
@@ -93,11 +100,11 @@ export function findTaskArchivalValidationFailure(
         for (const [logicalId, repoRelativePaths] of pathsByLogicalId) {
             const consolidation = consolidations.get(logicalId);
             if (!consolidation || !consolidation.preparedIntegrationOid) return `task ${task.number}: no integration commit recorded for repository "${logicalId}"`;
-            if (!consolidationChangedFromBase(consolidation.canonicalRepoRoot, consolidation.recordedBaseOid, consolidation.preparedIntegrationOid)) {
+            if (consolidationChangedFromBase(consolidation.canonicalRepoRoot, consolidation.recordedBaseOid, consolidation.preparedIntegrationOid) !== CONSOLIDATION_CHANGED_FROM_BASE) {
                 return `task ${task.number}: consolidation for repository "${logicalId}" produced no changes from its recorded base (empty commit ${consolidation.preparedIntegrationOid})`;
             }
             for (const repoRelativePath of repoRelativePaths) {
-                if (!pathExistsInTree(consolidation.canonicalRepoRoot, consolidation.preparedIntegrationOid, repoRelativePath)) {
+                if (pathExistsInTree(consolidation.canonicalRepoRoot, consolidation.preparedIntegrationOid, repoRelativePath) !== PATH_EXISTS_IN_TREE) {
                     return `task ${task.number}: declared file "${repoRelativePath}" is missing from commit ${consolidation.preparedIntegrationOid} in repository "${logicalId}"`;
                 }
             }
@@ -209,7 +216,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
     recordApproval(runState);
     const token = issueApprovalAuthorization(runState);
     const digest = computeApprovalDigest(runState.digestInput); let abortReason: string | null = null;
-    const aborted = await runFinalization(token, digest, async (): Promise<boolean> => {
+    const aborted = await runFinalization(token, digest, async (): Promise<number> => {
         const consolidations = new Map<string, ConsolidationOutcome>();
         for (const logicalGroup of logicalGroups) {
             const canonicalRepoRoot = coordinates.get(logicalGroup.canonicalOccurrenceId)!.repoRoot;
@@ -242,7 +249,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             let previewOid = sorted[0].branchOid;
             for (let i = 1; i < sorted.length; i++) {
                 const foldResult = prepareNoFfMerge(canonicalRepoRoot, previewOid, sorted[i].branchOid, `preview fold ${runId}`);
-                if (!foldResult.merged) return true; else previewOid = foldResult.commitOid;
+                if (!foldResult.merged) return MERGE_PIPELINE_FOLD_FAILED; else previewOid = foldResult.commitOid;
             }
             const approvedConvergedTreeOid = git(canonicalRepoRoot, "rev-parse", `${previewOid}^{tree}`).trim();
             const consolidationInput: LogicalRepositoryConsolidationInput = {
@@ -251,7 +258,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
                 recordedBaseOid: canonicalOccurrence.baseOid, baseBranchRef: `refs/heads/${canonicalOccurrence.baseBranch}`,
             };
             const [result] = consolidateRun(runId, [consolidationInput], token, digest);
-            if ("aborted" in result) return true;
+            if ("aborted" in result) return MERGE_PIPELINE_CONSOLIDATION_ABORTED;
             const integrationRef = `refs/finalize/${runId}/integration/${sanitizeSegment(logicalGroup.logicalId)}`;
             git(canonicalRepoRoot, "update-ref", integrationRef, result.preparedIntegrationOid);
             consolidations.set(logicalGroup.logicalId, { preparedIntegrationOid: result.preparedIntegrationOid, canonicalRepoRoot, canonicalRefName: `refs/heads/${canonicalOccurrence.baseBranch}`, recordedBaseOid: canonicalOccurrence.baseOid, integrationRef });
@@ -264,10 +271,10 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             consolidationState: group.occurrenceIds.length === 1 ? "single" : "grouped",
         }));
         await pushOperationBranches({ logicalRepositories: operationPushLogicalRepositories, occurrences: operationPushOccurrences }, token, digest);
-        for (const occurrence of manifest.occurrences) { const liveOid = readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`); if (liveOid !== occurrence.baseOid) { abortReason = `the source branch moved past the pinned baseOid (pinned ${occurrence.baseOid}, now ${liveOid})`; return true; } }
+        for (const occurrence of manifest.occurrences) { const liveOid = readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`); if (liveOid !== occurrence.baseOid) { abortReason = `the source branch moved past the pinned baseOid (pinned ${occurrence.baseOid}, now ${liveOid})`; return MERGE_PIPELINE_BASE_DRIFTED; } }
         const tasksForValidation = sortedGroups.flatMap((group) => group.tasks.map((task) => ({ number: task.number, files: task.files })));
         const validationFailure = findTaskArchivalValidationFailure(tasksForValidation, manifest, coordinates, logicalGroups, consolidations);
-        if (validationFailure !== null) { abortReason = validationFailure; return true; }
+        if (validationFailure !== null) { abortReason = validationFailure; return MERGE_PIPELINE_ARCHIVAL_VALIDATION_FAILED; }
         const publicationTargets: PublicationTarget[] = logicalGroups.map((group) => {
             const consolidation = consolidations.get(group.logicalId)!;
             return {
@@ -278,7 +285,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         });
         const rootConsolidation = consolidations.get(logicalGroups.find((g) => g.occurrenceIds.includes(rootOccurrence.occurrenceId))!.logicalId)!;
         const publicationResult = publishBases(publicationTargets, runState, { repoPath: rootConsolidation.canonicalRepoRoot, refName: rootConsolidation.integrationRef });
-        if (!publicationResult.published) return true;
+        if (!publicationResult.published) return MERGE_PIPELINE_PUBLICATION_FAILED;
         const rawOutcomes: RawTaskRepoOutcome[] = sortedGroups.flatMap((group) => group.tasks.flatMap((task) => {
             const owningLogicalIds = taskFilesByLogicalId(task.files, manifest, coordinates, logicalGroups);
             return [...owningLogicalIds].map((logicalId) => ({
@@ -295,7 +302,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         const archiveRequest: ArchiveRequest = { publishedTaskNumbers: sortedGroups.flatMap((group) => group.tasks.map((task) => task.number)), mergeResults };
         endMetrics(0);
         printResult(summaryTargets, null, archiveRequest);
-        return false;
+        return MERGE_PIPELINE_COMPLETED;
     });
-    if (aborted) { endMetrics(conflicts.length + 1); printResult([], abortReason); }
+    if (aborted !== MERGE_PIPELINE_COMPLETED) { endMetrics(conflicts.length + 1); printResult([], abortReason); }
 }

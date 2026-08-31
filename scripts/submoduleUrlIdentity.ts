@@ -1,4 +1,5 @@
 // submoduleUrlIdentity.ts: resolve submodule .gitmodules URLs to a normalized repository identity.
+import { IDENTITIES_MATCH, IDENTITIES_DIFFER } from "./resultCodes.ts";
 
 export interface SubmoduleOccurrence {
     path: string;
@@ -102,8 +103,10 @@ export function normalizeRepositoryIdentity(url: string): RepositoryIdentity | n
     };
 }
 
-function repositoryIdentitiesMatch(a: RepositoryIdentity, b: RepositoryIdentity): boolean {
-    return a.host === b.host && a.owner === b.owner && a.repository === b.repository;
+function repositoryIdentitiesMatch(a: RepositoryIdentity, b: RepositoryIdentity): number {
+    return a.host === b.host && a.owner === b.owner && a.repository === b.repository
+        ? IDENTITIES_MATCH
+        : IDENTITIES_DIFFER;
 }
 
 function resolutionRequired(reason: string, occurrences: SubmoduleOccurrence[]): SubmoduleIdentityResolution {
@@ -133,7 +136,7 @@ export function resolveSubmoduleUpstreamIdentity(
 
     const [first, ...rest] = identities as RepositoryIdentity[];
     for (const identity of rest) {
-        if (!repositoryIdentitiesMatch(first, identity)) {
+        if (repositoryIdentitiesMatch(first, identity) === IDENTITIES_DIFFER) {
             return resolutionRequired("submodule urls resolve to different repository identities", occurrences);
         }
     }

@@ -1,6 +1,18 @@
 // clang-format for `//` prose: rejoin wrapped comment runs onto one line, leaving commented-out code untouched.
 import { readFileSync, writeFileSync } from "node:fs";
 import { applyQuota } from "./reflowQuota.ts";
+import {
+  BODY_LOOKS_LIKE_CODE,
+  BODY_LOOKS_LIKE_PROSE,
+  CONTINUES_COMMENT_RUN,
+  REFLOW_EMITTED,
+  REFLOW_NOT_EMITTED,
+  REWRITE_NEEDED,
+  REWRITE_NOT_NEEDED,
+  RUN_IS_NOT_PROSE,
+  RUN_IS_PROSE,
+  STARTS_NEW_COMMENT_RUN,
+} from "./resultCodes.ts";
 
 const COMMENT = /^(\s*)(\/\/|%%)(?!\/) ?(.*)$/; // `%%` is mermaid's line comment; `///` opts out
 const MACHINE_DIRECTIVE = /^(eslint-|@ts-|prettier-|biome-|#region|#endregion|c8 |istanbul |v8 )/;
@@ -25,8 +37,8 @@ export type Reflow = {
 };
 
 // Trailing `;` and `)` are left out: wrapped prose ends lines that way too.
-function looksLikeCode(body: string): boolean {
-  return (
+function looksLikeCode(body: string): number {
+  const isCode = (
     /[{}]$|=>$/.test(body) ||
     /^[)}\]]/.test(body) ||
     /^<[/!a-zA-Z]/.test(body) || // commented-out markup
@@ -35,23 +47,27 @@ function looksLikeCode(body: string): boolean {
     /^[\w.$]+\s*[:=].*[,;:{]$/.test(body) ||
     /^[\w.$]+\(.*[;,){]$/.test(body)
   );
+  return isCode ? BODY_LOOKS_LIKE_CODE : BODY_LOOKS_LIKE_PROSE;
 }
 
 // A directive begins a new comment instead of poisoning the run above it.
-const startsNewRun = (body: string) =>
-  DIVIDER.test(body) || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body);
+const startsNewRun = (body: string): number =>
+  (DIVIDER.test(body) || MACHINE_DIRECTIVE.test(body) || PARAGRAPH_MARK.test(body))
+    ? STARTS_NEW_COMMENT_RUN
+    : CONTINUES_COMMENT_RUN;
 
 // Two spaces after a sentence-ending line, one space otherwise.
 function joinBodies(bodies: string[]): string {
   return bodies.reduce((acc, body) => acc + (/[.!?]["')\]]?$/.test(acc) ? "  " : " ") + body);
 }
 
-function runIsProse(bodies: string[]): boolean {
-  return (
+function runIsProse(bodies: string[]): number {
+  const isProse = (
     bodies.length > 0 &&
     !MACHINE_DIRECTIVE.test(bodies[0]) &&
-    bodies.every((body) => !looksLikeCode(body))
+    bodies.every((body) => looksLikeCode(body) === BODY_LOOKS_LIKE_PROSE)
   );
+  return isProse ? RUN_IS_PROSE : RUN_IS_NOT_PROSE;
 }
 
 // Block prose: continuation lines carry no marker, so the block is taken whole.
@@ -68,7 +84,7 @@ function reflowBlock(lines: string[], start: number, outLen: number) {
     const stripped = (n === 0 ? line.replace(kind.stripOpen, "") : line);
     return (n === raw.length - 1 ? stripped.replace(kind.stripClose, "") : stripped).trim();
   });
-  if (bodies.some((body) => body !== "" && looksLikeCode(body))) return null;
+  if (bodies.some((body) => body !== "" && looksLikeCode(body) === BODY_LOOKS_LIKE_CODE)) return null;
   if (kind.skipIf && bodies.some((body) => kind.skipIf!.test(body))) return null;
 
   const paragraphs: { bodies: string[]; start: number; end: number }[] = [];
@@ -123,11 +139,11 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
     const bodies: string[] = [head[3].trim()];
     while (end + 1 < lines.length) {
       const next = lines[end + 1].match(COMMENT);
-      if (!next || next[1] !== indent || next[2] !== marker || startsNewRun(next[3].trim())) break;
+      if (!next || next[1] !== indent || next[2] !== marker || startsNewRun(next[3].trim()) === STARTS_NEW_COMMENT_RUN) break;
       if (next[3].trim() !== "") bodies.push(next[3].trim());
       end += 1;
     }
-    if (runIsProse(bodies)) {
+    if (runIsProse(bodies) === RUN_IS_PROSE) {
       const text = joinBodies(bodies);
       const words = text.split(/\s+/).length;
       const joined = bodies.length > 1;
@@ -154,7 +170,8 @@ function showCommand(path: string, lines: number[]): string {
 const overCapLines = ({ path, runs }: FileReflow) =>
   ({ path, lines: runs.filter((run) => run.capped && run.words >= WORD_LIMIT).map((run) => run.line) });
 
-export const needsRewrite = (files: FileReflow[]) => files.some((f) => overCapLines(f).lines.length > 0);
+export const needsRewrite = (files: FileReflow[]): number =>
+  files.some((f) => overCapLines(f).lines.length > 0) ? REWRITE_NEEDED : REWRITE_NOT_NEEDED;
 
 // A JSON string, so the receiving agent parses instead of reasoning about prose.
 export function describeReflows(
@@ -186,14 +203,14 @@ export function reflowFile(path: string): Reflow[] {
 }
 
 // Blocks on over-cap comments; with a sessionId the quota silences already-seen debt after one fix.
-export function emitReflows(hookEventName: string, files: FileReflow[], sessionId?: string): boolean {
+export function emitReflows(hookEventName: string, files: FileReflow[], sessionId?: string): number {
   const reflowed = files.filter(({ runs }) => runs.length > 0);
-  if (reflowed.length === 0) return false;
+  if (reflowed.length === 0) return REFLOW_NOT_EMITTED;
   let overCap = reflowed.map(overCapLines).filter(({ lines }) => lines.length > 0);
   if (sessionId) overCap = applyQuota(sessionId, overCap);
   const joined = reflowed.some(({ runs }) => runs.some((run) => run.joined));
   if (overCap.length === 0) {
-    if (!joined) return false;
+    if (!joined) return REFLOW_NOT_EMITTED;
   }
   const reason = describeReflows(reflowed, overCap);
   process.stdout.write(`${JSON.stringify(
@@ -201,5 +218,5 @@ export function emitReflows(hookEventName: string, files: FileReflow[], sessionI
       ? { decision: "block", reason }
       : { hookSpecificOutput: { hookEventName, additionalContext: reason } },
   )}\n`);
-  return true;
+  return REFLOW_EMITTED;
 }

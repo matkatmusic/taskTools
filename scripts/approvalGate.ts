@@ -6,6 +6,7 @@ import { issueRunAuthorization } from "./runAuthorization.ts";
 import type { RunAuthorizationToken } from "./runAuthorization.ts";
 import { runFinalizer } from "./runFinalizer.ts";
 import type { FinalizationRunInput, FinalizationRunResult } from "./runFinalizer.ts";
+import { AUTHORIZATION_DRIFT_NOT_DETECTED, AUTHORIZATION_DRIFT_DETECTED } from "./resultCodes.ts";
 
 export type ApprovalDigestInput = {
     manifest: RepositoryManifest;
@@ -82,14 +83,14 @@ export function issueApprovalAuthorization(runState: RunState): RunAuthorization
 }
 
 // Recomputes the digest; a mismatch invalidates approval/authorization and returns the run to review.
-export function checkAuthorizationDrift(runState: RunState): boolean {
-    if (runState.authorization === undefined) return true;
+export function checkAuthorizationDrift(runState: RunState): number {
+    if (runState.authorization === undefined) return AUTHORIZATION_DRIFT_NOT_DETECTED;
     const currentDigest = computeApprovalDigest(runState.digestInput);
-    if (currentDigest === runState.authorization.stateDigest) return true;
+    if (currentDigest === runState.authorization.stateDigest) return AUTHORIZATION_DRIFT_NOT_DETECTED;
     runState.authorization = undefined;
     runState.approval = undefined;
     runState.status = "review";
-    return false;
+    return AUTHORIZATION_DRIFT_DETECTED;
 }
 
 export function finalizeApprovedRun(

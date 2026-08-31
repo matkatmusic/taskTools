@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TestPolicy } from "./testPolicy.ts";
+import { RELATED_TESTS_PASSED, COMPLETE_SUITE_PASSED } from "./resultCodes.ts";
 
 export interface TreeEntry {
     path: string;
@@ -53,8 +54,8 @@ export class VerificationError extends Error {
 export interface SyncVerificationRunners {
     resolveExpectedBranch(occurrence: Occurrence, receipt: SyncReceipt): string;
     resolveTestPolicy(occurrence: Occurrence): TestPolicy | undefined;
-    runRelatedTests(occurrence: Occurrence): boolean | Promise<boolean>;
-    runCompleteSuite(parentPath: string): boolean | Promise<boolean>;
+    runRelatedTests(occurrence: Occurrence): number | Promise<number>;
+    runCompleteSuite(parentPath: string): number | Promise<number>;
 }
 
 function treeEntryKey(entry: TreeEntry): string {
@@ -98,8 +99,8 @@ async function verifyRelatedTests(receipt: SyncReceipt, runners: SyncVerificatio
         if (!policy) {
             throw new VerificationError("missing-test-policy", `no test policy resolved for ${occurrence.path}`);
         }
-        const passed = await runners.runRelatedTests(occurrence);
-        if (!passed) {
+        const result = await runners.runRelatedTests(occurrence);
+        if (result !== RELATED_TESTS_PASSED) {
             throw new VerificationError("test-failure", `related tests failed for ${occurrence.path}`);
         }
     }
@@ -112,10 +113,10 @@ async function verifyCompleteSuites(receipt: SyncReceipt, runners: SyncVerificat
         for (const parentPath of occurrence.parentChain) {
             const key = `${parentPath}:${receipt.convergedDigest}`;
             if (ran.has(key)) continue;
-            const passed = await runners.runCompleteSuite(parentPath);
+            const result = await runners.runCompleteSuite(parentPath);
             ran.add(key);
             verifiedParents.push(parentPath);
-            if (!passed) {
+            if (result !== COMPLETE_SUITE_PASSED) {
                 throw new VerificationError("test-failure", `complete suite failed for ${parentPath}`);
             }
         }

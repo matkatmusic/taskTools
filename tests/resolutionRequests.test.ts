@@ -16,6 +16,7 @@ import {
     REASON_MULTIPLE_EXACT_TIP_MATCHES,
     REASON_BASE_RECONCILIATION,
 } from "../scripts/resolutionRequests.ts";
+import { RESOLUTION_REQUEST_NEEDED, RESOLUTION_REQUEST_NOT_NEEDED } from "../scripts/resultCodes.ts";
 
 // Zero exact tip matches: request carries that reason and an empty candidate list.
 test("createResolutionRequest records zero-exact-tip-match reason", () => {
@@ -66,9 +67,9 @@ test("needsResolutionRequest is false once an answer is stored", () => {
     const manifest = createEmptyResolutionManifest();
     const request = createResolutionRequest("occ-6", "abc123", ["main"], REASON_ZERO_EXACT_TIP_MATCHES);
     recordResolutionRequest(manifest, request);
-    assert.equal(needsResolutionRequest(manifest, "occ-6", REASON_ZERO_EXACT_TIP_MATCHES), true);
+    assert.equal(needsResolutionRequest(manifest, "occ-6", REASON_ZERO_EXACT_TIP_MATCHES), RESOLUTION_REQUEST_NEEDED);
     applyResolutionAnswers(manifest, { [request.id]: "main" });
-    assert.equal(needsResolutionRequest(manifest, "occ-6", REASON_ZERO_EXACT_TIP_MATCHES), false);
+    assert.equal(needsResolutionRequest(manifest, "occ-6", REASON_ZERO_EXACT_TIP_MATCHES), RESOLUTION_REQUEST_NOT_NEEDED);
 });
 
 // After a JSON round trip, recomputing the id must still match the stored id.

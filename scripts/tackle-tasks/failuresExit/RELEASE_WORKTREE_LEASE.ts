@@ -5,16 +5,17 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
+import { TASK_BRANCH_REMAINS, TASK_BRANCH_ABSENT } from "../../resultCodes.ts";
 import type { EntryPacket } from "./_packet.ts";
 
-function taskBranchRemains(projectRoot: string, branchName: string): boolean {
+function taskBranchRemains(projectRoot: string, branchName: string): number {
     try {
         execFileSync("git", ["-C", projectRoot, "rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`], {
             stdio: ["ignore", "ignore", "ignore"],
         });
-        return true;
+        return TASK_BRANCH_REMAINS;
     } catch (err) {
-        if (err && typeof err === "object" && typeof (err as { status?: unknown }).status === "number") return false;
+        if (err && typeof err === "object" && typeof (err as { status?: unknown }).status === "number") return TASK_BRANCH_ABSENT;
         throw err;
     }
 }
@@ -28,7 +29,7 @@ export function main(input: string): Record<string, unknown> {
 
     let leaseReleased = false;
     let leaseRetained = false;
-    if (worktreeRemains || branchRemains) {
+    if (worktreeRemains || branchRemains === TASK_BRANCH_REMAINS) {
         leaseRetained = true;
     } else if (readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(packet.worktree)) !== null) {
         releaseTaskWorktreeLease({ worktreePath: packet.worktree, runId: packet.runId });

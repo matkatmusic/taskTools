@@ -13,6 +13,7 @@ import {
     REASON_ZERO_EXACT_TIP_MATCHES,
 } from "./resolutionRequests.ts";
 import type { ResolutionManifest, ResolutionRequest } from "./resolutionRequests.ts";
+import { RESOLUTION_ANSWER_PRESENT } from "./resultCodes.ts";
 
 export type DiscoveryManifest = {
     repositoryManifest: RepositoryManifest;
@@ -25,7 +26,7 @@ export type DiscoveryResult =
 
 function readOriginUrl(checkoutPath: string): string {
     try {
-        // stdio: caught below on purpose (no origin is a normal case), so its stderr must not leak to the parent process — a leak was corrupting run-step's "last line" output parsing.
+        // stdio: stderr is piped, not inherited — a leak here corrupted run-step's last-line output parsing (no origin is normal).
         return execFileSync("git", ["-C", checkoutPath, "remote", "get-url", "origin"], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
@@ -63,7 +64,7 @@ function resolveOccurrenceBaseBranch(
 
     const reason = resolution.kind === "none" ? REASON_ZERO_EXACT_TIP_MATCHES : REASON_MULTIPLE_EXACT_TIP_MATCHES;
     const requestId = createResolutionRequestId(occurrenceId, reason);
-    if (hasResolutionAnswer(resolutionManifest, requestId)) {
+    if (hasResolutionAnswer(resolutionManifest, requestId) === RESOLUTION_ANSWER_PRESENT) {
         return resolutionManifest.resolutionAnswers[requestId];
     }
 

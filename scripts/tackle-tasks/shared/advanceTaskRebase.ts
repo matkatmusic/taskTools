@@ -12,6 +12,7 @@ import {
     rebaseInProgress, rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
 } from "../../mergeTaskWorktrees.ts";
+import { REBASE_IN_PROGRESS } from "../../resultCodes.ts";
 
 export type AdvanceTaskRebaseInput = {
     projectRoot: string;
@@ -65,7 +66,7 @@ function abortRebaseChecked(checkoutPath: string): { aborted: boolean; failureRe
 
 // Repeatedly continues the stopped layer's rebase until it finishes or hits a fresh conflict.
 function advanceStoppedLayer(stoppedAt: AdvanceTaskRebaseInput["stoppedAt"]): AdvanceTaskRebaseOutput | null {
-    while (rebaseInProgress(stoppedAt.checkoutPath)) {
+    while (rebaseInProgress(stoppedAt.checkoutPath) === REBASE_IN_PROGRESS) {
         const continuation = continueRebaseChecked(stoppedAt.checkoutPath);
         if (continuation.freshConflict) {
             return {
@@ -122,7 +123,7 @@ function mapParentOutcome(worktreePath: string, outcome: ParentRebaseOutcome): A
 function verifyNoRebaseInProgressAnywhere(worktreePath: string, projectRoot: string, rootSourceBranch: string): void {
     const manifest = buildDiscoveryManifest(worktreePath, projectRoot, rootSourceBranch);
     for (const occurrence of manifest.repositoryManifest.occurrences) {
-        if (rebaseInProgress(occurrence.checkoutPath)) {
+        if (rebaseInProgress(occurrence.checkoutPath) === REBASE_IN_PROGRESS) {
             throw new Error(`rebase reported finished but occurrence "${occurrence.occurrenceId}" still has one in progress`);
         }
     }

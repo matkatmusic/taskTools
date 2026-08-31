@@ -1,6 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import {
+    COMPLETE_MARKER_ABSENT,
+    COMPLETE_MARKER_PRESENT,
+    DONE_MARKER_NOT_STAGED,
+    DONE_MARKER_STAGED,
+} from "../scripts/resultCodes.ts";
 
 export type DoneMonitorOptions = {
     projectRoot: string;
@@ -52,18 +58,18 @@ function repositoryRoot(projectRoot: string): string {
  * The marker is ready only when it is a newly staged root `.done` file. Restricting the check
  * to added files prevents a consumed marker's staged deletion from retriggering the monitor.
  */
-export function isRootDoneMarkerStaged(projectRoot: string): boolean {
+export function isRootDoneMarkerStaged(projectRoot: string): number {
     const root = repositoryRoot(projectRoot);
     const stagedAdds = execFileSync(
         "git",
         ["-C", root, "diff", "--cached", "--diff-filter=A", "--name-only", "-z", "--", ".done"],
         { encoding: "utf8" },
     ).split("\0").filter(Boolean);
-    return stagedAdds.includes(".done");
+    return stagedAdds.includes(".done") ? DONE_MARKER_STAGED : DONE_MARKER_NOT_STAGED;
 }
 
-export function isRootCompleteMarkerPresent(projectRoot: string): boolean {
-    return existsSync(join(repositoryRoot(projectRoot), ".complete"));
+export function isRootCompleteMarkerPresent(projectRoot: string): number {
+    return existsSync(join(repositoryRoot(projectRoot), ".complete")) ? COMPLETE_MARKER_PRESENT : COMPLETE_MARKER_ABSENT;
 }
 
 function refuseTrackedMarker(root: string, markerName: ".done" | ".complete"): void {
@@ -82,22 +88,19 @@ export function consumeRootDoneMarker(
 ): Omit<DoneMonitorEvent, "event" | "status" | "nextAction"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".done");
-    if (!isRootDoneMarkerStaged(root)) {
+    if (isRootDoneMarkerStaged(root) === DONE_MARKER_NOT_STAGED) {
         throw new Error(`the root marker is not staged for addition: ${markerPath}`);
     }
 
-    // A marker is protocol state, never repository content. Refuse to reinterpret a tracked file
-    // as the transient marker because consuming it would stage an unrelated deletion.
+    // A marker is protocol state, not repository content. Refuse a tracked file as marker to avoid an unrelated deletion.
     refuseTrackedMarker(root, ".done");
-    // `.done` is a staged publication, so report the exact bytes that triggered the monitor from
-    // the index rather than a possibly modified working-tree copy.
+    // `.done` is staged, so report the exact bytes from the index, not a possibly modified working-tree copy.
     const contents = execFileSync("git", ["-C", root, "show", ":.done"], { encoding: "utf8" });
 
-    // The producer may still be completing a larger `git add` when the marker becomes visible.
-    // Retry index-lock contention, but never emit the event until the marker is actually unstaged.
+    // The producer may still be completing a larger `git add`. Retry index-lock contention; never emit until unstaged.
     const deadline = Date.now() + INDEX_RETRY_TIMEOUT_MS;
     let lastError: unknown = null;
-    while (isRootDoneMarkerStaged(root)) {
+    while (isRootDoneMarkerStaged(root) === DONE_MARKER_STAGED) {
         try {
             execFileSync("git", ["-C", root, "restore", "--staged", "--", ".done"], {
                 encoding: "utf8",
@@ -112,7 +115,7 @@ export function consumeRootDoneMarker(
             Atomics.wait(INDEX_RETRY_WAIT, 0, 0, INDEX_RETRY_INTERVAL_MS);
         }
     }
-    if (lastError !== null && isRootDoneMarkerStaged(root)) throw lastError;
+    if (lastError !== null && isRootDoneMarkerStaged(root) === DONE_MARKER_STAGED) throw lastError;
     if (existsSync(markerPath)) unlinkSync(markerPath);
     return { markerPath, contents };
 }
@@ -142,7 +145,7 @@ export async function waitForStagedDone(options: DoneMonitorOptions): Promise<Do
     const root = repositoryRoot(options.projectRoot);
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
-        if (isRootDoneMarkerStaged(root)) {
+        if (isRootDoneMarkerStaged(root) === DONE_MARKER_STAGED) {
             return {
                 event: "done",
                 status: "landed",
@@ -167,8 +170,8 @@ export async function waitForAuditorSignal(options: DoneMonitorOptions): Promise
     const root = repositoryRoot(options.projectRoot);
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
-        const hasDone = isRootDoneMarkerStaged(root);
-        const hasComplete = isRootCompleteMarkerPresent(root);
+        const hasDone = isRootDoneMarkerStaged(root) === DONE_MARKER_STAGED;
+        const hasComplete = isRootCompleteMarkerPresent(root) === COMPLETE_MARKER_PRESENT;
         if (hasDone && hasComplete) {
             throw new Error(`conflicting root protocol markers: ${join(root, ".done")} and ${join(root, ".complete")}`);
         }

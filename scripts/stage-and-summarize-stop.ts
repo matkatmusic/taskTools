@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { emitReflows, reflowFile } from "./reflowComments.ts";
+import { REFLOW_EMITTED } from "./resultCodes.ts";
 
 const input = JSON.parse(readFileSync(0, "utf8"));
 if (input.stop_hook_active) process.exit(0);
@@ -28,7 +29,7 @@ const unstaged = paths.some((p) => {
 });
 
 // One JSON payload per invocation; the staging pointer waits for the next turn.
-if (emitReflows("Stop", reflowed, sid)) process.exit(0);
+if (emitReflows("Stop", reflowed, sid) === REFLOW_EMITTED) process.exit(0);
 
 if (!unstaged) process.exit(0);
 

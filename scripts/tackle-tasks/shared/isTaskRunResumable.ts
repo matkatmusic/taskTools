@@ -1,16 +1,9 @@
-// "is the previous run's work resumable?" — plans/tackle-tasks-v1_5-plan.md Phase 3.
-// F7: the notes file must resolve, by real path, to a regular file inside the real worktree —
-// that one check handles an absolute outside path, a "../" escape and a symlink escape alike.
-// Finding 1 (phase10-audit.md): ownership is established FIRST, independent of resumability.
-// Every existing-worktree path — safe or not — must adopt an ended owner's lease or acquire an
-// absent one before anything else happens, so a "safe, no notes" run is never left proceeding
-// against a lease still naming a dead run. Only once ownership is established do we decide
-// resumable from the newest ended run's notes file. Neither the notes file's absence nor its
-// failing containment ever blocks lease establishment.
+// plans/tackle-tasks-v1_5-plan.md Phase 3, F7; phase10-audit.md Finding 1: lease ownership is established before deciding resumability.
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, sep } from "node:path";
 import { acquireAbsentWorktreeLease, adoptWorktreeLease, readTaskRunState } from "./taskRunState.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { NOTES_FILE_CONTAINED, NOTES_FILE_NOT_CONTAINED } from "../../resultCodes.ts";
 
 export type IsTaskRunResumableOutput = {
     resumable: boolean;
@@ -22,22 +15,20 @@ const NOT_RESUMABLE: IsTaskRunResumableOutput = {
     resumable: false, implementationNotesFile: null, leaseEstablished: false,
 };
 
-// F5/F7: the one read-only realpath + regular-file containment predicate. Shared with
-// recordImplementationNotes.ts (the mutating write side) and reconcileStep.ts's resumability and
-// notes-recording handlers, so all four cannot drift on what "inside the worktree" means.
-export function isNotesFileContained(worktreePath: string, notesFile: string): boolean {
+// F5/F7: containment check shared by recordImplementationNotes.ts and reconcileStep.ts so all four handlers agree.
+export function isNotesFileContained(worktreePath: string, notesFile: string): number {
     const notesPath = isAbsolute(notesFile) ? notesFile : join(worktreePath, notesFile);
-    if (!existsSync(notesPath)) return false;
+    if (!existsSync(notesPath)) return NOTES_FILE_NOT_CONTAINED;
     let realWorktree: string;
     let realNotesPath: string;
     try {
         realWorktree = realpathSync(worktreePath);
         realNotesPath = realpathSync(notesPath);
     } catch {
-        return false;
+        return NOTES_FILE_NOT_CONTAINED;
     }
-    if (!statSync(realNotesPath).isFile()) return false;
-    return realNotesPath.startsWith(`${realWorktree}${sep}`);
+    if (!statSync(realNotesPath).isFile()) return NOTES_FILE_NOT_CONTAINED;
+    return realNotesPath.startsWith(`${realWorktree}${sep}`) ? NOTES_FILE_CONTAINED : NOTES_FILE_NOT_CONTAINED;
 }
 
 export function isTaskRunResumable(
@@ -57,7 +48,7 @@ export function isTaskRunResumable(
     // An ended run that never implemented anything left no work to lose, so a fresh plan may start here.
     const noWorkRecorded = newest !== undefined && notesFile === null && newest.modifiedFiles.length === 0 && newest.commits.length === 0;
     if (noWorkRecorded) return { resumable: true, implementationNotesFile: null, leaseEstablished: true };
-    if (notesFile === null || !isNotesFileContained(worktreePath, notesFile)) {
+    if (notesFile === null || isNotesFileContained(worktreePath, notesFile) !== NOTES_FILE_CONTAINED) {
         return { resumable: false, implementationNotesFile: null, leaseEstablished: true };
     }
     return { resumable: true, implementationNotesFile: notesFile, leaseEstablished: true };

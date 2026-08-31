@@ -1,5 +1,13 @@
 // resolutionRequests.ts: resumable discovery resolution requests with persisted answers.
 import { createHash } from "node:crypto";
+import {
+    RESOLUTION_ANSWER_PRESENT,
+    RESOLUTION_ANSWER_ABSENT,
+    RESOLUTION_REQUEST_NEEDED,
+    RESOLUTION_REQUEST_NOT_NEEDED,
+    BASE_RECONCILIATION_ANSWER_PRESENT,
+    BASE_RECONCILIATION_ANSWER_ABSENT,
+} from "./resultCodes.ts";
 
 export type ResolutionReason = string;
 
@@ -101,17 +109,21 @@ export function recordBaseReconciliationRequest(
     manifest.baseReconciliationRequests[existingIndex] = request;
 }
 
-export function hasResolutionAnswer(manifest: ResolutionManifest, requestId: string): boolean {
-    return Object.prototype.hasOwnProperty.call(manifest.resolutionAnswers, requestId);
+export function hasResolutionAnswer(manifest: ResolutionManifest, requestId: string): number {
+    return Object.prototype.hasOwnProperty.call(manifest.resolutionAnswers, requestId)
+        ? RESOLUTION_ANSWER_PRESENT
+        : RESOLUTION_ANSWER_ABSENT;
 }
 
 export function needsResolutionRequest(
     manifest: ResolutionManifest,
     occurrenceId: string,
     reason: ResolutionReason
-): boolean {
+): number {
     const id = createResolutionRequestId(occurrenceId, reason);
-    return !hasResolutionAnswer(manifest, id);
+    return hasResolutionAnswer(manifest, id) === RESOLUTION_ANSWER_PRESENT
+        ? RESOLUTION_REQUEST_NOT_NEEDED
+        : RESOLUTION_REQUEST_NEEDED;
 }
 
 export function applyResolutionAnswers(manifest: ResolutionManifest, answers: Record<string, string>): void {
@@ -137,8 +149,10 @@ export function applyResolutionAnswers(manifest: ResolutionManifest, answers: Re
     }
 }
 
-export function hasBaseReconciliationAnswer(manifest: ResolutionManifest, requestId: string): boolean {
-    return Object.prototype.hasOwnProperty.call(manifest.baseReconciliationAnswers, requestId);
+export function hasBaseReconciliationAnswer(manifest: ResolutionManifest, requestId: string): number {
+    return Object.prototype.hasOwnProperty.call(manifest.baseReconciliationAnswers, requestId)
+        ? BASE_RECONCILIATION_ANSWER_PRESENT
+        : BASE_RECONCILIATION_ANSWER_ABSENT;
 }
 
 export function applyBaseReconciliationAnswers(

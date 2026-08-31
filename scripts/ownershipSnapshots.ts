@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { OwnershipEffects } from "./ownershipKeys.ts";
+import { CHANGE_COVERED_BY_OWNERSHIP, CHANGE_NOT_COVERED_BY_OWNERSHIP } from "./resultCodes.ts";
 
 export type PathState = {
     path: string;
@@ -129,14 +130,16 @@ export type Violation = {
     reason: "out-of-ownership";
 };
 
-function isCovered(change: Change, ownershipKeys: OwnershipEffects[]): boolean {
+function isCovered(change: Change, ownershipKeys: OwnershipEffects[]): number {
     const absolutePath = join(change.occurrenceRoot, change.path);
-    return ownershipKeys.some((effect) => effect.occurrencePaths.includes(absolutePath));
+    return ownershipKeys.some((effect) => effect.occurrencePaths.includes(absolutePath))
+        ? CHANGE_COVERED_BY_OWNERSHIP
+        : CHANGE_NOT_COVERED_BY_OWNERSHIP;
 }
 
 export function checkOwnership(workerId: string, changes: Change[], ownershipKeys: OwnershipEffects[]): Violation[] {
     return changes
-        .filter((change) => !isCovered(change, ownershipKeys))
+        .filter((change) => isCovered(change, ownershipKeys) !== CHANGE_COVERED_BY_OWNERSHIP)
         .map((change) => ({
             occurrenceId: change.occurrenceRoot,
             path: change.path,
@@ -147,7 +150,7 @@ export function checkOwnership(workerId: string, changes: Change[], ownershipKey
 
 export function checkGroupBoundary(changes: Change[], allWorkersOwnershipKeys: OwnershipEffects[][]): Violation[] {
     return changes
-        .filter((change) => !allWorkersOwnershipKeys.some((ownershipKeys) => isCovered(change, ownershipKeys)))
+        .filter((change) => !allWorkersOwnershipKeys.some((ownershipKeys) => isCovered(change, ownershipKeys) === CHANGE_COVERED_BY_OWNERSHIP))
         .map((change) => ({
             occurrenceId: change.occurrenceRoot,
             path: change.path,

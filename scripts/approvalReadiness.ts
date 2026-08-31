@@ -1,4 +1,5 @@
 // approvalReadiness.ts: gates readyForApproval on task/ownership/typecheck/sync checks, green test receipts, and per-group reviewer exercise methods.
+import { EXERCISE_METHOD_ACTIONABLE, EXERCISE_METHOD_NOT_ACTIONABLE } from "./resultCodes.ts";
 
 export type TaskCompletionState = "done" | "partial" | "blocked" | "needs-clarification";
 
@@ -67,10 +68,16 @@ export interface GroupExerciseFacts {
     verificationCommand?: string;
 }
 
-export function isActionableExerciseMethod(method: ExerciseMethod): boolean {
-    if (method.kind === "url") return method.url !== "";
-    if (method.kind === "command") return method.command !== "" && method.workingDirectory !== "";
-    return false;
+export function isActionableExerciseMethod(method: ExerciseMethod): number {
+    if (method.kind === "url") {
+        return method.url !== "" ? EXERCISE_METHOD_ACTIONABLE : EXERCISE_METHOD_NOT_ACTIONABLE;
+    }
+    if (method.kind === "command") {
+        return method.command !== "" && method.workingDirectory !== ""
+            ? EXERCISE_METHOD_ACTIONABLE
+            : EXERCISE_METHOD_NOT_ACTIONABLE;
+    }
+    return EXERCISE_METHOD_NOT_ACTIONABLE;
 }
 
 export function reviewGroupExerciseMethod(facts: GroupExerciseFacts): GroupReviewResult {
@@ -106,7 +113,9 @@ export function assessApprovalReadiness(input: ApprovalReadinessInput): Approval
             missingReview = true;
             continue;
         }
-        if (!review.methods.some(isActionableExerciseMethod)) nonActionableReview = true;
+        if (!review.methods.some((method) => isActionableExerciseMethod(method) === EXERCISE_METHOD_ACTIONABLE)) {
+            nonActionableReview = true;
+        }
     }
     if (missingReview) blockedBy.push("missing-review");
     if (nonActionableReview) blockedBy.push("non-actionable-review");

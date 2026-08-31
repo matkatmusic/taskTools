@@ -1,10 +1,11 @@
 import { findTask, readTaskLists } from "./getTaskDetails.ts";
 import { closeTasks, type CloseTasksResult } from "./closeTasks.ts";
 import type { TaskRecord } from "./taskFiles.ts";
+import { TASK_IS_NOT_OPEN, TASK_IS_OPEN } from "./resultCodes.ts";
 
-function isOpenTask(taskNumber: number, projectRoot?: string): boolean {
+function isOpenTask(taskNumber: number, projectRoot?: string): number {
     const { openTasks } = readTaskLists(projectRoot);
-    return openTasks.some((task) => task.taskNumber === taskNumber);
+    return openTasks.some((task) => task.taskNumber === taskNumber) ? TASK_IS_OPEN : TASK_IS_NOT_OPEN;
 }
 
 function assertValidSplitCount(numSplits: number): void {
@@ -18,7 +19,7 @@ export function readParentTask(taskNumber: number, projectRoot?: string): TaskRe
     if (!parent) {
         throw new Error(`Task ${taskNumber} not found`);
     }
-    if (!isOpenTask(taskNumber, projectRoot)) {
+    if (isOpenTask(taskNumber, projectRoot) !== TASK_IS_OPEN) {
         throw new Error(`Task ${taskNumber} is already closed and cannot be split`);
     }
     return parent;
@@ -121,7 +122,7 @@ export function validateChildNumbers(
             throw new Error(`Child task number ${child} was supplied more than once`);
         }
         seen.add(child);
-        if (!isOpenTask(child, projectRoot)) {
+        if (isOpenTask(child, projectRoot) !== TASK_IS_OPEN) {
             throw new Error(`Child task ${child} is not an open task`);
         }
     }

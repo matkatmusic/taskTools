@@ -1,6 +1,7 @@
 // Pure traversal helpers over the occurrence graph recorded by repositoryManifest.ts.
 import { relative } from "node:path";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
+import { PATH_WITHIN_CHECKOUT, PATH_OUTSIDE_CHECKOUT } from "./resultCodes.ts";
 
 function rootCandidates(manifest: RepositoryManifest): RepositoryOccurrence[] {
     return manifest.occurrences.filter((occurrence) => occurrence.parentOccurrenceId === null);
@@ -12,7 +13,9 @@ function selectRoot(
     manifest: RepositoryManifest,
 ): { root: RepositoryOccurrence; relativize: boolean } | null {
     const candidates = rootCandidates(manifest);
-    const rawMatch = candidates.find((root) => isWithinCheckout(rootRelativePath, root.checkoutPath));
+    const rawMatch = candidates.find(
+        (root) => isWithinCheckout(rootRelativePath, root.checkoutPath) === PATH_WITHIN_CHECKOUT,
+    );
     if (rawMatch) return { root: rawMatch, relativize: false };
     if (candidates.length === 1) return { root: candidates[0], relativize: true };
     return null;
@@ -63,9 +66,11 @@ export function getDeepestFirstOrder(occurrences: RepositoryOccurrence[]): Repos
     });
 }
 
-function isWithinCheckout(rootRelativePath: string, checkoutPath: string): boolean {
-    if (checkoutPath === "") return true;
-    return rootRelativePath === checkoutPath || rootRelativePath.startsWith(`${checkoutPath}/`);
+function isWithinCheckout(rootRelativePath: string, checkoutPath: string): number {
+    if (checkoutPath === "") return PATH_WITHIN_CHECKOUT;
+    return rootRelativePath === checkoutPath || rootRelativePath.startsWith(`${checkoutPath}/`)
+        ? PATH_WITHIN_CHECKOUT
+        : PATH_OUTSIDE_CHECKOUT;
 }
 
 // Descends recorded child edges, matching only recorded checkoutPath -- never splits the input path.
@@ -83,7 +88,7 @@ export function getOwningOccurrence(
         descended = false;
         for (const child of getChildren(owner, manifest)) {
             const childCheckoutPath = relativize ? checkoutPathFromRoot(child, root) : child.checkoutPath;
-            if (isWithinCheckout(rootRelativePath, childCheckoutPath)) {
+            if (isWithinCheckout(rootRelativePath, childCheckoutPath) === PATH_WITHIN_CHECKOUT) {
                 owner = child;
                 descended = true;
                 break;
@@ -100,7 +105,7 @@ export function getPathWithinRepository(
 ): string {
     const ancestors = getAncestorChain(owningOccurrence, manifest);
     const root = ancestors.length > 0 ? ancestors[ancestors.length - 1] : owningOccurrence;
-    const relativize = !isWithinCheckout(rootRelativePath, root.checkoutPath);
+    const relativize = isWithinCheckout(rootRelativePath, root.checkoutPath) === PATH_OUTSIDE_CHECKOUT;
     const checkoutPath = relativize ? checkoutPathFromRoot(owningOccurrence, root) : owningOccurrence.checkoutPath;
     if (checkoutPath === "") return rootRelativePath;
     if (rootRelativePath === checkoutPath) return "";

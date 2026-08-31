@@ -12,6 +12,7 @@ import { resetTask } from "./tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
 import { resetAttemptCounts } from "./tackle-tasks/shared/taskRunState.ts";
+import { SOURCE_LOCK_REACHABLE, SOURCE_LOCK_UNREACHABLE } from "./resultCodes.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
 process.on("uncaughtException", (error: Error) => {
@@ -35,7 +36,7 @@ function runStamp(): string {
     const pad = (value: number) => String(value).padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}-${process.pid}`;
 }
-// One folder per run in the skill's repo: <cwd>/.taskTools/runs/<stamp>. A packetFile input names the run it belongs to.  RUN_STEP_LOG lets tests point the log at their own file; packets then sit beside it.
+// One folder per run holds packets; a packetFile names its run. RUN_STEP_LOG lets tests move the log, packets follow.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
 let packetSequence = 0;
 const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.json`;
@@ -58,7 +59,7 @@ type StepRun = {
     stdout: string;
     result: Record<string, unknown> | null;
 };
-// payload is the path of the packet file the next block starts from; an agent answers a prompt into it.
+// payload is the packet file path the next block starts from; an agent writes its answer there.
 type Outcome = {
     next: string | null;
     payload: string;
@@ -181,9 +182,9 @@ function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): s
 }
 
 // A block holds the source lock when the walk can reach it from LOCK_SOURCE_REPO without entering an exit diagram.
-function isInsideSourceLock(stepKey: string): boolean {
+function isInsideSourceLock(stepKey: string): number {
     const lockStepKey = getStepKeysNamingBox(LOCK_SOURCE_REPO_BOX)[0];
-    if (lockStepKey === undefined) return false;
+    if (lockStepKey === undefined) return SOURCE_LOCK_UNREACHABLE;
     const reached = new Set<string>();
     const toVisit = [...STEPS_BY_KEY.get(lockStepKey)!.next.map((box) => getStepKey(box, STEPS_BY_KEY.get(lockStepKey)!.diagram))];
     while (toVisit.length > 0) {
@@ -193,7 +194,7 @@ function isInsideSourceLock(stepKey: string): boolean {
         reached.add(visiting);
         toVisit.push(...step.next.map((box) => getStepKey(box, step.diagram)));
     }
-    return reached.has(stepKey);
+    return reached.has(stepKey) ? SOURCE_LOCK_REACHABLE : SOURCE_LOCK_UNREACHABLE;
 }
 
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
@@ -283,7 +284,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const taskNumber = Number(startPacket.taskNumber);
         const entry = findStartAtBlockEntry(taskNumber, String(startPacket.tasksFile), STEPS_BY_KEY.get(startStepKey)!.box, dirname(logFile()));
         if (entry === null) return walkFromStep(START_STEP_KEY, startInput, invocation);
-        prepareResume({ taskNumber, runId: entry.runId, projectRoot: entry.projectRoot, sourceLockHeld: isInsideSourceLock(startStepKey) });
+        prepareResume({ taskNumber, runId: entry.runId, projectRoot: entry.projectRoot, sourceLockHeld: isInsideSourceLock(startStepKey) === SOURCE_LOCK_REACHABLE });
         resetAttemptCounts(taskNumber, entry.runId, entry.projectRoot);
         startInput = entry.input;
     }

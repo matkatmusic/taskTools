@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { leadingTaskNumbers, readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import { readTaskLists } from "./getTaskDetails.ts";
+import { PATH_IS_NOT_TEST_FILE, PATH_IS_TEST_FILE } from "./resultCodes.ts";
 
 export type RatingResult = {
     taskNumber: number;
@@ -17,8 +18,9 @@ function clampScore(raw: number): number {
     return Math.min(10, Math.max(1, Math.round(raw)));
 }
 
-function isTestFile(path: string): boolean {
-    return /(^|\/)tests?\//i.test(path) || /\.test\.[jt]sx?$/i.test(path);
+function isTestFile(path: string): number {
+    const matches = /(^|\/)tests?\//i.test(path) || /\.test\.[jt]sx?$/i.test(path);
+    return matches ? PATH_IS_TEST_FILE : PATH_IS_NOT_TEST_FILE;
 }
 
 function enumeratedLines(description: string): string[] {
@@ -48,8 +50,8 @@ function groupFilesByTopLevelDirectory(files: string[]): Map<string, string[]> {
 
 export function scoreDifficulty(task: TaskRecord): number {
     const files = declaredFiles(task);
-    const nonTestFiles = files.filter((f) => !isTestFile(f));
-    const testFiles = files.filter(isTestFile);
+    const nonTestFiles = files.filter((f) => isTestFile(f) !== PATH_IS_TEST_FILE);
+    const testFiles = files.filter((f) => isTestFile(f) === PATH_IS_TEST_FILE);
     const subsystemCount = groupFilesByTopLevelDirectory(files).size;
     const enumeratedSteps = enumeratedLines(task.description ?? "").length;
 

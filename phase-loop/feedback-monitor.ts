@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { PATH_IS_FILE, PATH_IS_NOT_FILE } from "../scripts/resultCodes.ts";
 
 export type FeedbackMonitorOptions = {
     projectRoot: string;
@@ -55,11 +56,11 @@ function repositoryRoot(projectRoot: string): string {
     }).trim();
 }
 
-function statPathIsFile(path: string): boolean {
+function statPathIsFile(path: string): number {
     try {
-        return statSync(path).isFile();
+        return statSync(path).isFile() ? PATH_IS_FILE : PATH_IS_NOT_FILE;
     } catch {
-        return false;
+        return PATH_IS_NOT_FILE;
     }
 }
 
@@ -105,20 +106,18 @@ function resolvePublishedPath(root: string, path: string): string {
 export function consumeRootFeedbackMarker(projectRoot: string): FeedbackPublishedMonitorEvent {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".feedback");
-    if (!statPathIsFile(markerPath)) throw new Error(`the root review marker does not exist: ${markerPath}`);
+    if (statPathIsFile(markerPath) === PATH_IS_NOT_FILE) throw new Error(`the root review marker does not exist: ${markerPath}`);
     refuseTrackedMarker(root, ".feedback");
 
     const markerContents = readFileSync(markerPath, "utf8");
-    // Detection consumes the transient signal even when its contents are invalid. This prevents
-    // one bad publication from retriggering every restarted monitor; the auditor must correct the
-    // review metadata and publish a fresh marker.
+    // Detection consumes the signal even when invalid, so one bad publication cannot retrigger every restarted monitor.
     unlinkSync(markerPath);
     const marker = parseFeedbackMarker(markerContents);
     const planPath = resolvePublishedPath(root, marker.plan);
     const auditPath = resolvePublishedPath(root, marker.audit);
     const reviewPath = resolvePublishedPath(root, marker.review);
     for (const [label, path] of [["plan", planPath], ["audit", auditPath], ["review", reviewPath]] as const) {
-        if (!statPathIsFile(path)) throw new Error(`.feedback ${label} path is not a file: ${path}`);
+        if (statPathIsFile(path) === PATH_IS_NOT_FILE) throw new Error(`.feedback ${label} path is not a file: ${path}`);
     }
 
     return {
@@ -142,7 +141,7 @@ export function consumeRootResolvedMarker(
 ): Omit<ResolvedMonitorEvent, "status" | "nextAction"> {
     const root = repositoryRoot(projectRoot);
     const markerPath = join(root, ".resolved");
-    if (!statPathIsFile(markerPath)) throw new Error(`the root resolution marker does not exist: ${markerPath}`);
+    if (statPathIsFile(markerPath) === PATH_IS_NOT_FILE) throw new Error(`the root resolution marker does not exist: ${markerPath}`);
     refuseTrackedMarker(root, ".resolved");
     const contents = readFileSync(markerPath, "utf8");
     unlinkSync(markerPath);
@@ -163,8 +162,8 @@ export async function waitForImplementorSignal(
     const resolvedPath = join(root, ".resolved");
     const deadline = timeoutMs === null ? null : Date.now() + timeoutMs;
     while (true) {
-        const hasFeedback = statPathIsFile(feedbackPath);
-        const hasResolved = statPathIsFile(resolvedPath);
+        const hasFeedback = statPathIsFile(feedbackPath) === PATH_IS_FILE;
+        const hasResolved = statPathIsFile(resolvedPath) === PATH_IS_FILE;
         if (hasFeedback && hasResolved) {
             throw new Error(`conflicting root protocol markers: ${feedbackPath} and ${resolvedPath}`);
         }

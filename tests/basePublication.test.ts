@@ -13,6 +13,7 @@ import {
 } from "../scripts/basePublication.ts";
 import type { CheckoutOperations, PublicationTarget, UpdatedRef } from "../scripts/basePublication.ts";
 import type { RunState } from "../scripts/approvalGate.ts";
+import { CHECKOUT_TRANSITION_FAILED } from "../scripts/resultCodes.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();
@@ -333,7 +334,7 @@ test("test_checkoutApplicationFailureReversesAppliedCheckoutsAndPublishedRefs", 
         ...defaultCheckoutOperations,
         apply: (transition) => {
             applyCount += 1;
-            return applyCount === 2 ? false : defaultCheckoutOperations.apply(transition);
+            return applyCount === 2 ? CHECKOUT_TRANSITION_FAILED : defaultCheckoutOperations.apply(transition);
         },
     };
 

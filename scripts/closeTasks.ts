@@ -4,6 +4,7 @@ import { leadingTaskNumbers, resolveTaskFiles } from "./taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "./taskFiles.ts";
 import { unblockDependents } from "./unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
+import { ARCHIVE_MALFORMED, ARCHIVE_WELL_FORMED } from "./resultCodes.ts";
 import type { StepResultReceipt, TaskRunRecord, TaskRunState } from "./tackle-tasks/shared/taskRunState.ts";
 
 export interface CloseTasksResult {
@@ -12,7 +13,7 @@ export interface CloseTasksResult {
   unblocked: number[];
 }
 
-// F12: closeTaskRun's reconciled output. `ambiguous` is a separate array from `skipped` so a completed-only mismatch (evidence exists but disagrees) is never mistaken for a task absent from both files (no evidence at all).
+// F12: closeTaskRun's output. `ambiguous` differs from `skipped` — evidence disagreeing is never mistaken for evidence absent entirely.
 export interface CloseTaskRunOutput {
   closed: number[];
   skipped: number[];
@@ -75,7 +76,7 @@ export function closeTasks(
     closeTasksLocked(taskNumbers, closureNote, pair, commitHashes), { onAcquired });
 }
 
-// F6's checked archive primitive: decides eligibility from task.run under the SAME lock as the write, instead of an unlocked precheck followed by a plain closeTasks call. The specified run must be the newest record, inactive, ended, and exitType "completed" — commit hashes are derived from that run's own chronological commits, never caller-supplied.
+// F6's checked archive: eligibility from task.run under the same lock as the write; hashes are derived, never caller-supplied.
 export function closeTaskRunChecked(
   taskNumber: number,
   runId: string,
@@ -122,25 +123,26 @@ function requireEndedCompletedRun(state: TaskRunState, runId: string, taskNumber
   return newest;
 }
 
-function archiveIsWellFormed(archived: ArchivedTaskRecord): boolean {
-  return typeof archived.closureNote === "string"
+function archiveIsWellFormed(archived: ArchivedTaskRecord): number {
+  const wellFormed = typeof archived.closureNote === "string"
     && Array.isArray(archived.commitHashes)
     && (archived.commitHashes as unknown[]).every((hash) => typeof hash === "string");
+  return wellFormed ? ARCHIVE_WELL_FORMED : ARCHIVE_MALFORMED;
 }
 
-// Shared with reconcileStep.ts's reconcileCloseTaskRun so the "does this archive really carry this run's durable record" rule cannot drift between the two callers. Requires an EXACT match of run identity, note, and derived hashes — anything else means the evidence disagrees, not that it's absent.
+// Shared with reconcileStep.ts's reconcileCloseTaskRun so this rule can't drift; requires an EXACT match of run identity, note, hashes.
 export function validateArchivedRun(
   archived: ArchivedTaskRecord, runId: string, closureNote: string,
 ): TaskRunRecord | null {
   const ended = findEndedRunEntry(archived, runId);
   if (ended === undefined) return null;
-  if (!archiveIsWellFormed(archived)) return null;
+  if (archiveIsWellFormed(archived) !== ARCHIVE_WELL_FORMED) return null;
   if (archived.closureNote !== closureNote) return null;
   if (JSON.stringify(archived.commitHashes) !== JSON.stringify(chronologicalHashes(ended))) return null;
   return ended;
 }
 
-// Only-completed: reconciled success requires an EXACT match of run identity, note, and derived hashes. Anything else is ambiguity, distinct from "not found" — evidence exists, it just disagrees — and never a write.
+// Only-completed: success requires an EXACT match of run identity, note, hashes; anything else is ambiguity, not "not found".
 function reconcileArchivedOnly(
   archived: ArchivedTaskRecord, taskNumber: number, runId: string, closureNote: string,
 ): CloseTaskRunOutput {
@@ -150,7 +152,7 @@ function reconcileArchivedOnly(
   return { closed: [], skipped: [], ambiguous: [taskNumber], unblocked: [] };
 }
 
-// Both files, same run: the archived record is immutable durable evidence. Only the open record's removal/unblocking is completed here — completedTasks.json is never written.
+// Both files, same run: archived record is immutable evidence; only open record removal/unblocking happens, completedTasks.json untouched.
 function archiveOpenTaskRemovalOnly(
   tasks: TaskRecord[], archived: ArchivedTaskRecord, taskNumber: number, runId: string, pair: TaskFilePair,
 ): CloseTaskRunOutput {
@@ -158,7 +160,7 @@ function archiveOpenTaskRemovalOnly(
   if (ended === undefined) {
     throw new Error(`closeTaskRun: task ${taskNumber} is archived under a different run than "${runId}"`);
   }
-  if (!archiveIsWellFormed(archived)) {
+  if (archiveIsWellFormed(archived) !== ARCHIVE_WELL_FORMED) {
     throw new Error(`closeTaskRun: task ${taskNumber}'s archived record is malformed and cannot be trusted`);
   }
   const remaining = tasks.filter((task) => task.taskNumber !== taskNumber);
@@ -167,7 +169,7 @@ function archiveOpenTaskRemovalOnly(
   return { closed: [taskNumber], skipped: [], ambiguous: [], unblocked };
 }
 
-// F10: writes the exact real return value of a fresh archive-and-close call onto the just-written archived record's run.history, tagged by stepId — the only place `unblocked` is still knowable once the task has left tasks.json. Only called for a fresh archive (case 1 below): the "both files, same run" case must leave completedTasks.json byte-identical, so it never gets a receipt written into it; that case's own return value is real and freshly computed, not reconstructed.
+// F10: writes the real return value of a fresh archive-and-close call onto run.history; not used for reused archives.
 function persistCloseStepReceipt(
   completedTasksPath: string, taskNumber: number, runId: string, stepId: string, result: CloseTaskRunOutput,
 ): void {

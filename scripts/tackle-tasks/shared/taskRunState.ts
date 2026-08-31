@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
 import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../../prepareTasks.ts";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../taskFiles.ts";
+import { LEASE_COMPATIBLE_WITH_INTENT, LEASE_INCOMPATIBLE_WITH_INTENT } from "../../resultCodes.ts";
 
 export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"
@@ -177,28 +178,29 @@ function describeLeaseOwner(bytes: string | null): string {
     }
 }
 
-// The only question a retained intent's reconciliation is allowed to answer from the physical lease: is it still exactly where the intent left the world (or found it), or does it already show the new owner's partially-completed write? Anything else names a third run that must never be overwritten, so it is a hard mismatch, not a data point to weigh against tasks.json.
+// Checks whether the physical lease matches the intent's expected state or new owner; else it's a hard mismatch.
 function isPhysicalLeaseCompatibleWithIntent(
     physicalBytes: string | null,
     intent: WorktreeLeaseTransitionIntent,
-): boolean {
-    if (physicalBytes === intent.previousLeaseBytes) return true;
-    if (physicalBytes === null) return false;
+): number {
+    if (physicalBytes === intent.previousLeaseBytes) return LEASE_COMPATIBLE_WITH_INTENT;
+    if (physicalBytes === null) return LEASE_INCOMPATIBLE_WITH_INTENT;
     try {
-        return (JSON.parse(physicalBytes) as { runId?: string }).runId === intent.newOwnerRunId;
+        return (JSON.parse(physicalBytes) as { runId?: string }).runId === intent.newOwnerRunId
+            ? LEASE_COMPATIBLE_WITH_INTENT : LEASE_INCOMPATIBLE_WITH_INTENT;
     } catch {
-        return false;
+        return LEASE_INCOMPATIBLE_WITH_INTENT;
     }
 }
 
-// Runs under both guards, at the top of every lease mutation. A retained intent means a prior adoption or acquisition died between writing the journal and deleting it. Before changing either authority, read the physical lease that exists right now and classify it against the intent: only the exact recorded prior state (including absence) or the intent's own new owner are safe to act on. Anything else is a different run that acquired or was assigned the lease during the recovery window — refuse outright rather than finish or roll back over it. Otherwise finish if the new run is still the active claimant and the previous owner (if any) has ended, or roll back to the prior physical state. Either way the intent is gone by the time this returns.
+// Reconciles a retained intent from a crashed lease mutation: finish, roll back, or refuse if another run took it.
 function reconcileRetainedAdoptionIntent(worktreePath: string, projectRoot: string): void {
     const intent = readTransitionIntent(worktreePath);
     if (intent === null) return;
 
     const leasePath = taskWorktreeLeasePath(worktreePath);
     const physicalBytes = readLeaseBytesOrNull(leasePath);
-    if (!isPhysicalLeaseCompatibleWithIntent(physicalBytes, intent)) {
+    if (isPhysicalLeaseCompatibleWithIntent(physicalBytes, intent) !== LEASE_COMPATIBLE_WITH_INTENT) {
         throw new Error(
             `worktree lease for task ${intent.taskNumber} at "${leasePath}" is held by `
             + `${describeLeaseOwner(physicalBytes)}, not the recorded prior owner or the `

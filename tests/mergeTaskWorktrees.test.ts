@@ -29,6 +29,7 @@ import {
 import type { MergeStepOperations } from "../scripts/mergeTaskWorktrees.ts";
 import { REASON_NO_TEST_CONFIGURATION } from "../scripts/testPolicy.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { GIT_PATH_PRESENT, GIT_PATH_ABSENT } from "../scripts/resultCodes.ts";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "mergeTaskWorktrees.ts");
 
@@ -729,10 +730,10 @@ test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessEmitsArch
     for (const path of clean.runFiles) assert.equal(existsSync(path), false);
 });
 
-function gitPathExists(worktreePath: string, relativePath: string): boolean {
+function gitPathExists(worktreePath: string, relativePath: string): number {
     const raw = git(worktreePath, "rev-parse", "--git-path", relativePath).trim();
     const full = isAbsolute(raw) ? raw : join(worktreePath, raw);
-    return existsSync(full);
+    return existsSync(full) ? GIT_PATH_PRESENT : GIT_PATH_ABSENT;
 }
 
 test("test_rebaseGroupOntoSourceReportsRebasedCleanForANonConflictingRebase", () => {
@@ -769,8 +770,8 @@ test("test_rebaseGroupOntoSourceReportsConflictedPathsAndLeavesNoRebaseInProgres
 
     const outcome = rebaseGroupOntoSource(group.worktree, sourceBranch);
     assert.deepEqual(outcome, { status: "conflicted", conflictedFilePaths: ["shared.txt"] });
-    assert.equal(gitPathExists(group.worktree, "rebase-merge"), false);
-    assert.equal(gitPathExists(group.worktree, "rebase-apply"), false);
+    assert.equal(gitPathExists(group.worktree, "rebase-merge"), GIT_PATH_ABSENT);
+    assert.equal(gitPathExists(group.worktree, "rebase-apply"), GIT_PATH_ABSENT);
 });
 
 test("test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails", () => {

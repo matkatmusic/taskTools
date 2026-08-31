@@ -14,6 +14,7 @@ import {
     type SuiteResult,
 } from "../scripts/hookOverride.ts";
 import { readRepositoryManifest, writeRepositoryManifest, REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { HOOK_OVERRIDE_REQUESTED, HOOK_OVERRIDE_NOT_REQUESTED, ALL_SUITES_PASSED, SUITE_FAILURE_DETECTED } from "../scripts/resultCodes.ts";
 
 function withTempDir(body: (dirPath: string) => void): void {
     const dirPath = mkdtempSync(join(tmpdir(), "hook-override-"));
@@ -28,14 +29,14 @@ function makeManifest(): ManifestWithHookOverride {
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [] };
 }
 
-// No override input given: isHookOverrideRequested reads false.
+// No override input given: isHookOverrideRequested reads not-requested.
 test("test_isHookOverrideRequested_isFalseWhenNoOverrideGiven", () => {
-    assert.equal(isHookOverrideRequested({}), false);
+    assert.equal(isHookOverrideRequested({}), HOOK_OVERRIDE_NOT_REQUESTED);
 });
 
-// Explicit override input given: isHookOverrideRequested reads true.
+// Explicit override input given: isHookOverrideRequested reads requested.
 test("test_isHookOverrideRequested_isTrueWhenExplicitOverrideGiven", () => {
-    assert.equal(isHookOverrideRequested({ hookOverride: true }), true);
+    assert.equal(isHookOverrideRequested({ hookOverride: true }), HOOK_OVERRIDE_REQUESTED);
 });
 
 // Recording the override on the manifest persists the flag through a real save.
@@ -84,23 +85,23 @@ test("test_runCompleteSuitesBeforeApproval_runsSuiteForEveryAffectedRepoAndParen
 // One failing suite among passing ones blocks approval.
 test("test_blockApprovalOnSuiteFailure_blocksWhenAnySuiteFails", () => {
     const results: SuiteResult[] = [{ id: "repoA", passed: true }, { id: "repoB", passed: false }];
-    assert.equal(blockApprovalOnSuiteFailure(results), false);
+    assert.equal(blockApprovalOnSuiteFailure(results), SUITE_FAILURE_DETECTED);
 });
 
 // All suites passing allows approval to proceed.
 test("test_blockApprovalOnSuiteFailure_allowsWhenAllSuitesPass", () => {
     const results: SuiteResult[] = [{ id: "repoA", passed: true }, { id: "repoB", passed: true }];
-    assert.equal(blockApprovalOnSuiteFailure(results), true);
+    assert.equal(blockApprovalOnSuiteFailure(results), ALL_SUITES_PASSED);
 });
 
 // Override active never skips the complete-suite run; a failure there still blocks approval.
 test("test_hookOverride_doesNotSkipCompleteSuiteRun", () => {
     const overrideActive = isHookOverrideRequested({ hookOverride: true });
-    assert.equal(overrideActive, true);
+    assert.equal(overrideActive, HOOK_OVERRIDE_REQUESTED);
     const runCompleteSuite = (id: string): SuiteResult => ({ id, passed: false });
     const results = runCompleteSuitesBeforeApproval(["repoA"], [], runCompleteSuite);
     assert.equal(results.length, 1);
-    assert.equal(blockApprovalOnSuiteFailure(results), false);
+    assert.equal(blockApprovalOnSuiteFailure(results), SUITE_FAILURE_DETECTED);
 });
 
 // The complete-suite run at approval happens fresh, not reused from an earlier stage.

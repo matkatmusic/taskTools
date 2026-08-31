@@ -2,16 +2,16 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
+import { TASK_HAS_NO_TESTS, TASK_HAS_TESTS } from "./resultCodes.ts";
 
 export type TaskRecord = { taskNumber: number; title?: string; description?: string } & Record<string, unknown>;
 export type TaskFilePair = { tasksPath: string; completedTasksPath: string };
 
-// A 1.0.0 entry says it with tests ("skip" or the user's example test); a 1.0.1 entry says it with hasTests.
-// No schemaVersion means the entry was made before the field existed, so it is 1.0.0.
-export function taskHasTests(task: TaskRecord): boolean {
+// Schema 1.0.0 uses tests ("skip" or the user's example test); 1.0.1 uses hasTests. Missing schemaVersion defaults to 1.0.0.
+export function taskHasTests(task: TaskRecord): number {
   const schemaVersion = task.schemaVersion ?? "1.0.0";
-  if (schemaVersion === "1.0.1") return task.hasTests === true;
-  if (schemaVersion === "1.0.0") return typeof task.tests === "string" && task.tests !== "skip";
+  if (schemaVersion === "1.0.1") return task.hasTests === true ? TASK_HAS_TESTS : TASK_HAS_NO_TESTS;
+  if (schemaVersion === "1.0.0") return typeof task.tests === "string" && task.tests !== "skip" ? TASK_HAS_TESTS : TASK_HAS_NO_TESTS;
   throw new Error(`task ${task.taskNumber} has an unknown schemaVersion ${JSON.stringify(schemaVersion)}`);
 }
 

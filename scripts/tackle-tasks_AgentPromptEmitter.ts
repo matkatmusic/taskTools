@@ -20,6 +20,7 @@ import {
 import { createEmptyResolutionManifest } from "./resolutionRequests.ts";
 import { currentBranchName } from "./repositoryBranches.ts";
 import { closeTasks } from "./closeTasks.ts";
+import { PATH_TRACKED_AT_HEAD, PATH_NOT_TRACKED_AT_HEAD, OCCURRENCE_COMMIT_SUCCEEDED, OCCURRENCE_COMMIT_FAILED } from "./resultCodes.ts";
 
 function readStdin(): string {
   try {
@@ -487,12 +488,12 @@ const readOptionalRef = (checkoutPath: string, ref: string): string | null => {
 }
 
 // changedPaths from a name-only diff also lists deletions; this checks the blob still exists at HEAD.
-const pathTrackedAtHead = (checkoutPath: string, relativePath: string): boolean => {
+const pathTrackedAtHead = (checkoutPath: string, relativePath: string): number => {
   try {
     execFileSync('git', ['-C', checkoutPath, 'cat-file', '-e', `HEAD:${relativePath}`], { stdio: 'ignore' })
-    return true
+    return PATH_TRACKED_AT_HEAD
   } catch {
-    return false
+    return PATH_NOT_TRACKED_AT_HEAD
   }
 }
 
@@ -534,13 +535,13 @@ function writeAdvanceConflictReceipt(receiptPath: string, result: AdvanceConflic
   renameSync(temporaryPath, receiptPath)
 }
 
-const commitOccurrenceChanges = (checkoutPath: string, occurrenceId: string) => {
+const commitOccurrenceChanges = (checkoutPath: string, occurrenceId: string): number => {
   try {
     execFileSync('git', ['-C', checkoutPath, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', checkoutPath, 'commit', '-q', '-m', `resolve merge conflict: cross-layer edit in ${occurrenceId === '' ? 'root' : occurrenceId}`], { stdio: 'ignore' })
-    return true
+    return OCCURRENCE_COMMIT_SUCCEEDED
   } catch {
-    return false
+    return OCCURRENCE_COMMIT_FAILED
   }
 }
 
@@ -651,7 +652,7 @@ function roleImplementFinalize() {
     }
   }
 
-  const notesPresent = pathTrackedAtHead(WORKTREE, notesRelative)
+  const notesPresent = pathTrackedAtHead(WORKTREE, notesRelative) === PATH_TRACKED_AT_HEAD
   printResult({ headOid, changedPaths, notesPresent })
 }
 
@@ -736,7 +737,7 @@ function roleAdvanceConflict() {
     }
     if (uncommitted.length === 0) continue
     const committed = commitOccurrenceChanges(otherPath, otherId)
-    if (!committed || uncommittedChangedFiles(otherPath).length > 0) {
+    if (committed !== OCCURRENCE_COMMIT_SUCCEEDED || uncommittedChangedFiles(otherPath).length > 0) {
       const abortResult = abortRebaseChecked(checkoutPath)
       const reason = `commit failed for occurrence "${otherId}"`
       finish({ advanced: false, lastFailure: conflictSummary, cleanupFailure: abortResult.aborted ? reason : `${reason}; abort failed: ${abortResult.failureReason}`, touchedPaths })

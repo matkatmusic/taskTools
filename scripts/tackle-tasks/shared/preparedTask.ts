@@ -1,8 +1,8 @@
-// The task record every agent prompt is built from. Its own module so no prompt file
-// has to import the dispatch hub, which would make the imports circular.
+// The task record every agent prompt is built from; its own module avoids prompt files importing the dispatch hub.
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
+import { TASK_HAS_TESTS } from "../../resultCodes.ts";
 
 function fail(problem: string): never {
     process.stderr.write(`AgentPromptEmitter: ${problem}\n`);
@@ -60,7 +60,7 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         files,
         ownedFilePaths: files.map((file) => `${root}/${file}`),
         testFilePaths: files.map((file) => pairedTestPath(root, file)).filter((path) => existsSync(path)),
-        hasTests: taskHasTests(task),
+        hasTests: taskHasTests(task) === TASK_HAS_TESTS,
         tests: typeof (task as any).tests === "string" ? (task as any).tests : null,
         codexReviewNotes: typeof (task as any).codexReviewNotes === "string" ? (task as any).codexReviewNotes : "",
         repoRoot: worktree,
