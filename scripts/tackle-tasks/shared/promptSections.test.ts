@@ -19,6 +19,7 @@ const fakeTask: PreparedTask = {
     testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
     notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
     files: ["src/thing.ts"],
+    readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
     testFilePaths: [],
     hasTests: true,

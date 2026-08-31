@@ -661,7 +661,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     const submoduleSourceBranch = currentBranchName(join(rootPath, "vendor"));
     const taskFiles = ["new.txt", "vendor/vendor-new.txt"];
     const group = makeGroup(rootPath, 1);
-    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: taskFiles }];
+    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: taskFiles, readOnlyFiles: ["*"] }];
     writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");

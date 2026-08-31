@@ -60,6 +60,7 @@ function makeTaskFixture(): PreparedTask {
         testReviewFile: join(worktree, "plans", "test-review.json"),
         notesFile: join(worktree, "plans", "implementation-notes-99.md"),
         files: ["src/thing.ts"],
+        readOnlyFiles: ["*"],
         ownedFilePaths: [join(worktree, "src", "thing.ts")],
         testFilePaths: [join(worktree, "tests", "thing.test.ts")],
         hasTests: true,
