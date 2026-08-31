@@ -8,6 +8,7 @@ import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type Sc
 import { getTemplateShapeMismatches } from "./templateShape.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 import { readCheckpoint, writeCheckpoint } from "./tackle-tasks/shared/checkpoint.ts";
+import { writeJsonAtomically } from "./taskStateLock.ts";
 import { resetTask } from "./tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
@@ -252,7 +253,7 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, i
     const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt, startedAt: stepRun.startedAt } : output;
     const payload = join(packetsDirectory(), `${String(output.box)}-${process.pid}.json`);
     mkdirSync(dirname(payload), { recursive: true });
-    writeFileSync(payload, JSON.stringify(packet));
+    writeJsonAtomically(payload, packet);
     // A run that completed has no next pass to feed; its log stays, its packets go.
     // if (next === null && stoppedAt.startsWith(`${SUCCESS_DIAGRAM}::`)) rmSync(packetsDirectory(), { recursive: true, force: true });
     return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload } };

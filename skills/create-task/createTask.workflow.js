@@ -50,11 +50,11 @@ const runAgent = (label, mode, schema, model) =>
 const runWithFallback = async (label, mode, schema) => {
     let result
     try {
-        result = await runAgent(label, mode, schema, 'Sonnet 5')
+        result = await runAgent(label, mode, schema, 'claude-sonnet-5[1m]')
     } catch {
         result = undefined
     }
-    if (result == null) result = await runAgent(label, mode, schema, 'Opus 5')
+    if (result == null) result = await runAgent(label, mode, schema, 'claude-opus-5[1m]')
     return result
 }
 
