@@ -3,8 +3,8 @@ import { computeTaskStats, formatTaskStats } from "./taskStats.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
 
 const payload = JSON.parse(readFileSync(0, "utf8")) as { prompt?: string; cwd?: string };
-const prompt = payload.prompt ?? "";
 
+const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
 if (prompt !== "/task-stats" && !prompt.startsWith("/task-stats ")) {
     process.exit(0);
 }
