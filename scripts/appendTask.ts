@@ -12,6 +12,7 @@ export type NewTaskPayload = {
     schemaVersion: string;
     hasTests: boolean;
     tests: string;
+    problemSolvedByTask?: string;
     chainGoal?: string[];
     files?: string[];
     description?: string;
@@ -40,6 +41,9 @@ export function buildTaskEntry(payload: NewTaskPayload, taskNumber: number, comm
         entry.chainGoal = payload.chainGoal;
     }
     entry.goal = payload.goal;
+    if (payload.problemSolvedByTask) {
+        entry.problemSolvedByTask = payload.problemSolvedByTask;
+    }
     if (payload.description) {
         entry.description = payload.description;
     }

@@ -31,6 +31,19 @@ function describeTask(taskNumber: number, openTasks: TaskRecord[], completedTask
   return `Task ${taskNumber}: not found in tasks.json or completedTasks.json`;
 }
 
+function buildOpenTaskListing(openTasks: TaskRecord[]): string {
+  const lines: string[] = [];
+  for (const task of openTasks) {
+    const run = task.run as { active?: boolean } | undefined;
+    const activePrefix = run?.active ? "(active)" : "";
+    lines.push(`  ${activePrefix} ${task.taskNumber}: ${task.title ?? ""}`);
+  }
+  return `Usage: /view-task <N...>
+
+Open tasks:
+${lines.join("\n")}`;
+}
+
 let payload: { prompt?: unknown; cwd?: unknown };
 try {
   payload = JSON.parse(readFileSync(0, "utf8"));
@@ -47,8 +60,10 @@ const openTasks = readTaskFile(pair.tasksPath);
 const completedTasks = readTaskFile(pair.completedTasksPath);
 
 const numbers = (prompt.slice("/view-task".length).match(/\d+/g) ?? []).map(Number);
-const reason =
-  numbers.length === 0
-    ? `Usage: /view-task <N...>\n\nOpen tasks:\n${openTasks.map(t => `  ${t.taskNumber}: ${t.title ?? ""}`).join("\n")}`
-    : numbers.map(n => describeTask(n, openTasks, completedTasks)).join("\n\n");
+let reason: string;
+if (numbers.length === 0) {
+  reason = buildOpenTaskListing(openTasks);
+} else {
+  reason = numbers.map(n => describeTask(n, openTasks, completedTasks)).join("\n\n");
+}
 process.stdout.write(JSON.stringify({ decision: "block", reason }) + "\n");

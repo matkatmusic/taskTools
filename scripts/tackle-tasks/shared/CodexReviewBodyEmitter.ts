@@ -86,7 +86,10 @@ ${reviewedPaths(t).map((path) => `- ${path}`).join("\n")}
 ## HOW TO JUDGE THE PLAN
 
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
-Verify every assertion against the source file it is about, never against what the plan says about it. 
+Verify every assertion against the source file it is about, never against what the plan says about it.
+
+The brief's \`problemSolvedByTask\` section states the problem this task exists to solve; judge whether the plan solves that problem.
+A task created before that field existed carries no value — the brief then says it is not provided, and you judge against the brief's description instead.
 
 The plan is good enough when an implementer could follow the plan without deciding anything the plan should have already decided: 
 - every edit names its file and line numbers with the old and new text, 
@@ -124,7 +127,14 @@ replacing every <...> with a real value.
 Write one fix per issue, in the same order. 
 Every \`sectionId\` must be an \`id\` the plan actually uses. 
 Write each fix as an instruction to whoever repairs the plan, not as commentary about it.
+Your fixes exist to help the task finish, not to block it: tell the planner exactly what to change so the plan proves the implementation solves the problem the task is meant to solve.
 Return empty arrays when you found nothing.
+
+## A REJECTION IS YOUR FAILURE
+
+You have no reject verdict: your fix count is the verdict. Five or more fixes force a full rewrite round.
+A fix the planner cannot apply exactly as written stalls the task without moving it — that is you failing your job, not the planner failing theirs.
+When you believe the whole approach is wrong, say so as ONE fix stating the approach to take instead, never as a pile of fixes that buys a round but gives no direction.  The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
 
 ## WHAT TO OUTPUT 
 
@@ -142,9 +152,7 @@ export function reviewQuestion(t: PreparedTask): string {
 // Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
 const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
 
-// Failed experiment: a tool-spawned shell has no controlling terminal, so /dev/tty cannot open;
-// `[ -w /dev/tty ]` still says yes (it checks mode bits), `exec 3>/dev/tty` then fails, and `2>&3`
-// makes codex fail before it starts. Kept for the record; the live version logs to a file instead.
+// Failed experiment: a tool-spawned shell has no controlling terminal, so /dev/tty cannot open; `[ -w /dev/tty ]` still says yes (it checks mode bits), `exec 3>/dev/tty` then fails, and `2>&3` makes codex fail before it starts. Kept for the record; the live version logs to a file instead.
 function createCodexShellInvocationTTY(t: PreparedTask): string {
     return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
@@ -184,8 +192,7 @@ ${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)} \\
   || ${spawnClaudeFableCli("medium")} \\
   || ${spawnClaudeOpus48Cli("high")}
     `;
-// WHAT_IS_REVIEW_VERDICT records the review; running it here too would apply the fixes twice.
-// node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+// WHAT_IS_REVIEW_VERDICT records the review; running it here too would apply the fixes twice.  node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
 }
 
 function createCodexShellInvocationOriginal(t: PreparedTask): string {

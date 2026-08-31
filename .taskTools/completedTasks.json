@@ -4013,5 +4013,110 @@
       "352e4c3"
     ],
     "closureNote": "implemented manually via 7 parallel subagents; full suite green"
+  },
+  {
+    "taskNumber": 184,
+    "schemaVersion": "1.0.0",
+    "version": "47a75b61f82835e53c10b57c7b798d045f08bc41",
+    "title": "Port the frozen serial-mode brief fix into tackleTasksBrief.ts and skip the wasted blocker check",
+    "userDescription": "incorporate tackle-tasks-v2's serial mode, and the fix for serial mode's prompt being given the blockedBy list, when its unneeded that was just added.",
+    "goal": [
+      "- A series invocation's brief contains no `- blocked status:` line at all.",
+      "- A series brief tells the reader to run checkBlockers, getTaskDetails and prepareTasks per task with a single-element array, and says explicitly not to run them against the full array.",
+      "- A non-series invocation's brief is byte-identical to what it emits today.",
+      "- A series run does not invoke the checkBlockers subprocess at all, so nothing is computed and discarded.",
+      "- `npm test` passes.",
+      "- NOT in scope: porting anything else out of the frozen copy. Its five separate plan/verify/implement/test/merge workflows are the retired pipeline that the task-86 chain replaced; bringing them across would undo tasks 123-153."
+    ],
+    "description": "The tackle-tasks and tackle-tasks-v2 skills run the SAME script; v2's SKILL.md just points at the frozen copy under /Users/matkatmusicllc/Programming/taskTools-frozen. So serial mode itself is already present in the live scripts/tackleTasksBrief.ts (the `## Serial mode` seriesSection). What the live copy lacks is the later fix, frozen commit efdc483, \"Skip serial-mode brief's stale blocker snapshot; check blockers, task details, and pipeline args per task via single-element arrays instead, via a new isSeries() helper.\"\n\nWHAT TO PORT, from the frozen file:\n\n1. Add an `isSeries = (argsValue: string) => /\\bseries\\b/.test(argsValue)` helper and use it in place of the inline regex in seriesSection.\n2. In tackleTasksBrief(), emit the leading `- blocked status: ${blockedStatus}` line ONLY when isSeries is false. A series brief carries no blocked-status snapshot at all, rather than carrying a stale one with a note telling the reader to ignore it.\n3. Replace the serial-mode paragraph that begins \"The blocked status at the top of this brief was computed once...\" with the frozen wording, which explains that the brief deliberately carries no snapshot, tells the reader to run checkBlockers, getTaskDetails and prepareTasks per task with a single-element array '[N]', and states that this REPLACES the one-shot run described above -- do not run those commands against the full array.\n\n4. ADDITIONALLY, and NOT part of efdc483: at scripts/tackleTasksBrief.ts:186 the CLI still runs `execFileSync(\"node\", [checkBlockersPath, argsValue])` unconditionally. In series mode the resulting blockedStatus is now dropped on the floor, so that subprocess is pure waste. Skip the call when series is in the arguments. The frozen copy still has this defect; this task fixes it rather than copying it.\n\nDO NOT port anything else from the frozen file. The rest of it is the OLD five-workflow pipeline (plan/verify/implement/test/merge.workflow.js) that the live copy has already replaced with the consolidated task.workflow.js and merge queue. Copying that would undo the whole task-86 chain.\n\nWatch out: tests pin this brief's output byte-for-byte, so the non-series form must stay byte-identical while the series form changes.\n\nSCHEDULING NOTE: tasks 169, 170, 171 and 182 in the audit chain also edit scripts/tackleTasksBrief.ts. This task is not blocked by them, but running it concurrently with any of them will conflict.",
+    "files": [
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts"
+    ],
+    "tests": "Series invocation: assert the brief has NO `- blocked status:` line at all, and that it tells the reader to run the commands per task with '[N]'. Non-series invocation: assert the brief is BYTE-IDENTICAL to what it emits today. Plus: assert checkBlockers is not invoked for a series run.",
+    "difficulty": 3,
+    "blockedBy": [],
+    "completionDate": "2026-08-31",
+    "commitHashes": [],
+    "closureNote": "closed as overtaken: defect exists only in the frozen v1.1 emitter; live pipeline unaffected"
+  },
+  {
+    "taskNumber": 185,
+    "schemaVersion": "1.0.0",
+    "version": "78fe0c815c794dd09097e3bf29c942ec3ed77b78",
+    "title": "Rebuild the plan review loop on the audit-loop pattern and add a subagent code review of the staged diff",
+    "userDescription": "the @audit-loop/ approach should be used for the codex review -> subagent fix sequence of the tackle-tasks workflow.",
+    "goal": [
+      "- A rejected plan review leaves a numbered finding carrying acceptance criteria and a required fix, not a free-text notes string.",
+      "- The fixer agent is given only the selected findings and does no work beyond them.",
+      "- A finding is removed only when it is actually resolved; an unresolved finding is never silently dropped.",
+      "- After the implement stage, a subagent -- not codex -- reviews the staged diff against numbered findings.",
+      "- On rejection the implementation paths are unstaged without discarding their working-tree changes, and only the findings update stays staged.",
+      "- On acceptance the resolved findings are removed and the findings update is staged alongside the implementation.",
+      "- The reviewer prompts state that optional improvements are not grounds for rejection, and that a green suite does not make a partial fix acceptable.",
+      "- The workflow still reaches a terminal state without a human, despite audit-loop's human-in-the-loop commit steps.",
+      "- `npm test` passes.",
+      "- NOT in scope: changing the rebase-test or merge stages' own review agents, and the serial-mode brief port owned by task 184."
+    ],
+    "description": "The audit-loop/ directory in this repository documents a review-and-repair pattern that proved itself on the task-86 audit. Read audit-loop/audit-loop-workflow.md, audit-loop/codex-review-prompt.md, audit-loop/sonnet-implementation-prompt.md and audit-loop/codex-audit-schema.md before planning; they are the specification for this task.\n\nWHAT MAKES AUDIT-LOOP DIFFERENT from the loop tackle-tasks runs today:\n- Rejections are DURABLE NUMBERED FINDINGS in a JSON file governed by a schema, not a free-text notes blob. Each finding carries .acceptanceCriteria, .provingTest, .suggestedFixApproach (containing actual code, so the fixer does not guess), and .resolvedBoundaryReference / .resolvedBoundaryExample which must be preserved.\n- The fixer is told to implement ONLY the selected findings and to do no work beyond them.\n- On ACCEPT the reviewer removes exactly those findings and stages the audit update alongside the implementation.\n- On REJECT the reviewer UNSTAGES the implementation paths (without discarding the working tree), rewrites the unresolved findings to describe only what remains, and stages only the audit file. A rejected implementation is never committed.\n- The reviewer is explicitly told NOT TO NITPICK, not to reject for optional improvements, and not to accept a partial fix merely because the suite is green.\n\nTWO PARTS, both requested by the user.\n\nPART 1 -- restructure the existing PLAN review loop. skills/tackle-tasks/tackle-tasks.workflow.js:390-403 runs runVerify (line 363, VERIFY_SCHEMA at :87) up to MAX_REVIEW_ROUNDS (:279), and on rejection passes verify.notes as a prose string to an apply-feedback agent (:400, APPLY_FEEDBACK_SCHEMA at :99). Replace that notes-passing with audit-loop-shaped findings: numbered, schema-governed, carrying acceptance criteria and required-fix code, cleared only when actually resolved. This half keeps its existing reviewer (codex, with the current fallback).\n\nPART 2 -- add a NEW code review after the implement stage. Today the implement stage (:422-473) produces staged changes and nothing reviews them; only fence violations are checked. Add an audit-loop-shaped review of the staged diff, following the accept/reject/unstage protocol above.\n\nREVIEWER CHOICE, settled with the user: the new code review in Part 2 uses ANOTHER SUBAGENT, not codex. Part 1 keeps codex.\n\nThe reviewer and fixer prompts are emitted by scripts/tackle-tasks_AgentPromptEmitter.ts via the emitterInstruction helper (workflow line 40, roles 'verify' and 'apply-feedback'); the new role(s) belong there too.\n\nADAPTATION NOTE: audit-loop as written stops for a human to review and commit each staged handoff. tackle-tasks runs unattended. Keep the accept/reject/unstage discipline and the durable findings, but the workflow must reach a terminal state on its own rather than waiting for a human.\n\nOVERLAP: open task 120 (\"Tell the codex plan reviewer which classes of issue are not...\") covers similar ground to audit-loop's do-not-nitpick rule. Check it before planning and fold it in or close it out rather than duplicating.\n\n## Audit correction (2026-08-31)\n\nLine anchors citing skills/tackle-tasks/tackle-tasks.workflow.js refer to the frozen v1.1 workflow; the live file is 121 generated lines marked do-not-edit. The live plan-review loop is CODEX_REVIEWS_PLAN.ts, WHAT_IS_REVIEW_VERDICT.ts, CodexReviewBodyEmitter.ts and the matching diagrams, now in files; scripts/steps.json is regenerated from the diagrams. scripts/tackle-tasks_AgentPromptEmitter.ts is an orphan the live pipeline never calls — do not add roles there. OVERLAP task 120 is closed; its fold-in is already satisfied. The two removed tests/ files pin the frozen v1.1 pipeline and must not be edited by this task.",
+    "files": [
+      "scripts/tackle-tasks/whatIsReviewVerdict/WHAT_IS_REVIEW_VERDICT.ts",
+      "scripts/planReviewRuling.ts",
+      "plans/review-plan-schema.json",
+      "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts",
+      "diagrams/tackle-tasks/pipeline-implementTask.mmd",
+      "scripts/tackle-tasks/whatIsReviewVerdict/WHAT_IS_REVIEW_VERDICT.test.ts",
+      "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.test.ts",
+      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts",
+      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.test.ts",
+      "diagrams/tackle-tasks/pipeline-codexReviewsPlan.mmd",
+      "diagrams/tackle-tasks/pipeline-whatIsReviewVerdict.mmd",
+      "scripts/steps.json"
+    ],
+    "tests": "Run the loop with a reviewer that REJECTS round 1 and ACCEPTS round 2. Assert that after round 1 a numbered finding exists with acceptanceCriteria and a required fix; that the fixer is given ONLY that finding; that after round 2 the finding is GONE from the file; and that an unresolved finding is never silently dropped.",
+    "difficulty": 8,
+    "handoffFilePaths": [
+      "audit-loop/audit-loop-workflow.md",
+      "audit-loop/codex-review-prompt.md",
+      "audit-loop/sonnet-implementation-prompt.md",
+      "audit-loop/codex-audit-schema.md"
+    ],
+    "completionDate": "2026-08-31",
+    "commitHashes": [],
+    "closureNote": "closed by user decision 2026-08-31: threshold raised to 3 directly in the live gates; remaining scope dropped"
+  },
+  {
+    "taskNumber": 186,
+    "schemaVersion": "1.0.0",
+    "version": "a27c0c3104d75d389f947175f87152f850003d30",
+    "title": "Skip plan verification for low-difficulty tasks and let the code-audit loop catch the fallout",
+    "userDescription": "if a task is simple enough, skip the planning verification stage, let the code-audit loop catch failures. this task relies on 185 being built.",
+    "goal": [
+      "- A difficulty-3 task with a clean plan runs no verify agent and proceeds straight to implement.",
+      "- A difficulty-6 task still runs the verify agent exactly as today.",
+      "- A difficulty-3 task whose planner reported missingFiles is verified anyway: the skip is overridden.",
+      "- A plan that strays outside the task's file fence is verified anyway, whatever the difficulty.",
+      "- A task record with no difficulty value is treated as not simple and is verified.",
+      "- The run output shows which tasks skipped plan verification.",
+      "- `npm test` passes.",
+      "- NOT in scope: building the code-audit loop this relies on, which is task 185 and the blocker for this task; and changing MAX_REVIEW_ROUNDS or the review loop's behaviour for tasks that are still verified."
+    ],
+    "description": "Plan verification currently runs for every task: skills/tackle-tasks/tackle-tasks.workflow.js:390-403 loops runVerify (line 363) up to MAX_REVIEW_ROUNDS (line 279) regardless of how small the task is. For a trivial task that review costs a codex round trip and buys little, because task 185 adds an audit-loop code review of the staged diff that catches a bad implementation directly.\n\nThis task makes plan verification conditional. It is blocked by 185 on purpose: skipping plan review is only safe once the code-audit loop exists to catch what the skipped review would have caught.\n\nTRIGGER, settled with the user: skip plan verification when ALL of these hold:\n1. the task's `difficulty` is 3 or lower;\n2. the planner reported no missingFiles;\n3. the plan stays inside the task's file fence.\nOtherwise verify exactly as today. Conditions 2 and 3 are escape hatches -- a cheap-looking task whose plan already smells wrong still gets reviewed.\n\nPLUMBING REQUIRED: `difficulty` does not reach the workflow today. describeTask in scripts/getTaskDetails.ts dumps the whole task record as JSON, so the value is visible to the agent, but TASK_INFO_SCHEMA (workflow line 51-61) captures only planFile, notesFile, briefFile, files and tests. Add `difficulty` to that schema so the workflow code can branch on it, and make the emitted task-info prompt in scripts/tackle-tasks_AgentPromptEmitter.ts ask for it.\n\nDecide deliberately what happens when a task record carries no `difficulty` at all -- older records exist. Treat a missing value as NOT simple (verify as today), so the absence of data never silently disables review.\n\nCalibration against the open tasks at the time of writing: difficulty 3 or lower covers tasks 120, 121, 161 and 184; tasks 118 (4), 165 (5), 164 (6) and 185 (8) would still be verified.\n\nThe run should record which tasks skipped verification, so the effect is visible rather than invisible.\n\n## Audit correction (2026-08-31)\n\nThe difficulty skip already exists in the live pipeline: WHAT_DID_THE_PLANNER_RETURN.ts:18 routes difficulty <= 2 straight to IMPLEMENT_TASK, and DO_TASK_TESTS_PASS_Q.ts:19 skips the codex test review at the same cutoff; difficulty needs no plumbing. TASK_INFO_SCHEMA and the tackle-tasks.workflow.js line anchors are the retired v1.1 design. Remaining scope: raise the threshold to 3 and add the two escape hatches (planner-reported missingFiles; plan strays outside the file fence).",
+    "files": [
+      "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts",
+      "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.test.ts",
+      "diagrams/tackle-tasks/pipeline-whatDidThePlannerReturn.mmd"
+    ],
+    "tests": "Difficulty 3 task with a clean plan: assert NO verify agent runs and that it proceeds to implement. Difficulty 6 task: assert the verify agent DOES run. Difficulty 3 task whose planner reports missingFiles: assert the verify agent runs anyway -- the skip is overridden.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNum": 185,
+        "reason": "skipping plan review is only safe once 185's audit-loop code review exists to catch a bad implementation that the skipped plan review would have caught"
+      }
+    ],
+    "completionDate": "2026-08-31",
+    "commitHashes": [],
+    "closureNote": "closed by user decision 2026-08-31: threshold raised to 3 directly in the live gates; remaining scope dropped"
   }
 ]

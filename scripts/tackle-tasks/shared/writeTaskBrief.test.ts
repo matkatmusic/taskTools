@@ -1,5 +1,4 @@
-// Behavioral checks for writeTaskBrief.ts: pure rendering, idempotent writing, generated-artifact isolation.
-// Run alone: node --test tests/writeTaskBrief.test.ts
+// Behavioral checks for writeTaskBrief.ts: pure rendering, idempotent writing, generated-artifact isolation.  Run alone: node --test tests/writeTaskBrief.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -78,6 +77,41 @@ test("test_generateTaskBriefContents_writesNothingToDisk", () => {
     assert.deepEqual(after, before);
 });
 
+test("test_generateTaskBriefContents_rendersTheTasksClarifyRequest", () => {
+    // Scenario: a stored clarifyRequest must reach the planner through the brief.
+    const repoRoot = makeTempRepoWithCommit();
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [], clarifyRequest: "which file holds the parser?" }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(brief.includes("## clarifyRequest"));
+    assert.ok(brief.includes("which file holds the parser?"));
+});
+
+test("test_generateTaskBriefContents_omitsTheClarifyRequestSectionWhenTheTaskHasNone", () => {
+    // Scenario: no clarifyRequest on the task, no clarifyRequest heading in the brief.
+    const repoRoot = makeTempRepoWithCommit();
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(!brief.includes("## clarifyRequest"));
+});
+
+test("test_generateTaskBriefContents_rendersProblemSolvedByTaskVerbatim", () => {
+    // Scenario: a task with problemSolvedByTask carries it verbatim into the brief.
+    const repoRoot = makeTempRepoWithCommit();
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [], problemSolvedByTask: "reviewers cannot tell what problem the task solves" }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(brief.includes("## problemSolvedByTask"));
+    assert.ok(brief.includes("reviewers cannot tell what problem the task solves"));
+});
+
+test("test_generateTaskBriefContents_saysWhenProblemSolvedByTaskIsNotProvided", () => {
+    // Scenario: an older task without the field gets an explicit not-provided line.
+    const repoRoot = makeTempRepoWithCommit();
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(brief.includes("## problemSolvedByTask"));
+    assert.ok(brief.includes("(not provided: this task was created before the problemSolvedByTask field existed)"));
+});
+
 test("test_generateTaskBriefContents_returnsTheSameBytesWriteTaskBriefToDiskWrites", () => {
     // Scenario: writeTaskBriefToDisk writes exactly what generateTaskBriefContents computes.
     const repoRoot = makeTempRepoWithCommit();
@@ -149,9 +183,7 @@ test("test_generateTaskBriefContents_omitsThePreviousRunSectionWhenThereAreNone"
 });
 
 test("test_generateTaskBriefContents_carriesTheFieldsThatTellTwoRunsApart", () => {
-    // Scenario: absorbed from the deleted amendExitNotesIntoBrief box — a previous-run section
-    // must name its start time, the files it touched and its notes file, or two runs of the
-    // same task read the same.
+    // A previous-run section must show its start time, touched files, and notes file, so two runs read differently.
     const repoRoot = makeTempRepoWithCommit();
     const history = [endedRun({
         runId: "run-a", startedAt: "2026-08-02T03:04:05-07:00", exitType: "tests-red",
@@ -188,8 +220,7 @@ test("test_generateTaskBriefContents_ordersPreviousRunsNewestFirstAndSkipsRunsWi
 });
 
 test("test_generateTaskBriefContents_writesThePreviousRunsHeadingExactlyOnce", () => {
-    // Scenario: the old AMD box appended a second "## Previous runs" section onto the brief.
-    // One renderer means one heading, on every path.
+    // The old box appended a second "## Previous runs" heading; one renderer must mean one heading.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{
         taskNumber: 1, title: "t1", description: "do the thing", files: [],

@@ -46,10 +46,10 @@ test("test_main_throwsWhenNoTaskTestRunIsRecorded", () => {
     assert.throws(() => main(JSON.stringify(input)), /no recorded task-test run/);
 });
 
-test("test_main_choosesLockSourceRepoWhenPassedAndDifficultyIsAtMost2", () => {
-    // Scenario: a task with difficulty 2 skips the codex test review.
-    // Steps: tasks.json holds difficulty 2; the task tests passed; the next block is LOCK_SOURCE_REPO.
-    const root = makeClaimedProjectRoot(4, true, 2);
+test("test_main_choosesLockSourceRepoWhenPassedAndDifficultyIsAtMost3", () => {
+    // Scenario: a task with difficulty 3 skips the codex test review.
+    // Steps: tasks.json holds difficulty 3; the task tests passed; the next block is LOCK_SOURCE_REPO.
+    const root = makeClaimedProjectRoot(4, true, 3);
     const input = packet(root, 4);
     const output = main(JSON.stringify(input));
     assert.deepEqual(output, { ...input, box: "DO_TASK_TESTS_PASS_Q", next: "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO" });

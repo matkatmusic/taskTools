@@ -1,4 +1,4 @@
-// SubagentStop hook: an agent that got a prompt from /run-step may not stop until its answer is in the packet file.
+// SubagentStop hook: an agent given a /run-step prompt cannot stop until its answer is in the packet file.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,7 +44,7 @@ if (mismatches.length === 0) {
 }
 const reason = [
     `${packetFile} is not ready for ${nextStepKey}: ${mismatches.join("; ")}.`,
-    "Follow the prompt in that file and write your answer into it, next to the keys already there.",
+    `Follow the prompt in that file and write your answer by piping it on stdin to: node ${PROJECT_ROOT}/scripts/tackle-tasks/shared/writeAgentAnswer.ts "${packetFile}" — never edit the packet file by hand.`,
     "Then return the hook output verbatim.",
 ].join(" ");
 log(`blocked the stop: ${reason}`);

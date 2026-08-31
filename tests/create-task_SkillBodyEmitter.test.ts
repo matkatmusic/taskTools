@@ -37,6 +37,14 @@ test("test_produceSkillBodyOpensTheGoalStepWithTheAskUserQuestionImperative", ()
     assert.match(body, /^4\. Invoke AskUserQuestion to settle `goal` with the user/m);
 });
 
+test("test_produceSkillBodyAsksTheProblemSolvedByTaskQuestionVerbatim", () => {
+    const body = produceSkillBody("test task");
+    assert.match(
+        body,
+        /^5\. Invoke AskUserQuestion to ask the user exactly: "what problem is being solved by this task"\. Store the user's answer verbatim, never reworded or summarized, in a `problemSolvedByTask` field\.$/m,
+    );
+});
+
 test("test_skillBodyEmitterScriptFailsWhenStdinIsEmpty", () => {
     assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
 });

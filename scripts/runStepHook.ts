@@ -119,7 +119,7 @@ function took(ms: number): string {
 
 function appendStepToRunLog(stepKey: string, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
-    // The log is one JSON array; each pass of this run rewrites it whole. Passes of one run never overlap.
+    // The log is one JSON array; each pass of a run rewrites it whole, and passes never overlap.
     const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
     runLogEntries.push({ block: stepKey, duration: took(tookMs), durationMs: tookMs });
     writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
@@ -248,7 +248,7 @@ function getPacketFromInput(input: string): Record<string, unknown> {
 function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, input: string): HookOutput {
     const output = stepRun.result!;
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
-    // What the next block starts from: after a prompt, that block's input plus the prompt and when the block started; otherwise this block's output.
+    // What the next block starts from: after a prompt, its input, prompt, and start time; otherwise this block's output.
     const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt, startedAt: stepRun.startedAt } : output;
     const payload = join(packetsDirectory(), `${String(output.box)}-${process.pid}.json`);
     mkdirSync(dirname(payload), { recursive: true });
@@ -260,7 +260,7 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, i
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
 function walkFromStep(startStepKey: string, startInput: string, invocation: string): HookOutput {
-    // A packetFile in the input expands to that file; the prompt an agent answered into it is not block input.
+    // A packetFile in the input expands to that file; the agent's prompt answer is not block input.
     const startPacket = getPacketFromInput(startInput);
     const startedFromPacketFile = typeof startPacket.packetFile === "string";
     if (typeof startPacket.packetFile === "string") {
@@ -279,7 +279,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
         startInput = JSON.stringify(packet);
     }
-    // A launch that names a later block starts there when its worktree, plan, brief and logged input all exist; otherwise the block is ignored.
+    // A launch naming a later block starts there if its worktree, plan, brief and input exist; otherwise it's ignored.
     if (startStepKey !== START_STEP_KEY && typeof startPacket.tasksFile === "string") {
         const taskNumber = Number(startPacket.taskNumber);
         const entry = findStartAtBlockEntry(taskNumber, String(startPacket.tasksFile), STEPS_BY_KEY.get(startStepKey)!.box, dirname(logFile()));
@@ -307,7 +307,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const packet = getPacketFromInput(input);
         const worktree = typeof packet.worktree === "string" ? packet.worktree : "";
         const worktreeExists = worktree !== "" && existsSync(worktree);
-        // A prompt block and the block that consumes its answer leave the checkpoint at the block that feeds the prompt, so a resume reproduces the prompt.
+        // A prompt block and its answer-consuming block checkpoint at the block that feeds the prompt, so resuming reproduces it.
         const answersAPrompt = startedFromPacketFile && boxesRun.length === 0;
         if (!inFailureChain && worktreeExists && !step.producesPrompt && !answersAPrompt) {
             const existing = readCheckpoint(worktree);
@@ -401,7 +401,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             }
             inFailureChain = true;
         }
-        // The block that consumed a prompt answer earns its checkpoint once it succeeds; a prompt block after it resumes from there.
+        // The block that consumed a prompt answer checkpoints once it succeeds; a later prompt block resumes from there.
         if (answersAPrompt && !step.producesPrompt && worktreeExists && !inFailureChain) {
             const existing = readCheckpoint(worktree);
             writeCheckpoint(worktree, {
@@ -419,7 +419,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             });
         }
         stepKey = nextStepKey;
-        // A box sees only the box before it, so anything further back has to be carried forward by hand.  next is routing, consumed here; a box that spreads its input must never inherit the choice that reached it.
+        // A box sees only the prior box; next is consumed here, so a spreading box never inherits its choice.
         const { next: _next, ...resultWithoutNext } = stepRun.result;
         input = JSON.stringify(resultWithoutNext);
     }
@@ -434,7 +434,7 @@ const skillName = String(toolInput.skill ?? "").replace(/^[\w-]+:/, "");
 // A person types the whole line. An agent calls the skill, so the name and the args arrive apart.
 const isTypedCommand = promptText.startsWith("/run-step");
 const isSkillCall = skillName === "run-step";
-// `/tackle-tasks reset N [BLOCK]` is the hook's job: it runs the reset here and hands the lines back, so the agent runs nothing.
+// `/tackle-tasks reset N [BLOCK]` is the hook's job: it resets and returns the lines, so the agent runs nothing.
 const resetMatch = promptText.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
 if (resetMatch !== null) {
     const said = resetTask(Number(resetMatch[1]), resetMatch[2] ?? "");
@@ -445,7 +445,7 @@ if (!isTypedCommand && !isSkillCall) {
     process.exit(0);
 }
 
-// A next box after a stop means a prompt is waiting in the packet file, so the agent has work to do.
+// A next box after a stop means a prompt is waiting in the packet file for the agent.
 function getInstructionsForAgent(result: HookOutput): string {
     if (result.outcome === null || result.outcome.next === null) {
         return "";
@@ -454,7 +454,7 @@ function getInstructionsForAgent(result: HookOutput): string {
         `The file at ${result.outcome.payload} holds a prompt under the key "prompt". Do these four steps in order.`,
         "1. Read that file.",
         "2. Follow the prompt.",
-        `3. Write the object the prompt asks you to return into ${result.outcome.payload}, next to the keys already there. Change no key you did not add.`,
+        `3. Write the object the prompt asks you to return by piping it on stdin to: node ${PROJECT_ROOT}/scripts/tackle-tasks/shared/writeAgentAnswer.ts "${result.outcome.payload}" — never edit the packet file by hand.`,
         "4. Only after step 3 is done, return the JSON object above verbatim.",
         "The next block reads that file and fails when message and additionalData are missing, so step 3 is not optional.",
     ].join(" ");

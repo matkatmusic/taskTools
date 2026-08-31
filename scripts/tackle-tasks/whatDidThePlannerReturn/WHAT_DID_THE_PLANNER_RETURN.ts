@@ -15,7 +15,7 @@ export function main(input: string): WhatDidThePlannerReturnPacket & { next: str
     if (outcome === "PLAN") {
         const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
         if (entry === undefined) throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
-        if (Number(entry.difficulty) <= 2) {
+        if (Number(entry.difficulty) <= 3) {
             return { ...output, next: "pipeline-implementTask.mmd::IMPLEMENT_TASK" };
         }
         return { ...output, next: "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN" };

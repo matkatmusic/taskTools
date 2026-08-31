@@ -57,11 +57,11 @@ test("test_runStepStopHook_blocksTheStopWhenTheAnswerIsMissingFromThePacketFile"
     const decision = JSON.parse(stdout);
     assert.equal(decision.decision, "block");
     assert.match(decision.reason, new RegExp(`^${packetFile} is not ready for one\\.mmd::B: message is missing; additionalData is missing\\.`));
-    assert.match(decision.reason, /write your answer into it/);
+    assert.match(decision.reason, /write your answer by piping it on stdin to: node \S+\/writeAgentAnswer\.ts /);
     assert.match(readLog(), /blocked the stop: /);
 });
 
-// Every invocation leaves a line, so a run shows whether the hook fired at all, even when it says nothing.
+// Every invocation leaves a line, so a run shows the hook fired, even when it says nothing.
 test("test_runStepStopHook_logsEveryTimeItFires", () => {
     const { configFile, transcriptFile } = buildAgent({ taskNumber: 7, prompt: "answer" }, false);
     // The log file is one JSON array; its first entry is the "fired" note of this invocation.

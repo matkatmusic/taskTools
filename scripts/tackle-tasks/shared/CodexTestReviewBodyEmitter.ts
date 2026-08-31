@@ -38,7 +38,7 @@ function taskTestRun(t: PreparedTask) {
 const reviewedPaths = (t: PreparedTask, diffPath: string) => [t.briefFile, t.planFile, ...t.testFilePaths, diffPath, REVIEW_TESTS_TEMPLATE_PATH];
 
 function approveReviewByDefaultPrompt(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
-    //APPROVE BY DEFAULT prompt:
+    // APPROVE BY DEFAULT prompt:
     return `Approve the tests. Do not judge them, do not hunt for problems, and do not flag anything.
 
 Return the JSON shape described below with \`outcome\` set to "OK", with \`missingFiles\`, \`message\` and \`issues\` all empty, and with every test name listed in \`testsThatHoldUp\`.
@@ -63,7 +63,7 @@ The command that runs you captures that message to \`${t.testReviewFile}\`, so d
 }
 
 function reviewByDefaultPrompt(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
-    //REVIEW BY DEFAULT prompt:
+    // REVIEW BY DEFAULT prompt:
     return `You are a read-only review agent tasked with reviewing the tests written for task ${t.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
@@ -118,6 +118,9 @@ Never run a test, and never run the full suite.
 
 Judge each test against what \`${t.briefFile}\` and \`${t.planFile}\` asked for.
 
+The brief's \`problemSolvedByTask\` section states the problem this task exists to solve; judge whether the tests prove that problem is solved.
+A task created before that field existed carries no value — the brief then says it is not provided, and you judge against the brief and plan instead.
+
 Flag a test only when one of these is true:
 - the test asserts something the brief and the plan do not call for, or
 - the test asserts nothing, or
@@ -145,6 +148,7 @@ Return only JSON in the shape given by \`${REVIEW_TESTS_TEMPLATE_PATH}\`, which 
 
 Write one fix per issue, in the same order.
 Write each fix as an instruction to whoever repairs the test, not as commentary about it.
+Your fixes exist to help the task finish, not to block it: tell the test writer exactly what to change so the tests prove the implementation solves the problem the task is meant to solve.
 Return empty arrays when you found nothing.
 
 ## WHAT TO OUTPUT
@@ -159,7 +163,7 @@ export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExisti
     return reviewByDefaultPrompt(t, diffPath, preExistingTestFiles, testCommand, testOutput);    
 }
 
-// Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
+// Sits beside the run-log, set by the hook, so `tail -f` shows codex working.
 const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
 
 export function reviewTestsPrompt(t: PreparedTask): string {

@@ -26,10 +26,10 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToCodexReviewsPlan", () 
     assert.equal(output.planFile, "plans/plan-35.json");
 });
 
-test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToImplementTaskWhenDifficultyIsAtMost2", () => {
-    // Scenario: a task with difficulty 2 skips the codex plan review.
-    // Steps: tasks.json holds difficulty 2; the planner returned PLAN; the next block is IMPLEMENT_TASK.
-    const output = main(JSON.stringify({ ...base(makeProjectRootWithDifficulty(2)), additionalData: { outcome: "PLAN", planFile: "plans/plan-35.json", clarifyRequest: "" } }));
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToImplementTaskWhenDifficultyIsAtMost3", () => {
+    // Scenario: a task with difficulty 3 skips the codex plan review.
+    // Steps: tasks.json holds difficulty 3; the planner returned PLAN; the next block is IMPLEMENT_TASK.
+    const output = main(JSON.stringify({ ...base(makeProjectRootWithDifficulty(3)), additionalData: { outcome: "PLAN", planFile: "plans/plan-35.json", clarifyRequest: "" } }));
     assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
 });
 

@@ -30,7 +30,9 @@ export function checkResumedWorktreeFence(input: CheckResumedWorktreeFenceInput)
     requireAbsolutePath("projectRoot", input.projectRoot);
     requireAbsolutePath("worktreePath", input.worktreePath);
 
-    const rootSourceBranch = currentBranchName(input.projectRoot);
+    // const rootSourceBranch = currentBranchName(input.projectRoot);
+    // Worktrees are cut from staging (prepareTasks.ts), so the fence diffs against staging, like DID_CHANGES_STAY_INSIDE_FENCE_Q.
+    const rootSourceBranch = "staging";
     const occurrences = getOccurrencesDeepestFirst(input.worktreePath, input.projectRoot, rootSourceBranch);
     const ownedPaths = new Set(buildOwnedOccurrencePaths(declaredFiles(input.taskNumber, input.projectRoot), occurrences));
 

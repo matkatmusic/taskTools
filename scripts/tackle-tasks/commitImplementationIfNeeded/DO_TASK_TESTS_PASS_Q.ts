@@ -16,7 +16,7 @@ export function main(input: string): CommitImplementationIfNeededPacket & { next
     }
     const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
     if (entry === undefined) throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
-    if (Number(entry.difficulty) <= 2) {
+    if (Number(entry.difficulty) <= 3) {
         return { ...output, next: "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO" };
     }
     return { ...output, next: "pipeline-codexReviewsTests.mmd::CODEX_REVIEWS_TESTS" };

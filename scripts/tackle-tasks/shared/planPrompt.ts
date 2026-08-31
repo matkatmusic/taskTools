@@ -146,6 +146,16 @@ The plan must be exact enough and comprehensive enough that the implementer make
 - State the verification that proves the change worked, by writing the exact command used to produce the expected result.  This helps the implementer know that they're implementing correctly.
 - ${TESTS_FIELD_INSTRUCTION}
 
+## ANSWERING A LEFT-BEHIND CLARIFY REQUEST
+
+The brief may hold a \`clarifyRequest\` field: a question a previous planning round asked.
+When it does, answer the question yourself, from the code, before you plan:
+- Read the files the question names, plus the files this task owns.
+- Trace the live path (the code that runs today), not the task text.
+- Use the answer to write the plan; put the file paths the answer rests on into the plan.
+Return outcome CLARIFY again only when the answer is a decision only the user can make
+(naming choices, tradeoffs, product scope — nothing the code can resolve).
+
 ## WHEN TO STOP PLANNING
 
 If:
@@ -170,7 +180,8 @@ You are forbidden from doing any of the following actions:
 
 ## ALLOWED ACTIONS
 
-You are allowed to read every file the read-file skill put into your context, and nothing else.
+You are allowed to read every file the read-file skill put into your context, plus every file named by a \`clarifyRequest\` in the brief, and nothing else.
+Files named by the brief's \`clarifyRequest\` count as files you were given.
 
 ---- TESTS_FIELD ("skip" means no TDD requirement) ----
 ${t.hasTests ? (t.tests ?? "(the task has tests; the user wrote no example)") : "skip"}

@@ -72,6 +72,15 @@ test("test_appendTaskWritesTwoSpaceIndentedJsonWithTrailingNewline", () => {
     assert.equal(raw, JSON.stringify(tasks, null, 2) + "\n");
 });
 
+test("test_appendTaskWritesProblemSolvedByTaskOntoTheEntry", () => {
+    const projectRoot = makeTemporaryTaskRepo([]);
+    const entry = appendTaskToTasksJson(
+        minimalPayload({ problemSolvedByTask: "users cannot tell why a task exists" }),
+        projectRoot,
+    );
+    assert.equal(entry.problemSolvedByTask, "users cannot tell why a task exists");
+});
+
 test("test_appendTaskOmitsOptionalFieldsThatAreEmpty", () => {
     const projectRoot = makeTemporaryTaskRepo([]);
     const entry = appendTaskToTasksJson(

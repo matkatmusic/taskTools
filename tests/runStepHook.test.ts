@@ -104,7 +104,7 @@ test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
     assert.match(result.errors[0], /named by more than one diagram/);
 });
 
-// A box named in a diagram's next but not entered under that diagram falls back to any diagram that has it.
+// A box named in a diagram's next but not entered there falls back to any diagram that has it.
 test("test_runStepHook_fallsBackToAnotherDiagramWhenTheSameDiagramHasNoSuchBox", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["SHARED"] }],
@@ -184,7 +184,7 @@ test("test_runStepHook_stopsWhenABlockPrintsAPromptForAnAgent", () => {
     assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).prompt, "read the plan and answer");
 });
 
-// The skill body says nothing about prompts; the hook output itself tells the agent what to do with the file.
+// The skill body says nothing about prompts; the hook output tells the agent what to do with the file.
 test("test_runStepHook_tellsTheAgentToAnswerIntoThePacketFileAfterAPromptStop", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [
@@ -194,7 +194,7 @@ test("test_runStepHook_tellsTheAgentToAnswerIntoThePacketFileAfterAPromptStop", 
     }));
     const { result, instructions } = runHook("/run-step A", configFile);
     assert.match(instructions, new RegExp(`The file at ${result.outcome.payload} holds a prompt`));
-    assert.match(instructions, new RegExp(`3\\. Write the object the prompt asks you to return into ${result.outcome.payload}`));
+    assert.match(instructions, new RegExp(`3\\. Write the object the prompt asks you to return by piping it on stdin to: node \\S+/writeAgentAnswer\\.ts "${result.outcome.payload}"`));
     assert.match(instructions, /4\. Only after step 3 is done, return the JSON object above verbatim/);
 });
 
@@ -317,7 +317,7 @@ test("test_runStepHook_expandsAPacketFileIntoTheStartInput", () => {
     assert.deepEqual(startInput, { taskNumber: 7, answer: "x" });
 });
 
-// The block script returns a prompt in milliseconds; the agent's own work runs after the hook returns, until the next call consumes the packet.
+// The block script returns a prompt fast; the agent's work runs after, until the next call consumes the packet.
 test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     // Setup: the packet block A wrote, holding when A started three seconds ago and the agent's answer.
     const folder = mkdtempSync(join(tmpdir(), "run-step-packet-"));
@@ -338,7 +338,7 @@ test("test_runStepHook_logsHowLongTheAgentTookOnAPromptBlock", () => {
     assert.ok(agentBlock.durationMs >= 3000, JSON.stringify(agentBlock));
 });
 
-// A typed `/tackle-tasks reset N` is the hook's job, not the agent's: the hook runs the reset and hands back its lines.
+// A typed `/tackle-tasks reset N` is the hook's job: it runs the reset and hands back its lines.
 test("test_runStepHook_runsTheResetForATackleTasksResetPrompt", () => {
     // Setup: a repository whose tasks.json holds open task 7 with run state from an earlier run.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-reset-")));
@@ -410,7 +410,7 @@ test("test_runStepHook_takesTheBranchTheOutputNames", () => {
     assert.deepEqual(runHook("/run-step A", configFile).result.ran, ["one.mmd::A", "one.mmd::C"]);
 });
 
-// A box after a decision box spreads its input; the decision's next must not ride along and re-route the walk.
+// A box after a decision box spreads its input; the decision's next must not ride along and re-route.
 test("test_runStepHook_dropsTheChosenNextBeforeHandingTheOutputToTheNextBox", () => {
     const configFile = configWith((writeStep, folder) => {
         const spreadingScript = join(folder, "B-spreads.ts");
@@ -659,7 +659,7 @@ test("test_runStepHook_echoesPostToolUseAsTheHookEventName", () => {
     assert.equal(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.hookEventName, "PostToolUse");
 });
 
-// Spawns the hook with no RUN_STEP_LOG override, from a throwaway repo folder, so the real run layout is what gets tested.
+// Spawns the hook with no RUN_STEP_LOG override, from a throwaway repo, so the real run layout gets tested.
 function runHookIn(cwd: string, prompt: string, configFile: string) {
     const { RUN_STEP_LOG: _unset, ...env } = process.env;
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
@@ -677,7 +677,7 @@ function runHookIn(cwd: string, prompt: string, configFile: string) {
 const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+-run-log\.json$/;
 
 test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
-    // Scenario: a fresh /run-step call starts a run; its log and its packets are named by one timestamp.  Steps: A continues into B, which stops on a prompt, so the hook writes one packet.
+    // A fresh /run-step run names its log and packets by one timestamp; A continues into B, which stops.
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
@@ -696,7 +696,7 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
 });
 
 test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
-    // Scenario: the run folder name ends with the hook process's own pid, so two runs launched in the same second still land in different folders.
+    // The run folder name ends with the hook's own pid, so two runs launched the same second land differently.
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
@@ -713,7 +713,7 @@ test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
 });
 
 test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
-    // Scenario: a two-block walk writes one packet per block pass, named by box, pid, and pass order.  Steps: A continues into B, and B stops.
+    // A two-block walk writes one packet per pass, named by box and pid; A continues into B, then stops.
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
@@ -726,7 +726,7 @@ test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
     const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     const packetNames = readdirSync(packetsFolder);
-    // One packet per block ran, named by box, pid, and the order it ran in: A is 1, B is 2.
+    // One packet ran per block, named by box, pid, and run order: A is 1, B is 2.
     const aPacketName = packetNames.find(name => /^A-\d+-1\.json$/.test(name))!;
     const bPacketName = packetNames.find(name => /^B-\d+-2\.json$/.test(name))!;
     assert.ok(aPacketName);
@@ -758,7 +758,7 @@ test("test_runStepHook_writesAPacketForABlockThatFailed", () => {
 });
 
 test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
-    // Scenario: the graph loops back through the same box; each pass writes its own packet.  Steps: A continues into B; B continues back into A, which this time stops.
+    // The graph loops back through the same box; each pass writes its own packet, even on the repeated pass.
     const configFile = configWith((writeStep, folder) => {
         const aScript = join(folder, "A.ts");
         writeFileSync(aScript, [
@@ -786,7 +786,7 @@ test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
 });
 
 test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => {
-    // Scenario: a later pass names a packet file; the hook logs into that run's log, not a new one.  Steps: A packet from run S already exists.
+    // A later pass naming an existing packet file logs into that run's log, not a new one.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const packetsFolder = join(cwd, ".taskTools", "runs", "S", "packets");
     mkdirSync(packetsFolder, { recursive: true });
@@ -839,7 +839,7 @@ test("test_runStepHook_keepsThePacketsOfARunThatFailed", () => {
     assert.equal(existsSync(packetFile), true);
 });
 
-// A checkpoint lets a killed run pick up where it stopped; the hook writes one before every block that has a worktree.
+// A checkpoint lets a killed run resume where it stopped; the hook writes one before every worktree block.
 test("test_runStepHook_keepsTheCheckpointAtTheBlockBeforeAPromptBlock", () => {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
     const configFile = configWith(writeStep => ({
@@ -1065,7 +1065,7 @@ test("test_runStepHook_keepsThePassIdWhenItRerunsTheCheckpointBlock", () => {
     assert.equal(checkpoint?.passId, "kept-pass-id");
 });
 
-// Reads its own just-written checkpoint at runtime so the test can see the passId a resumed block was actually given.
+// Reads its own just-written checkpoint at runtime so the test can see the passId a resumed block got.
 test("test_runStepHook_givesEveryNewBlockExecutionItsOwnPassId", () => {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
     const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
@@ -1140,7 +1140,7 @@ test("test_runStepHook_movesTheCheckpointToTheBlockAfterAPromptOnceItSucceeds", 
     assert.equal(checkpoint?.input, JSON.stringify(packetC));
 });
 
-// A launch that names a block after the preamble: an ended run whose worktree, plan, brief and logged block input all exist.
+// A launch naming a block after the preamble: an ended run whose worktree, plan, brief and input all exist.
 function seedAnEndedRunReadyToStartAtABlock(loggedInput: Record<string, unknown>) {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
     const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
@@ -1169,7 +1169,7 @@ function seedAnEndedRunReadyToStartAtABlock(loggedInput: Record<string, unknown>
 }
 
 test("test_runStepHook_startsAtTheNamedBlockWithTheInputFromTheRunLog", () => {
-    // The launch names X. X's state exists, so the walk starts at X with X's last logged input, the run is active again, and its counters are cleared.
+    // The launch names X; its state exists, so the walk resumes at X, active again, counters cleared.
     const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
     const configFile = configWith(writeStep => ({
         [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
@@ -1185,7 +1185,7 @@ test("test_runStepHook_startsAtTheNamedBlockWithTheInputFromTheRunLog", () => {
 });
 
 test("test_runStepHook_startsAtThePreambleWhenTheNamedBlockHasNoState", () => {
-    // The launch names X, but the plan file is missing, so the hook ignores X and walks from the preamble.
+    // The launch names X, but its plan file is missing, so the hook walks from the preamble instead.
     const seeded = seedAnEndedRunReadyToStartAtABlock({ box: "W", scriptSignal: "continue" });
     rmSync(join(seeded.worktree, "plans", "plan.json"));
     const configFile = configWith(writeStep => ({
