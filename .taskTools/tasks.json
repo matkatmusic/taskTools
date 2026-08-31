@@ -29,35 +29,7 @@
       "scripts/tackle-tasks/shared/preparedTask.ts"
     ],
     "tests": "Assert skills/create-task/template/taskTemplate.json carries a readOnlyFiles key with its ['*'] = every project file meaning documented in the template. Assert the prompt text emitted by scripts/tackle-tasks/shared/planPrompt.ts and scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts states a read fence of readOnlyFiles (or the whole project when ['*']) and no longer contains the phrase restricting reads to owned files and nothing else.",
-    "difficulty": 4,
-    "run": {
-      "active": false,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-94",
-      "leaseRunId": "7536be1b-ebe3-46fd-9a21-a28c48bbf241",
-      "history": [
-        {
-          "runId": "7536be1b-ebe3-46fd-9a21-a28c48bbf241",
-          "startedAt": "2026-08-29T18:06:40-07:00",
-          "endedAt": "2026-08-29T19:11:16-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        }
-      ]
-    }
+    "difficulty": 4
   },
   {
     "taskNumber": 95,
@@ -75,120 +47,7 @@
       "scripts/appendTask.ts"
     ],
     "tests": "Assert the prompt text emitted by scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts and scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts names modifiableFiles as the only paths that may be edited or git-added, and separately names readOnlyFiles (or the whole project when ['*']) as readable — the two fences must appear as distinct statements, not one combined sentence. Assert scripts/create-task_SkillBodyEmitter.ts instructs authors to emit modifiableFiles rather than files, while still describing legacy `files` as accepted.",
-    "difficulty": 4,
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-95",
-      "leaseRunId": "3af12360-59d7-438f-9cf2-5c7f7858b355",
-      "history": [
-        {
-          "runId": "85cdd397-cca1-414a-8f35-c1a19763c5f0",
-          "startedAt": "2026-08-29T18:06:42-07:00",
-          "endedAt": "2026-08-29T19:21:23-07:00",
-          "exitType": "plan-scrapped",
-          "exitNote": "codex did not accept the plan in two reviews",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "634060ab-641c-4abd-8580-32d57a3090e6",
-          "startedAt": "2026-08-29T19:45:56-07:00",
-          "endedAt": "2026-08-30T21:34:22-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "47979f2a-a252-420c-826f-9b35aa13f5bc",
-          "startedAt": "2026-08-31T08:20:41-07:00",
-          "endedAt": "2026-08-31T08:45:50-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "8ef67e64-224d-4074-9338-562f6368a2b8",
-          "startedAt": "2026-08-31T09:26:56-07:00",
-          "endedAt": "2026-08-31T10:13:38-07:00",
-          "exitType": "plan-scrapped",
-          "exitNote": "codex did not accept the plan in two reviews",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "3af12360-59d7-438f-9cf2-5c7f7858b355",
-          "startedAt": "2026-08-31T15:05:57-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        }
-      ]
-    },
-    "codexReviewNotes": "[implement-task-edit-read-fences] Replace the t.files and existing-command fallback with exact old/new edits that import and call child 93's accessor pair. Render modifiableFiles from the modifiable-files accessor and derive the readable scope from the read-only-files accessor, including the whole-project wording only for a [\"*\"] result. If child 93 has not landed, record task 93 as a prerequisite rather than inventing a fallback representation.\n\nDurable because: Both fences then come from the shared compatibility-aware source of truth, so legacy files records and future readOnlyFiles values are handled consistently.\n\n[implement-task-edit-read-fences] Remove the blanket permission to create or edit paired test paths outside modifiableFiles. Permit a paired test only when it is already returned by the modifiable-files accessor; describe the implementation log solely as the required out-of-band workflow artifact.\n\nDurable because: Every project or test edit remains inside the shared edit fence, so widening the readable set or deriving paired tests cannot silently widen ownership.\n\n[implement-task-edit-read-fences] Replace the global regex-count assertion with an assertion scoped only to the separately rendered paired-test subsection, and assert that the already-owned test is absent from that subsection while remaining present in the modifiableFiles mapping. Keep the exact expected output as OK.\n\nDurable because: The verification will test the intended deduplication boundary without counting legitimate appearances in the read command or relative-to-absolute mapping.\n\n[fix-implement-task-tests-already-separated] Replace the hard-coded [\"*\"] sentence with exact edits that import the sibling accessor pair and render readOnlyFiles from its result; emit whole-project language only when the returned value is [\"*\"], and otherwise render the returned readable paths.\n\nDurable because: The prompt will track the task's actual read fence instead of assuming that every task always has whole-tree read access.\n\n[fix-implement-task-tests-already-separated] Add a separately specified old/new edit changing `function buildFixTaskTestsPrompt` to `export function buildFixTaskTestsPrompt`, or replace the verification with an executable check that does not import a private symbol. Preserve the expected output `OK`.\n\nDurable because: The verification will invoke an API the module actually exposes and will fail only when the rendered fence behavior is wrong."
+    "difficulty": 4
   },
   {
     "taskNumber": 96,
@@ -203,135 +62,7 @@
       "scripts/prepareTasks.ts"
     ],
     "tests": "Group a task declaring modifiableFiles alongside a legacy task declaring only files, and assert they group identically to the way the legacy pair grouped before the rename — same groups, same membership, same order. Assert that two tasks with disjoint modifiable fences but overlapping readOnlyFiles, including the case where both are ['*'], stay in separate groups and do not collide. Assert a task carrying both keys resolves to modifiableFiles, so the legacy key never silently wins.",
-    "difficulty": 4,
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-96",
-      "leaseRunId": "5f2fbab4-3405-4aee-9e64-181afa54b3cd",
-      "history": [
-        {
-          "runId": "be49df4d-b713-4d54-a842-89b35d156efd",
-          "startedAt": "2026-08-29T18:06:43-07:00",
-          "endedAt": "2026-08-29T19:10:03-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "a1330f7a-fbba-4f98-94c4-5825a6ffbb93",
-          "startedAt": "2026-08-30T20:11:45-07:00",
-          "endedAt": "2026-08-30T21:34:23-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "840b7569-f9e0-48fc-a029-0bbb2257dca3",
-          "startedAt": "2026-08-31T08:20:42-07:00",
-          "endedAt": "2026-08-31T08:26:16-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "587cda9e-1646-459f-9359-f8181a075610",
-          "startedAt": "2026-08-31T09:26:59-07:00",
-          "endedAt": "2026-08-31T09:30:14-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "5f2fbab4-3405-4aee-9e64-181afa54b3cd",
-          "startedAt": "2026-08-31T10:59:32-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ],
-          "attempts": {
-            "planReview": 3,
-            "clarify": 1
-          },
-          "countedPasses": {
-            "planReview": [
-              "65befe9f-6663-4bb0-b6e4-1134c48dab03",
-              "e6ab5bbd-88ba-4591-90ff-bc8275a247bc",
-              "f69167e7-17cd-4697-b9f4-bd55b725ab09"
-            ],
-            "clarify": [
-              "e9500d20-1fcd-4b34-80e8-f8ce6266dd15"
-            ]
-          }
-        }
-      ]
-    },
-    "codexReviewNotes": "[red-tests-for-modifiable-vs-legacy-and-readonly-isolation] Revise the three regression tests to exercise the manifest-backed path by passing flatManifest, or add manifest-backed variants if the fallback also requires explicit coverage. Require the tests to fail before the production edit and pass afterward.\n\nDurable because: The tests will cover the branch used when repository metadata is available, preventing future changes from satisfying only the manifest-free fallback.\n\n[green-declared-files-reads-modifiable-files-first] Replace the single-helper-only edit with exact old/new edits that route both branches through the same resolved modifiable fence. Before calling buildCanonicalTaskGroups, provide task records whose legacy files field is normalized from the same modifiableFiles-first resolver, while never incorporating readOnlyFiles.\n\nDurable because: Both manifest-backed and manifest-free grouping will consume one resolution rule, so their ownership and collision behavior cannot diverge.",
-    "clarifyRequest": "To satisfy codex's amend note (\"route both branches through the same resolved modifiable fence\" for buildCanonicalTaskGroups, not just the manifest-free fallback), this round needs read access to scripts/canonicalTaskGroups.ts (read-only reference; this task does not edit it) to confirm exactly how buildCanonicalTaskGroups sources each task's files today -- whether it already imports scripts/taskGroups.ts's declaredFiles (in which case one edit to declaredFiles fixes both branches) or reads task.files itself (in which case the plan needs a different, exact edit to route it through the same resolver without duplicating the modifiableFiles-first fallback). It was not in this round's read-file list, and the prior rejected plan guessed at its behavior instead of reading it -- add it to the read-file list for the next planning round so the plan can name an exact, non-guessed edit instead of an indirect workaround."
+    "difficulty": 4
   },
   {
     "taskNumber": 113,
@@ -715,5 +446,32 @@
     ],
     "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
     "difficulty": 6
+  },
+  {
+    "taskNumber": 192,
+    "version": "ff38df02bfe622ced97013a33f9547c6d0e9748e",
+    "title": "Split each tasks.json entry's files list into readOnlyFiles and modifiableFiles",
+    "userDescription": "split the 'files' list in each tasks.json entry into 'readOnlyFiles' lists and 'modifiableFiles' lists.  Task 94-96 are outdated tasks covering the same problem area in the codebase, which was defined in task 58 (which was split into several subtasks).",
+    "goal": [
+      "- Every entry in tasks.json has readOnlyFiles and modifiableFiles; no entry keeps a files key",
+      "- npm test is green after the change",
+      "- the '.files' field in a tasks.json entry is no longer referenced in the codebase, and is replaced with relevant usage of 'readOnlyFiles' or 'modifiableFiles' in the codebase where prompts and briefs are generated.",
+      "- Not in scope: closing outdated tasks 94, 95, and 96 — they were archived by /close-tasks when this task was created"
+    ],
+    "problemSolvedByTask": "A single files list does not say which files a task changes and which it only reads, so agents over-fence or edit the wrong files.",
+    "description": "The 'files' key on task entries in .taskTools/tasks.json is legacy; scripts/prepareTasks.ts already exports modifiableFiles()/readOnlyFiles() accessors (added by completed task 154) that fall back to 'files' and default readOnlyFiles to ['*'], and scripts/taskGroups.ts declaredFiles() and scripts/tackle-tasks/shared/preparedTask.ts already route through them. So no code changes are needed — this task is a pure data migration: for each of the 15 open entries in .taskTools/tasks.json that still only have 'files' (out of 17 total), split that list into 'modifiableFiles' (files the task edits) and 'readOnlyFiles' (files it only needs to read, e.g. dependencies/callers), then remove the legacy 'files' key. Task 58 (completed) originally scoped this exact work and was closed with note \"Split into 93, 94, 95, 96, 97, 98\"; of those, 93/97/98 are completed and 94/95/96 are still open in tasks.json but now duplicate/overlap this same problem area since the shared accessor machinery they targeted already landed via task 154 — flag 94, 95, and 96 as likely outdated/supersedable when this task closes.",
+    "files": [
+      ".taskTools/tasks.json"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "A test loads tasks.json and asserts every entry has readOnlyFiles and modifiableFiles arrays and no files key.",
+    "difficulty": 2,
+    "blockedBy": [
+      {
+        "taskNum": 159,
+        "reason": "declaredFiles in scripts/taskGroups.ts and addTaskFiles.ts still read task.files only, per task 159's own description: splitting files into modifiableFiles/readOnlyFiles on tasks.json before that reader fallback lands would make every task's declaredFiles() resolve to [], silently blinding grouping, planning, and split-task."
+      }
+    ]
   }
 ]
