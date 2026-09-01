@@ -4178,5 +4178,48 @@
     "completionDate": "2026-08-31",
     "commitHashes": [],
     "closureNote": "replaced by task 192"
+  },
+  {
+    "taskNumber": 159,
+    "version": "51154e01742c74807a8991676169cfc8ad8e4a0a",
+    "title": "Make declaredFiles and addTaskFiles accept modifiableFiles with a fallback to the legacy files key",
+    "userDescription": "Make the task-file readers accept `modifiableFiles` with a fallback to the legacy `files` key, so the close-tasks migration can be safely re-enabled. This is the missing reader half of task 58's split; task 98 shipped the writer half (the close-tasks migration) but the reader half never landed, so the migration had to be disabled in skills/close-tasks/SKILL.md on 2026-08-08 to stop it blanking every task's file list. Evidence: `declaredFiles(task)` at scripts/taskGroups.ts:15 is the shared accessor and its whole body is `return Array.isArray(task.files) ? (task.files as string[]) : [];` — it reads `files` only. A repo-wide search for `modifiableFiles` across scripts/ returns exactly one hit, a stale comment at scripts/addTaskFiles.ts:6 reading `const FILES_KEY = \"files\" as const; // repoint here if task 58 splits files into modifiableFiles/readOnlyFiles`. Task 58's children 93-98 are closed, so the split was believed done, but no reader was ever repointed. Required behavior: `declaredFiles` returns `task.modifiableFiles` when present, falls back to `task.files` when not, and returns [] when neither exists; it must never merge the two lists. Add a matching `readOnlyFilesOf(task)` accessor that resolves an absent `readOnlyFiles` to [\"*\"], since an absent key is meaningful and must stay implicit. Repoint scripts/addTaskFiles.ts's FILES_KEY so appends land on whichever key the task already carries, defaulting to `files` for unmigrated tasks, and drop the stale comment. Every other reader must route through the accessor rather than touching task.files directly. Files: scripts/taskGroups.ts, scripts/addTaskFiles.ts, tests/taskGroups.test.ts, skills/close-tasks/SKILL.md. The SKILL.md edit is the last step: restore the full migration section verbatim from commit 3be16f7, replacing the DISABLED block, only after the readers pass their tests. Tests: fixture tasks holding only `files`, only `modifiableFiles`, both keys, and neither; assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively; assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise; assert addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one. Difficulty 4. This task must land before any close-tasks run is allowed to rename the key.",
+    "goal": [
+      "- `declaredFiles(task)` returns `modifiableFiles` when the task declares it, `files` when it does not, and [] when it declares neither",
+      "- a task declaring both keys resolves to `modifiableFiles` alone; the two lists are never merged",
+      "- `readOnlyFilesOf(task)` returns [\"*\"] for a task that declares no `readOnlyFiles`, and the declared list otherwise",
+      "- `addTaskFiles` appends to whichever key the task already carries, defaulting to `files` on an unmigrated task",
+      "- the stale FILES_KEY comment in scripts/addTaskFiles.ts naming task 58 is gone",
+      "- as the last step, the close-tasks migration section is restored verbatim from commit 3be16f7, replacing the DISABLED block",
+      "- NOT in scope: renaming any key inside tasks.json. The close-tasks migration step delivered by task 98 owns that, and it stays disabled until this task lands"
+    ],
+    "description": "The reader half of task 58's modifiableFiles/readOnlyFiles split was never built, even though children 93-98 all closed. `declaredFiles` in scripts/taskGroups.ts is the shared accessor every grouping and planning path routes through, and it reads `task.files` only; a repo-wide search finds `modifiableFiles` nowhere in scripts/ except a stale FILES_KEY comment in scripts/addTaskFiles.ts. Task 98 shipped the writer half on 2026-08-08 as a Migration section in skills/close-tasks/SKILL.md, which renames `files` to `modifiableFiles` unconditionally on every close-tasks run. Because no reader accepts the new key, running that migration would make every task's file list resolve to [], silently blinding grouping, planning and split-task. That section was therefore disabled in place the same day, with its full rules preserved in commit 3be16f7 and a pointer left in SKILL.md. This task closes the gap so the migration can be turned back on. The fallback must never merge the two lists — merging would widen an edit fence, which is the exact thing the split exists to keep narrow. An absent `readOnlyFiles` stays absent and resolves to [\"*\"] at read time rather than being materialised onto the record. Restoring the SKILL.md section is strictly the final step, after the reader tests pass.\n\n## Audit correction (2026-08-31)\n\nUser decision: the userDescription's scope governs — every live direct task.files reader routes through the accessor. The files list now includes those readers (fence checkers, worktree creation, commit, merge, split, clarify) and their existing tests. scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts also reads task.files directly but is frozen v1.1 and stays untouched. The two fence checkers matter most: on a modifiableFiles-only task they would compute an empty owned set and mis-fence the whole worktree.",
+    "files": [
+      "scripts/taskGroups.ts",
+      "scripts/addTaskFiles.ts",
+      "tests/taskGroups.test.ts",
+      "skills/close-tasks/SKILL.md",
+      "scripts/prepareTasks.ts",
+      "scripts/mergePipeline.ts",
+      "scripts/splitTask.ts",
+      "scripts/clarifyTask.ts",
+      "scripts/tackle-tasks/shared/checkTaskFileFence.ts",
+      "scripts/tackle-tasks/shared/checkResumedWorktreeFence.ts",
+      "scripts/tackle-tasks/shared/commitTaskWork.ts",
+      "scripts/tackle-tasks/shared/createTaskWorktree.ts",
+      "scripts/tackle-tasks/shared/_createFreshTaskWorktree.ts",
+      "tests/prepareTasks.test.ts",
+      "tests/mergePipeline.test.ts",
+      "tests/splitTask.test.ts",
+      "tests/clarifyTask.test.ts",
+      "scripts/tackle-tasks/shared/checkTaskFileFence.test.ts",
+      "scripts/tackle-tasks/shared/commitTaskWork.test.ts",
+      "scripts/tackle-tasks/shared/createTaskWorktree.test.ts"
+    ],
+    "tests": "In tests/taskGroups.test.ts, build four fixture tasks: one declaring only `files`, one declaring only `modifiableFiles`, one declaring both, and one declaring neither. Assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively. Also assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise, and that addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one.",
+    "difficulty": 4,
+    "completionDate": "2026-08-31",
+    "commitHashes": [],
+    "closureNote": "merged into task 192"
   }
 ]

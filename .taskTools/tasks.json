@@ -11,7 +11,14 @@
     "handoffFilePaths": [
       "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
     ],
-    "difficulty": 8
+    "difficulty": 8,
+    "problemSolvedByTask": "Without an end-to-end fixture spanning repeated nested submodules, nobody can trust the recursive discovery/merge system before it becomes the production path for every real multi-repo task.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 113,
@@ -19,7 +26,7 @@
     "version": "94a63561408ad7a01729ae4e89e32707263bbde5",
     "title": "Reorganize scripts/ into skillBodyGenerators/ plus topic subfolders, updating every reference",
     "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
-    "description": "scripts/ now holds 96 .ts files, flat. Tasks 71-79 (the skillBodyGenerators/ split) are all closed, so that half of this task is done; the only remaining skill-body-generator file is scripts/reviewPlanBrief.ts, not worth its own folder for one file.\n\nThe real remaining value: sort scripts/ into topic subfolders (task/, git/, workflow/, etc), and add a sweep test that catches broken references.\n\nhooks/hooks.json names 9 distinct scripts/*.ts command paths: viewTaskHook.ts, readFileHook.ts, runStepHook.ts, taskStatsHook.ts, turn-modified-flag.ts, reflow-comments-post.ts, relatedTests.ts, stage-and-summarize-stop.ts, session-end-cleanup.ts. Each must keep resolving after the move.\n\nThree runtime path computations build script paths as strings, so a move breaks them even with a green typecheck: scripts/prepareTasks.ts:83-84 (resolveMergeScriptPath), scripts/prepareTasks.ts:102-103 (resolveMergePhaseScriptPath), and scripts/reviewPlanBrief.ts:7 (fileURLToPath sibling import of planReviewRuling.ts).\n\nscripts/taskStatsBrief.ts no longer exists; it was deleted in commit 284aa0e. Its successor, scripts/taskStatsHook.ts, uses a plain relative import, not a fileURLToPath computation, so it is not on the fragile-path list above.\n\nThis task moves close to 96 files. The files array below cannot fence a move that size, so this task must be executed manually, outside the tackle-tasks fence system. The planner and implementer should still treat scripts/, tests/, skills/, and hooks/ as in scope.",
+    "description": "scripts/ now holds 96 .ts files, flat. Tasks 71-79 (the skillBodyGenerators/ split) are all closed, so that half of this task is done; the only remaining skill-body-generator file is scripts/reviewPlanBrief.ts, not worth its own folder for one file.\n\nThe real remaining value: reorganize scripts/ to follow the same pattern tackle-tasks' own scripts already use — scripts/tackle-tasks/<blockName>/ holds one folder per pipeline block (areTestsFlagged/, codexReviewsPlan/, implementTask/, planTheTask/, shared/, etc). Every other skill should get its own scripts/<skillName>/ folder holding all the source files that skill's hook and skill body use — not generic topic categories like task/ or git/. Scope is every source file used by any skill or hook, not just the 9 files hooks.json names directly: skills/*/SKILL.md reference many more flat scripts.ts files at the top level (e.g. scripts/clarifyTaskBrief.ts, scripts/rateTask.ts, scripts/splitTask.ts, scripts/taskGroups.ts, scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts) that a reorg must also account for.\n\nhooks/hooks.json names 9 distinct scripts/*.ts command paths: viewTaskHook.ts, readFileHook.ts, runStepHook.ts, taskStatsHook.ts, turn-modified-flag.ts, reflow-comments-post.ts, relatedTests.ts, stage-and-summarize-stop.ts, session-end-cleanup.ts. Each must keep resolving after the move.\n\nThree runtime path computations build script paths as strings, so a move breaks them even with a green typecheck: scripts/prepareTasks.ts:84 (resolveMergeScriptPath), scripts/prepareTasks.ts:103 (resolveMergePhaseScriptPath), and scripts/reviewPlanBrief.ts:7 (fileURLToPath sibling import of planReviewRuling.ts).\n\nscripts/taskStatsBrief.ts no longer exists; it was deleted in commit 284aa0e. Its successor, scripts/taskStatsHook.ts, uses a plain relative import, not a fileURLToPath computation, so it is not on the fragile-path list above.\n\nThis task moves close to 96+ files across every skill. The files array below cannot fence a move that size, so this task must be executed manually, outside the tackle-tasks fence system. The planner and implementer should still treat scripts/, tests/, skills/, and hooks/ as in scope.",
     "files": [
       "hooks/hooks.json",
       "package.json",
@@ -27,7 +34,13 @@
     ],
     "tests": "Add tests/scriptReferences.test.ts as a no-dangling-reference sweep: walk every command string in hooks/hooks.json, every `!` command line in skills/**/SKILL.md, and every relative import specifier in scripts/ and tests/, resolve each to an absolute path, and assert the file exists. The test must fail against a deliberately broken path, not pass vacuously when a glob matches nothing. Also assert resolveMergeScriptPath() and resolveMergePhaseScriptPath() point at existing files, and that the sibling URL resolved in scripts/reviewPlanBrief.ts exists. Alongside it, the full existing suite and the typecheck must stay green.",
     "difficulty": 8,
-    "blockedBy": []
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ],
+    "problemSolvedByTask": "A flat 96-file scripts/ folder makes it hard for a human or agent to find which script backs which skill or hook."
   },
   {
     "taskNumber": 155,
@@ -49,7 +62,14 @@
       "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
     ],
     "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
-    "difficulty": 5
+    "difficulty": 5,
+    "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 156,
@@ -63,13 +83,20 @@
       "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
       "- rewriting or shortening existing description text is NOT in scope; that is task 116"
     ],
-    "description": "Measured against the current file: 41 open tasks, 40 without a goal. 23 of those declare blockedBy — chiefly the 131-153 pipeline chain — so they need a shared chainGoal per chain, authored once and copied identically across that chain's members. 25 have a real tests field that states the acceptance condition and is the best raw material for the goal bullets; the rest carry tests \"skip\" and must be derived from the description alone.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches. Expect roughly 40 rounds.\n\nFormat is fixed by the work already landed this session: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.\n\n## Audit correction (2026-08-31)\n\nCounts in this description are stale. Current: 18 open tasks; 5 without a goal (36, 94, 95, 96, 113); 1 task with a non-empty blockedBy; 0 with chainGoal. The 131-153 pipeline chain no longer exists in tasks.json. Expect about 5 rounds, not 40.",
+    "description": "Measured against the current file: 12 open tasks; 2 without a goal (36, 113); 10 tasks declare a non-empty blockedBy; 0 tasks carry chainGoal. The 131-153 pipeline chain referenced in the original description no longer exists in tasks.json. Expect roughly 2 rounds of per-task authoring, not 40.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches.\n\nFormat is fixed by work already landed: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.\n\nBefore goals can be written for each remaining open task, each needs either a direct interview with the user, or a deep dive into its historical transcript_path to find the conversation where the task was created and derive the context that led to it — a goal drafted from the description alone risks missing scope the original conversation actually decided.",
     "files": [
       ".taskTools/tasks.json",
       "tests/taskFiles.test.ts"
     ],
     "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
-    "difficulty": 6
+    "difficulty": 6,
+    "problemSolvedByTask": "Without a goal array, nobody (human or planner agent) can tell when a task is actually done versus merely touched.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 157,
@@ -125,16 +152,16 @@
     "tests": "A guard test asserting no \"taskNum\" key remains in .taskTools/tasks.json or .taskTools/completedTasks.json, plus the existing blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key and passing.",
     "difficulty": 5,
     "run": {
-      "active": true,
+      "active": false,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-157",
-      "leaseRunId": "01530e9c-0656-453b-a6f3-737375d1f64b",
+      "leaseRunId": "9d7607ae-7c5e-4338-938c-15ddf4b6de44",
       "history": [
         {
-          "runId": "665c0747-20b4-4ee6-a7d4-dc7230adcaa7",
-          "startedAt": "2026-08-30T20:10:06-07:00",
-          "endedAt": "2026-08-30T21:34:24-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "runId": "9d7607ae-7c5e-4338-938c-15ddf4b6de44",
+          "startedAt": "2026-08-31T16:40:47-07:00",
+          "endedAt": "2026-08-31T17:21:41-07:00",
+          "exitType": "plan-scrapped",
+          "exitNote": "codex did not accept the plan in two reviews",
           "modifiedFiles": [],
           "commits": [],
           "implementationNotesFile": null,
@@ -148,64 +175,21 @@
                 "initialized": false
               }
             }
-          ]
-        },
-        {
-          "runId": "a7bae185-4309-4866-ad46-825881a59778",
-          "startedAt": "2026-08-31T08:20:45-07:00",
-          "endedAt": "2026-08-31T08:20:46-07:00",
-          "exitType": "fence-violation",
-          "exitNote": "the resumed worktree touched files the task does not own: scripts/tackle-tasks/shared/preparedTask.ts",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null
-        },
-        {
-          "runId": "dc0fc130-fcc2-47bc-826f-cd05f9955b53",
-          "startedAt": "2026-08-31T09:26:59-07:00",
-          "endedAt": "2026-08-31T09:32:43-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        },
-        {
-          "runId": "01530e9c-0656-453b-a6f3-737375d1f64b",
-          "startedAt": "2026-08-31T10:59:35-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
+          ],
+          "attempts": {
+            "planReview": 2
+          },
+          "countedPasses": {
+            "planReview": [
+              "d988d651-339e-4aa9-b1f0-71ad4d6aa373",
+              "8c5d7d13-6385-4ea3-9455-a5a1c61a834a"
+            ]
+          }
         }
       ]
-    }
+    },
+    "codexReviewNotes": "[rename-istaskblocked-shared] Replace the proposed two-line header with a comment that contains only the new field name, for example `// \"is task blocked?\" — pipeline.mmd. Reuses blockerReport; blockedBy entries use taskNumber.` Do not add any mention of the old token.\n\nDurable because: The comment remains accurate without creating a source-tree match for the retired field name.\n\n[migrate-completed-tasks-data] Replace the broken post-migration command with `rg -n '^        \"taskNumber\": (62|70|93|107|131|132|133|134|135|136|137|138|139|140|141|142|143|144|145|146|147|148|149|150|151|152|165|166|167|168|169|170|171|172|173|174|175|176|177|178|179|180|182|185),$' .taskTools/completedTasks.json` and retain the expected result of exactly 52 matches.\n\nDurable because: The corrected expression uses ripgrep’s actual alternation syntax and anchors the exact nested key lines; it was verified to count all 52 migrated entries.\n\n[update-checkblockers-test] Rewrite the guard without spelling the retired token contiguously. For example, define `const legacyKey = [\"task\", \"Num\"].join(\"\");`, use a neutral title such as `no legacy blockedBy key survives in the real project task data`, construct `const legacyKeyPattern = new RegExp(\u0012`\"${legacyKey}\"`\u0012);`, and apply that pattern to both file contents. Preserve the planned `readFileSync` import.\n\nDurable because: The test still detects the exact stale JSON key in either data file while the test source itself stays clean under the required repo-wide search.",
+    "problemSolvedByTask": "Two key names (taskNum in blockedBy, taskNumber everywhere else) mean a script copying an existing pattern can pick the wrong key and never register a real block."
   },
   {
     "taskNumber": 158,
@@ -213,64 +197,40 @@
     "title": "Second codex review only rechecks round-one findings instead of hunting for new ones",
     "userDescription": "the codex review prompt needs to indicate that a 2nd review by codex should only verify that the first round's flagged issues were resolved and not try to find new issues.  the purpose is to prevent a runaway review-reject-fix-review-reject-fix loop that happens often.",
     "goal": [
-      "- On a REJECTED first round, the reviewer's round-one PROBLEMS and FIXES text is written to a file alongside the plan, and that file survives the run so the recheck has something concrete to confirm against.",
-      "- Reading skills/tackle-tasks/verify.workflow.js shows the second review runs a distinct recheck prompt — the brief no longer instructs the agent to rerun the identical round-one command.",
-      "- The recheck prompt carries the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — so a plan whose round-one items were fixed comes back APPROVED even when the reviewer could find something else.",
-      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected in round two for a brand-new reason.",
-      "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This was investigated with the user and ruled out for the current pipeline — writeTaskBriefFile runs once per plan launch and the verify loop has no separate planner re-write agent. Tasks #83 and #87 in the taskTools-86 chain own that redesign.",
-      "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language tags — task #120 in the taskTools-86 chain owns that lever.",
+      "- scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts's reviewQuestion(t) always returns reviewByDefaultPrompt(t) for a non-scrapped plan, with no awareness of which review round is running.",
+      "- scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts's reviewTestsQuestion(t, ...) has the same gap: it always returns reviewByDefaultPrompt(...), never the approve prompt already written beside it.",
+      "- reviewQuestion(t) must pick its prompt by round, using getAttemptCount(t.number, \"planReview\", t.taskStateRoot) from scripts/tackle-tasks/shared/taskRunState.ts, the same call TWO_CODEX_REVIEWS_COMPLETED_Q.ts already makes.",
+      "- reviewTestsQuestion(t, ...) needs the same round-aware selection for the tests review, so both reviewers stop always running a fresh full review with no memory of round one.",
+      "- On the first review pass, plan or tests, the existing full review prompt is unchanged: reviewByDefaultPrompt(t) for the plan, reviewByDefaultPrompt(...) for the tests.",
+      "- On the second pass, both functions instead return a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.\"",
+      "- The plan recheck prompt points the reviewer at t.reviewOutputFile as the audit to recheck against; the tests recheck prompt points at t.testReviewFile.",
+      "- The existing checkpoint-based approve path in reviewQuestion(t), for a plan-scrapped relaunch, is untouched; the round check only governs the non-scrapped branch.",
+      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected for a fresh set of issues in round two, for plan review or tests review.",
+      "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This task only changes which prompt reviewQuestion and reviewTestsQuestion return.",
+      "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language.",
       "- NOT in scope: the sibling-task and blockedBy scope being added to the same reviewer prompt — task #155 owns that.",
       "- NOT in scope: any test asserting the prompt wording. The user chose no test here because a prompt's instructions change often and such a test would only pin wording."
     ],
-    "description": "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts builds one review prompt, reviewByDefaultPrompt(t), used unchanged by both review rounds; scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts calls it through reviewQuestion(t) with no awareness of which round is running. That is the root cause — round two is a fresh full review with no memory of round one, so it is free to reject on problems it never raised before. The fix needs a second prompt, not just changed prose, because prose alone cannot alter what the already-quoted codex exec command asks for. Round one's findings already land in a file next to the plan: t.reviewOutputFile (worktree/plans/codex-review.json) is where codex writes its round-one JSON verdict, and it survives into round two untouched — no new plumbing is needed to persist it, only a second prompt that points the reviewer at it instead of interpolating its contents into a shell command. This repo already carries tests for metacharacter-laden reason strings, so quoting arbitrary reviewer text into a command is a known hazard the file-based approach avoids. Round two must be detected the same way TWO_CODEX_REVIEWS_COMPLETED_Q.ts already does: getAttemptCount(t.number, \"planReview\", t.taskStateRoot) from scripts/tackle-tasks/shared/taskRunState.ts, made available where CODEX_REVIEWS_PLAN.ts builds the prompt. On round two, reviewQuestion(t) must emit a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — pointed at t.reviewOutputFile as the audit to recheck against — so a plan whose round-one items were fixed comes back APPROVED even when the reviewer could find something else. The existing two-review cap (TWO_CODEX_REVIEWS_COMPLETED_Q.ts, MAX_ATTEMPTS) and the codex/fable/opus fallback chain in createCodexShellInvocationLive stay as they are; only which prompt reviewQuestion returns changes. Task #155 edits the same reviewer prompt for a different purpose, and groupTasksByFileOverlap will place both in the same worktree group, so no blockedBy is declared. No test pins the recheck prompt's wording — a prompt's instructions change often and such a test would only pin wording; tests stays \"skip\".",
+    "description": "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts builds the plan review prompt: reviewQuestion(t) currently only branches on a plan-scrapped checkpoint, and otherwise always calls reviewByDefaultPrompt(t), the full review. scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts calls it through planReviewPrompt(t) with no awareness of which round is running. scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts has the identical gap on the tests side: reviewTestsQuestion(t, ...) always calls reviewByDefaultPrompt(...), never the approveReviewByDefaultPrompt(...) already written next to it, and scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts calls it through reviewTestsPrompt(t) the same way. That is the root cause on both sides — round two is a fresh full review with no memory of round one, so it is free to reject on problems it never raised before. The fix needs a second prompt on each side, not just changed prose, because prose alone cannot alter what the already-quoted codex exec command asks for. The counters for number of reviews already exist: scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.ts reads getAttemptCount(t.number, \"planReview\", projectRoot) from scripts/tackle-tasks/shared/taskRunState.ts for the plan side, and scripts/tackle-tasks/areTestsFlagged/ARE_2_TEST_REVIEWS_DONE_Q.ts reads the task's codexReviewNotes field for the tests side. Round one's findings already land in a file next to the plan or the tests: t.reviewOutputFile (plan) and t.testReviewFile (tests) survive into round two untouched, so no new plumbing is needed to persist them, only a second prompt on each side that points the reviewer at that file instead of interpolating its contents into a shell command. This repo already carries tests for metacharacter-laden reason strings, so quoting arbitrary reviewer text into a command is a known hazard the file-based approach avoids. On round two, reviewQuestion(t) and reviewTestsQuestion(t, ...) must each emit a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — so a plan or a set of tests whose round-one items were fixed comes back APPROVED even when the reviewer could find something else. The existing two-review caps and the codex/fable/opus fallback chains in createCodexShellInvocationLive stay as they are; only which prompt each reviewQuestion function returns changes. Task #155 edits the same plan reviewer prompt for a different purpose, and groupTasksByFileOverlap will place both in the same worktree group, so no blockedBy is declared. No test pins the recheck prompt's wording — a prompt's instructions change often and such a test would only pin wording; tests stays \"skip\".",
     "files": [
       "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts",
       "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.test.ts",
+      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts",
+      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.test.ts",
       "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts",
+      "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts",
+      "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.test.ts"
     ],
     "tests": "skip",
-    "difficulty": 3
-  },
-  {
-    "taskNumber": 159,
-    "version": "51154e01742c74807a8991676169cfc8ad8e4a0a",
-    "title": "Make declaredFiles and addTaskFiles accept modifiableFiles with a fallback to the legacy files key",
-    "userDescription": "Make the task-file readers accept `modifiableFiles` with a fallback to the legacy `files` key, so the close-tasks migration can be safely re-enabled. This is the missing reader half of task 58's split; task 98 shipped the writer half (the close-tasks migration) but the reader half never landed, so the migration had to be disabled in skills/close-tasks/SKILL.md on 2026-08-08 to stop it blanking every task's file list. Evidence: `declaredFiles(task)` at scripts/taskGroups.ts:15 is the shared accessor and its whole body is `return Array.isArray(task.files) ? (task.files as string[]) : [];` — it reads `files` only. A repo-wide search for `modifiableFiles` across scripts/ returns exactly one hit, a stale comment at scripts/addTaskFiles.ts:6 reading `const FILES_KEY = \"files\" as const; // repoint here if task 58 splits files into modifiableFiles/readOnlyFiles`. Task 58's children 93-98 are closed, so the split was believed done, but no reader was ever repointed. Required behavior: `declaredFiles` returns `task.modifiableFiles` when present, falls back to `task.files` when not, and returns [] when neither exists; it must never merge the two lists. Add a matching `readOnlyFilesOf(task)` accessor that resolves an absent `readOnlyFiles` to [\"*\"], since an absent key is meaningful and must stay implicit. Repoint scripts/addTaskFiles.ts's FILES_KEY so appends land on whichever key the task already carries, defaulting to `files` for unmigrated tasks, and drop the stale comment. Every other reader must route through the accessor rather than touching task.files directly. Files: scripts/taskGroups.ts, scripts/addTaskFiles.ts, tests/taskGroups.test.ts, skills/close-tasks/SKILL.md. The SKILL.md edit is the last step: restore the full migration section verbatim from commit 3be16f7, replacing the DISABLED block, only after the readers pass their tests. Tests: fixture tasks holding only `files`, only `modifiableFiles`, both keys, and neither; assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively; assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise; assert addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one. Difficulty 4. This task must land before any close-tasks run is allowed to rename the key.",
-    "goal": [
-      "- `declaredFiles(task)` returns `modifiableFiles` when the task declares it, `files` when it does not, and [] when it declares neither",
-      "- a task declaring both keys resolves to `modifiableFiles` alone; the two lists are never merged",
-      "- `readOnlyFilesOf(task)` returns [\"*\"] for a task that declares no `readOnlyFiles`, and the declared list otherwise",
-      "- `addTaskFiles` appends to whichever key the task already carries, defaulting to `files` on an unmigrated task",
-      "- the stale FILES_KEY comment in scripts/addTaskFiles.ts naming task 58 is gone",
-      "- as the last step, the close-tasks migration section is restored verbatim from commit 3be16f7, replacing the DISABLED block",
-      "- NOT in scope: renaming any key inside tasks.json. The close-tasks migration step delivered by task 98 owns that, and it stays disabled until this task lands"
-    ],
-    "description": "The reader half of task 58's modifiableFiles/readOnlyFiles split was never built, even though children 93-98 all closed. `declaredFiles` in scripts/taskGroups.ts is the shared accessor every grouping and planning path routes through, and it reads `task.files` only; a repo-wide search finds `modifiableFiles` nowhere in scripts/ except a stale FILES_KEY comment in scripts/addTaskFiles.ts. Task 98 shipped the writer half on 2026-08-08 as a Migration section in skills/close-tasks/SKILL.md, which renames `files` to `modifiableFiles` unconditionally on every close-tasks run. Because no reader accepts the new key, running that migration would make every task's file list resolve to [], silently blinding grouping, planning and split-task. That section was therefore disabled in place the same day, with its full rules preserved in commit 3be16f7 and a pointer left in SKILL.md. This task closes the gap so the migration can be turned back on. The fallback must never merge the two lists — merging would widen an edit fence, which is the exact thing the split exists to keep narrow. An absent `readOnlyFiles` stays absent and resolves to [\"*\"] at read time rather than being materialised onto the record. Restoring the SKILL.md section is strictly the final step, after the reader tests pass.\n\n## Audit correction (2026-08-31)\n\nUser decision: the userDescription's scope governs — every live direct task.files reader routes through the accessor. The files list now includes those readers (fence checkers, worktree creation, commit, merge, split, clarify) and their existing tests. scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts also reads task.files directly but is frozen v1.1 and stays untouched. The two fence checkers matter most: on a modifiableFiles-only task they would compute an empty owned set and mis-fence the whole worktree.",
-    "files": [
-      "scripts/taskGroups.ts",
-      "scripts/addTaskFiles.ts",
-      "tests/taskGroups.test.ts",
-      "skills/close-tasks/SKILL.md",
-      "scripts/prepareTasks.ts",
-      "scripts/mergePipeline.ts",
-      "scripts/splitTask.ts",
-      "scripts/clarifyTask.ts",
-      "scripts/tackle-tasks/shared/checkTaskFileFence.ts",
-      "scripts/tackle-tasks/shared/checkResumedWorktreeFence.ts",
-      "scripts/tackle-tasks/shared/commitTaskWork.ts",
-      "scripts/tackle-tasks/shared/createTaskWorktree.ts",
-      "scripts/tackle-tasks/shared/_createFreshTaskWorktree.ts",
-      "tests/prepareTasks.test.ts",
-      "tests/mergePipeline.test.ts",
-      "tests/splitTask.test.ts",
-      "tests/clarifyTask.test.ts",
-      "scripts/tackle-tasks/shared/checkTaskFileFence.test.ts",
-      "scripts/tackle-tasks/shared/commitTaskWork.test.ts",
-      "scripts/tackle-tasks/shared/createTaskWorktree.test.ts"
-    ],
-    "tests": "In tests/taskGroups.test.ts, build four fixture tasks: one declaring only `files`, one declaring only `modifiableFiles`, one declaring both, and one declaring neither. Assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively. Also assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise, and that addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one.",
-    "difficulty": 4
+    "difficulty": 3,
+    "problemSolvedByTask": "Codex is only told to \"find issues\", so it never checks if the plan amendments resolve the issues it found in the first round; instead codex only hunts for new issues.  Codex is really good at finding issues, which means the list of issues found never gets resolved and perpetually grows until codex ultimately rejects the plan. ",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 160,
@@ -290,7 +250,14 @@
       "scripts/turn-modified-flag.ts"
     ],
     "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
-    "difficulty": 7
+    "difficulty": 7,
+    "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit.",
+    "blockedBy": [
+      {
+        "taskNum": 192,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 164,
@@ -313,7 +280,14 @@
       "tests/stage-and-summarize-stop.test.ts"
     ],
     "tests": "Unit test on the hook: create a temp git repo, write and `git add` a file, feed scripts/stage-and-summarize-stop.ts its Stop-hook JSON on stdin (with a turn-flag file listing that path), and assert the printed hookSpecificOutput.additionalContext contains the staged diff text for that file.",
-    "difficulty": 6
+    "difficulty": 6,
+    "problemSolvedByTask": "The agent doesn't accurately see what is really staged after the end-of-turn stage-and-summarize-stop.ts hook fires.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 188,
@@ -349,7 +323,14 @@
       ".taskTools/tasks.json"
     ],
     "tests": "Seed a fixture task set into the database, run the query script for 'which open tasks touch file X' and 'what blocks task N', and assert the answers match hand-checked expected results, with no agent involved.",
-    "difficulty": 9
+    "difficulty": 9,
+    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.  ",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 190,
@@ -364,12 +345,19 @@
       "- The skill contains an explicit written checklist of those diagram rules, and the skill follows that checklist when it draws.",
       "- NOT in scope: changing any existing diagram in diagrams/tackle-tasks/, and changing scripts/generateSteps.ts. The skill only reads generateSteps.ts as the reference parser whose grammar its output must match; the skill's own output documents an arbitrary codebase and need not itself be runnable by generateSteps.ts."
     ],
-    "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, following the existing skill format seen in skills/view-task/SKILL.md and skills/create-task/SKILL.md) that searches a target codebase and emits a .mmd mermaid flowchart. It must codify the diagramming grammar already used in diagrams/tackle-tasks/*.mmd and parsed by scripts/generateSteps.ts (see getEdgesInDiagram and getPromptBoxesInDiagram, roughly lines 60-120, and the class-role usage around lines 200-210): `flowchart TB`, boxes declared inside a named `subgraph ... end` block as `BOX_ID[\"label\"]` (a decision box is a plain rectangular box whose id ends in `_Q`, not a diamond node), edges written `A -- \"label\" --> B` or `A --> B`, decision boxes branching with two edges whose labels are literally `YES` and `NO` (extra detail can follow on a `<br/>` line) rather than separate `_YES`/`_NO` boxes, a `classDef`/`class` block at the end assigning every box exactly one role among `script`, `returns_a_prompt`, `next_diagram`, `output`, and `fail`, and any box the diagram references but does not itself resolve grouped into a second `subgraph ... [\"next diagram\"]` block joined to the main subgraph by an invisible `~~~` link. Reference examples: diagrams/tackle-tasks/pipeline-planTheTask.mmd, diagrams/tackle-tasks/pipeline-whatIsReviewVerdict.mmd, and diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd. No existing skill in skills/ produces diagrams; this is a new skill directory, not an edit to an existing one. The skill must also carry an explicit written checklist of these diagram rules that it follows while it draws. The /mermaid skill documents codebases generally, not just taskTools pipelines, so its output does not need to be runnable by generateSteps.ts (which is hardcoded to the tackle-tasks box-ownership map) — it only needs to follow the same grammar.",
+    "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, following the existing skill format seen in skills/view-task/SKILL.md and skills/create-task/SKILL.md) that searches a target codebase and emits a .mmd mermaid flowchart. It must codify the diagramming grammar already used in diagrams/tackle-tasks/*.mmd and parsed by scripts/generateSteps.ts (see getEdgesInDiagram and getPromptBoxesInDiagram, roughly lines 60-120, and the `returns_a_prompt` class-role check at line 111 (`getPromptBoxesInDiagram`)): `flowchart TB`, boxes declared inside a named `subgraph ... end` block as `BOX_ID[\"label\"]` (a decision box is a plain rectangular box whose id ends in `_Q`, not a diamond node), edges written `A -- \"label\" --> B` or `A --> B`, decision boxes branching with two edges whose labels are literally `YES` and `NO` (extra detail can follow on a `<br/>` line) rather than separate `_YES`/`_NO` boxes, a `classDef`/`class` block at the end assigning every box exactly one role among `script`, `returns_a_prompt`, `next_diagram`, `output`, and `fail`, and any box the diagram references but does not itself resolve grouped into a second `subgraph ... [\"next diagram\"]` block joined to the main subgraph by an invisible `~~~` link. Reference examples: diagrams/tackle-tasks/pipeline-planTheTask.mmd, diagrams/tackle-tasks/pipeline-whatIsReviewVerdict.mmd, and diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd. No existing skill in skills/ produces diagrams; this is a new skill directory, not an edit to an existing one. The skill must also carry an explicit written checklist of these diagram rules that it follows while it draws. The /mermaid skill documents codebases generally, not just taskTools pipelines, so its output does not need to be runnable by generateSteps.ts (which is hardcoded to the tackle-tasks box-ownership map) — it only needs to follow the same grammar.",
     "files": [
       "skills/mermaid/SKILL.md"
     ],
     "tests": "skip -- generateSteps.ts is hardcoded to the tackle-tasks pipeline's box-ownership map (BLOCKS_BY_OWNER_FOLDER) and its cross-diagram remapping, so it cannot run as a general-purpose grammar validator against a diagram of an arbitrary codebase. Acceptance is checked against the written checklist inside the skill itself (every box declared in a subgraph, every edge label cosmetic, every box assigned a class, decision boxes branch on YES/NO edge labels) rather than a runnable script.",
-    "difficulty": 6
+    "difficulty": 6,
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand — no automated way to get a flowchart.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 191,
@@ -394,7 +382,14 @@
       "scripts/generateWorkflow.ts"
     ],
     "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
-    "difficulty": 6
+    "difficulty": 6,
+    "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ]
   },
   {
     "taskNumber": 192,
@@ -405,22 +400,40 @@
       "- Every entry in tasks.json has readOnlyFiles and modifiableFiles; no entry keeps a files key",
       "- npm test is green after the change",
       "- the '.files' field in a tasks.json entry is no longer referenced in the codebase, and is replaced with relevant usage of 'readOnlyFiles' or 'modifiableFiles' in the codebase where prompts and briefs are generated.",
-      "- Not in scope: closing outdated tasks 94, 95, and 96 — they were archived by /close-tasks when this task was created"
+      "- Not in scope: closing outdated tasks 94, 95, and 96 — they were archived by /close-tasks when this task was created",
+      "- declaredFiles(task) in scripts/taskGroups.ts returns modifiableFiles when the task declares it, files when it does not, and [] when it declares neither, with the two lists never merged",
+      "- readOnlyFilesOf(task) returns [\"*\"] for a task that declares no readOnlyFiles, and the declared list otherwise",
+      "- addTaskFiles appends to whichever key the task already carries, defaulting to files on an unmigrated task, and the stale FILES_KEY comment naming task 58 is gone",
+      "- as the last step before the tasks.json data migration, the close-tasks migration section in skills/close-tasks/SKILL.md is restored verbatim from commit 3be16f7, replacing the DISABLED block"
     ],
     "problemSolvedByTask": "A single files list does not say which files a task changes and which it only reads, so agents over-fence or edit the wrong files.",
-    "description": "The 'files' key on task entries in .taskTools/tasks.json is legacy; scripts/prepareTasks.ts already exports modifiableFiles()/readOnlyFiles() accessors (added by completed task 154) that fall back to 'files' and default readOnlyFiles to ['*'], and scripts/taskGroups.ts declaredFiles() and scripts/tackle-tasks/shared/preparedTask.ts already route through them. So no code changes are needed — this task is a pure data migration: for each of the 15 open entries in .taskTools/tasks.json that still only have 'files' (out of 17 total), split that list into 'modifiableFiles' (files the task edits) and 'readOnlyFiles' (files it only needs to read, e.g. dependencies/callers), then remove the legacy 'files' key. Task 58 (completed) originally scoped this exact work and was closed with note \"Split into 93, 94, 95, 96, 97, 98\"; of those, 93/97/98 are completed and 94/95/96 are still open in tasks.json but now duplicate/overlap this same problem area since the shared accessor machinery they targeted already landed via task 154 — flag 94, 95, and 96 as likely outdated/supersedable when this task closes.",
+    "description": "The `files` key on task entries in `.taskTools/tasks.json` is legacy. `scripts/prepareTasks.ts` already exports `modifiableFiles()`/`readOnlyFiles()` accessors (added by completed task 154) that fall back to `files` and default `readOnlyFiles` to `['*']`, and `scripts/tackle-tasks/shared/preparedTask.ts` already routes through them. But `scripts/taskGroups.ts`'s `declaredFiles()` (the shared accessor every grouping and planning path routes through) still reads `task.files` only, and `scripts/addTaskFiles.ts` still appends under a hardcoded `FILES_KEY = \"files\"` with a stale comment pointing at task 58. This task absorbs that reader work (formerly task 159, now closed and merged in here): repoint `declaredFiles` to read `modifiableFiles` with a fallback to `files` (never merging the two), add a matching `readOnlyFilesOf(task)` that resolves an absent `readOnlyFiles` to `['*']`, repoint `addTaskFiles`'s key resolution to whichever key a task already carries, route every other direct `task.files` reader (`scripts/mergePipeline.ts`, `scripts/splitTask.ts`, `scripts/clarifyTask.ts`, and the tackle-tasks fence/worktree/commit scripts) through the accessors, and restore the close-tasks migration section in `skills/close-tasks/SKILL.md` verbatim from commit `3be16f7`, replacing the DISABLED block — as the last step, after the reader tests pass. Only then does this task perform the actual data migration: for each of the 15 open entries in `.taskTools/tasks.json` that still only have `files`, split that list into `modifiableFiles` and `readOnlyFiles`, then remove the legacy `files` key. Task 58 (completed) originally scoped this problem area and was closed with note \"Split into 93, 94, 95, 96, 97, 98\"; of those, 93/97/98 are completed, and 94/95/96 were already closed as replaced by this task, since they duplicated/overlapped this same problem area.",
     "files": [
-      ".taskTools/tasks.json"
+      ".taskTools/tasks.json",
+      "scripts/taskGroups.ts",
+      "scripts/addTaskFiles.ts",
+      "tests/taskGroups.test.ts",
+      "skills/close-tasks/SKILL.md",
+      "scripts/prepareTasks.ts",
+      "scripts/mergePipeline.ts",
+      "scripts/splitTask.ts",
+      "scripts/clarifyTask.ts",
+      "scripts/tackle-tasks/shared/checkTaskFileFence.ts",
+      "scripts/tackle-tasks/shared/checkResumedWorktreeFence.ts",
+      "scripts/tackle-tasks/shared/commitTaskWork.ts",
+      "scripts/tackle-tasks/shared/createTaskWorktree.ts",
+      "scripts/tackle-tasks/shared/_createFreshTaskWorktree.ts",
+      "tests/prepareTasks.test.ts",
+      "tests/mergePipeline.test.ts",
+      "tests/splitTask.test.ts",
+      "tests/clarifyTask.test.ts",
+      "scripts/tackle-tasks/shared/checkTaskFileFence.test.ts",
+      "scripts/tackle-tasks/shared/commitTaskWork.test.ts",
+      "scripts/tackle-tasks/shared/createTaskWorktree.test.ts"
     ],
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "A test loads tasks.json and asserts every entry has readOnlyFiles and modifiableFiles arrays and no files key.",
-    "difficulty": 2,
-    "blockedBy": [
-      {
-        "taskNum": 159,
-        "reason": "declaredFiles in scripts/taskGroups.ts and addTaskFiles.ts still read task.files only, per task 159's own description: splitting files into modifiableFiles/readOnlyFiles on tasks.json before that reader fallback lands would make every task's declaredFiles() resolve to [], silently blinding grouping, planning, and split-task."
-      }
-    ]
+    "difficulty": 4
   }
 ]
