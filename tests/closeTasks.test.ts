@@ -114,7 +114,7 @@ test("folds unblockDependents into the same write: closing a task clears it from
     join(root, "tasks.json"),
     JSON.stringify([
       { taskNumber: 64, title: "first" },
-      { taskNumber: 65, title: "second", blockedBy: [{ taskNum: 64, reason: "needs task 64" }] },
+      { taskNumber: 65, title: "second", blockedBy: [{ taskNumber: 64, reason: "needs task 64" }] },
     ]),
   );
   writeFileSync(join(root, "completedTasks.json"), "[]");

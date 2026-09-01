@@ -39,23 +39,23 @@ function makeProjectRoot(): string {
         taskNumber: 2,
         title: "blocked by two claims against the same task",
         blockedBy: [
-          { taskNum: 1, reason: "needs task 1" },
-          { taskNum: 1, reason: "also needs task 1 for docs" },
-          { taskNum: 5, reason: "needs task 5" },
+          { taskNumber: 1, reason: "needs task 1" },
+          { taskNumber: 1, reason: "also needs task 1 for docs" },
+          { taskNumber: 5, reason: "needs task 5" },
         ],
       },
-      { taskNumber: 4, title: "blocked by one", blockedBy: [{ taskNum: 3, reason: "needs task 3" }] },
+      { taskNumber: 4, title: "blocked by one", blockedBy: [{ taskNumber: 3, reason: "needs task 3" }] },
       {
         taskNumber: 6,
         title: "blocked by two identical claims",
         blockedBy: [
-          { taskNum: 1, reason: "needs task 1" },
-          { taskNum: 1, reason: "needs task 1" },
+          { taskNumber: 1, reason: "needs task 1" },
+          { taskNumber: 1, reason: "needs task 1" },
         ],
       },
-      { taskNumber: 7, title: "blocked with an empty reason", blockedBy: [{ taskNum: 1, reason: "" }] },
-      { taskNumber: 8, title: "blocked with shell metacharacters", blockedBy: [{ taskNum: 1, reason: METACHAR_REASON }] },
-      { taskNumber: 9, title: "blocked with a multi-line reason", blockedBy: [{ taskNum: 1, reason: MULTILINE_REASON }] },
+      { taskNumber: 7, title: "blocked with an empty reason", blockedBy: [{ taskNumber: 1, reason: "" }] },
+      { taskNumber: 8, title: "blocked with shell metacharacters", blockedBy: [{ taskNumber: 1, reason: METACHAR_REASON }] },
+      { taskNumber: 9, title: "blocked with a multi-line reason", blockedBy: [{ taskNumber: 1, reason: MULTILINE_REASON }] },
     ]),
   );
   writeFileSync(join(root, "completedTasks.json"), JSON.stringify([]));
@@ -74,14 +74,14 @@ function readTasks(root: string): any[] {
   return JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
 }
 
-test("removes only the exact matching entry, keeping a same-taskNum entry with a different reason", () => {
+test("removes only the exact matching entry, keeping a same-taskNumber entry with a different reason", () => {
   const root = makeProjectRoot();
   const out = runScript(root, "2", "1", "needs task 1");
   assert.equal(out, "removed blockedBy entry from task 2 for blocker task 1\n");
   const task2 = readTasks(root).find((t: any) => t.taskNumber === 2);
   assert.deepEqual(task2.blockedBy, [
-    { taskNum: 1, reason: "also needs task 1 for docs" },
-    { taskNum: 5, reason: "needs task 5" },
+    { taskNumber: 1, reason: "also needs task 1 for docs" },
+    { taskNumber: 5, reason: "needs task 5" },
   ]);
 });
 
@@ -113,7 +113,7 @@ test("two identical blockedBy entries: one CLI invocation removes exactly one", 
   const out = runScript(root, "6", "1", "needs task 1");
   assert.equal(out, "removed blockedBy entry from task 6 for blocker task 1\n");
   const task6 = readTasks(root).find((t: any) => t.taskNumber === 6);
-  assert.deepEqual(task6.blockedBy, [{ taskNum: 1, reason: "needs task 1" }]);
+  assert.deepEqual(task6.blockedBy, [{ taskNumber: 1, reason: "needs task 1" }]);
 });
 
 test("removes a blockedBy entry whose reason is the empty string", () => {

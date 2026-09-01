@@ -34,11 +34,11 @@ function readTasks(root: string): any[] {
 
 test("test_clarifyTaskRecordsTheAnswerAndClearsEveryHistoryEntrysAttemptCounters", () => {
   const root = makeProjectRoot();
-  clarifyTask({ taskNumber: 1, answer: "X lives in b.ts", files: ["b.ts", "a.ts"], blockedBy: [{ taskNum: 9, reason: "defines X" }] }, root);
+  clarifyTask({ taskNumber: 1, answer: "X lives in b.ts", files: ["b.ts", "a.ts"], blockedBy: [{ taskNumber: 9, reason: "defines X" }] }, root);
   const task = readTasks(root)[0];
   assert.match(task.description, /^body\n\n## Clarification answer \(\d{4}-\d{2}-\d{2}\)\n\nX lives in b\.ts$/);
   assert.deepEqual(task.files, ["a.ts", "b.ts"]);
-  assert.deepEqual(task.blockedBy, [{ taskNum: 9, reason: "defines X" }]);
+  assert.deepEqual(task.blockedBy, [{ taskNumber: 9, reason: "defines X" }]);
   assert.equal("clarifyRequest" in task, false);
   for (const record of task.run.history) {
     assert.equal("attempts" in record, false);

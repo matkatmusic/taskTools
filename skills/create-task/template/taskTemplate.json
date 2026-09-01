@@ -15,5 +15,5 @@
   "hasTests": <true when the task needs tests written for it, false when the user skips them>,
   "tests": "<the user's example test as prose or pseudocode when hasTests is true; the empty string when it is false>",
   "difficulty": <implementation effort and risk, NOT importance: 1 = typo, comment, or constant edit with no behavior change; 2 = one-line or single-file mechanical change; 3 = one file edited alongside an existing test that already covers it; 4 = contained change to one file plus its test; 5 = a few files in one subsystem, mostly mechanical; 6 = several files in one subsystem, design already settled; 7 = one subsystem plus the callers it forces to change; 8 = crosses subsystems or needs design decisions during implementation; 9 = crosses subsystems with the design still unsettled; 10 = wide blast radius, unclear scope, or a previously reverted attempt>,
-  "blockedBy": [{"taskNum": <task number that must be completed first>, "reason": "<required: why this task depends on it>"}] (one object per blocking task; omit the field entirely if none)
+  "blockedBy": [{"taskNumber": <task number that must be completed first>, "reason": "<required: why this task depends on it>"}] (one object per blocking task; omit the field entirely if none)
 }

@@ -29,7 +29,7 @@ export function produceBlockerHunterPrompt(taskDescription: string, openTaskLine
 
 Read the code each open task touches, not only its title — a blocker can be "the function this task needs does not exist yet", which no title match would catch.
 
-Populate \`blockedBy\` with an array of objects, each shaped \`{ taskNum: <the blocking task's number>, reason: "<required: why this task depends on it>" }\`. An empty array is the correct answer when nothing blocks this task.
+Populate \`blockedBy\` with an array of objects, each shaped \`{ taskNumber: <the blocking task's number>, reason: "<required: why this task depends on it>" }\`. An empty array is the correct answer when nothing blocks this task.
 
 Task described by the user: ${taskDescription}
 

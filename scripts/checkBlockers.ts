@@ -3,7 +3,7 @@ import { leadingTaskNumbers, readTaskFile, resolveTaskFiles } from "./taskFiles.
 
 export function blockerReport(requestedNumbers: number[], projectRoot: string = process.cwd()): {
   requested: number[];
-  openBlockersOf: (n: number) => { taskNum: number; reason: string }[];
+  openBlockersOf: (n: number) => { taskNumber: number; reason: string }[];
   blockerPairs: { blockedTask: number; blockerTask: number; reason: string }[];
   unblockedNumbers: number[];
 } {
@@ -14,8 +14,8 @@ export function blockerReport(requestedNumbers: number[], projectRoot: string = 
   const requested = requestedNumbers.length > 0 ? requestedNumbers : openTasks.map(t => t.taskNumber);
   const openBlockersOf = (n: number) => {
     const task = openTasks.find(t => t.taskNumber === n);
-    const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNum: number; reason: string }[]) : [];
-    return blockedBy.filter(b => openNumbers.has(b.taskNum));
+    const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNumber: number; reason: string }[]) : [];
+    return blockedBy.filter(b => openNumbers.has(b.taskNumber));
   };
   // Depth-first search with an in-progress set: a back edge into a task still "visiting" is a cycle.
   const findCycle = (): number[] | null => {
@@ -25,10 +25,10 @@ export function blockerReport(requestedNumbers: number[], projectRoot: string = 
       state.set(n, "visiting");
       stack.push(n);
       for (const b of openBlockersOf(n)) {
-        const seen = state.get(b.taskNum);
-        if (seen === "visiting") return stack.slice(stack.indexOf(b.taskNum));
+        const seen = state.get(b.taskNumber);
+        if (seen === "visiting") return stack.slice(stack.indexOf(b.taskNumber));
         if (seen !== "done") {
-          const found = visit(b.taskNum);
+          const found = visit(b.taskNumber);
           if (found) return found;
         }
       }
@@ -46,7 +46,7 @@ export function blockerReport(requestedNumbers: number[], projectRoot: string = 
   };
   const cycle = findCycle();
   if (cycle) throw new Error(`cycle detected among open tasks: ${cycle.join(", ")}`);
-  const blockerPairs = requested.flatMap(n => openBlockersOf(n).map(b => ({ blockedTask: n, blockerTask: b.taskNum, reason: b.reason })));
+  const blockerPairs = requested.flatMap(n => openBlockersOf(n).map(b => ({ blockedTask: n, blockerTask: b.taskNumber, reason: b.reason })));
   const unblockedNumbers = requested.filter(n => openBlockersOf(n).length === 0);
   return { requested, openBlockersOf, blockerPairs, unblockedNumbers };
 }

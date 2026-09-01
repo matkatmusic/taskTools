@@ -22,7 +22,7 @@ function makeProjectRoot(tasks: unknown[]): string {
 
 test("test_IS_TASK_BLOCKED_Q_exitsWhenBlockedByNamesAnOpenTask", () => {
     const root = makeProjectRoot([
-        { taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] },
+        { taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] },
         { taskNumber: 2 },
     ]);
     const output = main(packet(1, root));
@@ -32,7 +32,7 @@ test("test_IS_TASK_BLOCKED_Q_exitsWhenBlockedByNamesAnOpenTask", () => {
 });
 
 test("test_IS_TASK_BLOCKED_Q_continuesToIsTaskActiveWhenTheBlockerIsNotOpen", () => {
-    const root = makeProjectRoot([{ taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] }]);
+    const root = makeProjectRoot([{ taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] }]);
     const output = main(packet(1, root));
     assert.equal(output.next, "IS_TASK_ACTIVE_Q");
     assert.equal(output.exitType, "");

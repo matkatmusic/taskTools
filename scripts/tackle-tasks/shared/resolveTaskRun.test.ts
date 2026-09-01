@@ -47,7 +47,7 @@ test("test_resolveTaskRun_writesNothingToTasksJson", () => {
 
 test("test_resolveTaskRun_returnsEveryRequestedTaskNumberIncludingBlockedOnes", () => {
     const root = makeProjectRoot([
-        { taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] },
+        { taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] },
         { taskNumber: 2 },
     ]);
     const output = resolveTaskRun("[1,2]", root);

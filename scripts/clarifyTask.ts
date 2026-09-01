@@ -8,7 +8,7 @@ export type ClarifyAnswer = {
   taskNumber: number;
   answer: string;
   files?: string[];
-  blockedBy?: { taskNum: number; reason: string }[];
+  blockedBy?: { taskNumber: number; reason: string }[];
 };
 
 type HistoryRecord = { attempts?: unknown; countedPasses?: unknown } & Record<string, unknown>;
@@ -42,7 +42,7 @@ export function clarifyTask(input: ClarifyAnswer, projectRoot: string = process.
 function fail(problem: string): never {
   process.stderr.write(
     `clarifyTask: ${problem}\n` +
-      `usage: node clarifyTask.ts <<'CLARIFYEOF'\n{"taskNumber": N, "answer": "...", "files": [...], "blockedBy": [{"taskNum": N, "reason": "..."}]}\nCLARIFYEOF\n`,
+      `usage: node clarifyTask.ts <<'CLARIFYEOF'\n{"taskNumber": N, "answer": "...", "files": [...], "blockedBy": [{"taskNumber": N, "reason": "..."}]}\nCLARIFYEOF\n`,
   );
   process.exit(1);
 }
