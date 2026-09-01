@@ -40,7 +40,8 @@ function runStamp(): string {
 // One folder per run holds packets; a packetFile names its run. RUN_STEP_LOG lets tests move the log, packets follow.
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
 let packetSequence = 0;
-const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}-run-log.json`;
+let currentTaskNumber: number | null = null;
+const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}${currentTaskNumber === null ? "" : `-task-${currentTaskNumber}`}-run-log.json`;
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block; the full suite takes about 2 minutes, and the hook ceiling is 10 minutes.
 const STEP_TIMEOUT_MS = 300_000;
@@ -263,6 +264,7 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, i
 function walkFromStep(startStepKey: string, startInput: string, invocation: string): HookOutput {
     // A packetFile in the input expands to that file; the agent's prompt answer is not block input.
     const startPacket = getPacketFromInput(startInput);
+    if (startPacket.taskNumber !== undefined) currentTaskNumber = Number(startPacket.taskNumber);
     const startedFromPacketFile = typeof startPacket.packetFile === "string";
     if (typeof startPacket.packetFile === "string") {
         if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));

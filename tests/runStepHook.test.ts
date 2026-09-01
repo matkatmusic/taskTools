@@ -695,6 +695,18 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     assert.ok(JSON.parse(readFileSync(join(runsFolder, logName), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::A"));
 });
 
+test("test_runStepHook_namesTheRunLogWithTheTaskNumberWhenInputCarriesOne", () => {
+    // Input naming a taskNumber gets it woven into the log file name: <stamp>-task-<N>-run-log.json.
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { runsFolder, runsEntries } = runHookIn(cwd, `/run-step A ${JSON.stringify({ taskNumber: 42 })}`, configFile);
+    const [stampFolder, logName] = runsEntries();
+    assert.equal(logName, `${stampFolder}-task-42-run-log.json`);
+    assert.ok(existsSync(join(runsFolder, logName)));
+});
+
 test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
     // The run folder name ends with the hook's own pid, so two runs launched the same second land differently.
     const configFile = configWith(writeStep => ({
