@@ -158,13 +158,7 @@
     ],
     "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
     "difficulty": 7,
-    "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit.",
-    "blockedBy": [
-      {
-        "taskNum": 192,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
+    "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit."
   },
   {
     "taskNumber": 164,
@@ -297,95 +291,5 @@
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
-  },
-  {
-    "taskNumber": 192,
-    "version": "ff38df02bfe622ced97013a33f9547c6d0e9748e",
-    "title": "Split each tasks.json entry's files list into readOnlyFiles and modifiableFiles",
-    "userDescription": "split the 'files' list in each tasks.json entry into 'readOnlyFiles' lists and 'modifiableFiles' lists.  Task 94-96 are outdated tasks covering the same problem area in the codebase, which was defined in task 58 (which was split into several subtasks).",
-    "goal": [
-      "- Every entry in tasks.json has readOnlyFiles and modifiableFiles; no entry keeps a files key",
-      "- npm test is green after the change",
-      "- the '.files' field in a tasks.json entry is no longer referenced in the codebase, and is replaced with relevant usage of 'readOnlyFiles' or 'modifiableFiles' in the codebase where prompts and briefs are generated.",
-      "- Not in scope: closing outdated tasks 94, 95, and 96 — they were archived by /close-tasks when this task was created",
-      "- declaredFiles(task) in scripts/taskGroups.ts returns modifiableFiles when the task declares it, files when it does not, and [] when it declares neither, with the two lists never merged",
-      "- readOnlyFilesOf(task) returns [\"*\"] for a task that declares no readOnlyFiles, and the declared list otherwise",
-      "- addTaskFiles appends to whichever key the task already carries, defaulting to files on an unmigrated task, and the stale FILES_KEY comment naming task 58 is gone",
-      "- as the last step before the tasks.json data migration, the close-tasks migration section in skills/close-tasks/SKILL.md is restored verbatim from commit 3be16f7, replacing the DISABLED block"
-    ],
-    "problemSolvedByTask": "A single files list does not say which files a task changes and which it only reads, so agents over-fence or edit the wrong files.",
-    "description": "The `files` key on task entries in `.taskTools/tasks.json` is legacy. `scripts/prepareTasks.ts` already exports `modifiableFiles()`/`readOnlyFiles()` accessors (added by completed task 154) that fall back to `files` and default `readOnlyFiles` to `['*']`, and `scripts/tackle-tasks/shared/preparedTask.ts` already routes through them. But `scripts/taskGroups.ts`'s `declaredFiles()` (the shared accessor every grouping and planning path routes through) still reads `task.files` only, and `scripts/addTaskFiles.ts` still appends under a hardcoded `FILES_KEY = \"files\"` with a stale comment pointing at task 58. This task absorbs that reader work (formerly task 159, now closed and merged in here): repoint `declaredFiles` to read `modifiableFiles` with a fallback to `files` (never merging the two), add a matching `readOnlyFilesOf(task)` that resolves an absent `readOnlyFiles` to `['*']`, repoint `addTaskFiles`'s key resolution to whichever key a task already carries, route every other direct `task.files` reader (`scripts/mergePipeline.ts`, `scripts/splitTask.ts`, `scripts/clarifyTask.ts`, and the tackle-tasks fence/worktree/commit scripts) through the accessors, and restore the close-tasks migration section in `skills/close-tasks/SKILL.md` verbatim from commit `3be16f7`, replacing the DISABLED block — as the last step, after the reader tests pass. Only then does this task perform the actual data migration: for each of the 15 open entries in `.taskTools/tasks.json` that still only have `files`, split that list into `modifiableFiles` and `readOnlyFiles`, then remove the legacy `files` key. Task 58 (completed) originally scoped this problem area and was closed with note \"Split into 93, 94, 95, 96, 97, 98\"; of those, 93/97/98 are completed, and 94/95/96 were already closed as replaced by this task, since they duplicated/overlapped this same problem area.",
-    "files": [
-      ".taskTools/tasks.json",
-      "scripts/taskGroups.ts",
-      "scripts/addTaskFiles.ts",
-      "tests/taskGroups.test.ts",
-      "skills/close-tasks/SKILL.md",
-      "scripts/prepareTasks.ts",
-      "scripts/mergePipeline.ts",
-      "scripts/splitTask.ts",
-      "scripts/clarifyTask.ts",
-      "scripts/tackle-tasks/shared/checkTaskFileFence.ts",
-      "scripts/tackle-tasks/shared/checkResumedWorktreeFence.ts",
-      "scripts/tackle-tasks/shared/commitTaskWork.ts",
-      "scripts/tackle-tasks/shared/createTaskWorktree.ts",
-      "scripts/tackle-tasks/shared/_createFreshTaskWorktree.ts",
-      "tests/prepareTasks.test.ts",
-      "tests/mergePipeline.test.ts",
-      "tests/splitTask.test.ts",
-      "tests/clarifyTask.test.ts",
-      "scripts/tackle-tasks/shared/checkTaskFileFence.test.ts",
-      "scripts/tackle-tasks/shared/commitTaskWork.test.ts",
-      "scripts/tackle-tasks/shared/createTaskWorktree.test.ts",
-      "scripts/taskArchival.ts",
-      "tests/taskArchival.test.ts"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "A test loads tasks.json and asserts every entry has readOnlyFiles and modifiableFiles arrays and no files key.",
-    "difficulty": 4,
-    "run": {
-      "active": false,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-192",
-      "leaseRunId": "a57da9d1-6c99-4315-a64f-558be21e4014",
-      "history": [
-        {
-          "runId": "a57da9d1-6c99-4315-a64f-558be21e4014",
-          "startedAt": "2026-08-31T18:35:06-07:00",
-          "endedAt": "2026-09-01T14:39:46-07:00",
-          "exitType": "plan-scrapped",
-          "exitNote": "codex did not accept the plan in two reviews",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ],
-          "attempts": {
-            "clarify": 1,
-            "planReview": 2
-          },
-          "countedPasses": {
-            "clarify": [
-              "be34d7d4-4b1b-4818-a999-80442451941b"
-            ],
-            "planReview": [
-              "ecddd693-ad1d-49ae-87a7-48a5b5f53a62",
-              "d1d4818b-1ee0-4708-8982-a21d0c9dcd2a"
-            ]
-          }
-        }
-      ]
-    },
-    "clarifyRequest": "Re-confirmed independently by reading scripts/taskArchival.ts and tests/taskArchival.test.ts (both granted via this clarifyRequest's read allowance; neither is in this task's Files list at brief-192.md lines 33-55). archivePublishedTasks in scripts/taskArchival.ts line 67 computes `const declaredFiles = (tasks[index].files as string[] | undefined) ?? [];`, then line 68 throws `archivePublishedTasks: task ${taskNumber} declares no files; refusing to archive` when that list is empty -- no modifiableFiles fallback exists anywhere in the file. tests/taskArchival.test.ts's makeProjectRoot (lines 14-28) writes every fixture task with an explicit `files` key only (lines 19-23), and the test that exercises this throw, 'a fully-published task with no declared files blocks the whole batch, archiving nothing' (lines 130-143), sets `.files = []` directly at line 133 -- no fixture in this file ever declares modifiableFiles, so 'npm test is green after the change' does not exercise the path this task's migration breaks. Once this task's mandated migration removes the files key from every tasks.json entry (required by this task's own Goal -- 'no entry keeps a files key' and '.files is no longer referenced in the codebase'), every tasks[index].files becomes undefined, declaredFiles always resolves to [], and archivePublishedTasks throws for every future archive attempt -- a break this task's own Goal both causes and forbids. The fix is exactly what the prior planning round proposed and this round confirms is mechanical: replace the line-67 read in scripts/taskArchival.ts with the modifiableFiles accessor scripts/prepareTasks.ts already exports at lines 115-118 (`export function modifiableFiles(task: TaskRecord): string[] { if (Array.isArray((task as any).modifiableFiles)) return (task as any).modifiableFiles as string[]; return Array.isArray(task.files) ? (task.files as string[]) : []; }`), and extend tests/taskArchival.test.ts's line-130 test with a second fixture covering a modifiableFiles-only task alongside the existing files-based one. Neither scripts/taskArchival.ts nor tests/taskArchival.test.ts is in this task's Files/modifiableFiles list, and a plan cannot edit a file this task does not own -- this is a task-ownership decision, not something the code can resolve. Please add scripts/taskArchival.ts and tests/taskArchival.test.ts to task 192's modifiableFiles list so the next planning round can write the exact edit.",
-    "codexReviewNotes": "[tasksjson-data-migration] Delete the '## Task 155 — narrow modifiableFiles' edit block entirely. Keep all five paths at .taskTools/tasks.json:365-369 in modifiableFiles unchanged. Change the '## Task 155 — insert readOnlyFiles after line 370' block to insert `\"readOnlyFiles\": [\"scripts/taskGroups.ts\"]` instead of preparedTask.ts, and replace the 'Why this split for task 155' paragraph with: task 155's audit correction says sibling discovery must come from scripts/taskGroups.ts groupTasksByFileOverlap, which this task consults but does not edit; preparedTask.ts stays modifiable because the same audit correction names loadPreparedTask as the loader that must carry blockedBy into the reviewer prompt.\n\nDurable because: The read-only entry is derived from a path the task's own live audit text names as consulted-only, and the edit fence keeps every file the task's goal needs to change, so the merge fence cannot block task 155.\n\n[tasksjson-data-migration] Delete the '## Task 160 — narrow modifiableFiles' edit block entirely. Keep all three paths at .taskTools/tasks.json:608-610 in modifiableFiles unchanged. Change the '## Task 160 — insert readOnlyFiles after line 611' block to insert `\"readOnlyFiles\": [\"*\"]`, and replace the 'Why this split for task 160' paragraph with: the description leaves the per-hunk design open between a pre-session snapshot written by the PostToolUse hook and scripted patch selection, so turn-modified-flag.ts stays modifiable; no reference-only path is named, so readOnlyFiles defaults to the whole project.\n\nDurable because: The fence now matches the task's stated design freedom instead of pre-deciding it, so whichever option task 160's planner picks stays inside its owned files."
   }
 ]
