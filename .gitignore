@@ -14,6 +14,7 @@ plans/implementation-notes-*.md
 **/plans/implementation-diff-*.patch
 **/plans/*.prompt.md
 **/plans/PLAN_THE_TASK.codex-*
+**/plans/checkpoint.json
 .claude/skills/run-task-tests
 .claude/skills/rebase-worktree
 .claude/skills/continue-rebase
