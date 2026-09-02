@@ -11,8 +11,8 @@ export function describeTask(taskNumber: number, openTasks: TaskRecord[], comple
 
 export function listTaskTitles(tag: string, tasks: TaskRecord[]): string[] {
   return tasks.map(t => {
-    const blockedBy = Array.isArray(t.blockedBy) ? (t.blockedBy as { taskNum: number; reason: string }[]) : [];
-    const blockers = blockedBy.length > 0 ? ` [blockedBy: ${blockedBy.map(b => `${b.taskNum} (${b.reason})`).join(", ")}]` : "";
+    const blockedBy = Array.isArray(t.blockedBy) ? (t.blockedBy as { taskNumber: number; reason: string }[]) : [];
+    const blockers = blockedBy.length > 0 ? ` [blockedBy: ${blockedBy.map(b => `${b.taskNumber} (${b.reason})`).join(", ")}]` : "";
     return `${tag} ${t.taskNumber}: ${t.title}${blockers}`;
   });
 }

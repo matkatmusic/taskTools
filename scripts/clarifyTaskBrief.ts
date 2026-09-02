@@ -19,7 +19,7 @@ Then record each answer with one call per task — this is the only permitted wa
 
 \`\`\`
 node "${clarifyTaskPath}" <<'CLARIFYEOF'
-{"taskNumber": N, "answer": "<the answer, markdown allowed>", "files": ["<extra repo-relative paths the answer names>"], "blockedBy": [{"taskNum": N, "reason": "<why>"}]}
+{"taskNumber": N, "answer": "<the answer, markdown allowed>", "files": ["<extra repo-relative paths the answer names>"], "blockedBy": [{"taskNumber": N, "reason": "<why>"}]}
 CLARIFYEOF
 \`\`\`
 

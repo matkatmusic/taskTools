@@ -16,8 +16,8 @@ export function buildBlockerInvestigationPrompt(blockedTask: number, blockerTask
 
 export function stripDisprovenBlocker(tasks: any[], blockedTaskNumber: number, blockerTaskNumber: number, reason: string): number {
   const task = tasks.find(t => t.taskNumber === blockedTaskNumber);
-  const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNum: number; reason: string }[]) : [];
-  const index = blockedBy.findIndex(b => b.taskNum === blockerTaskNumber && b.reason === reason);
+  const blockedBy = Array.isArray(task?.blockedBy) ? (task.blockedBy as { taskNumber: number; reason: string }[]) : [];
+  const index = blockedBy.findIndex(b => b.taskNumber === blockerTaskNumber && b.reason === reason);
   if (index === -1) return BLOCKER_ENTRY_NOT_FOUND;
   const remaining = [...blockedBy.slice(0, index), ...blockedBy.slice(index + 1)];
   if (remaining.length === 0) delete task.blockedBy;

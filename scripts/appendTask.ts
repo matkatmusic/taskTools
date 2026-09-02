@@ -17,7 +17,7 @@ export type NewTaskPayload = {
     files?: string[];
     description?: string;
     difficulty?: number;
-    blockedBy?: { taskNum: number; reason: string }[];
+    blockedBy?: { taskNumber: number; reason: string }[];
     handoffFilePaths?: string[];
 };
 

@@ -25,7 +25,7 @@ test("counts open and completed tasks separately", () => {
 });
 
 test("a task is blocked only by blockers that are still open", () => {
-    const open = [openTask(1, { blockedBy: [{ taskNum: 2, reason: "needs task 2" }] }), openTask(2), openTask(3, { blockedBy: [{ taskNum: 99, reason: "needs task 99" }] })];
+    const open = [openTask(1, { blockedBy: [{ taskNumber: 2, reason: "needs task 2" }] }), openTask(2), openTask(3, { blockedBy: [{ taskNumber: 99, reason: "needs task 99" }] })];
     const stats = computeTaskStats(open, [], TODAY);
     assert.equal(stats.blockedCount, 1);
     assert.equal(stats.unblockedCount, 2);
@@ -88,7 +88,7 @@ test("group forecast joins tasks sharing a file and separates disjoint ones", ()
 test("group forecast excludes blocked tasks and tasks declaring no files", () => {
     const open = [
         openTask(1, { files: ["a.ts"] }),
-        openTask(2, { files: ["b.ts"], blockedBy: [{ taskNum: 1, reason: "needs task 1" }] }),
+        openTask(2, { files: ["b.ts"], blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] }),
         openTask(3),
     ];
     const stats = computeTaskStats(open, [], TODAY);
@@ -152,9 +152,9 @@ test("each parallel command holds at most 6 tasks that share no files", () => {
 test("collapses a diamond blockedBy graph into one chain per sink", () => {
     const open = [
         openTask(1),
-        openTask(2, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
-        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
-        openTask(4, { blockedBy: [{ taskNum: 2, reason: "needs 2" }, { taskNum: 3, reason: "needs 3" }] }),
+        openTask(2, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
+        openTask(3, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
+        openTask(4, { blockedBy: [{ taskNumber: 2, reason: "needs 2" }, { taskNumber: 3, reason: "needs 3" }] }),
     ];
     const stats = computeTaskStats(open, [], TODAY);
     assert.deepEqual(stats.blockerChains, [[[1], [2, 3], [4]]]);
@@ -170,8 +170,8 @@ test("collapses a diamond blockedBy graph into one chain per sink", () => {
 test("two sinks sharing one root produce two chains and one deduplicated fastest sequence", () => {
     const open = [
         openTask(1),
-        openTask(2, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
-        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(2, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
+        openTask(3, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
     ];
     const stats = computeTaskStats(open, [], TODAY);
     assert.deepEqual(stats.blockerChains, [[[1], [2]], [[1], [3]]]);
@@ -191,10 +191,10 @@ test("no blocked tasks produces empty chain data and no chain section in output"
 
 test("a blockedBy cycle behind a genuine sink terminates with a finite chain", () => {
     const open = [
-        openTask(1, { blockedBy: [{ taskNum: 2, reason: "needs 2" }] }),
-        openTask(2, { blockedBy: [{ taskNum: 3, reason: "needs 3" }] }),
-        openTask(3, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
-        openTask(4, { blockedBy: [{ taskNum: 1, reason: "needs 1" }] }),
+        openTask(1, { blockedBy: [{ taskNumber: 2, reason: "needs 2" }] }),
+        openTask(2, { blockedBy: [{ taskNumber: 3, reason: "needs 3" }] }),
+        openTask(3, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
+        openTask(4, { blockedBy: [{ taskNumber: 1, reason: "needs 1" }] }),
     ];
     const stats = computeTaskStats(open, [], TODAY);
     assert.deepEqual(stats.blockerChains, [[[3], [2], [1], [4]]]);

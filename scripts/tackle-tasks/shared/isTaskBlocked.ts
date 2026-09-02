@@ -1,5 +1,4 @@
-// "is task blocked?" — pipeline.mmd. Reuses blockerReport; blockedBy keys on taskNum,
-// never taskNumber.
+// "is task blocked?" — pipeline.mmd. Reuses blockerReport; blockedBy entries use taskNumber.
 import { readFileSync } from "node:fs";
 import { blockerReport } from "../../checkBlockers.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
@@ -7,7 +6,7 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 // The outer `reason` is this task's, worded here once; each blocker carries its own.
 export type IsTaskBlockedOutput = {
     blocked: boolean;
-    blockers: { taskNum: number; reason: string }[];
+    blockers: { taskNumber: number; reason: string }[];
     reason: string | null;
 };
 
@@ -16,7 +15,7 @@ export function isTaskBlocked(taskNumber: number, projectRoot: string): IsTaskBl
     const { openBlockersOf } = blockerReport([taskNumber], projectRoot);
     const blockers = openBlockersOf(taskNumber);
     if (blockers.length === 0) return { blocked: false, blockers, reason: null };
-    return { blocked: true, blockers, reason: `is blocked by ${blockers.map((blocker) => blocker.taskNum).join(", ")}` };
+    return { blocked: true, blockers, reason: `is blocked by ${blockers.map((blocker) => blocker.taskNumber).join(", ")}` };
 }
 
 if (process.argv[1]?.endsWith("isTaskBlocked.ts")) {

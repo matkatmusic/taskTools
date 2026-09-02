@@ -8,7 +8,7 @@ import { skillBody } from "./tackle-tasks/shared/SkillBodyEmitter.ts";
 
 const checkBlockersPath = fileURLToPath(new URL("./checkBlockers.ts", import.meta.url));
 
-type Blocker = { taskNum: number; reason: string };
+type Blocker = { taskNumber: number; reason: string };
 type BlockerReport = { blockedTasks: Map<number, Blocker[]>; unblockedTasks: number[] };
 
 function parseBlockerReport(output: string): BlockerReport {
@@ -55,8 +55,8 @@ for (const n of requested) {
   const blockers = report.blockedTasks.get(n);
   if (!blockers) continue;
   for (const b of blockers) {
-    blockedLines.push(`[${n}] blocked by: ${b.taskNum}: ${b.reason}`);
-    if (!blockerNumbers.includes(b.taskNum)) blockerNumbers.push(b.taskNum);
+    blockedLines.push(`[${n}] blocked by: ${b.taskNumber}: ${b.reason}`);
+    if (!blockerNumbers.includes(b.taskNumber)) blockerNumbers.push(b.taskNumber);
   }
 }
 

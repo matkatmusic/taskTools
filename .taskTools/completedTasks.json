@@ -1540,11 +1540,11 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 62,
+        "taskNumber": 62,
         "reason": "reason not recorded (migrated from legacy blockedBy format)"
       },
       {
-        "taskNum": 70,
+        "taskNumber": 70,
         "reason": "reason not recorded (migrated from legacy blockedBy format)"
       }
     ],
@@ -1735,7 +1735,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 133,
+        "taskNumber": 133,
         "reason": "133 finishes the plan stage of task.workflow.js that this task extends; both edit the same file"
       }
     ],
@@ -1759,7 +1759,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 136,
+        "taskNumber": 136,
         "reason": "136 finishes the plan stage review loop in task.workflow.js that this task builds on; both edit the same file"
       }
     ],
@@ -1782,7 +1782,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 138,
+        "taskNumber": 138,
         "reason": "138 finishes the implement stage and fence check in task.workflow.js that this task builds on; both edit the same file"
       }
     ],
@@ -1807,7 +1807,7 @@
     "difficulty": 8,
     "blockedBy": [
       {
-        "taskNum": 141,
+        "taskNumber": 141,
         "reason": "141 finishes the orchestrator and approval gate in tackleTasksBrief.ts that this task builds on"
       }
     ],
@@ -1830,7 +1830,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 144,
+        "taskNumber": 144,
         "reason": "144 finishes the per-task merge primitive this task builds the retry queue around"
       }
     ],
@@ -1854,7 +1854,7 @@
     "difficulty": 8,
     "blockedBy": [
       {
-        "taskNum": 146,
+        "taskNumber": 146,
         "reason": "146 finishes the rebase-test stage and full-suite gate this task queues around"
       }
     ],
@@ -1876,7 +1876,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 149,
+        "taskNumber": 149,
         "reason": "149 finishes the merge queue exit and failure report this task acts on"
       }
     ],
@@ -1920,7 +1920,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 131,
+        "taskNumber": 131,
         "reason": "prepareTasks must create the per-task worktree and branch this workflow file runs inside"
       }
     ],
@@ -1945,7 +1945,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 132,
+        "taskNumber": 132,
         "reason": "creates the task.workflow.js dispatcher whose plan stage this task fills in; both edit the same file"
       }
     ],
@@ -1969,7 +1969,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 133,
+        "taskNumber": 133,
         "reason": "133 finishes the plan stage of task.workflow.js that this task extends; both edit the same file"
       }
     ],
@@ -1992,7 +1992,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 134,
+        "taskNumber": 134,
         "reason": "134 adds the verify agent and VERIFY_SCHEMA this loop applies feedback from; both edit the same file"
       }
     ],
@@ -2015,7 +2015,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 135,
+        "taskNumber": 135,
         "reason": "135 builds the three-round loop and round counter this widening consumes a round from; both edit the same file"
       }
     ],
@@ -2040,7 +2040,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 136,
+        "taskNumber": 136,
         "reason": "136 finishes the plan stage of task.workflow.js that the implement stage consumes; both edit the same file"
       }
     ],
@@ -2062,7 +2062,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 137,
+        "taskNumber": 137,
         "reason": "137 adds the implement stage and its commit, which this fence check runs against; both edit the same file"
       }
     ],
@@ -2086,7 +2086,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 138,
+        "taskNumber": 138,
         "reason": "138 finishes the implement stage and fence check in task.workflow.js that this orchestrator launches"
       }
     ],
@@ -2110,7 +2110,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 139,
+        "taskNumber": 139,
         "reason": "139 rewrites the launch shape this concurrency policy applies to; both edit the same two files"
       }
     ],
@@ -2133,7 +2133,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 140,
+        "taskNumber": 140,
         "reason": "140 finishes the parallel launch policy this gate closes; both edit the same two files"
       }
     ],
@@ -2159,7 +2159,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 141,
+        "taskNumber": 141,
         "reason": "141 finishes the approval gate; nothing in the serial tail may run before the user approves"
       }
     ],
@@ -2185,7 +2185,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 142,
+        "taskNumber": 142,
         "reason": "142 rebases the submodule branches whose commits this parent rebase resolves gitlinks to; both edit the same two files"
       }
     ],
@@ -2212,7 +2212,7 @@
     "difficulty": 7,
     "blockedBy": [
       {
-        "taskNum": 143,
+        "taskNumber": 143,
         "reason": "143 rebases the parent branch and resolves its gitlinks; this merge lands those rebased branches. Both edit the same files"
       }
     ],
@@ -2244,7 +2244,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 144,
+        "taskNumber": 144,
         "reason": "144 finishes the per-task rebase and merge primitive whose conflicts this stage resolves"
       }
     ],
@@ -2270,7 +2270,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 145,
+        "taskNumber": 145,
         "reason": "145 creates the rebase-test stage and clears conflicts before this gate can run; both edit the same file"
       }
     ],
@@ -2296,7 +2296,7 @@
     "difficulty": 7,
     "blockedBy": [
       {
-        "taskNum": 146,
+        "taskNumber": 146,
         "reason": "146 finishes the rebase-test stage and full-suite gate this queue calls per task"
       }
     ],
@@ -2319,7 +2319,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 147,
+        "taskNumber": 147,
         "reason": "147 writes the queue and lap loop this exit condition is layered on top of; both edit the same two files"
       }
     ],
@@ -2342,7 +2342,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 148,
+        "taskNumber": 148,
         "reason": "148 defines the zero-merge-lap exit this report is emitted at; both edit the same two files"
       }
     ],
@@ -2366,7 +2366,7 @@
     "difficulty": 3,
     "blockedBy": [
       {
-        "taskNum": 149,
+        "taskNumber": 149,
         "reason": "149 finishes the merge queue and its failure report; this cleanup runs inside that queue's success path"
       }
     ],
@@ -2390,7 +2390,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 150,
+        "taskNumber": 150,
         "reason": "150 deletes the plan and brief into the same worktree commit this merge lands; both edit the merge stage"
       }
     ],
@@ -2415,7 +2415,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 151,
+        "taskNumber": 151,
         "reason": "151 performs the merge whose commit hash this close is gated on"
       }
     ],
@@ -2441,7 +2441,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 152,
+        "taskNumber": 152,
         "reason": "152 adds the direct closeTasks call that this failure guarantee must prevent from running"
       }
     ],
@@ -2569,7 +2569,7 @@
     "difficulty": 8,
     "blockedBy": [
       {
-        "taskNum": 166,
+        "taskNumber": 166,
         "reason": "C86-01 changes how the launch path and workflow consume the manifest's branch fields; fixing the branch identity first would be written against plumbing that is about to move"
       }
     ],
@@ -2601,7 +2601,7 @@
     "difficulty": 3,
     "blockedBy": [
       {
-        "taskNum": 167,
+        "taskNumber": 167,
         "reason": "the user placed this after C86-02 in the audit chain; C86-02 reworks the same merge/rebase branch plumbing this continuation runs inside"
       }
     ],
@@ -2637,7 +2637,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 168,
+        "taskNumber": 168,
         "reason": "the merge stage must be able to finish at all before a queue-termination fix can be verified end to end; C86-03 leaves it hanging"
       }
     ],
@@ -2673,7 +2673,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 169,
+        "taskNumber": 169,
         "reason": "C86-04 gives the queue a real all-work-complete terminal state; both findings rewrite the same next-action branch in the generated driver, so landing 169 first avoids writing this gate against wording that is about to change"
       }
     ],
@@ -2710,7 +2710,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 170,
+        "taskNumber": 170,
         "reason": "C86-05 rewrites the next-action logic in the same generated driver step; landing it first keeps two tasks from rewriting the same driver-generation lines out of order"
       }
     ],
@@ -2748,7 +2748,7 @@
     "difficulty": 7,
     "blockedBy": [
       {
-        "taskNum": 171,
+        "taskNumber": 171,
         "reason": "C86-06 defines one documented result type per stage; the typed failure results here must be written against that settled envelope, not against the one it is about to replace"
       }
     ],
@@ -2785,7 +2785,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 172,
+        "taskNumber": 172,
         "reason": "the user placed this after C86-07 in the audit chain; 172 settles the failure-result contract that the widen path reports through"
       }
     ],
@@ -2818,7 +2818,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 173,
+        "taskNumber": 173,
         "reason": "C86-08 routes addTaskFiles through the hash-guarded protocol; this fix must be written against that guarded writer, which is the other side of the race it repairs"
       }
     ],
@@ -2853,7 +2853,7 @@
     "difficulty": 5,
     "blockedBy": [
       {
-        "taskNum": 174,
+        "taskNumber": 174,
         "reason": "the user placed this after C86-09 in the audit chain; both land in the close-and-cleanup path, so serialising them avoids overlapping edits"
       }
     ],
@@ -2886,7 +2886,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 175,
+        "taskNumber": 175,
         "reason": "C86-10 also edits the worktree and branch cleanup logic in mergeTaskWorktrees.ts; serialising them avoids overlapping edits to the same file"
       }
     ],
@@ -2921,7 +2921,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 176,
+        "taskNumber": 176,
         "reason": "C86-11 makes task-N worktrees discoverable/recoverable via --discover; this fix's retention/recovery behavior should be written against that discovery path rather than duplicating it"
       }
     ],
@@ -2958,7 +2958,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 177,
+        "taskNumber": 177,
         "reason": "the user placed this after C86-12 in the audit chain; both change what preparation and rebase-test do to a task's worktree before merge"
       }
     ],
@@ -2994,7 +2994,7 @@
     "difficulty": 6,
     "blockedBy": [
       {
-        "taskNum": 178,
+        "taskNumber": 178,
         "reason": "C86-13 edits the same rebase/merge region of mergeTaskWorktrees.ts and task.workflow.js; serialising them avoids overlapping edits"
       }
     ],
@@ -3031,7 +3031,7 @@
     "difficulty": 7,
     "blockedBy": [
       {
-        "taskNum": 179,
+        "taskNumber": 179,
         "reason": "end-to-end coverage exercises the merged-but-not-closed retry path, so C86-14's merge-hash correctness must land before these scenarios can assert the right outcome"
       }
     ],
@@ -3065,7 +3065,7 @@
     "difficulty": 2,
     "blockedBy": [
       {
-        "taskNum": 180,
+        "taskNumber": 180,
         "reason": "the user placed this after C86-15 in the audit chain; both touch the brief and its byte-for-byte assertions"
       }
     ],
@@ -3103,7 +3103,7 @@
     "difficulty": 2,
     "blockedBy": [
       {
-        "taskNum": 182,
+        "taskNumber": 182,
         "reason": "the user placed this after C86-16 in the audit chain; it is the final finding and closes the chain out"
       }
     ],
@@ -3261,7 +3261,7 @@
     "difficulty": 3,
     "blockedBy": [
       {
-        "taskNum": 165,
+        "taskNumber": 165,
         "reason": "161 deletes the ref by the name 165 defines; landing 165 first avoids writing the deletion against a name that is about to change"
       }
     ],
@@ -3370,7 +3370,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 62,
+        "taskNumber": 62,
         "reason": "reason not recorded (migrated from legacy blockedBy format)"
       }
     ],
@@ -3394,7 +3394,7 @@
     "difficulty": 2,
     "blockedBy": [
       {
-        "taskNum": 107,
+        "taskNumber": 107,
         "reason": "unexcluding tasks.json makes the injected diff larger, and today that diff lands in the main agent's context via the skill body before reaching the subagent; task 107 moves the injection into the subagent's own prompt first, so this change adds bytes to the subagent rather than to the orchestrator"
       }
     ],
@@ -3533,7 +3533,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 93,
+        "taskNumber": 93,
         "reason": "Consumes the readOnlyFiles field that task 93 adds to the PreparedTask interface and construction site, and imports the exported accessor that supplies the ['*'] default rather than re-implementing it."
       }
     ],
@@ -4111,7 +4111,7 @@
     "difficulty": 4,
     "blockedBy": [
       {
-        "taskNum": 185,
+        "taskNumber": 185,
         "reason": "skipping plan review is only safe once 185's audit-loop code review exists to catch a bad implementation that the skipped plan review would have caught"
       }
     ],
