@@ -367,15 +367,22 @@ test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
 test("test_selectRequestedTasksRefusesTasksWithNoFilesArray", () => {
     // Setup: task 1 declares files, task 2 has no files key at all; both are requested.
     const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2 }];
-    // Verification: the run stops and names only the undeclared task.
-    assert.throws(() => selectRequestedTasks(openTasks, [1, 2]), /\b2\b/);
+    // Verification: the run stops, names only the undeclared task, and points at modifiableFiles, never the legacy "files" key.
+    let message = "";
+    try { selectRequestedTasks(openTasks, [1, 2]); } catch (error) { message = (error as Error).message; }
+    assert.match(message, /\b2\b/);
+    assert.match(message, /"modifiableFiles"/);
+    assert.doesNotMatch(message, /"files"/);
 });
 
 test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
     // Setup: task 1 carries an explicitly empty files array.
     const openTasks = [{ taskNumber: 1, files: [] }];
-    // Verification: an empty array is refused like a missing one — no ownership fence.
-    assert.throws(() => selectRequestedTasks(openTasks, [1]), /files/i);
+    // Verification: an empty array is refused like a missing one; message names modifiableFiles, never "files".
+    let message = "";
+    try { selectRequestedTasks(openTasks, [1]); } catch (error) { message = (error as Error).message; }
+    assert.match(message, /"modifiableFiles"/);
+    assert.doesNotMatch(message, /"files"/);
 });
 
 test("test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask", () => {
@@ -393,8 +400,10 @@ test("test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists
     // Test action: capture the refusal message.
     let message = "";
     try { selectRequestedTasks(openTasks, [7]); } catch (error) { message = (error as Error).message; }
-    // Verification: message names update-task-files, and its SKILL.md exists, so the pointer can't rot.
+    // Verification: message names update-task-files and modifiableFiles, never "files"; the SKILL.md still exists.
     assert.match(message, /update-task-files/);
+    assert.match(message, /"modifiableFiles"/);
+    assert.doesNotMatch(message, /"files"/);
     assert.ok(existsSync(join(import.meta.dirname, "..", "skills", "update-task-files", "SKILL.md")));
 });
 

@@ -1,5 +1,6 @@
 // Groups tasks by shared file paths so disjoint groups can run in parallel. No-file tasks share one "unknown" group.
 import type { TaskRecord } from "./taskFiles.ts";
+import { modifiableFiles, readOnlyFiles } from "./prepareTasks.ts";
 import { buildCanonicalTaskGroups } from "./canonicalTaskGroups.ts";
 import type { RepositoryManifest } from "./repositoryManifest.ts";
 
@@ -13,7 +14,11 @@ export type TaskGroup = {
 };
 
 export function declaredFiles(task: TaskRecord): string[] {
-    return Array.isArray(task.files) ? (task.files as string[]) : [];
+    return modifiableFiles(task);
+}
+
+export function readOnlyFilesOf(task: TaskRecord): string[] {
+    return readOnlyFiles(task);
 }
 
 // Manifest-free fallback for taskStats.ts: groups by exact shared file paths, files-less tasks share "unknown".

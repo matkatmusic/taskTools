@@ -1,5 +1,6 @@
 // Archives fully-published tasks from an explicit list; task 31's approvalGate.ts already gates this, so no re-prompt.
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "./taskFiles.ts";
+import { modifiableFiles } from "./prepareTasks.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
 export type RepoPublishStatus = "published" | "conflicted" | "skipped" | "rolled-back";
@@ -64,7 +65,7 @@ export function archivePublishedTasks(
         for (const taskNumber of candidates) {
             const index = tasks.findIndex((task) => task.taskNumber === taskNumber);
             if (index === -1) throw new Error(`archivePublishedTasks: task ${taskNumber} is fully published but missing from tasks.json`);
-            const declaredFiles = (tasks[index].files as string[] | undefined) ?? [];
+            const declaredFiles = modifiableFiles(tasks[index]);
             if (declaredFiles.length === 0) throw new Error(`archivePublishedTasks: task ${taskNumber} declares no files; refusing to archive`);
             const commitHashes = resultsByTask.get(taskNumber)!.repos
                 .filter((repo) => repo.status === "published" && repo.commitHash)

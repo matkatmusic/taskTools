@@ -1,21 +1,8 @@
-// "create a worktree" — plans/tackle-tasks-v1_5-plan.md Phase 3.
-//
-// F11: createWorktreeForGroup creates the real git worktree and takes its lease before this
-// function can record task.run.worktree/leaseRunId. If that recording write fails, the
-// conventional path would otherwise hold an unrecorded worktree and lease that
-// doesTaskWorktreeExist can never see (it only trusts task state) and that nothing would
-// ever release. So: journal the create intent first, before either the worktree creation or
-// the state recording. On failure of either, roll back under the lease guard: re-read the
-// physical owner, and only if it is still this runId (or already gone) remove the worktree
-// and branch, release the lease last, then delete the journal. A different live owner is
-// never touched — the worktree, branch and journal are all left exactly as found, and the
-// mismatch is reported. If the destructive rollback itself fails, the journal is left in
-// place — its shape is the exact receipt Phase 8 reconciliation needs to finish recording a
-// completed creation or safely undo an incomplete one; see taskWorktreeCreateJournalPath below.
+// F11: journals intent before creating the worktree, so failures roll back safely and Phase 8 can recover.
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-    createWorktreeForGroup, readTaskWorktreeLeaseOwner, resolveTaskWorktreeConventionDirectory,
+    createWorktreeForGroup, modifiableFiles, readTaskWorktreeLeaseOwner, resolveTaskWorktreeConventionDirectory,
     taskWorktreeLeasePath, withTaskWorktreeLeaseGuard,
 } from "../../prepareTasks.ts";
 import { removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
@@ -32,15 +19,7 @@ export function taskBranchName(taskNumber: number): string {
 
 export type CreateTaskWorktreeOutput = { worktree: string; branch: string };
 
-// The durable F11 receipt. Written before the git worktree is created, deleted once
-// task.run.worktree/leaseRunId is either recorded or fully rolled back. If it survives, Phase 8
-// reconciliation should: read the physical lease at taskWorktreeLeasePath(worktreePath); if it
-// still names journal.runId AND task.run.worktree/leaseRunId for journal.taskNumber already
-// match journal.worktreePath/runId, the creation completed after all and the journal is stale
-// (delete it); otherwise the creation never finished — remove the worktree/branch at
-// journal.worktreePath and release its lease with journal.runId, then delete the journal. Never
-// touch a worktree/lease at the conventional path whose lease does not name journal.runId — the
-// conventional path alone never proves ownership.
+// F11 journal: written before worktree creation, deleted once recorded or rolled back; guides Phase 8 recovery if left behind.
 export type TaskWorktreeCreateJournal = {
     taskNumber: number;
     runId: string;
@@ -53,28 +32,21 @@ export function taskWorktreeCreateJournalPath(worktreePath: string): string {
     return `${worktreePath}.create-journal.json`;
 }
 
-// Test-only fault injection, unset in production: forces the physical lease to a different
-// owner just before rollback re-reads it, so tests can exercise the "another owner holds it
-// now" refusal. See tests/createTaskWorktree.test.ts.
+// Test-only: forces the lease to a different owner before rollback re-reads it, to test the ownership refusal path.
 const ROLLBACK_CORRUPT_LEASE_ENV = "CREATETASKWORKTREE_TEST_CORRUPT_LEASE_BEFORE_ROLLBACK";
 function corruptLeaseForTest(worktreePath: string): void {
     if (process.env[ROLLBACK_CORRUPT_LEASE_ENV] !== "1") return;
     writeFileSync(taskWorktreeLeasePath(worktreePath), JSON.stringify({ runId: "test-rollback-saboteur", pid: 1, createdAt: 1 }));
 }
 
-// Test-only fault injection, unset in production: forces the rollback's own worktree/branch
-// removal to fail, so tests can exercise the "removal failed, lease retained" path.
+// Test-only: forces rollback's worktree/branch removal to fail, to test the removal-failed lease-retained path.
 const ROLLBACK_FORCE_REMOVAL_FAILURE_ENV = "CREATETASKWORKTREE_TEST_FORCE_REMOVAL_FAILURE";
 function forceRemovalFailureForTest(): void {
     if (process.env[ROLLBACK_FORCE_REMOVAL_FAILURE_ENV] !== "1") return;
     throw new Error("test-forced worktree removal failure");
 }
 
-// F11: ownership-checked, destructive-last rollback. Re-reads the physical lease under the
-// lease guard and only removes the worktree/branch (and releases the lease, last) if that
-// owner is still this run or already gone. A different live owner is never touched. The
-// journal is deleted only once both the worktree/branch and the lease are gone; otherwise it
-// is retained with enough data for Phase 8 reconciliation to finish the job.
+// F11 rollback: removes worktree/lease only if still owned by this run; otherwise retains the journal for Phase 8.
 function rollbackCreateTaskWorktree(
     projectRoot: string,
     journal: TaskWorktreeCreateJournal,
@@ -121,18 +93,7 @@ function rollbackCreateTaskWorktree(
     throw originalErr;
 }
 
-// F1: recovery for a journal retained by an earlier, interrupted call to this same function -
-// the mutating repair the Phase 8 reconciliation-table row for createTaskWorktree depends on.
-// Read under the lease guard so a concurrent recovery/rollback can never race this one. A
-// physical lease naming neither the journal's run nor nobody is a live third owner: never
-// touched, never inferred safe from the conventional path alone. A journal naming a run other
-// than the one requesting recovery is also never touched - it is not this call's to finish or
-// roll back. Otherwise: only when BOTH task state and the physical lease name the journal's run
-// is the creation proved finished late (delete the stale journal and return the already-created
-// worktree); task state matching with no physical lease is an unproven inconsistency and is
-// refused rather than destroyed; anything else means it never finished (remove the journal-owned
-// worktree/branch first, release its lease last, then delete the journal, then let the caller
-// create afresh).
+// F1 recovery: resumes or rolls back a retained journal under the lease guard, trusting only run and lease together.
 function recoverRetainedCreateJournal(
     projectRoot: string, taskNumber: number, runId: string, expectedWorktreePath: string, branch: string, journalPath: string,
 ): CreateTaskWorktreeOutput | null {
@@ -160,9 +121,7 @@ function recoverRetainedCreateJournal(
                 + `lease is now held by run "${owner.runId}"; refusing to touch it`,
             );
         }
-        // F1 remediation: a journal naming a different run than this call is not this call's to
-        // finish, roll back, or destroy - only the run that owns it (or reconciliation acting on
-        // its behalf) may resolve it.
+        // F1: a journal owned by a different run is not this call's to finish, roll back, or destroy.
         if (journal.runId !== runId) {
             throw new Error(
                 `retained creation journal at "${journalPath}" names run "${journal.runId}", not the requested `
@@ -176,10 +135,7 @@ function recoverRetainedCreateJournal(
         const state = task?.run;
         const stateMatchesJournal = state?.worktree === journal.worktreePath && state?.leaseRunId === journal.runId;
 
-        // Both authority records - task state AND the physical lease - must name this exact run
-        // before the creation is trusted as finished late. Task state alone is not proof: it can
-        // agree with the journal while the physical lease is absent, an inconsistency that is
-        // refused rather than silently adopted or destroyed.
+        // Task state and the physical lease must both name this run before the creation counts as finished.
         if (stateMatchesJournal && owner !== null) {
             unlinkSync(journalPath);
             recovered = { worktree: journal.worktreePath, branch: journal.branch };
@@ -214,7 +170,7 @@ export function createTaskWorktree(taskNumber: number, runId: string, projectRoo
     const group: TaskGroup = {
         groupId: taskNumber,
         taskNumbers: [taskNumber],
-        filePaths: Array.isArray(task.files) ? (task.files as string[]) : [],
+        filePaths: modifiableFiles(task),
         scope: "declared",
     };
     const journal: TaskWorktreeCreateJournal = {

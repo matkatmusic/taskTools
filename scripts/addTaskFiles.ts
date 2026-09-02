@@ -5,7 +5,7 @@ import { leadingTaskNumbers, resolveTaskFiles, taskFilesProjectRoot, type TaskRe
 import { resolveRunArgumentsPath } from "./prepareTasks.ts";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 
-const FILES_KEY = "files" as const; // repoint here if task 58 splits files into modifiableFiles/readOnlyFiles
+// const FILES_KEY = "files" as const; // retired by task 192: each reader resolves the key per task
 
 // Repo-relative only: blocks a planner-reported path from escaping the ownership boundary.
 function rejectionReason(path: string): string | null {
@@ -26,7 +26,8 @@ function firstRejectedPath(paths: string[]): string | null {
 }
 
 function appendFiles(task: TaskRecord, paths: string[]): void {
-    const existing = Array.isArray(task[FILES_KEY]) ? (task[FILES_KEY] as string[]) : [];
+    const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files";
+    const existing = Array.isArray(task[key]) ? (task[key] as string[]) : [];
     const seen = new Set(existing);
     const merged = [...existing];
     for (const path of paths) {
@@ -34,13 +35,16 @@ function appendFiles(task: TaskRecord, paths: string[]): void {
         seen.add(path);
         merged.push(path);
     }
-    task[FILES_KEY] = merged;
+    task[key] = merged;
 }
 
 export type RunArgumentsSnapshot = { groups: { tasks: { number: number; files: string[] }[] }[] } & Record<string, unknown>;
 
 export function refreshRunArgumentsSnapshotInMemory(snapshot: RunArgumentsSnapshot, tasks: TaskRecord[]): void {
-    const filesByNumber = new Map(tasks.map((task) => [task.taskNumber, (task[FILES_KEY] as string[] | undefined) ?? []]));
+    const filesByNumber = new Map(tasks.map((task) => {
+        const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files";
+        return [task.taskNumber, (task[key] as string[] | undefined) ?? []];
+    }));
     for (const group of snapshot.groups) {
         for (const task of group.tasks) {
             const widened = filesByNumber.get(task.number);

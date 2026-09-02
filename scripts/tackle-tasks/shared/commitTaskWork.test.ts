@@ -75,6 +75,24 @@ test("test_commitTaskWork_commitsDeepestFirstAndBumpsTheParentGitlink", () => {
     assert.match(parentDiffStat, /root-widget\.txt/);
 });
 
+test("test_commitTaskWork_stagesAnOwnedPathDeclaredUnderModifiableFilesInsteadOfLegacyFiles", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const taskNumber = 9004;
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    mkdirSync(join(tasksPath, ".."), { recursive: true });
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "modern task", modifiableFiles: ["modern-widget.txt"] }]);
+    claimTask(taskNumber, "run-1", rootOrigin);
+
+    writeFileSync(join(worktreePath, "modern-widget.txt"), "modern widget\n");
+
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
+
+    assert.equal(result.commits.length, 1);
+    const diffStat = git(worktreePath, "show", "--stat", result.commits[0].hash);
+    assert.match(diffStat, /modern-widget\.txt/);
+});
+
 test("test_commitTaskWork_returnsNoCommitsWhenEveryLayerIsClean", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);

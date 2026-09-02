@@ -22,6 +22,7 @@ function makeProjectRoot(): string {
         { runId: "r2", attempts: { clarify: 2 }, countedPasses: { clarify: ["p2", "p3"] } },
       ] } },
     { taskNumber: 2, title: "no question", description: "body" },
+    { taskNumber: 3, title: "already migrated", description: "body3", modifiableFiles: ["m.ts"], clarifyRequest: "where is Y?" },
   ];
   writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify(tasks, null, 2) + "\n");
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
@@ -59,4 +60,12 @@ test("test_clarifyTaskScriptReadsTheAnswerFromStdin", () => {
   const out = execFileSync("node", [scriptPath], { cwd: root, encoding: "utf8", input: JSON.stringify({ taskNumber: 1, answer: "via stdin" }) });
   assert.match(out, /^answered task 1; files: \["a\.ts"\]; blockedBy: \[\]; run attempts cleared; checkpoint removed\n$/);
   assert.match(readTasks(root)[0].description, /via stdin$/);
+});
+
+test("test_clarifyTaskWidensModifiableFilesWhenTheTaskAlreadyCarriesThatKeyInsteadOfCreatingAFilesKey", () => {
+  const root = makeProjectRoot();
+  clarifyTask({ taskNumber: 3, answer: "Y lives in n.ts", files: ["n.ts", "m.ts"] }, root);
+  const task = readTasks(root)[2];
+  assert.deepEqual(task.modifiableFiles, ["m.ts", "n.ts"]);
+  assert.equal("files" in task, false);
 });

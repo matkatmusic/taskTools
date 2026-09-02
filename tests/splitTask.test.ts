@@ -270,6 +270,50 @@ test("findSplitCandidates lists open tasks qualifying on difficulty or file coun
     assert.equal(task12.fileCount, 5);
 });
 
+test("findSplitCandidates counts modifiableFiles when a task declares it instead of legacy files", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 50, title: "Migrated wide task", difficulty: 1, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] }], []);
+    const candidates = findSplitCandidates(root);
+    assert.deepEqual(candidates.map((c) => c.taskNumber), [50]);
+    assert.equal(candidates[0].fileCount, 4);
+});
+
+test("verifyChildFiles passes when the child declares modifiableFiles matching its assigned group", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 70, title: "Modern child", modifiableFiles: ["x.ts", "y.ts"] }], []);
+    assert.doesNotThrow(() => verifyChildFiles(70, ["x.ts", "y.ts"], root));
+});
+
+test("closeParentTask validates against the parent's modifiableFiles when it has no legacy files key", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(
+        root,
+        [
+            { taskNumber: 80, title: "Modern parent", modifiableFiles: ["p.ts", "q.ts"] },
+            { taskNumber: 81, title: "Child A", files: ["p.ts"] },
+            { taskNumber: 82, title: "Child B", files: ["q.ts"] },
+        ],
+        [],
+    );
+    const result = closeParentTask(80, 2, [81, 82], [["p.ts"], ["q.ts"]], root);
+    assert.deepEqual(result.closed, [80]);
+});
+
+test("runInfo partitions the parent's modifiableFiles when it has no legacy files key", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 90, title: "Modern parent", modifiableFiles: ["r.ts", "s.ts"] }], []);
+    let printed = "";
+    const originalLog = console.log;
+    console.log = (msg: string) => { printed = msg; };
+    try {
+        runInfo("90", "2", root);
+    } finally {
+        console.log = originalLog;
+    }
+    const output = JSON.parse(printed);
+    assert.deepEqual(output.fileGroups, [["r.ts"], ["s.ts"]]);
+});
+
 test("runInfo throws a usage message when numSplits is omitted", () => {
     assert.throws(
         () => runInfo("189", undefined as unknown as string),
