@@ -31,10 +31,11 @@ export function main(input: string): EntryPacket & { next: string } {
     if (!isTaskNumberValid(taskNumber, projectRoot).valid) {
         return { ...packet, exitType: "invalid-number", exitNote: "task number is not in tasks.json", next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
     }
-    const difficulty = Number(execFileSync("jq", [`.[] | select(.taskNumber == ${taskNumber}) | .difficulty`, resolve(tasksFile)], { encoding: "utf8" }).trim());
-    if (difficulty > 6) {
-        return { ...packet, exitType: "too-difficult", exitNote: `difficulty ${difficulty} is above 6; run /split-task ${taskNumber}`, next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
-    }
+    // Retired: difficulty 7+ now reaches PLAN_THE_TASK, which hands the plan to codex.
+    // const difficulty = Number(execFileSync("jq", [`.[] | select(.taskNumber == ${taskNumber}) | .difficulty`, resolve(tasksFile)], { encoding: "utf8" }).trim());
+    // if (difficulty > 6) {
+    //     return { ...packet, exitType: "too-difficult", exitNote: `difficulty ${difficulty} is above 6; run /split-task ${taskNumber}`, next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
+    // }
     return { ...packet, next: "IS_TASK_BLOCKED_Q" };
 }
 

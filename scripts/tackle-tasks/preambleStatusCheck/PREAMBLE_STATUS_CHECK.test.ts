@@ -24,6 +24,14 @@ test("test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenTheTaskIsInTasksJso
     });
 });
 
+test("test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenDifficultyIsAbove6", () => {
+    // A difficulty-7 task must reach PLAN_THE_TASK, which hands difficulty 7+ to codex.
+    const tasksFile = makeTasksFile([{ taskNumber: 7, difficulty: 7 }]);
+    const output = main(JSON.stringify({ taskNumber: 7, tasksFile }));
+    assert.equal(output.exitType, "");
+    assert.equal(output.next, "IS_TASK_BLOCKED_Q");
+});
+
 test("test_PREAMBLE_STATUS_CHECK_exitsWhenTheTaskNumberIsNotInTasksJson", () => {
     const tasksFile = makeTasksFile([{ taskNumber: 1 }]);
     const output = main(JSON.stringify({ taskNumber: 999, tasksFile }));

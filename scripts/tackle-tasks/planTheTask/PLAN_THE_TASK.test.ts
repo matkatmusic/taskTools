@@ -52,10 +52,18 @@ test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () 
 
     main(packet);
 
+    // Codex outruns one Bash() call: the script holds the command, the prompt starts and polls it.
     const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+    const runScript = join(worktree, "plans", "PLAN_THE_TASK.codex-run.sh");
+    const doneFile = join(worktree, "plans", "PLAN_THE_TASK.codex-done");
     const promptFileContents = readFileSync(promptFile, "utf8");
-    assert.match(promptFileContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
     assert.match(promptFileContents, /You are spawning a plan agent running in the CLI\./);
+    assert.ok(promptFileContents.includes(`setsid nohup sh ${runScript} >/dev/null 2>&1 </dev/null &`));
+    assert.ok(promptFileContents.includes(`[ -f ${doneFile} ]`));
+    assert.doesNotMatch(promptFileContents, /codex exec/);
+    const runScriptContents = readFileSync(runScript, "utf8");
+    assert.match(runScriptContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
+    assert.ok(runScriptContents.includes(`echo $? >${doneFile}`));
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

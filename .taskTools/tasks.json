@@ -179,16 +179,16 @@
     "difficulty": 7,
     "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit.",
     "run": {
-      "active": false,
+      "active": true,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-160",
-      "leaseRunId": "f8cf8346-82ff-45f3-846d-0fff370af04e",
+      "leaseRunId": "b40cfebb-55b3-41b7-9f44-3758d33d656b",
       "history": [
         {
-          "runId": "f8cf8346-82ff-45f3-846d-0fff370af04e",
-          "startedAt": "2026-09-02T09:02:03-07:00",
-          "endedAt": "2026-09-02T09:09:15-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "runId": "b40cfebb-55b3-41b7-9f44-3758d33d656b",
+          "startedAt": "2026-09-02T09:54:59-07:00",
+          "endedAt": null,
+          "exitType": null,
+          "exitNote": null,
           "modifiedFiles": [],
           "commits": [],
           "implementationNotesFile": null,

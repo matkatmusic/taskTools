@@ -15,19 +15,35 @@ import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 // Beside the run-log, so `tail -f` on it shows the spawned agent working. The hook sets RUN_STEP_LOG for every block.
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
 
-// Difficulty 7+: an agent spawns codex to draft the plan, same shell-spawn pattern CodexReviewBodyEmitter.ts uses.
+// Difficulty 7+: codex drafts the plan. It outruns one Bash() call, so it runs detached and the agent polls.
 function codexPlanPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const answerFile = `${root}/plans/PLAN_THE_TASK.codex-answer.md`;
-    return `${spawnAgentHeader("plan", true)}
-
-\`\`\`\`sh
+    const doneFile = `${root}/plans/PLAN_THE_TASK.codex-done`;
+    const runScript = `${root}/plans/PLAN_THE_TASK.codex-run.sh`;
+    writeFileSync(runScript, `#!/bin/sh
 PLAN_PROMPT=$(cat <<'PLANEOF'
 ${planPrompt(t)}
 PLANEOF
 )
-cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$PLAN_PROMPT" </dev/null >${answerFile}
-\`\`\`\`
+cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$PLAN_PROMPT" </dev/null >${answerFile} 2>&1
+echo $? >${doneFile}
+`);
+    return `You are spawning a plan agent running in the CLI.
+You do not edit any files. Your job is to start codex detached, wait for it to finish, then report.
+Codex runs longer than one Bash() call may last, so never run it in the foreground and never use run_in_background or Monitor.
+
+## STEP 1 — start codex detached. One Bash() call, verbatim.
+
+\`\`\`sh
+rm -f ${doneFile} && setsid nohup sh ${runScript} >/dev/null 2>&1 </dev/null &
+\`\`\`
+
+## STEP 2 — wait. Repeat this Bash() call, verbatim, until it prints DONE.
+
+\`\`\`sh
+for i in $(seq 1 27); do [ -f ${doneFile} ] && break; sleep 20; done; [ -f ${doneFile} ] && echo DONE || echo NOT YET
+\`\`\`
 
 ${whatToReturnSection(`{ "outcome": "<PLAN if ${t.planFile} now exists, else CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<empty when outcome is PLAN; otherwise the question from ${answerFile}>" }`, `checking whether ${t.planFile} exists and reading ${answerFile} for the clarify question`, "")}
 `;

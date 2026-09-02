@@ -26,7 +26,7 @@ flowchart TB
   end
   preambleStatusCheck ~~~ preambleStatusCheckNext
 
-  PREAMBLE_STATUS_CHECK -- "NO<br/>invalid-number<br/>too-difficult" --> REPORT_ONLY_EXIT
+  PREAMBLE_STATUS_CHECK -- "NO<br/>invalid-number" --> REPORT_ONLY_EXIT
   PREAMBLE_STATUS_CHECK -- "YES" --> IS_TASK_BLOCKED_Q
   IS_TASK_BLOCKED_Q -- "YES<br/>blocked" --> REPORT_ONLY_EXIT
   IS_TASK_BLOCKED_Q -- "NO" --> IS_TASK_ACTIVE_Q
