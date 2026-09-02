@@ -32,8 +32,11 @@ function decideVerdict(planFile: string, review: PlanReview): { verdict: string;
     const ruling = sectionCount >= PERCENTAGE_SCALE_MINIMUM_SECTIONS
         ? rulingByPercentage(efficacyPercentage(sectionCount, fixes.length))
         : rulingByFixCount(fixes.length);
+    // A fix naming an unknown section sends the plan back to the planner instead of crashing.
+    const unknownSectionFix = fixes.find((fix: PlanReviewFix) => !plan.sections.some((entry: { id: string }) => entry.id === fix.sectionId));
+    const verdict = unknownSectionFix === undefined ? VERDICTS[ruling]! : "AMEND";
     const notes = fixes.map((fix: PlanReviewFix) => `[${fix.sectionId}] ${fixNote(fix)}`).join("\n\n");
-    return { verdict: VERDICTS[ruling]!, notes };
+    return { verdict, notes };
 }
 
 // Writes codex's fixes straight into the plan file, so implement reads them.

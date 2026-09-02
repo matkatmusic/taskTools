@@ -55,12 +55,36 @@ test("test_main_amendsThenAcceptsOnASingleFixAndWritesThePlan", () => {
     assert.equal(plan.revision, 2);
 });
 
-test("test_main_throwsWhenAnAmendThenAcceptFixNamesASectionThePlanDoesNotHave", () => {
-    const { projectRoot, planFile } = makeFixture();
-    assert.throws(
-        () => main(JSON.stringify(packet(projectRoot, planFile, review([fix("no-such-step")])))),
-        /no-such-step/,
-    );
+// Superseded: an unknown-section fix now downgrades to AMEND instead of throwing, see test below.
+// test("test_main_throwsWhenAnAmendThenAcceptFixNamesASectionThePlanDoesNotHave", () => {
+//     const { projectRoot, planFile } = makeFixture();
+//     assert.throws(
+//         () => main(JSON.stringify(packet(projectRoot, planFile, review([fix("no-such-step")])))),
+//         /no-such-step/,
+//     );
+// });
+
+test("test_whatIsReviewVerdict_downgradesToAmendWhenAFixNamesAnUnknownSection", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "what-is-review-verdict-"));
+    const planFile = join(projectRoot, "plan.json");
+    const planBefore = JSON.stringify({
+        task: 7,
+        revision: 1,
+        createsFiles: [],
+        sections: [
+            { id: "a", title: "one", body: "b", codexNotes: "" },
+            { id: "b", title: "two", body: "b", codexNotes: "" },
+        ],
+    });
+    writeFileSync(planFile, planBefore);
+
+    const output = main(JSON.stringify(packet(projectRoot, planFile, review([fix("not-a-section")]))));
+
+    assert.equal(output.verdict, "AMEND");
+    assert.equal(output.next, "UPDATE_TASKS_JSON");
+    assert.match(output.notes as string, /\[not-a-section\]/);
+    assert.match(output.notes as string, /repair not-a-section/);
+    assert.equal(readFileSync(planFile, "utf8"), planBefore);
 });
 
 test("test_main_amendsOnTwoFixesAndRoutesToUpdateTasksJson", () => {
