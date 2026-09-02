@@ -2,6 +2,7 @@ import { findTask, readTaskLists } from "./getTaskDetails.ts";
 import { closeTasks, type CloseTasksResult } from "./closeTasks.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { TASK_IS_NOT_OPEN, TASK_IS_OPEN } from "./resultCodes.ts";
+import { modifiableFiles } from "./prepareTasks.ts";
 
 function isOpenTask(taskNumber: number, projectRoot?: string): number {
     const { openTasks } = readTaskLists(projectRoot);
@@ -39,7 +40,7 @@ export function findSplitCandidates(projectRoot?: string): SplitCandidate[] {
     for (const task of openTasks) {
         const record = task as unknown as Record<string, unknown>;
         const difficulty = record.difficulty as number | undefined;
-        const fileCount = ((record.files as string[] | undefined) ?? []).length;
+        const fileCount = modifiableFiles(task).length;
         if ((difficulty ?? 0) >= 3 || fileCount > 3) {
             candidates.push({
                 taskNumber: task.taskNumber,
@@ -133,7 +134,7 @@ export function verifyChildFiles(childNumber: number, expectedFiles: string[], p
     if (!child) {
         throw new Error(`Child task ${childNumber} not found`);
     }
-    const actual = (child.files as string[] | undefined) ?? [];
+    const actual = modifiableFiles(child);
     const matches = actual.length === expectedFiles.length && actual.every((file, i) => file === expectedFiles[i]);
     if (!matches) {
         throw new Error(
@@ -154,7 +155,7 @@ export function closeParentTask(
     if (childFileGroups.length !== numSplits) {
         throw new Error(`Expected ${numSplits} file group(s), got ${childFileGroups.length}`);
     }
-    validateFileGroups(parent.files as string[] | undefined, childFileGroups);
+    validateFileGroups(modifiableFiles(parent), childFileGroups);
     childNumbers.forEach((childNumber, index) => verifyChildFiles(childNumber, childFileGroups[index], projectRoot));
 
     const result = closeTasks([parentNumber], composeClosureNote(childNumbers), projectRoot);
@@ -172,14 +173,14 @@ function toPositiveInt(value: string, label: string): number {
     return parsed;
 }
 
-export function runInfo(taskNumberArg: string, numSplitsArg: string): void {
+export function runInfo(taskNumberArg: string, numSplitsArg: string, projectRoot?: string): void {
     if (numSplitsArg === undefined) {
         throw new Error("Usage: /split-task <taskNum> <numSplits> [guidance]");
     }
     const taskNumber = toPositiveInt(taskNumberArg, "taskNum");
     const numSplits = toPositiveInt(numSplitsArg, "numSplits");
-    const parent = readParentTask(taskNumber);
-    const fileGroups = partitionFiles((parent.files as string[] | undefined) ?? [], numSplits);
+    const parent = readParentTask(taskNumber, projectRoot);
+    const fileGroups = partitionFiles(modifiableFiles(parent), numSplits);
     console.log(JSON.stringify({ parent, fileGroups }, null, 2));
 }
 

@@ -13,8 +13,8 @@ function makeProjectRoot(): string {
   writeFileSync(
     join(root, "tasks.json"),
     JSON.stringify([
-      { taskNumber: 2, title: "fully blocked", blockedBy: [{ taskNum: 1, reason: "needs task 1" }] },
-      { taskNumber: 4, title: "partly blocked", blockedBy: [{ taskNum: 1, reason: "needs task 1" }, { taskNum: 3, reason: "needs task 3" }] },
+      { taskNumber: 2, title: "fully blocked", blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] },
+      { taskNumber: 4, title: "partly blocked", blockedBy: [{ taskNumber: 1, reason: "needs task 1" }, { taskNumber: 3, reason: "needs task 3" }] },
       { taskNumber: 5, title: "unrelated" },
     ]),
   );
@@ -31,7 +31,7 @@ test("removes closed number, drops emptied blockedBy, keeps other blockers and t
   const out = runScript(root, "1");
   const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
   assert.equal("blockedBy" in tasks.find((t: any) => t.taskNumber === 2), false);
-  assert.deepEqual(tasks.find((t: any) => t.taskNumber === 4).blockedBy, [{ taskNum: 3, reason: "needs task 3" }]);
+  assert.deepEqual(tasks.find((t: any) => t.taskNumber === 4).blockedBy, [{ taskNumber: 3, reason: "needs task 3" }]);
   assert.equal("blockedBy" in tasks.find((t: any) => t.taskNumber === 5), false);
   assert.match(out, /task\(s\): 2, 4/);
 });
@@ -67,7 +67,7 @@ test("migrates a legacy bare-number entry to the object shape even when its bloc
   const out = runScript(root, "99");
   const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
   assert.deepEqual(tasks.find((t: any) => t.taskNumber === 7).blockedBy, [
-    { taskNum: 1, reason: "reason not recorded (migrated from legacy blockedBy format)" },
+    { taskNumber: 1, reason: "reason not recorded (migrated from legacy blockedBy format)" },
   ]);
   assert.match(out, /no blockedBy references/);
 });

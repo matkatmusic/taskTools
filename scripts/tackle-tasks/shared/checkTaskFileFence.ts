@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
 import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { modifiableFiles } from "../../prepareTasks.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 
@@ -25,7 +26,7 @@ function declaredFiles(taskNumber: number, projectRoot: string): string[] {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
-    return Array.isArray(task.files) ? (task.files as string[]) : [];
+    return modifiableFiles(task);
 }
 
 function readGitlinkOidAtHead(checkoutPath: string, pathInParent: string): string | null {

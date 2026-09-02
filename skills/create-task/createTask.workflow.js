@@ -24,10 +24,10 @@ const BLOCKER_HUNTER_SCHEMA = {
             items: {
                 type: 'object',
                 properties: {
-                    taskNum: { type: 'number' },
+                    taskNumber: { type: 'number' },
                     reason: { type: 'string' },
                 },
-                required: ['taskNum', 'reason'],
+                required: ['taskNumber', 'reason'],
             },
         },
     },

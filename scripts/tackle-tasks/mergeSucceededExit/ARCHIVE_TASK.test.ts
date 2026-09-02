@@ -50,7 +50,7 @@ function samplePacket(projectRoot: string, taskNumber: number, runId: string, cl
 test("test_ARCHIVE_TASK_archivesAndUnblocksInOneCall", () => {
     const root = makeProjectRoot([
         { taskNumber: 1, title: "finished", run: completedRunState() },
-        { taskNumber: 2, title: "waiting", blockedBy: [{ taskNum: 1, reason: "needs 1 first" }] },
+        { taskNumber: 2, title: "waiting", blockedBy: [{ taskNumber: 1, reason: "needs 1 first" }] },
     ]);
 
     const output = main(JSON.stringify(samplePacket(root, 1, "run-a", "Task 1 completed.")));

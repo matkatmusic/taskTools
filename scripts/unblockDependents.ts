@@ -7,16 +7,16 @@ export function unblockDependents(tasks: any[], closedTaskNumbers: number[]): nu
   const unblocked: number[] = [];
   for (const t of tasks) {
     if (!Array.isArray(t.blockedBy)) continue;
-    const entries = t.blockedBy as (number | { taskNum: number; reason: string })[];
+    const entries = t.blockedBy as (number | { taskNumber: number; reason: string })[];
     let taskMigrated = false;
     const upgraded = entries.map((entry) => {
       if (typeof entry === "number") {
         taskMigrated = true;
-        return { taskNum: entry, reason: "reason not recorded (migrated from legacy blockedBy format)" };
+        return { taskNumber: entry, reason: "reason not recorded (migrated from legacy blockedBy format)" };
       }
       return entry;
     });
-    const remaining = upgraded.filter((entry) => !closed.has(entry.taskNum));
+    const remaining = upgraded.filter((entry) => !closed.has(entry.taskNumber));
     const taskUnblocked = remaining.length !== upgraded.length;
     if (!taskMigrated && !taskUnblocked) continue;
     if (taskUnblocked) unblocked.push(t.taskNumber);

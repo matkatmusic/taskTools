@@ -6,6 +6,7 @@ import { buildOwnedOccurrencePaths, getOccurrencesDeepestFirst, parseOccurrenceP
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 import { appendTaskCommits, getCurrentTaskRun, type TaskCommit } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { modifiableFiles } from "../../prepareTasks.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 
 export type CommitTaskWorkInput = {
@@ -65,7 +66,7 @@ function declaredFiles(taskNumber: number, projectRoot: string): string[] {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
-    return Array.isArray(task.files) ? (task.files as string[]) : [];
+    return modifiableFiles(task);
 }
 
 export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput {

@@ -43,8 +43,8 @@ export type WorkflowArguments = {
 const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
 
 function getOpenBlockers(task: TaskRecord, openNumbers: Set<number>): number[] {
-    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNum: number }[]) : [];
-    return blockedBy.map((entry) => entry.taskNum).filter((number) => openNumbers.has(number));
+    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNumber: number }[]) : [];
+    return blockedBy.map((entry) => entry.taskNumber).filter((number) => openNumbers.has(number));
 }
 
 // Never defaults to every open task: this creates worktrees and fans out agents.
@@ -63,8 +63,8 @@ export function selectRequestedTasks(openTasks: TaskRecord[], requestedNumbers: 
     if (undeclaredNumbers.length > 0) {
         const numbers = undeclaredNumbers.join(", ");
         throw new Error(
-            `these tasks declare no "files" and cannot be planned or implemented: ${numbers}. `
-            + `A task's "files" array is both the worker's ownership fence and the key that decides `
+            `these tasks declare no "modifiableFiles" and cannot be planned or implemented: ${numbers}. `
+            + `A task's "modifiableFiles" array is both the worker's ownership fence and the key that decides `
             + `what runs in parallel, so it cannot be inferred at run time. `
             + `Run /taskTools:update-task-files [${undeclaredNumbers.join(",")}] to add them, `
             + `or revise the tasks first.`,

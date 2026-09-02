@@ -17,19 +17,19 @@ function makeProjectRoot(openTasks: unknown[]): string {
 
 test("test_isTaskBlocked_reportsBlockedWhenBlockedByNamesAnOpenTask", () => {
     const root = makeProjectRoot([
-        { taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] },
+        { taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] },
         { taskNumber: 2 },
     ]);
     assert.deepEqual(isTaskBlocked(1, root), {
         blocked: true,
-        blockers: [{ taskNum: 2, reason: "needs schema" }],
+        blockers: [{ taskNumber: 2, reason: "needs schema" }],
         reason: "is blocked by 2",
     });
 });
 
 test("test_isTaskBlocked_reportsNotBlockedWhenBlockerIsNotOpen", () => {
     const root = makeProjectRoot([
-        { taskNumber: 1, blockedBy: [{ taskNum: 2, reason: "needs schema" }] },
+        { taskNumber: 1, blockedBy: [{ taskNumber: 2, reason: "needs schema" }] },
     ]);
     assert.deepEqual(isTaskBlocked(1, root), { blocked: false, blockers: [], reason: null });
 });

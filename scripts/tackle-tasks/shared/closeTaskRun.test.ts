@@ -43,7 +43,7 @@ test("test_closeTaskRun_archivesAndUnblocksInOneCall", () => {
     // Setup: task 1's run has ended completed under run-a; task 2 is blocked on task 1.
     const root = makeProjectRoot([
         { taskNumber: 1, title: "finished", run: completedRunState() },
-        { taskNumber: 2, title: "waiting", blockedBy: [{ taskNum: 1, reason: "needs 1 first" }] },
+        { taskNumber: 2, title: "waiting", blockedBy: [{ taskNumber: 1, reason: "needs 1 first" }] },
     ]);
 
     // Test action: close task 1.
@@ -152,7 +152,7 @@ test("test_closeTaskRun_archiveFirstRetryUnblocksDependentsWhileLeavingTheArchiv
     const root = makeProjectRoot(
         [
             { taskNumber: 1, title: "finished", run: runState },
-            { taskNumber: 2, title: "waiting", blockedBy: [{ taskNum: 1, reason: "needs 1 first" }] },
+            { taskNumber: 2, title: "waiting", blockedBy: [{ taskNumber: 1, reason: "needs 1 first" }] },
         ],
         [archivedRecord],
     );

@@ -27,8 +27,8 @@ export const TASKS_PER_COMMAND = 6;
 const dayNumber = (isoDate: string) => Math.floor(Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000);
 
 function openBlockersOf(task: TaskRecord, openNumbers: Set<number>): number[] {
-    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNum: number }[]) : [];
-    return blockedBy.map(entry => entry.taskNum).filter(n => openNumbers.has(n));
+    const blockedBy = Array.isArray(task.blockedBy) ? (task.blockedBy as { taskNumber: number }[]) : [];
+    return blockedBy.map(entry => entry.taskNumber).filter(n => openNumbers.has(n));
 }
 
 function countClosedWithin(completed: TaskRecord[], today: string, days: number): number {
