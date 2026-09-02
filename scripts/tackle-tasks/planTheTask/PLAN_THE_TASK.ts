@@ -42,7 +42,7 @@ rm -f ${doneFile} && setsid nohup sh ${runScript} >/dev/null 2>&1 </dev/null &
 ## STEP 2 — wait. Repeat this Bash() call, verbatim, until it prints DONE.
 
 \`\`\`sh
-for i in $(seq 1 27); do [ -f ${doneFile} ] && break; sleep 20; done; [ -f ${doneFile} ] && echo DONE || echo NOT YET
+for i in $(seq 1 3); do [ -f ${doneFile} ] && break; sleep 5; done; [ -f ${doneFile} ] && echo DONE || echo NOT YET
 \`\`\`
 
 ${whatToReturnSection(`{ "outcome": "<PLAN if ${t.planFile} now exists, else CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<empty when outcome is PLAN; otherwise the question from ${answerFile}>" }`, `checking whether ${t.planFile} exists and reading ${answerFile} for the clarify question`, "")}
