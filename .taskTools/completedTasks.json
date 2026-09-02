@@ -4221,5 +4221,245 @@
     "completionDate": "2026-08-31",
     "commitHashes": [],
     "closureNote": "merged into task 192"
+  },
+  {
+    "taskNumber": 157,
+    "version": "2f698b27960017e7f4c461d811438ee8a72eea11",
+    "title": "Rename the blockedBy entry key from taskNum to taskNumber everywhere",
+    "userDescription": "change every task's 'blockedBy[i].taskNum' to '.taskNumber'.  update every place that reads the blockedBy entry's taskNum to match the new key name.",
+    "goal": [
+      "- `rg -n '\"taskNum\"' .taskTools/tasks.json .taskTools/completedTasks.json` returns no matches, and every former entry now reads `{\"taskNumber\": N, \"reason\": \"...\"}`.",
+      "- `rg -n 'taskNum\\b' scripts/ tests/ skills/create-task/` returns no blockedBy-related matches; the only surviving hits are the unrelated splitTask.ts CLI argument label and the split-task SKILL.md argument-hint.",
+      "- `npm test` passes with the blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key.",
+      "- `npx tsc --noEmit` passes — the inline `{ taskNum: number }` casts in the reader scripts are updated, not left as stale types.",
+      "- A guard test asserts no `\"taskNum\"` key survives in either task data file, so a future task written from a stale template fails the suite.",
+      "- NOT in scope: any backwards-compatible fallback that still reads the old `taskNum` key. The user explicitly chose a clean one-shot rename; no reader keeps a dual-key path.",
+      "- NOT in scope: the `taskNum` CLI argument label in scripts/splitTask.ts and skills/split-task/SKILL.md, and the stale `taskNum` mentions in plans/*.md — those name a command-line argument or are historical notes, not the blockedBy field."
+    ],
+    "description": "Seven scripts read the blockedBy entry key: checkBlockers.ts, blockerVerdicts.ts, unblockDependents.ts, taskStats.ts, runStartup.ts, prepareTasks.ts, and getTaskDetails.ts. Each declares its own inline cast (`{ taskNum: number }` or `{ taskNum: number; reason: string }`) rather than sharing a type, so the rename touches both the cast and the property read in every one. unblockDependents.ts additionally constructs the object when migrating the legacy plain-number blockedBy format, so its emitted key must change too. checkBlockers.ts JSON.stringifies whole blockedBy entries into its BLOCKED output line, which makes the key user-visible: scripts/tackleTasksBrief.ts contains prompt prose instructing the agent to read that element's `taskNum`, and tests/checkBlockers.test.ts asserts on the literal JSON string. The authoring template at skills/create-task/template/taskTemplate.json still documents the old key and must be updated or every new task reintroduces it. Data lives in .taskTools/tasks.json (23 entries) and .taskTools/completedTasks.json (12 entries); completedTasks entries are historical records but share the same reader path via unblockDependents and should be migrated in the same commit for consistency. No shared TypeScript interface for the entry exists, so there is no single choke point — this is a genuine multi-file mechanical rename.\n\n## Clarification answer (2026-08-31)\n\nExpand this task's files list to cover every file the goal's repo-wide check touches, so the rename lands atomically in one task. The rg 'taskNum' check stays repo-wide; do not scope it down. The files named by the previous planning round are now added to the files list.\n\n## Audit correction (2026-08-31)\n\nscripts/tackleTasksBrief.ts no longer exists (renamed in 5e54487; its successor scripts/tackle-tasks/shared/SkillBodyEmitter.ts holds no taskNum) — removed from files. The live consumers of the BLOCKED line's taskNum are scripts/tackleTasksHook.ts:18 and :58-59, already owned.",
+    "files": [
+      ".taskTools/tasks.json",
+      ".taskTools/completedTasks.json",
+      "scripts/checkBlockers.ts",
+      "scripts/blockerVerdicts.ts",
+      "scripts/unblockDependents.ts",
+      "scripts/taskStats.ts",
+      "scripts/runStartup.ts",
+      "scripts/prepareTasks.ts",
+      "scripts/getTaskDetails.ts",
+      "skills/create-task/template/taskTemplate.json",
+      "tests/checkBlockers.test.ts",
+      "tests/blockerVerdicts.test.ts",
+      "tests/unblockDependents.test.ts",
+      "tests/taskStats.test.ts",
+      "tests/runStartup.test.ts",
+      "tests/prepareTasks.test.ts",
+      "tests/getTaskDetails.test.ts",
+      "tests/closeTasks.test.ts",
+      "scripts/tackleTasksHook.ts",
+      "tests/tackleTasksHook.test.ts",
+      "scripts/appendTask.ts",
+      "scripts/clarifyTask.ts",
+      "scripts/clarifyTaskBrief.ts",
+      "scripts/create-task_AgentPromptEmitter.ts",
+      "scripts/tackle-tasks/shared/isTaskBlocked.ts",
+      "skills/create-task/createTask.workflow.js",
+      "tests/clarifyTask.test.ts",
+      "tests/create-task_AgentPromptEmitter.test.ts",
+      "tests/tackle-tasks_BootstrapAgentPromptEmitter.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.test.ts",
+      "scripts/tackle-tasks/shared/closeTaskRun.test.ts",
+      "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+      "scripts/tackle-tasks/shared/isTaskBlocked.test.ts",
+      "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.test.ts"
+    ],
+    "tests": "A guard test asserting no \"taskNum\" key remains in .taskTools/tasks.json or .taskTools/completedTasks.json, plus the existing blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key and passing.",
+    "difficulty": 5,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-157",
+      "leaseRunId": "9d7607ae-7c5e-4338-938c-15ddf4b6de44",
+      "history": [
+        {
+          "runId": "9d7607ae-7c5e-4338-938c-15ddf4b6de44",
+          "startedAt": "2026-08-31T16:40:47-07:00",
+          "endedAt": "2026-09-02T00:13:01-07:00",
+          "exitType": "completed",
+          "exitNote": "All layers merged successfully.",
+          "modifiedFiles": [
+            ".taskTools/completedTasks.json",
+            "scripts/appendTask.ts",
+            "scripts/blockerVerdicts.ts",
+            "scripts/checkBlockers.ts",
+            "scripts/clarifyTask.ts",
+            "scripts/clarifyTaskBrief.ts",
+            "scripts/create-task_AgentPromptEmitter.ts",
+            "scripts/getTaskDetails.ts",
+            "scripts/prepareTasks.ts",
+            "scripts/runStartup.ts",
+            "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.test.ts",
+            "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.test.ts",
+            "scripts/tackle-tasks/shared/closeTaskRun.test.ts",
+            "scripts/tackle-tasks/shared/isTaskBlocked.test.ts",
+            "scripts/tackle-tasks/shared/isTaskBlocked.ts",
+            "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+            "scripts/tackleTasksHook.ts",
+            "scripts/taskStats.ts",
+            "scripts/unblockDependents.ts",
+            "skills/create-task/createTask.workflow.js",
+            "skills/create-task/template/taskTemplate.json",
+            "tests/blockerVerdicts.test.ts",
+            "tests/checkBlockers.test.ts",
+            "tests/clarifyTask.test.ts",
+            "tests/closeTasks.test.ts",
+            "tests/create-task_AgentPromptEmitter.test.ts",
+            "tests/getTaskDetails.test.ts",
+            "tests/prepareTasks.test.ts",
+            "tests/runStartup.test.ts",
+            "tests/tackle-tasks_BootstrapAgentPromptEmitter.test.ts",
+            "tests/tackleTasksHook.test.ts",
+            "tests/taskStats.test.ts",
+            "tests/unblockDependents.test.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "9df7d88bf6d606d024470917292fb0efc208c3b3",
+              "kind": "work",
+              "stepId": "implement"
+            },
+            {
+              "occurrenceId": "",
+              "hash": "6cca92ccc4492cfbdb86ac741db29abdf84aa94b",
+              "kind": "merge"
+            }
+          ],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "tests/blockerVerdicts.test.ts",
+              "tests/checkBlockers.test.ts",
+              "tests/clarifyTask.test.ts",
+              "tests/closeTasks.test.ts",
+              "tests/create-task_AgentPromptEmitter.test.ts",
+              "tests/getTaskDetails.test.ts",
+              "tests/prepareTasks.test.ts",
+              "tests/runStartup.test.ts",
+              "tests/tackle-tasks_BootstrapAgentPromptEmitter.test.ts",
+              "tests/tackleTasksHook.test.ts",
+              "tests/taskStats.test.ts",
+              "tests/unblockDependents.test.ts"
+            ],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "atal: clone of '/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/prepare-tasks-HcudaX' into submodule path '/private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/prepare-tasks-EWSKjW-22853521/task-1/vendor' failed\nFailed to clone 'vendor' a second time, aborting\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-268'\nReset branch 'task-270'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-2'\nCloning into '/private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/prepare-tasks-4SAqcM-e32539d9/task-1/vendor'...\ndone.\nReset branch 'task-1'\nSwitched to a new branch 'task-1'\nHEAD is now at 38cf7f6 inner\nCloning into '/private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/prepare-tasks-J2I1ye-b7742edd/task-1/vendor'...\ndone.\nReset branch 'task-1'\nSwitched to a new branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-2'\n✔ test_twoBarrierSynchronizedPrepareProcessesHaveExactlyOneOwnerOfTheSameCleanWorktree (301.014667ms)\n✔ test_createWorktreeForGroupRefusesToDiscardAStaleWorktreesRetainedWork (295.496208ms)\n✔ test_createWorktreeForGroupPopulatesSubmoduleWorkingTrees (710.3495ms)\n✔ test_createWorktreeForGroupThrowsWhenSubmoduleInitFails (535.450292ms)\n✔ test_recoverStaleTaskWorktreeLeaseRefusesWhenRetainedWorkExists (221.190792ms)\n✔ test_recoverStaleTaskWorktreeLeaseReleasesACleanStaleLease (314.248791ms)\n✔ test_recoverStaleTaskWorktreeLeaseRemovesALeaseWhoseWorktreeIsAlreadyGone (163.386ms)\n✔ test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask (300.571208ms)\n✔ test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput (285.788ms)\n✔ test_buildWorkflowArgumentsRollsBackEarlierCandidateLeasesWhenALaterTaskHasAForeignLease (336.033542ms)\n✔ test_generateRunIdIsALocalTimestampToTheMillisecond (0.23575ms)\n✔ test_mergeScriptPathPointsAtTheSiblingMergeScriptAsAnAbsolutePath (0.135292ms)\n✔ test_selectRequestedTasksRefusesToRunWhenNoTaskNumbersWereGiven (0.174958ms)\n✔ test_selectRequestedTasksRefusesWhenARequestedNumberIsNotOpen (0.074375ms)\n✔ test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask (0.66875ms)\n✔ test_selectRequestedTasksRefusesTasksWithNoFilesArray (0.102792ms)\n✔ test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared (0.072ms)\n✔ test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask (0.053292ms)\n✔ test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists (0.07975ms)\n✔ test_modifiableFilesFallsBackToTheLegacyFilesKeyWhenModifiableFilesIsAbsent (0.033042ms)\n✔ test_modifiableFilesPrefersTheModifiableFilesKeyWhenPresent (0.049667ms)\n✔ test_readOnlyFilesDefaultsToWildcardWhenAbsent (0.034958ms)\n✔ test_readOnlyFilesReturnsTheDeclaredReadOnlyFilesKeyWhenPresent (0.035292ms)\n✔ test_modifiableFilesAndReadOnlyFilesResolveIdenticallyForAModernTaskAndItsLegacyEquivalent (0.050541ms)\n✔ test_loadPreparedTaskCarriesReadOnlyFilesFromTheTaskRecordThroughToThePreparedTask (57.560833ms)\n✔ test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch (542.237833ms)\n✔ test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory (401.198667ms)\n✔ test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch (854.590583ms)\n✔ test_buildWorkflowArgumentsGivesEachTaskItsOwnFilesNotTheCombinedList (295.2ms)\n✔ test_buildWorkflowArgumentsCarriesReadOnlyFilesThroughToThePrintedPipelineArgs (245.89925ms)\n✔ test_buildWorkflowArgumentsGivesEachTaskItsOwnWorktreeAndBranchAsASingletonGroup (349.999334ms)\n✔ prepareTasks publishes a widening that lands under the task-state lock (722.050083ms)\nReset branch 'task-1'\nReset branch 'task-1'\n✔ prepareTasks CLI rolls back every candidate lease when run-arguments publication fails, then a retry succeeds (1046.607041ms)\n✔ current and archived materialized files each carry their own marker, and the archived emitter names only its own field (2.432083ms)\n✔ materializeTaskWorkflow's archived output is unaffected by a change to the current template (1.869125ms)\n✔ buildWorkflowArguments releases the worktree lease and leaves no sibling file when the first materialization call fails (335.257416ms)\n✔ buildWorkflowArguments releases the worktree lease and leaves no sibling file when the second materialization call fails (231.943375ms)\n✔ withTaskWorktreeLeaseGuard makes one lease transition indivisible across two real processes (604.392792ms)\n✔ acquireTaskWorktreeLease and releaseTaskWorktreeLease stay behaviorally identical to callers (78.269125ms)\n✔ discovery reports blocked/unblocked open tasks and performs no writes (8.265042ms)\n✔ confirmTestHookEnabled: missing entry point is not enabled (2.79725ms)\n✔ confirmTestHookEnabled: entry explicitly disabled is not enabled (3.330792ms)\n✔ confirmTestHookEnabled: registered entry with no enabled flag defaults to enabled (1.548375ms)\n✔ hooks/hooks.json registers the copied relatedTests.ts entry point (0.848ms)\n✔ hook disabled: runStartup stops before any mutating step runs (2.302625ms)\n✔ gate precedes every mutating step individually, not just the first (0.587625ms)\n✔ gate stopping mid-sequence prevents later steps from running (0.290583ms)\n✔ runStartup's read-only discovery phase never calls the gate or a mutating step (1.793417ms)\n✔ runStartup.ts never references semantic-commit/push/merge/base-update/archival helpers (0.3795ms)\nReset branch 'task-1'\nReset branch 'task-1'\n✔ discover mode returns schema-valid blockerPairs and unblockedNumbers, never raw text (522.967459ms)\n✔ prepare mode returns normalized taskDetails, parsed pipelineArgs, and maxConcurrency (891.480292ms)\n✔ discover mode treats a nonexistent task number as unblocked, matching checkBlockers.ts's pre-existing behavior (195.771583ms)\n✔ prepare mode returns completed/not-found taskDetails instead of aborting, and creates no worktree for them (168.247125ms)\n✔ prepare mode with a mixed open/completed/not-found request only prepares the open task (568.953791ms)\n✔ fails loudly on an unknown mode or missing arguments (295.322ms)\n✔ tests/tackleTasksHook.test.ts (142.169042ms)\n✔ counts open and completed tasks separately (2.971667ms)\n✔ a task is blocked only by blockers that are still open (0.249958ms)\n✔ reports how many open tasks declare files (0.691625ms)\n✔ closure windows count completionDate within 7 and 30 days of today (93.693083ms)\n✔ busiest day is the completionDate closing the most tasks (0.661167ms)\n✔ busiestDay is null when nothing has been closed (0.086917ms)\n✔ counts completed tasks that recorded commit hashes (0.120625ms)\n✔ group forecast joins tasks sharing a file and separates disjoint ones (0.185167ms)\n✔ group forecast excludes blocked tasks and tasks declaring no files (0.282375ms)\n✔ contended files rank paths claimed by more than one open task (0.436625ms)\n✔ formatted output names every headline number (1.057375ms)\n✔ CLI prints stats for the project it is run from (162.292459ms)\n✔ CLI reports empty projects without crashing (143.146208ms)\n✔ each parallel command holds at most 6 tasks that share no files (1.215208ms)\n✔ collapses a diamond blockedBy graph into one chain per sink (0.568ms)\n✔ two sinks sharing one root produce two chains and one deduplicated fastest sequence (0.268417ms)\n✔ no blocked tasks produces empty chain data and no chain section in output (0.197583ms)\n✔ a blockedBy cycle behind a genuine sink terminates with a finite chain (0.208792ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (248.974208ms)\n✔ no matching blockers leaves tasks.json untouched (135.27275ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (197.566791ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (228.927458ms)\nℹ tests 133\nℹ suites 0\nℹ pass 133\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 11608.95275\n",
+            "checkedAt": "2026-09-01T14:39:32-07:00"
+          },
+          "fullSuite": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "layers": [
+              {
+                "occurrenceId": "",
+                "passed": true
+              }
+            ],
+            "output": "lict role reports advanced false, not true, against a checkout whose rebase already aborted (456.20975ms)\n✔ a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed (914.378292ms)\n✔ a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit (968.3005ms)\n✔ a merged-but-not-closed retry archives the original merge commit even after main advances in between (1038.371167ms)\n✔ a real root merge conflict produces a concrete final-report reason naming the conflicted file (495.522625ms)\n✔ merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close (2453.841084ms)\n✔ rebase stage: a failing rebase command blocks the lap before any agent runs (626.169375ms)\n✔ rebase stage: an unresolved live conflict blocks the lap and leaves the source branch unmoved (900.013667ms)\n✔ rebase stage: a layer still red after the fix-round ceiling blocks the lap and leaves the source branch unmoved (950.737292ms)\n✔ rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate (1094.676916ms)\n✔ rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation (1397.268375ms)\n✔ rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation (901.762958ms)\n✔ merge stage refuses to guess when a merge intent exists but the merge record is missing (411.234041ms)\n✔ rebase-test blocks on a real type error even when the complete suite passes (516.164708ms)\n✔ merge revalidates root source drift with the configured typecheck (2103.625958ms)\n✔ merge revalidates source-submodule drift with the configured typecheck (3194.985ms)\n✔ merge still closes when merge-time typecheck and complete suites are green (1979.275958ms)\n✔ merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact (498.485208ms)\n✔ rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing (113.736125ms)\n✔ merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing (485.451542ms)\n✔ merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict (550.8335ms)\n✔ merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged (1275.030875ms)\n✔ merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly (1458.191917ms)\n✔ successful close deletes task-N from root and every source submodule (1673.134208ms)\n✔ close failure retains root and every source-submodule task ref (1584.394041ms)\n✔ production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path (707.606542ms)\n✔ attachOperationBranch sets the given branch on every occurrence, independent of any other invocation (0.212917ms)\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\n✔ implement refuses to run without a repositoryManifest instead of silently falling back to root-only (1.988625ms)\n✔ plan+implement refuses to run without a repositoryManifest instead of silently falling back to root-only (0.215375ms)\n✔ plan alone tolerates a missing repositoryManifest (0.461458ms)\n✔ plan+implement commits only in each prepared task worktree (3048.220458ms)\n✔ plan+implement reports blocked when the implementer claims done without committing (1423.994084ms)\n✔ plan+implement rejects a planner that returns an existing plan outside the task worktree (579.175625ms)\n✔ plan+implement rejects a planner that reports planned at the expected path without writing it (738.751916ms)\n✔ plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase (1701.999083ms)\n✔ plan+implement blocks a notes-only commit that never touches an owned file (1662.555584ms)\n✔ plan+implement blocks a done result that deletes the previously committed notes file (1543.663875ms)\n✔ plan+implement blocks an owned commit that omits the required notes file (1266.352208ms)\n✔ widened ownership survives replanning, verification, and a separately launched implement stage (1689.483292ms)\n✔ plan+implement rejects missing sourceRoot before source or worktree mutation (370.067583ms)\n✔ a third rejected review with missingFiles widens every downstream implementation boundary (2396.056ms)\n✔ test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch (1.03025ms)\n✔ test_getTemplateShapeMismatches_namesAMissingKey (0.151334ms)\n✔ test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind (0.071875ms)\n✔ test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave (0.068209ms)\n✔ test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject (0.077958ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.067208ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (0.074583ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (0.068208ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (0.082542ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (0.391709ms)\n✔ test_missingPackageJsonProducesResolutionRequest (2.215417ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (1.009458ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (1.369041ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (0.695541ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (1.256792ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (3.592958ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (1.293791ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (1.404333ms)\n✔ appends each edited path to the session flag file (189.407833ms)\n✔ missing session_id does nothing (85.879417ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (131.701959ms)\n✔ no matching blockers leaves tasks.json untouched (134.858917ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (117.842292ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (114.868583ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (163.40375ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (0.462167ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (312.938ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (79.557084ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (0.500917ms)\n✔ hook loads and answers /view-task with a block decision (113.577833ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (97.785875ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (92.008167ms)\n✔ hook is silent passthrough for other prompts (85.5625ms)\n✔ /view-task <N> includes the task's description with real newlines (91.12725ms)\n✔ /view-task with no number blocks with usage and the open-task listing (91.197292ms)\n✔ unknown task number reports not-found instead of crashing (85.750041ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.545417ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (0.743458ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (0.295542ms)\nℹ tests 2505\nℹ suites 0\nℹ pass 2505\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 99890.262333\n",
+            "checkedAt": "2026-09-01T14:47:28-07:00"
+          },
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "9df7d88bf6d606d024470917292fb0efc208c3b3"
+                }
+              ]
+            },
+            {
+              "stepId": "merge-succeeded-exit",
+              "script": "closeTaskRun",
+              "result": {
+                "closed": [
+                  157
+                ],
+                "skipped": [],
+                "unblocked": [],
+                "ambiguous": []
+              }
+            }
+          ],
+          "attempts": {
+            "planReview": 4
+          },
+          "countedPasses": {
+            "planReview": [
+              "d988d651-339e-4aa9-b1f0-71ad4d6aa373",
+              "8c5d7d13-6385-4ea3-9455-a5a1c61a834a",
+              "a7f07f9f-9b00-48f9-8fdb-ec11734cdabe",
+              "cf1d5da0-6ca1-44ea-baa3-f8e8eb285d21"
+            ]
+          },
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "ff38df02bfe622ced97013a33f9547c6d0e9748e"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "9df7d88bf6d606d024470917292fb0efc208c3b3"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "ff38df02bfe622ced97013a33f9547c6d0e9748e"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "codexReviewNotes": "[rename-istaskblocked-shared] Replace the proposed two-line header with a comment that contains only the new field name, for example `// \"is task blocked?\" — pipeline.mmd. Reuses blockerReport; blockedBy entries use taskNumber.` Do not add any mention of the old token.\n\nDurable because: The comment remains accurate without creating a source-tree match for the retired field name.\n\n[migrate-completed-tasks-data] Replace the broken post-migration command with `rg -n '^        \"taskNumber\": (62|70|93|107|131|132|133|134|135|136|137|138|139|140|141|142|143|144|145|146|147|148|149|150|151|152|165|166|167|168|169|170|171|172|173|174|175|176|177|178|179|180|182|185),$' .taskTools/completedTasks.json` and retain the expected result of exactly 52 matches.\n\nDurable because: The corrected expression uses ripgrep’s actual alternation syntax and anchors the exact nested key lines; it was verified to count all 52 migrated entries.\n\n[update-checkblockers-test] Rewrite the guard without spelling the retired token contiguously. For example, define `const legacyKey = [\"task\", \"Num\"].join(\"\");`, use a neutral title such as `no legacy blockedBy key survives in the real project task data`, construct `const legacyKeyPattern = new RegExp(\u0012`\"${legacyKey}\"`\u0012);`, and apply that pattern to both file contents. Preserve the planned `readFileSync` import.\n\nDurable because: The test still detects the exact stale JSON key in either data file while the test source itself stays clean under the required repo-wide search.",
+    "problemSolvedByTask": "Two key names (taskNum in blockedBy, taskNumber everywhere else) mean a script copying an existing pattern can pick the wrong key and never register a real block.",
+    "completionDate": "2026-09-02",
+    "commitHashes": [
+      "9df7d88bf6d606d024470917292fb0efc208c3b3",
+      "6cca92ccc4492cfbdb86ac741db29abdf84aa94b"
+    ],
+    "closureNote": "Task 157 completed.\n\nCommits:\n  9df7d88bf6d606d024470917292fb0efc208c3b3  (root)   work\n  6cca92ccc4492cfbdb86ac741db29abdf84aa94b  (root)   merge\nModified files: .taskTools/completedTasks.json, scripts/appendTask.ts, scripts/blockerVerdicts.ts, scripts/checkBlockers.ts, scripts/clarifyTask.ts, scripts/clarifyTaskBrief.ts, scripts/create-task_AgentPromptEmitter.ts, scripts/getTaskDetails.ts, scripts/prepareTasks.ts, scripts/runStartup.ts, scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.test.ts, scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.test.ts, scripts/tackle-tasks/shared/closeTaskRun.test.ts, scripts/tackle-tasks/shared/isTaskBlocked.test.ts, scripts/tackle-tasks/shared/isTaskBlocked.ts, scripts/tackle-tasks/shared/resolveTaskRun.test.ts, scripts/tackleTasksHook.ts, scripts/taskStats.ts, scripts/unblockDependents.ts, skills/create-task/createTask.workflow.js, skills/create-task/template/taskTemplate.json, tests/blockerVerdicts.test.ts, tests/checkBlockers.test.ts, tests/clarifyTask.test.ts, tests/closeTasks.test.ts, tests/create-task_AgentPromptEmitter.test.ts, tests/getTaskDetails.test.ts, tests/prepareTasks.test.ts, tests/runStartup.test.ts, tests/tackle-tasks_BootstrapAgentPromptEmitter.test.ts, tests/tackleTasksHook.test.ts, tests/taskStats.test.ts, tests/unblockDependents.test.ts\nTask tests: 12 files, green\nFull suite: green"
   }
 ]
