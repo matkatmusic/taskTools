@@ -127,6 +127,23 @@ test("duplicate task numbers in publishedTaskNumbers archive the task once", () 
     assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
 });
 
+test("a fully-published task declaring modifiableFiles instead of legacy files still archives", () => {
+    const root = makeProjectRoot();
+    const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
+    const taskTwo = tasks.find((t: any) => t.taskNumber === 2);
+    delete taskTwo.files;
+    taskTwo.modifiableFiles = ["b.ts"];
+    writeFileSync(join(root, "tasks.json"), JSON.stringify(tasks));
+    const raw: RawTaskRepoOutcome[] = [
+        { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "bbb" } },
+    ];
+    const mergeResults = summarizeTaskMergeResults(raw);
+    const { archived } = archivePublishedTasks([2], mergeResults, root);
+    assert.deepEqual(archived, [2]);
+    const completedTwo = readCompleted(root).find((t: any) => t.taskNumber === 2);
+    assert.deepEqual(completedTwo.modifiableFiles, ["b.ts"]);
+});
+
 test("a fully-published task with no declared files blocks the whole batch, archiving nothing", () => {
     const root = makeProjectRoot();
     const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));

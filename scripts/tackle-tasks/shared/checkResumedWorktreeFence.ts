@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { computeExemptGitlinkPaths } from "./checkTaskFileFence.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { modifiableFiles } from "../../prepareTasks.ts";
 import { currentBranchName } from "../../repositoryBranches.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
@@ -23,7 +24,7 @@ function declaredFiles(taskNumber: number, projectRoot: string): string[] {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
-    return Array.isArray(task.files) ? (task.files as string[]) : [];
+    return modifiableFiles(task);
 }
 
 export function checkResumedWorktreeFence(input: CheckResumedWorktreeFenceInput): CheckResumedWorktreeFenceOutput {

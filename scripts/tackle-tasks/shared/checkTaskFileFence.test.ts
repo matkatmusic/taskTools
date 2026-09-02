@@ -22,8 +22,7 @@ function seedTask(rootOrigin: string, taskNumber: number, files: string[]): void
     writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", files }]);
 }
 
-// Real gitlink move without any child file change: an empty commit changes the child's HEAD
-// but no tracked file, so the child occurrence's own diff against baseRef is empty.
+// Empty commit moves the child's gitlink HEAD but changes no tracked file, so its diff against baseRef is empty.
 function moveChildGitlinkWithNoChildFileChange(worktreePath: string): void {
     const childCheckout = join(worktreePath, "child");
     git(childCheckout, "commit", "--allow-empty", "-q", "-m", "empty commit moves HEAD only");
@@ -46,6 +45,29 @@ test("test_checkTaskFileFence_acceptsAnOwnedPathInsideASubmodule", () => {
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-20", taskNumber)).status, "acquired");
     const result = checkTaskFileFence({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-20", rootSourceBranch: "main",
+    });
+
+    assert.equal(result.inside, true);
+    assert.deepEqual(result.violations, []);
+});
+
+test("test_checkTaskFileFence_acceptsAnOwnedPathDeclaredUnderModifiableFilesInsteadOfLegacyFiles", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 27;
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    mkdirSync(join(tasksPath, ".."), { recursive: true });
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: ["child/widget.txt"] }]);
+
+    writeFileSync(join(worktreePath, "child", "widget.txt"), "widget\n");
+    git(join(worktreePath, "child"), "add", "widget.txt");
+    git(join(worktreePath, "child"), "commit", "-q", "-m", "add widget");
+    git(worktreePath, "add", "child");
+    git(worktreePath, "commit", "-q", "-m", "bump child gitlink");
+
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-27", taskNumber)).status, "acquired");
+    const result = checkTaskFileFence({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-27", rootSourceBranch: "main",
     });
 
     assert.equal(result.inside, true);
@@ -77,8 +99,7 @@ test("test_checkTaskFileFence_reportsAViolationForAPathTheAgentDidNotDeclare", (
     assert.deepEqual(result.violations, ["sneaky.txt"]);
 });
 
-// F10: a parent gitlink moved to an arbitrary commit with no owned (or any) child file change
-// must not be swept in by the old blanket "every gitlink is structural" exemption.
+// F10: a parent gitlink moved with no owned child file change must not pass the blanket structural exemption.
 test("test_checkTaskFileFence_reportsAParentGitlinkMovedWithNoChildChangeAsAViolation", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = makeLinkedWorktree(rootOrigin);
@@ -96,8 +117,7 @@ test("test_checkTaskFileFence_reportsAParentGitlinkMovedWithNoChildChangeAsAViol
     assert.deepEqual(result.violations, ["child"]);
 });
 
-// F10: an unowned child edit reports the child's own path, and its mechanical parent gitlink
-// does not become legal through the structural exemption just because the bump is mechanical.
+// F10: an unowned child edit reports the child's path; its mechanical parent gitlink stays illegal despite the structural exemption.
 test("test_checkTaskFileFence_reportsTheChildPathForAnUnownedChildEditAndDoesNotExemptItsGitlink", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = makeLinkedWorktree(rootOrigin);

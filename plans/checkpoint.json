@@ -1,0 +1,17 @@
+{
+    "taskNumber": 192,
+    "passId": "d42ade3a-8e17-4d37-b94a-a4b5e4d191bb",
+    "runId": "a57da9d1-6c99-4315-a64f-558be21e4014",
+    "projectRoot": "/Users/matkatmusicllc/Programming/taskTools-86",
+    "block": "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN",
+    "input": "{\"box\":\"TWO_CODEX_REVIEWS_COMPLETED_Q\",\"scriptSignal\":\"continue\",\"taskNumber\":192,\"runId\":\"a57da9d1-6c99-4315-a64f-558be21e4014\",\"projectRoot\":\"/Users/matkatmusicllc/Programming/taskTools-86\",\"worktree\":\"/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-192\",\"branch\":\"task-192\",\"docsMode\":\"UPDATE\",\"planFile\":\"/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-192/plans/plan.json\",\"exitType\":\"\",\"exitNote\":\"\",\"outcome\":\"PLAN\",\"clarifyRequest\":\"\",\"reviewOutputFile\":\"/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-192/plans/codex-review.json\",\"verdict\":\"AMEND\",\"notes\":\"[preparetasks-no-edit] Replace the no-edit section with an exact edit to scripts/prepareTasks.ts:62-70 that changes both quoted references from \\\"files\\\" to \\\"modifiableFiles\\\" while retaining the update-task-files guidance. Update the owned tests at tests/prepareTasks.test.ts:367-399 to capture the error and assert that it names quoted \\\"modifiableFiles\\\" and does not name quoted \\\"files\\\". Keep `node --test tests/prepareTasks.test.ts` as the verification command with all tests expected green.\\n\\nDurable because: The runtime rejection will direct future task authors to the authoritative edit-fence key, and the regression assertion will prevent legacy schema guidance from returning.\",\"message\":\"\",\"additionalData\":{\"outcome\":\"PLAN\",\"planFile\":\"/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-192/plans/plan.json\",\"clarifyRequest\":\"\"}}",
+    "state": "running",
+    "sourceLockHeld": false,
+    "exitType": "",
+    "exitNote": "",
+    "resumedFrom": {
+        "block": "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q",
+        "exitType": "plan-scrapped",
+        "exitNote": "codex did not accept the plan in two reviews"
+    }
+}
