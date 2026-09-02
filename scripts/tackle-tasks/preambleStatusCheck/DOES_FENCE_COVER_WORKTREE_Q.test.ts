@@ -1,7 +1,7 @@
 // DOES_FENCE_COVER_WORKTREE_Q.ts is "does the task's file list cover what the worktree touched?" in pipeline-preambleStatusCheck.mmd.  Run alone: node --test scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main } from "./DOES_FENCE_COVER_WORKTREE_Q.ts";
 import { git, makeCommittedRepo, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
@@ -29,6 +29,21 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesInitSubmodulesRecursivelyAndSetsDo
 
     assert.equal(output.next, "INIT_SUBMODULES_RECURSIVELY");
     assert.equal(output.docsMode, "UPDATE");
+    assert.equal(output.exitType, "");
+});
+
+test("test_DOES_FENCE_COVER_WORKTREE_Q_ignoresTheResumedRunsOwnCheckpointFile", () => {
+    const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
+    const groupId = 900_403;
+    const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", files: ["seed.txt"] }]);
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "plans", "checkpoint.json"), "{}\n");
+    git(worktreePath, "add", "plans/checkpoint.json");
+
+    const output = main(packet(groupId, worktreePath, rootOrigin));
+
+    assert.equal(output.next, "INIT_SUBMODULES_RECURSIVELY");
     assert.equal(output.exitType, "");
 });
 

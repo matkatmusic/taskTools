@@ -51,7 +51,10 @@ export function checkResumedWorktreeFence(input: CheckResumedWorktreeFenceInput)
 
     const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, rootSourceBranch, changedPathsByOccurrenceId, ownedPaths);
 
-    const violations = allChangedPaths.filter((path) => !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
+    // ponytail: the pipeline's own resume bookkeeping file, always dirty after a run, exempt like a gitlink.
+    const violations = allChangedPaths.filter(
+        (path) => path !== "plans/checkpoint.json" && !ownedPaths.has(path) && !exemptGitlinkPaths.has(path),
+    );
     return { inside: violations.length === 0, violations };
 }
 
