@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergeTaskWorktree } from "./mergeTaskWorktree.ts";
@@ -44,7 +44,7 @@ function makeSourceRepoWithSubmodule(): string {
 }
 
 let nextGroupId = 1;
-// operationBranch is attached as "task-<taskNumber>" by the script under test, so taskNumber here must equal the worktree's real groupId - matching production's one-task-per-group.
+// The script attaches operationBranch as "task-<taskNumber>", so taskNumber must equal the worktree's real groupId, matching production.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
@@ -70,7 +70,7 @@ function commitTaskWorkInWorktree(worktreePath: string): void {
     git(worktreePath, "commit", "-q", "-m", "root work");
 }
 
-// The full precondition for a merge under F3: the task must have been claimed and rebased first, so the current run carries the source-tip receipt the merge box verifies.
+// F3 requires the task be claimed and rebased first, so this run carries the source-tip receipt the merge checks.
 async function claimCommitAndRebase(rootOrigin: string, taskNumber: number, worktreePath: string, runId: string): Promise<string> {
     seedTaskAndClaim(rootOrigin, taskNumber, runId);
     commitTaskWorkInWorktree(worktreePath);
@@ -113,6 +113,8 @@ test("test_mergeTaskWorktree_createsAMergeCommitWithTwoParents", async () => {
     assert.equal(parents.length, 2);
 });
 
+// Superseded by the staging-worktree redesign: rootOrigin dirt no longer blocks a merge, so this is now false.
+/*
 test("test_mergeTaskWorktree_refusesWhenTheSourceCheckoutWentDirty", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
@@ -125,13 +127,14 @@ test("test_mergeTaskWorktree_refusesWhenTheSourceCheckoutWentDirty", async () =>
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-32", rootSourceBranch: sourceBranch,
     }), /dirty/);
 });
+*/
 
 test("test_mergeTaskWorktree_refusesWhenAnUnrelatedCleanRootCommitLandedAfterRebase", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-33");
 
-    // A clean, committed, unrelated root change lands in the source checkout after rebase.  The branch name is unchanged and the checkout is clean, so the old branch-name+dirty check alone would miss this (F3).
+    // An unrelated clean, committed root change after rebase evades the old branch-name+dirty check alone (F3).
     writeFileSync(join(rootOrigin, "unrelated.txt"), "unrelated\n");
     git(rootOrigin, "add", "unrelated.txt");
     git(rootOrigin, "commit", "-q", "-m", "unrelated clean root change");
@@ -159,13 +162,15 @@ test("test_mergeTaskWorktree_refusesWhenACommittedSourceSubmoduleChangeLandedAft
     }));
 });
 
+// Superseded by the staging-worktree redesign: both dirtied rootOrigin, which no longer blocks a merge.
+/*
 test("test_mergeTaskWorktree_refusesBeforeMovingAnySourceRefWhenUnrelatedFileSitsBesideTaskStateFiles", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-40");
     const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
 
-    // An unrelated untracked file lands beside tasks.json/completedTasks.json in the same ignored .taskTools/ directory - the exemption must be exact-path, not directory-wide.
+    // An unrelated untracked file lands beside tasks.json in .taskTools/; the exemption must be exact-path, not directory-wide.
     writeFileSync(join(rootOrigin, ".taskTools", "rogue.txt"), "rogue\n");
 
     assert.throws(() => mergeTaskWorktree({
@@ -183,7 +188,7 @@ test("test_mergeTaskWorktree_refusesOnAWhitespacePathRenameViaTheNulSafeParser",
     const sourceBranch = await claimCommitAndRebase(rootOrigin, taskNumber, worktreePath, "run-41");
     const beforeHead = git(rootOrigin, "rev-parse", "HEAD");
 
-    // A staged rename to a path containing whitespace, still at the recorded tip - only a NUL-safe parser reports this as one exact dirty path rather than mangling it.
+    // A staged rename to a whitespace path, still at the recorded tip; only a NUL-safe parser reports it correctly.
     git(rootOrigin, "mv", "package.json", "package renamed.json");
 
     assert.throws(() => mergeTaskWorktree({
@@ -194,6 +199,7 @@ test("test_mergeTaskWorktree_refusesOnAWhitespacePathRenameViaTheNulSafeParser",
     const run = getCurrentTaskRun(taskNumber, rootOrigin);
     assert.deepEqual(run?.commits, []);
 });
+*/
 
 test("test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
@@ -218,7 +224,7 @@ test("test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheChecked
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
 
-    // The root origin stays checked out on "main". createLinkedWorktree already created "staging" as a side effect - a separate real merge target, not HEAD's branch.
+    // The root origin stays on "main"; createLinkedWorktree already created "staging" as a separate real merge target, not HEAD's branch.
     const mainTipBeforeMerge = git(rootOrigin, "rev-parse", "main");
 
     seedTaskAndClaim(rootOrigin, taskNumber, "run-50");
@@ -238,6 +244,38 @@ test("test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheChecked
     assert.equal(git(rootOrigin, "rev-parse", "staging"), rootMergeCommit.hash);
     assert.equal(git(rootOrigin, "rev-parse", "main"), mainTipBeforeMerge);
     assert.equal(git(rootOrigin, "rev-parse", "--abbrev-ref", "HEAD"), "main");
+});
+
+test("test_mergeTaskWorktree_mergesWhileTheProjectRootHasUncommittedEdits", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-60");
+    commitTaskWorkInWorktree(worktreePath);
+    const rebaseResult = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-60", stepId: "rebase-run-60", rootSourceBranch: "staging",
+    });
+    assert.equal(rebaseResult.conflicted, false);
+    assert.equal(rebaseResult.stoppedAt, null);
+
+    // An unrelated uncommitted file lands in the source checkout while the lock was held.
+    writeFileSync(join(rootOrigin, "scratch.txt"), "wip\n");
+
+    const result = mergeTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-60", rootSourceBranch: "staging",
+    });
+
+    assert.equal(result.merged, true);
+    assert.equal(git(rootOrigin, "rev-parse", "--abbrev-ref", "HEAD"), "main");
+    assert.equal(existsSync(join(rootOrigin, "scratch.txt")), true);
+    assert.equal(readFileSync(join(rootOrigin, "scratch.txt"), "utf8"), "wip\n");
+    assert.equal(git(rootOrigin, "status", "--porcelain", "--", "scratch.txt").trim().startsWith("??"), true);
+
+    const rootMergeCommit = result.commits.find((commit) => commit.occurrenceId === "")!;
+    assert.equal(git(rootOrigin, "rev-parse", "staging"), rootMergeCommit.hash);
+
+    const childMergeCommit = result.commits.find((commit) => commit.occurrenceId === "child")!;
+    assert.equal(git(join(rootOrigin, "child"), "cat-file", "-t", childMergeCommit.hash), "commit");
 });
 
 test("test_mergeTaskWorktree_mergesARootWithNoTestSuite", async () => {

@@ -27,7 +27,7 @@ test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
 });
 
 test("test_planReviewPrompt_capsCodexExecWithAPerlAlarm", () => {
-    // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
+    // codex hangs on a broken models cache; the alarm lets the claude -p fallbacks run instead.
     const codexLine = planReviewPrompt(task).replace(/\\\n\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
     assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });
@@ -74,6 +74,31 @@ test("test_planReviewPrompt_excludesAnOwnedPathThePlanDeclaresItWillCreate", () 
     };
     const prompt = planReviewPrompt(createsTask);
     assert.equal(prompt.includes(join(repoRoot, "src/thing.ts")), false);
+});
+
+test("test_reviewByDefaultPrompt_usesAdversarialLanguageWhenTheDifficultyIsAtLeast7", () => {
+    const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-difficulty-"));
+    mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, difficulty: 7 }]));
+    const codexDraftedTask: PreparedTask = { ...task, taskStateRoot };
+
+    const prompt = planReviewPrompt(codexDraftedTask);
+
+    assert.match(prompt, /second, independent codex instance auditing/);
+    assert.match(prompt, /do not extend it the benefit of the doubt/);
+    assert.match(prompt, /A REJECTION IS YOUR FAILURE/);
+});
+
+test("test_reviewByDefaultPrompt_keepsTheOrdinaryWordingBelowDifficulty7", () => {
+    const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-difficulty-"));
+    mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, difficulty: 6 }]));
+    const humanDraftedTask: PreparedTask = { ...task, taskStateRoot };
+
+    const prompt = planReviewPrompt(humanDraftedTask);
+
+    assert.match(prompt, /read-only review agent/);
+    assert.equal(prompt.includes("second, independent codex instance"), false);
 });
 
 test("test_reviewQuestion_approvesOnTheRelaunchAfterAScrap", () => {

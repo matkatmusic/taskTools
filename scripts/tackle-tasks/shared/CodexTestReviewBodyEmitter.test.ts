@@ -106,8 +106,13 @@ test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", (
     assert.match(cliLines[0], /-o "\$REVIEW_FILE"/);
 });
 
+test("test_reviewTestsPrompt_setsTheReviewModelAndReasoningEffort", () => {
+    const codexLine = reviewTestsPrompt(fakeTask).replace(/\\\n(?!\s*\|\|)\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
+    assert.match(codexLine ?? "", /-m gpt-5\.6-terra -c 'model_reasoning_effort="medium"'/);
+});
+
 test("test_reviewTestsPrompt_capsCodexExecWithAPerlAlarm", () => {
-    // codex hangs on a broken models cache; the alarm kills it so the claude -p lines after || get their turn.
+    // codex hangs on a broken models cache; the alarm lets the claude -p fallbacks run instead.
     const codexLine = reviewTestsPrompt(fakeTask).replace(/\\\n(?!\s*\|\|)\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
     assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
 });

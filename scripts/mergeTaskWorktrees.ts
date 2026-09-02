@@ -5,6 +5,7 @@ import { basename, isAbsolute, join } from "node:path";
 import { tmpdir } from "node:os";
 import { resolveTaskWorktreeConventionDirectory, type PreparedGroup } from "./prepareTasks.ts";
 import { collectRepositorySources, currentBranchName } from "./repositoryBranches.ts";
+import { ensureStagingWorktree, stagingWorktreePath } from "./tackle-tasks/shared/stagingWorktree.ts";
 import { declaredFiles } from "./taskGroups.ts";
 import type { TaskRecord } from "./taskFiles.ts";
 import { readTaskFile, resolveTaskFiles } from "./taskFiles.ts";
@@ -432,8 +433,11 @@ export function mergeGroupBranchIntoRepo(
     sourceBranch: string,
     submodulePaths: string[] = [],
 ): MergeOutcome {
-    const foundBranch = git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD").trim();
-    git(repoRoot, "checkout", sourceBranch);
+    // const foundBranch = git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    // git(repoRoot, "checkout", sourceBranch);
+    if (currentBranchName(repoRoot) !== sourceBranch) {
+        throw new Error(`merge target "${repoRoot}" is on "${currentBranchName(repoRoot)}", expected "${sourceBranch}"`);
+    }
     const shared = { groupId: group.groupId, submoduleConflicts: [], worktree: group.worktree };
     let outcome: MergeOutcome;
     try {
@@ -448,7 +452,7 @@ export function mergeGroupBranchIntoRepo(
             outcome = { ...shared, merged: false, conflictedFilePaths: resolution.unexpectedConflicts, failureReason };
         }
     }
-    git(repoRoot, "checkout", foundBranch);
+    // git(repoRoot, "checkout", foundBranch);
     return outcome;
 }
 
@@ -475,9 +479,12 @@ export function mergeSubmoduleBranchIntoRepo(
     sourceBranch: string,
 ): { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null } {
     const groupBranch = currentBranchName(worktreeSubmodulePath);
-    const foundBranch = git(mainSubmodulePath, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    // const foundBranch = git(mainSubmodulePath, "rev-parse", "--abbrev-ref", "HEAD").trim();
     git(mainSubmodulePath, "fetch", worktreeSubmodulePath, `${groupBranch}:refs/heads/${groupBranch}`);
-    git(mainSubmodulePath, "checkout", sourceBranch);
+    // git(mainSubmodulePath, "checkout", sourceBranch);
+    if (currentBranchName(mainSubmodulePath) !== sourceBranch) {
+        throw new Error(`merge target "${mainSubmodulePath}" is on "${currentBranchName(mainSubmodulePath)}", expected "${sourceBranch}"`);
+    }
     let outcome: { merged: boolean; conflictedFilePaths: string[]; failureReason: string | null };
     try {
         git(mainSubmodulePath, "merge", "--no-ff", groupBranch, "-m", `merge ${groupBranch}`);
@@ -492,7 +499,7 @@ export function mergeSubmoduleBranchIntoRepo(
             outcome = { merged: false, conflictedFilePaths, failureReason: null };
         }
     }
-    git(mainSubmodulePath, "checkout", foundBranch);
+    // git(mainSubmodulePath, "checkout", foundBranch);
     return outcome;
 }
 
@@ -871,13 +878,14 @@ function runMergeCli(worktreePath: string): void {
     const repositorySources = collectRepositorySources(repoRoot, "staging");
     const parentSource = repositorySources.find((source) => source.path === "");
     if (!parentSource) throw new Error(`no recorded source branch for repository path "${repoRoot}"`);
+    ensureStagingWorktree(repoRoot, parentSource.sourceBranch);
     const submodulePathsDeepestFirst = repositorySources
         .map((source) => source.path)
         .filter((path) => path !== "")
         .sort((a, b) => b.split("/").length - a.split("/").length);
     const branch = currentBranchName(worktreePath);
     const group: PreparedGroup = { groupId: 0, worktree: worktreePath, branch, scope: "unknown", tasks: [] };
-    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, parentSource.sourceBranch, submodulePathsDeepestFirst);
+    const outcome = mergeGroupBranchIntoRepo(stagingWorktreePath(repoRoot), group, parentSource.sourceBranch, submodulePathsDeepestFirst);
     if (outcome.merged) removeWorktreeAndBranch(repoRoot, worktreePath, branch);
     process.stdout.write(JSON.stringify(outcome));
 }

@@ -1,17 +1,18 @@
-// "clean up worktrees, leases, persistence refs and source lock" (pipeline.mmd). Order matters: this is the fix for a stranding bug - ownership (lease, then lock) is released LAST, only after the destructive removal has actually succeeded. A failed removal keeps both, so no other process can take a worktree that still holds retained work.  F5: removal failure is an operational failure, not a verdict - it throws (never returns removed:false) so the CLI exits non-zero and rule 10's exit chain runs. Lease policy: the worktree lease is retained for as long as any retained artifact (worktree or task branch) still exists; the source lock is always released so unrelated tasks can proceed. This is derived from an ownership-checked retained-artifact query, not a caller-supplied flag - the query is authoritative and cannot be defeated by a wrong caller input.
+// Cleans up worktrees, leases, refs and lock (pipeline.mmd); releases ownership last, after removal succeeds, so no process strands work.
 import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow, releaseSourceRepoLock } from "./sourceRepoLock.ts";
 import { taskBranchName } from "./createTaskWorktree.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { GENERATED_ARTIFACT_PATTERNS } from "./writeTaskBrief.ts";
-import { loadRepositoryManifest, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import {
     collectRetainedTaskArtifacts, deleteTaskMergePersistence, removeTaskWorktreeAndBranches,
     type RetainedArtifactTarget, type SourceBranchCleanupTarget,
 } from "../../mergeTaskWorktrees.ts";
+import { loadSourceManifest } from "./occurrences.ts";
 
-// M3: branchName is derived from taskNumber inside this script, never accepted independently on stdin - a malformed payload can no longer point cleanup's destructive branch/ref deletions at another task.
+// M3: branchName derives from taskNumber here, not stdin, so a malformed payload can't target another task's deletions.
 export type CleanupTaskWorktreeInput = {
     projectRoot: string;
     worktreePath: string;
@@ -58,13 +59,13 @@ export function cleanupTaskWorktree(input: CleanupTaskWorktreeInput): CleanupTas
     const branchName = taskBranchName(input.taskNumber);
     const owner = buildLockOwner(input.runId, input.taskNumber);
 
-    const manifest = loadRepositoryManifest(input.projectRoot, input.rootSourceBranch);
+    const manifest = loadSourceManifest(input.projectRoot, input.rootSourceBranch);
     const sourceSubmodules: SourceBranchCleanupTarget[] = manifest.occurrences
         .filter((occurrence) => occurrence.occurrenceId !== "")
         .map((occurrence) => ({ checkoutPath: occurrence.checkoutPath, depth: occurrence.depth }));
     const retainedArtifactTarget = buildRetainedArtifactTarget(input, branchName, sourceSubmodules);
 
-    // F2 exception: an idempotent reconciliation may return success without the lock, but only after proving the worktree, task branches, persistence refs and owned lease are ALL absent. A missing lock alone is not proof of completion; a still-existing artifact means real work remains, so we fall through and require the lock like any other mutation.
+    // F2: skip the lock if worktree, branches, refs, and lease are ALL absent; any remaining artifact requires the lock.
     if (collectRetainedTaskArtifacts(retainedArtifactTarget).length === 0) {
         return { removed: true, retainedArtifacts: [] };
     }
@@ -80,7 +81,7 @@ export function cleanupTaskWorktree(input: CleanupTaskWorktreeInput): CleanupTas
         removeTaskWorktreeAndBranches(input.projectRoot, input.worktreePath, branchName, sourceSubmodules);
     } catch (cleanupError) {
         const retainedArtifacts = collectRetainedTaskArtifacts(retainedArtifactTarget);
-        // Always release the source lock so unrelated tasks can still run. Never release the worktree lease here: retainedArtifacts is non-empty by construction (removal failed), so it still needs a live ownership marker for the next claimed run to adopt.
+        // Always release the source lock; keep the worktree lease, since retainedArtifacts is non-empty, so future runs can adopt it.
         releaseSourceRepoLock(input.projectRoot, owner);
         throw new Error(
             `cleanup failed to remove task ${input.taskNumber}'s worktree/branches: `

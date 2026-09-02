@@ -10,7 +10,6 @@ import { rebaseTaskWorktree } from "../shared/rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner, releaseSourceRepoLock } from "../shared/sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { currentBranchName } from "../../repositoryBranches.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 
@@ -76,9 +75,8 @@ function commitTaskWorkInWorktree(worktree: string): void {
 async function markActiveCommitAndRebase(rootOrigin: string, taskNumber: number, worktree: string, runId: string): Promise<void> {
     seedTaskAndMarkActive(rootOrigin, taskNumber, runId);
     commitTaskWorkInWorktree(worktree);
-    const sourceBranch = currentBranchName(rootOrigin);
     const rebaseResult = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath: worktree, taskNumber, runId, stepId: `rebase-${runId}`, rootSourceBranch: sourceBranch,
+        projectRoot: rootOrigin, worktreePath: worktree, taskNumber, runId, stepId: `rebase-${runId}`, rootSourceBranch: "staging",
     });
     assert.equal(rebaseResult.conflicted, false);
     assert.equal(rebaseResult.stoppedAt, null);
@@ -136,6 +134,8 @@ test("test_MERGE_WORKTREES_createsAMergeCommitWithTwoParents", async () => {
     assert.equal(parents.length, 2);
 });
 
+// Superseded by the staging-worktree redesign: rootOrigin dirt no longer blocks a merge, so this is now false.
+/*
 test("test_MERGE_WORKTREES_refusesWhenTheSourceCheckoutWentDirty", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktree, taskNumber } = createLinkedWorktree(rootOrigin);
@@ -149,6 +149,7 @@ test("test_MERGE_WORKTREES_refusesWhenTheSourceCheckoutWentDirty", async () => {
         /dirty/,
     );
 });
+*/
 
 test("test_MERGE_WORKTREES_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun", async () => {
     const rootOrigin = makeSourceRepoWithSubmodule();

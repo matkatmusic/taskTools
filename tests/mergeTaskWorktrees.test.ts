@@ -239,7 +239,7 @@ test("test_mergeGroupBranchIntoRepoContinuesToLaterGroupsAfterAnEarlierConflict"
 });
 
 test("test_mergeGroupBranchIntoRepoMergesIntoTheNamedBranchWithoutMovingTheCheckout", () => {
-    // repo starts on sourceBranch, then checks out a different branch
+    // repo starts on sourceBranch and stays there
     const repoRoot = makeTempRepoWithCommit();
     const sourceBranch = currentBranchName(repoRoot);
     // a group worktree branch has a new commit with new.txt
@@ -248,18 +248,18 @@ test("test_mergeGroupBranchIntoRepoMergesIntoTheNamedBranchWithoutMovingTheCheck
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");
 
-    git(repoRoot, "checkout", "-b", "some-other-branch");
-
     // merge the group branch into sourceBranch
     const outcome = mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []);
     // the merge succeeds
     assert.equal(outcome.merged, true);
-    // the checkout never moved off the branch it was found on
-    assert.equal(currentBranchName(repoRoot), "some-other-branch");
+    // the checkout never moved off sourceBranch
+    assert.equal(currentBranchName(repoRoot), sourceBranch);
     // the named branch holds the merge
     assert.equal(git(repoRoot, "show", `${sourceBranch}:new.txt`).trim(), "brand new");
 });
 
+// Superseded: mergeGroupBranchIntoRepo no longer switches branches, so it never returns to a "found" one.
+/*
 test("test_mergeGroupBranchIntoRepoReturnsToTheBranchItFoundAfterMerging", () => {
     // repo starts on some-other-branch, with a staging branch present
     const repoRoot = makeTempRepoWithCommit();
@@ -279,6 +279,38 @@ test("test_mergeGroupBranchIntoRepoReturnsToTheBranchItFoundAfterMerging", () =>
     assert.equal(currentBranchName(repoRoot), "some-other-branch");
     // staging now contains new.txt
     assert.equal(git(repoRoot, "show", "staging:new.txt").trim(), "brand new");
+});
+*/
+
+test("test_mergeGroupBranchIntoRepoRefusesACheckoutOnAnotherBranch", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    git(repoRoot, "checkout", "-b", "some-other-branch");
+
+    assert.throws(
+        () => mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []),
+        (error: Error) => error.message.includes("some-other-branch") && error.message.includes(sourceBranch),
+    );
+});
+
+test("test_mergeSubmoduleBranchIntoRepoRefusesASubmoduleCheckoutOnAnotherBranch", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const sourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+
+    git(mainSubmodulePath, "checkout", "-b", "some-other-branch");
+
+    assert.throws(
+        () => mergeSubmoduleBranchIntoRepo(mainSubmodulePath, worktreeSubmodulePath, sourceBranch),
+        (error: Error) => error.message.includes("some-other-branch") && error.message.includes(sourceBranch),
+    );
 });
 
 test("test_mergeSubmoduleBranchSurvivesEvenWhenTheGroupConflicts", () => {
@@ -1506,12 +1538,13 @@ test("test_mergeTaskDeepestFirstMergesGrandchildThenChildThenParentAndProvesReac
     const rootSourceBranch = currentBranchName(rootPath);
     const rootBaseOid = git(rootPath, "rev-parse", rootSourceBranch).trim();
 
-    const vendorCheckoutPath = join(rootPath, "vendor");
-    const innerCheckoutPath = join(rootPath, "vendor", "inner");
-    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
-    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+    // A separate linked worktree carries the task-1 branch; rootPath itself stays on rootSourceBranch throughout, matching production.
+    const rootWorktreePath = `${rootPath}-task-1`;
+    git(rootPath, "worktree", "add", "-q", "-b", "task-1", rootWorktreePath, rootSourceBranch);
+    git(rootWorktreePath, "submodule", "update", "--init", "--recursive", "-q");
 
-    git(rootPath, "checkout", "-q", "-b", "task-1");
+    const vendorCheckoutPath = join(rootWorktreePath, "vendor");
+    const innerCheckoutPath = join(rootWorktreePath, "vendor", "inner");
     git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
     git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
 
@@ -1528,11 +1561,11 @@ test("test_mergeTaskDeepestFirstMergesGrandchildThenChildThenParentAndProvesReac
     git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
     const vendorTaskCommitOid = git(vendorCheckoutPath, "rev-parse", "HEAD").trim();
 
-    git(rootPath, "add", "vendor");
-    git(rootPath, "commit", "-q", "-m", "bump vendor gitlink");
-    writeFileSync(join(rootPath, "root-work.txt"), "root work\n");
-    git(rootPath, "add", "root-work.txt");
-    git(rootPath, "commit", "-q", "-m", "root work");
+    git(rootWorktreePath, "add", "vendor");
+    git(rootWorktreePath, "commit", "-q", "-m", "bump vendor gitlink");
+    writeFileSync(join(rootWorktreePath, "root-work.txt"), "root work\n");
+    git(rootWorktreePath, "add", "root-work.txt");
+    git(rootWorktreePath, "commit", "-q", "-m", "root work");
 
     const manifest: DiscoveryManifest = {
         repositoryManifest: {
@@ -1579,12 +1612,12 @@ test("test_mergeTaskDeepestFirstMergesGrandchildThenChildThenParentAndProvesReac
             reachabilityAtRootEntry.reachable = false;
         }
         // Root's task branch must already record vendor's post-merge source tip.
-        gitlinkAtRootEntry.recorded = git(rootPath, "rev-parse", "HEAD:vendor").trim();
+        gitlinkAtRootEntry.recorded = git(rootWorktreePath, "rev-parse", "HEAD:vendor").trim();
         gitlinkAtRootEntry.childSourceTip = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
         return mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, submodulePaths);
     };
 
-    const report = mergeTaskDeepestFirst(rootPath, manifest, {
+    const report = mergeTaskDeepestFirst(rootWorktreePath, manifest, {
         mergeSubmodule: wrappedMergeSubmodule,
         mergeGroup: wrappedMergeGroup,
     });

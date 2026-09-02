@@ -102,7 +102,7 @@ test("test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress", 
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
     const first = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "rebase-1", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "rebase-1", rootSourceBranch: "staging",
     });
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");
@@ -140,7 +140,7 @@ test("test_CONTINUE_REBASE_runsTwiceWithTheSameInput", async () => {
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
     const first = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-3", stepId: "rebase-3", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-3", stepId: "rebase-3", rootSourceBranch: "staging",
     });
     assert.equal(first.conflicted, true);
 
@@ -185,7 +185,7 @@ test("test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing", async () => {
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
     const first = await rebaseTaskWorktree({
-        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", stepId: "rebase-2", rootSourceBranch: "main",
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-2", stepId: "rebase-2", rootSourceBranch: "staging",
     });
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");

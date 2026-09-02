@@ -6,6 +6,13 @@ import type { PreparedTask } from "./preparedTask.ts";
 import { readCheckpoint } from "./checkpoint.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
+import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+
+// Same difficulty>=7 rule PLAN_THE_TASK.ts uses to route to codex drafting; no field records this separately.
+const isCodexDraftedPlan = (t: PreparedTask): boolean => {
+    const entry = readTaskFile(resolveTaskFiles(t.taskStateRoot).tasksPath).find((task) => task.taskNumber === t.number);
+    return entry !== undefined && Number(entry.difficulty) >= 7;
+};
 
 export type CodexReviewReceipt = CodexReview;
 
@@ -56,8 +63,12 @@ message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 
 function reviewByDefaultPrompt(t: PreparedTask): string {
     // REVIEW BY DEFAULT prompt:
-    return `You are a read-only review agent tasked with reviewing the implementation plan for task ${t.number}. 
-You write no file. 
+    const adversarial = isCodexDraftedPlan(t);
+    const roleSentence = adversarial
+        ? `You are a second, independent codex instance auditing the implementation plan for task ${t.number}, drafted by another codex instance. Actively hunt for flaws in it; do not extend it the benefit of the doubt.`
+        : `You are a read-only review agent tasked with reviewing the implementation plan for task ${t.number}.`;
+    return `${roleSentence}
+You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
 ## STRICT INPUT ALLOWLIST
@@ -149,10 +160,10 @@ export function reviewQuestion(t: PreparedTask): string {
     return reviewByDefaultPrompt(t);
 }
 
-// Beside the run-log, so `tail -f` on it shows codex working. The hook sets RUN_STEP_LOG for every block it spawns.
+// Logs beside the run-log so `tail -f` shows codex working; the hook sets RUN_STEP_LOG.
 const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
 
-// Failed experiment: a tool-spawned shell has no controlling terminal, so /dev/tty cannot open; `[ -w /dev/tty ]` still says yes (it checks mode bits), `exec 3>/dev/tty` then fails, and `2>&3` makes codex fail before it starts. Kept for the record; the live version logs to a file instead.
+// Failed experiment: a spawned shell has no controlling terminal, so /dev/tty tricks fail codex before it starts.
 function createCodexShellInvocationTTY(t: PreparedTask): string {
     return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
@@ -192,7 +203,7 @@ ${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)} \\
   || ${spawnClaudeFableCli("medium")} \\
   || ${spawnClaudeOpus48Cli("high")}
     `;
-// WHAT_IS_REVIEW_VERDICT records the review; running it here too would apply the fixes twice.  node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+// WHAT_IS_REVIEW_VERDICT already records the review; this line would apply fixes twice.  node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
 }
 
 function createCodexShellInvocationOriginal(t: PreparedTask): string {

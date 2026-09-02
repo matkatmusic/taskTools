@@ -11,11 +11,11 @@ process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.json");
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // Sets up a project root and worktree with a brief file, since loadPreparedTask is read-only and never creates one.
-function makeFixture(taskNumber = 35): { projectRoot: string; worktree: string } {
+function makeFixture(taskNumber = 35, difficulty?: number): { projectRoot: string; worktree: string } {
     const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-"));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
-        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "" },
+        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", difficulty },
     ]));
     writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
     const worktree = join(projectRoot, "worktree");
@@ -41,6 +41,21 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
     const promptFileContents = readFileSync(promptFile, "utf8");
     assert.match(promptFileContents, /task 35/);
     assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
+});
+
+test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () => {
+    const { projectRoot, worktree } = makeFixture(35, 7);
+    const packet = JSON.stringify({
+        box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber: 35, runId: "run-1",
+        projectRoot, worktree, branch: "task-35", docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
+    });
+
+    main(packet);
+
+    const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+    const promptFileContents = readFileSync(promptFile, "utf8");
+    assert.match(promptFileContents, /codex exec -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
+    assert.match(promptFileContents, /You are spawning a plan agent running in the CLI\./);
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

@@ -3,8 +3,9 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { attachOperationBranch, loadRepositoryManifest } from "../../prepareTasks.ts";
 import type { DiscoveryManifest } from "../../repositoryDiscovery.ts";
-import type { RepositoryOccurrence } from "../../repositoryManifest.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../../repositoryManifest.ts";
 import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
+import { ensureStagingWorktree, stagingWorktreePath } from "./stagingWorktree.ts";
 import {
     defaultMergeStepOperations,
     mergeTaskDeepestFirst,
@@ -45,7 +46,13 @@ export function mapSourceOccurrencesToWorktree(
 }
 
 export function buildWorktreeOccurrences(worktreePath: string, projectRoot: string, rootSourceBranch: string): WorktreeOccurrence[] {
-    return mapSourceOccurrencesToWorktree(worktreePath, loadRepositoryManifest(projectRoot, rootSourceBranch).occurrences);
+    return mapSourceOccurrencesToWorktree(worktreePath, loadSourceManifest(projectRoot, rootSourceBranch).occurrences);
+}
+
+// Every source checkoutPath now lives under the staging worktree; refs are shared, so nothing else moves.
+export function loadSourceManifest(projectRoot: string, rootSourceBranch: string): RepositoryManifest {
+    ensureStagingWorktree(projectRoot, rootSourceBranch);
+    return loadRepositoryManifest(stagingWorktreePath(projectRoot), rootSourceBranch);
 }
 
 // Fetches each occurrence's base branch from source into worktree, never origin; run before discovery walks source-recorded OIDs.
@@ -65,7 +72,7 @@ const OCCURRENCE_PATH_SEPARATOR = "::";
 
 // The source repository, not the worktree, is the base-branch authority; createWorktreeForGroup checks out task-N everywhere, hiding layer branches.
 export function buildDiscoveryManifest(worktreePath: string, projectRoot: string, rootSourceBranch: string): DiscoveryManifest {
-    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
+    const sourceManifest = loadSourceManifest(projectRoot, rootSourceBranch);
     return {
         repositoryManifest: {
             ...sourceManifest,
@@ -154,7 +161,7 @@ export function rebaseWorktreeSubmoduleLayersDeepestFirst(
     typecheckCommand: string | null = null,
     runTests: boolean = true,
 ): SubmoduleLayerWalkReport {
-    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
+    const sourceManifest = loadSourceManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber);
     return rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, leaveConflictLive, typecheckCommand, runTests);
@@ -170,7 +177,7 @@ export function mergeWorktreeTaskDeepestFirst(
     typecheckCommand: string | null = null,
     runTests: boolean = true,
 ): MergeTaskWalkReport {
-    const sourceManifest = loadRepositoryManifest(projectRoot, rootSourceBranch);
+    const sourceManifest = loadSourceManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
     const occurrencesWithRootSourceBranch = sourceManifest.occurrences.map((occurrence) =>
         occurrence.occurrenceId === "" ? { ...occurrence, baseBranch: rootSourceBranch } : occurrence,

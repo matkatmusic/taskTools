@@ -1,13 +1,14 @@
-// The shell commands that spawn a CLI agent and log it beside the run-log: `claude -p` for the agent-driven blocks, `codex exec` for the reviews.
+// Commands that spawn a CLI agent: `claude -p` for agent blocks, `codex exec` for reviews.
 import { whatToReturnSection } from "./whatToReturn.ts";
 
-// Beside the run-log, so `tail -f` on it shows the spawned agent working. The hook sets RUN_STEP_LOG for every block.
+// Logs beside the run-log so `tail -f` shows the agent working; the hook sets RUN_STEP_LOG.
 const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-agents.log");
 
 // Expects the caller's shell to have set REVIEW_PROMPT, REVIEW_FILE and CODEX_LOG.
 export function codexExecCommand(schemaPath: string): string {
     return `perl -e 'alarm shift; exec @ARGV' 300 \\
   codex exec \\
+    -m gpt-5.6-terra -c 'model_reasoning_effort="medium"' \\
     -s read-only \\
     --output-schema ${schemaPath} \\
     -o "$REVIEW_FILE" \\
