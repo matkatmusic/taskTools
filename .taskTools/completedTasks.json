@@ -4559,5 +4559,163 @@
       "4fb4789"
     ],
     "closureNote": "files->modifiableFiles/readOnlyFiles migration implemented and merged to staging"
+  },
+  {
+    "taskNumber": 160,
+    "version": "9d691066dfd2322286e8bf0676d6fc7f18aff4c8",
+    "title": "Make the Stop hook auto-stage only this session's hunks before asking for a commit message",
+    "userDescription": "make the hook that produces the 'invoke the commit-message' skill auto-stage only the chunks in this session by keeping a list of files modified during the session, via the hook's payload that provides the transcript path and reading the list of files modified in the transcript path, unless there's an easier way to find out (maybe the hook payload lists files?).",
+    "goal": [
+      "- After the Stop hook runs, `git diff --cached` shows only hunks this session produced; hunks another agent or an earlier session left in the same file stay unstaged.",
+      "- A session that modified no files stages nothing and does not ask the agent to invoke the commit-message skill.",
+      "- A missing or unreadable per-session flag file makes the hook stage nothing and print why, rather than falling back to staging everything.",
+      "- Explicitly NOT in scope: committing. The hook stages and then hands off to the commit-message skill, which the agent still invokes; no task here makes the hook run `git commit`."
+    ],
+    "description": "The Stop/SubagentStop hook `scripts/stage-and-summarize-stop.ts` already reads a per-session file list from `~/.claude/turn-flags/<session_id>`, written by the PostToolUse hook `scripts/turn-modified-flag.ts` from `input.tool_input.file_path`. No transcript parsing is needed — the hook payload already supplies file paths directly, so the user's transcript-reading premise is unnecessary. Today the Stop hook only checks whether those paths are unstaged and emits `additionalContext` telling the agent to stage them itself; it stages nothing. This task makes the hook stage, scoping `git add` per repo or submodule via `dirname(p)` the way the existing porcelain check does. Per-hunk scoping is in scope and is the hard part: `turn-modified-flag.ts` records paths only, not line ranges, so the hook needs either a pre-session content snapshot per file or scripted patch selection to separate this session's hunks from unrelated ones inside the same file. Choosing between those two is the main design decision.\n\n## Clarification answer (2026-09-02)\n\nThe hook-registration file is `hooks/hooks.json`. It registers `scripts/turn-modified-flag.ts` under the `PostToolUse` event with matcher `\"Edit|Write|NotebookEdit\"`, so it runs after every Edit/Write/NotebookEdit tool call and can only record the path from `input.tool_input.file_path` after the write already happened -- confirming the recorder is post-write only.\n\nThere is no `PreToolUse` hook anywhere in `hooks/hooks.json` (its top-level keys are `PostToolUse`, `SessionEnd`, `Stop`, `SubagentStop`, `UserPromptSubmit`) or registered elsewhere in the repo. A pre-edit snapshot producer does not exist today. If the plan chooses the pre-session-content-snapshot design (one of the two options this task's own description names as the main design decision), it must add a new `PreToolUse` entry with matcher `\"Edit|Write|NotebookEdit\"` to `hooks/hooks.json` itself -- there is nothing to point at instead. The scripted-patch-selection alternative needs no hook change at all, since it derives per-hunk scoping from the post-write path list plus a diff at Stop time instead of a pre-edit snapshot.",
+    "modifiableFiles": [
+      "scripts/stage-and-summarize-stop.ts",
+      "tests/stage-and-summarize-stop.test.ts",
+      "scripts/turn-modified-flag.ts",
+      "hooks/hooks.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
+    "difficulty": 7,
+    "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit.",
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-160",
+      "leaseRunId": "9bc29b25-ae8c-4682-a648-64285818e614",
+      "history": [
+        {
+          "runId": "9bc29b25-ae8c-4682-a648-64285818e614",
+          "startedAt": "2026-09-02T10:45:47-07:00",
+          "endedAt": "2026-09-02T13:08:23-07:00",
+          "exitType": "completed",
+          "exitNote": "All layers merged successfully.",
+          "modifiedFiles": [
+            "hooks/hooks.json",
+            "scripts/stage-and-summarize-stop.ts",
+            "scripts/turn-modified-flag.ts",
+            "tests/stage-and-summarize-stop.test.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "5617a2d318c8584f6531b56f4668187cf2501d2e",
+              "kind": "work",
+              "stepId": "implement"
+            },
+            {
+              "occurrenceId": "",
+              "hash": "6f0bfef8bd0192913cd6f5f6e098c281ac9d2a03",
+              "kind": "merge"
+            }
+          ],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "tests/stage-and-summarize-stop.test.ts"
+            ],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "✔ test_stages_only_the_flagged_session_files (646.646958ms)\n✔ test_stages_only_the_session_hunk_in_a_file_with_an_earlier_hunk (715.719167ms)\n✔ test_empty_session_stages_nothing_and_does_not_request_a_commit_message (193.614625ms)\n✔ already staged: silent (207.485208ms)\n✔ file outside any git repo: silent (94.228667ms)\n✔ test_missing_or_unreadable_flag_stages_nothing_and_explains_why (166.695083ms)\n✔ stop_hook_active: silent even with flag set (93.918708ms)\n✔ test_stopHookExitsCleanlyWhenTheTurnFlagIsRemovedByAConcurrentSubagent (99.606584ms)\nℹ tests 8\nℹ suites 0\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2301.922334\n",
+            "checkedAt": "2026-09-02T12:37:31-07:00"
+          },
+          "fullSuite": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "layers": [
+              {
+                "occurrenceId": "",
+                "passed": true
+              }
+            ],
+            "output": "advanced false, not true, against a checkout whose rebase already aborted (598.295667ms)\n✔ a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed (1373.906416ms)\n✔ a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit (1266.244541ms)\n✔ a merged-but-not-closed retry archives the original merge commit even after main advances in between (1313.690208ms)\n✔ a real root merge conflict produces a concrete final-report reason naming the conflicted file (729.520667ms)\n✔ merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close (3012.471792ms)\n✔ rebase stage: a failing rebase command blocks the lap before any agent runs (696.363375ms)\n✔ rebase stage: an unresolved live conflict blocks the lap and leaves the source branch unmoved (1019.479042ms)\n✔ rebase stage: a layer still red after the fix-round ceiling blocks the lap and leaves the source branch unmoved (1210.768583ms)\n✔ rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate (1303.573708ms)\n✔ rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation (1415.802583ms)\n✔ rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation (1111.283541ms)\n✔ merge stage refuses to guess when a merge intent exists but the merge record is missing (557.1035ms)\n✔ rebase-test blocks on a real type error even when the complete suite passes (666.164042ms)\n✔ merge revalidates root source drift with the configured typecheck (2341.035125ms)\n✔ merge revalidates source-submodule drift with the configured typecheck (3427.043792ms)\n✔ merge still closes when merge-time typecheck and complete suites are green (2479.20425ms)\n✔ merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact (627.288042ms)\n✔ rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing (141.170667ms)\n✔ merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing (686.591875ms)\n✔ merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict (729.034625ms)\n✔ merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged (1614.536458ms)\n✔ merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly (1706.380958ms)\n✔ successful close deletes task-N from root and every source submodule (2009.3515ms)\n✔ close failure retains root and every source-submodule task ref (1615.17625ms)\n✔ production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path (1007.45275ms)\n✔ attachOperationBranch sets the given branch on every occurrence, independent of any other invocation (0.484084ms)\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\n✔ implement refuses to run without a repositoryManifest instead of silently falling back to root-only (2.726083ms)\n✔ plan+implement refuses to run without a repositoryManifest instead of silently falling back to root-only (0.210042ms)\n✔ plan alone tolerates a missing repositoryManifest (0.414708ms)\n✔ plan+implement commits only in each prepared task worktree (5773.136667ms)\n✔ plan+implement reports blocked when the implementer claims done without committing (2220.797417ms)\n✔ plan+implement rejects a planner that returns an existing plan outside the task worktree (1102.179875ms)\n✔ plan+implement rejects a planner that reports planned at the expected path without writing it (1456.912083ms)\n✔ plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase (2632.785708ms)\n✔ plan+implement blocks a notes-only commit that never touches an owned file (2445.828709ms)\n✔ plan+implement blocks a done result that deletes the previously committed notes file (1874.885458ms)\n✔ plan+implement blocks an owned commit that omits the required notes file (1864.302ms)\n✔ widened ownership survives replanning, verification, and a separately launched implement stage (2083.466209ms)\n✔ plan+implement rejects missing sourceRoot before source or worktree mutation (480.989083ms)\n✔ a third rejected review with missingFiles widens every downstream implementation boundary (2869.487167ms)\n✔ test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch (1.926167ms)\n✔ test_getTemplateShapeMismatches_namesAMissingKey (5.645916ms)\n✔ test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind (4.357542ms)\n✔ test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave (1.914541ms)\n✔ test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject (1.478417ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.432084ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (6.182792ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (7.117792ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (2.216625ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (0.298792ms)\n✔ test_missingPackageJsonProducesResolutionRequest (3.356375ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (2.473375ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (0.709667ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (0.688416ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (2.001125ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (1.148333ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (1.003708ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (1.2675ms)\n✔ appends each edited path to the session flag file (223.037417ms)\n✔ missing session_id does nothing (213.214958ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (214.280959ms)\n✔ no matching blockers leaves tasks.json untouched (130.950208ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (184.764042ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (457.890833ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (205.61575ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (0.15825ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (801.183417ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (146.332458ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (1.918ms)\n✔ hook loads and answers /view-task with a block decision (383.283042ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (189.416167ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (103.065334ms)\n✔ hook is silent passthrough for other prompts (141.645625ms)\n✔ /view-task <N> includes the task's description with real newlines (146.820208ms)\n✔ /view-task with no number blocks with usage and the open-task listing (113.315625ms)\n✔ unknown task number reports not-found instead of crashing (128.310667ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.666708ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (0.857167ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (0.42425ms)\nℹ tests 2523\nℹ suites 0\nℹ pass 2523\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 166136.613125\n",
+            "checkedAt": "2026-09-02T13:02:39-07:00"
+          },
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "7e632ec362b66623ed99a09c64ca656a213b4a50"
+                }
+              ]
+            },
+            {
+              "stepId": "merge-succeeded-exit",
+              "script": "closeTaskRun",
+              "result": {
+                "closed": [
+                  160
+                ],
+                "skipped": [],
+                "unblocked": [],
+                "ambiguous": []
+              }
+            }
+          ],
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "4fb4789c05a6559feb7f40fe95662e0c7d4ecd88"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "7e632ec362b66623ed99a09c64ca656a213b4a50"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "4fb4789c05a6559feb7f40fe95662e0c7d4ecd88"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "completionDate": "2026-09-02",
+    "commitHashes": [
+      "5617a2d318c8584f6531b56f4668187cf2501d2e",
+      "6f0bfef8bd0192913cd6f5f6e098c281ac9d2a03"
+    ],
+    "closureNote": "Task 160 completed.\n\nCommits:\n  5617a2d318c8584f6531b56f4668187cf2501d2e  (root)   work\n  6f0bfef8bd0192913cd6f5f6e098c281ac9d2a03  (root)   merge\nModified files: hooks/hooks.json, scripts/stage-and-summarize-stop.ts, scripts/turn-modified-flag.ts, tests/stage-and-summarize-stop.test.ts\nTask tests: 1 files, green\nFull suite: green"
   }
 ]

@@ -86,7 +86,8 @@ export function runTaskTests(
 ): RunTaskTestsOutput {
     requireAbsolutePath("projectRoot", projectRoot);
     requireAbsolutePath("worktreePath", worktreePath);
-    const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const baseBranch = "staging";
     const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, baseBranch);
 
     const testFiles: string[] = [];

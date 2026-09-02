@@ -11,9 +11,10 @@ type Input = CommitImplementationIfNeededPacket & { message: string; additionalD
 
 export function main(input: string): CommitImplementationIfNeededPacket {
     const { message: _message, additionalData: _additionalData, next: _next, ...packet } = JSON.parse(input) as Input;
-    const rootSourceBranch = execFileSync(
-        "git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" },
-    ).trim();
+    // const rootSourceBranch = execFileSync(
+    //     "git", ["-C", packet.projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" },
+    // ).trim();
+    const rootSourceBranch = "staging";
     commitTaskWork({
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktree,

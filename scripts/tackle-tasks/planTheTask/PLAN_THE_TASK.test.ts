@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -58,12 +59,20 @@ test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () 
     const doneFile = join(worktree, "plans", "PLAN_THE_TASK.codex-done");
     const promptFileContents = readFileSync(promptFile, "utf8");
     assert.match(promptFileContents, /You are spawning a plan agent running in the CLI\./);
-    assert.ok(promptFileContents.includes(`setsid nohup sh ${runScript} >/dev/null 2>&1 </dev/null &`));
+    // macOS has no setsid; a plain nohup job outlives the Bash() call that started it.
+    assert.ok(promptFileContents.includes(`nohup sh ${runScript} >/dev/null 2>&1 </dev/null &`));
+    assert.doesNotMatch(promptFileContents, /setsid/);
     assert.ok(promptFileContents.includes(`[ -f ${doneFile} ]`));
     assert.doesNotMatch(promptFileContents, /codex exec/);
     const runScriptContents = readFileSync(runScript, "utf8");
     assert.match(runScriptContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
     assert.ok(runScriptContents.includes(`echo $? >${doneFile}`));
+    // macOS sh chokes on a heredoc inside $(...) holding an apostrophe, so the prompt is a file.
+    const codexPromptFile = join(worktree, "plans", "PLAN_THE_TASK.codex-prompt.md");
+    assert.ok(runScriptContents.includes(`"$(cat ${codexPromptFile})"`));
+    assert.doesNotMatch(runScriptContents, /PLANEOF/);
+    assert.match(readFileSync(codexPromptFile, "utf8"), /task 35/);
+    execFileSync("sh", ["-n", runScript]);
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

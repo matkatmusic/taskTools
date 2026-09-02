@@ -96,7 +96,8 @@ export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFil
 
     const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, input.rootSourceBranch, changedPathsByOccurrenceId, ownedPaths);
 
-    const violations = allChangedPaths.filter((path) => !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
+    // ponytail: the pipeline's own resume bookkeeping file, exempt like in checkResumedWorktreeFence.
+    const violations = allChangedPaths.filter((path) => path !== "plans/checkpoint.json" && !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
     return { inside: violations.length === 0, violations };
 }
 

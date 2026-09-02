@@ -21,6 +21,7 @@ function makeTempGitRepo(prefix: string): string {
     writeFileSync(join(repoPath, "seed.txt"), "seed\n");
     git(repoPath, "add", "seed.txt");
     git(repoPath, "commit", "-q", "-m", "seed");
+    git(repoPath, "branch", "staging");
     return repoPath;
 }
 

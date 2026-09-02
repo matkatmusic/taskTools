@@ -19,7 +19,8 @@ export function main(input: string): Record<string, unknown> {
     const projectRoot = requireAbsolutePath("projectRoot", packet.projectRoot);
     const worktree = requireAbsolutePath("worktree", packet.worktree);
     refreshOwnedSourceRepoLockOrThrow(projectRoot, buildLockOwner(packet.runId, packet.taskNumber));
-    const rootSourceBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    // const rootSourceBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const rootSourceBranch = "staging";
     const promptFile = `${worktree.replace(/\/+$/, "")}/plans/FIX_CONFLICTS.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
     writeFileSync(promptFile, fixConflictsPrompt(worktree, packet.taskNumber, projectRoot, packet.runId, rootSourceBranch));

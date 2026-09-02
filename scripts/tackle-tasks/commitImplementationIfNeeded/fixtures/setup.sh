@@ -42,6 +42,7 @@ JSON
 echo fixture > commit/root/.fixture-marker
 git -C commit/root add -A
 git -C commit/root commit -q -m root
+git -C commit/root branch staging
 git -C commit/root worktree add -q -b task-1 ../worktree main
 mkdir -p commit/worktree/src
 echo "export const thing = 2;" > commit/worktree/src/thing.ts
@@ -85,6 +86,7 @@ JSON
 echo fixture > runTests/root/.fixture-marker
 git -C runTests/root add -A
 git -C runTests/root commit -q -m root
+git -C runTests/root branch staging
 git -C runTests/root worktree add -q -b task-2 ../worktree main
 mkdir -p runTests/worktree/tests
 cat > runTests/worktree/tests/sentinel.test.ts <<'TS'

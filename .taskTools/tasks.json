@@ -155,59 +155,6 @@
     ]
   },
   {
-    "taskNumber": 160,
-    "version": "9d691066dfd2322286e8bf0676d6fc7f18aff4c8",
-    "title": "Make the Stop hook auto-stage only this session's hunks before asking for a commit message",
-    "userDescription": "make the hook that produces the 'invoke the commit-message' skill auto-stage only the chunks in this session by keeping a list of files modified during the session, via the hook's payload that provides the transcript path and reading the list of files modified in the transcript path, unless there's an easier way to find out (maybe the hook payload lists files?).",
-    "goal": [
-      "- After the Stop hook runs, `git diff --cached` shows only hunks this session produced; hunks another agent or an earlier session left in the same file stay unstaged.",
-      "- A session that modified no files stages nothing and does not ask the agent to invoke the commit-message skill.",
-      "- A missing or unreadable per-session flag file makes the hook stage nothing and print why, rather than falling back to staging everything.",
-      "- Explicitly NOT in scope: committing. The hook stages and then hands off to the commit-message skill, which the agent still invokes; no task here makes the hook run `git commit`."
-    ],
-    "description": "The Stop/SubagentStop hook `scripts/stage-and-summarize-stop.ts` already reads a per-session file list from `~/.claude/turn-flags/<session_id>`, written by the PostToolUse hook `scripts/turn-modified-flag.ts` from `input.tool_input.file_path`. No transcript parsing is needed — the hook payload already supplies file paths directly, so the user's transcript-reading premise is unnecessary. Today the Stop hook only checks whether those paths are unstaged and emits `additionalContext` telling the agent to stage them itself; it stages nothing. This task makes the hook stage, scoping `git add` per repo or submodule via `dirname(p)` the way the existing porcelain check does. Per-hunk scoping is in scope and is the hard part: `turn-modified-flag.ts` records paths only, not line ranges, so the hook needs either a pre-session content snapshot per file or scripted patch selection to separate this session's hunks from unrelated ones inside the same file. Choosing between those two is the main design decision.\n\n## Clarification answer (2026-09-02)\n\nThe hook-registration file is `hooks/hooks.json`. It registers `scripts/turn-modified-flag.ts` under the `PostToolUse` event with matcher `\"Edit|Write|NotebookEdit\"`, so it runs after every Edit/Write/NotebookEdit tool call and can only record the path from `input.tool_input.file_path` after the write already happened -- confirming the recorder is post-write only.\n\nThere is no `PreToolUse` hook anywhere in `hooks/hooks.json` (its top-level keys are `PostToolUse`, `SessionEnd`, `Stop`, `SubagentStop`, `UserPromptSubmit`) or registered elsewhere in the repo. A pre-edit snapshot producer does not exist today. If the plan chooses the pre-session-content-snapshot design (one of the two options this task's own description names as the main design decision), it must add a new `PreToolUse` entry with matcher `\"Edit|Write|NotebookEdit\"` to `hooks/hooks.json` itself -- there is nothing to point at instead. The scripted-patch-selection alternative needs no hook change at all, since it derives per-hunk scoping from the post-write path list plus a diff at Stop time instead of a pre-edit snapshot.",
-    "modifiableFiles": [
-      "scripts/stage-and-summarize-stop.ts",
-      "tests/stage-and-summarize-stop.test.ts",
-      "scripts/turn-modified-flag.ts",
-      "hooks/hooks.json"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
-    "difficulty": 7,
-    "problemSolvedByTask": "A blanket git add of a whole file would sweep in another session's unrelated edits in the same file, contaminating this session's commit.",
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-160",
-      "leaseRunId": "b40cfebb-55b3-41b7-9f44-3758d33d656b",
-      "history": [
-        {
-          "runId": "b40cfebb-55b3-41b7-9f44-3758d33d656b",
-          "startedAt": "2026-09-02T09:54:59-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
     "taskNumber": 164,
     "schemaVersion": "1.0.0",
     "version": "b2d66ef60db6badfdd4de5fc1413156b4bdb53af",

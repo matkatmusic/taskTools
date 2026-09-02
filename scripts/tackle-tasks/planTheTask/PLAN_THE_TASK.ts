@@ -21,28 +21,27 @@ function codexPlanPrompt(t: PreparedTask): string {
     const answerFile = `${root}/plans/PLAN_THE_TASK.codex-answer.md`;
     const doneFile = `${root}/plans/PLAN_THE_TASK.codex-done`;
     const runScript = `${root}/plans/PLAN_THE_TASK.codex-run.sh`;
+    const pidFile = `${root}/plans/PLAN_THE_TASK.codex-pid`;
+    const codexPromptFile = `${root}/plans/PLAN_THE_TASK.codex-prompt.md`;
+    // macOS sh chokes on a heredoc inside $(...) holding an apostrophe, so the prompt is a file.
+    writeFileSync(codexPromptFile, planPrompt(t));
     writeFileSync(runScript, `#!/bin/sh
-PLAN_PROMPT=$(cat <<'PLANEOF'
-${planPrompt(t)}
-PLANEOF
-)
-cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$PLAN_PROMPT" </dev/null >${answerFile} 2>&1
+cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$(cat ${codexPromptFile})" </dev/null >${answerFile} 2>&1
 echo $? >${doneFile}
 `);
     return `You are spawning a plan agent running in the CLI.
 You do not edit any files. Your job is to start codex detached, wait for it to finish, then report.
-Codex runs longer than one Bash() call may last, so never run it in the foreground and never use run_in_background or Monitor.
 
-## STEP 1 — start codex detached. One Bash() call, verbatim.
+## STEP 1 — Run this command verbatim:
 
 \`\`\`sh
-rm -f ${doneFile} && setsid nohup sh ${runScript} >/dev/null 2>&1 </dev/null &
+rm -f ${doneFile} && nohup sh ${runScript} >/dev/null 2>&1 </dev/null & echo $! >${pidFile}
 \`\`\`
 
-## STEP 2 — wait. Repeat this Bash() call, verbatim, until it prints DONE.
+## STEP 2 — wait. Execute this exact command once, with run_in_background: true. It polls until codex's planning run is complete or its process is gone, then exits; wait for its completion notification.
 
 \`\`\`sh
-for i in $(seq 1 3); do [ -f ${doneFile} ] && break; sleep 5; done; [ -f ${doneFile} ] && echo DONE || echo NOT YET
+until [ -f ${doneFile} ] || ! kill -0 $(cat ${pidFile}) 2>/dev/null; do sleep 20; done; [ -f ${doneFile} ] && echo DONE || echo CODEX DIED
 \`\`\`
 
 ${whatToReturnSection(`{ "outcome": "<PLAN if ${t.planFile} now exists, else CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<empty when outcome is PLAN; otherwise the question from ${answerFile}>" }`, `checking whether ${t.planFile} exists and reading ${answerFile} for the clarify question`, "")}
