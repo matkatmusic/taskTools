@@ -54,7 +54,7 @@ test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () 
 
     const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
     const promptFileContents = readFileSync(promptFile, "utf8");
-    assert.match(promptFileContents, /codex exec -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
+    assert.match(promptFileContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
     assert.match(promptFileContents, /You are spawning a plan agent running in the CLI\./);
 });
 

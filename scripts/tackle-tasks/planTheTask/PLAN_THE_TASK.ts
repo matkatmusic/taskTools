@@ -26,7 +26,7 @@ PLAN_PROMPT=$(cat <<'PLANEOF'
 ${planPrompt(t)}
 PLANEOF
 )
-cd ${root} && codex exec -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$PLAN_PROMPT" </dev/null >${answerFile}
+cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$PLAN_PROMPT" </dev/null >${answerFile}
 \`\`\`\`
 
 ${whatToReturnSection(`{ "outcome": "<PLAN if ${t.planFile} now exists, else CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<empty when outcome is PLAN; otherwise the question from ${answerFile}>" }`, `checking whether ${t.planFile} exists and reading ${answerFile} for the clarify question`, "")}
