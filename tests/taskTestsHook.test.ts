@@ -23,11 +23,15 @@ test("exits silently for a prompt that is not /task-tests", () => {
   assert.equal(runHook("hello there", process.cwd()), "");
 });
 
-test("blocks with the failing test lines when the suite reports failures", () => {
-  const cwd = fakeRepoWhoseTestPrints("printf '✖ boom (1ms)\\nℹ fail 1\\n'");
+test("on failures, adds context naming each failing test with its file and the subagent instructions, and never blocks", () => {
+  const reporterTail = "✖ boom (1ms)\\nℹ fail 1\\n✖ failing tests:\\n\\ntest at tests/a.test.ts:12:1\\n✖ boom (1ms)\\n";
+  const cwd = fakeRepoWhoseTestPrints(`printf '${reporterTail}'`);
   const parsed = JSON.parse(runHook("/task-tests", cwd));
-  assert.equal(parsed.decision, "block");
-  assert.equal(parsed.reason, "✖ boom (1ms)");
+  assert.equal(parsed.decision, undefined);
+  const context: string = parsed.hookSpecificOutput.additionalContext;
+  assert.match(context, /Spawn ONE subagent/);
+  assert.match(context, /First invoke `\/ponytail ultra`/);
+  assert.match(context, /^- tests\/a\.test\.ts — boom$/m);
 });
 
 test("adds 'all tests passed' as context when the suite reports zero failures", () => {

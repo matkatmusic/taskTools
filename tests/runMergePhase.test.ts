@@ -531,6 +531,7 @@ const makeQueueFixtureRepoV2 = (taskNumber: number, ownedFiles: string[]) => {
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
+    git(root, "checkout", "-q", "-b", "staging");
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);
