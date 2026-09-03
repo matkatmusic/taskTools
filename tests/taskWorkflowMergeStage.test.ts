@@ -1592,6 +1592,8 @@ test('production-shaped: the worktree prepareTasks.createWorktreeForGroup produc
   addTestScript(root, 'true')
   const runId = 'production-shaped-run'
   const worktreePath = createWorktreeForGroup(root, { groupId: taskNumber, taskNumbers: [taskNumber], filePaths: [], scope: 'declared' }, runId)
+  // A real tackle-tasks run launches from a checkout already sitting on staging, the merge target.
+  git(root, 'checkout', '-q', 'staging')
   symlinkSync(join(REPO_ROOT, 'scripts'), join(worktreePath, 'scripts'))
   mkdirSync(join(worktreePath, 'plans'), { recursive: true })
   // Real production manifest; its empty operationBranch forces task.workflow.js to supply the branch.

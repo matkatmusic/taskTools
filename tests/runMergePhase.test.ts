@@ -903,6 +903,7 @@ const makeQueueFixtureRepoWithTwoTasks = (taskA: number, taskB: number) => {
     writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
+    git(root, "checkout", "-q", "-b", "staging");
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([
         { taskNumber: taskA, title: "fixture A", files: [], blockedBy: [] },
@@ -1070,6 +1071,7 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
+    git(root, "checkout", "-q", "-b", "staging");
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);

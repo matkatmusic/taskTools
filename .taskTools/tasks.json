@@ -18,7 +18,7 @@
     "problemSolvedByTask": "Without an end-to-end fixture spanning repeated nested submodules, nobody can trust the recursive discovery/merge system before it becomes the production path for every real multi-repo task.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -42,7 +42,7 @@
     "difficulty": 8,
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ],
@@ -75,7 +75,7 @@
     "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -107,7 +107,7 @@
     "problemSolvedByTask": "Without a goal array, nobody (human or planner agent) can tell when a task is actually done versus merely touched.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -153,7 +153,7 @@
     "problemSolvedByTask": "Codex is only told to \"find issues\", so it never checks if the plan amendments resolve the issues it found in the first round; instead codex only hunts for new issues.  Codex is really good at finding issues, which means the list of issues found never gets resolved and perpetually grows until codex ultimately rejects the plan. ",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -188,7 +188,7 @@
     "problemSolvedByTask": "The agent doesn't accurately see what is really staged after the end-of-turn stage-and-summarize-stop.ts hook fires.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -220,7 +220,7 @@
     "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand — no automated way to get a flowchart.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]
@@ -257,7 +257,7 @@
     "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ]

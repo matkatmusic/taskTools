@@ -4759,7 +4759,7 @@
     "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.  ",
     "blockedBy": [
       {
-        "taskNum": 160,
+        "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
     ],

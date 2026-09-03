@@ -185,7 +185,20 @@ export function readStagingTip(repoRoot: string): string | null {
 // Creates from HEAD, which may be detached. A racing creator's failure is fine if the ref exists after.
 export function resolveOrCreateStagingTip(repoRoot: string): string {
     const found = readStagingTip(repoRoot);
-    if (found !== null) return found;
+    if (found !== null) {
+        const headTip = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+        if (found === headTip) return found;
+        const stagingIsMergedIntoHead = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", found, "HEAD"], { stdio: "ignore" });
+        if (stagingIsMergedIntoHead.status !== 0) return found;
+        const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", "HEAD"], { encoding: "utf8" });
+        if (moved.status !== 0) {
+            throw new Error(
+                `${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}\n` +
+                `Update that checkout yourself, e.g. git -C <that worktree> merge --ff-only ${headTip}, then run tackle-tasks again.`,
+            );
+        }
+        return readStagingTip(repoRoot)!;
+    }
     const created = spawnSync("git", ["-C", repoRoot, "branch", "staging"], { encoding: "utf8" });
     const foundAfterCreate = readStagingTip(repoRoot);
     if (foundAfterCreate === null) {

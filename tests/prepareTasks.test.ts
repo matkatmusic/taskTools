@@ -140,6 +140,40 @@ test("test_createWorktreeForGroupCreatesStagingFromHeadWhenItIsMissing", () => {
     assert.equal(git(repoRoot, "rev-parse", "staging").trim(), headTip);
 });
 
+test("test_createWorktreeForGroupMovesAMergedStagingToHead", () => {
+    // Setup: staging sits at B; the current branch has moved on to O, so staging is fully merged.
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    const oldStagingTip = git(repoRoot, "rev-parse", "staging").trim();
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    assert.notEqual(oldStagingTip, headTip);
+    // Test action: cut a worktree.
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    // Verification: staging moved to HEAD, and the worktree sits there too.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), headTip);
+});
+
+test("test_createWorktreeForGroupFailsLoudlyWhenAMergedStagingIsCheckedOutElsewhere", () => {
+    // Setup: staging is merged into HEAD but another worktree has it checked out, so git refuses to move it.
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    const stagingWorktree = mkdtempSync(join(tmpdir(), "staging-checkout-"));
+    git(repoRoot, "worktree", "add", "-q", stagingWorktree, "staging");
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    // Test action and verification: the error names the fix instead of moving anything.
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    assert.throws(() => createWorktreeForGroup(repoRoot, group), new RegExp(`merge --ff-only ${headTip}`));
+    assert.notEqual(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+});
+
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
@@ -212,10 +246,15 @@ test("test_createWorktreeForGroupResetsAReusableWorktreeToTheStagingTip", () => 
 });
 
 test("test_createWorktreeForGroupSelectsTheStagingBranchOverAStagingTag", () => {
-    // Setup: the staging branch sits at B; a tag named staging sits at a later commit O.
+    // Setup: staging branch holds unmerged commit B; a tag named staging sits at commit O.
     const repoRoot = makeTempRepoWithCommit();
-    git(repoRoot, "branch", "staging");
+    const originalBranch = git(repoRoot, "branch", "--show-current").trim();
+    git(repoRoot, "checkout", "-q", "-b", "staging");
+    writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
+    git(repoRoot, "add", "staging-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "B");
     const branchTip = git(repoRoot, "rev-parse", "refs/heads/staging").trim();
+    git(repoRoot, "checkout", "-q", originalBranch);
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
