@@ -191,7 +191,7 @@
     "taskNumber": 188,
     "schemaVersion": "1.0.0",
     "version": "477d72f20cf34295169c3524e437c2ee328627ac",
-    "title": "Store tasks in SQLite with tags so blockers and files are queries, not agents",
+    "title": "Store tasks in SQLite so blockers and files are looked up by query instead of by research agents.",
     "userDescription": "find a way to store tasks so that they're queryable so that an agent isn't needed to investigate open tasks that block and an agent isn't needed to find the files it touches.  probably needs some kind of tagging system per task/file.",
     "goal": [
       "- A query script answers \"what blocks task N\" and \"which open tasks touch file X\" from the SQLite database, with no agent run",
