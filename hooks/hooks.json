@@ -18,6 +18,11 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskStatsHook.ts\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskTestsHook.ts\"",
+            "timeout": 600
           }
         ]
       }
