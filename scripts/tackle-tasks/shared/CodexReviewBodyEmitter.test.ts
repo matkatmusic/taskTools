@@ -10,12 +10,16 @@ import type { PreparedTask } from "./preparedTask.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.json");
 
+const baseTaskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-body-taskstate-"));
+mkdirSync(join(baseTaskStateRoot, ".taskTools"), { recursive: true });
+writeFileSync(join(baseTaskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99 }]));
+
 const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
     testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
     files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], testFilePaths: [],
-    hasTests: false, tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: "/project",
+    hasTests: false, tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: baseTaskStateRoot,
 };
 
 test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
