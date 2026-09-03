@@ -29,6 +29,7 @@ function minimalPayload(overrides: Partial<NewTaskPayload> = {}): NewTaskPayload
         title: "Do the thing",
         userDescription: "user asked for the thing",
         goal: ["- the thing works"],
+        notInScope: ["- the other thing — task 99 owns it"],
         schemaVersion: "1.0.1",
         hasTests: false,
         tests: "",
@@ -52,6 +53,17 @@ test("test_appendTaskAddsEntryAsLastElementOfTasksJson", () => {
     assert.equal(tasks[0].taskNumber, 1);
     assert.equal(tasks[1].taskNumber, 2);
     assert.equal(tasks[2].title, "Do the thing");
+});
+
+test("test_appendTaskRefusesAPayloadWithoutNotInScope", () => {
+    const projectRoot = makeTemporaryTaskRepo([{ taskNumber: 1, title: "First" }]);
+    const { notInScope: _dropped, ...payloadWithoutNotInScope } = minimalPayload();
+    assert.throws(
+        () => appendTaskToTasksJson(payloadWithoutNotInScope as NewTaskPayload, projectRoot),
+        /notInScope is required/,
+    );
+    const tasks = JSON.parse(readFileSync(join(projectRoot, ".taskTools", "tasks.json"), "utf8"));
+    assert.equal(tasks.length, 1);
 });
 
 test("test_appendTaskStampsTheNextTaskNumber", () => {

@@ -4717,5 +4717,54 @@
       "6f0bfef8bd0192913cd6f5f6e098c281ac9d2a03"
     ],
     "closureNote": "Task 160 completed.\n\nCommits:\n  5617a2d318c8584f6531b56f4668187cf2501d2e  (root)   work\n  6f0bfef8bd0192913cd6f5f6e098c281ac9d2a03  (root)   merge\nModified files: hooks/hooks.json, scripts/stage-and-summarize-stop.ts, scripts/turn-modified-flag.ts, tests/stage-and-summarize-stop.test.ts\nTask tests: 1 files, green\nFull suite: green"
+  },
+  {
+    "taskNumber": 188,
+    "schemaVersion": "1.0.0",
+    "version": "477d72f20cf34295169c3524e437c2ee328627ac",
+    "title": "Store tasks in SQLite so blockers and files are looked up by query instead of by research agents.",
+    "userDescription": "find a way to store tasks so that they're queryable so that an agent isn't needed to investigate open tasks that block and an agent isn't needed to find the files it touches.  probably needs some kind of tagging system per task/file.",
+    "goal": [
+      "- A query script answers \"what blocks task N\" and \"which open tasks touch file X\" from the SQLite database, with no agent run",
+      "- A script regenerates a human-readable tasks.json from the database on demand, and the regenerated file matches what the database holds",
+      "- /create-task shows the derived tags for approval and accepts user-supplied tags instead",
+      "- createTask.workflow.js no longer spawns the blocker-hunter or file-hunter agents; it calls the query script",
+      "- The existing test suite still passes: npm test reports no failures after the storage swap",
+      "- NOT in scope: the .done file watcher handshake — task 187 owns that"
+    ],
+    "description": "Move task storage from .taskTools/tasks.json to a queryable SQLite database at .taskTools/tasks.db. Use node:sqlite or bun:sqlite — already stdlib, so no new dependency. package.json has no \"dependencies\" key at all today, only @types/node.\n\nAdd per-task and per-file tags so 'what blocks task N' and 'which open tasks touch file X' are SQL queries instead of agent research. The query system should behave like the context-mode query system: structured lookups, not prose. Tags are derived automatically from what a task already has, then presented to the user for approval (\"do these tags match? [list]\"), with an optional \"specify tags\" path so the user can supply their own.\n\nKeep a human-readable escape hatch: scripts/generateTasksJson.ts regenerates tasks.json from the database on demand, so a person can still read the task list until the SQLite version is fully integrated everywhere.\n\nThen retire the research agents. skills/create-task/createTask.workflow.js currently spawns two parallel agent() calls through runWithFallback — file-hunter (FILE_HUNTER_SCHEMA: files/description/difficulty) and blocker-hunter (BLOCKER_HUNTER_SCHEMA: blockedBy). Both must be replaced with direct calls to the new query script, and skills/create-task/SKILL.md updated to match.\n\nExisting code to rework: all task I/O funnels through scripts/taskFiles.ts (resolveTaskFiles, readTaskFile, seedTaskFilesIfAbsent) and scripts/appendTask.ts (appendTaskToTasksJson, buildTaskEntry), which read and write tasks.json as a flat JSON array of TaskRecord objects with fields taskNumber, title, userDescription, goal, description, files, tests, difficulty, blockedBy, chainGoal, handoffFilePaths. These become the database-backed read/write layer. scripts/checkBlockers.ts and scripts/getUnblockedTaskNumbers.ts do in-memory graph and cycle detection over blockedBy arrays loaded from tasks.json; that logic becomes SQL. scripts/getTaskDetails.ts, scripts/addTaskFiles.ts, scripts/nextTaskNumber.ts and scripts/closeTasks.ts all read or write tasks.json and must follow.\n\n## Audit correction (2026-08-31)\n\n'All task I/O funnels through scripts/taskFiles.ts and scripts/appendTask.ts' understates the blast radius: roughly thirty files read tasks.json directly (scripts/prepareTasks.ts, PREAMBLE_STATUS_CHECK.ts via jq, resetTask.ts, taskStats.ts, viewTaskHook.ts, and others). Per this task's own design the regenerated tasks.json stays authoritative for those readers; they are not migrated by this task.",
+    "modifiableFiles": [
+      ".taskTools/tasks.db",
+      "scripts/taskFiles.ts",
+      "scripts/taskStore.ts",
+      "scripts/generateTasksJson.ts",
+      "scripts/appendTask.ts",
+      "scripts/checkBlockers.ts",
+      "scripts/getUnblockedTaskNumbers.ts",
+      "scripts/getTaskDetails.ts",
+      "scripts/addTaskFiles.ts",
+      "scripts/nextTaskNumber.ts",
+      "scripts/closeTasks.ts",
+      "skills/create-task/createTask.workflow.js",
+      "skills/create-task/SKILL.md",
+      "tests/taskStore.test.ts",
+      "tests/generateTasksJson.test.ts",
+      ".taskTools/tasks.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "Seed a fixture task set into the database, run the query script for 'which open tasks touch file X' and 'what blocks task N', and assert the answers match hand-checked expected results, with no agent involved.",
+    "difficulty": 9,
+    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.  ",
+    "blockedBy": [
+      {
+        "taskNum": 160,
+        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
+      }
+    ],
+    "completionDate": "2026-09-02",
+    "commitHashes": [],
+    "closureNote": "Closed as not relevant: the same reasons that rejected SQLite for block logging on 2026-08-28 apply here; tasks.json stays the source of truth and a small jq query script replaces the SQLite store"
   }
 ]

@@ -9,6 +9,7 @@ export type NewTaskPayload = {
     title: string;
     userDescription: string;
     goal: string[];
+    notInScope: string[];
     schemaVersion: string;
     hasTests: boolean;
     tests: string;
@@ -41,15 +42,21 @@ export function buildTaskEntry(payload: NewTaskPayload, taskNumber: number, comm
         entry.chainGoal = payload.chainGoal;
     }
     entry.goal = payload.goal;
+    if (!Array.isArray(payload.notInScope)) {
+        throw new Error(`task ${taskNumber}: notInScope is required (an array of "- " lines)`);
+    }
+    entry.notInScope = payload.notInScope;
     if (payload.problemSolvedByTask) {
         entry.problemSolvedByTask = payload.problemSolvedByTask;
     }
     if (payload.description) {
         entry.description = payload.description;
     }
-    if (payload.files && payload.files.length > 0) {
-        entry.files = payload.files;
-    }
+    // if (payload.files && payload.files.length > 0) {
+    //     entry.files = payload.files;
+    // }
+    entry.modifiableFiles = payload.files ?? [];
+    entry.readOnlyFiles = ["*"];
     entry.schemaVersion = payload.schemaVersion;
     entry.hasTests = payload.hasTests;
     entry.tests = payload.tests;

@@ -140,6 +140,7 @@ export function renderTaskBriefContent(task: TaskRecord, repoRoot: string): stri
         "",
         ...(goalText(task.chainGoal) ? [`## Chain goal\n\n${goalText(task.chainGoal)}`, ""] : []),
         ...(goalText(task.goal) ? [`## Goal\n\n**This task is considered done when all of these are true:**\n\n${goalText(task.goal)}`, ""] : []),
+        ...(goalText(task.notInScope) ? [`## Not in scope\n\n${goalText(task.notInScope)}`, ""] : []),
         ...(typeof task.problemSolvedByTask === "string" && task.problemSolvedByTask.trim() !== ""
             ? [`## problemSolvedByTask\n\n${task.problemSolvedByTask}`, ""]
             : ["## problemSolvedByTask\n\n(not provided: this task was created before the problemSolvedByTask field existed)", ""]),

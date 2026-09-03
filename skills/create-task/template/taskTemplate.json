@@ -6,8 +6,10 @@
   "chainGoal": ["<omit this field entirely unless this task is one of a chain; one line per entry: what the whole chain achieves, and which task numbers are in it>"],
   "goal": [
     "<- one observable condition a reviewer can confirm without reading the diff: a command that succeeds, output a user can see, a symptom that no longer reproduces>",
-    "<- one condition per entry, no embedded newlines — the brief and /view-task rejoin them>",
-    "<- at least one entry naming what is explicitly NOT in scope and which sibling task owns it instead>"
+    "<- one condition per entry, no embedded newlines — the brief and /view-task rejoin them>"
+  ],
+  "notInScope": [
+    "<- required: one entry per hand-off, naming what is explicitly NOT in scope and which sibling task owns it instead>"
   ],
   "description": "<only the agent's derived understanding gathered while writing the task: file paths, function names, root-cause findings, constraints, and decisions; must not restate the raw prompt; under ten sentences; no line numbers — they go stale>",
   "files": ["<repo-relative path this task will touch>"],

@@ -87,9 +87,11 @@
     "userDescription": "yes, create a task to backfill goals for tasks in tasks.json.  completedTasks.json is excluded.",
     "goal": [
       "- every task in .taskTools/tasks.json carries a non-empty goal array; completedTasks.json is untouched",
-      "- each goal entry is one line with no embedded newline, and at least one entry per task names what is NOT in scope",
       "- tasks that belong to a chain share one identical chainGoal array across that chain",
       "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
+      "- each goal entry is one line with no embedded newline, and every task carries a notInScope array"
+    ],
+    "notInScope": [
       "- rewriting or shortening existing description text is NOT in scope; that is task 116"
     ],
     "description": "Measured against the current file: 12 open tasks; 2 without a goal (36, 113); 10 tasks declare a non-empty blockedBy; 0 tasks carry chainGoal. The 131-153 pipeline chain referenced in the original description no longer exists in tasks.json. Expect roughly 2 rounds of per-task authoring, not 40.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches.\n\nFormat is fixed by work already landed: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.\n\nBefore goals can be written for each remaining open task, each needs either a direct interview with the user, or a deep dive into its historical transcript_path to find the conversation where the task was created and derive the context that led to it — a goal drafted from the description alone risks missing scope the original conversation actually decided.",
@@ -124,7 +126,9 @@
       "- On the second pass, both functions instead return a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.\"",
       "- The plan recheck prompt points the reviewer at t.reviewOutputFile as the audit to recheck against; the tests recheck prompt points at t.testReviewFile.",
       "- The existing checkpoint-based approve path in reviewQuestion(t), for a plan-scrapped relaunch, is untouched; the round check only governs the non-scrapped branch.",
-      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected for a fresh set of issues in round two, for plan review or tests review.",
+      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected for a fresh set of issues in round two, for plan review or tests review."
+    ],
+    "notInScope": [
       "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This task only changes which prompt reviewQuestion and reviewTestsQuestion return.",
       "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language.",
       "- NOT in scope: the sibling-task and blockedBy scope being added to the same reviewer prompt — task #155 owns that.",
@@ -165,7 +169,9 @@
       "- The staged-diff text comes from the same scripts/stagedDiffs.ts code path the commit-message skill uses; no second copy of the diff logic exists in the repo.",
       "- The full diff is emitted, not a file-name-only list.",
       "- Staged changes in a submodule whose pointer moved appear in the hook output, labelled per repo, the same way the commit-message skill labels them.",
-      "- `npm test` passes, including an updated tests/stage-and-summarize-stop.test.ts that asserts the staged-diff text is present in additionalContext.",
+      "- `npm test` passes, including an updated tests/stage-and-summarize-stop.test.ts that asserts the staged-diff text is present in additionalContext."
+    ],
+    "notInScope": [
       "- NOT in scope: changing the commit-message skill's own output or wording, changing the EXCLUDES list in stagedDiffs.ts, and changing the staging behaviour itself -- the hook still only reports, it never stages."
     ],
     "description": "The 'changes detected' hook is scripts/stage-and-summarize-stop.ts (Stop/SubagentStop), which currently only checks `git status --porcelain` column two per file to decide if anything is unstaged, then emits a generic additionalContext string 'Files were changed. Stage the changes...' with no diff content. The commit-message skill already has the reusable staged-diff code in scripts/stagedDiffs.ts: it resolves the repo root via `git rev-parse --show-toplevel` from `process.cwd()`, runs `git diff --staged` with an EXCLUDES filter, and recurses into any submodule whose pointer moved. Note stagedDiffs.ts is currently a top-level script that writes to stdout, not an exported function -- confirm its actual shape in the source before assuming an export exists; extracting a reusable function is expected. stage-and-summarize-stop.ts must call that shared code and include the actual staged-diff text in the additionalContext payload instead of the generic reminder, so the agent sees what is really staged rather than trusting its stale in-context view. The user chose the FULL staged diff, not a file-name-only list, and chose reuse of the same code over a new lighter implementation. Complication: stage-and-summarize-stop.ts iterates over `paths` that can span multiple repos/submodules (using `dirname(p)` per path), while stagedDiffs.ts resolves only one repo root from cwd with no repo parameter, so this task must either loop the stagedDiffs logic per distinct repo root among the flagged paths, or add a repo-path parameter. tests/stage-and-summarize-stop.test.ts's `run()` helper currently asserts additionalContext matches /commit-message skill/ and does not exercise diff content, so the tests need updating to assert the emitted diff text appears in additionalContext.\n\n## Audit correction (2026-08-31)\n\nscripts/stagedDiffs.ts already exports stagedDiffs() (line 27) with a CLI guard at line 55 — the extraction this description asks to confirm is done. It takes no repo argument and resolves a single root from cwd; the remaining work is the repo-path parameter. 'The hook still only reports, it never stages' means not in scope for this task; task 160 owns staging behavior.",
@@ -188,52 +194,6 @@
     ]
   },
   {
-    "taskNumber": 188,
-    "schemaVersion": "1.0.0",
-    "version": "477d72f20cf34295169c3524e437c2ee328627ac",
-    "title": "Store tasks in SQLite so blockers and files are looked up by query instead of by research agents.",
-    "userDescription": "find a way to store tasks so that they're queryable so that an agent isn't needed to investigate open tasks that block and an agent isn't needed to find the files it touches.  probably needs some kind of tagging system per task/file.",
-    "goal": [
-      "- A query script answers \"what blocks task N\" and \"which open tasks touch file X\" from the SQLite database, with no agent run",
-      "- A script regenerates a human-readable tasks.json from the database on demand, and the regenerated file matches what the database holds",
-      "- /create-task shows the derived tags for approval and accepts user-supplied tags instead",
-      "- createTask.workflow.js no longer spawns the blocker-hunter or file-hunter agents; it calls the query script",
-      "- The existing test suite still passes: npm test reports no failures after the storage swap",
-      "- NOT in scope: the .done file watcher handshake — task 187 owns that"
-    ],
-    "description": "Move task storage from .taskTools/tasks.json to a queryable SQLite database at .taskTools/tasks.db. Use node:sqlite or bun:sqlite — already stdlib, so no new dependency. package.json has no \"dependencies\" key at all today, only @types/node.\n\nAdd per-task and per-file tags so 'what blocks task N' and 'which open tasks touch file X' are SQL queries instead of agent research. The query system should behave like the context-mode query system: structured lookups, not prose. Tags are derived automatically from what a task already has, then presented to the user for approval (\"do these tags match? [list]\"), with an optional \"specify tags\" path so the user can supply their own.\n\nKeep a human-readable escape hatch: scripts/generateTasksJson.ts regenerates tasks.json from the database on demand, so a person can still read the task list until the SQLite version is fully integrated everywhere.\n\nThen retire the research agents. skills/create-task/createTask.workflow.js currently spawns two parallel agent() calls through runWithFallback — file-hunter (FILE_HUNTER_SCHEMA: files/description/difficulty) and blocker-hunter (BLOCKER_HUNTER_SCHEMA: blockedBy). Both must be replaced with direct calls to the new query script, and skills/create-task/SKILL.md updated to match.\n\nExisting code to rework: all task I/O funnels through scripts/taskFiles.ts (resolveTaskFiles, readTaskFile, seedTaskFilesIfAbsent) and scripts/appendTask.ts (appendTaskToTasksJson, buildTaskEntry), which read and write tasks.json as a flat JSON array of TaskRecord objects with fields taskNumber, title, userDescription, goal, description, files, tests, difficulty, blockedBy, chainGoal, handoffFilePaths. These become the database-backed read/write layer. scripts/checkBlockers.ts and scripts/getUnblockedTaskNumbers.ts do in-memory graph and cycle detection over blockedBy arrays loaded from tasks.json; that logic becomes SQL. scripts/getTaskDetails.ts, scripts/addTaskFiles.ts, scripts/nextTaskNumber.ts and scripts/closeTasks.ts all read or write tasks.json and must follow.\n\n## Audit correction (2026-08-31)\n\n'All task I/O funnels through scripts/taskFiles.ts and scripts/appendTask.ts' understates the blast radius: roughly thirty files read tasks.json directly (scripts/prepareTasks.ts, PREAMBLE_STATUS_CHECK.ts via jq, resetTask.ts, taskStats.ts, viewTaskHook.ts, and others). Per this task's own design the regenerated tasks.json stays authoritative for those readers; they are not migrated by this task.",
-    "modifiableFiles": [
-      ".taskTools/tasks.db",
-      "scripts/taskFiles.ts",
-      "scripts/taskStore.ts",
-      "scripts/generateTasksJson.ts",
-      "scripts/appendTask.ts",
-      "scripts/checkBlockers.ts",
-      "scripts/getUnblockedTaskNumbers.ts",
-      "scripts/getTaskDetails.ts",
-      "scripts/addTaskFiles.ts",
-      "scripts/nextTaskNumber.ts",
-      "scripts/closeTasks.ts",
-      "skills/create-task/createTask.workflow.js",
-      "skills/create-task/SKILL.md",
-      "tests/taskStore.test.ts",
-      "tests/generateTasksJson.test.ts",
-      ".taskTools/tasks.json"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "Seed a fixture task set into the database, run the query script for 'which open tasks touch file X' and 'what blocks task N', and assert the answers match hand-checked expected results, with no agent involved.",
-    "difficulty": 9,
-    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.  ",
-    "blockedBy": [
-      {
-        "taskNum": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
-  },
-  {
     "taskNumber": 190,
     "schemaVersion": "1.0.0",
     "version": "53e3de50ba468819f85f4913e181cad21664c602",
@@ -243,7 +203,9 @@
       "- A /mermaid skill exists at skills/mermaid/SKILL.md and appears in the skill list.",
       "- Running /mermaid against a codebase writes a .mmd file the user can name and open.",
       "- The written .mmd follows the diagrams/tackle-tasks grammar: flowchart TB, boxes declared inside subgraphs as BOX_ID[\"label\"], edges written as A -- \"label\" --> B, decision boxes branch with two edges labeled YES and NO (never separate _YES/_NO boxes), a classDef/class block assigns every box a role, and cross-section targets are grouped in a \"next diagram\" subgraph joined by an invisible ~~~ link.",
-      "- The skill contains an explicit written checklist of those diagram rules, and the skill follows that checklist when it draws.",
+      "- The skill contains an explicit written checklist of those diagram rules, and the skill follows that checklist when it draws."
+    ],
+    "notInScope": [
       "- NOT in scope: changing any existing diagram in diagrams/tackle-tasks/, and changing scripts/generateSteps.ts. The skill only reads generateSteps.ts as the reference parser whose grammar its output must match; the skill's own output documents an arbitrary codebase and need not itself be runnable by generateSteps.ts."
     ],
     "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, following the existing skill format seen in skills/view-task/SKILL.md and skills/create-task/SKILL.md) that searches a target codebase and emits a .mmd mermaid flowchart. It must codify the diagramming grammar already used in diagrams/tackle-tasks/*.mmd and parsed by scripts/generateSteps.ts (see getEdgesInDiagram and getPromptBoxesInDiagram, roughly lines 60-120, and the `returns_a_prompt` class-role check at line 111 (`getPromptBoxesInDiagram`)): `flowchart TB`, boxes declared inside a named `subgraph ... end` block as `BOX_ID[\"label\"]` (a decision box is a plain rectangular box whose id ends in `_Q`, not a diamond node), edges written `A -- \"label\" --> B` or `A --> B`, decision boxes branching with two edges whose labels are literally `YES` and `NO` (extra detail can follow on a `<br/>` line) rather than separate `_YES`/`_NO` boxes, a `classDef`/`class` block at the end assigning every box exactly one role among `script`, `returns_a_prompt`, `next_diagram`, `output`, and `fail`, and any box the diagram references but does not itself resolve grouped into a second `subgraph ... [\"next diagram\"]` block joined to the main subgraph by an invisible `~~~` link. Reference examples: diagrams/tackle-tasks/pipeline-planTheTask.mmd, diagrams/tackle-tasks/pipeline-whatIsReviewVerdict.mmd, and diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd. No existing skill in skills/ produces diagrams; this is a new skill directory, not an edit to an existing one. The skill must also carry an explicit written checklist of these diagram rules that it follows while it draws. The /mermaid skill documents codebases generally, not just taskTools pipelines, so its output does not need to be runnable by generateSteps.ts (which is hardcoded to the tackle-tasks box-ownership map) — it only needs to follow the same grammar.",
@@ -271,7 +233,9 @@
     "goal": [
       "- With no .taskTools/settings.json, `/tackle-tasks [N]` runs the current pipeline block for block: the run-log's ran[] matches today's.",
       "- With settings.json holding `{ \"diagramFolder\": \"<path>\" }`, generateSteps, the workflow and the hook all read that folder; the run-log names that folder's blocks and none of the default pipeline's.",
-      "- A diagramFolder that does not exist or holds no .mmd stops the run at launch with a message naming the path. No fallback.",
+      "- A diagramFolder that does not exist or holds no .mmd stops the run at launch with a message naming the path. No fallback."
+    ],
+    "notInScope": [
       "- Not in scope: a guide for users who author their own diagrams. A later task owns it."
     ],
     "description": "generateSteps.ts (invoked as `node scripts/generateSteps.ts diagrams/tackle-tasks` from package.json's \"steps\"/\"steps:watch\" scripts) resolves the diagram folder from process.argv, falling back to the dead default `plans/diagrams` (diagrams actually live at diagrams/tackle-tasks/*.mmd) when no CLI arg is given. It walks that folder into scripts/steps.json plus per-box stub scripts under scripts/tackle-tasks/, using a hardcoded BLOCKS_BY_OWNER_FOLDER box-name map tied to the current pipeline's diagram set. generateWorkflow.ts and runStepHook.ts consume the already-generated scripts/steps.json and are diagram-folder-agnostic, so they don't need to change. No .taskTools/settings.json file or reader exists anywhere in the codebase yet (grepped scripts/, skills/, tests/) — this would be a new config file and a new settings-read helper, most naturally added in generateSteps.ts's CLI entrypoint (diagramFolder resolution) ahead of its current argv/hardcoded-default fallback, with the current diagrams/tackle-tasks folder becoming the default when no setting is present.\n\nSetting shape settled with the user: `{ \"diagramFolder\": \"<path>\" }`. The folder holds the .mmd files plus each block's script and template. An absent file or key means diagrams/tackle-tasks.\n\n## Audit correction (2026-08-31)\n\nUser decision: both step consumers stay in the fence. scripts/runStepHook.ts and scripts/generateWorkflow.ts are owned so the merge fence cannot block this task, whichever consumer ends up edited. The setting may still flow only through regenerated scripts/steps.json (also owned), in which case the hook and workflow generator need no code change.",
@@ -296,6 +260,33 @@
         "taskNum": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
+    ]
+  },
+  {
+    "taskNumber": 193,
+    "version": "d255c478df52966ecd156d0f1dcd67c4a1aabc1a",
+    "title": "Add plain-node query script over tasks.json for blockers and file matches",
+    "userDescription": "Add one query script over .taskTools/tasks.json that answers two questions with no agent and no database: \"what blocks task N\" (follow the blockedBy chain, print each blocker's taskNumber, title, and reason) and \"which open tasks touch file X\" (match X against each open task's modifiableFiles). Reads tasks.json directly with node; no SQLite, no new dependency. This replaces task 188 (closed 2026-09-02 as not relevant; see plans/decision-sqlite-task-storage.md). Difficulty 2. One test that seeds a small fixture tasks.json and asserts both answers.",
+    "goal": [
+      "- `node scripts/queryTasks.ts blockers N` prints each blocker's taskNumber, title, and reason, following the blockedBy chain, with no agent run",
+      "- `node scripts/queryTasks.ts files X` prints every open task whose modifiableFiles contains X",
+      "- The script reads .taskTools/tasks.json only; no SQLite, no new dependency in package.json"
+    ],
+    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.",
+    "description": "tasks.json is a flat array of TaskRecord objects (scripts/taskFiles.ts, readTaskFile) each with taskNumber, title, files, and blockedBy: {taskNumber, reason}[] (buildTaskEntry in scripts/appendTask.ts writes blockedBy entries keyed taskNumber, but existing rows in tasks.json/completedTasks.json use the older key taskNum — the script must check both keys or it silently reports an empty blocker chain). scripts/checkBlockers.ts already does an in-memory blockedBy walk with cycle protection over openTasks; the new script's blocker-chain walk can follow the same shape but should not depend on checkBlockers' open-only filtering, since a blocker can be closed. scripts/getTaskDetails.ts (readTaskLists) shows the existing helper for loading tasks.json/completedTasks.json arrays and can be reused for reading. Add a new standalone script, e.g. scripts/queryTasks.ts, invoked directly with node — no agent, no SQLite, no new dependency.",
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Write a small fixture tasks.json with 3 tasks (A blocked by B, B blocked by C; A and C touch scripts/foo.ts). Run the script for 'what blocks A' and assert B and C print with title and reason. Run 'which tasks touch scripts/foo.ts' and assert A and C print.",
+    "difficulty": 2,
+    "notInScope": [
+      "- Moving tasks to a database — task 188 was closed on 2026-09-02 and nothing owns that now"
+    ],
+    "modifiableFiles": [
+      "scripts/queryTasks.ts",
+      "tests/queryTasks.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
     ]
   }
 ]
