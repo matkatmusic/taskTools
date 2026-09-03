@@ -150,6 +150,208 @@ test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
     assert.equal(second, first);
 });
 
+test("test_createWorktreeForGroupCreatesMissingStagingBeforeReusingAWorktree", () => {
+    // Setup: a first run cut the worktree folder and released its lease.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const firstWorktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
+    // Setup: the staging branch is gone; the root checkout still sits on its original branch.
+    git(repoRoot, "branch", "-D", "staging");
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    // Test action: a second run reuses the folder.
+    const secondWorktreePath = createWorktreeForGroup(repoRoot, group, "run-2");
+    // Verification: staging exists again at HEAD, and the reused folder sits at that exact commit.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), headTip);
+});
+
+test("test_createWorktreeForGroupDoesNotCallTheStagingTipRetainedWhenTheLauncherDiverged", () => {
+    // Setup: staging holds commit S; the original branch holds a different commit O.
+    const repoRoot = makeTempRepoWithCommit();
+    const originalBranch = git(repoRoot, "branch", "--show-current").trim();
+    git(repoRoot, "checkout", "-q", "-b", "staging");
+    writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
+    git(repoRoot, "add", "staging-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "S");
+    git(repoRoot, "checkout", "-q", originalBranch);
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    // Setup: a first run cut the folder at S and released its lease.
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const firstWorktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
+    // Test action and verification: a clean folder at the staging tip is not retained work.
+    assert.doesNotThrow(() => createWorktreeForGroup(repoRoot, group, "run-2"));
+});
+
+test("test_createWorktreeForGroupResetsAReusableWorktreeToTheStagingTip", () => {
+    // Setup: a first run cut the folder at the common base B and released its lease.
+    const repoRoot = makeTempRepoWithCommit();
+    const originalBranch = git(repoRoot, "branch", "--show-current").trim();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const firstWorktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
+    // Setup: staging moves to S; the original branch moves to a different commit O.
+    git(repoRoot, "checkout", "-q", "staging");
+    writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
+    git(repoRoot, "add", "staging-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "S");
+    const stagingTip = git(repoRoot, "rev-parse", "refs/heads/staging").trim();
+    git(repoRoot, "checkout", "-q", originalBranch);
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    // Test action: a second run reuses the folder.
+    const secondWorktreePath = createWorktreeForGroup(repoRoot, group, "run-2");
+    // Verification: the folder sits at S, holds the staging-only file, and lacks the original-only file.
+    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), stagingTip);
+    assert.equal(existsSync(join(secondWorktreePath, "staging-only.txt")), true);
+    assert.equal(existsSync(join(secondWorktreePath, "original-only.txt")), false);
+});
+
+test("test_createWorktreeForGroupSelectsTheStagingBranchOverAStagingTag", () => {
+    // Setup: the staging branch sits at B; a tag named staging sits at a later commit O.
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    const branchTip = git(repoRoot, "rev-parse", "refs/heads/staging").trim();
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    git(repoRoot, "tag", "staging");
+    // Test action: a fresh cut, then a reuse.
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const firstWorktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    const firstHead = git(firstWorktreePath, "rev-parse", "HEAD").trim();
+    releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
+    const secondWorktreePath = createWorktreeForGroup(repoRoot, group, "run-2");
+    // Verification: both cuts sit at the branch commit, never the tag commit.
+    assert.equal(firstHead, branchTip);
+    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), branchTip);
+});
+
+test("test_createWorktreeForGroupRefusesWhenTheHiddenTaskBranchHoldsRetainedWork", () => {
+    // Setup: a first run committed R on task-1, then moved the folder to a clean detached HEAD.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    writeFileSync(join(worktreePath, "retained.txt"), "retained\n");
+    git(worktreePath, "add", "retained.txt");
+    git(worktreePath, "commit", "-q", "-m", "R");
+    const retainedTip = git(repoRoot, "rev-parse", "refs/heads/task-1").trim();
+    git(worktreePath, "checkout", "-q", "--detach", "refs/heads/staging");
+    releaseTaskWorktreeLease({ worktreePath, runId: "run-1" });
+    // Test action and verification: reuse refuses, and task-1 still points at R.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group, "run-2"), /retained work/);
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/task-1").trim(), retainedTip);
+});
+
+test("test_createWorktreeForGroupRefusesToRecreateOverAnUnmergedTaskBranch", () => {
+    // Setup: a first run committed R on task-1; its folder was removed but the branch stayed.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    writeFileSync(join(worktreePath, "retained.txt"), "retained\n");
+    git(worktreePath, "add", "retained.txt");
+    git(worktreePath, "commit", "-q", "-m", "R");
+    const retainedTip = git(repoRoot, "rev-parse", "refs/heads/task-1").trim();
+    releaseTaskWorktreeLease({ worktreePath, runId: "run-1" });
+    git(repoRoot, "worktree", "remove", "--force", worktreePath);
+    assert.equal(existsSync(worktreePath), false);
+    // Test action and verification: the fresh path refuses, and task-1 still points at R.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group, "run-2"), /retained work/);
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/task-1").trim(), retainedTip);
+});
+
+test("test_createWorktreeForGroupRefusesWhenASubmoduleTaskBranchHoldsRetainedWork", () => {
+    // Setup: a first run committed R on the submodule's task-1, then reset it to a clean gitlink commit.
+    const { repoRoot } = makeTempRepoWithLocalSubmodule();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    const submodulePath = join(worktreePath, "vendor");
+    const gitlinkTip = git(worktreePath, "rev-parse", "HEAD:vendor").trim();
+    writeFileSync(join(submodulePath, "retained.txt"), "retained\n");
+    git(submodulePath, "add", "retained.txt");
+    git(submodulePath, "commit", "-q", "-m", "R");
+    const retainedTip = git(submodulePath, "rev-parse", "refs/heads/task-1").trim();
+    git(submodulePath, "checkout", "-q", "--detach", gitlinkTip);
+    releaseTaskWorktreeLease({ worktreePath, runId: "run-1" });
+    // Test action and verification: reuse refuses, and the submodule's task-1 still points at R.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group, "run-2"), /retained work/);
+    assert.equal(git(submodulePath, "rev-parse", "refs/heads/task-1").trim(), retainedTip);
+});
+
+test("test_createWorktreeForGroupRefusesWhenTheWorktreeHoldsAnUntrackedFile", () => {
+    // Setup: a first run left an untracked file behind and released its lease.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
+    writeFileSync(join(worktreePath, "untracked.txt"), "not yet added\n");
+    releaseTaskWorktreeLease({ worktreePath, runId: "run-1" });
+    // Test action and verification: reuse refuses, and the file survives.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group, "run-2"), /retained work/);
+    assert.equal(existsSync(join(worktreePath, "untracked.txt")), true);
+});
+
+test("test_recoverStaleTaskWorktreeLeaseJudgesRetainedWorkAgainstStaging", () => {
+    // Setup: staging holds S, the original branch holds O, and a crashed run left its lease at S.
+    const repoRoot = makeTempRepoWithCommit();
+    const originalBranch = git(repoRoot, "branch", "--show-current").trim();
+    git(repoRoot, "checkout", "-q", "-b", "staging");
+    writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
+    git(repoRoot, "add", "staging-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "S");
+    git(repoRoot, "checkout", "-q", originalBranch);
+    writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
+    git(repoRoot, "add", "original-only.txt");
+    git(repoRoot, "commit", "-q", "-m", "O");
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    // Test action and verification: recovery releases the lease instead of calling S retained.
+    assert.doesNotThrow(() => recoverStaleTaskWorktreeLease(repoRoot, worktreePath));
+    assert.equal(existsSync(`${worktreePath}.lease`), false);
+});
+
+test("test_recoverStaleTaskWorktreeLeaseRefusesWhenStagingIsMissing", () => {
+    // Setup: a crashed run left its lease; the staging branch is gone.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    git(repoRoot, "branch", "-D", "staging");
+    // Test action and verification: recovery refuses and leaves the lease in place.
+    assert.throws(() => recoverStaleTaskWorktreeLease(repoRoot, worktreePath), /staging branch is missing/);
+    assert.equal(existsSync(`${worktreePath}.lease`), true);
+});
+
+test("test_twoPrepareProcessesWithNoStagingBranchBothStartFromTheSameStagingTip", async () => {
+    // Setup: a repo with no staging branch, and two prepare processes for two different groups held at a barrier.
+    const repoRoot = makeTempRepoWithCommit();
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    const readyA = join(repoRoot, "ready-a");
+    const readyB = join(repoRoot, "ready-b");
+    const goFile = join(repoRoot, "go");
+    const a = spawnLeaseRacer(repoRoot, 1, "run-a", readyA, goFile);
+    const b = spawnLeaseRacer(repoRoot, 2, "run-b", readyB, goFile);
+    try {
+        await waitForPath(readyA);
+        await waitForPath(readyB);
+        // Test action: release both at once.
+        writeFileSync(goFile, "go\n");
+        const [outA, outB] = await Promise.all([captureSuccessfulChild(a), captureSuccessfulChild(b)]);
+        const results = [JSON.parse(outA), JSON.parse(outB)] as Array<{ ok: boolean, worktreePath?: string, message?: string }>;
+        // Verification: both succeed, staging exists at HEAD, and both folders sit at that tip.
+        assert.equal(results[0]!.ok, true, results[0]!.message ?? "");
+        assert.equal(results[1]!.ok, true, results[1]!.message ?? "");
+        assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+        assert.equal(git(results[0]!.worktreePath!, "rev-parse", "HEAD").trim(), headTip);
+        assert.equal(git(results[1]!.worktreePath!, "rev-parse", "HEAD").trim(), headTip);
+    } finally {
+        rmSync(resolveTaskWorktreeConventionDirectory(repoRoot), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 // Real processes, not sequential same-process calls: both block on one "go" file, a genuine race.
 function spawnLeaseRacer(repoRoot: string, groupId: number, runId: string, readyFile: string, goFile: string): ChildProcess {
     const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "prepareTasks.ts")).href;
@@ -206,7 +408,7 @@ test("test_createWorktreeForGroupRefusesToDiscardAStaleWorktreesRetainedWork", (
     // Setup: a worktree left behind by an earlier run, holding that run's commit.
     const repoRoot = makeTempRepoWithCommit();
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
-    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
     writeFileSync(join(worktreePath, "stale.txt"), "from the previous run\n");
     git(worktreePath, "add", "stale.txt");
     git(worktreePath, "commit", "-q", "-m", "previous run");
@@ -215,6 +417,8 @@ test("test_createWorktreeForGroupRefusesToDiscardAStaleWorktreesRetainedWork", (
     writeFileSync(join(repoRoot, "fresh.txt"), "landed since\n");
     git(repoRoot, "add", "fresh.txt");
     git(repoRoot, "commit", "-q", "-m", "fresh work");
+    // The lease is taken before the retained-work check; a held lease refuses on ownership instead.
+    releaseTaskWorktreeLease({ worktreePath, runId: "run-1" });
     // Test action and verification: re-preparation refuses to silently discard retained work.
     assert.throws(() => createWorktreeForGroup(repoRoot, group), /retained work/);
     // Verification: the previous run's commit and file are still there for inspection or recovery.

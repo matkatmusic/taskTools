@@ -171,19 +171,81 @@ export function initializeSubmodulesInWorktree(worktreePath: string): void {
     );
 }
 
+export const STAGING_REF = "refs/heads/staging";
+
+// null means the branch is absent. Any other git failure throws; status 1 is "not found".
+export function readStagingTip(repoRoot: string): string | null {
+    const result = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", `${STAGING_REF}^{commit}`], { encoding: "utf8" });
+    if (result.status === 0) return result.stdout.trim();
+    if (result.status === 1) return null;
+    throw new Error(`git rev-parse ${STAGING_REF} failed in "${repoRoot}": ${result.stderr}`);
+}
+
+// Creates from HEAD, which may be detached. A racing creator's failure is fine if the ref exists after.
+export function resolveOrCreateStagingTip(repoRoot: string): string {
+    const found = readStagingTip(repoRoot);
+    if (found !== null) return found;
+    const created = spawnSync("git", ["-C", repoRoot, "branch", "staging"], { encoding: "utf8" });
+    const foundAfterCreate = readStagingTip(repoRoot);
+    if (foundAfterCreate === null) {
+        throw new Error(`could not create ${STAGING_REF} in "${repoRoot}": ${created.stderr}`);
+    }
+    return foundAfterCreate;
+}
+
+function commitHoldsRetainedWork(repoPath: string, commit: string, baseTip: string): number {
+    if (commit === baseTip) return WORKTREE_HOLDS_NO_RETAINED_WORK;
+    const ancestry = spawnSync("git", ["-C", repoPath, "merge-base", "--is-ancestor", commit, baseTip], { stdio: "ignore" });
+    if (ancestry.status === 0) return WORKTREE_HOLDS_NO_RETAINED_WORK;
+    return WORKTREE_HOLDS_RETAINED_WORK;
+}
+
+// A branch ref a -B reset would overwrite is safe only when absent, at the base, or behind it.
+function branchRefHoldsRetainedWork(repoPath: string, branchName: string, baseTip: string): number {
+    const found = spawnSync("git", ["-C", repoPath, "rev-parse", "--verify", "--quiet", `refs/heads/${branchName}^{commit}`], { encoding: "utf8" });
+    if (found.status !== 0) return WORKTREE_HOLDS_NO_RETAINED_WORK;
+    return commitHoldsRetainedWork(repoPath, found.stdout.trim(), baseTip);
+}
+
+// ponytail: two safe-side limits. Checks the submodule's current HEAD, not a moved gitlink, so it can over-refuse, never lose work. A detached-HEAD folder makes this throw instead of resetting.  createBranchInEveryRepository resets task-N in every populated submodule; each is checked against its own checked-out HEAD, just set to the gitlink by init.
+function submoduleTaskBranchesHoldRetainedWork(worktreePath: string, branchName: string): number {
+    for (const path of submodulePaths(worktreePath, currentBranchName(worktreePath))) {
+        const submodulePath = join(worktreePath, path);
+        const gitlinkTip = execFileSync("git", ["-C", submodulePath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        if (branchRefHoldsRetainedWork(submodulePath, branchName, gitlinkTip) === WORKTREE_HOLDS_RETAINED_WORK) {
+            return WORKTREE_HOLDS_RETAINED_WORK;
+        }
+    }
+    return WORKTREE_HOLDS_NO_RETAINED_WORK;
+}
+
 // A two-lap failure can leave commits or edits in the worktree for inspection/recovery.
-function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): number {
-    const status = execFileSync("git", ["-C", worktreePath, "status", "--porcelain"], { encoding: "utf8" });
+// function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string): number {
+//     const status = execFileSync("git", ["-C", worktreePath, "status", "--porcelain"], { encoding: "utf8" });
+//     if (status.trim().length > 0) return WORKTREE_HOLDS_RETAINED_WORK;
+//     const worktreeHead = execFileSync("git", ["-C", worktreePath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+//     const sourceTip = execFileSync("git", ["-C", repoRoot, "rev-parse", currentBranchName(repoRoot)], { encoding: "utf8" }).trim();
+//     if (worktreeHead === sourceTip) return WORKTREE_HOLDS_NO_RETAINED_WORK;
+//     try {
+//         execFileSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", worktreeHead, sourceTip], { stdio: "ignore" });
+//         return WORKTREE_HOLDS_NO_RETAINED_WORK;
+//     } catch {
+//         return WORKTREE_HOLDS_RETAINED_WORK;
+//     }
+// }
+
+function worktreeHoldsRetainedWork(worktreePath: string, repoRoot: string, branchName: string, stagingTip: string): number {
+    const status = execFileSync(
+        "git",
+        ["-C", worktreePath, "status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"],
+        { encoding: "utf8" },
+    );
     if (status.trim().length > 0) return WORKTREE_HOLDS_RETAINED_WORK;
     const worktreeHead = execFileSync("git", ["-C", worktreePath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    const sourceTip = execFileSync("git", ["-C", repoRoot, "rev-parse", currentBranchName(repoRoot)], { encoding: "utf8" }).trim();
-    if (worktreeHead === sourceTip) return WORKTREE_HOLDS_NO_RETAINED_WORK;
-    try {
-        execFileSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", worktreeHead, sourceTip], { stdio: "ignore" });
-        return WORKTREE_HOLDS_NO_RETAINED_WORK;
-    } catch {
+    if (commitHoldsRetainedWork(repoRoot, worktreeHead, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
         return WORKTREE_HOLDS_RETAINED_WORK;
     }
+    return branchRefHoldsRetainedWork(repoRoot, branchName, stagingTip);
 }
 
 export type TaskWorktreeLease = { worktreePath: string; runId: string };
@@ -282,7 +344,14 @@ export function recoverStaleTaskWorktreeLease(repoRoot: string, worktreePath: st
         unlinkSync(leasePath);
         return;
     }
-    if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
+    // if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
+    //     throw new Error(`worktree at "${worktreePath}" holds retained work; resolve or remove it before releasing its stale lease`);
+    // }
+    const stagingTip = readStagingTip(repoRoot);
+    if (stagingTip === null) {
+        throw new Error(`local staging branch is missing in "${repoRoot}"; create it before releasing the stale lease at "${worktreePath}"`);
+    }
+    if (worktreeHoldsRetainedWork(worktreePath, repoRoot, basename(worktreePath), stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
         throw new Error(`worktree at "${worktreePath}" holds retained work; resolve or remove it before releasing its stale lease`);
     }
     unlinkSync(leasePath);
@@ -298,20 +367,75 @@ export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId: string = generateRunId()): string {
     const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
+    // let lease: TaskWorktreeLease;
+    // if (existsSync(worktreePath)) {
+    //     if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
+    //         throw new Error(
+    //             `worktree at "${worktreePath}" holds retained work from a previous run; `
+    //             + `resolve or remove it before re-preparing task-${group.groupId}`,
+    //         );
+    //     }
+    //     // No retained work: acquire ownership before resetting so a racing session can't share it.
+    //     lease = acquireTaskWorktreeLease(worktreePath, runId);
+    //     try {
+    //         execFileSync(
+    //             "git",
+    //             ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
+    //             { stdio: "ignore" },
+    //         );
+    //     } catch (error) {
+    //         releaseTaskWorktreeLease(lease);
+    //         throw error;
+    //     }
+    // } else {
+    //     mkdirSync(dirname(worktreePath), { recursive: true });
+    //     lease = acquireTaskWorktreeLease(worktreePath, runId);
+    //     try {
+    //         const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+    //         if (stagingVerify.status !== 0) {
+    //             execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+    //         }
+    //         execFileSync(
+    //             "git",
+    //             ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "staging"],
+    //             { stdio: "ignore" },
+    //         );
+    //     } catch (error) {
+    //         releaseTaskWorktreeLease(lease);
+    //         throw error;
+    //     }
+    // }
+    // // A submodule-init or branch-creation failure gets the same treatment: release, don't orphan.
+    // try {
+    //     initializeSubmodulesInWorktree(worktreePath);
+    //     createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath, currentBranchName(worktreePath))], branchName);
+    // } catch (error) {
+    //     releaseTaskWorktreeLease(lease);
+    //     throw error;
+    // }
+    // return worktreePath;
+
     let lease: TaskWorktreeLease;
     if (existsSync(worktreePath)) {
-        if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
-            throw new Error(
-                `worktree at "${worktreePath}" holds retained work from a previous run; `
-                + `resolve or remove it before re-preparing task-${group.groupId}`,
-            );
-        }
-        // No retained work: acquire ownership before resetting so a racing session can't share it.
+        // Lease first, then resolve: the safety decision and the reset must see the same staging commit.
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         try {
+            const stagingTip = resolveOrCreateStagingTip(repoRoot);
+            if (worktreeHoldsRetainedWork(worktreePath, repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
+                throw new Error(
+                    `worktree at "${worktreePath}" holds retained work from a previous run; `
+                    + `resolve or remove it before re-preparing task-${group.groupId}`,
+                );
+            }
+            if (submoduleTaskBranchesHoldRetainedWork(worktreePath, branchName) === WORKTREE_HOLDS_RETAINED_WORK) {
+                throw new Error(
+                    `worktree at "${worktreePath}" holds retained work on a submodule task branch; `
+                    + `resolve or remove it before re-preparing task-${group.groupId}`,
+                );
+            }
             execFileSync(
                 "git",
-                ["-C", worktreePath, "checkout", "--force", "-B", branchName, currentBranchName(repoRoot)],
+                ["-C", worktreePath, "checkout", "--force", "-B", branchName, stagingTip],
                 { stdio: "ignore" },
             );
         } catch (error) {
@@ -322,13 +446,16 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
         mkdirSync(dirname(worktreePath), { recursive: true });
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         try {
-            const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
-            if (stagingVerify.status !== 0) {
-                execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+            const stagingTip = resolveOrCreateStagingTip(repoRoot);
+            if (branchRefHoldsRetainedWork(repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
+                throw new Error(
+                    `branch "${branchName}" holds retained work from a previous run; `
+                    + `resolve or delete it before re-preparing task-${group.groupId}`,
+                );
             }
             execFileSync(
                 "git",
-                ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, "staging"],
+                ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, stagingTip],
                 { stdio: "ignore" },
             );
         } catch (error) {
@@ -339,6 +466,12 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     // A submodule-init or branch-creation failure gets the same treatment: release, don't orphan.
     try {
         initializeSubmodulesInWorktree(worktreePath);
+        if (submoduleTaskBranchesHoldRetainedWork(worktreePath, branchName) === WORKTREE_HOLDS_RETAINED_WORK) {
+            throw new Error(
+                `worktree at "${worktreePath}" holds retained work on a submodule task branch; `
+                + `resolve or remove it before re-preparing task-${group.groupId}`,
+            );
+        }
         createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath, currentBranchName(worktreePath))], branchName);
     } catch (error) {
         releaseTaskWorktreeLease(lease);
@@ -391,10 +524,11 @@ export function buildWorkflowArguments(
     tasks: TaskRecord[],
     runId: string = generateRunId(),
 ): WorkflowArguments {
-    const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
-    if (stagingVerify.status !== 0) {
-        execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
-    }
+    // const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+    // if (stagingVerify.status !== 0) {
+    //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+    // }
+    resolveOrCreateStagingTip(repoRoot);
     const repositorySources = collectRepositorySources(repoRoot, "staging");
     const preparedGroups: PreparedGroup[] = [];
     try {
@@ -476,10 +610,11 @@ function runAsCli(): void {
     let workflowArguments: WorkflowArguments | null = null;
     let ownershipTransferred = false;
     try {
-        const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
-        if (stagingVerify.status !== 0) {
-            execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
-        }
+        // const stagingVerify = spawnSync("git", ["-C", repoRoot, "rev-parse", "--verify", "--quiet", "staging"], { stdio: "ignore" });
+        // if (stagingVerify.status !== 0) {
+        //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
+        // }
+        resolveOrCreateStagingTip(repoRoot);
         const manifest = loadRepositoryManifest(repoRoot, "staging");
         workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
         // startTimestamp is stamped here because workflow scripts cannot call Date.now().
