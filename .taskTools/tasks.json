@@ -243,10 +243,19 @@
                 "initialized": false
               }
             }
-          ]
+          ],
+          "attempts": {
+            "planReview": 1
+          },
+          "countedPasses": {
+            "planReview": [
+              "b0c61654-36b2-468b-bb44-953fbc1538fe"
+            ]
+          }
         }
       ]
-    }
+    },
+    "codexReviewNotes": "[files-needing-no-edit] Replace the no-edit assertions for `scripts/generateWorkflow.ts` and `scripts/runStepHook.ts` with explicit edits that derive one deterministic start key from the regenerated config (the first entry of the first emitted diagram, with an explicit empty-config error). Use that key in the generated workflow and in the hook's start/resume checks instead of the two hardcoded `pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK` constants. Extend the integration coverage to exercise the generated `/tackle-tasks` workflow path with the custom config, rather than invoking `/run-step BOX_A` directly.\n\nDurable because: The launch path and hook will use the same config-derived entry point, so a custom diagram set cannot be rejected merely because it lacks a default-pipeline key.\n\n[implement-diagram-folder-resolution] Add a concrete, documented layout for user-provided block scripts and templates within the configured diagram folder, then edit `generateSteps.ts` to use those authored files when building each custom-folder config entry instead of always creating or retaining files under `scripts/tackle-tasks`. Add a test fixture with distinctive authored script/template content and assert the generated config and hook execute that content.\n\nDurable because: The test proves the configured folder supplies both the graph and its implementation, preventing future changes from silently falling back to generated default stubs."
   },
   {
     "taskNumber": 194,

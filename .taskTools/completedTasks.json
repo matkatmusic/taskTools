@@ -4978,5 +4978,175 @@
     "completionDate": "2026-09-03",
     "commitHashes": [],
     "closureNote": "completed by fable 5.1 medium manually"
+  },
+  {
+    "taskNumber": 193,
+    "version": "d255c478df52966ecd156d0f1dcd67c4a1aabc1a",
+    "title": "Add plain-node query script over tasks.json for blockers and file matches",
+    "userDescription": "Add one query script over .taskTools/tasks.json that answers two questions with no agent and no database: \"what blocks task N\" (follow the blockedBy chain, print each blocker's taskNumber, title, and reason) and \"which open tasks touch file X\" (match X against each open task's modifiableFiles). Reads tasks.json directly with node; no SQLite, no new dependency. This replaces task 188 (closed 2026-09-02 as not relevant; see plans/decision-sqlite-task-storage.md). Difficulty 2. One test that seeds a small fixture tasks.json and asserts both answers.",
+    "goal": [
+      "- `node scripts/queryTasks.ts blockers N` prints each blocker's taskNumber, title, and reason, following the blockedBy chain, with no agent run",
+      "- `node scripts/queryTasks.ts files X` prints every open task whose modifiableFiles contains X",
+      "- The script reads .taskTools/tasks.json only; no SQLite, no new dependency in package.json"
+    ],
+    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.",
+    "description": "tasks.json is a flat array of TaskRecord objects (scripts/taskFiles.ts, readTaskFile) each with taskNumber, title, files, and blockedBy: {taskNumber, reason}[] (buildTaskEntry in scripts/appendTask.ts writes blockedBy entries keyed taskNumber, but existing rows in tasks.json/completedTasks.json use the older key taskNum — the script must check both keys or it silently reports an empty blocker chain). scripts/checkBlockers.ts already does an in-memory blockedBy walk with cycle protection over openTasks; the new script's blocker-chain walk can follow the same shape but should not depend on checkBlockers' open-only filtering, since a blocker can be closed. scripts/getTaskDetails.ts (readTaskLists) shows the existing helper for loading tasks.json/completedTasks.json arrays and can be reused for reading. Add a new standalone script, e.g. scripts/queryTasks.ts, invoked directly with node — no agent, no SQLite, no new dependency.",
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Write a small fixture tasks.json with 3 tasks (A blocked by B, B blocked by C; A and C touch scripts/foo.ts). Run the script for 'what blocks A' and assert B and C print with title and reason. Run 'which tasks touch scripts/foo.ts' and assert A and C print.",
+    "difficulty": 2,
+    "notInScope": [
+      "- Moving tasks to a database — task 188 was closed on 2026-09-02 and nothing owns that now"
+    ],
+    "modifiableFiles": [
+      "scripts/queryTasks.ts",
+      "tests/queryTasks.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "blockedBy": [],
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-193",
+      "leaseRunId": "951ba6c1-e3b5-4c92-ac68-ead16b666e26",
+      "history": [
+        {
+          "runId": "951ba6c1-e3b5-4c92-ac68-ead16b666e26",
+          "startedAt": "2026-09-03T17:56:13-07:00",
+          "endedAt": "2026-09-03T18:10:16-07:00",
+          "exitType": "completed",
+          "exitNote": "All layers merged successfully.",
+          "modifiedFiles": [
+            "scripts/queryTasks.ts",
+            "tests/queryTasks.test.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "1cc221ab7e3818f289bc4b09f8cc2a9a4f442403",
+              "kind": "work",
+              "stepId": "implement"
+            },
+            {
+              "occurrenceId": "",
+              "hash": "9f8ee7bb21feac70a27dff8fcd3c30557af49935",
+              "kind": "merge"
+            }
+          ],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "tests/queryTasks.test.ts"
+            ],
+            "createdTestFiles": [
+              "tests/queryTasks.test.ts"
+            ],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "✔ test_blockers_prints_each_blocker_in_the_chain_with_title_and_reason (99.486125ms)\n✔ test_files_prints_every_open_task_whose_modifiableFiles_contains_the_path (94.196417ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 318.379125\n",
+            "checkedAt": "2026-09-03T18:05:31-07:00"
+          },
+          "fullSuite": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "layers": [
+              {
+                "occurrenceId": "",
+                "passed": true
+              }
+            ],
+            "output": "e, not true, against a checkout whose rebase already aborted (1846.644667ms)\n✔ a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed (3790.709375ms)\n✔ a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit (1528.272708ms)\n✔ a merged-but-not-closed retry archives the original merge commit even after main advances in between (1709.874ms)\n✔ a real root merge conflict produces a concrete final-report reason naming the conflicted file (1080.124125ms)\n✔ merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close (5327.377625ms)\n✔ rebase stage: a failing rebase command blocks the lap before any agent runs (1293.442708ms)\n✔ rebase stage: an unresolved live conflict blocks the lap and leaves the source branch unmoved (1809.860166ms)\n✔ rebase stage: a layer still red after the fix-round ceiling blocks the lap and leaves the source branch unmoved (1868.680417ms)\n✔ rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate (1672.811875ms)\n✔ rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation (1894.684ms)\n✔ rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation (1498.521875ms)\n✔ merge stage refuses to guess when a merge intent exists but the merge record is missing (524.340083ms)\n✔ rebase-test blocks on a real type error even when the complete suite passes (992.712375ms)\n✔ merge revalidates root source drift with the configured typecheck (3497.281042ms)\n✔ merge revalidates source-submodule drift with the configured typecheck (6014.849916ms)\n✔ merge still closes when merge-time typecheck and complete suites are green (4947.590875ms)\n✔ merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact (663.705333ms)\n✔ rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing (266.55325ms)\n✔ merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing (1082.00025ms)\n✔ merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict (897.213666ms)\n✔ merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged (2345.668542ms)\n✔ merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly (3479.389375ms)\n✔ successful close deletes task-N from root and every source submodule (3139.51725ms)\n✔ close failure retains root and every source-submodule task ref (2932.614417ms)\n✔ production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path (1814.077666ms)\n✔ attachOperationBranch sets the given branch on every occurrence, independent of any other invocation (2.103875ms)\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\n✔ implement refuses to run without a repositoryManifest instead of silently falling back to root-only (5.790458ms)\n✔ plan+implement refuses to run without a repositoryManifest instead of silently falling back to root-only (0.207084ms)\n✔ plan alone tolerates a missing repositoryManifest (1.611208ms)\n✔ plan+implement commits only in each prepared task worktree (10741.755083ms)\n✔ plan+implement reports blocked when the implementer claims done without committing (3119.424875ms)\n✔ plan+implement rejects a planner that returns an existing plan outside the task worktree (1921.721625ms)\n✔ plan+implement rejects a planner that reports planned at the expected path without writing it (2304.492875ms)\n✔ plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase (4413.033916ms)\n✔ plan+implement blocks a notes-only commit that never touches an owned file (3982.885209ms)\n✔ plan+implement blocks a done result that deletes the previously committed notes file (4293.820959ms)\n✔ plan+implement blocks an owned commit that omits the required notes file (4485.001791ms)\n✔ widened ownership survives replanning, verification, and a separately launched implement stage (2798.833833ms)\n✔ plan+implement rejects missing sourceRoot before source or worktree mutation (1191.398375ms)\n✔ a third rejected review with missingFiles widens every downstream implementation boundary (5111.404458ms)\n✔ test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch (1.244917ms)\n✔ test_getTemplateShapeMismatches_namesAMissingKey (0.147708ms)\n✔ test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind (0.072ms)\n✔ test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave (0.067834ms)\n✔ test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject (0.300792ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.324583ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (0.223375ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (0.067958ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (0.121625ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (0.759167ms)\n✔ test_missingPackageJsonProducesResolutionRequest (7.91325ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (16.859667ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (71.636208ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (0.971459ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (8.81625ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (2.609292ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (0.449083ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (12.376875ms)\n✔ appends each edited path to the session flag file (971.44425ms)\n✔ missing session_id does nothing (377.947458ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (538.413083ms)\n✔ no matching blockers leaves tasks.json untouched (683.44175ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (1102.978125ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (348.177125ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (917.832125ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (25.521542ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (1473.478708ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (302.971709ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (1.004291ms)\n✔ hook loads and answers /view-task with a block decision (514.476958ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (327.981417ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (127.275375ms)\n✔ hook is silent passthrough for other prompts (198.434375ms)\n✔ /view-task <N> includes the task's description with real newlines (366.296458ms)\n✔ /view-task with no number blocks with usage and the open-task listing (201.286708ms)\n✔ unknown task number reports not-found instead of crashing (141.44425ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.665666ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (1.685417ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (1.226625ms)\nℹ tests 2551\nℹ suites 0\nℹ pass 2551\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 276562.692708\n",
+            "checkedAt": "2026-09-03T18:10:10-07:00"
+          },
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "1cc221ab7e3818f289bc4b09f8cc2a9a4f442403"
+                }
+              ]
+            },
+            {
+              "stepId": "merge-succeeded-exit",
+              "script": "closeTaskRun",
+              "result": {
+                "closed": [
+                  193
+                ],
+                "skipped": [],
+                "unblocked": [],
+                "ambiguous": []
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 1
+          },
+          "countedPasses": {
+            "clarify": [
+              "8fdcdd92-52bc-4ea3-8ef3-b836af1679ec"
+            ]
+          },
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "abac56ec26ed599517f25fd02537d310b51c05cd"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "1cc221ab7e3818f289bc4b09f8cc2a9a4f442403"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "abac56ec26ed599517f25fd02537d310b51c05cd"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clarifyRequest": "The brief names files this plan needs to read but the read-file call did not include them: .taskTools/tasks.json (to see the real field names on a TaskRecord — the brief itself conflicts, calling the field 'files' in one sentence and 'modifiableFiles' in the Goal's file-match criterion, and to see whether live blockedBy entries key on 'taskNumber' or the older 'taskNum'), scripts/taskFiles.ts (readTaskFile), scripts/checkBlockers.ts (the existing blockedBy walk shape), scripts/getTaskDetails.ts (readTaskLists), and scripts/appendTask.ts (buildTaskEntry). Since scripts/queryTasks.ts and tests/queryTasks.test.ts do not exist yet, there is no owned file to search instead. Please add these five files to the read-file call so the plan can name the exact TaskRecord field for file matches and the exact blockedBy key to check.",
+    "completionDate": "2026-09-03",
+    "commitHashes": [
+      "1cc221ab7e3818f289bc4b09f8cc2a9a4f442403",
+      "9f8ee7bb21feac70a27dff8fcd3c30557af49935"
+    ],
+    "closureNote": "Task 193 completed.\n\nCommits:\n  1cc221ab7e3818f289bc4b09f8cc2a9a4f442403  (root)   work\n  9f8ee7bb21feac70a27dff8fcd3c30557af49935  (root)   merge\nModified files: scripts/queryTasks.ts, tests/queryTasks.test.ts\nTask tests: 1 files, green\nFull suite: green"
   }
 ]
