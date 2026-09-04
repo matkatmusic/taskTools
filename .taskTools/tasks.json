@@ -59,75 +59,6 @@
     ]
   },
   {
-    "taskNumber": 155,
-    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Give the codex plan reviewer the sibling-task and blocker scope so chain boundaries are not flagged as omissions",
-    "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
-    "goal": [
-      "- loadPreparedTask returns siblingTasks (number and title) and blockedBy for the task under review",
-      "- the reviewer prompt names each sibling task sharing the group's files, by number and title",
-      "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
-      "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
-    ],
-    "description": "The plan reviewer prompt (planReviewPrompt in scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts) only lists file paths. It never names the tasks that share files with the task under review, and never names the task's blockedBy entries. So codex reports work owned by a sibling or a blocker as an omission.\n\nSibling scope comes from groupTasksByFileOverlap in scripts/taskGroups.ts (overlap on modifiableFiles). Blockers come from the task record's blockedBy array (entry key taskNumber, see scripts/checkBlockers.ts). loadPreparedTask in scripts/tackle-tasks/shared/preparedTask.ts reads neither today.\n\nAdd siblingTasks (number + title) and blockedBy to PreparedTask. Have planReviewPrompt print both lists and state plainly: work assigned to a named sibling or blocker is out of scope and must not be reported as an omission. Task 120 (closed) already tells the reviewer what is not grounds for rejection. This task supplies the scope facts that make that judgement possible.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/shared/preparedTask.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "In CodexReviewBodyEmitter.test.ts: build a PreparedTask with one sibling task and one blockedBy entry, call planReviewPrompt, and assert the prompt names both and says work owned by them is out of scope.",
-    "difficulty": 5,
-    "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
-    "blockedBy": [],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "notInScope": [
-      "- Telling the reviewer which issue classes are not grounds for rejection; task 120 (closed) owns that",
-      "- Changes to the tests reviewer prompt in CodexTestReviewBodyEmitter.ts"
-    ],
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-155",
-      "leaseRunId": "376a4058-c7d5-472b-867d-6a0cdac8dedc",
-      "history": [
-        {
-          "runId": "376a4058-c7d5-472b-867d-6a0cdac8dedc",
-          "startedAt": "2026-09-03T17:56:42-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ],
-          "attempts": {
-            "clarify": 2
-          },
-          "countedPasses": {
-            "clarify": [
-              "511ff816-0715-4799-9fa6-586d739af709",
-              "21cc3b63-88c8-407f-954f-e51f08142dcc"
-            ]
-          }
-        }
-      ]
-    },
-    "clarifyRequest": "Previous round's question is answered: groupTasksByFileOverlap(tasks: TaskRecord[], manifest?: RepositoryManifest): TaskGroup[] is exported from scripts/taskGroups.ts. TaskGroup = { groupId: number; taskNumbers: number[]; filePaths: string[]; scope: 'declared'|'unknown' }. With no manifest argument (the case loadPreparedTask is in, since it never builds a RepositoryManifest), groups come from groupTasksByExactFileOverlapWithNoManifest: a union-find over exact modifiableFiles() overlap, files-less tasks all sharing one 'unknown' group. Siblings of a task are the other taskNumbers in whichever group's taskNumbers array contains it. scripts/checkBlockers.ts confirms blockedBy entries are `{ taskNumber: number; reason: string }[]` on the task record, and exports no helper for the reverse edge (tasks blocked BY a given task) -- blockerReport() and openBlockersOf() only walk forward (a task's own blockedBy list filtered to still-open blockers); the reverse edge must be computed by scanning tasks.json for entries whose blockedBy array contains an entry with taskNumber equal to the task under review. New question this round: the goal asks loadPreparedTask to return siblingTasks as {number, title} pairs, but no 'title' field appears anywhere in task 155's owned files (preparedTask.ts, CodexReviewBodyEmitter.ts, CodexReviewBodyEmitter.test.ts) or in taskGroups.ts/checkBlockers.ts -- every task field those files touch today (tests, codexReviewNotes, difficulty, taskNumber, blockedBy) is read straight off the raw task object with no field-name citation for a title/description. I need to read scripts/taskFiles.ts (the TaskRecord type/interface that readTaskFile returns) to find the exact field name holding a task's title, so the plan cites a verified field name instead of guessing between 'title', 'description', or 'userDescription'."
-  },
-  {
     "taskNumber": 164,
     "schemaVersion": "1.0.1",
     "version": "b2d66ef60db6badfdd4de5fc1413156b4bdb53af",
@@ -187,77 +118,6 @@
     "hasTests": false
   },
   {
-    "taskNumber": 191,
-    "version": "229b706f661221a74ff2784f8574cec5f61114f7",
-    "title": "Read the diagram folder for tackle-tasks from .taskTools/settings.json",
-    "userDescription": "The ability to define which set of diagrams to use for tackle-tasks.  this ability makes the skill and pipeline runner generic, allowing the end user to provide their own diagrams.  the default diagram would be the current pipeline.  .taskTools/settings.json is where this diagram setting would live.",
-    "goal": [
-      "- With no .taskTools/settings.json, `/tackle-tasks [N]` runs the current pipeline block for block: the run-log's ran[] matches today's.",
-      "- With settings.json holding `{ \"diagramFolder\": \"<path>\" }`, generateSteps, the workflow and the hook all read that folder; the run-log names that folder's blocks and none of the default pipeline's.",
-      "- A diagramFolder that does not exist or holds no .mmd stops the run at launch with a message naming the path. No fallback."
-    ],
-    "notInScope": [
-      "- Not in scope: a guide for users who author their own diagrams. A later task owns it."
-    ],
-    "description": "generateSteps.ts (invoked as `node scripts/generateSteps.ts diagrams/tackle-tasks` from package.json's \"steps\"/\"steps:watch\" scripts) resolves the diagram folder from process.argv, falling back to the dead default `plans/diagrams` (diagrams actually live at diagrams/tackle-tasks/*.mmd) when no CLI arg is given. It walks that folder into scripts/steps.json plus per-box stub scripts under scripts/tackle-tasks/, using a hardcoded BLOCKS_BY_OWNER_FOLDER box-name map tied to the current pipeline's diagram set. generateWorkflow.ts and runStepHook.ts consume the already-generated scripts/steps.json and are diagram-folder-agnostic, so they don't need to change. No .taskTools/settings.json file or reader exists anywhere in the codebase yet (grepped scripts/, skills/, tests/) — this would be a new config file and a new settings-read helper, most naturally added in generateSteps.ts's CLI entrypoint (diagramFolder resolution) ahead of its current argv/hardcoded-default fallback, with the current diagrams/tackle-tasks folder becoming the default when no setting is present.\n\nSetting shape settled with the user: `{ \"diagramFolder\": \"<path>\" }`. The folder holds the .mmd files plus each block's script and template. An absent file or key means diagrams/tackle-tasks.\n\n## Audit correction (2026-08-31)\n\nUser decision: both step consumers stay in the fence. scripts/runStepHook.ts and scripts/generateWorkflow.ts are owned so the merge fence cannot block this task, whichever consumer ends up edited. The setting may still flow only through regenerated scripts/steps.json (also owned), in which case the hook and workflow generator need no code change.",
-    "modifiableFiles": [
-      "scripts/generateSteps.ts",
-      "tests/generateSteps.test.ts",
-      "package.json",
-      ".taskTools/settings.json",
-      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
-      "scripts/runStepHook.ts",
-      "scripts/steps.json",
-      "scripts/generateWorkflow.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
-    "difficulty": 6,
-    "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
-    "blockedBy": [],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-191",
-      "leaseRunId": "06026626-526c-4a53-afe2-260a65b5c918",
-      "history": [
-        {
-          "runId": "06026626-526c-4a53-afe2-260a65b5c918",
-          "startedAt": "2026-09-03T17:56:11-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ],
-          "attempts": {
-            "planReview": 1
-          },
-          "countedPasses": {
-            "planReview": [
-              "b0c61654-36b2-468b-bb44-953fbc1538fe"
-            ]
-          }
-        }
-      ]
-    },
-    "codexReviewNotes": "[files-needing-no-edit] Replace the no-edit assertions for `scripts/generateWorkflow.ts` and `scripts/runStepHook.ts` with explicit edits that derive one deterministic start key from the regenerated config (the first entry of the first emitted diagram, with an explicit empty-config error). Use that key in the generated workflow and in the hook's start/resume checks instead of the two hardcoded `pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK` constants. Extend the integration coverage to exercise the generated `/tackle-tasks` workflow path with the custom config, rather than invoking `/run-step BOX_A` directly.\n\nDurable because: The launch path and hook will use the same config-derived entry point, so a custom diagram set cannot be rejected merely because it lacks a default-pipeline key.\n\n[implement-diagram-folder-resolution] Add a concrete, documented layout for user-provided block scripts and templates within the configured diagram folder, then edit `generateSteps.ts` to use those authored files when building each custom-folder config entry instead of always creating or retaining files under `scripts/tackle-tasks`. Add a test fixture with distinctive authored script/template content and assert the generated config and hook execute that content.\n\nDurable because: The test proves the configured folder supplies both the graph and its implementation, preventing future changes from silently falling back to generated default stubs."
-  },
-  {
     "taskNumber": 194,
     "version": "ef36ad1d5faf1e1aeeaca4955593957169993d6c",
     "title": "Generate one task-N.workflow.js per tackle-tasks invocation, titled 'Tackle-task N'",
@@ -287,5 +147,36 @@
     "hasTests": true,
     "tests": "Run the tackle-tasks skill body emitter with tasks [191,193] in a temp project and assert task-191.workflow.js and task-193.workflow.js exist, each with meta.name 'Tackle-task <N>' and its own task number in args.",
     "difficulty": 7
+  },
+  {
+    "taskNumber": 195,
+    "version": "663305ee46c8da2ab06476bccc821749f2042c77",
+    "title": "Rebase a resumed task worktree onto staging when staging has moved",
+    "userDescription": "when re-running a task, if 'staging' has moved since the task was last run, rebase the task that is being rerun off of the new 'staging' commit.",
+    "goal": [
+      "- Rerunning a task whose worktree was cut from an older staging commit rebases that worktree onto the current staging tip before the planner runs",
+      "- The run log shows the rebase block ran, and git log in the worktree shows staging's tip as an ancestor",
+      "- When staging has not moved, no rebase happens and the run log shows the block was skipped"
+    ],
+    "notInScope": [
+      "- none"
+    ],
+    "problemSolvedByTask": "A rerun task plans against a stale worktree, so it's edits are not in sync with the latest changes on the staging branch.",
+    "description": "User settled the design: this is a single check on the resume path, difficulty rated by the user as small. In diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, after IS_PREVIOUS_RUN_RESUMABLE_Q says the worktree can be resumed and before DOES_FENCE_COVER_WORKTREE_Q, add one block that runs on every resume: if staging's tip is not an ancestor of the worktree branch (git merge-base --is-ancestor staging HEAD fails), rebase the worktree onto staging using the existing helper scripts/tackle-tasks/shared/rebaseTaskWorktree.ts (the same code scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts runs before the merge tail); when staging is already an ancestor, skip. Conflicts route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit. No new field in taskRunState.ts: no last-seen tip is tracked, the ancestry check is the whole test. The merge-time rebase in pipeline-lockSourceRepo.mmd stays as it is. Regenerate scripts/steps.json after the diagram edit.",
+    "modifiableFiles": [
+      "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.test.ts",
+      "scripts/tackle-tasks/shared/rebaseTaskWorktree.ts",
+      "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts",
+      "scripts/steps.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In a temp repo: cut a task worktree from staging, add a commit to staging, mark the task run as failed, rerun the preamble for that task, and assert the worktree's HEAD has the new staging commit as an ancestor and the task's own commit on top.",
+    "difficulty": 5
   }
 ]
