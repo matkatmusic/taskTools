@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
 import { TASK_HAS_TESTS } from "../../resultCodes.ts";
 import { modifiableFiles, readOnlyFiles } from "../../prepareTasks.ts";
+import { groupTasksByFileOverlap } from "../../taskGroups.ts";
 
 function fail(problem: string): never {
     process.stderr.write(`AgentPromptEmitter: ${problem}\n`);
@@ -30,6 +31,12 @@ export type PreparedTask = {
     tests: string | null;
     // Written into the task entry by UPDATE_TASK_ENTRY; empty until a replan has been asked for.
     codexReviewNotes: string;
+    // Tasks sharing this task's files, from groupTasksByFileOverlap; their work is out of scope for the plan reviewer.
+    siblingTasks: { number: number; title: string }[];
+    // This task's blockedBy entries from tasks.json; their work is out of scope for the plan reviewer.
+    blockedBy: { taskNumber: number; reason: string }[];
+    // Tasks whose blockedBy entries name this task; their work is out of scope for the plan reviewer.
+    blocks: { number: number; title: string; reason: string }[];
     repoRoot: string;
     taskStateRoot: string;
 };
@@ -43,7 +50,8 @@ const pairedTestPath = (root: string, file: string) => `${root}/tests/${basename
 
 export function loadPreparedTask(taskNumber: number, worktree: string, projectRoot: string): PreparedTask {
     const pair = resolveTaskFiles(projectRoot);
-    const task = readTaskFile(pair.tasksPath).find((entry: any) => entry.taskNumber === taskNumber);
+    const allTasks = readTaskFile(pair.tasksPath);
+    const task = allTasks.find((entry: any) => entry.taskNumber === taskNumber);
     if (!task) fail(`task ${taskNumber} not found in tasks.json`);
     const briefFile = `${worktree.replace(/\/+$/, "")}/plans/brief-${taskNumber}.md`;
     if (!existsSync(briefFile)) {
@@ -51,6 +59,18 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     }
     const files: string[] = modifiableFiles(task);
     const root = worktree.replace(/\/+$/, "");
+    const group = groupTasksByFileOverlap(allTasks).find((g) => g.taskNumbers.includes(taskNumber));
+    const siblingTasks = (group ? group.taskNumbers.filter((n) => n !== taskNumber) : [])
+        .map((n) => allTasks.find((entry: any) => entry.taskNumber === n))
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
+        .map((entry: any) => ({ number: entry.taskNumber, title: entry.title }));
+    const blocks = allTasks
+        .filter((entry: any) => Array.isArray(entry.blockedBy))
+        .flatMap((entry: any) =>
+            (entry.blockedBy as { taskNumber: number; reason: string }[])
+                .filter((b) => b.taskNumber === taskNumber)
+                .map((b) => ({ number: entry.taskNumber, title: entry.title, reason: b.reason }))
+        );
     return {
         number: taskNumber,
         briefFile,
@@ -66,6 +86,9 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         hasTests: taskHasTests(task) === TASK_HAS_TESTS,
         tests: typeof (task as any).tests === "string" ? (task as any).tests : null,
         codexReviewNotes: typeof (task as any).codexReviewNotes === "string" ? (task as any).codexReviewNotes : "",
+        siblingTasks,
+        blockedBy: Array.isArray((task as any).blockedBy) ? (task as any).blockedBy : [],
+        blocks,
         repoRoot: worktree,
         taskStateRoot: projectRoot,
     };
