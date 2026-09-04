@@ -51,7 +51,7 @@
   {
     "taskNumber": 155,
     "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Give the codex reviewer sibling-task and blockedBy scope so chain boundaries read as intent",
+    "title": "Give the codex plan reviewer the sibling-task and blocker scope so chain boundaries are not flagged as omissions",
     "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
     "goal": [
       "- run-arguments.json carries a blockedBy array for every task that declares one",
@@ -59,26 +59,19 @@
       "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
       "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
     ],
-    "description": "The two halves start from different places, verified against a real run-arguments.json in the taskTools-86 worktree.\n\nSibling scope is already in hand: verify.workflow.js builds TASK_BY_NUMBER by flat-mapping every group's tasks, so each task and its files are reachable; codexPrompt simply never mentions them. Note that buildWorkflowArguments in scripts/prepareTasks.ts sets each task's files to the GROUP's union rather than the task's own declared files, so \"tasks owning overlapping files\" is exactly \"tasks in the same group\" — no new grouping logic is needed.\n\nblockedBy is the missing half: buildWorkflowArguments emits only number, briefFile, planFile, and files per task, and the string blockedBy appears nowhere in the produced arguments. It must be carried through from the TaskRecord before verify.workflow.js can cite it.\n\nThen extend codexPrompt to state the sibling list and the blocker relationships, and to say plainly that work assigned to a named sibling or blocker is out of scope for this plan and must not be reported as an omission. Pairs with task 120, which tells the same reviewer what is not grounds for rejection; this one supplies the scope facts that make those judgements possible.\n\n## Audit correction (2026-08-31)\n\nskills/tackle-tasks/verify.workflow.js was deleted (42ee3d3); the reviewer prompt now lives in scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts (planReviewPrompt), spawned by scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts, with task data loaded by scripts/tackle-tasks/shared/preparedTask.ts (loadPreparedTask reads tasks.json directly). The claim that buildWorkflowArguments sets each task's files to the group union is false: scripts/prepareTasks.ts:375-427 builds one group per task with the task's own declaredFiles (pinned by tests/prepareTasks.test.ts:423). Sibling discovery must come from scripts/taskGroups.ts groupTasksByFileOverlap. TASK_BY_NUMBER and codexPrompt no longer exist in live code. Note: open task 157 renames the blockedBy key taskNum to taskNumber; plan against that rename landing.",
+    "description": "The plan reviewer prompt (planReviewPrompt in scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts) only lists file paths. It never names the tasks that share files with the task under review, and never names the task's blockedBy entries. So codex reports work owned by a sibling or a blocker as an omission.\n\nSibling scope comes from groupTasksByFileOverlap in scripts/taskGroups.ts (overlap on modifiableFiles). Blockers come from the task record's blockedBy array (entry key taskNumber, see scripts/checkBlockers.ts). loadPreparedTask in scripts/tackle-tasks/shared/preparedTask.ts reads neither today.\n\nAdd siblingTasks (number + title) and blockedBy to PreparedTask. Have planReviewPrompt print both lists and state plainly: work assigned to a named sibling or blocker is out of scope and must not be reported as an omission. Task 120 (closed) already tells the reviewer what is not grounds for rejection. This task supplies the scope facts that make that judgement possible.",
     "modifiableFiles": [
-      "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
       "scripts/tackle-tasks/shared/preparedTask.ts",
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
       "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
     ],
     "readOnlyFiles": [
-      "scripts/taskGroups.ts"
+      "*"
     ],
     "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
     "difficulty": 5,
     "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
+    "blockedBy": []
   },
   {
     "taskNumber": 156,
@@ -105,52 +98,6 @@
     "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
     "difficulty": 6,
     "problemSolvedByTask": "Without a goal array, nobody (human or planner agent) can tell when a task is actually done versus merely touched.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
-  },
-  {
-    "taskNumber": 158,
-    "version": "70500c09ac6e4889764da6ab2bcea6123136c6a2",
-    "title": "Second codex review only rechecks round-one findings instead of hunting for new ones",
-    "userDescription": "the codex review prompt needs to indicate that a 2nd review by codex should only verify that the first round's flagged issues were resolved and not try to find new issues.  the purpose is to prevent a runaway review-reject-fix-review-reject-fix loop that happens often.",
-    "goal": [
-      "- scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts's reviewQuestion(t) always returns reviewByDefaultPrompt(t) for a non-scrapped plan, with no awareness of which review round is running.",
-      "- scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts's reviewTestsQuestion(t, ...) has the same gap: it always returns reviewByDefaultPrompt(...), never the approve prompt already written beside it.",
-      "- reviewQuestion(t) must pick its prompt by round, using getAttemptCount(t.number, \"planReview\", t.taskStateRoot) from scripts/tackle-tasks/shared/taskRunState.ts, the same call TWO_CODEX_REVIEWS_COMPLETED_Q.ts already makes.",
-      "- reviewTestsQuestion(t, ...) needs the same round-aware selection for the tests review, so both reviewers stop always running a fresh full review with no memory of round one.",
-      "- On the first review pass, plan or tests, the existing full review prompt is unchanged: reviewByDefaultPrompt(t) for the plan, reviewByDefaultPrompt(...) for the tests.",
-      "- On the second pass, both functions instead return a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.\"",
-      "- The plan recheck prompt points the reviewer at t.reviewOutputFile as the audit to recheck against; the tests recheck prompt points at t.testReviewFile.",
-      "- The existing checkpoint-based approve path in reviewQuestion(t), for a plan-scrapped relaunch, is untouched; the round check only governs the non-scrapped branch.",
-      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected for a fresh set of issues in round two, for plan review or tests review."
-    ],
-    "notInScope": [
-      "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This task only changes which prompt reviewQuestion and reviewTestsQuestion return.",
-      "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language.",
-      "- NOT in scope: the sibling-task and blockedBy scope being added to the same reviewer prompt — task #155 owns that.",
-      "- NOT in scope: any test asserting the prompt wording. The user chose no test here because a prompt's instructions change often and such a test would only pin wording."
-    ],
-    "description": "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts builds the plan review prompt: reviewQuestion(t) currently only branches on a plan-scrapped checkpoint, and otherwise always calls reviewByDefaultPrompt(t), the full review. scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts calls it through planReviewPrompt(t) with no awareness of which round is running. scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts has the identical gap on the tests side: reviewTestsQuestion(t, ...) always calls reviewByDefaultPrompt(...), never the approveReviewByDefaultPrompt(...) already written next to it, and scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts calls it through reviewTestsPrompt(t) the same way. That is the root cause on both sides — round two is a fresh full review with no memory of round one, so it is free to reject on problems it never raised before. The fix needs a second prompt on each side, not just changed prose, because prose alone cannot alter what the already-quoted codex exec command asks for. The counters for number of reviews already exist: scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.ts reads getAttemptCount(t.number, \"planReview\", projectRoot) from scripts/tackle-tasks/shared/taskRunState.ts for the plan side, and scripts/tackle-tasks/areTestsFlagged/ARE_2_TEST_REVIEWS_DONE_Q.ts reads the task's codexReviewNotes field for the tests side. Round one's findings already land in a file next to the plan or the tests: t.reviewOutputFile (plan) and t.testReviewFile (tests) survive into round two untouched, so no new plumbing is needed to persist them, only a second prompt on each side that points the reviewer at that file instead of interpolating its contents into a shell command. This repo already carries tests for metacharacter-laden reason strings, so quoting arbitrary reviewer text into a command is a known hazard the file-based approach avoids. On round two, reviewQuestion(t) and reviewTestsQuestion(t, ...) must each emit a recheck-only prompt carrying the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — so a plan or a set of tests whose round-one items were fixed comes back APPROVED even when the reviewer could find something else. The existing two-review caps and the codex/fable/opus fallback chains in createCodexShellInvocationLive stay as they are; only which prompt each reviewQuestion function returns changes. Task #155 edits the same plan reviewer prompt for a different purpose, and groupTasksByFileOverlap will place both in the same worktree group, so no blockedBy is declared. No test pins the recheck prompt's wording — a prompt's instructions change often and such a test would only pin wording; tests stays \"skip\".",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts",
-      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.test.ts",
-      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts",
-      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.test.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
-      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts",
-      "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts",
-      "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "skip",
-    "difficulty": 3,
-    "problemSolvedByTask": "Codex is only told to \"find issues\", so it never checks if the plan amendments resolve the issues it found in the first round; instead codex only hunts for new issues.  Codex is really good at finding issues, which means the list of issues found never gets resolved and perpetually grows until codex ultimately rejects the plan. ",
     "blockedBy": [
       {
         "taskNumber": 160,
@@ -260,7 +207,35 @@
         "taskNumber": 160,
         "reason": "Deferred: possibly no longer relevant after blocking task is completed."
       }
-    ]
+    ],
+    "run": {
+      "active": true,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-191",
+      "leaseRunId": "06711c3a-e716-4543-9a25-969598831f0f",
+      "history": [
+        {
+          "runId": "06711c3a-e716-4543-9a25-969598831f0f",
+          "startedAt": "2026-09-03T17:24:08-07:00",
+          "endedAt": null,
+          "exitType": null,
+          "exitNote": null,
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "taskNumber": 193,
@@ -287,6 +262,34 @@
     ],
     "readOnlyFiles": [
       "*"
-    ]
+    ],
+    "run": {
+      "active": true,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-193",
+      "leaseRunId": "e3d88e1f-5847-46cd-9c36-9d0decf57748",
+      "history": [
+        {
+          "runId": "e3d88e1f-5847-46cd-9c36-9d0decf57748",
+          "startedAt": "2026-09-03T17:24:18-07:00",
+          "endedAt": null,
+          "exitType": null,
+          "exitNote": null,
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 ]
