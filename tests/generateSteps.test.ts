@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generateSteps, getBoxesInDiagram, getEdgesInDiagram } from "../scripts/generateSteps.ts";
+import { generateSteps, getBoxesInDiagram, getEdgesInDiagram, resolveDiagramFolderSetting } from "../scripts/generateSteps.ts";
+import { skillBody } from "../scripts/tackle-tasks/shared/SkillBodyEmitter.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -224,4 +225,131 @@ test("test_generateSteps_ignoresSharedFolderAndHiddenFilesInTheOrphanGuard", () 
     writeFileSync(join(stepsRoot, "one/_packet.ts"), "// packet\n");
     writeFileSync(join(stepsRoot, "one/A.test.ts"), "// test\n");
     assert.doesNotThrow(() => run());
+});
+
+test("test_resolveDiagramFolderSetting_defaultsToTheRealPipelineWhenNoSettingsFile", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
+    const setting = resolveDiagramFolderSetting(fixtureRoot);
+    assert.deepEqual(setting, {
+        diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks"),
+        stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
+        allowStubs: true,
+    });
+});
+
+test("test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    const diagramFolder = join(fixtureRoot, "diagrams");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
+    const setting = resolveDiagramFolderSetting(fixtureRoot);
+    assert.deepEqual(setting, { diagramFolder, stepsRoot: diagramFolder, allowStubs: false });
+});
+
+test("test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderDoesNotExist", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    const diagramFolder = join(fixtureRoot, "missing");
+    writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
+    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot), (error: Error) => error.message.includes(diagramFolder));
+});
+
+test("test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderHoldsNoMmd", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    const diagramFolder = join(fixtureRoot, "diagrams");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
+    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot), (error: Error) => error.message.includes(diagramFolder));
+});
+
+test("test_generateSteps_throwsOnAMissingScriptWhenStubsAreNotAllowed", () => {
+    const folder = mkdtempSync(join(tmpdir(), "generate-steps-"));
+    const diagramFolder = join(folder, "diagrams");
+    const stepsRoot = join(folder, "steps");
+    const configPath = join(folder, "steps.json");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    assert.throws(() => generateSteps(diagramFolder, stepsRoot, configPath, false), /A\.ts is missing/);
+});
+
+test("test_generateSteps_usesAuthoredScriptsInACustomFolderWithoutThrowing", () => {
+    const folder = mkdtempSync(join(tmpdir(), "generate-steps-"));
+    const diagramFolder = join(folder, "diagrams");
+    const configPath = join(folder, "steps.json");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    mkdirSync(join(diagramFolder, "one"), { recursive: true });
+    writeFileSync(join(diagramFolder, "one/A.ts"), "// authored\n");
+    writeFileSync(join(diagramFolder, "one/A.template.json"), `{"input":{},"output":{"box":"A"}}`);
+    writeFileSync(join(diagramFolder, "one/B.ts"), "// authored\n");
+    writeFileSync(join(diagramFolder, "one/B.template.json"), `{"input":{},"output":{"box":"B"}}`);
+    assert.doesNotThrow(() => generateSteps(diagramFolder, diagramFolder, configPath, false));
+    assert.equal(readFileSync(join(diagramFolder, "one/A.ts"), "utf8"), "// authored\n");
+});
+
+test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeline", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "tackle-tasks-custom-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(fixtureRoot, ".taskTools/tasks.json"), "[]\n");
+    const diagramFolder = join(fixtureRoot, "diagrams");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
+    writeFileSync(
+        join(diagramFolder, "pipeline-preambleStatusCheck.mmd"),
+        "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n",
+    );
+
+    const preambleFolder = join(diagramFolder, "preambleStatusCheck");
+    mkdirSync(preambleFolder, { recursive: true });
+    writeFileSync(
+        join(preambleFolder, "PREAMBLE_STATUS_CHECK.ts"),
+        `console.log(JSON.stringify({ box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK", input: "" }));\n`,
+    );
+    writeFileSync(
+        join(preambleFolder, "PREAMBLE_STATUS_CHECK.template.json"),
+        `${JSON.stringify({ input: {}, output: { box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", note: "PREAMBLE_STATUS_CHECK.ts for PREAMBLE_STATUS_CHECK", input: "" } }, null, 4)}\n`,
+    );
+
+    const secondBoxFolder = join(diagramFolder, "pipeline-preambleStatusCheck");
+    mkdirSync(secondBoxFolder, { recursive: true });
+    writeFileSync(
+        join(secondBoxFolder, "SECOND_BOX.ts"),
+        `console.log(JSON.stringify({ box: "SECOND_BOX", scriptSignal: "stop", note: "SECOND_BOX.ts for SECOND_BOX", input: "" }));\n`,
+    );
+    writeFileSync(
+        join(secondBoxFolder, "SECOND_BOX.template.json"),
+        `${JSON.stringify({ input: {}, output: { box: "SECOND_BOX", scriptSignal: "stop", note: "SECOND_BOX.ts for SECOND_BOX", input: "" } }, null, 4)}\n`,
+    );
+
+    const stepsConfigPath = join(fixtureRoot, "steps.json");
+    const workflowFilePath = join(fixtureRoot, "workflow.js");
+    const previousRunStepConfig = process.env.RUN_STEP_CONFIG;
+    const previousRunStepWorkflowFile = process.env.RUN_STEP_WORKFLOW_FILE;
+    try {
+        process.env.RUN_STEP_CONFIG = stepsConfigPath;
+        process.env.RUN_STEP_WORKFLOW_FILE = workflowFilePath;
+        skillBody("999999", fixtureRoot);
+    } finally {
+        if (previousRunStepConfig === undefined) delete process.env.RUN_STEP_CONFIG;
+        else process.env.RUN_STEP_CONFIG = previousRunStepConfig;
+        if (previousRunStepWorkflowFile === undefined) delete process.env.RUN_STEP_WORKFLOW_FILE;
+        else process.env.RUN_STEP_WORKFLOW_FILE = previousRunStepWorkflowFile;
+    }
+
+    const runLogPath = join(fixtureRoot, "run-log.json");
+    const command = `/run-step pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;
+    execFileSync("node", ["--no-inspect", join(PROJECT_ROOT, "scripts/runStepHook.ts")], {
+        encoding: "utf8",
+        input: JSON.stringify({ hook_event_name: "SubagentStart", prompt: command }),
+        env: { ...process.env, RUN_STEP_CONFIG: stepsConfigPath, RUN_STEP_LOG: runLogPath },
+    });
+
+    const runLog = JSON.parse(readFileSync(runLogPath, "utf8")) as Array<{ block: string }>;
+    assert.deepEqual(runLog.map(entry => entry.block), [
+        "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK",
+        "pipeline-preambleStatusCheck.mmd::SECOND_BOX",
+    ]);
 });

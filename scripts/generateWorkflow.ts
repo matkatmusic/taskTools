@@ -6,7 +6,7 @@ import { buildHookOutputSchema } from "./buildRunStepSchemas.ts";
 import type { StepConfig } from "./generateSteps.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
+const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
 export const WORKFLOW_FILE = join(PROJECT_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
 export const START_STEP = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 
@@ -24,7 +24,8 @@ export function assertStartStepIsInConfig(config: StepConfig, startStep: string)
 }
 
 export function buildWorkflowScript(): string {
-    const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+    const configFile = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
+    const config = JSON.parse(readFileSync(configFile, "utf8")) as StepConfig;
     assertStartStepIsInConfig(config, START_STEP);
     const hookOutputSchemaText = JSON.stringify(buildHookOutputSchema(), null, 4);
     return `export const meta = {

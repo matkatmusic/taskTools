@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting } from "../../generateSteps.ts";
 import { generateWorkflow } from "../../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+const DEFAULT_STEPS_CONFIG_PATH = fileURLToPath(new URL("../../steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 
@@ -29,7 +31,11 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     */
 
     // Made fresh on every run, so the shapes in it always match the diagrams on disk.
-    generateWorkflow(TASK_WORKFLOW_PATH);
+    const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
+    const stepsConfigPath = process.env.RUN_STEP_CONFIG ?? DEFAULT_STEPS_CONFIG_PATH;
+    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+    const workflowFile = process.env.RUN_STEP_WORKFLOW_FILE ?? TASK_WORKFLOW_PATH;
+    generateWorkflow(workflowFile);
     const startingBlock = parseStartingBlockArgument(argsValue);
     const workflowLines = taskNumbers.map((taskNumber, index) => {
         const workflowArgs: Record<string, unknown> = {
@@ -40,7 +46,7 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
         if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
         // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
         const workflowCall = JSON.stringify({
-            scriptPath: TASK_WORKFLOW_PATH,
+            scriptPath: workflowFile,
             args: workflowArgs,
         });
         return `WORKFLOW ${index + 1}: ${workflowCall}`;
