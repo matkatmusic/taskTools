@@ -7,7 +7,8 @@ import { TASK_HAS_TESTS } from "../../resultCodes.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
-const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
+// const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
+const TEST_FILE_PATTERN = /\.test\.ts$/; // co-located scripts/**/x.test.ts count too
 
 export type RunTaskTestsOutput = {
     stepId: string;

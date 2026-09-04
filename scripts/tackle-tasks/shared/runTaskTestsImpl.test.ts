@@ -324,3 +324,19 @@ test("test_runTaskTests_throwsWhenTheExpectedRunIdIsStale", () => {
     assert.throws(() => runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin), /run-2/);
     assert.equal(getCurrentTaskRun(1, rootOrigin)?.taskTests, null);
 });
+
+test("test_runTaskTests_selectsACoLocatedTestFileOutsideTheTestsFolder", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    mkdirSync(join(worktreePath, "scripts", "shared"), { recursive: true });
+    writePassingTest(join(worktreePath, "scripts", "shared", "foo.test.ts"));
+    git(worktreePath, "add", "scripts/shared/foo.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "add co-located test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
+
+    assert.deepEqual(result.testFiles, ["scripts/shared/foo.test.ts"]);
+    assert.equal(result.missingTests, false);
+    assert.equal(result.passed, true);
+});

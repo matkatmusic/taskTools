@@ -162,14 +162,21 @@
       "- none"
     ],
     "problemSolvedByTask": "A rerun task plans against a stale worktree, so it's edits are not in sync with the latest changes on the staging branch.",
-    "description": "User settled the design: this is a single check on the resume path, difficulty rated by the user as small. In diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, after IS_PREVIOUS_RUN_RESUMABLE_Q says the worktree can be resumed and before DOES_FENCE_COVER_WORKTREE_Q, add one block that runs on every resume: if staging's tip is not an ancestor of the worktree branch (git merge-base --is-ancestor staging HEAD fails), rebase the worktree onto staging using the existing helper scripts/tackle-tasks/shared/rebaseTaskWorktree.ts (the same code scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts runs before the merge tail); when staging is already an ancestor, skip. Conflicts route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit. No new field in taskRunState.ts: no last-seen tip is tracked, the ancestry check is the whole test. The merge-time rebase in pipeline-lockSourceRepo.mmd stays as it is. Regenerate scripts/steps.json after the diagram edit.",
+    "description": "User settled the design: this is a single check on the resume path, difficulty rated by the user as small. In diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, after IS_PREVIOUS_RUN_RESUMABLE_Q says the worktree can be resumed and before DOES_FENCE_COVER_WORKTREE_Q, add one block that runs on every resume: if staging's tip is not an ancestor of the worktree branch (git merge-base --is-ancestor staging HEAD fails), rebase the worktree onto staging using the existing helper scripts/tackle-tasks/shared/rebaseTaskWorktree.ts (the same code scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts runs before the merge tail); when staging is already an ancestor, skip. Conflicts route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit. No new field in taskRunState.ts: no last-seen tip is tracked, the ancestry check is the whole test. The merge-time rebase in pipeline-lockSourceRepo.mmd stays as it is. Regenerate scripts/steps.json after the diagram edit.\n\n## Clarification answer (2026-09-04)\n\nTwo corrections.\n\n(1) Template shape. Every box template is `{ \"input\": <packet the box receives>, \"output\": <packet the box returns> }`. Copy scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json as the model: both packets carry `box`, `scriptSignal`, `taskNumber`, `runId`, `projectRoot`, `worktree`, `branch`, `docsMode`, `planFile`, `exitType`, `exitNote`; `input.box` is the previous box's name, `output.box` is this box's name, and `output` adds `next` naming the box that follows. Fixture paths use the `{{PROJECT_ROOT}}` placeholder. For the new box, `input.box` is `IS_PREVIOUS_RUN_RESUMABLE_Q` and `output.next` is `DOES_FENCE_COVER_WORKTREE_Q`. Both template files are now in this task's files.\n\n(2) Do not hand-edit scripts/steps.json. It is generated: `npm run steps` runs `node scripts/generateSteps.ts diagrams/tackle-tasks` then `node scripts/generateWorkflow.ts`. Edit the diagram in diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, run `npm run steps`, and the generator writes the steps.json entries plus a stub script and template for the new box under scripts/tackle-tasks/preambleStatusCheck/; then fill in the stub. That generated script and template are owned files of this task (see files).",
     "modifiableFiles": [
       "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
       "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
       "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.test.ts",
       "scripts/tackle-tasks/shared/rebaseTaskWorktree.ts",
       "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts",
-      "scripts/steps.json"
+      "scripts/steps.json",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.template.json",
+      "scripts/generateSteps.ts",
+      "package.json",
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts"
     ],
     "readOnlyFiles": [
       "*"
@@ -177,6 +184,34 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "In a temp repo: cut a task worktree from staging, add a commit to staging, mark the task run as failed, rerun the preamble for that task, and assert the worktree's HEAD has the new staging commit as an ancestor and the task's own commit on top.",
-    "difficulty": 5
+    "difficulty": 5,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-195",
+      "leaseRunId": "3c22238a-d0b1-434c-8c2b-ce192c298424",
+      "history": [
+        {
+          "runId": "3c22238a-d0b1-434c-8c2b-ce192c298424",
+          "startedAt": "2026-09-03T21:09:53-07:00",
+          "endedAt": "2026-09-03T21:19:50-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

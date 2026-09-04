@@ -5148,5 +5148,377 @@
       "9f8ee7bb21feac70a27dff8fcd3c30557af49935"
     ],
     "closureNote": "Task 193 completed.\n\nCommits:\n  1cc221ab7e3818f289bc4b09f8cc2a9a4f442403  (root)   work\n  9f8ee7bb21feac70a27dff8fcd3c30557af49935  (root)   merge\nModified files: scripts/queryTasks.ts, tests/queryTasks.test.ts\nTask tests: 1 files, green\nFull suite: green"
+  },
+  {
+    "taskNumber": 155,
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Give the codex plan reviewer the sibling-task and blocker scope so chain boundaries are not flagged as omissions",
+    "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
+    "goal": [
+      "- loadPreparedTask returns siblingTasks (number and title) and blockedBy for the task under review",
+      "- the reviewer prompt names each sibling task sharing the group's files, by number and title",
+      "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
+      "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
+    ],
+    "description": "The plan reviewer prompt (planReviewPrompt in scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts) only lists file paths. It never names the tasks that share files with the task under review, and never names the task's blockedBy entries. So codex reports work owned by a sibling or a blocker as an omission.\n\nSibling scope comes from groupTasksByFileOverlap in scripts/taskGroups.ts (overlap on modifiableFiles). Blockers come from the task record's blockedBy array (entry key taskNumber, see scripts/checkBlockers.ts). loadPreparedTask in scripts/tackle-tasks/shared/preparedTask.ts reads neither today.\n\nAdd siblingTasks (number + title) and blockedBy to PreparedTask. Have planReviewPrompt print both lists and state plainly: work assigned to a named sibling or blocker is out of scope and must not be reported as an omission. Task 120 (closed) already tells the reviewer what is not grounds for rejection. This task supplies the scope facts that make that judgement possible.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/preparedTask.ts",
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
+      "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "In CodexReviewBodyEmitter.test.ts: build a PreparedTask with one sibling task and one blockedBy entry, call planReviewPrompt, and assert the prompt names both and says work owned by them is out of scope.",
+    "difficulty": 5,
+    "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
+    "blockedBy": [],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "notInScope": [
+      "- Telling the reviewer which issue classes are not grounds for rejection; task 120 (closed) owns that",
+      "- Changes to the tests reviewer prompt in CodexTestReviewBodyEmitter.ts"
+    ],
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-155",
+      "leaseRunId": "d854cde9-1d92-4767-9c11-6d42d020a452",
+      "history": [
+        {
+          "runId": "d854cde9-1d92-4767-9c11-6d42d020a452",
+          "startedAt": "2026-09-03T18:31:48-07:00",
+          "endedAt": "2026-09-03T18:52:20-07:00",
+          "exitType": "completed",
+          "exitNote": "All layers merged successfully.",
+          "modifiedFiles": [
+            "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts",
+            "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts",
+            "scripts/tackle-tasks/shared/preparedTask.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "af6e5fe69b766c9303f97fe4be9911f98b65877b",
+              "kind": "work",
+              "stepId": "implement"
+            },
+            {
+              "occurrenceId": "",
+              "hash": "6a9a0775bb1820c989fca2a42275adfb4d7d0365",
+              "kind": "merge"
+            }
+          ],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts"
+            ],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "✔ test_planReviewPrompt_closesStdinOnEveryReviewerCommand (1.639416ms)\n✔ test_planReviewPrompt_capsCodexExecWithAPerlAlarm (0.274208ms)\n✔ test_planReviewPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer (0.384834ms)\n✔ test_planReviewPrompt_asksExactlyOneQuestionOnce (0.432959ms)\n✔ test_planReviewPrompt_leavesNoUnresolvedInterpolation (0.164333ms)\n✔ test_planReviewPrompt_excludesAnOwnedPathThePlanDeclaresItWillCreate (1.465ms)\n✔ test_reviewByDefaultPrompt_usesAdversarialLanguageWhenTheDifficultyIsAtLeast7 (0.977667ms)\n✔ test_reviewByDefaultPrompt_keepsTheOrdinaryWordingBelowDifficulty7 (0.781417ms)\n✔ test_reviewQuestion_approvesOnTheRelaunchAfterAScrap (1.353042ms)\n✔ test_planReviewPrompt_namesSiblingTasksAndBlockersAsOutOfScope (0.269792ms)\n✔ test_planReviewPrompt_statesNoSiblingsOrBlockersWhenNoneExist (0.193417ms)\nℹ tests 11\nℹ suites 0\nℹ pass 11\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 124.442542\n",
+            "checkedAt": "2026-09-03T18:48:48-07:00"
+          },
+          "fullSuite": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "layers": [
+              {
+                "occurrenceId": "",
+                "passed": true
+              }
+            ],
+            "output": "ict role reports advanced false, not true, against a checkout whose rebase already aborted (567.823792ms)\n✔ a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed (1053.776542ms)\n✔ a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit (1137.142916ms)\n✔ a merged-but-not-closed retry archives the original merge commit even after main advances in between (1076.988584ms)\n✔ a real root merge conflict produces a concrete final-report reason naming the conflicted file (528.685792ms)\n✔ merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close (2382.661541ms)\n✔ rebase stage: a failing rebase command blocks the lap before any agent runs (679.163667ms)\n✔ rebase stage: an unresolved live conflict blocks the lap and leaves the source branch unmoved (987.011542ms)\n✔ rebase stage: a layer still red after the fix-round ceiling blocks the lap and leaves the source branch unmoved (1117.394125ms)\n✔ rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate (1123.272791ms)\n✔ rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation (1310.28125ms)\n✔ rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation (807.834666ms)\n✔ merge stage refuses to guess when a merge intent exists but the merge record is missing (420.954417ms)\n✔ rebase-test blocks on a real type error even when the complete suite passes (520.404666ms)\n✔ merge revalidates root source drift with the configured typecheck (2059.552041ms)\n✔ merge revalidates source-submodule drift with the configured typecheck (3785.22925ms)\n✔ merge still closes when merge-time typecheck and complete suites are green (2352.817917ms)\n✔ merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact (495.194333ms)\n✔ rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing (120.975ms)\n✔ merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing (621.659958ms)\n✔ merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict (668.5345ms)\n✔ merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged (1488.34375ms)\n✔ merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly (1897.01325ms)\n✔ successful close deletes task-N from root and every source submodule (1713.125583ms)\n✔ close failure retains root and every source-submodule task ref (1964.066625ms)\n✔ production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path (944.770667ms)\n✔ attachOperationBranch sets the given branch on every occurrence, independent of any other invocation (0.42575ms)\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\n✔ implement refuses to run without a repositoryManifest instead of silently falling back to root-only (1.513541ms)\n✔ plan+implement refuses to run without a repositoryManifest instead of silently falling back to root-only (0.1955ms)\n✔ plan alone tolerates a missing repositoryManifest (0.387208ms)\n✔ plan+implement commits only in each prepared task worktree (5336.530208ms)\n✔ plan+implement reports blocked when the implementer claims done without committing (1854.555291ms)\n✔ plan+implement rejects a planner that returns an existing plan outside the task worktree (1113.651208ms)\n✔ plan+implement rejects a planner that reports planned at the expected path without writing it (1192.58825ms)\n✔ plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase (2391.362292ms)\n✔ plan+implement blocks a notes-only commit that never touches an owned file (2371.22975ms)\n✔ plan+implement blocks a done result that deletes the previously committed notes file (1643.150292ms)\n✔ plan+implement blocks an owned commit that omits the required notes file (1639.981334ms)\n✔ widened ownership survives replanning, verification, and a separately launched implement stage (1927.031666ms)\n✔ plan+implement rejects missing sourceRoot before source or worktree mutation (389.801625ms)\n✔ a third rejected review with missingFiles widens every downstream implementation boundary (2468.188416ms)\n✔ test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch (0.9295ms)\n✔ test_getTemplateShapeMismatches_namesAMissingKey (0.132958ms)\n✔ test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind (0.069917ms)\n✔ test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave (0.067ms)\n✔ test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject (0.08225ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.069083ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (0.071125ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (0.05575ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (0.081791ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (0.101459ms)\n✔ test_missingPackageJsonProducesResolutionRequest (2.330208ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (0.876084ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (0.826ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (0.725708ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (1.602667ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (1.050458ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (0.77125ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (1.549541ms)\n✔ appends each edited path to the session flag file (282.967625ms)\n✔ missing session_id does nothing (193.033166ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (437.180041ms)\n✔ no matching blockers leaves tasks.json untouched (219.498708ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (260.089292ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (188.584ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (265.182791ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (0.169375ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (455.364292ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (102.929209ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (0.543709ms)\n✔ hook loads and answers /view-task with a block decision (188.139667ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (159.350875ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (106.144916ms)\n✔ hook is silent passthrough for other prompts (97.660166ms)\n✔ /view-task <N> includes the task's description with real newlines (131.681875ms)\n✔ /view-task with no number blocks with usage and the open-task listing (147.895625ms)\n✔ unknown task number reports not-found instead of crashing (99.03225ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.547083ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (0.542083ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (0.299666ms)\nℹ tests 2553\nℹ suites 0\nℹ pass 2553\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 127014.38575\n",
+            "checkedAt": "2026-09-03T18:52:17-07:00"
+          },
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "af6e5fe69b766c9303f97fe4be9911f98b65877b"
+                }
+              ]
+            },
+            {
+              "stepId": "merge-succeeded-exit",
+              "script": "closeTaskRun",
+              "result": {
+                "closed": [
+                  155
+                ],
+                "skipped": [],
+                "unblocked": [],
+                "ambiguous": []
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 1
+          },
+          "countedPasses": {
+            "clarify": [
+              "7939be00-a614-4f34-be54-6b5995a9d553"
+            ]
+          },
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "9f8ee7bb21feac70a27dff8fcd3c30557af49935"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "af6e5fe69b766c9303f97fe4be9911f98b65877b"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "9f8ee7bb21feac70a27dff8fcd3c30557af49935"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clarifyRequest": "The brief says siblingTasks must come from groupTasksByFileOverlap in scripts/taskGroups.ts and blockedBy comes from the task record's blockedBy array as read by scripts/checkBlockers.ts, but neither file is in the owned files or given to me to read, so I cannot write exact edits (signatures, return shapes, field names) that reuse them. I also need .taskTools/tasks.json to confirm the exact field names on a task entry (e.g. whether it is `title`, and the exact shape of `blockedBy` entries) so the plan's code matches the live schema instead of guessing. Please give me scripts/taskGroups.ts, scripts/checkBlockers.ts, and .taskTools/tasks.json (or one representative task entry with a blockedBy array) so I can plan exact edits.",
+    "completionDate": "2026-09-03",
+    "commitHashes": [
+      "af6e5fe69b766c9303f97fe4be9911f98b65877b",
+      "6a9a0775bb1820c989fca2a42275adfb4d7d0365"
+    ],
+    "closureNote": "Task 155 completed.\n\nCommits:\n  af6e5fe69b766c9303f97fe4be9911f98b65877b  (root)   work\n  6a9a0775bb1820c989fca2a42275adfb4d7d0365  (root)   merge\nModified files: scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts, scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts, scripts/tackle-tasks/shared/preparedTask.ts\nTask tests: 1 files, green\nFull suite: green"
+  },
+  {
+    "taskNumber": 191,
+    "version": "229b706f661221a74ff2784f8574cec5f61114f7",
+    "title": "Read the diagram folder for tackle-tasks from .taskTools/settings.json",
+    "userDescription": "The ability to define which set of diagrams to use for tackle-tasks.  this ability makes the skill and pipeline runner generic, allowing the end user to provide their own diagrams.  the default diagram would be the current pipeline.  .taskTools/settings.json is where this diagram setting would live.",
+    "goal": [
+      "- With no .taskTools/settings.json, `/tackle-tasks [N]` runs the current pipeline block for block: the run-log's ran[] matches today's.",
+      "- With settings.json holding `{ \"diagramFolder\": \"<path>\" }`, generateSteps, the workflow and the hook all read that folder; the run-log names that folder's blocks and none of the default pipeline's.",
+      "- A diagramFolder that does not exist or holds no .mmd stops the run at launch with a message naming the path. No fallback."
+    ],
+    "notInScope": [
+      "- Not in scope: a guide for users who author their own diagrams. A later task owns it."
+    ],
+    "description": "generateSteps.ts (invoked as `node scripts/generateSteps.ts diagrams/tackle-tasks` from package.json's \"steps\"/\"steps:watch\" scripts) resolves the diagram folder from process.argv, falling back to the dead default `plans/diagrams` (diagrams actually live at diagrams/tackle-tasks/*.mmd) when no CLI arg is given. It walks that folder into scripts/steps.json plus per-box stub scripts under scripts/tackle-tasks/, using a hardcoded BLOCKS_BY_OWNER_FOLDER box-name map tied to the current pipeline's diagram set. generateWorkflow.ts and runStepHook.ts consume the already-generated scripts/steps.json and are diagram-folder-agnostic, so they don't need to change. No .taskTools/settings.json file or reader exists anywhere in the codebase yet (grepped scripts/, skills/, tests/) — this would be a new config file and a new settings-read helper, most naturally added in generateSteps.ts's CLI entrypoint (diagramFolder resolution) ahead of its current argv/hardcoded-default fallback, with the current diagrams/tackle-tasks folder becoming the default when no setting is present.\n\nSetting shape settled with the user: `{ \"diagramFolder\": \"<path>\" }`. The folder holds the .mmd files plus each block's script and template. An absent file or key means diagrams/tackle-tasks.\n\n## Audit correction (2026-08-31)\n\nUser decision: both step consumers stay in the fence. scripts/runStepHook.ts and scripts/generateWorkflow.ts are owned so the merge fence cannot block this task, whichever consumer ends up edited. The setting may still flow only through regenerated scripts/steps.json (also owned), in which case the hook and workflow generator need no code change.\n\n## Clarification answer (2026-09-04)\n\nUser decisions on the three open points.\n\n(1) Start block: keep the fixed string. `START_STEP` in scripts/generateWorkflow.ts and `START_STEP_KEY` in scripts/runStepHook.ts stay the literal `pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK`. Do not derive the start key from the config. A custom diagram set must name its entry block `PREAMBLE_STATUS_CHECK` in a file named `pipeline-preambleStatusCheck.mmd`, or the launch fails with today's missing-block error. The two tests that pin the literal (tests/generateWorkflow.test.ts test_buildWorkflowScript_usesOneHookOutputSchemaForEveryPass and tests/runStepHook.test.ts test_runStepHook_startStepKeyMatchesTheWorkflowsStartStep) stay as they are. Codex's [files-needing-no-edit] note is declined on this point.\n\n(2) Layout: a custom diagramFolder uses the same nested layout as the default, not a flat one. `generateSteps(diagramFolder, stepsRoot, configPath)` in scripts/generateSteps.ts already resolves each box to `<stepsRoot>/<ownerFolder>/<box>.ts` and `<box>.template.json` via `BLOCK_OWNER_FOLDER` and `getDefaultOwnerFolder`. Keep that rule; the CLI entrypoint sets `stepsRoot` to the configured folder instead of the hardcoded `join(PROJECT_ROOT, \"scripts/tackle-tasks\")` when settings.json names a diagramFolder. The default folder keeps its existing layout untouched.\n\n(3) Missing box files: for a custom folder, a box whose script or template is absent is a launch-time error naming the path. Do not write a stub there; the `if (!existsSync(scriptPath))` stub branch in generateSteps.ts applies only when stepsRoot is the default scripts/tackle-tasks. The default folder keeps today's stub behavior.",
+    "modifiableFiles": [
+      "scripts/generateSteps.ts",
+      "tests/generateSteps.test.ts",
+      "package.json",
+      ".taskTools/settings.json",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "scripts/runStepHook.ts",
+      "scripts/steps.json",
+      "scripts/generateWorkflow.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
+    "difficulty": 6,
+    "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
+    "blockedBy": [],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-191",
+      "leaseRunId": "2ab1e933-4dcb-4e75-8426-94a911269b02",
+      "history": [
+        {
+          "runId": "06026626-526c-4a53-afe2-260a65b5c918",
+          "startedAt": "2026-09-03T17:56:11-07:00",
+          "endedAt": "2026-09-03T18:41:23-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ]
+        },
+        {
+          "runId": "2ab1e933-4dcb-4e75-8426-94a911269b02",
+          "startedAt": "2026-09-03T19:31:07-07:00",
+          "endedAt": "2026-09-03T20:22:13-07:00",
+          "exitType": "completed",
+          "exitNote": "All layers merged successfully.",
+          "modifiedFiles": [
+            "package.json",
+            "scripts/generateSteps.ts",
+            "scripts/generateWorkflow.ts",
+            "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+            "tests/generateSteps.test.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "04ae7937a382bf094b04473b5074c3f2d6b73e94",
+              "kind": "work",
+              "stepId": "implement"
+            },
+            {
+              "occurrenceId": "",
+              "hash": "7fcd722d51a7f1e9a08eec8e5a0447fe03346fdc",
+              "kind": "merge"
+            }
+          ],
+          "implementationNotesFile": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "tests/generateSteps.test.ts"
+            ],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "✔ test_getBoxesInDiagram_findsBothSidesOfAnArrow (3.121542ms)\n✔ test_getBoxesInDiagram_namesABoxOnceWhenItAppearsTwice (0.135333ms)\n✔ test_getBoxesInDiagram_ignoresCommentsAndDiagramKeywords (0.093083ms)\n✔ test_getBoxesInDiagram_stripsRoundAndCurlyLabels (0.080584ms)\n✔ test_generateSteps_keysTheConfigByDiagramFileName (7.184ms)\n✔ test_generateSteps_ignoresAFileThatIsNotADiagram (3.937917ms)\n✔ test_generateSteps_writesAStubForABoxWithNoScript (6.951416ms)\n✔ test_generateSteps_writesAStubThatPrintsItsBoxAndSignal (200.359041ms)\n✔ test_generateSteps_leavesAnExistingScriptAlone (8.800625ms)\n✔ test_generateSteps_throwsWhenADroppedBoxesStubIsStillOnDisk (6.172875ms)\n✔ test_generateSteps_writesTheConfigAsBoxAndScriptPairs (4.192458ms)\n✔ test_getEdgesInDiagram_recordsWhatEachBoxPointsAt (0.1075ms)\n✔ test_getEdgesInDiagram_ignoresAnEdgeLabel (0.065917ms)\n✔ test_getEdgesInDiagram_anInvisibleLinkMakesNoBoxAndNoEdge (0.053834ms)\n✔ test_getEdgesInDiagram_aDottedArrowMakesNoEdge (0.235167ms)\n✔ test_getEdgesInDiagram_ignoresAnEdgeLabelWrittenBeforeTheArrow (0.074916ms)\n✔ test_getEdgesInDiagram_ignoresAnUnquotedEdgeLabelBeforeTheArrow (0.133541ms)\n✔ test_generateSteps_writesTheNextBoxFromTheArrows (6.682833ms)\n✔ test_generateSteps_keepsAHandWrittenMutatingFlag (4.08125ms)\n✔ test_generateSteps_throwsWhenARenamedBoxesOldStubIsStillOnDisk (4.13025ms)\n✔ test_generateSteps_writesAStubThatReadsItsInputArgument (140.125959ms)\n✔ test_generateSteps_writesATemplateForABoxWithNone (3.396917ms)\n✔ test_generateSteps_recordsTheTemplatePathBesideTheScript (3.406834ms)\n✔ test_generateSteps_leavesAnExistingTemplateAlone (4.282042ms)\n✔ test_generateSteps_seedsANewInputTemplateFromThePredecessorsOutput (3.411125ms)\n✔ test_generateSteps_seedsANewInputTemplateAcrossDiagrams (6.673375ms)\n✔ test_generateSteps_rewritesAnArrowIntoABoxWithArrowsInAnotherDiagram (8.655167ms)\n✔ test_generateSteps_writesNoEntryForABoxThatOnlyPointsIntoAnotherDiagram (7.107375ms)\n✔ test_generateSteps_leavesArrowBareWhenTargetHasItsOwnOutgoingArrow (5.766958ms)\n✔ test_generateSteps_leavesArrowBareWhenTargetHasNoArrowsAnywhere (5.396791ms)\n✔ test_generateSteps_sharesOneScriptForABoxTwoDiagramsBothDraw (5.510791ms)\n✔ test_generateSteps_throwsOnAnOrphanBoxScript (4.751292ms)\n✔ test_generateSteps_throwsOnAStubOutsideItsOwnerFolder (9.803292ms)\n✔ test_generateSteps_doesNotThrowWhenEveryExistingScriptMatchesABox (4.642ms)\n✔ test_generateSteps_ignoresSharedFolderAndHiddenFilesInTheOrphanGuard (12.161334ms)\n✔ test_resolveDiagramFolderSetting_defaultsToTheRealPipelineWhenNoSettingsFile (0.834959ms)\n✔ test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings (1.8765ms)\n✔ test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderDoesNotExist (1.439208ms)\n✔ test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderHoldsNoMmd (1.414333ms)\n✔ test_generateSteps_throwsOnAMissingScriptWhenStubsAreNotAllowed (1.348458ms)\n✔ test_generateSteps_usesAuthoredScriptsInACustomFolderWithoutThrowing (2.671083ms)\n✔ test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeline (311.819125ms)\nℹ tests 42\nℹ suites 0\nℹ pass 42\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1022.754875\n",
+            "checkedAt": "2026-09-03T20:18:06-07:00"
+          },
+          "fullSuite": {
+            "stepId": "run-full-suite-0",
+            "passed": true,
+            "layers": [
+              {
+                "occurrenceId": "",
+                "passed": true
+              }
+            ],
+            "output": " reports advanced false, not true, against a checkout whose rebase already aborted (557.876041ms)\n✔ a lost cleanup-incomplete merge result is retried as cleanup-only, never re-merged or re-closed (1242.2075ms)\n✔ a lap that merges but cannot close keeps the worktree, and its retried cleanup makes no second commit (1382.914792ms)\n✔ a merged-but-not-closed retry archives the original merge commit even after main advances in between (1207.238958ms)\n✔ a real root merge conflict produces a concrete final-report reason naming the conflicted file (728.985083ms)\n✔ merge stage: a locked worktree fails final cleanup with a warning-only outcome after a successful close (2672.060458ms)\n✔ rebase stage: a failing rebase command blocks the lap before any agent runs (638.523833ms)\n✔ rebase stage: an unresolved live conflict blocks the lap and leaves the source branch unmoved (990.205709ms)\n✔ rebase stage: a layer still red after the fix-round ceiling blocks the lap and leaves the source branch unmoved (998.429459ms)\n✔ rebase-fix: a root-layer fix that commits an unapproved file returns green but reports a fence violation and forces a re-gate (1162.680583ms)\n✔ rebase-fix: a fix that only commits an already-approved path stays green without a false-positive fence violation (1159.4175ms)\n✔ rebase-fix-verify: a nested submodule-layer commit outside the fence is normalized to a root-relative violation (785.168125ms)\n✔ merge stage refuses to guess when a merge intent exists but the merge record is missing (619.533292ms)\n✔ rebase-test blocks on a real type error even when the complete suite passes (627.962042ms)\n✔ merge revalidates root source drift with the configured typecheck (2017.5565ms)\n✔ merge revalidates source-submodule drift with the configured typecheck (3673.566333ms)\n✔ merge still closes when merge-time typecheck and complete suites are green (2174.126666ms)\n✔ merge stage: a cleanup commit blocked by a hook leaves the source branch unmoved and the worktree intact (480.88825ms)\n✔ rebase-test stage: a rebase-walk driver returning no result blocks the lap instead of throwing (140.68625ms)\n✔ merge stage: an unexpected merge driver exception is normalized to a typed parent-conflicted result instead of throwing (774.948ms)\n✔ merge stage: a merge-record failure after the root lands reports merged-but-not-closed, not a conflict (715.027916ms)\n✔ merge stage: after a submodule layer merges, an untested parent layer blocks the lap while the submodule stays merged (1430.824917ms)\n✔ merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly (1704.862792ms)\n✔ successful close deletes task-N from root and every source submodule (2007.054417ms)\n✔ close failure retains root and every source-submodule task ref (1696.762291ms)\n✔ production-shaped: the worktree prepareTasks.createWorktreeForGroup produces is what task.workflow.js merges, with no chdir and the real script path (881.668917ms)\n✔ attachOperationBranch sets the given branch on every occurrence, independent of any other invocation (0.236667ms)\nReset branch 'task-1'\nReset branch 'task-2'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\nReset branch 'task-1'\n✔ implement refuses to run without a repositoryManifest instead of silently falling back to root-only (1.698834ms)\n✔ plan+implement refuses to run without a repositoryManifest instead of silently falling back to root-only (0.163709ms)\n✔ plan alone tolerates a missing repositoryManifest (0.369209ms)\n✔ plan+implement commits only in each prepared task worktree (5095.404542ms)\n✔ plan+implement reports blocked when the implementer claims done without committing (2314.840875ms)\n✔ plan+implement rejects a planner that returns an existing plan outside the task worktree (1007.458541ms)\n✔ plan+implement rejects a planner that reports planned at the expected path without writing it (1028.421709ms)\n✔ plan, verify, widen-files, and apply-feedback calls all use the task-numbered Plan phase (2491.105667ms)\n✔ plan+implement blocks a notes-only commit that never touches an owned file (1993.756625ms)\n✔ plan+implement blocks a done result that deletes the previously committed notes file (1600.045625ms)\n✔ plan+implement blocks an owned commit that omits the required notes file (1764.679958ms)\n✔ widened ownership survives replanning, verification, and a separately launched implement stage (2172.160917ms)\n✔ plan+implement rejects missing sourceRoot before source or worktree mutation (707.196958ms)\n✔ a third rejected review with missingFiles widens every downstream implementation boundary (2614.516125ms)\n✔ test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch (1.580583ms)\n✔ test_getTemplateShapeMismatches_namesAMissingKey (0.185375ms)\n✔ test_getTemplateShapeMismatches_namesAKeyOfTheWrongKind (0.099625ms)\n✔ test_getTemplateShapeMismatches_ignoresAKeyTheTemplateDoesNotHave (0.080167ms)\n✔ test_getTemplateShapeMismatches_ignoresAnExtraKeyInsideANestedObject (0.088833ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.070958ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (0.074458ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (0.06ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (0.0855ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (1.656542ms)\n✔ test_missingPackageJsonProducesResolutionRequest (1.8045ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (1.668834ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (1.329792ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (0.84875ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (0.962458ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (0.912333ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (1.015875ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (1.502875ms)\n✔ appends each edited path to the session flag file (225.743708ms)\n✔ missing session_id does nothing (130.833083ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (157.718792ms)\n✔ no matching blockers leaves tasks.json untouched (140.616625ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (152.194709ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (130.251083ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (226.480583ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (0.20175ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (579.13025ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (322.128083ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (2.866083ms)\n✔ hook loads and answers /view-task with a block decision (184.594708ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (156.372125ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (158.60475ms)\n✔ hook is silent passthrough for other prompts (184.667584ms)\n✔ /view-task <N> includes the task's description with real newlines (233.754334ms)\n✔ /view-task with no number blocks with usage and the open-task listing (184.467791ms)\n✔ unknown task number reports not-found instead of crashing (121.334458ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.498083ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (0.499084ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (0.357375ms)\nℹ tests 2560\nℹ suites 0\nℹ pass 2560\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 135093.866584\n",
+            "checkedAt": "2026-09-03T20:22:10-07:00"
+          },
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            },
+            {
+              "stepId": "rebase",
+              "script": "rebaseTaskWorktree",
+              "result": {
+                "lock": "acquired",
+                "heldByOwner": null,
+                "recoveryCommand": null,
+                "conflicted": false,
+                "stoppedAt": null,
+                "conflictedFilePaths": [],
+                "failureReason": null
+              },
+              "occurrenceIds": [
+                ""
+              ],
+              "worktreeHeads": [
+                {
+                  "occurrenceId": "",
+                  "head": "de7fdba5cfefefc283b26becc689c1d211690dfa"
+                }
+              ]
+            },
+            {
+              "stepId": "merge-succeeded-exit",
+              "script": "closeTaskRun",
+              "result": {
+                "closed": [
+                  191
+                ],
+                "skipped": [],
+                "unblocked": [],
+                "ambiguous": []
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "6d796509-35b5-46f3-8f70-6a1f31114403",
+              "5b917535-b149-4e9e-93e0-35bc3f577115"
+            ]
+          },
+          "sourceTipsAtRebase": [
+            {
+              "occurrenceId": "",
+              "baseBranch": "staging",
+              "sourceTip": "6a9a0775bb1820c989fca2a42275adfb4d7d0365"
+            }
+          ],
+          "rebaseStepReceipt": {
+            "stepId": "rebase",
+            "occurrenceIds": [
+              ""
+            ],
+            "worktreeHeads": [
+              {
+                "occurrenceId": "",
+                "head": "de7fdba5cfefefc283b26becc689c1d211690dfa"
+              }
+            ],
+            "sourceTips": [
+              {
+                "occurrenceId": "",
+                "baseBranch": "staging",
+                "sourceTip": "6a9a0775bb1820c989fca2a42275adfb4d7d0365"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "codexReviewNotes": "[files-needing-no-edit] Replace the no-edit assertions for `scripts/generateWorkflow.ts` and `scripts/runStepHook.ts` with explicit edits that derive one deterministic start key from the regenerated config (the first entry of the first emitted diagram, with an explicit empty-config error). Use that key in the generated workflow and in the hook's start/resume checks instead of the two hardcoded `pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK` constants. Extend the integration coverage to exercise the generated `/tackle-tasks` workflow path with the custom config, rather than invoking `/run-step BOX_A` directly.\n\nDurable because: The launch path and hook will use the same config-derived entry point, so a custom diagram set cannot be rejected merely because it lacks a default-pipeline key.\n\n[implement-diagram-folder-resolution] Add a concrete, documented layout for user-provided block scripts and templates within the configured diagram folder, then edit `generateSteps.ts` to use those authored files when building each custom-folder config entry instead of always creating or retaining files under `scripts/tackle-tasks`. Add a test fixture with distinctive authored script/template content and assert the generated config and hook execute that content.\n\nDurable because: The test proves the configured folder supplies both the graph and its implementation, preventing future changes from silently falling back to generated default stubs.",
+    "clarifyRequest": "Read scripts/tackle-tasks/shared/resumeRun.ts in full, as granted by the last clarify round. findResumeEntry(taskNumber, tasksFile) resolves projectRoot via taskFilesProjectRoot({tasksPath: resolve(tasksFile), completedTasksPath: \"\"}), then reads isTaskNumberValid(taskNumber, projectRoot).valid and readTaskRunState(taskNumber, projectRoot). Tracing every branch: when readTaskRunState(...).worktree is null (true for a task that has never been through this pipeline once, since only CREATE_WORKTREE/RESET_WORKTREE ever set it), every remaining branch returns null -- row 1 (task invalid), row 4 (state.active, after writeTaskExitNotes+endTaskRun), and row 5 (fall-through) all return null; only row 2 (an existing worktree with a checkpoint file on disk) or row 3 (history's newest entry has exitType 'completed') redirect the walk. So a fixture task with no worktree and no completed run guarantees findResumeEntry returns null unconditionally, regardless of isTaskNumberValid's or readTaskRunState's exact validity/active rules -- that much of the previous round's question is answered from resumeRun.ts alone. What is still unresolved: the required test (TESTS_FIELD) must spawn runStepHook.ts's real CLI at START_STEP_KEY with a startPacket carrying taskNumber and tasksFile (matching what generateWorkflow.ts's generated workflow sends as its first input: `{taskNumber: args.task, tasksFile: args.tasksFile}`), so the test needs a real, on-disk tasksFile and a taskNumber that isTaskNumberValid(taskNumber, projectRoot) and readTaskRunState(taskNumber, projectRoot) can read without throwing before either function reaches a return. I have not been given scripts/tackle-tasks/shared/isTaskNumberValid.ts, scripts/tackle-tasks/shared/taskRunState.ts, or scripts/taskFiles.ts (imported by resumeRun.ts as taskFilesProjectRoot, and by the already-owned scripts/tackle-tasks/shared/SkillBodyEmitter.ts as resolveTaskFiles), so I do not know: tasks.json's top-level shape (a bare array vs. an object keyed by some field), which fields a task entry must carry for isTaskNumberValid to return {valid:false} cleanly (not throw) for a task that is simply not present, or what readTaskRunState returns for a task with no run-state file yet on disk -- a clean {history:[], worktree:null, active:false} default, or a throw when that file is missing. Please add these three files to the files I can read so the integration test's tasksFile content and taskNumber can be specified exactly instead of guessed.",
+    "completionDate": "2026-09-03",
+    "commitHashes": [
+      "04ae7937a382bf094b04473b5074c3f2d6b73e94",
+      "7fcd722d51a7f1e9a08eec8e5a0447fe03346fdc"
+    ],
+    "closureNote": "Task 191 completed.\n\nCommits:\n  04ae7937a382bf094b04473b5074c3f2d6b73e94  (root)   work\n  7fcd722d51a7f1e9a08eec8e5a0447fe03346fdc  (root)   merge\nModified files: package.json, scripts/generateSteps.ts, scripts/generateWorkflow.ts, scripts/tackle-tasks/shared/SkillBodyEmitter.ts, tests/generateSteps.test.ts\nTask tests: 1 files, green\nFull suite: green"
   }
 ]
