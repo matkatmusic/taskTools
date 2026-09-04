@@ -1,5 +1,5 @@
 // Sole home of the "codex reviews the plan" prompt (plans/diagram/pipeline-reviewPlan.mmd); its receipt is the review verdict, typed in planArtifacts.ts.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isPlanProblem, readAndValidatePlan, type CodexReview } from "./planArtifacts.ts";
 import type { PreparedTask } from "./preparedTask.ts";
@@ -29,12 +29,13 @@ const REVIEW_PLAN_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/re
 const REVIEW_PLAN_OUTPUT_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-output-template.json", import.meta.url));
 const RECORD_REVIEW_SCRIPT = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
 
-// Serves codex and claude fallbacks alike; drops a createsFiles path since it doesn't exist yet.
+// Serves codex and claude fallbacks alike; drops any owned path not on disk yet.
 const reviewedPaths = (t: PreparedTask) => {
-    const plan = readAndValidatePlan(t.planFile, t.number);
-    const root = t.repoRoot.replace(/\/+$/, "");
-    const createdPaths = new Set(isPlanProblem(plan) ? [] : plan.createsFiles.map((file) => `${root}/${file}`));
-    const owned = t.ownedFilePaths.filter((path) => !createdPaths.has(path));
+    // const plan = readAndValidatePlan(t.planFile, t.number);
+    // const root = t.repoRoot.replace(/\/+$/, "");
+    // const createdPaths = new Set(isPlanProblem(plan) ? [] : plan.createsFiles.map((file) => `${root}/${file}`));
+    // const owned = t.ownedFilePaths.filter((path) => !createdPaths.has(path));
+    const owned = t.ownedFilePaths.filter((path) => existsSync(path));
     return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
 };
 

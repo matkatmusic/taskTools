@@ -33,10 +33,21 @@ test("test_planReviewPrompt_capsCodexExecWithAPerlAlarm", () => {
 });
 
 test("test_planReviewPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () => {
-    const prompt = planReviewPrompt(task);
-    for (const path of [task.briefFile, task.planFile, ...task.ownedFilePaths]) {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-owned-"));
+    mkdirSync(join(repoRoot, "src"));
+    writeFileSync(join(repoRoot, "src/thing.ts"), "");
+    const onDiskTask: PreparedTask = { ...task, repoRoot, ownedFilePaths: [join(repoRoot, "src/thing.ts")] };
+    const prompt = planReviewPrompt(onDiskTask);
+    for (const path of [onDiskTask.briefFile, onDiskTask.planFile, ...onDiskTask.ownedFilePaths]) {
         assert.ok(prompt.includes(path), `prompt is missing ${path}`);
     }
+});
+
+test("test_planReviewPrompt_excludesAnOwnedPathMissingFromDiskEvenWhenCreatesFilesIsEmpty", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-missing-"));
+    const missing = join(repoRoot, ".taskTools/settings.json");
+    const prompt = planReviewPrompt({ ...task, repoRoot, ownedFilePaths: [missing] });
+    assert.equal(prompt.includes(missing), false);
 });
 
 test("test_planReviewPrompt_asksExactlyOneQuestionOnce", () => {
