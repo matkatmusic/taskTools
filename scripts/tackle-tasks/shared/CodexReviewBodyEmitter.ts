@@ -95,6 +95,16 @@ Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
 
 ${reviewedPaths(t).map((path) => `- ${path}`).join("\n")}
 
+## SIBLING AND BLOCKER SCOPE
+
+${t.siblingTasks.length > 0 ? `These tasks share files with task ${t.number} and may own related work:\n${t.siblingTasks.map((s) => `- task ${s.number}: ${s.title}`).join("\n")}` : `No other open task shares files with task ${t.number}.`}
+
+${t.blockedBy.length > 0 ? `These tasks block task ${t.number}:\n${t.blockedBy.map((b) => `- task ${b.taskNumber} blocks task ${t.number}: ${b.reason}`).join("\n")}` : `No open task blocks task ${t.number}.`}
+
+${t.blocks.length > 0 ? `Task ${t.number} blocks these tasks:\n${t.blocks.map((b) => `- task ${t.number} blocks task ${b.number}: ${b.reason}`).join("\n")}` : `Task ${t.number} blocks no open task.`}
+
+Work assigned to a named sibling or blocker above is out of scope for task ${t.number} and must not be reported as an omission.
+
 ## HOW TO JUDGE THE PLAN
 
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
