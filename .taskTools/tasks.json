@@ -54,47 +54,7 @@
     "notInScope": [
       "- Changing what any script does; only paths move",
       "- The tackle-tasks block folders under scripts/tackle-tasks/ already follow the pattern and stay as they are"
-    ],
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-113",
-      "leaseRunId": "95e4a893-23ec-40ba-ab51-364038e79c3b",
-      "history": [
-        {
-          "runId": "b4478075-64a1-4527-bfc4-3db7d8b91fb9",
-          "startedAt": "2026-09-04T12:15:05-07:00",
-          "endedAt": "2026-09-04T13:43:51-07:00",
-          "exitType": "agent-failed",
-          "exitNote": "run stopped before a worktree existed",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null
-        },
-        {
-          "runId": "95e4a893-23ec-40ba-ab51-364038e79c3b",
-          "startedAt": "2026-09-04T13:43:51-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        }
-      ]
-    }
+    ]
   },
   {
     "taskNumber": 164,
@@ -200,7 +160,7 @@
       "- none"
     ],
     "problemSolvedByTask": "A rerun task plans against a stale worktree, so it's edits are not in sync with the latest changes on the staging branch.",
-    "description": "User settled the design: this is a single check on the resume path, difficulty rated by the user as small. In diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, after IS_PREVIOUS_RUN_RESUMABLE_Q says the worktree can be resumed and before DOES_FENCE_COVER_WORKTREE_Q, add one block that runs on every resume: if staging's tip is not an ancestor of the worktree branch (git merge-base --is-ancestor staging HEAD fails), rebase the worktree onto staging using the existing helper scripts/tackle-tasks/shared/rebaseTaskWorktree.ts (the same code scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts runs before the merge tail); when staging is already an ancestor, skip. Conflicts route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit. No new field in taskRunState.ts: no last-seen tip is tracked, the ancestry check is the whole test. The merge-time rebase in pipeline-lockSourceRepo.mmd stays as it is. Regenerate scripts/steps.json after the diagram edit.\n\n## Clarification answer (2026-09-04)\n\nTwo corrections.\n\n(1) Template shape. Every box template is `{ \"input\": <packet the box receives>, \"output\": <packet the box returns> }`. Copy scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json as the model: both packets carry `box`, `scriptSignal`, `taskNumber`, `runId`, `projectRoot`, `worktree`, `branch`, `docsMode`, `planFile`, `exitType`, `exitNote`; `input.box` is the previous box's name, `output.box` is this box's name, and `output` adds `next` naming the box that follows. Fixture paths use the `{{PROJECT_ROOT}}` placeholder. For the new box, `input.box` is `IS_PREVIOUS_RUN_RESUMABLE_Q` and `output.next` is `DOES_FENCE_COVER_WORKTREE_Q`. Both template files are now in this task's files.\n\n(2) Do not hand-edit scripts/steps.json. It is generated: `npm run steps` runs `node scripts/generateSteps.ts diagrams/tackle-tasks` then `node scripts/generateWorkflow.ts`. Edit the diagram in diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, run `npm run steps`, and the generator writes the steps.json entries plus a stub script and template for the new box under scripts/tackle-tasks/preambleStatusCheck/; then fill in the stub. That generated script and template are owned files of this task (see files).",
+    "description": "User settled the design: this is a single check on the resume path, difficulty rated by the user as small. In diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, after IS_PREVIOUS_RUN_RESUMABLE_Q says the worktree can be resumed and before DOES_FENCE_COVER_WORKTREE_Q, add one block that runs on every resume: if staging's tip is not an ancestor of the worktree branch (git merge-base --is-ancestor staging HEAD fails), rebase the worktree onto staging using the existing helper scripts/tackle-tasks/shared/rebaseTaskWorktree.ts (the same code scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts runs before the merge tail); when staging is already an ancestor, skip. Conflicts route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit. No new field in taskRunState.ts: no last-seen tip is tracked, the ancestry check is the whole test. The merge-time rebase in pipeline-lockSourceRepo.mmd stays as it is. Regenerate scripts/steps.json after the diagram edit.\n\n## Clarification answer (2026-09-04)\n\nTwo corrections.\n\n(1) Template shape. Every box template is `{ \"input\": <packet the box receives>, \"output\": <packet the box returns> }`. Copy scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json as the model: both packets carry `box`, `scriptSignal`, `taskNumber`, `runId`, `projectRoot`, `worktree`, `branch`, `docsMode`, `planFile`, `exitType`, `exitNote`; `input.box` is the previous box's name, `output.box` is this box's name, and `output` adds `next` naming the box that follows. Fixture paths use the `{{PROJECT_ROOT}}` placeholder. For the new box, `input.box` is `IS_PREVIOUS_RUN_RESUMABLE_Q` and `output.next` is `DOES_FENCE_COVER_WORKTREE_Q`. Both template files are now in this task's files.\n\n(2) Do not hand-edit scripts/steps.json. It is generated: `npm run steps` runs `node scripts/generateSteps.ts diagrams/tackle-tasks` then `node scripts/generateWorkflow.ts`. Edit the diagram in diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd, run `npm run steps`, and the generator writes the steps.json entries plus a stub script and template for the new box under scripts/tackle-tasks/preambleStatusCheck/; then fill in the stub. That generated script and template are owned files of this task (see files).\n\n## Clarification answer (2026-09-04)\n\nUser decisions on the two open points.\n\n(1) Lock lifetime: the new preamble box releases the source-repo lock itself, right after a clean rebase, before routing to DOES_FENCE_COVER_WORKTREE_Q. Call `releaseSourceRepoLock` from scripts/tackle-tasks/shared/sourceRepoLock.ts the same way scripts/tackle-tasks/failuresExit/RELEASE_SOURCE_LOCK.ts does. When staging is already an ancestor, take no lock at all.\n\n(2) Conflict routing: reuse the existing FIX_CONFLICTS path, then return to the preamble. The conflicted output of the new box routes to the same FIX_CONFLICTS entry that DID_REBASE_REPORT_CONFLICTS_Q uses today (diagrams/tackle-tasks/pipeline-rebase.mmd -> pipeline-fixConflicts.mmd -> pipeline-commitMergeConflictFixIfNeeded.mmd). The packet carries one new field, `returnTo`, set by the new box to `DOES_FENCE_COVER_WORKTREE_Q`. IS_REBASE_FINISHED_Q's YES branch routes to `returnTo` when the field is set, and to RUN_FULL_SUITE as today when it is absent; the merge-time rebase never sets it. The lock is released on that return path too, in the same place as (1). The three conflict diagrams and their scripts are now owned files of this task; the packet types live in each folder's _packet.ts.",
     "modifiableFiles": [
       "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
       "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
@@ -214,7 +174,21 @@
       "package.json",
       "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
       "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
-      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts"
+      "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts",
+      "diagrams/tackle-tasks/pipeline-rebase.mmd",
+      "diagrams/tackle-tasks/pipeline-fixConflicts.mmd",
+      "diagrams/tackle-tasks/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "scripts/tackle-tasks/rebase/_packet.ts",
+      "scripts/tackle-tasks/rebase/DID_REBASE_REPORT_CONFLICTS_Q.ts",
+      "scripts/tackle-tasks/rebase/ARE_2_CONFLICT_FIXES_DONE_Q.ts",
+      "scripts/tackle-tasks/fixConflicts/_packet.ts",
+      "scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.ts",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/_packet.ts",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.ts",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/IS_REBASE_FINISHED_Q.ts",
+      "scripts/tackle-tasks/shared/sourceRepoLock.ts",
+      "scripts/tackle-tasks/failuresExit/RELEASE_SOURCE_LOCK.ts"
     ],
     "readOnlyFiles": [
       "*"
@@ -268,19 +242,9 @@
                 "initialized": false
               }
             }
-          ],
-          "attempts": {
-            "clarify": 2
-          },
-          "countedPasses": {
-            "clarify": [
-              "8ad7efa4-ee90-4ae5-a211-41f80f78b7ff",
-              "2f4d513f-50e7-4687-8616-2a16ededc511"
-            ]
-          }
+          ]
         }
       ]
-    },
-    "clarifyRequest": "REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts calling rebaseTaskWorktree(rootSourceBranch: \"staging\") surfaces two problems the brief does not settle, both verified from the files given this round (sourceRepoLock.ts, occurrences.ts, mergeTaskWorktrees.ts, and REBASE_ONTO_TARGET_BRANCH.test.ts's rebasesOntoStaging fixture, all now read). (1) Lock lifetime: rebaseTaskWorktree acquires the durable source-repo lock via acquireSourceRepoLockBounded and never releases it inside the function; sourceRepoLock.ts's own file comment says the lock is 'held through a task workflow run's rebase tail'. Today only pipeline-failuresExit.mmd's DOES_RUN_HOLD_SOURCE_LOCK_Q -> RELEASE_SOURCE_LOCK releases it (steps.json's pipeline-mergeSucceededExit.mmd box list has no matching release box). If the new preamble-time box acquires this lock on every resume where staging has moved and the run then continues normally into planning/implementation instead of failing or merging right away, the lock stays held for that run's entire remaining lifetime, blocking every other concurrent task's LOCK_SOURCE_REPO the whole time, not just for 'the rebase tail'. Should the new box call releaseSourceRepoLock itself immediately after a clean (non-conflicted) rebase, before routing to DOES_FENCE_COVER_WORKTREE_Q? (2) Conflict routing target: the brief says conflicts 'route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit,' but task 195 owns none of diagrams/tackle-tasks/pipeline-rebase.mmd, diagrams/tackle-tasks/pipeline-fixConflicts.mmd, diagrams/tackle-tasks/pipeline-commitMergeConflictFixIfNeeded.mmd, or their scripts (DID_REBASE_REPORT_CONFLICTS_Q.ts, ARE_2_CONFLICT_FIXES_DONE_Q.ts, FIX_CONFLICTS.ts, COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts, CONTINUE_REBASE.ts, IS_REBASE_FINISHED_Q.ts), and none were given this round. scripts/steps.json shows that path's clean branch (DID_REBASE_REPORT_CONFLICTS_Q --NO--> RUN_FULL_SUITE) and its post-fix branch (IS_REBASE_FINISHED_Q --YES--> RUN_FULL_SUITE) both lead toward RUN_FULL_SUITE and then MERGE_WORKTREES. Routing a resumed, not-yet-(re)planned task's conflict fix through that same path risks merging the task's stale pre-resume work instead of returning to DOES_FENCE_COVER_WORKTREE_Q to continue the normal preamble. I need one of those diagram or script files (or explicit confirmation of the exact box name my new box's conflicted output should target, and what happens right after the conflict is fixed) to write an exact edit list."
+    }
   }
 ]
