@@ -126,3 +126,29 @@ test("test_commitTaskWork_usesTheWorkKindForTheFirstCommitAndRepairForEveryLater
     assert.equal(run?.commits.length, 2);
     assert.deepEqual(run?.commits.map((commit) => commit.kind), ["work", "repair"]);
 });
+
+test("test_commitTaskWork_commitsARenamedOwnedFileNextToAStagedDeletion", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const taskNumber = 9006;
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    mkdirSync(join(tasksPath, ".."), { recursive: true });
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "move task", modifiableFiles: ["seed.txt", "moved/seed.txt", "gone.txt"] }]);
+    claimTask(taskNumber, "run-1", rootOrigin);
+
+    writeFileSync(join(worktreePath, "gone.txt"), "gone\n");
+    git(worktreePath, "add", "gone.txt");
+    git(worktreePath, "commit", "-q", "-m", "add gone");
+    git(worktreePath, "rm", "-q", "gone.txt");
+    mkdirSync(join(worktreePath, "moved"));
+    git(worktreePath, "mv", "seed.txt", "moved/seed.txt");
+    writeFileSync(join(worktreePath, "moved/seed.txt"), "seed edited\n");
+
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
+
+    assert.equal(result.commits.length, 1);
+    assert.equal(git(worktreePath, "status", "--porcelain"), "");
+    const names = git(worktreePath, "show", "--name-status", "--format=", result.commits[0].hash);
+    assert.match(names, /moved\/seed\.txt/);
+    assert.match(names, /D\tgone\.txt/);
+});

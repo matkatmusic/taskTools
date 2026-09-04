@@ -28,7 +28,8 @@ function git(repoRoot: string, ...args: string[]): string {
 }
 
 // Only the task's own files get staged, so a stray __pycache__ or node_modules never reaches the fence.
-function changedOwnedPaths(occurrence: Occurrence, occurrences: Occurrence[], ownedOccurrencePaths: string[]): string[] {
+// Returns every changed owned path, staged or not, so the caller knows whether a commit is due.
+function stageOwnedChanges(occurrence: Occurrence, occurrences: Occurrence[], ownedOccurrencePaths: string[]): string[] {
     const ownedHere = ownedOccurrencePaths
         .map(parseOccurrencePath)
         .filter((owned) => owned.occurrenceId === occurrence.occurrenceId)
@@ -41,8 +42,13 @@ function changedOwnedPaths(occurrence: Occurrence, occurrences: Occurrence[], ow
         .map((id) => id.slice(prefix.length));
     ownedHere.push(...childGitlinks);
     if (ownedHere.length === 0) return [];
-    return git(occurrence.checkoutPath, "status", "--porcelain", "-z", "--untracked-files=all", "--", ...ownedHere)
-        .split("\0").filter(Boolean).map((entry) => entry.slice(3));
+    // --no-renames: a -z rename is two entries (new, old) and the old one carries no XY prefix to slice.
+    const entries = git(occurrence.checkoutPath, "status", "--porcelain", "-z", "--no-renames", "--untracked-files=all", "--", ...ownedHere)
+        .split("\0").filter(Boolean);
+    // `git add` is fatal on a fully staged deletion (matches nothing), so only worktree-dirty entries get added.
+    const unstaged = entries.filter((entry) => entry[1] !== " ").map((entry) => entry.slice(3));
+    if (unstaged.length > 0) git(occurrence.checkoutPath, "add", "-A", "--", ...unstaged);
+    return entries.map((entry) => entry.slice(3));
 }
 
 // F2: a commit's step is embedded in its message, so an unrecorded-but-landed commit is still recognizable on rerun.
@@ -93,9 +99,8 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
         );
         if (alreadyRecorded) continue;
 
-        const changed = changedOwnedPaths(occurrence, occurrences, ownedOccurrencePaths);
+        const changed = stageOwnedChanges(occurrence, occurrences, ownedOccurrencePaths);
         if (changed.length > 0) {
-            git(occurrence.checkoutPath, "add", "-A", "--", ...changed);
             git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId));
             const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
             commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind, stepId });
