@@ -130,3 +130,14 @@ test("test_leadingTaskNumbersStopsAtFreeTextReasoning", () => {
     // Verification: only the array contributes, so numbers inside the prose are not picked up.
     assert.deepEqual(numbers, [268, 270]);
 });
+
+test("test_everyOpenTaskHasAGoalAndNotInScope", () => {
+  const tasksPath = join(import.meta.dirname, "..", ".taskTools", "tasks.json");
+  const tasks = JSON.parse(readFileSync(tasksPath, "utf8")) as Array<Record<string, unknown>>;
+  for (const task of tasks) {
+    const goal = task.goal;
+    assert.ok(Array.isArray(goal) && goal.length > 0, `task ${task.taskNumber} has no goal`);
+    assert.ok(goal.every((line) => typeof line === "string" && !line.includes("\n")), `task ${task.taskNumber} goal has an embedded newline`);
+    assert.ok(Array.isArray(task.notInScope), `task ${task.taskNumber} has no notInScope`);
+  }
+});

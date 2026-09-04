@@ -4946,5 +4946,37 @@
       "abac56ec26ed599517f25fd02537d310b51c05cd"
     ],
     "closureNote": "Task 158 completed.\n\nCommits:\n  bc412f29ffde53fd7afae1fa27897746e16ab621  (root)   work\n  abac56ec26ed599517f25fd02537d310b51c05cd  (root)   merge\nModified files: scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts, scripts/tackle-tasks/shared/CodexReviewBodyEmitter.ts, scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.ts\nTask tests: (not recorded)\nFull suite: green"
+  },
+  {
+    "taskNumber": 156,
+    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
+    "title": "Backfill goal and chainGoal on every open task in tasks.json",
+    "userDescription": "yes, create a task to backfill goals for tasks in tasks.json.  completedTasks.json is excluded.",
+    "goal": [
+      "- every task in .taskTools/tasks.json carries a non-empty goal array; completedTasks.json is untouched",
+      "- tasks that belong to a chain share one identical chainGoal array across that chain",
+      "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
+      "- each goal entry is one line with no embedded newline, and every task carries a notInScope array"
+    ],
+    "notInScope": [
+      "- rewriting or shortening existing description text is NOT in scope; that is task 116"
+    ],
+    "description": "Measured against the current file: 12 open tasks; 2 without a goal (36, 113); 10 tasks declare a non-empty blockedBy; 0 tasks carry chainGoal. The 131-153 pipeline chain referenced in the original description no longer exists in tasks.json. Expect roughly 2 rounds of per-task authoring, not 40.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches.\n\nFormat is fixed by work already landed: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.\n\nBefore goals can be written for each remaining open task, each needs either a direct interview with the user, or a deep dive into its historical transcript_path to find the conversation where the task was created and derive the context that led to it — a goal drafted from the description alone risks missing scope the original conversation actually decided.",
+    "modifiableFiles": [
+      ".taskTools/tasks.json",
+      "tests/taskFiles.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
+    "difficulty": 6,
+    "problemSolvedByTask": "Without a goal array, nobody (human or planner agent) can tell when a task is actually done versus merely touched.",
+    "blockedBy": [],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "completionDate": "2026-09-03",
+    "commitHashes": [],
+    "closureNote": "completed by fable 5.1 medium manually"
   }
 ]

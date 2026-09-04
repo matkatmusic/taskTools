@@ -1,7 +1,7 @@
 [
   {
     "taskNumber": 36,
-    "schemaVersion": "1.0.0",
+    "schemaVersion": "1.0.1",
     "title": "RevEng-shaped end-to-end fixture and Phase 4 acceptance run",
     "description": "Phase 4 of the recursive repository-discovery redesign — the final acceptance gate.\n\nBuild a RevEng-shaped end-to-end fixture in tests/fixtures/revengGraph.ts containing tmux_lib at tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib; two occurrences each of claude_plugin_lib and scenarios; nested submodules beneath ordinary directories; and distinct parent chains. Drive a full run against it in tests/revengEndToEnd.test.ts.\n\nVerify in that fixture that a change originating from any repeated occurrence converges everywhere; all child and ancestor suites pass; approval precedes every commit, merge, and push; all occurrence histories consolidate into one operation per logical repository; gitlinks propagate through the correct explicit parents to the root; and every intended local base ends at the expected merge commit. Also verify no semantic commit, push, integration merge, base mutation, or archival occurs before approval, and that only successfully published tasks are archived.\n\nPhase 4 acceptance: the recursive workflow is the production path, completes the RevEng-shaped run without data loss, and archives only tasks whose integration was successfully published.",
     "modifiableFiles": [
@@ -16,16 +16,21 @@
     ],
     "difficulty": 8,
     "problemSolvedByTask": "Without an end-to-end fixture spanning repeated nested submodules, nobody can trust the recursive discovery/merge system before it becomes the production path for every real multi-repo task.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
+    "blockedBy": [],
+    "tests": "",
+    "hasTests": false,
+    "goal": [
+      "- node --test tests/revengEndToEnd.test.ts passes",
+      "- The fixture in tests/fixtures/revengGraph.ts holds tmux_lib at three paths, two copies each of claude_plugin_lib and scenarios, and nested submodules under plain folders",
+      "- The test proves a change from any copy lands in every copy, one merge per logical repo, and no commit, merge, push, or archive before approval"
+    ],
+    "notInScope": [
+      "- Changes to the recursive discovery or merge code itself; this task only adds the fixture and the test"
     ]
   },
   {
     "taskNumber": 113,
-    "schemaVersion": "1.0.0",
+    "schemaVersion": "1.0.1",
     "version": "94a63561408ad7a01729ae4e89e32707263bbde5",
     "title": "Reorganize scripts/ into skillBodyGenerators/ plus topic subfolders, updating every reference",
     "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
@@ -40,13 +45,18 @@
     ],
     "tests": "Add tests/scriptReferences.test.ts as a no-dangling-reference sweep: walk every command string in hooks/hooks.json, every `!` command line in skills/**/SKILL.md, and every relative import specifier in scripts/ and tests/, resolve each to an absolute path, and assert the file exists. The test must fail against a deliberately broken path, not pass vacuously when a glob matches nothing. Also assert resolveMergeScriptPath() and resolveMergePhaseScriptPath() point at existing files, and that the sibling URL resolved in scripts/reviewPlanBrief.ts exists. Alongside it, the full existing suite and the typecheck must stay green.",
     "difficulty": 8,
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
+    "blockedBy": [],
+    "problemSolvedByTask": "A flat 96-file scripts/ folder makes it hard for a human or agent to find which script backs which skill or hook.",
+    "hasTests": true,
+    "goal": [
+      "- Every source file a skill or hook uses lives under scripts/<skillName>/; files shared by more than one skill live under scripts/shared/; scripts/ holds only folders",
+      "- Every path in hooks/hooks.json and skills/*/SKILL.md resolves (tests/scriptReferences.test.ts passes)",
+      "- npm test reports all passing after the move"
     ],
-    "problemSolvedByTask": "A flat 96-file scripts/ folder makes it hard for a human or agent to find which script backs which skill or hook."
+    "notInScope": [
+      "- Changing what any script does; only paths move",
+      "- The tackle-tasks block folders under scripts/tackle-tasks/ already follow the pattern and stay as they are"
+    ]
   },
   {
     "taskNumber": 155,
@@ -54,7 +64,7 @@
     "title": "Give the codex plan reviewer the sibling-task and blocker scope so chain boundaries are not flagged as omissions",
     "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
     "goal": [
-      "- run-arguments.json carries a blockedBy array for every task that declares one",
+      "- loadPreparedTask returns siblingTasks (number and title) and blockedBy for the task under review",
       "- the reviewer prompt names each sibling task sharing the group's files, by number and title",
       "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
       "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
@@ -68,46 +78,20 @@
     "readOnlyFiles": [
       "*"
     ],
-    "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
+    "tests": "In CodexReviewBodyEmitter.test.ts: build a PreparedTask with one sibling task and one blockedBy entry, call planReviewPrompt, and assert the prompt names both and says work owned by them is out of scope.",
     "difficulty": 5,
     "problemSolvedByTask": "Codex needs to know if other tasks are related to the plan being reviewed, which might explain some of the plan's omissions found by codex, so that codex doesn't reject a plan for a reason that another task is meant to solve.",
-    "blockedBy": []
-  },
-  {
-    "taskNumber": 156,
-    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Backfill goal and chainGoal on every open task in tasks.json",
-    "userDescription": "yes, create a task to backfill goals for tasks in tasks.json.  completedTasks.json is excluded.",
-    "goal": [
-      "- every task in .taskTools/tasks.json carries a non-empty goal array; completedTasks.json is untouched",
-      "- tasks that belong to a chain share one identical chainGoal array across that chain",
-      "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
-      "- each goal entry is one line with no embedded newline, and every task carries a notInScope array"
-    ],
+    "blockedBy": [],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
     "notInScope": [
-      "- rewriting or shortening existing description text is NOT in scope; that is task 116"
-    ],
-    "description": "Measured against the current file: 12 open tasks; 2 without a goal (36, 113); 10 tasks declare a non-empty blockedBy; 0 tasks carry chainGoal. The 131-153 pipeline chain referenced in the original description no longer exists in tasks.json. Expect roughly 2 rounds of per-task authoring, not 40.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches.\n\nFormat is fixed by work already landed: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.\n\nBefore goals can be written for each remaining open task, each needs either a direct interview with the user, or a deep dive into its historical transcript_path to find the conversation where the task was created and derive the context that led to it — a goal drafted from the description alone risks missing scope the original conversation actually decided.",
-    "modifiableFiles": [
-      ".taskTools/tasks.json",
-      "tests/taskFiles.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
-    "difficulty": 6,
-    "problemSolvedByTask": "Without a goal array, nobody (human or planner agent) can tell when a task is actually done versus merely touched.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
+      "- Telling the reviewer which issue classes are not grounds for rejection; task 120 (closed) owns that",
+      "- Changes to the tests reviewer prompt in CodexTestReviewBodyEmitter.ts"
     ]
   },
   {
     "taskNumber": 164,
-    "schemaVersion": "1.0.0",
+    "schemaVersion": "1.0.1",
     "version": "b2d66ef60db6badfdd4de5fc1413156b4bdb53af",
     "title": "'changes detected' Stop hook prints the real staged diff",
     "userDescription": "make the 'changes detected' hook print out what changes are actually staged, because the agent's view of staged changes is always stale.  It should use the same code that the commit-message hook uses to provide the list of staged changes.",
@@ -133,16 +117,12 @@
     "tests": "Unit test on the hook: create a temp git repo, write and `git add` a file, feed scripts/stage-and-summarize-stop.ts its Stop-hook JSON on stdin (with a turn-flag file listing that path), and assert the printed hookSpecificOutput.additionalContext contains the staged diff text for that file.",
     "difficulty": 6,
     "problemSolvedByTask": "The agent doesn't accurately see what is really staged after the end-of-turn stage-and-summarize-stop.ts hook fires.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
+    "blockedBy": [],
+    "hasTests": true
   },
   {
     "taskNumber": 190,
-    "schemaVersion": "1.0.0",
+    "schemaVersion": "1.0.1",
     "version": "53e3de50ba468819f85f4913e181cad21664c602",
     "title": "Add a /mermaid skill that diagrams a codebase into a .mmd file",
     "userDescription": "make a '/mermaid' skill that searches a codebase and builds a .mmd mermaid diagram.  it should follow the same mermaid diagram rules that I used for the diagrams in taskTools-86 (Yes/No boxes at decision points, output boxes -> what gets outputted, etc)",
@@ -165,12 +145,8 @@
     "tests": "skip -- generateSteps.ts is hardcoded to the tackle-tasks pipeline's box-ownership map (BLOCKS_BY_OWNER_FOLDER) and its cross-diagram remapping, so it cannot run as a general-purpose grammar validator against a diagram of an arbitrary codebase. Acceptance is checked against the written checklist inside the skill itself (every box declared in a subgraph, every edge label cosmetic, every box assigned a class, decision boxes branch on YES/NO edge labels) rather than a runnable script.",
     "difficulty": 6,
     "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand — no automated way to get a flowchart.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ]
+    "blockedBy": [],
+    "hasTests": false
   },
   {
     "taskNumber": 191,
@@ -202,16 +178,11 @@
     "tests": "A test writes .taskTools/settings.json naming a temp folder with one .mmd of two blocks and their scripts; runs /tackle-tasks; asserts the hook walked those two blocks and none of the default pipeline.",
     "difficulty": 6,
     "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
-    "blockedBy": [
-      {
-        "taskNumber": 160,
-        "reason": "Deferred: possibly no longer relevant after blocking task is completed."
-      }
-    ],
+    "blockedBy": [],
     "run": {
       "active": true,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-191",
-      "leaseRunId": "06711c3a-e716-4543-9a25-969598831f0f",
+      "leaseRunId": null,
       "history": [
         {
           "runId": "06711c3a-e716-4543-9a25-969598831f0f",
@@ -235,7 +206,9 @@
           ]
         }
       ]
-    }
+    },
+    "schemaVersion": "1.0.1",
+    "hasTests": true
   },
   {
     "taskNumber": 193,
@@ -266,7 +239,7 @@
     "run": {
       "active": true,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-193",
-      "leaseRunId": "e3d88e1f-5847-46cd-9c36-9d0decf57748",
+      "leaseRunId": null,
       "history": [
         {
           "runId": "e3d88e1f-5847-46cd-9c36-9d0decf57748",
@@ -290,6 +263,7 @@
           ]
         }
       ]
-    }
+    },
+    "blockedBy": []
   }
 ]
