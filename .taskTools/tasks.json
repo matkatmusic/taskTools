@@ -87,7 +87,45 @@
     "notInScope": [
       "- Telling the reviewer which issue classes are not grounds for rejection; task 120 (closed) owns that",
       "- Changes to the tests reviewer prompt in CodexTestReviewBodyEmitter.ts"
-    ]
+    ],
+    "run": {
+      "active": true,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-155",
+      "leaseRunId": "376a4058-c7d5-472b-867d-6a0cdac8dedc",
+      "history": [
+        {
+          "runId": "376a4058-c7d5-472b-867d-6a0cdac8dedc",
+          "startedAt": "2026-09-03T17:56:42-07:00",
+          "endedAt": null,
+          "exitType": null,
+          "exitNote": null,
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "511ff816-0715-4799-9fa6-586d739af709",
+              "21cc3b63-88c8-407f-954f-e51f08142dcc"
+            ]
+          }
+        }
+      ]
+    },
+    "clarifyRequest": "Previous round's question is answered: groupTasksByFileOverlap(tasks: TaskRecord[], manifest?: RepositoryManifest): TaskGroup[] is exported from scripts/taskGroups.ts. TaskGroup = { groupId: number; taskNumbers: number[]; filePaths: string[]; scope: 'declared'|'unknown' }. With no manifest argument (the case loadPreparedTask is in, since it never builds a RepositoryManifest), groups come from groupTasksByExactFileOverlapWithNoManifest: a union-find over exact modifiableFiles() overlap, files-less tasks all sharing one 'unknown' group. Siblings of a task are the other taskNumbers in whichever group's taskNumbers array contains it. scripts/checkBlockers.ts confirms blockedBy entries are `{ taskNumber: number; reason: string }[]` on the task record, and exports no helper for the reverse edge (tasks blocked BY a given task) -- blockerReport() and openBlockersOf() only walk forward (a task's own blockedBy list filtered to still-open blockers); the reverse edge must be computed by scanning tasks.json for entries whose blockedBy array contains an entry with taskNumber equal to the task under review. New question this round: the goal asks loadPreparedTask to return siblingTasks as {number, title} pairs, but no 'title' field appears anywhere in task 155's owned files (preparedTask.ts, CodexReviewBodyEmitter.ts, CodexReviewBodyEmitter.test.ts) or in taskGroups.ts/checkBlockers.ts -- every task field those files touch today (tests, codexReviewNotes, difficulty, taskNumber, blockedBy) is read straight off the raw task object with no field-name citation for a title/description. I need to read scripts/taskFiles.ts (the TaskRecord type/interface that readTaskFile returns) to find the exact field name holding a task's title, so the plan cites a verified field name instead of guessing between 'title', 'description', or 'userDescription'."
   },
   {
     "taskNumber": 164,
@@ -179,14 +217,16 @@
     "difficulty": 6,
     "problemSolvedByTask": "The user cannot provide their own pipeline (mermaid diagram) for how they want tasks completed. sometimes the current pipeline is too complex/uses too many agents.",
     "blockedBy": [],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
     "run": {
       "active": true,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-191",
-      "leaseRunId": null,
+      "leaseRunId": "06026626-526c-4a53-afe2-260a65b5c918",
       "history": [
         {
-          "runId": "06711c3a-e716-4543-9a25-969598831f0f",
-          "startedAt": "2026-09-03T17:24:08-07:00",
+          "runId": "06026626-526c-4a53-afe2-260a65b5c918",
+          "startedAt": "2026-09-03T17:56:11-07:00",
           "endedAt": null,
           "exitType": null,
           "exitNote": null,
@@ -206,64 +246,37 @@
           ]
         }
       ]
-    },
-    "schemaVersion": "1.0.1",
-    "hasTests": true
+    }
   },
   {
-    "taskNumber": 193,
-    "version": "d255c478df52966ecd156d0f1dcd67c4a1aabc1a",
-    "title": "Add plain-node query script over tasks.json for blockers and file matches",
-    "userDescription": "Add one query script over .taskTools/tasks.json that answers two questions with no agent and no database: \"what blocks task N\" (follow the blockedBy chain, print each blocker's taskNumber, title, and reason) and \"which open tasks touch file X\" (match X against each open task's modifiableFiles). Reads tasks.json directly with node; no SQLite, no new dependency. This replaces task 188 (closed 2026-09-02 as not relevant; see plans/decision-sqlite-task-storage.md). Difficulty 2. One test that seeds a small fixture tasks.json and asserts both answers.",
+    "taskNumber": 194,
+    "version": "ef36ad1d5faf1e1aeeaca4955593957169993d6c",
+    "title": "Generate one task-N.workflow.js per tackle-tasks invocation, titled 'Tackle-task N'",
+    "userDescription": "invoking 'tackle-task' causes the 'generateWorkflow' script to run, which sets the title of the generated workflow to 'Tackle-task <N>'.  Each workflow run gets its own custom task-N.workflow.js, generated upon invocation of 'tackle-tasks <N>'.  if multiple [N] are provided, multiple task-N.workflow.js are generated, each unique to the N they'll be running.",
     "goal": [
-      "- `node scripts/queryTasks.ts blockers N` prints each blocker's taskNumber, title, and reason, following the blockedBy chain, with no agent run",
-      "- `node scripts/queryTasks.ts files X` prints every open task whose modifiableFiles contains X",
-      "- The script reads .taskTools/tasks.json only; no SQLite, no new dependency in package.json"
+      "- Invoking /tackle-tasks [N] writes skills/tackle-tasks/task-N.workflow.js before launching, one file per N",
+      "- Each generated file's meta.name is 'Tackle-task N' so /workflows shows that title",
+      "- Invoking /tackle-tasks [191,193] yields task-191.workflow.js and task-193.workflow.js, each carrying only its own task number"
     ],
-    "problemSolvedByTask": "extracting information from tasks.json requires complex 'jq' expressions, vs. simpler SQL queries and table joins.",
-    "description": "tasks.json is a flat array of TaskRecord objects (scripts/taskFiles.ts, readTaskFile) each with taskNumber, title, files, and blockedBy: {taskNumber, reason}[] (buildTaskEntry in scripts/appendTask.ts writes blockedBy entries keyed taskNumber, but existing rows in tasks.json/completedTasks.json use the older key taskNum — the script must check both keys or it silently reports an empty blocker chain). scripts/checkBlockers.ts already does an in-memory blockedBy walk with cycle protection over openTasks; the new script's blocker-chain walk can follow the same shape but should not depend on checkBlockers' open-only filtering, since a blocker can be closed. scripts/getTaskDetails.ts (readTaskLists) shows the existing helper for loading tasks.json/completedTasks.json arrays and can be reused for reading. Add a new standalone script, e.g. scripts/queryTasks.ts, invoked directly with node — no agent, no SQLite, no new dependency.",
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "Write a small fixture tasks.json with 3 tasks (A blocked by B, B blocked by C; A and C touch scripts/foo.ts). Run the script for 'what blocks A' and assert B and C print with title and reason. Run 'which tasks touch scripts/foo.ts' and assert A and C print.",
-    "difficulty": 2,
     "notInScope": [
-      "- Moving tasks to a database — task 188 was closed on 2026-09-02 and nothing owns that now"
+      "- Changing which diagrams the pipeline runs; task 191 owns the settings.json diagram choice",
+      "- Changing the pipeline blocks themselves"
     ],
+    "problemSolvedByTask": "All tackle-tasks runs share one workflow file named 'tackle-tasks', so /workflows cannot tell which run is which task.",
+    "description": "scripts/generateWorkflow.ts's buildWorkflowScript() hardcodes meta.name 'tackle-tasks' and generateWorkflow() always writes the single constant WORKFLOW_FILE (skills/tackle-tasks/tackle-tasks.workflow.js); neither takes a task number. scripts/tackle-tasks/shared/SkillBodyEmitter.ts's skillBody() calls generateWorkflow(TASK_WORKFLOW_PATH) once per invocation regardless of how many task numbers it parses, so every emitted WORKFLOW line points at the same shared file and fixed title. The fix: buildWorkflowScript/generateWorkflow take a task number and set meta.name 'Tackle-task <N>'; SkillBodyEmitter writes one task-<N>.workflow.js per task number instead of sharing TASK_WORKFLOW_PATH. tests/generateWorkflow.test.ts (test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt, test_generateWorkflow_theCommittedWorkflowIsUpToDate) and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts (test_skillBody_writesTheWorkflowFileFromTheGenerator, test_skillBody_launchesOneWorkflowPerTaskNumberInTheOrderGiven) pin today's fixed-title, shared-file behavior and must change. The checked-in tackle-tasks.workflow.js and its 'committed workflow is up to date' test assume one committed generated file; that assumption must be retired or repointed once files are generated per task number.",
     "modifiableFiles": [
-      "scripts/queryTasks.ts",
-      "tests/queryTasks.test.ts"
+      "scripts/generateWorkflow.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "tests/generateWorkflow.test.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+      "skills/tackle-tasks/tackle-tasks.workflow.js"
     ],
     "readOnlyFiles": [
       "*"
     ],
-    "run": {
-      "active": true,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-193",
-      "leaseRunId": null,
-      "history": [
-        {
-          "runId": "e3d88e1f-5847-46cd-9c36-9d0decf57748",
-          "startedAt": "2026-09-03T17:24:18-07:00",
-          "endedAt": null,
-          "exitType": null,
-          "exitNote": null,
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ]
-        }
-      ]
-    },
-    "blockedBy": []
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Run the tackle-tasks skill body emitter with tasks [191,193] in a temp project and assert task-191.workflow.js and task-193.workflow.js exist, each with meta.name 'Tackle-task <N>' and its own task number in args.",
+    "difficulty": 7
   }
 ]
