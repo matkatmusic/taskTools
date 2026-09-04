@@ -10,12 +10,16 @@ import type { PreparedTask } from "./preparedTask.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.json");
 
+const baseTaskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-body-taskstate-"));
+mkdirSync(join(baseTaskStateRoot, ".taskTools"), { recursive: true });
+writeFileSync(join(baseTaskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99 }]));
+
 const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
     testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
     files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], testFilePaths: [],
-    hasTests: false, tests: null, codexReviewNotes: "", repoRoot: "/wt", taskStateRoot: "/project",
+    hasTests: false, tests: null, codexReviewNotes: "", siblingTasks: [], blockedBy: [], blocks: [], repoRoot: "/wt", taskStateRoot: baseTaskStateRoot,
 };
 
 test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
@@ -123,4 +127,25 @@ test("test_reviewQuestion_approvesOnTheRelaunchAfterAScrap", () => {
         resumedFrom: { block: "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q", exitType: "plan-scrapped", exitNote: "n" },
     });
     assert.match(reviewQuestion(resumedTask), /^Approve the plan\./);
+});
+
+test("test_planReviewPrompt_namesSiblingTasksAndBlockersAsOutOfScope", () => {
+    const scopedTask: PreparedTask = {
+        ...task,
+        siblingTasks: [{ number: 12, title: "Sibling task title" }],
+        blockedBy: [{ taskNumber: 34, reason: "Waits on the sibling's shared type" }],
+        blocks: [{ number: 56, title: "Blocked task title", reason: "Blocked task needs this task's new field" }],
+    };
+    const prompt = planReviewPrompt(scopedTask);
+    assert.match(prompt, /task 12: Sibling task title/);
+    assert.match(prompt, /task 34 blocks task 99: Waits on the sibling's shared type/);
+    assert.match(prompt, /task 99 blocks task 56: Blocked task needs this task's new field/);
+    assert.match(prompt, /out of scope/);
+});
+
+test("test_planReviewPrompt_statesNoSiblingsOrBlockersWhenNoneExist", () => {
+    const prompt = planReviewPrompt(task);
+    assert.match(prompt, /No other open task shares files with task 99\./);
+    assert.match(prompt, /No open task blocks task 99\./);
+    assert.match(prompt, /Task 99 blocks no open task\./);
 });

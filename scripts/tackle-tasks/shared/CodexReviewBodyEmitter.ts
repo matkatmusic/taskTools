@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { isPlanProblem, readAndValidatePlan, type CodexReview } from "./planArtifacts.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 import { readCheckpoint } from "./checkpoint.ts";
+import { getAttemptCount } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
@@ -95,6 +96,16 @@ Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
 
 ${reviewedPaths(t).map((path) => `- ${path}`).join("\n")}
 
+## SIBLING AND BLOCKER SCOPE
+
+${t.siblingTasks.length > 0 ? `These tasks share files with task ${t.number} and may own related work:\n${t.siblingTasks.map((s) => `- task ${s.number}: ${s.title}`).join("\n")}` : `No other open task shares files with task ${t.number}.`}
+
+${t.blockedBy.length > 0 ? `These tasks block task ${t.number}:\n${t.blockedBy.map((b) => `- task ${b.taskNumber} blocks task ${t.number}: ${b.reason}`).join("\n")}` : `No open task blocks task ${t.number}.`}
+
+${t.blocks.length > 0 ? `Task ${t.number} blocks these tasks:\n${t.blocks.map((b) => `- task ${t.number} blocks task ${b.number}: ${b.reason}`).join("\n")}` : `Task ${t.number} blocks no open task.`}
+
+Work assigned to a named sibling or blocker above is out of scope for task ${t.number} and must not be reported as an omission.
+
 ## HOW TO JUDGE THE PLAN
 
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
@@ -155,9 +166,67 @@ message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
 `;
 }
 
+function recheckOnlyPrompt(t: PreparedTask): string {
+    // RECHECK ONLY prompt: round two rechecks round one's flagged issues, and stops hunting for new ones.
+    return `You are a read-only review agent rechecking the implementation plan for task ${t.number}.
+You write no file.
+Your sandbox is read-only, so any attempt to write one fails.
+
+## STRICT INPUT ALLOWLIST
+
+Read only the exact files listed under WHAT YOU READ.
+Do not search for, list, discover, infer, or open alternative files, even if an alternative has a similar name or appears to contain the requested material.
+In particular, do not substitute another plan file for plan.json.
+
+You may check whether each listed path exists and is readable.
+Before reviewing, verify every listed file.
+If any file is missing or unreadable, stop immediately without reviewing any other content.
+
+## MISSING-FILE RESPONSE
+
+If any required file is missing or unreadable, return only the following JSON:
+\`\`\`
+${readFileSync(REVIEW_PLAN_ERROR_TEMPLATE_PATH, "utf8").trim()}
+\`\`\`
+This error response overrides the normal review-plan JSON template.
+Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
+
+## WHAT YOU READ
+
+${[...reviewedPaths(t), t.reviewOutputFile].map((path) => `- ${path}`).join("\n")}
+
+## HOW TO JUDGE THE PLAN
+
+\`${t.reviewOutputFile}\` is the audit you wrote in round one. check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.
+
+## DOCUMENTING EVIDENCE
+
+Every issue flagged must carry evidence:
+- include the repo-relative path and the exact line numbers you read, as \`path/to/file.ts:12-40\`, when proving an issue exists.
+- A command you ran and its output counts as evidence.
+- An issue you cannot evidence does not go in the review.
+
+## WHAT YOU, THE REVIEWING AGENT, RETURNS
+
+Return only JSON in the shape given by \`${REVIEW_PLAN_TEMPLATE_PATH}\`, which you read above,
+replacing every <...> with a real value.
+
+Write one fix only for an audited issue that is still unresolved, in the same order the audit lists them.
+Every \`sectionId\` must be an \`id\` the plan actually uses.
+Write each fix as an instruction to whoever repairs the plan, not as commentary about it.
+Return empty arrays when every audited issue is resolved.
+
+## WHAT TO OUTPUT
+
+Print the JSON as your final message and nothing else. The command that runs you captures that
+message to \`${t.reviewOutputFile}\`, so do not try to write the file yourself.
+`;
+}
+
 // The relaunch after a plan-scrapped exit gets the approve prompt, so codex's review stops blocking the task.
 export function reviewQuestion(t: PreparedTask): string {
     if (readCheckpoint(t.repoRoot)?.resumedFrom?.exitType === "plan-scrapped") return approveReviewByDefaultPrompt(t);
+    if (getAttemptCount(t.number, "planReview", t.taskStateRoot) >= 1) return recheckOnlyPrompt(t);
     return reviewByDefaultPrompt(t);
 }
 

@@ -1,6 +1,6 @@
 // Turns every .mmd in a folder into stub scripts and a box-to-script config.
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AGENT_ANSWER_TEMPLATE } from "./contracts.ts";
 
@@ -201,6 +201,22 @@ function getDiagramFileNames(diagramFolder: string): string[] {
     return readdirSync(diagramFolder).filter(name => name.endsWith(".mmd") && !name.startsWith("_")).sort();
 }
 
+export type DiagramFolderSetting = { diagramFolder: string; stepsRoot: string; allowStubs: boolean };
+
+// .taskTools/settings.json in the target project names a diagramFolder; an absent file or key means the default pipeline.
+export function resolveDiagramFolderSetting(projectRoot: string): DiagramFolderSetting {
+    const settingsPath = join(projectRoot, ".taskTools/settings.json");
+    const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) as { diagramFolder?: string } : {};
+    if (!settings.diagramFolder) {
+        return { diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks"), stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"), allowStubs: true };
+    }
+    const diagramFolder = resolve(projectRoot, settings.diagramFolder);
+    if (!existsSync(diagramFolder) || getDiagramFileNames(diagramFolder).length === 0) {
+        throw new Error(`diagramFolder ${diagramFolder} does not exist or holds no .mmd files`);
+    }
+    return { diagramFolder, stepsRoot: diagramFolder, allowStubs: false };
+}
+
 type ParsedDiagram = DiagramEdges & { promptBoxes: string[] };
 
 // Every diagram's boxes, edges, and prompt-marked boxes, parsed once up front.
@@ -227,7 +243,7 @@ function getDiagramWhereBoxHasArrows(box: string, parsedDiagrams: Map<string, Pa
     return undefined;
 }
 
-// An arrow into a box with no outgoing arrows here, but with arrows in another diagram, exits into that diagram.
+// An arrow into a box with no arrows here crosses into the diagram where that box does have some.
 function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, string[]>, parsedDiagrams: Map<string, ParsedDiagram>): Record<string, string[]> {
     const remapped: Record<string, string[]> = {};
     for (const [box, targets] of Object.entries(next)) {
@@ -242,7 +258,7 @@ function remapNextAcrossDiagrams(diagramFile: string, next: Record<string, strin
     return remapped;
 }
 
-// A stub on disk that no diagram draws is a missed rename; one outside its owner folder is a missed move.
+// A stray stub script means a rename; one in the wrong folder means a move.
 function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, getOwnerFolder: (box: string) => string): void {
     if (!existsSync(stepsRoot)) {
         return;
@@ -281,7 +297,7 @@ function assertNoOrphanBoxScripts(stepsRoot: string, allBoxNames: Set<string>, g
     throw new Error(orphans.join("\n"));
 }
 
-// A box outside the real 19 (only possible from a synthetic diagram) is owned by whichever diagram names it first.
+// A synthetic box (outside the real 19) is owned by whichever diagram names it first.
 function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDiagram>): string {
     for (const [diagramFile, data] of parsedDiagrams) {
         if (data.boxes.includes(box)) {
@@ -292,7 +308,7 @@ function getDefaultOwnerFolder(box: string, parsedDiagrams: Map<string, ParsedDi
     throw new Error(`${box} is drawn by no diagram`);
 }
 
-export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string): StepConfig {
+export function generateSteps(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean = true): StepConfig {
     const mutatingByStepKey = getMutatingFromPreviousConfig(configPath);
     const parsedDiagrams = parseDiagrams(diagramFolder);
 
@@ -323,9 +339,15 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
             const templatePath = join(stepsDirectory, `${box}.template.json`);
             // An existing file is the author's, so only a missing one gets written.
             if (!existsSync(scriptPath)) {
+                if (!allowStubs) {
+                    throw new Error(`${scriptPath} is missing; a custom diagram folder must author its own block scripts`);
+                }
                 writeFileSync(scriptPath, buildStubScript(box, diagramFile, producesPrompt));
             }
             if (!existsSync(templatePath)) {
+                if (!allowStubs) {
+                    throw new Error(`${templatePath} is missing; a custom diagram folder must author its own block templates`);
+                }
                 writeFileSync(templatePath, buildStubTemplate(box, producesPrompt));
                 newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
             }
@@ -354,7 +376,7 @@ function getConfigSummary(config: StepConfig): string {
     return lines.join("\n");
 }
 
-function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath: string): void {
+function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath: string, allowStubs: boolean): void {
     let pendingRegenerate: NodeJS.Timeout | undefined;
     watch(diagramFolder, (_event, name) => {
         if (name && !name.endsWith(".mmd")) {
@@ -363,7 +385,7 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
         // One save fires several events, so the last one wins after a short pause.
         clearTimeout(pendingRegenerate);
         pendingRegenerate = setTimeout(() => {
-            console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath)));
+            console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
         }, REGENERATE_DELAY_MS);
     });
     console.log(`watching ${relative(PROJECT_ROOT, diagramFolder)}`);
@@ -371,12 +393,11 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const commandArguments = process.argv.slice(2);
-    const diagramFolder = commandArguments.find(argument => !argument.startsWith("--")) ?? join(PROJECT_ROOT, "plans/diagrams");
-    const stepsRoot = join(PROJECT_ROOT, "scripts/tackle-tasks");
+    const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT);
     const configPath = join(PROJECT_ROOT, "scripts/steps.json");
-    console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath)));
+    console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
 
     if (commandArguments.includes("--watch")) {
-        watchDiagramFolder(diagramFolder, stepsRoot, configPath);
+        watchDiagramFolder(diagramFolder, stepsRoot, configPath, allowStubs);
     }
 }
