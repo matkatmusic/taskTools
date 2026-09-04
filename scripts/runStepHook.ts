@@ -71,6 +71,7 @@ type HookOutput = {
     ran: string[];
     errors: string[];
     outcome: Outcome | null;
+    report?: string;
 };
 
 const CONFIG = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
@@ -205,7 +206,8 @@ function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
     runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
     writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
-    return { ok: false, ran: boxesRun, errors, outcome: null };
+    const report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
+    return { ok: false, ran: boxesRun, errors, outcome: null, report };
 }
 
 function readTemplate(step: Step): BlockTemplate {
@@ -450,6 +452,9 @@ if (!isTypedCommand && !isSkillCall) {
 
 // A next box after a stop means a prompt is waiting in the packet file for the agent.
 function getInstructionsForAgent(result: HookOutput): string {
+    if (result.report !== undefined) {
+        return `Print out the following verbatim to the user: \`\`\`${result.report}\`\`\``;
+    }
     if (result.outcome === null || result.outcome.next === null) {
         return "";
     }

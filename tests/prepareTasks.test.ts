@@ -158,8 +158,8 @@ test("test_createWorktreeForGroupMovesAMergedStagingToHead", () => {
     assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), headTip);
 });
 
-test("test_createWorktreeForGroupFailsLoudlyWhenAMergedStagingIsCheckedOutElsewhere", () => {
-    // Setup: staging is merged into HEAD but another worktree has it checked out, so git refuses to move it.
+test("test_createWorktreeForGroupFastForwardsAMergedStagingThatIsCheckedOutElsewhere", () => {
+    // Setup: staging is merged into HEAD but another worktree has it checked out, so git branch -f refuses.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
     const stagingWorktree = mkdtempSync(join(tmpdir(), "staging-checkout-"));
@@ -168,10 +168,11 @@ test("test_createWorktreeForGroupFailsLoudlyWhenAMergedStagingIsCheckedOutElsewh
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
     const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
-    // Test action and verification: the error names the fix instead of moving anything.
+    // Test action and verification: staging moves to HEAD inside that checkout.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
-    assert.throws(() => createWorktreeForGroup(repoRoot, group), new RegExp(`merge --ff-only ${headTip}`));
-    assert.notEqual(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    createWorktreeForGroup(repoRoot, group);
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), headTip);
 });
 
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {

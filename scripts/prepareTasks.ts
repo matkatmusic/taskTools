@@ -192,10 +192,12 @@ export function resolveOrCreateStagingTip(repoRoot: string): string {
         if (stagingIsMergedIntoHead.status !== 0) return found;
         const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", "HEAD"], { encoding: "utf8" });
         if (moved.status !== 0) {
-            throw new Error(
-                `${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}\n` +
-                `Update that checkout yourself, e.g. git -C <that worktree> merge --ff-only ${headTip}, then run tackle-tasks again.`,
-            );
+            // git refuses to move a branch a worktree has checked out, so fast-forward it inside that worktree.
+            const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
+            if (stagingCheckout === undefined) {
+                throw new Error(`${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}`);
+            }
+            execFileSync("git", ["-C", stagingCheckout, "merge", "--ff-only", headTip], { stdio: ["ignore", "ignore", "inherit"] });
         }
         return readStagingTip(repoRoot)!;
     }

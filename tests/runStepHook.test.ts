@@ -94,6 +94,13 @@ test("test_runStepHook_namesTheKnownBlocksWhenTheBlockIsUnknown", () => {
     assert.match(result.errors[0], /pipeline\.mmd::SAY_HELLO/);
 });
 
+test("test_runStepHook_tellsTheAgentToPrintTheReportVerbatimOnFailure", () => {
+    const { result, instructions } = runHook("/run-step NOT_A_BLOCK", sayHelloConfig());
+    assert.match(result.report, /^The workflow failed to complete successfully: no block named NOT_A_BLOCK/);
+    assert.match(result.report, /See .* for specific inputs and outputs of each run-step block's execution\.$/);
+    assert.match(instructions, /^Print out the following verbatim to the user: ```/);
+});
+
 test("test_runStepHook_refusesABareBoxTwoDiagramsBothName", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "SHARED", script: writeStep("SHARED", { scriptSignal: "stop" }), next: [] }],

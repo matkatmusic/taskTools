@@ -62,6 +62,7 @@ execute ${executeCalls} in one message.
 Never serialize the runs yourself: each run takes the source-repository lock around its own rebase and merge, and that lock is what makes concurrent merge tails safe.
 
 Wait for every launched run's completion notification, then report one line per task in the order given.
+A run that returns \`report\` failed: print its \`report\` verbatim to the user, in a code block, under that task's line.
 `;
 };
 

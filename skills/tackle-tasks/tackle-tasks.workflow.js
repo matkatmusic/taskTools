@@ -49,6 +49,9 @@ const HOOK_OUTPUT_SCHEMA = {
                     "type": "null"
                 }
             ]
+        },
+        "report": {
+            "type": "string"
         }
     },
     "required": [
@@ -103,7 +106,7 @@ while (true) {
 
     // script exited non-zero, block was unknown, or output came back as a string.
     if (result.ok === false) {
-        return { ok: false, ran, errors: result.errors, prompt, outcome: result.outcome }
+        return { ok: false, ran, errors: result.errors, prompt, outcome: result.outcome, report: result.report }
     }
 
     // agent never ran /run-step, made up fields, or reworded them; hook threw or returned nothing.

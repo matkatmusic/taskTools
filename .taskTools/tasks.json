@@ -36,9 +36,7 @@
     "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
     "description": "scripts/ now holds 96 .ts files, flat. Tasks 71-79 (the skillBodyGenerators/ split) are all closed, so that half of this task is done; the only remaining skill-body-generator file is scripts/reviewPlanBrief.ts, not worth its own folder for one file.\n\nThe real remaining value: reorganize scripts/ to follow the same pattern tackle-tasks' own scripts already use — scripts/tackle-tasks/<blockName>/ holds one folder per pipeline block (areTestsFlagged/, codexReviewsPlan/, implementTask/, planTheTask/, shared/, etc). Every other skill should get its own scripts/<skillName>/ folder holding all the source files that skill's hook and skill body use — not generic topic categories like task/ or git/. Scope is every source file used by any skill or hook, not just the 9 files hooks.json names directly: skills/*/SKILL.md reference many more flat scripts.ts files at the top level (e.g. scripts/clarifyTaskBrief.ts, scripts/rateTask.ts, scripts/splitTask.ts, scripts/taskGroups.ts, scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts) that a reorg must also account for.\n\nhooks/hooks.json names 9 distinct scripts/*.ts command paths: viewTaskHook.ts, readFileHook.ts, runStepHook.ts, taskStatsHook.ts, turn-modified-flag.ts, reflow-comments-post.ts, relatedTests.ts, stage-and-summarize-stop.ts, session-end-cleanup.ts. Each must keep resolving after the move.\n\nThree runtime path computations build script paths as strings, so a move breaks them even with a green typecheck: scripts/prepareTasks.ts:84 (resolveMergeScriptPath), scripts/prepareTasks.ts:103 (resolveMergePhaseScriptPath), and scripts/reviewPlanBrief.ts:7 (fileURLToPath sibling import of planReviewRuling.ts).\n\nscripts/taskStatsBrief.ts no longer exists; it was deleted in commit 284aa0e. Its successor, scripts/taskStatsHook.ts, uses a plain relative import, not a fileURLToPath computation, so it is not on the fragile-path list above.\n\nThis task moves close to 96+ files across every skill. The files array below cannot fence a move that size, so this task must be executed manually, outside the tackle-tasks fence system. The planner and implementer should still treat scripts/, tests/, skills/, and hooks/ as in scope.",
     "modifiableFiles": [
-      "hooks/hooks.json",
-      "package.json",
-      "tests/scriptReferences.test.ts"
+      "*"
     ],
     "readOnlyFiles": [
       "*"
@@ -56,7 +54,47 @@
     "notInScope": [
       "- Changing what any script does; only paths move",
       "- The tackle-tasks block folders under scripts/tackle-tasks/ already follow the pattern and stay as they are"
-    ]
+    ],
+    "run": {
+      "active": true,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-113",
+      "leaseRunId": "95e4a893-23ec-40ba-ab51-364038e79c3b",
+      "history": [
+        {
+          "runId": "b4478075-64a1-4527-bfc4-3db7d8b91fb9",
+          "startedAt": "2026-09-04T12:15:05-07:00",
+          "endedAt": "2026-09-04T13:43:51-07:00",
+          "exitType": "agent-failed",
+          "exitNote": "run stopped before a worktree existed",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null
+        },
+        {
+          "runId": "95e4a893-23ec-40ba-ab51-364038e79c3b",
+          "startedAt": "2026-09-04T13:43:51-07:00",
+          "endedAt": null,
+          "exitType": null,
+          "exitNote": null,
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ]
+        }
+      ]
+    }
   },
   {
     "taskNumber": 164,
@@ -188,7 +226,7 @@
     "run": {
       "active": false,
       "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-195",
-      "leaseRunId": "3c22238a-d0b1-434c-8c2b-ce192c298424",
+      "leaseRunId": "7c92fc1d-3ff0-4b6c-aade-e61fc7e85cab",
       "history": [
         {
           "runId": "3c22238a-d0b1-434c-8c2b-ce192c298424",
@@ -210,8 +248,39 @@
               }
             }
           ]
+        },
+        {
+          "runId": "7c92fc1d-3ff0-4b6c-aade-e61fc7e85cab",
+          "startedAt": "2026-09-04T08:46:03-07:00",
+          "endedAt": "2026-09-04T09:13:27-07:00",
+          "exitType": "run-failed",
+          "exitNote": "Review not performed because one or more required input files were unavailable. missing: /var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-86/package.json",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "clarify": 2
+          },
+          "countedPasses": {
+            "clarify": [
+              "8ad7efa4-ee90-4ae5-a211-41f80f78b7ff",
+              "2f4d513f-50e7-4687-8616-2a16ededc511"
+            ]
+          }
         }
       ]
-    }
+    },
+    "clarifyRequest": "REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts calling rebaseTaskWorktree(rootSourceBranch: \"staging\") surfaces two problems the brief does not settle, both verified from the files given this round (sourceRepoLock.ts, occurrences.ts, mergeTaskWorktrees.ts, and REBASE_ONTO_TARGET_BRANCH.test.ts's rebasesOntoStaging fixture, all now read). (1) Lock lifetime: rebaseTaskWorktree acquires the durable source-repo lock via acquireSourceRepoLockBounded and never releases it inside the function; sourceRepoLock.ts's own file comment says the lock is 'held through a task workflow run's rebase tail'. Today only pipeline-failuresExit.mmd's DOES_RUN_HOLD_SOURCE_LOCK_Q -> RELEASE_SOURCE_LOCK releases it (steps.json's pipeline-mergeSucceededExit.mmd box list has no matching release box). If the new preamble-time box acquires this lock on every resume where staging has moved and the run then continues normally into planning/implementation instead of failing or merging right away, the lock stays held for that run's entire remaining lifetime, blocking every other concurrent task's LOCK_SOURCE_REPO the whole time, not just for 'the rebase tail'. Should the new box call releaseSourceRepoLock itself immediately after a clean (non-conflicted) rebase, before routing to DOES_FENCE_COVER_WORKTREE_Q? (2) Conflict routing target: the brief says conflicts 'route through pipeline-rebase.mmd's existing FIX_CONFLICTS path, not a new exit,' but task 195 owns none of diagrams/tackle-tasks/pipeline-rebase.mmd, diagrams/tackle-tasks/pipeline-fixConflicts.mmd, diagrams/tackle-tasks/pipeline-commitMergeConflictFixIfNeeded.mmd, or their scripts (DID_REBASE_REPORT_CONFLICTS_Q.ts, ARE_2_CONFLICT_FIXES_DONE_Q.ts, FIX_CONFLICTS.ts, COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts, CONTINUE_REBASE.ts, IS_REBASE_FINISHED_Q.ts), and none were given this round. scripts/steps.json shows that path's clean branch (DID_REBASE_REPORT_CONFLICTS_Q --NO--> RUN_FULL_SUITE) and its post-fix branch (IS_REBASE_FINISHED_Q --YES--> RUN_FULL_SUITE) both lead toward RUN_FULL_SUITE and then MERGE_WORKTREES. Routing a resumed, not-yet-(re)planned task's conflict fix through that same path risks merging the task's stale pre-resume work instead of returning to DOES_FENCE_COVER_WORKTREE_Q to continue the normal preamble. I need one of those diagram or script files (or explicit confirmation of the exact box name my new box's conflicted output should target, and what happens right after the conflict is fixed) to write an exact edit list."
   }
 ]

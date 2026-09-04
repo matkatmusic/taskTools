@@ -24,6 +24,8 @@ export function buildHookOutputSchema(): Record<string, unknown> {
             errors: { type: "array", items: { type: "string" } },
             // A walk that never reached a block has no outcome to report.
             outcome: { anyOf: [outcome, { type: "null" }] },
+            // Failure only: the text the top-level agent prints verbatim to the user.
+            report: { type: "string" },
         },
         required: ["ok", "ran", "errors", "outcome"],
         additionalProperties: false,
