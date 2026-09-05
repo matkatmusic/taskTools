@@ -1,179 +1,181 @@
-# Task 23 plan — hard block failures inside the failures-exit chain resume the cleanup, not the task work
+# Task 23 plan — hard block failures reach the failures-exit chain, not a dead retry loop
 
 Session task 23 (`/Users/matkatmusicllc/.claude/tasks/taskTools-86/23.json`), blocked by task 15,
 related to task 16. Spec ("Missing critical task: hard block failures do not enter a durable
-failure state" in `plans/pipeline-audit-codex-20260905-113523.md`):
-`runStepHook.ts:336-359` returns `buildFailure()` for timeouts, non-zero exits, missing output, and
-contract errors; `buildFailure()` (`runStepHook.ts:203-210`) only appends a log line and returns an
-error object — it does not persist anything resumable. That is tolerable for a crash during normal
-task work, because the worktree checkpoint (written at the top of the walk loop) already lets
-resume retry the same box. It is **not** tolerable for a crash inside the failures-exit chain:
-`inFailureChain` (set at `runStepHook.ts:407`) suppresses every later checkpoint write
-(`runStepHook.ts:317`'s `!inFailureChain` guard), so the worktree checkpoint stays frozen at the
-pre-failure block. If a later failures-exit box (e.g. `RELEASE_SOURCE_LOCK`) then crashes, the next
-resume reads that frozen checkpoint and **re-runs the original task work from scratch**, instead of
-continuing the tail — exactly the "worse" case the task's description calls out. Fix: reuse task
-16's `tailCursor` (owned by `taskRunState.ts`, read with top priority by
-`resumeRun.ts`'s row 0 — both already landed by task 16) so every box inside the tail persists
-where it is, outside the worktree, and the tail's own terminal box clears it.
+failure state" in `plans/pipeline-audit-codex-20260905-113523.md`): every hard block failure after
+`MARK_TASK_ACTIVE` (a script that times out, exits non-zero, prints no result, prints an unknown
+`scriptSignal`, or breaks its output contract) must either route into `pipeline-failuresExit.mmd`
+(so the lock and lease get released and the exit type gets written) or leave a precise resumable
+cleanup state — never just a checkpoint that retries the same doomed box forever.
 
-This plan does **not** make `buildFailure()` auto-enter `FAILURES_EXIT` for an ordinary task-work
-crash outside any exit chain — that would require inferring what resources a box might be holding
-from a bare non-zero exit, a materially larger and riskier change than what this task's own test
-directive asks for ("inject a failure at each failures-exit box and prove the next invocation
-continues cleanup instead of rerunning task work"). That directive is scoped to the tail; this plan
-implements exactly that scope.
+**Current state, re-verified live just before writing this plan** (another session is actively
+editing this repo; every line cited below was re-read from disk immediately before citing it):
+the *tail-cursor* mechanism this plan depends on is already implemented and staged:
+- `TaskRunRecord.tailCursor` and `writeTailCursor` exist in
+  `scripts/tackle-tasks/shared/taskRunState.ts` (lines 78-83, 560-587 in the current file).
+- `resumeRun.ts`'s `findResumeEntry` already has row 0 (lines 19-21): `if (newest !== null &&
+  newest.tailCursor) { return { block: newest.tailCursor.block, input: newest.tailCursor.input }; }`,
+  ahead of the worktree-checkpoint check.
+- `scripts/runStepHook.ts`'s `walkFromStep` already derives `inFailureChain` from where the walk
+  starts (line 342: `let inFailureChain = startStepKey.startsWith("pipeline-failuresExit.mmd::");`,
+  not a hardcoded `false`) and already writes the tail cursor for every box once inside the tail
+  (lines 366-371, immediately before `runStepScript` runs at line 372):
+  ```ts
+          // Once inside an exit tail, the worktree checkpoint above stays frozen at the box that
+          // entered it (inFailureChain is true here, so it never runs again). This durable cursor
+          // is what a crash of a LATER tail box — including a resumed one — resumes from instead.
+          if (inFailureChain) {
+              writeTailCursor(Number(packet.taskNumber), String(packet.runId ?? ""), { block: stepKey, input }, String(packet.projectRoot ?? ""));
+          }
+  ```
+- `tests/runStepHook.test.ts`'s two pre-existing failure-chain tests
+  (`test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt`,
+  `test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain`) already seed a
+  `tasks.json` so `writeTailCursor` has a real task record to write against.
+
+None of that is this plan's work to redo. What is **not yet implemented**, confirmed live just now:
+- `buildFailure` (`scripts/runStepHook.ts:229-236`) still only logs and returns
+  `{ ok: false, ran, errors, outcome: null, report }` — an *ordinary* task-work box that hard-fails
+  (never having reached a decision box that explicitly names `FAILURES_EXIT_KEY`) still gets nothing
+  but the frozen retry-same-box checkpoint. This is the gap this plan closes.
+- `"block-failed"` is not a member of `TaskExitType` (`scripts/tackle-tasks/shared/taskRunState.ts:10-14`)
+  or of `EXIT_TYPES` (`scripts/tackle-tasks/shared/writeTaskExitNotes.ts:6-11`).
+- `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.ts` still just echoes its packet
+  (confirmed live, 15 lines, unchanged) — the chain's terminal box never clears the tail cursor it
+  (or `buildFailure`) leaves behind.
+- No test proves the walk keeps advancing the cursor across more than one box in a single resumed
+  pass, and no test injects a failure at each real `pipeline-failuresExit.mmd` box.
 
 ## Scope confirmation
 
-- `scripts/runStepHook.ts` — read in full (504 lines). Depends on task 16 having already added
-  `writeTailCursor` and `resumeRun.ts`'s row 0 (this plan does not redefine that record — it is the
-  one persisted record task 16 introduced; this plan is purely a second writer of it).
-  - Import line 15 today: `import { resetAttemptCounts } from "./tackle-tasks/shared/taskRunState.ts";`
-    — extended to also import `writeTailCursor`.
-  - Lines 306-333 today (`walkFromStep`'s loop body, top half):
-    ```ts
-        const boxesRun: string[] = [];
-        let stepKey = startStepKey;
-        let input = startInput;
-        let inFailureChain = false;
-        while (true) {
-            const step = STEPS_BY_KEY.get(stepKey)!;
-            const packet = getPacketFromInput(input);
-            const worktree = typeof packet.worktree === "string" ? packet.worktree : "";
-            const worktreeExists = worktree !== "" && existsSync(worktree);
-            // A prompt block and its answer-consuming block checkpoint at the block that feeds the prompt, so resuming reproduces it.
-            const answersAPrompt = startedFromPacketFile && boxesRun.length === 0;
-            if (!inFailureChain && worktreeExists && !step.producesPrompt && !answersAPrompt) {
-                const existing = readCheckpoint(worktree);
-                writeCheckpoint(worktree, {
-                    taskNumber: Number(packet.taskNumber),
-                    passId: existing?.block === stepKey && existing?.input === input ? existing.passId : randomUUID(),
-                    runId: String(packet.runId ?? ""),
-                    projectRoot: String(packet.projectRoot ?? ""),
-                    block: stepKey,
-                    input,
-                    state: "running",
-                    sourceLockHeld: false,
-                    exitType: "",
-                    exitNote: "",
-                    resumedFrom: existing?.resumedFrom ?? null,
-                });
-            }
-            const stepRun = runStepScript(step, input, invocation);
-    ```
-    This `if (!inFailureChain && ...)` block is unchanged by this plan — it is the block that
-    freezes at the pre-failure box, and that freeze is correct and still asserted by
-    `tests/runStepHook.test.ts:937-955`
-    (`test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain`) and
-    `tests/runStepHook.test.ts:900-921`
-    (`test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt`). This plan adds a sibling
-    write, gated on `inFailureChain` being true, immediately after this block and before
-    `runStepScript` runs.
-  - `walkFromStep` is recursive, and `let inFailureChain = false;` (line 309) is a fresh local on
-    every call — confirmed live: the tailCursor resume path this plan relies on (`findResumeEntry`
-    returning a `pipeline-failuresExit.mmd::X` block, then `return walkFromStep(entry.block,
-    entry.input, invocation);` at line 299) starts a brand-new `walkFromStep` call whose loop begins
-    with `inFailureChain = false`, exactly like a normal first-ever walk. Left as `false`, that
-    resumed walk would both write a normal worktree checkpoint at line 317-332 for a box that is
-    really mid-tail, and never write the new tail-cursor cursor this plan adds (its guard below is
-    `if (inFailureChain)`), stranding the cursor at whatever box the *previous* process crashed on
-    even after this one succeeds. Step 1 initializes `inFailureChain` from `startStepKey` itself
-    (`stepKey.startsWith("pipeline-failuresExit.mmd::")`) rather than always `false`, so a walk that
-    starts *inside* the tail is recognized as being inside it from its very first iteration — this
-    is also correct for the ordinary (non-resume) top-level entry, since a fresh walk never starts
-    at a box in `pipeline-failuresExit.mmd` except via this exact resume path or a worktree-checkpoint
-    resume that (per the paragraph above) never resolves to one, because the checkpoint freezes at
-    the pre-failure box the moment the chain is entered.
-  - Lines 385-408 (the `FAILURES_EXIT_KEY` transition that sets `inFailureChain = true`) are
-    unchanged — that is where the chain is entered and the pre-failure checkpoint is correctly
-    frozen; this plan does not touch it.
-  - `EXIT_DIAGRAMS`, `FAILURES_EXIT_KEY`, `SUCCESS_DIAGRAM` constants (lines 32, 49, 52) are
-    read-only references confirming `pipeline-failuresExit.mmd` is the one diagram this plan
-    instruments.
-- `tests/runStepHook.test.ts` — read in full (1243 lines). Two existing tests construct a fake
-  `pipeline-failuresExit.mmd` with `projectRoot: worktree` and **no** `tasks.json` anywhere under
-  `worktree`: `test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt` (lines 900-921) and
-  `test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain` (lines 937-955). Once
-  this plan makes the walk loop call `writeTailCursor(taskNumber, runId, ..., projectRoot)` for
-  every box once `inFailureChain` is true, both tests will throw `"task 7 not found"` the moment
-  they enter `FAILURES_EXIT`, because `writeTailCursor` (per task 16's implementation) requires a
-  real task record. Both must be updated to seed one, using the exact literal-JSON style already
-  proven at lines 961-972 (`test_runStepHook_resumesAtTheCheckpointBlockWhenTheStartBlockIsThePreamble`).
-  `configWith` (lines 44-69) and `runHook` (lines 17-41) are read in full and reused as-is; they
-  already support a per-test fake `steps.json` with arbitrary boxes/scripts, and the preamble-resume
-  test at lines 958-986 is the exact template for driving a second, fresh `/run-step` invocation
-  that resumes through `findResumeEntry`.
-- `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.ts` — read in full (14 lines). Last
-  real box before `STOP` in `scripts/steps.json`'s `pipeline-failuresExit.mmd` array
-  (`RELEASE_SOURCE_LOCK -> REPORT_EXIT_TYPE_AND_NOTE -> STOP`, and
-  `DOES_RUN_HOLD_SOURCE_LOCK_Q -> REPORT_EXIT_TYPE_AND_NOTE` on the "lock not held" branch — both
-  predecessors converge here, so this is the single place the whole chain's tail cursor can be
-  cleared). Currently just echoes the packet:
-  ```ts
-  export function main(input: string): Record<string, unknown> {
-      const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
-      return { ...packet, box: "REPORT_EXIT_TYPE_AND_NOTE", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
-  }
+- `scripts/runStepHook.ts` — every `buildFailure` call site, re-grepped live just now:
   ```
-- `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.test.ts` — read in full (22 lines).
-  Its one existing test uses `projectRoot: "/repo"`, a path that does not exist on disk. Once
-  `main()` calls `writeTailCursor`, this throws `"task 169 not found"` immediately (no
-  `resolveTaskFiles("/repo")` ever finds a task record). This test must be rewritten against a real,
-  seeded `projectRoot`.
-- `scripts/tackle-tasks/failuresExit/_packet.ts` — read-only reference; `EntryPacket` already
-  carries `taskNumber, runId, projectRoot` on every box between `FAILURES_EXIT` and
-  `REPORT_EXIT_TYPE_AND_NOTE`, confirming the walk-loop write (which reads these three fields off
-  the generic `packet` object, not off a box-specific type) is well-typed for every box in the
-  chain.
-- `scripts/tackle-tasks/shared/taskRunState.ts` (`writeTailCursor`) and
-  `scripts/tackle-tasks/shared/resumeRun.ts` (row 0) — read-only for this plan; both already exist
-  once task 16 lands. This plan owns no new persisted-record logic, only new call sites.
+  229:function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
+  299:            return buildFailure([], [`packet file ${startPacket.packetFile} does not exist`]);
+  303:            return buildFailure([], [`packet file ${startPacket.packetFile} is empty`]);
+  337:        return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches]);
+  378:            return buildFailure(boxesRun, [`${stepKey} ${why}`, stepRun.stdout]);
+  381:            return buildFailure(boxesRun, [`${stepKey} printed no result object`, stepRun.stdout]);
+  387:            return buildFailure(boxesRun, [`${stepKey} scriptSignal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.scriptSignal)}`]);
+  391:            return buildFailure(boxesRun, [`${stepKey} is marked returns_a_prompt but printed scriptSignal ${JSON.stringify(scriptSignal)}`]);
+  394:            return buildFailure(boxesRun, [`${stepKey} printed scriptSignal "prompt" but is not marked returns_a_prompt in its diagram`]);
+  398:            return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches]);
+  408:            return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`]);
+  415:            return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`]);
+  418:            return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`]);
+  422:            return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
+  537:    injectResult(buildFailure([], [`no block named ${startBoxId || "<missing>"}; known: ${knownKeys}`]));
+  542:    injectResult(buildFailure([], [why]));
+  ```
+  Lines 378-422 (10 sites) sit inside the `while (true)` loop, where `packet` (from line 345) and
+  `inFailureChain` (from line 342) are already live locals — these ten gain a third argument. Line
+  337 sits just before the loop, with `startPacket` (line 293) already parsed and no possibility of
+  already being in the tail — it gains `{ packet: startPacket, inFailureChain: false }`. Lines 299,
+  303, 537, 542 have no resolvable task context at all (a missing/empty packet file, or a box name
+  that matched nothing anywhere) and are left exactly as they are.
+  `FAILURES_EXIT_KEY` (line 74: `"pipeline-failuresExit.mmd::FAILURES_EXIT"`) is the literal this
+  plan routes into; `packetsDirectory()` (line 70) and `writeJsonAtomically` (imported line 11) are
+  the existing helpers `buildSuccess` (lines 277-288) already uses to write a payload file, reused
+  here rather than inventing a second payload convention.
+  Import line 17 today: `import { resetAttemptCounts, writeTailCursor } from
+  "./tackle-tasks/shared/taskRunState.ts";` — extended to add `readTaskRunState`.
+- `scripts/tackle-tasks/shared/taskRunState.ts:10-14` — the `TaskExitType` union, read live, ends
+  `| "partially-published" | "not-resumable";` with no `"block-failed"`.
+- `scripts/tackle-tasks/shared/writeTaskExitNotes.ts:6-11` — `EXIT_TYPES`, read live, is the runtime
+  guard `writeTaskExitNotes` checks (`writeTaskExitNotes.ts:29-31`) before writing any exit type;
+  `WRITE_EXIT_TYPE_AND_NOTE.ts:9-14` calls `writeTaskExitNotes` with `packet.exitType` taken
+  **directly** from the incoming packet (not recomputed), so a `"block-failed"` packet reaching that
+  box without this array's update throws `unknown exit type "block-failed"` instead of completing
+  the chain.
+- `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.ts` — read live in full (15 lines,
+  unchanged from prior research): last real box before `STOP` in `scripts/steps.json`'s
+  `pipeline-failuresExit.mmd` array (`RELEASE_SOURCE_LOCK -> REPORT_EXIT_TYPE_AND_NOTE -> STOP`, and
+  `DOES_RUN_HOLD_SOURCE_LOCK_Q -> REPORT_EXIT_TYPE_AND_NOTE` on the "lock not held" branch converge
+  here too), currently just `{ ...packet, box: "REPORT_EXIT_TYPE_AND_NOTE", scriptSignal:
+  SCRIPT_SIGNAL.CONTINUE }`.
+- `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.test.ts` — read live in full (21
+  lines, unchanged): its one test uses `projectRoot: "/repo"`, a path that resolves to no task
+  record. Once `main()` calls `writeTailCursor`, this throws before returning. Rewritten below
+  against a real, claimed `projectRoot`.
+- `scripts/tackle-tasks/failuresExit/_packet.ts` — `EntryPacket` already carries `taskNumber, runId,
+  projectRoot, worktree, branch, exitType, exitNote` on every box between `FAILURES_EXIT` and
+  `REPORT_EXIT_TYPE_AND_NOTE`; the packet `buildFailure` constructs below matches this shape exactly
+  so it satisfies `FAILURES_EXIT`'s own input contract on the resumed pass.
+- `tests/runStepHook.test.ts` — read live in full (1484 lines now; grew since prior research because
+  the other session added unrelated tests for other tasks). `FAILURES_EXIT_KEY`,
+  `[PREAMBLE_DIAGRAM, PREAMBLE_BOX]`, `configWith`, `runHook`, and the two now-fixture-seeded
+  failure-chain tests are all present exactly as previously read; nothing here conflicts with this
+  plan's additions.
+- `scripts/steps.json`'s `pipeline-failuresExit.mmd` array and `scripts/tackle-tasks/failuresExit/fixtures/{setup.sh,tasks.json}`
+  — read live; the fixture seeds three active, claimed tasks (900001/900002/900003) and every real
+  box's `<BOX>.template.json` already carries a realistic `input` matching one of them, with
+  `{{PROJECT_ROOT}}` placeholders. `tests/stepTemplates.test.ts` (read in full) already spawns every
+  one of these boxes' real scripts against this exact fixture on every `npm test` run, and separately
+  proves every box's real output satisfies the next real box's real input contract
+  (`test_stepEdge_*_agreesOnTheShape`) — this plan's table-driven test (Step 4) leans on both proofs
+  rather than re-deriving them, and runs against an **isolated copy** of the fixture (not the shared
+  in-place one) specifically because `node --test` can run test files concurrently and
+  `tests/stepTemplates.test.ts` mutates that same shared fixture on every run.
 
 ## Steps
 
-### Step 1 — the walk loop persists a tail cursor for every box once inside the failures-exit chain (RED, then GREEN)
+### Step 1 — `"block-failed"` becomes a known exit type
 
-First, update the two existing tests so they keep passing once the new write requires a real task
-record — this is not new test *behavior*, it is a fixture fix, so do this before writing the new
-red test:
-
-1. In `tests/runStepHook.test.ts`, at the top of
-   `test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt` (line 901, right after
-   `mkdirSync(join(worktree, ".git"));`), add:
-   ```ts
-       writeFileSync(join(worktree, "tasks.json"), JSON.stringify([{
-           taskNumber: 7,
-           run: {
-               active: true, worktree: null, leaseRunId: null,
-               history: [{
-                   runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
-                   modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
-               }],
-           },
-       }]));
-   ```
-2. Add the identical block at the top of
-   `test_runStepHook_keepsTheFailedBlockInTheCheckpointThroughTheFailureChain` (line 938, right
-   after its own `mkdirSync(join(worktree, ".git"));`).
-
-These two tests' own assertions are about the frozen worktree checkpoint, not about
-`tailCursor`, so no other change to them is needed — run
-`npm test -- tests/runStepHook.test.ts` now and confirm both still pass unchanged (this is a
-pure fixture addition, not yet exercising new behavior).
-
-Now add the new test, `test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxSucceeds`.
-It proves three things together: resume lands on the box that actually crashed (not back at the
-original task-work box), that box can then succeed on retry, and the walk keeps advancing the
-cursor through the box(es) after it in that same pass — not just that the first resumed box was
-chosen. `MIDDLE`'s script crashes on its first invocation and succeeds on the second (a marker
-file on disk distinguishes the two), standing in for any real failures-exit box that fails once and
-is safe to retry (e.g. `RELEASE_SOURCE_LOCK`, whose own release call reproves ownership and is a
-no-op if already released):
+`scripts/tackle-tasks/shared/writeTaskExitNotes.test.ts` already exists (read live) and already has
+this exact shape of test for another exit type,
+`test_writeTaskExitNotes_acceptsNotResumable` — an active run, `writeTaskExitNotes` called directly
+(not via the CLI), asserting the output and the persisted `exitType`. Add a sibling immediately
+after it, `test_writeTaskExitNotes_acceptsBlockFailed`, reusing the file's own
+`makeProjectRootWithTasks` and `endedRunRecord` helpers exactly as that test does:
 ```ts
-test("test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxSucceeds", () => {
-    // Setup: a worktree, a separate tasks.json naming task 7 with an active run "r1", and a
-    // lease so a checkpoint-based resume (the pre-fix behavior) could also legally run.
+test("test_writeTaskExitNotes_acceptsBlockFailed", () => {
+    // Scenario: buildFailure routes an active task's hard failure into the tail; the writer must
+    // record the new exit type, not throw.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [endedRunRecord({ endedAt: null, exitType: null, exitNote: null })] },
+    }]);
+
+    const output = writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "block-failed", exitNote: "one.mmd::A exited 1" });
+
+    assert.deepEqual(output, { exitType: "block-failed", exitNote: "one.mmd::A exited 1" });
+    assert.equal(readTaskRunState(1, root).history[0].exitType, "block-failed");
+});
+```
+
+This fails (RED): `EXIT_TYPES` does not include `"block-failed"`, so `writeTaskExitNotes` throws.
+
+Production change:
+1. `scripts/tackle-tasks/shared/taskRunState.ts:10-14` — add the new member:
+   ```ts
+   export type TaskExitType =
+       | "completed" | "invalid-number" | "already-active" | "blocked"
+       | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
+       | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed"
+       | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable"
+       | "block-failed";
+   ```
+2. `scripts/tackle-tasks/shared/writeTaskExitNotes.ts:6-11` — add the same literal:
+   ```ts
+   const EXIT_TYPES: readonly TaskExitType[] = [
+       "completed", "invalid-number", "already-active", "blocked",
+       "plan-scrapped", "tests-red", "tests-flagged", "suite-red",
+       "rebase-stuck", "merge-failed", "fence-violation", "run-failed",
+       "clarify-stuck", "agent-failed", "partially-published", "not-resumable",
+       "block-failed",
+   ];
+   ```
+
+Run `npm test -- scripts/tackle-tasks/shared/writeTaskExitNotes.test.ts`: it passes.
+
+### Step 2 — `buildFailure` routes an active task's hard failure into `FAILURES_EXIT`
+
+Test name: `test_runStepHook_routesAnOrdinaryHardFailureIntoFailuresExitOnceTheTaskIsActive`, added
+to `tests/runStepHook.test.ts` near the other failure-chain tests:
+```ts
+test("test_runStepHook_routesAnOrdinaryHardFailureIntoFailuresExitOnceTheTaskIsActive", () => {
+    // Setup: a worktree and a separate tasks.json naming task 7 with an active run "r1" — the
+    // "past MARK_TASK_ACTIVE" state this routing only applies once inside.
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
     mkdirSync(join(worktree, ".git"));
     const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
@@ -187,12 +189,149 @@ test("test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxS
             }],
         },
     }]));
-    writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: process.pid, runId: "r1" }));
 
-    // Setup: A fails into the tail; FAILURES_EXIT runs cleanly and echoes the packet fields forward
-    // (matching the real FAILURES_EXIT.ts's `{...packet, box, scriptSignal}` spread — a plain
-    // writeStep() canned result does not echo its input, so this step's result names them itself).
-    // MIDDLE crashes exactly once, via a marker file, then succeeds; LAST is an ordinary box after it.
+    // Setup: A crashes outright — no decision box ever names FAILURES_EXIT_KEY.
+    const configFile = configWith((writeStep, folder) => {
+        const crashScriptPath = join(folder, "A-crash.ts");
+        writeFileSync(crashScriptPath, "process.exit(1);\n");
+        return {
+            [PREAMBLE_DIAGRAM]: [{ box: PREAMBLE_BOX, script: writeStep(PREAMBLE_BOX, { scriptSignal: "stop" }), next: [] }],
+            "one.mmd": [
+                { box: "A", script: crashScriptPath, next: ["B"] },
+                { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            ],
+            "pipeline-failuresExit.mmd": [{ box: "FAILURES_EXIT", script: writeStep("FAILURES_EXIT", { scriptSignal: "stop" }), next: [] }],
+        };
+    });
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", branch: "task-7", projectRoot: dirname(tasksFile) });
+
+    // Test action, pass 1: A crashes.
+    const first = runHook(`/run-step A ${startInput}`, configFile);
+
+    // Verification: the failure is still reported, but its outcome now names the failures-exit
+    // block, and a durable tail cursor is left for the next invocation to pick up.
+    assert.equal(first.result.ok, false);
+    assert.equal(first.result.outcome?.next, FAILURES_EXIT_KEY);
+    const tailCursor = readTaskRunState(7, dirname(tasksFile)).history[0].tailCursor;
+    assert.equal(tailCursor?.block, FAILURES_EXIT_KEY);
+    const cursorPacket = JSON.parse(tailCursor!.input);
+    assert.equal(cursorPacket.exitType, "block-failed");
+    assert.match(cursorPacket.exitNote, /A/);
+
+    // Test action, pass 2: a fresh invocation starting at the preamble resumes into the tail.
+    const second = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
+    assert.equal(second.result.ok, true);
+    assert.deepEqual(second.result.ran, [FAILURES_EXIT_KEY]);
+});
+```
+Add `readTaskRunState` to a new import: `import { readTaskRunState } from
+"../scripts/tackle-tasks/shared/taskRunState.ts";`.
+
+This fails (RED): `buildFailure` today always returns `outcome: null`, so `first.result.outcome` is
+`null` and there is no tail cursor to read.
+
+Production change in `scripts/runStepHook.ts`:
+1. Extend the import at line 17:
+   ```ts
+   import { readTaskRunState, resetAttemptCounts, writeTailCursor } from "./tackle-tasks/shared/taskRunState.ts";
+   ```
+2. Replace `buildFailure` (lines 229-236):
+   ```ts
+   // A walk that could not finish has no outcome to report on its own — unless a live, active task
+   // can absorb it into the failures-exit chain instead of leaving a checkpoint that retries the
+   // same doomed box forever.
+   function buildFailure(
+       boxesRun: string[],
+       errors: string[],
+       context: { packet: Record<string, unknown>; inFailureChain: boolean } = { packet: {}, inFailureChain: false },
+   ): HookOutput {
+       mkdirSync(dirname(logFile()), { recursive: true });
+       const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
+       runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
+       writeJsonAtomically(logFile(), runLogEntries);
+       const report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
+       const worktree = typeof context.packet.worktree === "string" ? context.packet.worktree : "";
+       if (!context.inFailureChain) {
+           if (worktree !== "" && existsSync(worktree)) {
+               const taskNumber = Number(context.packet.taskNumber);
+               const runId = String(context.packet.runId ?? "");
+               const projectRoot = String(context.packet.projectRoot ?? "");
+               if (readTaskRunState(taskNumber, projectRoot).active) {
+                   const failingPacket = {
+                       box: "FAILURES_EXIT", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+                       taskNumber, runId, projectRoot, worktree,
+                       branch: String(context.packet.branch ?? ""),
+                       exitType: "block-failed", exitNote: errors[0] ?? "",
+                   };
+                   const input = JSON.stringify(failingPacket);
+                   writeTailCursor(taskNumber, runId, { block: FAILURES_EXIT_KEY, input }, projectRoot);
+                   const payload = join(packetsDirectory(), `FAILURES_EXIT-${process.pid}.json`);
+                   mkdirSync(dirname(payload), { recursive: true });
+                   writeJsonAtomically(payload, failingPacket);
+                   return { ok: false, ran: boxesRun, errors, outcome: { next: FAILURES_EXIT_KEY, payload }, report };
+               }
+           }
+       }
+       return { ok: false, ran: boxesRun, errors, outcome: null, report };
+   }
+   ```
+   Two nested single-condition `if`s (worktree exists, then task active), matching the
+   single-condition-branching rule; no `try`/`catch` — `readTaskRunState` throwing (e.g. the task
+   record genuinely does not exist) is a loud, correct failure the top-level
+   `uncaughtException` handler (lines 21-30) already reports.
+3. Update the ten in-loop call sites (lines 378, 381, 387, 391, 394, 398, 408, 415, 418, 422) to
+   pass the loop's own live locals as a third argument, e.g. line 378 becomes:
+   ```ts
+               return buildFailure(boxesRun, [`${stepKey} ${why}`, stepRun.stdout], { packet, inFailureChain });
+   ```
+   and identically `, { packet, inFailureChain }` appended to the other nine argument lists at 381,
+   387, 391, 394, 398, 408, 415, 418, 422 — no other change to any of those lines.
+4. Update line 337 (before the loop, where `startPacket` and not yet any `inFailureChain` exist):
+   ```ts
+           return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches], { packet: startPacket, inFailureChain: false });
+   ```
+5. Leave lines 299, 303, 537, 542 exactly as they are — no packet, no task context, nothing to route.
+
+Run `npm test -- tests/runStepHook.test.ts`: the new test passes, and no pre-existing test in the
+file exercises a hard failure with both a real worktree and an active task via the ten updated call
+sites without also expecting `outcome: null` — confirm this by running the whole file and checking
+for regressions in the existing `test_runStepHook_stopsWhenAStepExitsNonZero` and
+`test_runStepHook_failsWhenABlockBreaksItsOutputContract`-style tests (they use fake worktrees that
+either don't exist or aren't linked to a claimed task, so `worktreeExists` or the `active` check is
+false and `buildFailure` falls through to the unchanged `outcome: null` path).
+
+### Step 3 — prove the walk keeps advancing the cursor across more than one tail box in a resumed pass
+
+The per-box cursor write (`runStepHook.ts:366-371`) and the `inFailureChain` derivation
+(`runStepHook.ts:342`) are already live; nothing in this step changes production code. It has no
+test proving the walk *keeps* advancing the cursor once resumed mid-tail, rather than only landing
+on the first resumed box — add one.
+
+Test name: `test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxSucceeds`,
+added to `tests/runStepHook.test.ts`. `MIDDLE`'s script crashes on its first invocation and succeeds
+on the second (a marker file on disk distinguishes the two), standing in for any real failures-exit
+box that fails once and is safe to retry (e.g. `RELEASE_SOURCE_LOCK`, whose own release call
+reproves ownership and is a no-op if already released):
+```ts
+test("test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxSucceeds", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    const tasksFile = join(mkdtempSync(join(tmpdir(), "run-step-tasks-")), "tasks.json");
+    writeFileSync(tasksFile, JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true, worktree: null, leaseRunId: null,
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+
+    // FAILURES_EXIT echoes packet fields forward (matching the real FAILURES_EXIT.ts's
+    // `{...packet, box, scriptSignal}` spread — writeStep()'s canned result does not echo its own
+    // input, so this step's result must name the fields itself). MIDDLE crashes once via a marker
+    // file, then succeeds; LAST is an ordinary box after it.
     const configFile = configWith((writeStep, folder) => {
         const markerPath = join(folder, "middle-ran-once");
         const middleScriptPath = join(folder, "MIDDLE.ts");
@@ -217,70 +356,33 @@ test("test_runStepHook_advancesTheTailCursorAcrossMultipleBoxesAfterAResumedBoxS
     });
     const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: dirname(tasksFile) });
 
-    // Test action, pass 1: A routes into the tail; MIDDLE crashes on its first run.
+    // Pass 1: A routes into the tail (via its own explicit next, the existing decision-box path);
+    // FAILURES_EXIT runs; MIDDLE crashes on its first run.
     const first = runHook(`/run-step A ${startInput}`, configFile);
     assert.equal(first.result.ok, false);
 
-    // Test action, pass 2: a fresh invocation starting at the preamble.
+    // Pass 2: a fresh invocation at the preamble resumes at MIDDLE, which now succeeds, and the
+    // walk keeps going through LAST and STOP in the same pass.
     const second = runHook(`/run-step ${START_STEP} ${JSON.stringify({ taskNumber: 7, tasksFile })}`, configFile);
-
-    // Verification: resume lands on MIDDLE (not back at A), MIDDLE now succeeds, and the walk keeps
-    // going through LAST and STOP in the same pass — proving the cursor mechanism (and the checkpoint
-    // suppression that goes with it) stays correctly engaged for every box after the resumed one.
     assert.equal(second.result.ok, true);
     assert.deepEqual(second.result.ran, [
         "pipeline-failuresExit.mmd::MIDDLE", "pipeline-failuresExit.mmd::LAST", "pipeline-failuresExit.mmd::STOP",
     ]);
 });
 ```
-Before the production fix, this fails two ways in sequence as fixes land: with no `tailCursor` ever
-written and `inFailureChain` untouched, `findResumeEntry` falls through row 0, finds the worktree
-checkpoint frozen at `one.mmd::A` (row 2), and `second.result.ran[0]` is `"one.mmd::A"`. Once the
-cursor write is added but `inFailureChain` still always starts `false`, resume does land on `MIDDLE`
-first — but the loop's line 317 checkpoint-write block fires for it (since `inFailureChain` reads
-`false` at the top of this fresh walk), and no cursor write follows it into `LAST`, so a failure
-mid-`LAST` would incorrectly resume at the frozen `MIDDLE` checkpoint instead — this test's
-`deepEqual` on the full `ran` array plus `ok: true` catches that this pass truly walked all three
-boxes in one continuous, correctly-flagged tail, not just that the first one matched.
+This already passes against the live code (the mechanism it exercises is already shipped) — it is
+still worth adding as a permanent regression guard: without the `inFailureChain` derivation and the
+per-box cursor write, resume would land on `MIDDLE` (row 2's frozen checkpoint still points at `A`,
+so this specific assertion would actually catch that regression via `second.result.ran` not
+starting with `MIDDLE` at all) but a subsequent failure in `LAST` would silently fall back to
+retrying `MIDDLE`'s stale checkpoint instead of `LAST`'s own — this test's `deepEqual` on the full
+three-box `ran` array is what would catch that narrower regression.
 
-Production change in `scripts/runStepHook.ts`:
-1. Extend the import at line 15:
-   ```ts
-   import { resetAttemptCounts, writeTailCursor } from "./tackle-tasks/shared/taskRunState.ts";
-   ```
-2. Replace line 309's unconditional `let inFailureChain = false;` with a value derived from where
-   this walk starts, so a walk that begins *inside* the tail (via `findResumeEntry`'s row 0) is
-   already flagged as such from its first iteration:
-   ```ts
-       let inFailureChain = startStepKey.startsWith("pipeline-failuresExit.mmd::");
-   ```
-   This is a one-line change to an existing declaration, not a new parameter: every other call to
-   `walkFromStep` (the top-level entry, the packet-file/prompt-answer path, the start-at-block path)
-   still starts with a `startStepKey` outside `pipeline-failuresExit.mmd`, so `inFailureChain` is
-   still `false` for all of them, unchanged.
-3. Immediately after the existing `if (!inFailureChain && worktreeExists && ...)` checkpoint block
-   (i.e. right after its closing `}` on line 332) and before `const stepRun =
-   runStepScript(step, input, invocation);` (line 333), add:
-   ```ts
-           // Once inside an exit tail, the worktree checkpoint above stays frozen at the box that
-           // entered it (inFailureChain is true here, so it never runs again). This durable cursor
-           // is what a crash of a LATER tail box — including a resumed one — resumes from instead.
-           if (inFailureChain) {
-               writeTailCursor(Number(packet.taskNumber), String(packet.runId ?? ""), { block: stepKey, input }, String(packet.projectRoot ?? ""));
-           }
-   ```
+### Step 4 — `REPORT_EXIT_TYPE_AND_NOTE` clears the cursor
 
-Run `npm test -- tests/runStepHook.test.ts`: the new test passes, and the two updated tests still
-pass (their assertions only inspect the worktree checkpoint, which this change never touches — both
-of them start their second `runHook` call at a box outside `pipeline-failuresExit.mmd`, or don't
-make a second call at all).
-
-### Step 2 — the tail's terminal box clears the cursor (RED, then GREEN)
-
-First, rewrite `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.test.ts` so its
-existing test uses a real, seeded `projectRoot` instead of the fictitious `"/repo"`, then add a
+Test-first, rewriting `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.test.ts` so its
+existing test uses a real, seeded `projectRoot` instead of the fictitious `"/repo"`, then adding a
 second test proving the clear:
-
 ```ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -338,8 +440,8 @@ The first test's expected values are unchanged from today — only its fixture (
 new, per the "when a design change makes an old test wrong, update it and say why" rule: it was
 wrong the moment `main()` needed a resolvable task record, which it does starting with this step.
 
-This fails (RED): `main()` does not call `writeTailCursor` yet, so the second test's
-`tailCursor` stays `{block: "...RELEASE_SOURCE_LOCK", input: "{}"}` instead of `null`.
+This fails (RED): `main()` does not call `writeTailCursor` yet, so the second test's `tailCursor`
+stays set instead of `null`, and the first test throws `"task 169 not found"` before this rewrite.
 
 Production change in `scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.ts`:
 ```ts
@@ -366,6 +468,105 @@ if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.ur
 Run `npm test -- scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.test.ts`: both tests
 pass.
 
+### Step 5 — table-driven test: inject one failure at each real `pipeline-failuresExit.mmd` box
+
+Added to `tests/runStepHook.test.ts`. This is the coverage Step 3 cannot give by itself: Step 3
+proves the mechanism with one synthetic box; this proves it for every real box script, using each
+box's own real `<BOX>.template.json` input as a realistic starting packet, and a wrapper script that
+crashes exactly once before delegating to the real production script — so the real script genuinely
+runs and its real output feeds the real next box, exactly as `tests/stepTemplates.test.ts` already
+proves happens edge-by-edge.
+
+Runs against an **isolated copy** of `scripts/tackle-tasks/failuresExit/fixtures`, not the shared
+in-place one: `tests/stepTemplates.test.ts` resets and reads that exact fixture on every `npm test`
+run, and `node --test` can run test files concurrently, so sharing it here would be flaky by
+construction.
+
+```ts
+import { cpSync } from "node:fs"; // add to the existing node:fs import list at the top of the file
+
+const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const FIXTURE_SOURCE_DIR = join(PROJECT_ROOT, "scripts/tackle-tasks/failuresExit/fixtures");
+const REAL_STEPS_JSON = JSON.parse(readFileSync(join(PROJECT_ROOT, "scripts/steps.json"), "utf8")) as
+    Record<string, { box: string; script: string; template: string; next: string[] }[]>;
+
+// A one-shot fixture: setup.sh only ever needs itself and `git` on PATH, so copying just the script
+// into a fresh temp directory and running it there gives each table row its own isolated repo.
+function makeIsolatedFailuresExitFixture(): string {
+    const dir = mkdtempSync(join(tmpdir(), "failuresExit-fixture-"));
+    cpSync(join(FIXTURE_SOURCE_DIR, "setup.sh"), join(dir, "setup.sh"));
+    const setupResult = spawnSync("bash", ["setup.sh"], { cwd: dir, encoding: "utf8" });
+    if (setupResult.status !== 0) throw new Error(`isolated fixture setup failed:\n${setupResult.stdout}${setupResult.stderr}`);
+    return dir;
+}
+
+// Crashes once (a marker file survives between the two invocations), then delegates to the real
+// production script with the exact same argv — proving the real script itself completes correctly
+// once retried, not just that some script at this path was chosen.
+function makeCrashOnceThenDelegateScript(folder: string, realScriptPath: string): string {
+    const marker = join(folder, "ran-once");
+    const wrapperPath = join(folder, "wrapper.ts");
+    writeFileSync(wrapperPath, [
+        'import { existsSync, writeFileSync } from "node:fs";',
+        'import { execFileSync } from "node:child_process";',
+        `const marker = ${JSON.stringify(marker)};`,
+        'if (!existsSync(marker)) { writeFileSync(marker, "1"); process.exit(1); }',
+        `process.stdout.write(execFileSync("node", ["--no-inspect", ${JSON.stringify(realScriptPath)}, process.argv[2] ?? ""], { encoding: "utf8" }));`,
+    ].join("\n"));
+    return wrapperPath;
+}
+
+for (const entry of REAL_STEPS_JSON["pipeline-failuresExit.mmd"] ?? []) {
+    if (entry.box === "STOP") continue; // no script, nothing to inject a failure into
+    test(`test_runStepHook_injectsOneFailureAt_${entry.box}_andResumeContinuesTheChain`, () => {
+        const isolatedFixtureDir = makeIsolatedFailuresExitFixture();
+        const templateRaw = readFileSync(join(PROJECT_ROOT, entry.template), "utf8")
+            .replaceAll("{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures", isolatedFixtureDir);
+        const templateInput = (JSON.parse(templateRaw) as { input: Record<string, unknown> }).input;
+        const taskNumber = Number(templateInput.taskNumber);
+        const projectRoot = String(templateInput.projectRoot);
+        const stepKey = `pipeline-failuresExit.mmd::${entry.box}`;
+
+        const wrapperFolder = mkdtempSync(join(tmpdir(), `run-step-inject-${entry.box}-`));
+        const wrapperScript = makeCrashOnceThenDelegateScript(wrapperFolder, join(PROJECT_ROOT, entry.script));
+        const overriddenConfig = JSON.parse(JSON.stringify(REAL_STEPS_JSON));
+        overriddenConfig["pipeline-failuresExit.mmd"].find((candidate: { box: string }) => candidate.box === entry.box)!.script = wrapperScript;
+        const configFile = join(wrapperFolder, "steps.json");
+        writeFileSync(configFile, JSON.stringify(overriddenConfig));
+        const startInput = JSON.stringify(templateInput);
+
+        // Test action, pass 1: the box crashes on its first, real invocation.
+        const first = runHook(`/run-step ${stepKey} ${startInput}`, configFile);
+        assert.equal(first.result.ok, false, JSON.stringify(first.result));
+
+        // Verification: a durable tail cursor now names this exact box and input.
+        assert.deepEqual(
+            readTaskRunState(taskNumber, projectRoot).history[0].tailCursor,
+            { block: stepKey, input: startInput },
+        );
+
+        // Test action, pass 2: the next invocation — literally what resumeRun.ts's row 0 hands
+        // back for this cursor — retries the same box, which now delegates to the real script and
+        // succeeds, and the walk runs the rest of the real chain to completion.
+        const second = runHook(`/run-step ${stepKey} ${startInput}`, configFile);
+        assert.equal(second.result.ok, true, JSON.stringify(second.result));
+        assert.equal(second.result.ran[0], stepKey);
+    });
+}
+```
+Add `readTaskRunState` (already added in Step 2) and `cpSync` to this file's imports.
+
+Like Step 3, this already passes against the live code, and is independent of Steps 1, 2, and 4:
+each row starts the walk directly at `pipeline-failuresExit.mmd::<BOX>`, so the already-shipped
+`inFailureChain` derivation and per-box cursor write (Step 3's mechanism, not this step's) are what
+make it pass — no box here ever carries `exitType: "block-failed"` or reaches
+`REPORT_EXIT_TYPE_AND_NOTE`'s new clear. Add it anyway, as the permanent regression guard Step 3
+cannot provide by itself: Step 3 proves the mechanism on one synthetic box; this proves it on every
+real one, using each box's own real script and real template.
+
+Run `npm test -- tests/runStepHook.test.ts`: one passing test per real failures-exit box (12 boxes,
+excluding `STOP`).
+
 ## Verification
 
 ```sh
@@ -387,11 +588,10 @@ npm test 2>&1 \
 ```
 If not all passing, follow up with `npm test 2>&1 | tail -50` and fix, repeating until green.
 
-## Note for the implementer: ordering against tasks 15 and 16
+## Note for the implementer
 
-This plan's `resumeRun.ts` row 0 and `taskRunState.ts`'s `tailCursor` field/`writeTailCursor`
-function are the same objects task 16 introduces — do not redefine them here. Implement task 15,
-then task 16, then this task, in that order; if this task somehow lands first in a worktree that
-does not yet have task 16's changes, stop and implement task 16's Steps 1-3 first (the `tailCursor`
-field, `writeTailCursor`, and `findResumeEntry`'s row 0) — this task only adds new *callers* of
-that machinery, in `runStepHook.ts`'s walk loop and in `REPORT_EXIT_TYPE_AND_NOTE.ts`.
+Re-read every file this plan cites before editing it — another session has been actively landing
+related work (task 16's `tailCursor`/`writeTailCursor`/row 0, and this plan's own `inFailureChain`
+derivation and per-box cursor write, are already live, per the "Current state" section above; do
+not re-implement them, and do not assume any other file this plan cites is still in the state
+described here without re-checking it first).

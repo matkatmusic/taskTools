@@ -207,3 +207,12 @@ npm test 2>&1 \
 ```
 
 If it does not report "all passing", run `Bash(npm test 2>&1 | tail -50)` and fix the codebase until it does. Do not re-run `npm test` again once it reports "all passing".
+
+## Draft on disk from another session
+
+Uncommitted work from another session (task-list items 30 to 32) overlaps this plan:
+- diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd lines 9, 35-37, 59: a PREFLIGHT_OK_Q box between IS_TASK_ACTIVE_Q and MARK_TASK_ACTIVE, routing NO to REPORT_ONLY_EXIT.
+- scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts, .test.ts, .template.json (untracked): checkDiskSpace (5 GB, statfs on projectRoot), checkPlanModeDefault (reads settings files), checkDuplicateHookRegistration (script basename per event).
+- scripts/steps.json and IS_TASK_ACTIVE_Q.template.json regenerated for that box.
+- This plan owns the plan-mode check. The draft reads settings files, which cannot tell the live permission mode; comment out checkPlanModeDefault. The live check comes from the hook payload as this plan says.
+This plan is the spec. Before step 1, read that draft. Keep only what this plan's steps produce. Comment out the rest; never delete it. Do not state that the edits are the result of the draft.

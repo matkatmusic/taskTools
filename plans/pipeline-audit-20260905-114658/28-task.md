@@ -11,7 +11,7 @@ Per the memory note "check liveness before claiming it": a `PostToolUse` hook, m
 - `scripts/readFileHook.ts:7`, `scripts/taskTestsHook.ts:8`, `scripts/runStepHook.ts:433` — the live pattern for a hook's own payload parse: `const payload = JSON.parse(readFileSync(0, "utf8"));`, bare, no `try`/`catch`. A malformed payload is a real failure and must throw, not be swallowed. Read `payload.tool_input`, decide relevance, write one `{ hookSpecificOutput: { hookEventName, additionalContext } }` line to stdout, or `process.exit(0)` with no output when not relevant — that part of the shape still matches `scripts/relatedTests.ts` and `scripts/taskTestsHook.ts:13-23`.
 - `hooks/hooks.json`, `"PostToolUse"` array (lines 41-80 today) — currently two matcher groups, `"Edit|Write|NotebookEdit"` (lines 42-60) and `"Skill"` (lines 62-79). No `"Workflow"` matcher group exists yet; this task adds a third.
 - `scripts/taskFiles.ts:18-22`, `taskFilesProjectRoot(pair: TaskFilePair): string` — pure string logic (`dirname`/`basename` on `pair.tasksPath`, no filesystem access), already the repository's one way to turn a `tasks.json` path into its project root. `args.tasksFile` (confirmed above, required on every `Workflow` call this pipeline issues) is exactly a `tasks.json` path, so this function derives the correct project root without trusting the hook payload's `cwd` — a global skill install can fire this hook from a session `cwd` that is a worktree, a subdirectory, or an unrelated repository.
-- `scripts/runStepHook.ts:123-128`, `appendStepToRunLog` — `writeFileSync(logFile(), ...)` rewrites the whole log array on every step, not an atomic rename; a hook reading `.taskTools/runs/*-run-log.json` at an arbitrary moment can observe a truncated or invalid write in progress. An observational hook over this pipeline-owned, non-atomically-written state must degrade to diagnostic text on a bad read, per the established precedent at `scripts/taskFiles.ts:74-80`'s `readTaskFile` (`try { ... } catch { return []; }` on exactly this class of read).
+- `scripts/runStepHook.ts:123-128`, `appendStepToRunLog` — `writeFileSync(logFile(), ...)` rewrites the whole log array on every step, not an atomic rename. A missing or empty file is a known, observable state and is reported as plain diagnostic text; a file that exists, is non-empty, and still fails to parse as a JSON array of block entries is a real bug, and the hook lets that parse error throw — a non-zero exit with the error surfaced by the harness is the evidence, not a swallowed "unreadable" string.
 
 ## Steps
 
@@ -137,11 +137,13 @@ test("test_workflowLivenessHook_staysSilentWhenArgsTasksFileIsMissing", () => {
     assert.equal(stdout.trim(), "");
 });
 
-test("test_workflowLivenessHook_reportsUnreadableForInvalidJson", () => {
+test("test_workflowLivenessHook_throwsForInvalidJsonInsteadOfReportingUnreadable", () => {
+    // A malformed, non-empty log is a real bug, not a "cannot tell" — the hook exits non-zero
+    // (execFileSync throws) and the harness surfaces the raw parse error as the evidence.
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), "{not valid json");
-    const stdout = runHook(workflowPayload(projectRoot, 7));
-    assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /unreadable/);
+    const badLogPath = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json");
+    writeFileSync(badLogPath, "{not valid json");
+    assert.throws(() => runHook(workflowPayload(projectRoot, 7)), `expected a thrown parse error for ${badLogPath}`);
 });
 
 test("test_workflowLivenessHook_reportsUnreadableForANonArray", () => {
@@ -203,15 +205,13 @@ function newestRunLogPathForTask(directory: string, task: number): string | null
     return join(directory, namesByNewestFirst[0].name);
 }
 
-// A run log is rewritten whole on every pass (scripts/runStepHook.ts:123-128), not appended atomically —
-// an observational hook reading it mid-rewrite must degrade to diagnostic text, never throw.
+// A missing or empty file is a known, observable state, reported directly. Anything else must parse as
+// a JSON array of block entries or this throws — a real parse failure is a bug, not a "cannot tell".
 function describeFirstBlock(path: string): string {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(readFileSync(path, "utf8"));
-    } catch {
-        return "unreadable (invalid JSON, possibly a rewrite in progress)";
-    }
+    if (!existsSync(path)) return "unreadable (file no longer exists)";
+    const raw = readFileSync(path, "utf8");
+    if (raw === "") return "empty (no entries recorded yet)";
+    const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return "unreadable (not a JSON array)";
     if (parsed.length === 0) return "empty (no entries recorded yet)";
     const firstEntry = parsed[0] as Record<string, unknown>;
@@ -228,8 +228,6 @@ process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext },
 })}\n`);
 ```
-
-The `describeFirstBlock` `try`/`catch` mirrors the established precedent at `scripts/taskFiles.ts:74-80`'s `readTaskFile` — degrading a bad read of pipeline-owned, non-atomically-written state to diagnostic text, not hiding a real programming error.
 
 ### Step 2 — register the hook
 

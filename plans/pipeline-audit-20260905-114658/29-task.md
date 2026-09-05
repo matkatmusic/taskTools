@@ -170,3 +170,11 @@ npm test 2>&1 \
     '
 ```
 Expected: **not** `all passing` while `.taskTools/knownFailingTests.json` still lists `tests/stage-and-summarize-stop.test.ts`'s `test_stages_only_the_flagged_session_files` as a real, currently-failing test — this raw `npm test` invocation runs Node's test runner directly (`package.json`'s `"test"` script) and never consults the baseline file; only the pipeline's own `taskTestsRunner`-based path (`runTaskTestsImpl.ts`, imported by the task-tests hook, not part of `npm test`) applies `readKnownFailingTests`/`newFailingTests`/`judgeSuite` to decide green vs. red. Read `/tmp/tasktools-npm-test.log`'s `✖ failing tests:` section and confirm the **only** listed failure is that one baselined test — any other failure is a real regression this task's commit should not go out with. The `node --test tests/taskTestsRunner.test.ts` run above, not this raw full-suite run, is what proves this task's own acceptance criterion.
+
+## Draft on disk from another session
+
+Uncommitted work from another session (task-list items 30 to 32) overlaps this plan:
+- scripts/checkTestBaseline.ts (untracked) and a new package.json script "test:baseline" that runs it; no test file for it.
+- .taskTools/knownFailingTests.json refreshed.
+- This plan owns the baseline commit. Stage checkTestBaseline.ts and the package.json line only if this plan's test covers them; otherwise leave them unstaged and say so in the report.
+This plan is the spec. Before step 1, read that draft. Keep only what this plan's steps produce. Comment out the rest; never delete it. Do not state that the edits are the result of the draft.

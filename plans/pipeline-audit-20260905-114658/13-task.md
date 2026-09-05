@@ -287,3 +287,12 @@ npm test 2>&1 \
 ```
 
 Pay particular attention to every `test_stepTemplate_preambleStatusCheck_*` and `test_stepEdge_*` line in the log if the run is not clean — these are the seam-gate tests this plan's Step 4 and Step 7 exist specifically to keep green. If it does not report "all passing", run `Bash(npm test 2>&1 | tail -50)` and fix the codebase until it does. Do not re-run `npm test` again once it reports "all passing".
+
+## Draft on disk from another session
+
+Uncommitted work from another session (task-list items 30 to 32) overlaps this plan:
+- diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd lines 9, 35-37, 59: a PREFLIGHT_OK_Q box between IS_TASK_ACTIVE_Q and MARK_TASK_ACTIVE, routing NO to REPORT_ONLY_EXIT.
+- scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts, .test.ts, .template.json (untracked): checkDiskSpace (5 GB, statfs on projectRoot), checkPlanModeDefault (reads settings files), checkDuplicateHookRegistration (script basename per event).
+- scripts/steps.json and IS_TASK_ACTIVE_Q.template.json regenerated for that box.
+- This plan owns the disk check. Its box replaces PREFLIGHT_OK_Q on the IS_TASK_ACTIVE_Q edge; the draft box leaves the diagram, and its script files are commented out. The plan-mode and duplicate-hook checks in the draft are owned by plans 20 and 21.
+This plan is the spec. Before step 1, read that draft. Keep only what this plan's steps produce. Comment out the rest; never delete it. Do not state that the edits are the result of the draft.

@@ -625,3 +625,10 @@ npm test 2>&1 \
     '
 ```
 Expected: `all passing`.
+
+## Draft on disk from another session
+
+Uncommitted work from another session (task-list items 30 to 32) overlaps this plan:
+- scripts/pipeline/health-check.sh (untracked): a bash snapshot of branch, worktree list, checkpoint, lock and lease files, last 5 run-log entries, df.
+- This plan owns the health check. Keep the bash file only if this plan's TypeScript script does not cover a section it prints; otherwise comment its body out and leave a one-line pointer to the script this plan adds.
+This plan is the spec. Before step 1, read that draft. Keep only what this plan's steps produce. Comment out the rest; never delete it. Do not state that the edits are the result of the draft.
