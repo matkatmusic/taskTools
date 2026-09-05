@@ -1,15 +1,16 @@
 // Behavioral checks for scripts/tackle-tasks/shared/resumeRun.ts. Run: node --test tests/resumeRun.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./resumeRun.ts";
 import { getTemplateShapeMismatches } from "../../templateShape.ts";
 import { readCheckpoint, writeCheckpoint, type Checkpoint } from "./checkpoint.ts";
 import {
-    claimTask, endTaskRun, readTaskRunState, updateCurrentTaskRun,
+    claimTask, endTaskRun, readTaskRunState, updateCurrentTaskRun, writeTailCursor,
 } from "./taskRunState.ts";
 import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 import {
@@ -18,6 +19,10 @@ import {
 import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../prepareTasks.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { resetIntentPath } from "./resetIntent.ts";
+import { taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
+import { main as resetWorktreeMain } from "../preambleStatusCheck/RESET_WORKTREE.ts";
+import { main as takeLeaseBeforeReset } from "../preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -164,6 +169,45 @@ test("test_findResumeEntry_resumesTheMergeTailAtBuildClosureNoteWhileActive", ()
     });
 });
 
+test("test_findResumeEntry_resumesAtTheTailCursorRegardlessOfExitTypeOrActiveState", () => {
+    // Setup: a claimed, still-active run with no completed exitType at all.
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const taskNumber = 9217;
+    const runId = "run-9217";
+    seedTaskAndClaim(rootOrigin, taskNumber, "tail cursor wins", runId, []);
+    const cursor = { block: "pipeline-failuresExit.mmd::RELEASE_SOURCE_LOCK", input: JSON.stringify({ taskNumber, runId }) };
+    writeTailCursor(taskNumber, runId, cursor, rootOrigin);
+
+    // Test action: resume the task.
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const entry = findResumeEntry(taskNumber, tasksPath);
+
+    // Verification: the tail cursor is returned verbatim, bypassing rows 2-5 entirely.
+    assert.deepEqual(entry, cursor);
+});
+
+test("test_findResumeEntry_prefersTheTailCursorOverAnExistingUsableCheckpoint", () => {
+    // Setup: a claimed run with BOTH a live worktree checkpoint AND a tail cursor.
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const taskNumber = 9218;
+    const runId = "run-9218";
+    const worktreePath = createLinkedWorktree(rootOrigin, runId);
+    seedTaskAndClaim(rootOrigin, taskNumber, "tail cursor beats checkpoint", runId, []);
+    updateCurrentTaskRun(taskNumber, runId, { worktree: worktreePath }, rootOrigin);
+    writeCheckpoint(worktreePath, baseCheckpoint(taskNumber, runId, rootOrigin));
+    const cursor = { block: "pipeline-failuresExit.mmd::REPORT_EXIT_TYPE_AND_NOTE", input: JSON.stringify({ taskNumber, runId }) };
+    writeTailCursor(taskNumber, runId, cursor, rootOrigin);
+
+    // Test action: resume the task.
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const entry = findResumeEntry(taskNumber, tasksPath);
+
+    // Verification: the tail cursor wins even though a usable checkpoint also exists — this is
+    // the exact ordering task 23's failures-exit chain depends on, since that chain leaves a
+    // stale checkpoint alive throughout the tail.
+    assert.deepEqual(entry, cursor);
+});
+
 test("test_findResumeEntry_resumesTheMergeTailAtBuildClosureNoteWhenInactiveAndSatisfiesItsContract", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = 9204;
@@ -212,6 +256,68 @@ test("test_findResumeEntry_returnsNullWhenTheWorktreeIsGone", () => {
     const entry = findResumeEntry(taskNumber, tasksPath);
 
     assert.equal(entry, null);
+});
+
+test("test_findResumeEntry_resumesAtResetWorktreeAfterAKillRightAfterDeletingTheOldWorktree", async () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const taskNumber = 9217;
+    const runId = "run-old";
+    seedTaskAndClaim(rootOrigin, taskNumber, "resumes reset after kill", runId, []);
+    const firstWorktree = createLinkedWorktree(rootOrigin, runId);
+    updateCurrentTaskRun(taskNumber, runId, { worktree: firstWorktree, leaseRunId: runId }, rootOrigin);
+    const beforeReset = takeLeaseBeforeReset(JSON.stringify({
+        box: "IS_WORKTREE_SAFE_TO_USE_Q", scriptSignal: "continue", taskNumber, runId, projectRoot: rootOrigin,
+        worktree: firstWorktree, branch: taskBranchName(taskNumber), docsMode: "", planFile: "", exitType: "", exitNote: "",
+    }));
+
+    // Test action: kill a real child right after RESET_WORKTREE tears the old worktree down.
+    const scriptPath = join(import.meta.dirname, "../preambleStatusCheck/RESET_WORKTREE.ts");
+    const child = spawn(process.execPath, [scriptPath, JSON.stringify(beforeReset)], {
+        stdio: "inherit",
+        env: { ...process.env, RESETWORKTREE_TEST_KILL_AFTER_DELETE: "1" },
+    });
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after tearing down the old worktree`);
+
+    // Verification: the old worktree and branch are gone (the lease was already released by
+    // TAKE_WORKTREE_LEASE_BEFORE_RESET before RESET_WORKTREE ran), but a new reset-intent survives it.
+    assert.ok(!existsSync(firstWorktree));
+    assert.throws(() => git(rootOrigin, "rev-parse", "--verify", `refs/heads/${taskBranchName(taskNumber)}`));
+    assert.ok(!existsSync(taskWorktreeLeasePath(firstWorktree)));
+    const intent = JSON.parse(readFileSync(resetIntentPath(firstWorktree), "utf8"));
+    assert.deepEqual(
+        { taskNumber: intent.taskNumber, runId: intent.runId, branch: intent.branch },
+        { taskNumber, runId, branch: taskBranchName(taskNumber) },
+    );
+    assert.equal(readTaskRunState(taskNumber, rootOrigin).active, true);
+
+    // Test action: the real, automatic resume decision.
+    const { tasksPath } = resolveTaskFiles(rootOrigin);
+    const entry = findResumeEntry(taskNumber, tasksPath);
+
+    // Verification: it resumes at RESET_WORKTREE instead of abandoning the run.
+    assert.notEqual(entry, null);
+    assert.equal(entry!.block, "pipeline-preambleStatusCheck.mmd::RESET_WORKTREE");
+    const input = JSON.parse(entry!.input);
+    assert.equal(input.taskNumber, taskNumber);
+    assert.equal(input.runId, runId);
+    assert.equal(input.worktree, firstWorktree);
+    assert.equal(input.branch, taskBranchName(taskNumber));
+    const stateAfterResume = readTaskRunState(taskNumber, rootOrigin);
+    assert.equal(stateAfterResume.active, true);
+    assert.equal(stateAfterResume.history[stateAfterResume.history.length - 1].exitType, null);
+
+    // Test action: feed the resumed input into RESET_WORKTREE.ts's own main().
+    const output = resetWorktreeMain(entry!.input);
+
+    // Verification: a fresh worktree exists on the task branch, no leftover state, journals gone.
+    assert.ok(existsSync(output.worktree));
+    assert.equal(git(output.worktree, "branch", "--show-current"), taskBranchName(taskNumber));
+    const finalLeaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(output.worktree), "utf8"));
+    assert.equal(finalLeaseOwner.runId, runId);
+    assert.ok(!existsSync(resetIntentPath(output.worktree)));
+    assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
+    assert.equal(readTaskRunState(taskNumber, rootOrigin).worktree, output.worktree);
 });
 
 test("test_prepareResume_reopensTheRecordAndRetakesTheLock", () => {

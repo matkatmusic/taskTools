@@ -10,7 +10,7 @@
         "exitType": "",
         "exitNote": "",
         "message": "implemented the change",
-        "additionalData": {}
+        "additionalData": { "implemented": true }
     },
     "output": {
         "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",

@@ -62,7 +62,7 @@ function seedOpenTaskAndClaim(root: string, taskNumber: number): void {
 
 const RUN_ID = "run-1";
 
-test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
+test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", async () => {
     // Setup: a source repo whose root suite is green and whose submodule suite is red.
     const childOrigin = makeTempRepoWithCommit("child-main");
     writePackageJsonWithTestExitCode(childOrigin, 1);
@@ -74,7 +74,7 @@ test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the full suite.
-    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the whole run is red because the submodule layer is red, even though root is green.
     assert.equal(result.passed, false);
@@ -84,19 +84,19 @@ test("test_runFullSuite_failsWhenASubmoduleSuiteIsRedAndTheRootIsGreen", () => {
     assert.equal(root?.passed, true);
 });
 
-test("test_runFullSuite_countsALayerWithNoDiscoverableSuiteAsPassed", () => {
+test("test_runFullSuite_countsALayerWithNoDiscoverableSuiteAsPassed", async () => {
     // Setup: a plain repo with no package.json at all, so no complete-suite command exists.
     const rootOrigin = makeTempRepoWithCommit("main");
     const worktreePath = createLinkedWorktree(rootOrigin);
     seedOpenTaskAndClaim(rootOrigin, 1);
 
-    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
     assert.equal(result.passed, true);
     assert.deepEqual(result.layers, [{ occurrenceId: "", passed: true }]);
     assert.match(result.output, /occurrence "" has no discoverable test suite/);
 });
 
-test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
+test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", async () => {
     // Setup: a single-layer repo with a green suite.
     const rootOrigin = makeTempRepoWithCommit("main");
     writePackageJsonWithTestExitCode(rootOrigin, 0);
@@ -104,7 +104,7 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     // Test action: run the full suite.
-    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-9", rootOrigin);
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-9", rootOrigin);
 
     // Verification: the stored run record's fullSuite matches the returned decision.
     const stored = getCurrentTaskRun(1, rootOrigin)?.fullSuite;
@@ -116,7 +116,7 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
     assert.ok(stored?.checkedAt);
 });
 
-test("test_runFullSuite_keepsALayerGreenWhenItsOnlyFailureIsKnown", () => {
+test("test_runFullSuite_keepsALayerGreenWhenItsOnlyFailureIsKnown", async () => {
     // Setup: a layer whose one reported failure is already recorded as a known baseline.
     const rootOrigin = makeTempRepoWithCommit("main");
     writePackageJsonWithReporterFailure(rootOrigin, "tests/a.test.ts", "boom");
@@ -125,7 +125,7 @@ test("test_runFullSuite_keepsALayerGreenWhenItsOnlyFailureIsKnown", () => {
     writeKnownFailingTests(rootOrigin, [{ file: "tests/a.test.ts", name: "boom" }]);
 
     // Test action: run the full suite.
-    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
 
     // Verification: the known failure keeps the layer, and the overall run, green.
     assert.equal(result.passed, true);
@@ -133,7 +133,7 @@ test("test_runFullSuite_keepsALayerGreenWhenItsOnlyFailureIsKnown", () => {
     assert.match(result.output, /^known failing test \(ignored\):/);
 });
 
-test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", () => {
+test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", async () => {
     // Setup: a claimed run ends, replaced by a newer claim, as a timed-out process still holds the old id.
     const rootOrigin = makeTempRepoWithCommit("main");
     writePackageJsonWithTestExitCode(rootOrigin, 0);
@@ -144,6 +144,40 @@ test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", () => {
     assert.equal(outcome.status, "claimed");
 
     // Test action + verification: the stale run's write is rejected, and the new run is untouched.
-    assert.throws(() => runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /run-2/);
+    await assert.rejects(runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin), /run-2/);
     assert.equal(getCurrentTaskRun(1, rootOrigin)?.fullSuite, null);
+});
+
+test("test_runFullSuite_reportsATimeoutAsARedLayerNotAHang", async () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    writeFileSync(join(rootOrigin, "package.json"), JSON.stringify({ name: "fixture", scripts: { test: "sleep 999 & wait" } }));
+    git(rootOrigin, "add", "package.json");
+    git(rootOrigin, "commit", "-q", "-m", "hang");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin, 200);
+
+    assert.equal(result.passed, false);
+    assert.match(result.output, /timed out/);
+});
+
+test("test_runFullSuite_stopsRemainingLayersWhenTheTotalBudgetIsExhausted", async () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    writePackageJsonWithTestExitCode(rootOrigin, 0);
+    const childOrigin = makeTempRepoWithCommit("main");
+    writeFileSync(join(childOrigin, "package.json"), JSON.stringify({ name: "child", scripts: { test: "sleep 999 & wait" } }));
+    git(childOrigin, "add", "package.json");
+    git(childOrigin, "commit", "-q", "-m", "hang");
+    git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
+    git(rootOrigin, "commit", "-q", "-m", "add submodule");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1);
+
+    // Total budget of 200ms: the deeper (submodule) occurrence runs first, hangs, and consumes it all.
+    const result = await runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin, 200);
+
+    assert.equal(result.passed, false);
+    assert.equal(result.layers.length, 2);
+    assert.ok(result.layers.every((layer) => layer.passed === false));
 });

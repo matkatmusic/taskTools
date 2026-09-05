@@ -11,7 +11,8 @@ export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed"
-    | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable";
+    | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable" | "implementation-incomplete"
+    | "block-failed";
 
 // F2: `stepId` names the logical step that produced this commit. Merge-kind commits omit it.
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };
@@ -77,6 +78,8 @@ export type TaskRunRecord = {
     attempts?: Record<string, number>;
     // Hook passIds already counted per counter, so a re-run of the same block counts once.
     countedPasses?: Record<string, string[]>;
+    // Where an exit-tail resume continues when the checkpoint is untrusted. Null when done. Set by writeTailCursor, read by findResumeEntry.
+    tailCursor?: { block: string; input: string } | null;
 };
 
 // Every retry in this pipeline caps at two attempts.
@@ -545,6 +548,31 @@ export function appendStepResult(
             entry,
         ];
         const nextRecord: TaskRunRecord = { ...newest, stepResults };
+        const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
+        task.run = nextState;
+        writeJsonAtomically(tasksPath, tasks);
+        return nextState;
+    });
+}
+
+// F-tail: saves the resume point. Unlike updateCurrentTaskRun, ignores state.active, since failures-exit may run after inactive.
+export function writeTailCursor(
+    taskNumber: number,
+    expectedRunId: string,
+    cursor: { block: string; input: string } | null,
+    projectRoot: string,
+): TaskRunState {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const task = findTask(tasks, taskNumber);
+        if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+        const state = getRunState(task);
+        const newest = state.history[state.history.length - 1];
+        if (newest === undefined || newest.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
+        }
+        const nextRecord: TaskRunRecord = { ...newest, tailCursor: cursor };
         const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
         task.run = nextState;
         writeJsonAtomically(tasksPath, tasks);

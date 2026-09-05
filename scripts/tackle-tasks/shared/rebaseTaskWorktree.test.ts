@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rebaseTaskWorktree } from "./rebaseTaskWorktree.ts";
-import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
+import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
@@ -175,4 +175,31 @@ test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", asy
     assert.equal(output.conflicted, true);
     assert.equal(output.stoppedAt?.occurrenceId, "");
     assert.deepEqual(output.conflictedFilePaths, ["package.json"]);
+});
+
+test("test_rebaseTaskWorktree_releasesTheSourceLockWhenAnOperationalFailureThrows", async () => {
+    // Setup: a claimed task with a linked worktree; the source branch diverges so the parent
+    // rebase has real work to do.
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    const runId = "run-throw";
+    seedTaskAndClaim(rootOrigin, taskNumber, runId);
+    writeFileSync(join(rootOrigin, "root-work.txt"), "root work\n");
+    git(rootOrigin, "add", "root-work.txt");
+    git(rootOrigin, "commit", "-q", "-m", "root work");
+
+    // rebaseTaskWorktree always calls the parent rebase with leaveConflictLive=true, so a real
+    // conflict returns "conflicted" (a normal return), never "cleanup-failed". An uncommitted
+    // change in the worktree makes `git rebase` itself refuse to start (no rebase-merge directory
+    // is ever created), which rebaseGroupOntoSource maps straight to "cleanup-failed" with no
+    // abort attempt at all.
+    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ x: "dirty" }));
+
+    // Test action: rebaseTaskWorktree throws (cleanup-failed is an operational failure, mapped to a throw).
+    await assert.rejects(() => rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId, stepId: "rebase", rootSourceBranch: "main",
+    }));
+
+    // Verification: the source lock this call acquired is released, not stranded.
+    assert.equal(readSourceRepoLock(rootOrigin), null);
 });

@@ -9,7 +9,7 @@ flowchart TB
   end
   subgraph whatIsReviewVerdictNext ["next diagram"]
     direction TB
-    PLAN_THE_TASK["PLAN_THE_TASK"]
+    IS_DIFFICULTY_7_PLUS_Q["IS_DIFFICULTY_7_PLUS_Q"]
     FAILURES_EXIT["FAILURES_EXIT"]
     IMPLEMENT_TASK["IMPLEMENT_TASK"]
   end
@@ -18,7 +18,7 @@ flowchart TB
   WHAT_IS_REVIEW_VERDICT -- "ACCEPT<br/>AMEND_THEN_ACCEPT" --> IMPLEMENT_TASK
   WHAT_IS_REVIEW_VERDICT -- "AMEND<br/>SCRAP" --> UPDATE_TASKS_JSON
   UPDATE_TASKS_JSON --> TWO_CODEX_REVIEWS_COMPLETED_Q
-  TWO_CODEX_REVIEWS_COMPLETED_Q -- "NO<br/>replan with codex's notes" --> PLAN_THE_TASK
+  TWO_CODEX_REVIEWS_COMPLETED_Q -- "NO<br/>replan with codex's notes" --> IS_DIFFICULTY_7_PLUS_Q
   TWO_CODEX_REVIEWS_COMPLETED_Q -- "YES<br/>plan-scrapped" --> FAILURES_EXIT
   WHAT_IS_REVIEW_VERDICT -- "ERROR<br/>run-failed" --> FAILURES_EXIT
 
@@ -28,4 +28,4 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
   class WHAT_IS_REVIEW_VERDICT,UPDATE_TASKS_JSON,TWO_CODEX_REVIEWS_COMPLETED_Q script
-  class PLAN_THE_TASK,FAILURES_EXIT,IMPLEMENT_TASK next_diagram
+  class IS_DIFFICULTY_7_PLUS_Q,FAILURES_EXIT,IMPLEMENT_TASK next_diagram

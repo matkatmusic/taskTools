@@ -1,5 +1,4 @@
-// Behavioral checks for scripts/tackle-tasks/writeTaskExitNotes.ts.
-// Run: node --test tests/writeTaskExitNotes.test.ts
+// Behavioral checks for scripts/tackle-tasks/writeTaskExitNotes.ts.  Run: node --test tests/writeTaskExitNotes.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -56,8 +55,7 @@ test("test_writeTaskExitNotes_acceptsNotResumable", () => {
 });
 
 test("test_writeTaskExitNotes_reopensAnAlreadyEndedRunWhenReopenIsSet", () => {
-    // Scenario: a run already ended completed (the success tail, per rule 10 case 4), then a
-    // later script in the same tail fails operationally and the exit chain must reopen it.
+    // Scenario: an ended completed run's later script fails operationally (rule 10 case 4); the exit chain must reopen it.
     const root = makeProjectRootWithTasks([{
         taskNumber: 1, title: "t",
         run: { active: false, worktree: null, leaseRunId: null, history: [endedRunRecord()] },
@@ -77,8 +75,7 @@ test("test_writeTaskExitNotes_reopensAnAlreadyEndedRunWhenReopenIsSet", () => {
 });
 
 test("test_writeTaskExitNotes_throwsWithASiblingRunId", () => {
-    // Scenario (F6): a process pauses, its run ends, a new run is claimed. The paused process
-    // finally writes exit notes — it must fence against the newer run, not silently retarget it.
+    // Scenario (F6): a paused process's late exit notes must fence against a newer run, not retarget it.
     const root = makeProjectRootWithTasks([{
         taskNumber: 1, title: "t",
         run: { active: true, worktree: null, leaseRunId: null, history: [endedRunRecord({ runId: "run-new", endedAt: null, exitType: null, exitNote: null })] },
@@ -90,4 +87,30 @@ test("test_writeTaskExitNotes_throwsWithASiblingRunId", () => {
 
     const state = readTaskRunState(1, root);
     assert.equal(state.history[0].exitType, null);
+});
+
+test("test_writeTaskExitNotes_acceptsImplementationIncomplete", () => {
+    // Scenario: COMMIT_IMPLEMENTATION_IF_NEEDED exits "implementation-incomplete"; the writer must record it, not throw.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [endedRunRecord({ endedAt: null, exitType: null, exitNote: null })] },
+    }]);
+
+    const output = writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "implementation-incomplete", exitNote: "agent stopped early" });
+
+    assert.deepEqual(output, { exitType: "implementation-incomplete", exitNote: "agent stopped early" });
+    assert.equal(readTaskRunState(1, root).history[0].exitType, "implementation-incomplete");
+});
+
+test("test_writeTaskExitNotes_acceptsBlockFailed", () => {
+    // Scenario: buildFailure routes a hard failure into the tail; the writer must record it, not throw.
+    const root = makeProjectRootWithTasks([{
+        taskNumber: 1, title: "t",
+        run: { active: true, worktree: null, leaseRunId: null, history: [endedRunRecord({ endedAt: null, exitType: null, exitNote: null })] },
+    }]);
+
+    const output = writeTaskExitNotes({ taskNumber: 1, runId: "run-old", projectRoot: root, exitType: "block-failed", exitNote: "one.mmd::A exited 1" });
+
+    assert.deepEqual(output, { exitType: "block-failed", exitNote: "one.mmd::A exited 1" });
+    assert.equal(readTaskRunState(1, root).history[0].exitType, "block-failed");
 });

@@ -12,6 +12,8 @@ type Input = {
     projectRoot: string;
     worktree: string;
     branch: string;
+    message: string;
+    additionalData: Record<string, unknown>;
 };
 
 function baseBranch(projectRoot: string): string {
@@ -22,6 +24,9 @@ function baseBranch(projectRoot: string): string {
 // Narrows down to the core packet, plus the task's own branch, which every later box in this folder carries through.
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
+    if (typeof packet.additionalData.fixSummary !== "string") {
+        throw new Error(`COMMIT_SUITE_FIX_IF_NEEDED: additionalData holds no string "fixSummary"`);
+    }
     const attempts = getAttemptCount(packet.taskNumber, "suiteFix", packet.projectRoot);
     commitTaskWork({
         projectRoot: packet.projectRoot,
@@ -39,6 +44,7 @@ export function main(input: string): Record<string, unknown> {
         projectRoot: packet.projectRoot,
         worktree: packet.worktree,
         branch: packet.branch,
+        fixSummary: packet.additionalData.fixSummary,
     };
 }
 

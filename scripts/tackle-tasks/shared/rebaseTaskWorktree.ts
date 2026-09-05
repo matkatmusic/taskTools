@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
-    acquireSourceRepoLock, buildLockOwner, refreshOwnedSourceRepoLockOrThrow,
+    acquireSourceRepoLock, buildLockOwner, refreshOwnedSourceRepoLockOrThrow, releaseSourceRepoLock,
 } from "./sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
@@ -185,37 +185,48 @@ export async function rebaseTaskWorktree(
             conflicted: false, stoppedAt: null, conflictedFilePaths: [], failureReason: null,
         };
     }
-    refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
+    try {
+        refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
-    // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
-    const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, true, null, false);
-    if (submoduleReport.stoppedAt !== null) {
-        const result: RebaseTaskWorktreeOutput = {
-            lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt),
-        };
+        // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
+        const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, true, null, false);
+        if (submoduleReport.stoppedAt !== null) {
+            const result: RebaseTaskWorktreeOutput = {
+                lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapSubmoduleStop(submoduleReport.stoppedAt),
+            };
+            persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
+            return result;
+        }
+
+        const manifest = buildDiscoveryManifest(worktreePath, projectRoot, input.rootSourceBranch);
+        const parentOutcome = rebaseParentOntoSourceAndTest(
+            "",
+            worktreePath,
+            input.rootSourceBranch,
+            directChildPathsInParent(manifest),
+            createEmptyResolutionManifest(),
+            true,
+            null,
+            false,
+        );
+        const mapped = mapParentOutcome(worktreePath, parentOutcome);
+        if (mapped.stoppedAt === null && mapped.failureReason === null) {
+            const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
+            persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
+        }
+        const result: RebaseTaskWorktreeOutput = { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
         persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
         return result;
+    } catch (error) {
+        // Every operational throw here (mapSubmoduleStop/mapParentOutcome's default branches, or
+        // any git call above) leaves the lock held unless released here. The deliberate
+        // "conflicted" status returns normally above and never reaches this catch, so
+        // FIX_CONFLICTS still finds the lock held, as intended. releaseSourceRepoLock reproves
+        // ownership itself, so calling it unconditionally is always safe (matches
+        // cleanupTaskWorktree.ts's existing catch-then-release precedent).
+        releaseSourceRepoLock(projectRoot, owner);
+        throw error;
     }
-
-    const manifest = buildDiscoveryManifest(worktreePath, projectRoot, input.rootSourceBranch);
-    const parentOutcome = rebaseParentOntoSourceAndTest(
-        "",
-        worktreePath,
-        input.rootSourceBranch,
-        directChildPathsInParent(manifest),
-        createEmptyResolutionManifest(),
-        true,
-        null,
-        false,
-    );
-    const mapped = mapParentOutcome(worktreePath, parentOutcome);
-    if (mapped.stoppedAt === null && mapped.failureReason === null) {
-        const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
-        persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
-    }
-    const result: RebaseTaskWorktreeOutput = { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
-    persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
-    return result;
 }
 
 if (process.argv[1]?.endsWith("rebaseTaskWorktree.ts")) {

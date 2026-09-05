@@ -23,7 +23,7 @@ export function main(input: string): EntryPacket & { next: string } {
     if (parsed.acquired) {
         return { ...packet, next: "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH" };
     }
-    return { ...packet, next: "HAVE_15_MINUTES_PASSED_Q" };
+    return { ...packet, next: "HAS_LOCK_WAIT_DEADLINE_PASSED_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

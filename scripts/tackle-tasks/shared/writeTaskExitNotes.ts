@@ -7,7 +7,8 @@ const EXIT_TYPES: readonly TaskExitType[] = [
     "completed", "invalid-number", "already-active", "blocked",
     "plan-scrapped", "tests-red", "tests-flagged", "suite-red",
     "rebase-stuck", "merge-failed", "fence-violation", "run-failed",
-    "clarify-stuck", "agent-failed", "partially-published", "not-resumable",
+    "clarify-stuck", "agent-failed", "partially-published", "not-resumable", "implementation-incomplete",
+    "block-failed",
 ];
 
 export type WriteTaskExitNotesInput = {
@@ -21,9 +22,7 @@ export type WriteTaskExitNotesInput = {
 
 export type WriteTaskExitNotesOutput = { exitType: TaskExitType; exitNote: string };
 
-// rule 10: reopening overwrites exit type completed with run-failed on the already-ended
-// success tail, via replaceEndedRunOutcome, which owns that whole transition under one lock.
-// F6: runId fences the write to the run that requested it, never "whichever run is newest".
+// Rule 10: reopening replaces completed with run-failed via replaceEndedRunOutcome. F6: runId fences writes to the requesting run.
 export function writeTaskExitNotes(input: WriteTaskExitNotesInput): WriteTaskExitNotesOutput {
     requireAbsolutePath("projectRoot", input.projectRoot);
     if (!EXIT_TYPES.includes(input.exitType as TaskExitType)) {

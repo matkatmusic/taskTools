@@ -1,0 +1,67 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { main } from "./PLAN_THE_TASK_CODEX.ts";
+
+process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-codex-run-log.json");
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+// Sets up a project root and worktree with a brief file, since loadPreparedTask is read-only and never creates one.
+function makeFixture(taskNumber = 35): { projectRoot: string; worktree: string } {
+    const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-codex-"));
+    mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
+        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "" },
+    ]));
+    writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
+    const worktree = join(projectRoot, "worktree");
+    mkdirSync(join(worktree, "plans"), { recursive: true });
+    writeFileSync(join(worktree, "plans", `brief-${taskNumber}.md`), `# fixture sentinel brief for task ${taskNumber}\n`);
+    return { projectRoot, worktree };
+}
+
+test("test_PLAN_THE_TASK_CODEX_startsCodexDetachedToDraftThePlan", async () => {
+    const { projectRoot, worktree } = makeFixture(35);
+    // A fake codex on PATH records its call, so the test proves the detached start without running the real one.
+    const shimDir = join(projectRoot, "shim");
+    mkdirSync(shimDir);
+    const codexCallFile = join(projectRoot, "codex-call.txt");
+    writeFileSync(join(shimDir, "codex"), `#!/bin/sh\nprintf '%s\\n' "$@" >${codexCallFile}\n`, { mode: 0o755 });
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${shimDir}:${savedPath}`;
+    const packet = JSON.stringify({
+        box: "IS_DIFFICULTY_7_PLUS_Q", scriptSignal: "continue", taskNumber: 35, runId: "run-1",
+        projectRoot, worktree, branch: "task-35", docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
+    });
+
+    try { main(packet); } finally { process.env.PATH = savedPath; }
+
+    // Codex outruns the block's 5-minute cap: the block starts it detached, the prompt only waits for the done marker.
+    const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+    const runScript = join(worktree, "plans", "PLAN_THE_TASK.codex-run.sh");
+    const doneFile = join(worktree, "plans", "PLAN_THE_TASK.codex-done");
+    const pidFile = join(worktree, "plans", "PLAN_THE_TASK.codex-pid");
+    const promptFileContents = readFileSync(promptFile, "utf8");
+    assert.match(promptFileContents, /You are waiting on a plan agent running in the CLI\./);
+    assert.doesNotMatch(promptFileContents, /nohup|setsid|run_in_background: true/);
+    assert.ok(promptFileContents.includes(`[ -f ${doneFile} ]`));
+    assert.doesNotMatch(promptFileContents, /codex exec/);
+    assert.match(readFileSync(pidFile, "utf8"), /^\d+$/);
+    const runScriptContents = readFileSync(runScript, "utf8");
+    assert.match(runScriptContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
+    assert.ok(runScriptContents.includes(`echo $? >${doneFile}`));
+    // macOS sh chokes on a heredoc inside $(...) holding an apostrophe, so the prompt is a file.
+    const codexPromptFile = join(worktree, "plans", "PLAN_THE_TASK.codex-prompt.md");
+    assert.ok(runScriptContents.includes(`"$(cat ${codexPromptFile})"`));
+    assert.doesNotMatch(runScriptContents, /PLANEOF/);
+    assert.match(readFileSync(codexPromptFile, "utf8"), /task 35/);
+    execFileSync("sh", ["-n", runScript]);
+    for (let i = 0; i < 50 && !existsSync(doneFile); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(readFileSync(doneFile, "utf8").trim(), "0");
+    assert.match(readFileSync(codexCallFile, "utf8"), /task 35/);
+});

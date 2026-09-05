@@ -20,13 +20,13 @@ function baseBranch(projectRoot: string): string {
     return "staging";
 }
 
-export function main(input: string): Record<string, unknown> {
+export async function main(input: string): Promise<Record<string, unknown>> {
     const { next: _next, ...packet } = JSON.parse(input) as Input & { next?: string };
     const targetBranch = baseBranch(packet.projectRoot);
     // Re-derives ownedFilePaths/testFilePaths on every entry, never trusts a carried-forward value.
     const prepared = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const attempts = getAttemptCount(packet.taskNumber, "suiteFix", packet.projectRoot);
-    const result = runFullSuite(
+    const result = await runFullSuite(
         packet.taskNumber, packet.runId, packet.worktree, targetBranch, `run-full-suite-${attempts}`, packet.projectRoot,
     );
     return {
@@ -42,4 +42,4 @@ export function main(input: string): Record<string, unknown> {
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
 if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
-    console.log(JSON.stringify(main(process.argv[2] ?? "")));
+    console.log(JSON.stringify(await main(process.argv[2] ?? "")));

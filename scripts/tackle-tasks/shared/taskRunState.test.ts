@@ -23,6 +23,7 @@ import {
     resetAttemptCounts,
     transitionWorktreeLease,
     updateCurrentTaskRun,
+    writeTailCursor,
     type TaskRunRecord,
 } from "./taskRunState.ts";
 import { resolveTaskFiles } from "../../taskFiles.ts";
@@ -1042,4 +1043,39 @@ test("test_resetAttemptCounts_refusesARunIdThatIsNotTheNewest", () => {
     claimTask(1, "run-a", root);
     // Test action: resetting with a stale runId throws.
     assert.throws(() => resetAttemptCounts(1, "run-stale", root));
+});
+
+test("test_writeTailCursor_persistsAndReadsBackWhileTheRunIsActive", () => {
+    // Setup: a task with an active run.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    // Test action: write a tail cursor naming an arbitrary block and input.
+    writeTailCursor(1, "run-a", { block: "pipeline-failuresExit.mmd::RELEASE_SOURCE_LOCK", input: "{}" }, root);
+    // Verification: it reads back unchanged from the run's history.
+    const state = readTaskRunState(1, root);
+    assert.deepEqual(state.history[0].tailCursor, { block: "pipeline-failuresExit.mmd::RELEASE_SOURCE_LOCK", input: "{}" });
+});
+
+test("test_writeTailCursor_persistsAfterTheRunHasEnded", () => {
+    // Setup: a task whose run has already ended (unlike updateCurrentTaskRun, this must not require active).
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    endTaskRun(1, "run-a", root);
+    // Test action: write a tail cursor against the now-inactive run.
+    writeTailCursor(1, "run-a", { block: "pipeline-mergeSucceededExit.mmd::CLEAN_UP_WORKTREES", input: "{}" }, root);
+    // Verification: it persists even though the run is inactive.
+    const state = readTaskRunState(1, root);
+    assert.equal(state.active, false);
+    assert.deepEqual(state.history[0].tailCursor, { block: "pipeline-mergeSucceededExit.mmd::CLEAN_UP_WORKTREES", input: "{}" });
+});
+
+test("test_writeTailCursor_clearsWithNull", () => {
+    // Setup: a task with a tail cursor already set.
+    const root = makeProjectRootWithTasks([{ taskNumber: 1, title: "t" }]);
+    claimTask(1, "run-a", root);
+    writeTailCursor(1, "run-a", { block: "x.mmd::X", input: "{}" }, root);
+    // Test action: clear it by writing null.
+    writeTailCursor(1, "run-a", null, root);
+    // Verification: the field reads back null.
+    assert.equal(readTaskRunState(1, root).history[0].tailCursor, null);
 });

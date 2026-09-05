@@ -44,13 +44,13 @@ export function resolveTaskFiles(root: string): TaskFilePair {
   }
 }
 
-const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/"];
+const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/", "**/plans/checkpoint.json", ".taskTools/workflows/"];
 
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
   const taskFolder = dirname(pair.tasksPath);
-  if (!existsSync(taskFolder)) seedGitignore(dirname(taskFolder));
   mkdirSync(taskFolder, { recursive: true });
   withTaskStateLock(pair.tasksPath, () => {
+    seedGitignore(taskFilesProjectRoot(pair));
     for (const path of [pair.tasksPath, pair.completedTasksPath]) {
       if (!existsSync(path)) writeJsonAtomically(path, []);
     }

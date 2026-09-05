@@ -11,6 +11,7 @@ type Input = {
     projectRoot: string;
     worktree: string;
     branch: string;
+    failureReason: string;
 };
 
 export function main(input: string): Record<string, unknown> {
@@ -25,7 +26,7 @@ export function main(input: string): Record<string, unknown> {
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         next: done ? "pipeline-failuresExit.mmd::FAILURES_EXIT" : "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH",
         exitType: done ? "merge-failed" : "",
-        exitNote: done ? "nothing landed after 2 attempts. worktree preserved." : "",
+        exitNote: done ? `paused, merge-failed: nothing landed after 2 merge attempts (${packet.failureReason}). worktree preserved. Find out why the merge failed from the run log and packets under .taskTools/runs. Fixable: fix it, then run /tackle-tasks [${packet.taskNumber}] MERGE_WORKTREES to merge again. Not fixable: ask the user what to do.` : "",
     };
 }
 

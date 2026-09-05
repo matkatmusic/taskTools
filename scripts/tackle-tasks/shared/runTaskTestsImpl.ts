@@ -5,7 +5,7 @@ import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
 import { TASK_HAS_TESTS } from "../../resultCodes.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, type FailingTest } from "../../taskTestsRunner.ts";
+import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../taskTestsRunner.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 // const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
@@ -81,13 +81,14 @@ function isTestPath(path: string | undefined): path is string {
 //     }
 // }
 
-export function runTaskTests(
+export async function runTaskTests(
     taskNumber: number,
     expectedRunId: string,
     worktreePath: string,
     stepId: string,
     projectRoot: string,
-): RunTaskTestsOutput {
+    timeoutMs: number = SUITE_TIMEOUT_MS,
+): Promise<RunTaskTestsOutput> {
     requireAbsolutePath("projectRoot", projectRoot);
     requireAbsolutePath("worktreePath", worktreePath);
     // const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
@@ -132,15 +133,20 @@ export function runTaskTests(
     } else {
         missingTests = false;
         // ponytail: runs the top-level worktree's suite only; submodule suites are not run here.
-        const suite = runSuite(worktreePath);
+        const suite = await runSuite(worktreePath, timeoutMs);
         const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
         const known = readKnownFailingTests(projectRoot);
         const newFailures = newFailingTests(failing, known);
-        passed = judgeSuite(suite.allPassing, failing, newFailures);
+        if (suite.timedOut) {
+            passed = false;
+        } else {
+            passed = judgeSuite(suite.allPassing, failing, newFailures);
+        }
         taskNewFailingTests = newFailures;
         taskKnownFailingTests = failing.filter((test) => !newFailures.includes(test));
         outputParts.push(...taskNewFailingTests.map((test) => `new failing test: ${test.file} — ${test.name}`));
         outputParts.push(...taskKnownFailingTests.map((test) => `known failing test (ignored): ${test.file} — ${test.name}`));
+        if (suite.timedOut) outputParts.push(`the branch's test suite timed out after ${timeoutMs}ms and was killed`);
         outputParts.push(suite.output);
         outputParts.push(truncateOutput(suite.log));
     }

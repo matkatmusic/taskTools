@@ -31,5 +31,5 @@ test("test_wasLockAcquired_routesToRebaseOntoTargetBranchWhenAcquired", () => {
 test("test_wasLockAcquired_routesToHave15MinutesPassedWhenNotAcquired", () => {
     const result = main(JSON.stringify({ ...BASE_INPUT, acquired: false }));
 
-    assert.equal(result.next, "HAVE_15_MINUTES_PASSED_Q");
+    assert.equal(result.next, "HAS_LOCK_WAIT_DEADLINE_PASSED_Q");
 });

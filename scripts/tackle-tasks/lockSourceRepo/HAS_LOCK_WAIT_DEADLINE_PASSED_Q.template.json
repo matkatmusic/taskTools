@@ -12,7 +12,7 @@
         "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
     },
     "output": {
-        "box": "HAVE_15_MINUTES_PASSED_Q",
+        "box": "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
         "scriptSignal": "continue",
         "next": "WAIT_FOR_LOCK",
         "taskNumber": 1,

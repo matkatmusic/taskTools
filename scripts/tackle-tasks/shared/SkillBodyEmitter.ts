@@ -28,9 +28,7 @@ function isTaskActive(tasksFile: string, taskNumber: number): boolean {
     return run.active === true;
 }
 
-// An active task's already-generated pair is reused untouched, so a duplicate launch of the same running task can
-// never rewrite the files a checkpoint mid-run is relying on. Everything else (a first launch, or a finished task's
-// next run) regenerates fresh, seeded from the canonical config so hand-authored mutating flags are not lost.
+// Reuses an active task's pair untouched to protect checkpoint files; otherwise regenerates fresh from canonical config, preserving hand-authored flags.
 function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFolderSetting: DiagramFolderSetting): { workflowFile: string; stepsConfigPath: string } {
     const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
     const stepsConfigPath = join(workflowDirectory, "steps.json");
@@ -72,8 +70,7 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     }
     */
 
-    // Made fresh on every run, so the shapes in it always match the diagrams on disk — unless the task is already
-    // active and its pair already exists, in which case ensureTaskWorkflowPair reuses it untouched.
+    // Regenerated fresh each run to match diagrams on disk, unless ensureTaskWorkflowPair reuses an active task's existing pair untouched.
     const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
     const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
     const startingBlock = parseStartingBlockArgument(argsValue);
@@ -104,6 +101,7 @@ Never serialize the runs yourself: each run takes the source-repository lock aro
 
 Wait for every launched run's completion notification, then report one line per task in the order given.
 A run that returns \`report\` failed: print its \`report\` verbatim to the user, in a code block, under that task's line.
+A run without \`report\` stopped at an exit: read the file at its \`outcome.payload\`, say its exitType and exitNote under that task's line, then do what the exitNote says.
 `;
 };
 

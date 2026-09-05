@@ -27,6 +27,17 @@ function buildProject(blocks: { box: string; output: Record<string, unknown>; pr
     return { projectRoot, config, configFile };
 }
 
+// Runs the generated workflow the way the harness would: async body, args/agent/phase as free names.
+// Reuses tackleTasksRetry.test.ts's exact "export const meta" -> "const meta" rewrite for the same reason:
+// the harness's sandbox never sees a top-level `export`.
+function runWorkflowScript(script: string, args: Record<string, unknown>, agentResults: unknown[]): Promise<Record<string, unknown>> {
+    let call = 0;
+    const agent = () => Promise.resolve(agentResults[call++]);
+    const phase = () => {};
+    const body = script.replace("export const meta", "const meta");
+    return new Function("args", "agent", "phase", `return (async () => {\n${body}\n})()`)(args, agent, phase);
+}
+
 const REPO_STEPS_JSON = join(import.meta.dirname, "..", "scripts", "steps.json");
 
 // The agent copies two strings; a payload path, never a payload object, so there is nothing to retype.
@@ -122,6 +133,54 @@ test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
 test("test_buildWorkflowScript_startsAtArgsStartingBlockWhenGiven", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
     assert.match(script, /let blockToRun = args\.startingBlock \?\? START_STEP/);
+});
+
+test("test_buildWorkflowScript_reportsAgentDeathWhenAgentReturnsNull", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [null]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.ran, []);
+    assert.deepEqual(result.errors, ["PREAMBLE_STATUS_CHECK: agent died or was skipped"]);
+    assert.equal(typeof result.prompt, "string");
+    assert.ok((result.prompt as string).length > 0);
+    assert.equal(result.outcome, null);
+});
+
+test("test_buildWorkflowScript_reportsATextAnswerWhenAgentReturnsAString", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, ["the agent's raw text"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.errors, ["PREAMBLE_STATUS_CHECK: agent answered with text, not the hook output", "the agent's raw text"]);
+    assert.equal(result.outcome, null);
+});
+
+test("test_buildWorkflowScript_stopsAndForwardsTheReportWhenTheHookOutputSaysNotOk", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [
+        { ok: false, ran: ["one.mmd::A"], errors: ["boom"], outcome: null, report: "see the run for detail" },
+    ]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.ran, ["one.mmd::A"]);
+    assert.deepEqual(result.errors, ["boom"]);
+    assert.equal(result.report, "see the run for detail");
+});
+
+test("test_buildWorkflowScript_reportsEmptyRanWhenTheAgentSkippedTheHook", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [{ ok: true, ran: [] }]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.errors, ["PREAMBLE_STATUS_CHECK: agent answered without a hook output/payload/packet"]);
+    assert.equal(result.outcome, null);
+});
+
+test("test_buildWorkflowScript_stopsSuccessfullyWhenOutcomeNextIsNull", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [
+        { ok: true, ran: ["one.mmd::A"], outcome: { next: null, payload: "/tmp/p.json" } },
+    ]);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.outcome, { next: null, payload: "/tmp/p.json" });
 });
 
 test("test_assertStartStepIsInConfig_throwsWhenTheStartStepIsMissing", () => {

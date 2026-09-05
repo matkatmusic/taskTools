@@ -27,12 +27,13 @@ test("test_readJsonFile_throwsWhenTheFileIsMissing", () => {
     assert.throws(() => readJsonFile(path), /ENOENT/);
 });
 
-test("test_readJsonFile_doesNotNameThePathForNonEmptyMalformedContent", () => {
+test("test_readJsonFile_throwsNamingThePathForNonEmptyTruncatedContentWithTheOriginalAsCause", () => {
     const path = tempPath();
     writeFileSync(path, "{\"a\":");
     assert.throws(() => readJsonFile(path), (error: unknown) => {
-        assert.ok(error instanceof SyntaxError);
-        assert.equal((error as Error).message.includes(path), false);
+        assert.ok(error instanceof Error);
+        assert.ok((error as Error).message.includes(path));
+        assert.ok((error as Error & { cause?: unknown }).cause instanceof SyntaxError);
         return true;
     });
 });

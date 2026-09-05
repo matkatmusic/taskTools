@@ -3,13 +3,15 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ResetScope } from "../contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./shared/writeTaskBrief.ts";
 import { resetAttemptCounts } from "./shared/taskRunState.ts";
 import { readJsonFile } from "./shared/readJsonFile.ts";
 import { writeCheckpoint } from "./shared/checkpoint.ts";
+import { resolveTaskFiles, taskWorkflowDirectory } from "../taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting } from "../generateSteps.ts";
 
 // These blocks read plans/plan.json, plans/codex-review.json, or a prompt file. Cleanup removes those with the worktree and nothing keeps a copy, so a resume there has no input to work from. The brief is the one file a reset can make again.
 // const BLOCKS_THAT_NEED_LOST_WORKTREE_FILES = [
@@ -22,8 +24,16 @@ import { writeCheckpoint } from "./shared/checkpoint.ts";
 export async function resetTask(taskNumber: number, block: string): Promise<string> {
     const lines: string[] = [];
     if (!Number.isInteger(taskNumber) || taskNumber <= 0) throw new Error("usage: resetTask <taskNumber> [<block>]");
+    const repoRoot = execSync("git rev-parse --show-toplevel").toString().trim();
     // The checkpoint's block is the full `<diagram>::<box>` key; the resume walk needs that, so a bare name gets resolved.
-    const stepsByDiagram: Record<string, { box: string; script: string }[]> = JSON.parse(readFileSync(fileURLToPath(new URL("../steps.json", import.meta.url)), "utf-8"));
+    const stepsConfigPath = join(taskWorkflowDirectory(resolveTaskFiles(repoRoot).tasksPath, taskNumber), "steps.json");
+    // A run that failed before task 10 shipped has no per-task pair yet; regenerate one so reset stays usable.
+    if (!existsSync(stepsConfigPath)) {
+        mkdirSync(dirname(stepsConfigPath), { recursive: true });
+        const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
+        generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+    }
+    const stepsByDiagram: Record<string, { box: string; script: string }[]> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
     const stepKeysNamingBlock = Object.entries(stepsByDiagram).flatMap(([diagram, entries]) => entries.filter((entry) => entry.box === block).map(() => `${diagram}::${block}`));
     if (block !== "" && stepKeysNamingBlock.length !== 1) {
         throw new Error(`block ${block} names ${stepKeysNamingBlock.length} steps in steps.json: ${stepKeysNamingBlock.join(", ")}`);
@@ -37,7 +47,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         scope = blockModule.resetScope ?? {};
     }
 
-    const repoRoot = execSync("git rev-parse --show-toplevel").toString().trim();
+    // repoRoot moved above, before stepsByDiagram is read (task 10).
     const tasksFile = join(repoRoot, ".taskTools", "tasks.json");
     const completedFile = join(repoRoot, ".taskTools", "completedTasks.json");
 

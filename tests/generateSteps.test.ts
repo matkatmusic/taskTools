@@ -341,3 +341,13 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
         "pipeline-preambleStatusCheck.mmd::SECOND_BOX",
     ]);
 });
+
+// A stale committed steps.json fails here; npm run steps regenerates it.
+test("test_generateSteps_theCommittedStepsJsonIsUpToDate", () => {
+    const committedStepsJsonPath = join(PROJECT_ROOT, "scripts/steps.json");
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-committed-")), "steps.json");
+    // Seeds the previous-config read so hand-written `mutating: true` flags carry forward.
+    copyFileSync(committedStepsJsonPath, tempConfigPath);
+    generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    assert.equal(readFileSync(tempConfigPath, "utf8"), readFileSync(committedStepsJsonPath, "utf8"));
+});

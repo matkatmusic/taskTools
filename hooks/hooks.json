@@ -13,7 +13,8 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
+            "timeout": 900
           },
           {
             "type": "command",
@@ -62,12 +63,22 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
+            "timeout": 900
           },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskTestsHook.ts\"",
             "timeout": 600
+          }
+        ]
+      },
+      {
+        "matcher": "Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/workflowLivenessHook.ts\""
           }
         ]
       }

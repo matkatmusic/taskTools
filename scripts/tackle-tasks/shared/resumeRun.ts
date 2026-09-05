@@ -7,6 +7,7 @@ import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepare
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
 import { readTaskRunState, reopenTaskRun, endTaskRun } from "./taskRunState.ts";
 import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
+import { readRetainedResetIntent } from "./resetIntent.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { checkpointPath, readCheckpoint, writeCheckpoint, type Checkpoint } from "./checkpoint.ts";
 
@@ -16,6 +17,9 @@ export function findResumeEntry(taskNumber: number, tasksFile: string): { block:
 
     const state = readTaskRunState(taskNumber, projectRoot);
     const newest = state.history[state.history.length - 1] ?? null;
+    if (newest !== null && newest.tailCursor) { // row 0: an exit-tail cursor always outranks the worktree checkpoint
+        return { block: newest.tailCursor.block, input: newest.tailCursor.input };
+    }
     const worktree = state.worktree;
     const usableWorktree = worktree !== null && existsSync(worktree) && existsSync(checkpointPath(worktree));
 
@@ -38,6 +42,18 @@ export function findResumeEntry(taskNumber: number, tasksFile: string): { block:
     }
 
     if (state.active) { // row 4
+        if (worktree !== null) {
+            const resetIntent = readRetainedResetIntent(worktree);
+            if (resetIntent !== null && resetIntent.runId === newest!.runId) {
+                const input = JSON.stringify({
+                    box: "TAKE_WORKTREE_LEASE_BEFORE_RESET", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+                    taskNumber, runId: newest!.runId, projectRoot,
+                    worktree: resetIntent.worktreePath, branch: resetIntent.branch,
+                    docsMode: "", planFile: "", exitType: "", exitNote: "",
+                });
+                return { block: "pipeline-preambleStatusCheck.mmd::RESET_WORKTREE", input };
+            }
+        }
         writeTaskExitNotes({
             taskNumber, runId: newest!.runId, projectRoot,
             exitType: "agent-failed", exitNote: "run stopped before a worktree existed",

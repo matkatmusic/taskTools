@@ -44,7 +44,7 @@ function packet(projectRoot: string, worktree: string, taskNumber: number) {
     return { box: "ARE_TASK_TESTS_SKIPPED_Q", scriptSignal: "continue", taskNumber, runId: "run-1", projectRoot, worktree, branch: "task-1", exitType: "", exitNote: "" };
 }
 
-test("test_main_recordsAPassWhenTheBranchAddsAPassingTest", () => {
+test("test_main_recordsAPassWhenTheBranchAddsAPassingTest", async () => {
     const rootOrigin = makeTempRepoWithCommit();
     const worktree = createLinkedWorktree(rootOrigin);
     mkdirSync(join(worktree, "tests"), { recursive: true });
@@ -54,25 +54,25 @@ test("test_main_recordsAPassWhenTheBranchAddsAPassingTest", () => {
     seedOpenTaskAndClaim(rootOrigin, 1);
 
     const input = packet(rootOrigin, worktree, 1);
-    const output = main(JSON.stringify(input));
+    const output = await main(JSON.stringify(input));
 
     assert.deepEqual(output, { ...input, box: "RUN_TASK_TESTS" });
     assert.equal(getCurrentTaskRun(1, rootOrigin)?.taskTests?.passed, true);
 });
 
-test("test_main_recordsAFailWhenTheTaskDeclaresTestsAndTheBranchAddedNone", () => {
+test("test_main_recordsAFailWhenTheTaskDeclaresTestsAndTheBranchAddedNone", async () => {
     const rootOrigin = makeTempRepoWithCommit();
     const worktree = createLinkedWorktree(rootOrigin);
     seedOpenTaskAndClaim(rootOrigin, 2, { tests: "add a test for the widget" });
 
     const input = packet(rootOrigin, worktree, 2);
-    const output = main(JSON.stringify(input));
+    const output = await main(JSON.stringify(input));
 
     assert.deepEqual(output, { ...input, box: "RUN_TASK_TESTS" });
     assert.equal(getCurrentTaskRun(2, rootOrigin)?.taskTests?.passed, false);
 });
 
-test("test_RUN_TASK_TESTS_runsTwiceWithTheSameInput", () => {
+test("test_RUN_TASK_TESTS_runsTwiceWithTheSameInput", async () => {
     const rootOrigin = makeTempRepoWithCommit();
     const worktree = createLinkedWorktree(rootOrigin);
     mkdirSync(join(worktree, "tests"), { recursive: true });
@@ -83,9 +83,9 @@ test("test_RUN_TASK_TESTS_runsTwiceWithTheSameInput", () => {
 
     const input = packet(rootOrigin, worktree, 3);
     // checkedAt and output embed real wall-clock timing (node --test stamps its own duration); everything else must match.
-    const firstOutput = main(JSON.stringify(input));
+    const firstOutput = await main(JSON.stringify(input));
     const { checkedAt: _firstCheckedAt, output: _firstOutputText, ...firstTaskTests } = getCurrentTaskRun(3, rootOrigin)?.taskTests ?? {};
-    const secondOutput = main(JSON.stringify(input));
+    const secondOutput = await main(JSON.stringify(input));
     const { checkedAt: _secondCheckedAt, output: _secondOutputText, ...secondTaskTests } = getCurrentTaskRun(3, rootOrigin)?.taskTests ?? {};
 
     assert.deepEqual(secondOutput, firstOutput);

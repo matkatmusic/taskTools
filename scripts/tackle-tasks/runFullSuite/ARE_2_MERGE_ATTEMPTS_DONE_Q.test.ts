@@ -78,11 +78,14 @@ test("test_ARE_2_MERGE_ATTEMPTS_DONE_Q_exitsMergeFailedAfterTwoAttempts", () => 
     seedCheckpoint(taskNumber, runId, worktree, "pass-0");
     main(packet(taskNumber, runId, projectRoot));
     seedCheckpoint(taskNumber, runId, worktree, "pass-1");
-    const result = main(packet(taskNumber, runId, projectRoot));
+    const packetWithReason = JSON.parse(packet(taskNumber, runId, projectRoot));
+    packetWithReason.failureReason = "conflict in scripts/foo.ts";
+    const result = main(JSON.stringify(packetWithReason));
 
     assert.equal(result.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
     assert.equal(result.exitType, "merge-failed");
-    assert.equal(result.exitNote, "nothing landed after 2 attempts. worktree preserved.");
+    assert.match(String(result.exitNote), /conflict in scripts\/foo\.ts/);
+    assert.match(String(result.exitNote), new RegExp(`\\/tackle-tasks \\[${taskNumber}\\] MERGE_WORKTREES`));
 });
 
 test("test_ARE_2_MERGE_ATTEMPTS_DONE_Q_countsOnceWhenRunTwiceWithTheSameCheckpoint", () => {

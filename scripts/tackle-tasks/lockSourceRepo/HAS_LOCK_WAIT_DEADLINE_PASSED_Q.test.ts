@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { main } from "./HAVE_15_MINUTES_PASSED_Q.ts";
+import { main } from "./HAS_LOCK_WAIT_DEADLINE_PASSED_Q.ts";
 
 const BASE_INPUT = {
     runId: "run-a",
@@ -12,7 +12,7 @@ const BASE_INPUT = {
     exitNote: "",
 };
 
-test("test_have15MinutesPassed_waitsAgainBeforeTheCap", () => {
+test("test_hasLockWaitDeadlinePassed_waitsAgainBeforeTheCap", () => {
     const lockWaitStartedAt = new Date(Date.now() - 60_000).toISOString();
 
     const result = main(JSON.stringify({ ...BASE_INPUT, lockWaitStartedAt }));
@@ -22,12 +22,21 @@ test("test_have15MinutesPassed_waitsAgainBeforeTheCap", () => {
     assert.equal(result.exitNote, "");
 });
 
-test("test_have15MinutesPassed_exitsRunFailedAfterTheCap", () => {
+test("test_hasLockWaitDeadlinePassed_exitsRunFailedAfterTheCap", () => {
     const lockWaitStartedAt = new Date(Date.now() - 16 * 60 * 1000).toISOString();
 
     const result = main(JSON.stringify({ ...BASE_INPUT, lockWaitStartedAt }));
 
     assert.equal(result.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
     assert.equal(result.exitType, "run-failed");
-    assert.equal(result.exitNote, "the source repo lock did not come free within 15 minutes");
+    assert.equal(result.exitNote, "the source repo lock did not come free within 5 minutes");
+});
+
+test("test_hasLockWaitDeadlinePassed_exitsRunFailedBeforeTheOldFifteenMinuteCap", () => {
+    const lockWaitStartedAt = new Date(Date.now() - 9 * 60 * 1000).toISOString();
+
+    const result = main(JSON.stringify({ ...BASE_INPUT, lockWaitStartedAt }));
+
+    assert.equal(result.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
+    assert.equal(result.exitType, "run-failed");
 });

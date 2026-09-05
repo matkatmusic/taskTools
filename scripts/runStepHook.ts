@@ -10,10 +10,11 @@ import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps
 import { readCheckpoint, writeCheckpoint } from "./tackle-tasks/shared/checkpoint.ts";
 import { writeJsonAtomically } from "./taskStateLock.ts";
 import { readJsonFile } from "./tackle-tasks/shared/readJsonFile.ts";
+import { taskWorkflowDirectory } from "./taskFiles.ts";
 import { resetTask } from "./tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
-import { resetAttemptCounts } from "./tackle-tasks/shared/taskRunState.ts";
+import { resetAttemptCounts, writeTailCursor } from "./tackle-tasks/shared/taskRunState.ts";
 import { SOURCE_LOCK_REACHABLE, SOURCE_LOCK_UNREACHABLE } from "./resultCodes.ts";
 
 // Registered first so a throw while this file loads still reports, instead of dying silently.
@@ -21,17 +22,37 @@ process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
     mkdirSync(dirname(logFile()), { recursive: true });
-    // Never re-reads the existing log: a log that is corrupt at the moment this fires cannot be
-    // safely re-parsed without a try/catch, so this always starts a fresh one instead of risking
-    // a second, unrecoverable throw inside the handler of last resort.
+    // Never re-reads the log since it may be corrupt; this last-resort handler always starts a fresh one instead.
     writeJsonAtomically(logFile(), [{ block: "HOOK EXCEPTION", reason }]);
     process.exit(0);
 });
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
-const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? DEFAULT_CONFIG_FILE;
+let CONFIG_FILE: string;
 const SUCCESS_DIAGRAM = "pipeline-mergeSucceededExit.mmd";
+
+// The env var is a test-only escape hatch (hooks.json sets no env for a real invocation); a real run's config is derived from its own packet, never accepted as a live override, so nothing can redirect a run already in flight.
+// startInput is either the first pass's raw packet ({taskNumber, tasksFile, ...}) or a later pass's {packetFile: ...}
+// wrapper; PREAMBLE_STATUS_CHECK.ts drops tasksFile from every packet after the first, so a later pass is resolved
+// from the packet's own projectRoot instead.
+function resolveConfigFile(startInput: string): string {
+    if (process.env.RUN_STEP_CONFIG) {
+        return process.env.RUN_STEP_CONFIG;
+    }
+    const wrapper = getPacketFromInput(startInput);
+    const packet = typeof wrapper.packetFile === "string" ? JSON.parse(readFileSync(wrapper.packetFile, "utf8")) as Record<string, unknown> : wrapper;
+    if (packet.taskNumber === undefined) {
+        return DEFAULT_CONFIG_FILE;
+    }
+    if (typeof packet.tasksFile === "string") {
+        return join(taskWorkflowDirectory(packet.tasksFile, Number(packet.taskNumber)), "steps.json");
+    }
+    if (typeof packet.projectRoot === "string") {
+        return join(taskWorkflowDirectory(join(packet.projectRoot, ".taskTools", "tasks.json"), Number(packet.taskNumber)), "steps.json");
+    }
+    return DEFAULT_CONFIG_FILE;
+}
 
 // Local time, filesystem-safe, one per process: 2026-08-27T10-08-19-4213.
 function runStamp(): string {
@@ -76,7 +97,7 @@ type HookOutput = {
     report?: string;
 };
 
-const CONFIG = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+let CONFIG: StepConfig;
 
 // Every diagram's boxes in one map, keyed "diagram.mmd::BOX", so a seam is a plain lookup.
 function buildStepsByKey(config: StepConfig): Map<string, Step> {
@@ -89,7 +110,7 @@ function buildStepsByKey(config: StepConfig): Map<string, Step> {
     return stepsByKey;
 }
 
-const STEPS_BY_KEY = buildStepsByKey(CONFIG);
+let STEPS_BY_KEY: Map<string, Step>;
 
 // A bare box id names its own diagram; one with :: names another.
 function getStepKey(boxReference: string, fromDiagram: string): string {
@@ -202,14 +223,50 @@ function isInsideSourceLock(stepKey: string): number {
     return reached.has(stepKey) ? SOURCE_LOCK_REACHABLE : SOURCE_LOCK_UNREACHABLE;
 }
 
-// A walk that could not finish has no outcome to report, so the reasons stand on their own.
-function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
+// A failed walk has no outcome, unless its worktree lives outside an exit diagram, then it joins the tail.
+function buildFailure(
+    boxesRun: string[],
+    errors: string[],
+    context: { step: Step; packet: Record<string, unknown>; input: string; startedFromPacketFile: boolean } | null = null,
+): HookOutput {
     mkdirSync(dirname(logFile()), { recursive: true });
     const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
     runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
     writeJsonAtomically(logFile(), runLogEntries);
     const report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
-    return { ok: false, ran: boxesRun, errors, outcome: null, report };
+    if (context === null) return { ok: false, ran: boxesRun, errors, outcome: null, report };
+    if (EXIT_DIAGRAMS.includes(context.step.diagram)) return { ok: false, ran: boxesRun, errors, outcome: null, report };
+    const worktree = typeof context.packet.worktree === "string" ? context.packet.worktree : "";
+    const worktreeExists = worktree !== "" && existsSync(worktree);
+    if (!worktreeExists) return { ok: false, ran: boxesRun, errors, outcome: null, report };
+    if (!STEPS_BY_KEY.has(FAILURES_EXIT_KEY)) return { ok: false, ran: boxesRun, errors, outcome: null, report };
+
+    const stepKey = `${context.step.diagram}::${context.step.box}`;
+    const existing = readCheckpoint(worktree);
+    const sourceLockHeld = readSourceRepoLock(String(context.packet.projectRoot ?? ""))?.owner
+        === buildLockOwner(String(context.packet.runId ?? ""), Number(context.packet.taskNumber));
+    const consumedAPrompt = context.startedFromPacketFile && boxesRun.length === 1;
+    const exitNote = errors.join("\n");
+    if (consumedAPrompt && existing === null) throw new Error(`${stepKey} answered a prompt but ${worktree} holds no checkpoint`);
+    writeCheckpoint(worktree, {
+        taskNumber: Number(context.packet.taskNumber),
+        passId: existing?.passId ?? randomUUID(),
+        runId: String(context.packet.runId ?? ""),
+        projectRoot: String(context.packet.projectRoot ?? ""),
+        block: consumedAPrompt ? existing!.block : stepKey,
+        input: consumedAPrompt ? existing!.input : context.input,
+        state: "failed",
+        sourceLockHeld,
+        exitType: "block-failed",
+        exitNote,
+        resumedFrom: existing?.resumedFrom ?? null,
+    });
+    const tailInput = JSON.stringify({
+        ...context.packet, box: context.step.box, scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+        exitType: "block-failed", exitNote, branch: String(context.packet.branch ?? ""),
+    });
+    const tailResult = walkFromStep(FAILURES_EXIT_KEY, tailInput, invocation);
+    return { ok: false, ran: [...boxesRun, ...tailResult.ran], errors, outcome: null, report };
 }
 
 function readTemplate(step: Step): BlockTemplate {
@@ -280,6 +337,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildFailure([], [`packet file ${startPacket.packetFile} is empty`]);
         }
         const { prompt: _prompt, startedAt, ...packet } = JSON.parse(packetFileText);
+        if (packet.taskNumber !== undefined) currentTaskNumber = Number(packet.taskNumber);
         // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
         const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
         const promptBoxStepKey = getStepKeysNamingBox(promptBox)[0];
@@ -315,7 +373,7 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     const boxesRun: string[] = [];
     let stepKey = startStepKey;
     let input = startInput;
-    let inFailureChain = false;
+    let inFailureChain = startStepKey.startsWith("pipeline-failuresExit.mmd::");
     while (true) {
         const step = STEPS_BY_KEY.get(stepKey)!;
         const packet = getPacketFromInput(input);
@@ -339,33 +397,40 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
                 resumedFrom: existing?.resumedFrom ?? null,
             });
         }
+        // Inside an exit tail, the checkpoint freezes; this durable cursor lets a later box resume after a crash.
+        if (inFailureChain) {
+            // A box with no successor needs no cursor; one would undo REPORT_EXIT_TYPE_AND_NOTE's clear.
+            if (step.next.length > 0) {
+                writeTailCursor(Number(packet.taskNumber), String(packet.runId ?? ""), { block: stepKey, input }, String(packet.projectRoot ?? ""));
+            }
+        }
         const stepRun = runStepScript(step, input, invocation);
         boxesRun.push(stepKey);
 
         if (!stepRun.ok) {
             // ponytail: a null exit code means killed, and the timeout is the only thing that kills a block here.
             const why = stepRun.exitCode === null ? `did not exit within ${STEP_TIMEOUT_MS}ms` : `exited ${stepRun.exitCode}`;
-            return buildFailure(boxesRun, [`${stepKey} ${why}`, stepRun.stdout]);
+            return buildFailure(boxesRun, [`${stepKey} ${why}`, stepRun.stdout], { step, packet, input, startedFromPacketFile });
         }
         if (!stepRun.result) {
-            return buildFailure(boxesRun, [`${stepKey} printed no result object`, stepRun.stdout]);
+            return buildFailure(boxesRun, [`${stepKey} printed no result object`, stepRun.stdout], { step, packet, input, startedFromPacketFile });
         }
 
         const scriptSignal = stepRun.result.scriptSignal as ScriptSignal;
         if (!KNOWN_SCRIPT_SIGNALS.includes(scriptSignal)) {
             const knownList = KNOWN_SCRIPT_SIGNALS.map(known => JSON.stringify(known)).join(", ");
-            return buildFailure(boxesRun, [`${stepKey} scriptSignal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.scriptSignal)}`]);
+            return buildFailure(boxesRun, [`${stepKey} scriptSignal must be one of ${knownList}, not ${JSON.stringify(stepRun.result.scriptSignal)}`], { step, packet, input, startedFromPacketFile });
         }
         // The diagram's returns_a_prompt mark and the printed scriptSignal must agree, both ways.
         if (step.producesPrompt && scriptSignal !== SCRIPT_SIGNAL.PROMPT) {
-            return buildFailure(boxesRun, [`${stepKey} is marked returns_a_prompt but printed scriptSignal ${JSON.stringify(scriptSignal)}`]);
+            return buildFailure(boxesRun, [`${stepKey} is marked returns_a_prompt but printed scriptSignal ${JSON.stringify(scriptSignal)}`], { step, packet, input, startedFromPacketFile });
         }
         if (!step.producesPrompt && scriptSignal === SCRIPT_SIGNAL.PROMPT) {
-            return buildFailure(boxesRun, [`${stepKey} printed scriptSignal "prompt" but is not marked returns_a_prompt in its diagram`]);
+            return buildFailure(boxesRun, [`${stepKey} printed scriptSignal "prompt" but is not marked returns_a_prompt in its diagram`], { step, packet, input, startedFromPacketFile });
         }
         const contractMismatches = getOutputContractMismatches(step, stepRun.result);
         if (contractMismatches.length > 0) {
-            return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches]);
+            return buildFailure(boxesRun, [`${stepKey} output breaks its contract`, ...contractMismatches], { step, packet, input, startedFromPacketFile });
         }
         if (scriptSignal === SCRIPT_SIGNAL.STOP) {
             return buildSuccess(boxesRun, stepKey, stepRun, input);
@@ -375,21 +440,21 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
             return buildSuccess(boxesRun, stepKey, stepRun, input);
         }
         if (step.next.length === 0) {
-            return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`]);
+            return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`], { step, packet, input, startedFromPacketFile });
         }
 
         // A box with one successor may leave next out of its output; a decision box must name its choice.
         const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
         const chosenNextBox = stepRun.result.next ?? onlySuccessor;
         if (chosenNextBox === undefined) {
-            return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`]);
+            return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`], { step, packet, input, startedFromPacketFile });
         }
         if (!step.next.includes(String(chosenNextBox))) {
-            return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`]);
+            return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`], { step, packet, input, startedFromPacketFile });
         }
         const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
         if (!STEPS_BY_KEY.has(nextStepKey)) {
-            return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`]);
+            return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`], { step, packet, input, startedFromPacketFile });
         }
         if (nextStepKey === FAILURES_EXIT_KEY && !inFailureChain) {
             if (worktreeExists) {
@@ -495,6 +560,9 @@ const invocation = `/run-step ${argumentText}`.trim();
 const argumentMatch = argumentText.match(/^("[^"]*"|'[^']*'|\S+)\s*([\s\S]*)$/) ?? [];
 const startBoxId = (argumentMatch[1] ?? "").replace(/^(["'])(.*)\1$/s, "$2");
 const startInput = (argumentMatch[2] ?? "").trim();
+CONFIG_FILE = resolveConfigFile(startInput);
+CONFIG = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as StepConfig;
+STEPS_BY_KEY = buildStepsByKey(CONFIG);
 const startStepKeys = startBoxId.includes("::")
     ? [startBoxId].filter(stepKey => STEPS_BY_KEY.has(stepKey))
     : getStepKeysNamingBox(startBoxId);

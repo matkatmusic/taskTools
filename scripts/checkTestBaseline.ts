@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { judgeSuite, newFailingTests, parseFailingTests, readKnownFailingTests, runSuite } from "./taskTestsRunner.ts";
 
 const projectRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const suite = runSuite(projectRoot);
+const suite = await runSuite(projectRoot);
 const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
 const newFailures = newFailingTests(failing, readKnownFailingTests(projectRoot));
 const passed = judgeSuite(suite.allPassing, failing, newFailures);

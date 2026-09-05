@@ -1,6 +1,8 @@
 // The one file the hook writes before every block, so a killed run can continue at that block. Lives inside the task worktree.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readJsonFile } from "./readJsonFile.ts";
+import { writeJsonAtomically } from "../../taskStateLock.ts";
 
 export type Checkpoint = {
     taskNumber: number;
@@ -23,11 +25,11 @@ export function checkpointPath(worktree: string): string {
 export function readCheckpoint(worktree: string): Checkpoint | null {
     const path = checkpointPath(worktree);
     if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf8")) as Checkpoint;
+    return readJsonFile(path) as Checkpoint;
 }
 
 export function writeCheckpoint(worktree: string, checkpoint: Checkpoint): void {
     const path = checkpointPath(worktree);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(checkpoint, null, 4)}\n`);
+    writeJsonAtomically(path, checkpoint);
 }

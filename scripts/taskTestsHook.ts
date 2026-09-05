@@ -33,7 +33,7 @@ function emit(additionalContext: string): never {
     process.exit(0);
 }
 
-const suite = runSuite(cwd);
+const suite = await runSuite(cwd);
 const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
 writeKnownFailingTests(projectRoot, failing);
 

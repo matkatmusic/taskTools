@@ -59,5 +59,6 @@ test("test_DID_CHANGES_STAY_INSIDE_FENCE_Q_choosesExitWhenAnUnownedFileChanged",
 
     assert.equal(output.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
     assert.equal(output.exitType, "fence-violation");
-    assert.match(String(output.exitNote), /task does not own/);
+    assert.match(String(output.exitNote), /sneaky\.txt/);
+    assert.match(String(output.exitNote), /\/tackle-tasks \[702\] DO_ALL_TESTS_PASS_Q/);
 });

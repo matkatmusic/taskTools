@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import {
     acquireSourceRepoLock,
     buildLockOwner,
@@ -55,6 +56,21 @@ function spawnLockCall(functionCall: string): Promise<unknown> {
 
 function wait(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Polls until the guard file exists AND is fully written, not just created (openSync makes it visible before writeFileSync fills it in).
+async function waitForCompleteMutationGuard(guardPath: string): Promise<void> {
+    while (true) {
+        if (existsSync(guardPath)) {
+            try {
+                JSON.parse(readFileSync(guardPath, "utf8"));
+                return;
+            } catch {
+                // not yet fully written; keep polling
+            }
+        }
+        await wait(5);
+    }
 }
 
 test("test_buildLockOwner_joinsRunIdAndTaskNumberWithAColon", () => {
@@ -386,6 +402,182 @@ test("test_releaseSourceRepoLock_pausedReleaseBlocksAReplacementAcquisitionAndNe
     assert.deepEqual(acquireResult, { status: "acquired" });
     // Step: release never removes B — it had already unlinked A before B ever existed.
     assert.equal(readSourceRepoLock(root)?.owner, ownerB);
+});
+
+test("test_acquireSourceRepoLock_stampsTheMutationGuardWithTheCallersOwnerToken", async () => {
+    // Step: acquisition pauses inside the guard before it publishes the outer lock.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-500", 500);
+    const pausePath = join(root, "pause-guard-stamp");
+    const acquireCall = spawnLockCall(
+        `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(pausePath)} } })`,
+    );
+    await wait(150);
+    // Step: the guard file, read while still held, must carry the caller's owner token.
+    let guard: { owner?: unknown; pid?: unknown; createdAt?: unknown };
+    try {
+        guard = JSON.parse(readFileSync(join(root, ".git", "taskTools-source.lock.mutation-guard"), "utf8"));
+    } finally {
+        writeFileSync(pausePath, "");
+    }
+    const result = await acquireCall;
+    assert.deepEqual(result, { status: "acquired" });
+    assert.equal(guard.owner, owner);
+    assert.equal(typeof guard.pid, "number");
+    assert.equal(typeof guard.createdAt, "string");
+});
+
+test("test_reclaimDeadMutationGuard_throwsOnAGuardWithNoParseablePid", () => {
+    // Step: the guard file exists but its bytes are not JSON at all.
+    const root = makeProjectRoot();
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    writeFileSync(guardPath, "not json");
+    // Step: an acquisition hitting the timeout must surface the corruption, not fold it into the generic timeout message.
+    assert.throws(
+        () => acquireSourceRepoLock(root, buildLockOwner("run-501", 501), { timeoutMs: 200 }),
+        (error: Error) => error.message.includes(guardPath) && error.message.includes("not json"),
+    );
+    // Step: the throw happens before any removal is attempted; the guard is untouched.
+    assert.equal(readFileSync(guardPath, "utf8"), "not json");
+});
+
+test("test_acquireSourceRepoLock_neverReclaimsAGuardHeldByALiveProcess", async () => {
+    // Step: a child acquires the guard and pauses inside it forever, so it is genuinely alive and holding it.
+    const root = makeProjectRoot();
+    const neverCreatedPausePath = join(root, "never-created-pause");
+    const childSource = `
+        import { acquireSourceRepoLock, buildLockOwner } from ${JSON.stringify(sourceRepoLockModulePath)};
+        acquireSourceRepoLock(${JSON.stringify(root)}, buildLockOwner("run-502", 502), `
+        + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(neverCreatedPausePath)} } });
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    await waitForCompleteMutationGuard(guardPath);
+    // Step: a second acquirer times out against the still-live guard.
+    assert.throws(
+        () => acquireSourceRepoLock(root, buildLockOwner("run-503", 503), { timeoutMs: 200 }),
+        /inspect the PID by hand/,
+    );
+    // Step: the guard is untouched, still naming the live child's pid.
+    assert.equal(JSON.parse(readFileSync(guardPath, "utf8")).pid, child.pid);
+    child.kill("SIGKILL");
+});
+
+test("test_acquireSourceRepoLock_reclaimsAStrandedGuardAfterItsOwningProcessIsKilled", async () => {
+    // Step: a child acquires the guard and pauses just before publishing the outer lock.
+    const root = makeProjectRoot();
+    const pausePath = join(root, "never-created-pause-504");
+    const childSource = `
+        import { acquireSourceRepoLock, buildLockOwner } from ${JSON.stringify(sourceRepoLockModulePath)};
+        acquireSourceRepoLock(${JSON.stringify(root)}, buildLockOwner("run-504", 504), `
+        + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(pausePath)} } });
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    await waitForCompleteMutationGuard(guardPath);
+    // Step: kill the child while it still holds the guard, stranding it.
+    child.kill("SIGKILL");
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL");
+    assert.equal(existsSync(guardPath), true);
+    assert.equal(JSON.parse(readFileSync(guardPath, "utf8")).owner, "run-504:504");
+    // Step: a new acquirer reclaims the stranded guard and succeeds within one call.
+    const outcome = acquireSourceRepoLock(root, buildLockOwner("run-505", 505), { timeoutMs: 200 });
+    assert.deepEqual(outcome, { status: "acquired" });
+    assert.equal(existsSync(guardPath), false);
+    assert.equal(readSourceRepoLock(root)?.owner, "run-505:505");
+});
+
+test("test_refreshSourceRepoLock_reclaimsAStrandedGuardAfterItsOwningProcessIsKilled", async () => {
+    // Step: the durable lock already exists, held by the owner about to refresh it.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-506", 506);
+    acquireSourceRepoLock(root, owner);
+    const pausePath = join(root, "never-created-pause-506");
+    const childSource = `
+        import { refreshSourceRepoLock } from ${JSON.stringify(sourceRepoLockModulePath)};
+        refreshSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ testHooks: { pauseAfterValidateUntilExists: ${JSON.stringify(pausePath)} } });
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    await waitForCompleteMutationGuard(guardPath);
+    child.kill("SIGKILL");
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL");
+    // Step: a later refresh call by the same owner reclaims the stranded guard and succeeds.
+    const outcome = refreshSourceRepoLock(root, owner, { timeoutMs: 200 });
+    assert.deepEqual(outcome, { refreshed: true });
+    assert.equal(existsSync(guardPath), false);
+});
+
+test("test_releaseSourceRepoLock_reclaimsAStrandedGuardAfterItsOwningProcessIsKilled", async () => {
+    // Step: the durable lock already exists, held by the owner about to release it.
+    const root = makeProjectRoot();
+    const owner = buildLockOwner("run-507", 507);
+    acquireSourceRepoLock(root, owner);
+    const pausePath = join(root, "never-created-pause-507");
+    const childSource = `
+        import { releaseSourceRepoLock } from ${JSON.stringify(sourceRepoLockModulePath)};
+        releaseSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ testHooks: { pauseAfterValidateUntilExists: ${JSON.stringify(pausePath)} } });
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    await waitForCompleteMutationGuard(guardPath);
+    child.kill("SIGKILL");
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL");
+    // Step: a later release call by the same owner reclaims the stranded guard and succeeds.
+    const outcome = releaseSourceRepoLock(root, owner, { timeoutMs: 200 });
+    assert.deepEqual(outcome, { released: true });
+    assert.equal(existsSync(guardPath), false);
+});
+
+test("test_acquireSourceRepoLock_exactlyOneOfTwoReclaimersEntersTheGuardedActionAfterADeadGuard", async () => {
+    // Step: a child acquires the guard, is killed, and strands it naming a real, now-dead pid.
+    const root = makeProjectRoot();
+    const neverCreatedPausePath = join(root, "never-created-pause-508");
+    const childSource = `
+        import { acquireSourceRepoLock, buildLockOwner } from ${JSON.stringify(sourceRepoLockModulePath)};
+        acquireSourceRepoLock(${JSON.stringify(root)}, buildLockOwner("run-508", 508), `
+        + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(neverCreatedPausePath)} } });
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], { stdio: "inherit" });
+    const guardPath = join(root, ".git", "taskTools-source.lock.mutation-guard");
+    await waitForCompleteMutationGuard(guardPath);
+    child.kill("SIGKILL");
+    await once(child, "exit");
+
+    // Step: two contenders both confirm the stranded pid is dead, then pause at a shared barrier before either renames the guard.
+    const barrierPath = join(root, "barrier-508");
+    const ownerA = buildLockOwner("run-506", 506);
+    const ownerB = buildLockOwner("run-507", 507);
+    const contenderCall = (owner: string) => spawnLockCall(
+        `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
+        + `{ timeoutMs: 200, testHooks: { pauseAfterDeadGuardCheckUntilExists: ${JSON.stringify(barrierPath)} } })`,
+    );
+    const callA = contenderCall(ownerA);
+    const callB = contenderCall(ownerB);
+    await wait(150);
+    writeFileSync(barrierPath, "");
+    const [resultA, resultB] = await Promise.allSettled([callA, callB]);
+
+    // Step: exactly one contender wins and enters the guarded action; the other loses its rename and never touches the winner's guard or lock.
+    const settled = [resultA, resultB];
+    const fulfilled = settled.filter((result) => result.status === "fulfilled");
+    const rejected = settled.filter((result) => result.status === "rejected");
+    assert.equal(fulfilled.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.deepEqual(fulfilled[0]!.value, { status: "acquired" });
+    assert.match((rejected[0]! as PromiseRejectedResult).reason.message, /inspect the PID by hand/);
+    // Step: the final lock names exactly the winner's owner.
+    const winnerOwner = resultA.status === "fulfilled" ? ownerA : ownerB;
+    assert.equal(readSourceRepoLock(root)?.owner, winnerOwner);
+    // Step: the winner verified and unlinked its own private claim; no leftover reclaim file remains.
+    const leftoverReclaimFiles = readdirSync(join(root, ".git")).filter((name) => name.includes(".reclaimed"));
+    assert.deepEqual(leftoverReclaimFiles, []);
 });
 
 test("test_refreshSourceRepoLock_pausedRefreshBlocksRecoveryAndAcquisition_ownerAIsNeverOverwrittenByB", async () => {
