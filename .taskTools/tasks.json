@@ -119,31 +119,34 @@
     "taskNumber": 194,
     "version": "ef36ad1d5faf1e1aeeaca4955593957169993d6c",
     "title": "Generate one task-N.workflow.js per tackle-tasks invocation, titled 'Tackle-task N'",
-    "userDescription": "invoking 'tackle-task' causes the 'generateWorkflow' script to run, which sets the title of the generated workflow to 'Tackle-task <N>'.  Each workflow run gets its own custom task-N.workflow.js, generated upon invocation of 'tackle-tasks <N>'.  if multiple [N] are provided, multiple task-N.workflow.js are generated, each unique to the N they'll be running.",
+    "userDescription": "invoking 'tackle-task' causes the 'generateWorkflow' script to run, which sets the title of the generated workflow to 'Tackle-task <N>'.  Each workflow run gets its own custom task-N.workflow.js, generated upon invocation of 'tackle-tasks <N>'.  if multiple [N] are provided, multiple task-N.workflow.js are generated, each unique to the N they'll be running.  The task-N.workflow.js is written inside the project that /tackle-tasks was invoked from, at .taskTools/workflows/task-N.workflow.js, so the Workflow tool can read it as a scriptPath. It is never written into the plugin checkout.",
     "goal": [
-      "- Invoking /tackle-tasks [N] writes skills/tackle-tasks/task-N.workflow.js before launching, one file per N",
+      "- Invoking /tackle-tasks [N] writes <projectRoot>/.taskTools/workflows/task-N.workflow.js before launching, one file per N, and the WORKFLOW line passes that path as scriptPath",
       "- Each generated file's meta.name is 'Tackle-task N' so /workflows shows that title",
-      "- Invoking /tackle-tasks [191,193] yields task-191.workflow.js and task-193.workflow.js, each carrying only its own task number"
+      "- Invoking /tackle-tasks [191,193] yields task-191.workflow.js and task-193.workflow.js, each carrying only its own task number",
+      "- The file lives in the project the skill is invoked from, never in the plugin checkout: the Workflow tool reads a scriptPath only from the session working directory, and the plugin checkout is a different directory in every project except this one",
+      "- .taskTools/workflows/ is ignored by the project git, the same way .taskTools/runs/ is"
     ],
     "notInScope": [
       "- Changing which diagrams the pipeline runs; task 191 owns the settings.json diagram choice",
       "- Changing the pipeline blocks themselves"
     ],
     "problemSolvedByTask": "All tackle-tasks runs share one workflow file named 'tackle-tasks', so /workflows cannot tell which run is which task.",
-    "description": "scripts/generateWorkflow.ts's buildWorkflowScript() hardcodes meta.name 'tackle-tasks' and generateWorkflow() always writes the single constant WORKFLOW_FILE (skills/tackle-tasks/tackle-tasks.workflow.js); neither takes a task number. scripts/tackle-tasks/shared/SkillBodyEmitter.ts's skillBody() calls generateWorkflow(TASK_WORKFLOW_PATH) once per invocation regardless of how many task numbers it parses, so every emitted WORKFLOW line points at the same shared file and fixed title. The fix: buildWorkflowScript/generateWorkflow take a task number and set meta.name 'Tackle-task <N>'; SkillBodyEmitter writes one task-<N>.workflow.js per task number instead of sharing TASK_WORKFLOW_PATH. tests/generateWorkflow.test.ts (test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt, test_generateWorkflow_theCommittedWorkflowIsUpToDate) and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts (test_skillBody_writesTheWorkflowFileFromTheGenerator, test_skillBody_launchesOneWorkflowPerTaskNumberInTheOrderGiven) pin today's fixed-title, shared-file behavior and must change. The checked-in tackle-tasks.workflow.js and its 'committed workflow is up to date' test assume one committed generated file; that assumption must be retired or repointed once files are generated per task number.",
+    "description": "scripts/generateWorkflow.ts's buildWorkflowScript() hardcodes meta.name 'tackle-tasks' and generateWorkflow() always writes the single constant WORKFLOW_FILE (skills/tackle-tasks/tackle-tasks.workflow.js); neither takes a task number. scripts/tackle-tasks/shared/SkillBodyEmitter.ts's skillBody() calls generateWorkflow(TASK_WORKFLOW_PATH) once per invocation regardless of how many task numbers it parses, so every emitted WORKFLOW line points at the same shared file and fixed title. The fix: buildWorkflowScript/generateWorkflow take a task number and set meta.name 'Tackle-task <N>'; SkillBodyEmitter writes one task-<N>.workflow.js per task number instead of sharing TASK_WORKFLOW_PATH. tests/generateWorkflow.test.ts (test_buildWorkflowScript_startsWithAMetaBlockAndSaysNotToEditIt, test_generateWorkflow_theCommittedWorkflowIsUpToDate) and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts (test_skillBody_writesTheWorkflowFileFromTheGenerator, test_skillBody_launchesOneWorkflowPerTaskNumberInTheOrderGiven) pin today's fixed-title, shared-file behavior and must change. The checked-in tackle-tasks.workflow.js and its 'committed workflow is up to date' test assume one committed generated file; that assumption must be retired or repointed once files are generated per task number. Location: the per-task file goes to <projectRoot>/.taskTools/workflows/task-<N>.workflow.js, where projectRoot is the project skillBody() receives, not the plugin checkout. Reason: the Workflow tool rejects a scriptPath outside the session working directory ('scriptPath must be a script path this tool returned, or a file you can already read'), and a project session cannot read the plugin checkout. The task worktree is not an option either: the workflow creates it, and it sits under the system temp folder. Add .taskTools/workflows/ to .gitignore next to .taskTools/runs/.",
     "modifiableFiles": [
       "scripts/generateWorkflow.ts",
       "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
       "tests/generateWorkflow.test.ts",
       "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
-      "skills/tackle-tasks/tackle-tasks.workflow.js"
+      "skills/tackle-tasks/tackle-tasks.workflow.js",
+      ".gitignore"
     ],
     "readOnlyFiles": [
       "*"
     ],
     "schemaVersion": "1.0.1",
     "hasTests": true,
-    "tests": "Run the tackle-tasks skill body emitter with tasks [191,193] in a temp project and assert task-191.workflow.js and task-193.workflow.js exist, each with meta.name 'Tackle-task <N>' and its own task number in args.",
+    "tests": "Run the tackle-tasks skill body emitter with tasks [191,193] in a temp project and assert <tempProject>/.taskTools/workflows/task-191.workflow.js and task-193.workflow.js exist, each with meta.name 'Tackle-task <N>' and its own task number in args, and that each emitted WORKFLOW line names that path as scriptPath. Assert nothing is written under skills/tackle-tasks/.",
     "difficulty": 7
   },
   {
