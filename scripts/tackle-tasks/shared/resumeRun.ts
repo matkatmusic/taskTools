@@ -31,10 +31,10 @@ export function findResumeEntry(taskNumber: number, tasksFile: string): { block:
             box: "CLEAN_UP_WORKTREES", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
             projectRoot, taskNumber, runId: newest.runId,
         });
-        const block = state.active
-            ? "pipeline-mergeSucceededExit.mmd::BUILD_CLOSURE_NOTE"
-            : "pipeline-mergeSucceededExit.mmd::ARCHIVE_TASK";
-        return { block, input };
+        // Always BUILD_CLOSURE_NOTE, active or not: ARCHIVE_TASK needs a closureNote this packet
+        // never carries, and BUILD_CLOSURE_NOTE / MARK_TASK_INACTIVE_SUCCESS are both idempotent,
+        // so replaying them before ARCHIVE_TASK is always safe (MSE-19).
+        return { block: "pipeline-mergeSucceededExit.mmd::BUILD_CLOSURE_NOTE", input };
     }
 
     if (state.active) { // row 4

@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/taskFiles.ts";
+import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent, taskWorkflowDirectory } from "../scripts/taskFiles.ts";
 
 function makeEmptyProjectRoot(): string {
   return mkdtempSync(join(tmpdir(), "taskTools-"));
@@ -129,6 +129,22 @@ test("test_leadingTaskNumbersStopsAtFreeTextReasoning", () => {
     const numbers = leadingTaskNumbers([invocation]);
     // Verification: only the array contributes, so numbers inside the prose are not picked up.
     assert.deepEqual(numbers, [268, 270]);
+});
+
+test("test_taskWorkflowDirectory_isNamedByTheProjectRootAndTheTaskNumber", () => {
+    // Scenario: a project uses the .taskTools/ layout.
+    const root = "/repo";
+    // Test action: ask where task 74's workflow pair lives.
+    const directory = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 74);
+    // Verification: it is a task-numbered subfolder of .taskTools/workflows in the project root, not the plugin.
+    assert.equal(directory, join(root, ".taskTools", "workflows", "74"));
+});
+
+test("test_taskWorkflowDirectory_givesTwoTaskNumbersTwoDifferentDirectories", () => {
+    const root = "/repo";
+    const first = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 3);
+    const second = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 5);
+    assert.notEqual(first, second);
 });
 
 test("test_everyOpenTaskHasAGoalAndNotInScope", () => {

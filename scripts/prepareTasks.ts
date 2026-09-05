@@ -186,20 +186,24 @@ export function readStagingTip(repoRoot: string): string | null {
 export function resolveOrCreateStagingTip(repoRoot: string): string {
     const found = readStagingTip(repoRoot);
     if (found !== null) {
-        const headTip = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-        if (found === headTip) return found;
-        const stagingIsMergedIntoHead = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", found, "HEAD"], { stdio: "ignore" });
-        if (stagingIsMergedIntoHead.status !== 0) return found;
-        const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", "HEAD"], { encoding: "utf8" });
-        if (moved.status !== 0) {
-            // git refuses to move a branch a worktree has checked out, so fast-forward it inside that worktree.
-            const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
-            if (stagingCheckout === undefined) {
-                throw new Error(`${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}`);
-            }
-            execFileSync("git", ["-C", stagingCheckout, "merge", "--ff-only", headTip], { stdio: ["ignore", "ignore", "inherit"] });
-        }
-        return readStagingTip(repoRoot)!;
+        // RETIRED (task 8): staging holds work that passed the pipeline for review, so moving it to an
+        // arbitrary session HEAD put unreviewed commits into staging. An existing tip is now used as-is;
+        // pipeline merge code is the only writer to an existing staging branch.
+        // const headTip = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+        // if (found === headTip) return found;
+        // const stagingIsMergedIntoHead = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", found, "HEAD"], { stdio: "ignore" });
+        // if (stagingIsMergedIntoHead.status !== 0) return found;
+        // const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", "HEAD"], { encoding: "utf8" });
+        // if (moved.status !== 0) {
+        //     // git refuses to move a branch a worktree has checked out, so fast-forward it inside that worktree.
+        //     const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
+        //     if (stagingCheckout === undefined) {
+        //         throw new Error(`${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}`);
+        //     }
+        //     execFileSync("git", ["-C", stagingCheckout, "merge", "--ff-only", headTip], { stdio: ["ignore", "ignore", "inherit"] });
+        // }
+        // return readStagingTip(repoRoot)!;
+        return found;
     }
     const created = spawnSync("git", ["-C", repoRoot, "branch", "staging"], { encoding: "utf8" });
     const foundAfterCreate = readStagingTip(repoRoot);
@@ -380,6 +384,24 @@ export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string
     return join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
 }
 
+// Test-only: SIGKILLs this process right after the named step of createWorktreeForGroup
+// finishes, so a retry can be exercised against a real process death, not a thrown error.
+const CREATE_WORKTREE_FOR_GROUP_TEST_KILL_AFTER_ENV = "CREATEWORKTREEFORGROUP_TEST_KILL_AFTER";
+function killSelfForTest(step: "lease" | "gitCreate" | "gitReset"): void {
+    if (process.env[CREATE_WORKTREE_FOR_GROUP_TEST_KILL_AFTER_ENV] === step) process.kill(process.pid, "SIGKILL");
+}
+
+// A lease whose owner pid no longer exists (ESRCH) is recovered before acquiring; a live pid still throws.
+function recoverLeaseIfOwnerIsDead(repoRoot: string, worktreePath: string): void {
+    const owner = readTaskWorktreeLeaseOwner(taskWorktreeLeasePath(worktreePath));
+    if (owner === null) return;
+    try {
+        process.kill(owner.pid, 0);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") recoverStaleTaskWorktreeLease(repoRoot, worktreePath);
+    }
+}
+
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId: string = generateRunId()): string {
     const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
@@ -434,7 +456,9 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
     let lease: TaskWorktreeLease;
     if (existsSync(worktreePath)) {
         // Lease first, then resolve: the safety decision and the reset must see the same staging commit.
+        recoverLeaseIfOwnerIsDead(repoRoot, worktreePath);
         lease = acquireTaskWorktreeLease(worktreePath, runId);
+        killSelfForTest("lease");
         try {
             const stagingTip = resolveOrCreateStagingTip(repoRoot);
             if (worktreeHoldsRetainedWork(worktreePath, repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
@@ -454,13 +478,16 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
                 ["-C", worktreePath, "checkout", "--force", "-B", branchName, stagingTip],
                 { stdio: "ignore" },
             );
+            killSelfForTest("gitReset");
         } catch (error) {
             releaseTaskWorktreeLease(lease);
             throw error;
         }
     } else {
         mkdirSync(dirname(worktreePath), { recursive: true });
+        recoverLeaseIfOwnerIsDead(repoRoot, worktreePath);
         lease = acquireTaskWorktreeLease(worktreePath, runId);
+        killSelfForTest("lease");
         try {
             const stagingTip = resolveOrCreateStagingTip(repoRoot);
             if (branchRefHoldsRetainedWork(repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
@@ -474,6 +501,7 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
                 ["-C", repoRoot, "worktree", "add", "-B", branchName, worktreePath, stagingTip],
                 { stdio: "ignore" },
             );
+            killSelfForTest("gitCreate");
         } catch (error) {
             releaseTaskWorktreeLease(lease);
             throw error;

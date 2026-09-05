@@ -2,10 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./resumeRun.ts";
+import { getTemplateShapeMismatches } from "../../templateShape.ts";
 import { readCheckpoint, writeCheckpoint, type Checkpoint } from "./checkpoint.ts";
 import {
     claimTask, endTaskRun, readTaskRunState, updateCurrentTaskRun,
@@ -163,7 +164,7 @@ test("test_findResumeEntry_resumesTheMergeTailAtBuildClosureNoteWhileActive", ()
     });
 });
 
-test("test_findResumeEntry_resumesTheMergeTailAtArchiveTaskWhenInactive", () => {
+test("test_findResumeEntry_resumesTheMergeTailAtBuildClosureNoteWhenInactiveAndSatisfiesItsContract", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const taskNumber = 9204;
     const runId = "run-9204";
@@ -175,9 +176,13 @@ test("test_findResumeEntry_resumesTheMergeTailAtArchiveTaskWhenInactive", () => 
     const entry = findResumeEntry(taskNumber, tasksPath);
 
     assert.deepEqual(entry, {
-        block: "pipeline-mergeSucceededExit.mmd::ARCHIVE_TASK",
+        block: "pipeline-mergeSucceededExit.mmd::BUILD_CLOSURE_NOTE",
         input: JSON.stringify({ box: "CLEAN_UP_WORKTREES", scriptSignal: "continue", projectRoot: rootOrigin, taskNumber, runId }),
     });
+
+    const templatePath = join(import.meta.dirname, "../mergeSucceededExit/BUILD_CLOSURE_NOTE.template.json");
+    const template = JSON.parse(readFileSync(templatePath, "utf8"));
+    assert.deepEqual(getTemplateShapeMismatches(template.input, JSON.parse(entry!.input)), []);
 });
 
 test("test_findResumeEntry_endsARunThatDiedBeforeAWorktreeAndReturnsNull", () => {

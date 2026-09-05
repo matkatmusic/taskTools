@@ -5,6 +5,7 @@ import { SCRIPT_SIGNAL } from "../../contracts.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 import { efficacyPercentage, rulingByFixCount, rulingByPercentage } from "../../planReviewRuling.ts";
 import { readReviewJson } from "../shared/readReviewJson.ts";
+import { readJsonFile } from "../shared/readJsonFile.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";
 
@@ -26,7 +27,8 @@ function decideVerdict(planFile: string, review: PlanReview): { verdict: string;
     if (review.outcome === "ERROR") {
         return { verdict: "ERROR", notes: `${review.message} missing: ${review.missingFiles.join(", ")}` };
     }
-    const plan = JSON.parse(readFileSync(planFile, "utf8"));
+    const plan = readJsonFile(planFile) as { sections: { id: string }[]; revision: number };
+    if (!Array.isArray(plan.sections)) throw new Error(`WHAT_IS_REVIEW_VERDICT: ${planFile} has no "sections" array`);
     const fixes = review.fixes;
     const sectionCount = plan.sections.length;
     const ruling = sectionCount >= PERCENTAGE_SCALE_MINIMUM_SECTIONS
@@ -41,7 +43,7 @@ function decideVerdict(planFile: string, review: PlanReview): { verdict: string;
 
 // Writes codex's fixes straight into the plan file, so implement reads them.
 function applyFixesToPlan(planFile: string, fixes: PlanReviewFix[]): void {
-    const plan = JSON.parse(readFileSync(planFile, "utf8"));
+    const plan = readJsonFile(planFile) as { sections: { id: string; codexNotes?: string }[]; revision: number };
     let changed = false;
     for (const fix of fixes) {
         const section = plan.sections.find((entry: { id: string }) => entry.id === fix.sectionId);
@@ -59,6 +61,12 @@ export function main(input: string): Record<string, unknown> {
     const { message: _message, additionalData, ...rest } = JSON.parse(input) as Input;
     const packet: WhatIsReviewVerdictPacket = { ...rest, reviewOutputFile: additionalData.reviewFile };
     const review = readReviewJson(packet.reviewOutputFile) as PlanReview;
+    if (review.outcome !== "OK" && review.outcome !== "ERROR") {
+        throw new Error(`WHAT_IS_REVIEW_VERDICT: ${packet.reviewOutputFile} has no valid "outcome" (got ${JSON.stringify(review.outcome)})`);
+    }
+    if (review.outcome === "OK" && !Array.isArray(review.fixes)) {
+        throw new Error(`WHAT_IS_REVIEW_VERDICT: ${packet.reviewOutputFile} has no "fixes" array`);
+    }
     const { verdict, notes } = decideVerdict(packet.planFile, review);
     const output = { ...packet, box: "WHAT_IS_REVIEW_VERDICT", scriptSignal: SCRIPT_SIGNAL.CONTINUE, verdict, notes };
 

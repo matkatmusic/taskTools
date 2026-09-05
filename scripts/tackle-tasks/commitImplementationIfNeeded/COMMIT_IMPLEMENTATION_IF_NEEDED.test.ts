@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./COMMIT_IMPLEMENTATION_IF_NEEDED.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
+import { stagingWorktreePath } from "../shared/stagingWorktree.ts";
 import { writeJsonAtomically } from "../../taskStateLock.ts";
 
 function git(repoPath: string, ...args: string[]): string {
@@ -74,4 +75,16 @@ test("test_COMMIT_IMPLEMENTATION_IF_NEEDED_runsTwiceWithTheSameInput", () => {
     assert.deepEqual(secondOutput, firstOutput);
     assert.equal(getCurrentTaskRun(taskNumber, projectRoot)?.commits.length, 1);
     assert.equal(git(worktree, "log", "--oneline").split("\n").length, 2);
+});
+
+test("test_main_usesStagingAsTheBaseBranchWhenTheSourceCheckoutIsOnAnotherBranch", () => {
+    const taskNumber = 9104;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+    git(projectRoot, "checkout", "-q", "-b", "feature-branch");
+    writeFileSync(join(worktree, "widget.txt"), "widget\n");
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { ok: true } };
+    main(JSON.stringify(input));
+
+    assert.equal(git(stagingWorktreePath(projectRoot), "branch", "--show-current"), "staging");
 });

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { runTaskTests } from "./runTaskTestsImpl.ts";
 import { claimTask, endTaskRun, getCurrentTaskRun } from "./taskRunState.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
+import { writeKnownFailingTests } from "../../taskTestsRunner.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -21,7 +22,11 @@ function makeTempRepoWithCommit(branchName: string): string {
     git(repoPath, "config", "user.email", "test@example.com");
     git(repoPath, "config", "user.name", "Test");
     writeFileSync(join(repoPath, "seed.txt"), "seed\n");
-    git(repoPath, "add", "seed.txt");
+    writeFileSync(
+        join(repoPath, "package.json"),
+        JSON.stringify({ name: "fixture", scripts: { test: 'node --test "tests/**/*.test.ts" "scripts/**/*.test.ts"' } }),
+    );
+    git(repoPath, "add", "seed.txt", "package.json");
     git(repoPath, "commit", "-q", "-m", "seed");
     return repoPath;
 }
@@ -119,7 +124,7 @@ test("test_runTaskTests_stillSelectsTheTestsWhenTheWorktreeIsClean", () => {
 });
 
 test("test_runTaskTests_separatesCreatedTestsFromModifiedExistingTests", () => {
-    // Setup: an existing test file on the source branch, and a worktree that both modifies it and adds a brand-new one.
+    // Setup: an existing source-branch test file, both modified and a new one added on the worktree.
     const rootOrigin = makeTempRepoWithCommit("main");
     mkdirSync(join(rootOrigin, "tests"), { recursive: true });
     writePassingTest(join(rootOrigin, "tests", "existing.test.ts"));
@@ -144,7 +149,7 @@ test("test_runTaskTests_separatesCreatedTestsFromModifiedExistingTests", () => {
 });
 
 test("test_runTaskTests_findsATestFileInsideASubmodule", () => {
-    // Setup: a source repo with a submodule, and a new test file committed inside the submodule's occurrence of the linked worktree.
+    // Setup: a source repo with a submodule, and a new test committed inside its worktree occurrence.
     const { rootOrigin } = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
     const childCheckout = join(worktreePath, "child");
@@ -162,27 +167,28 @@ test("test_runTaskTests_findsATestFileInsideASubmodule", () => {
     assert.deepEqual(result.createdTestFiles, ["child::tests/child.test.ts"]);
 });
 
-test("test_runTaskTests_runsASubmodulesTestsInsideThatSubmodule", () => {
-    // Setup: a submodule test file that only passes when its cwd is the submodule checkout.
-    const { rootOrigin } = makeSourceRepoWithSubmodule();
-    const worktreePath = createLinkedWorktree(rootOrigin);
-    const childCheckout = join(worktreePath, "child");
-    writeFileSync(join(childCheckout, "marker.txt"), "child-marker");
-    mkdirSync(join(childCheckout, "tests"), { recursive: true });
-    writePassingTest(
-        join(childCheckout, "tests", "child.test.ts"),
-        { relativeToCwd: "marker.txt", expectedContent: "child-marker" },
-    );
-    git(childCheckout, "add", "tests/child.test.ts", "marker.txt");
-    git(childCheckout, "commit", "-q", "-m", "add child test");
-    seedOpenTaskAndClaim(rootOrigin, 1);
-
-    // Test action: run the task's tests.
-    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
-
-    // Verification: the test ran with the submodule as its cwd, so it passed.
-    assert.equal(result.passed, true);
-});
+// obsolete: the gate runs only the top-level worktree suite through task-tests now; submodule suites are not run here.
+// test("test_runTaskTests_runsASubmodulesTestsInsideThatSubmodule", () => {
+//     // Setup: a submodule test file that only passes when its cwd is the submodule checkout.
+//     const { rootOrigin } = makeSourceRepoWithSubmodule();
+//     const worktreePath = createLinkedWorktree(rootOrigin);
+//     const childCheckout = join(worktreePath, "child");
+//     writeFileSync(join(childCheckout, "marker.txt"), "child-marker");
+//     mkdirSync(join(childCheckout, "tests"), { recursive: true });
+//     writePassingTest(
+//         join(childCheckout, "tests", "child.test.ts"),
+//         { relativeToCwd: "marker.txt", expectedContent: "child-marker" },
+//     );
+//     git(childCheckout, "add", "tests/child.test.ts", "marker.txt");
+//     git(childCheckout, "commit", "-q", "-m", "add child test");
+//     seedOpenTaskAndClaim(rootOrigin, 1);
+//
+//     // Test action: run the task's tests.
+//     const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
+//
+//     // Verification: the test ran with the submodule as its cwd, so it passed.
+//     assert.equal(result.passed, true);
+// });
 
 test("test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchAddedNone", () => {
     // Setup: a task that declares tests, and a branch that added none.
@@ -286,7 +292,7 @@ test("test_runTaskTests_parsesATestFilenameContainingSpaces", () => {
 });
 
 test("test_runTaskTests_reportsARedSuiteAsRedEvenWhenTheParentProcessHasNodeTestContextSet", () => {
-    // Setup: a failing test file, run with NODE_TEST_CONTEXT set on the parent process (as it is whenever this suite itself runs under `node --test`).
+    // Setup: a failing test file, run with NODE_TEST_CONTEXT set on the parent process, as this suite always has it.
     const rootOrigin = makeTempRepoWithCommit("main");
     const worktreePath = createLinkedWorktree(rootOrigin);
     mkdirSync(join(worktreePath, "tests"), { recursive: true });
@@ -311,8 +317,32 @@ test("test_runTaskTests_reportsARedSuiteAsRedEvenWhenTheParentProcessHasNodeTest
     assert.equal(result.passed, false);
 });
 
+test("test_runTaskTests_ignoresKnownFailingTests", () => {
+    // Setup: a failing test file whose failure is already recorded as a known baseline.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    mkdirSync(join(worktreePath, "tests"), { recursive: true });
+    writeFileSync(
+        join(worktreePath, "tests", "failing.test.ts"),
+        `import { test } from "node:test";\nimport assert from "node:assert/strict";\ntest("t", () => { assert.ok(false); });\n`,
+    );
+    git(worktreePath, "add", "tests/failing.test.ts");
+    git(worktreePath, "commit", "-q", "-m", "add failing test");
+    seedOpenTaskAndClaim(rootOrigin, 1);
+    writeKnownFailingTests(rootOrigin, [{ file: "tests/failing.test.ts", name: "t" }]);
+
+    // Test action: run the task's tests.
+    const result = runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
+
+    // Verification: a known failure keeps the run green, but is still named.
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.newFailingTests, []);
+    assert.deepEqual(result.knownFailingTests, [{ file: "tests/failing.test.ts", name: "t" }]);
+    assert.match(result.output, /^known failing test \(ignored\):/);
+});
+
 test("test_runTaskTests_throwsWhenTheExpectedRunIdIsStale", () => {
-    // Setup: a claimed run that then ends and is replaced by a newer claim, simulating a timed-out process that is still holding the original run's id.
+    // Setup: a claimed run ends, replaced by a newer claim, as a timed-out process still holds the old id.
     const rootOrigin = makeTempRepoWithCommit("main");
     const worktreePath = createLinkedWorktree(rootOrigin);
     seedOpenTaskAndClaim(rootOrigin, 1);

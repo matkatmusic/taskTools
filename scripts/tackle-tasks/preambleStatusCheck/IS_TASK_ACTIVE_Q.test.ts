@@ -24,7 +24,7 @@ function makeProjectRoot(tasks: unknown[]): string {
 test("test_IS_TASK_ACTIVE_Q_continuesToMarkTaskActiveWhenNotActive", () => {
     const root = makeProjectRoot([{ taskNumber: 1 }]);
     const output = main(packet(1, root));
-    assert.equal(output.next, "MARK_TASK_ACTIVE");
+    assert.equal(output.next, "PREFLIGHT_OK_Q");
     assert.equal(output.exitType, "");
 });
 

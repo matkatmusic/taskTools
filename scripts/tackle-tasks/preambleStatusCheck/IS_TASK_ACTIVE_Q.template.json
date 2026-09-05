@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "MARK_TASK_ACTIVE"
+        "next": "PREFLIGHT_OK_Q"
     }
 }

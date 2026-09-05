@@ -6,6 +6,7 @@ import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { discoverTestPolicy } from "../../testPolicy.ts";
 import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite } from "../../taskTestsRunner.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 
@@ -57,8 +58,21 @@ export function runFullSuite(
             continue;
         }
         const layerRun = runCompleteSuite(occurrence.checkoutPath, policyResult.policy.completeSuiteCommand);
-        layers.push({ occurrenceId: occurrence.occurrenceId, passed: layerRun.passed });
-        outputs.push(layerRun.output);
+        let layerPassed = layerRun.passed;
+        let layerOutput = layerRun.output;
+        if (!layerRun.passed) {
+            const failing = parseFailingTests(layerRun.output);
+            const newFailures = newFailingTests(failing, readKnownFailingTests(projectRoot));
+            const knownStillFailing = failing.filter((test) => !newFailures.includes(test));
+            layerPassed = judgeSuite(false, failing, newFailures);
+            layerOutput = [
+                ...newFailures.map((test) => `new failing test: ${test.file} — ${test.name}`),
+                ...knownStillFailing.map((test) => `known failing test (ignored): ${test.file} — ${test.name}`),
+                layerRun.output,
+            ].join("\n");
+        }
+        layers.push({ occurrenceId: occurrence.occurrenceId, passed: layerPassed });
+        outputs.push(layerOutput);
     }
 
     const result: RunFullSuiteOutput = {

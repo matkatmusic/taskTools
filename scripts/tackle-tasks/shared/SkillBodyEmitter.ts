@@ -1,15 +1,57 @@
 // The tackle-tasks skill body: one workflow launch, with the task number and the tasks file the preamble reads.
-import { readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { generateSteps, resolveDiagramFolderSetting } from "../../generateSteps.ts";
+import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../../generateSteps.ts";
 import { generateWorkflow } from "../../generateWorkflow.ts";
 
-const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
-const DEFAULT_STEPS_CONFIG_PATH = fileURLToPath(new URL("../../steps.json", import.meta.url));
+// RETIRED (task 10): replaced by taskWorkflowDirectory(tasksFile, taskNumber), computed per task inside skillBody.
+// const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+// The mutating flag is hand-authored (scripts/generateSteps.ts:182) and only ever carried forward by reading a previous
+// config at the SAME path a task is about to write to. A task's first-ever per-task steps.json has no previous file of
+// its own, so it is seeded from this canonical file first — the plugin's own committed config for the default pipeline.
+const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../../steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
+
+function isTaskActive(tasksFile: string, taskNumber: number): boolean {
+    const task = readTaskFile(tasksFile).find((entry) => entry.taskNumber === taskNumber);
+    if (task === undefined) {
+        return false;
+    }
+    const run = task.run as { active?: boolean } | undefined;
+    if (run === undefined) {
+        return false;
+    }
+    return run.active === true;
+}
+
+// An active task's already-generated pair is reused untouched, so a duplicate launch of the same running task can
+// never rewrite the files a checkpoint mid-run is relying on. Everything else (a first launch, or a finished task's
+// next run) regenerates fresh, seeded from the canonical config so hand-authored mutating flags are not lost.
+function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFolderSetting: DiagramFolderSetting): { workflowFile: string; stepsConfigPath: string } {
+    const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
+    const stepsConfigPath = join(workflowDirectory, "steps.json");
+    const workflowFile = join(workflowDirectory, "workflow.js");
+    if (isTaskActive(tasksFile, taskNumber)) {
+        if (existsSync(workflowFile)) {
+            if (existsSync(stepsConfigPath)) {
+                return { workflowFile, stepsConfigPath };
+            }
+        }
+    }
+    mkdirSync(workflowDirectory, { recursive: true });
+    if (!existsSync(stepsConfigPath)) {
+        if (existsSync(CANONICAL_STEPS_CONFIG_PATH)) {
+            copyFileSync(CANONICAL_STEPS_CONFIG_PATH, stepsConfigPath);
+        }
+    }
+    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+    generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
+    return { workflowFile, stepsConfigPath };
+}
 
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // `reset N [BLOCK]`: the run-step hook already ran the reset on this prompt and injected its lines above.
@@ -30,17 +72,16 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     }
     */
 
-    // Made fresh on every run, so the shapes in it always match the diagrams on disk.
+    // Made fresh on every run, so the shapes in it always match the diagrams on disk — unless the task is already
+    // active and its pair already exists, in which case ensureTaskWorkflowPair reuses it untouched.
     const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
-    const stepsConfigPath = process.env.RUN_STEP_CONFIG ?? DEFAULT_STEPS_CONFIG_PATH;
-    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
-    const workflowFile = process.env.RUN_STEP_WORKFLOW_FILE ?? TASK_WORKFLOW_PATH;
-    generateWorkflow(workflowFile);
+    const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
     const startingBlock = parseStartingBlockArgument(argsValue);
     const workflowLines = taskNumbers.map((taskNumber, index) => {
+        const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
         const workflowArgs: Record<string, unknown> = {
             task: taskNumber,
-            tasksFile: resolveTaskFiles(projectRoot).tasksPath,
+            tasksFile,
             // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
         };
         if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;

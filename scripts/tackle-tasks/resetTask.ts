@@ -4,29 +4,38 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ResetScope } from "../contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./shared/writeTaskBrief.ts";
+import { resetAttemptCounts } from "./shared/taskRunState.ts";
+import { readJsonFile } from "./shared/readJsonFile.ts";
+import { writeCheckpoint } from "./shared/checkpoint.ts";
 
 // These blocks read plans/plan.json, plans/codex-review.json, or a prompt file. Cleanup removes those with the worktree and nothing keeps a copy, so a resume there has no input to work from. The brief is the one file a reset can make again.
-const BLOCKS_THAT_NEED_LOST_WORKTREE_FILES = [
-    "PLAN_THE_TASK", "WHAT_DID_THE_PLANNER_RETURN", "WRITE_CLARIFY_REQUEST", "CODEX_REVIEWS_PLAN", "WHAT_IS_REVIEW_VERDICT",
-    "IMPLEMENT_TASK", "FIX_IMPLEMENT_TASK_TESTS", "CODEX_REVIEWS_TESTS", "FIX_THE_CODEBASE_FOR_SUITE", "FIX_CONFLICTS",
-];
+// const BLOCKS_THAT_NEED_LOST_WORKTREE_FILES = [
+//     "PLAN_THE_TASK", "WHAT_DID_THE_PLANNER_RETURN", "WRITE_CLARIFY_REQUEST", "CODEX_REVIEWS_PLAN", "WHAT_IS_REVIEW_VERDICT",
+//     "IMPLEMENT_TASK", "FIX_IMPLEMENT_TASK_TESTS", "CODEX_REVIEWS_TESTS", "FIX_THE_CODEBASE_FOR_SUITE", "FIX_CONFLICTS",
+// ];
+// retired: that refusal existed because a plain reset removed the worktree; the "no worktree" throw below already guards this.
 
-// A block name makes the next plain launch resume at that block instead of starting over. Returns the lines to say.
-export function resetTask(taskNumber: number, block: string): string {
+// A block name makes the next launch resume there instead of starting over. Returns the lines to say.
+export async function resetTask(taskNumber: number, block: string): Promise<string> {
     const lines: string[] = [];
     if (!Number.isInteger(taskNumber) || taskNumber <= 0) throw new Error("usage: resetTask <taskNumber> [<block>]");
-    if (BLOCKS_THAT_NEED_LOST_WORKTREE_FILES.includes(block)) {
-        throw new Error(`cannot resume at ${block}: it reads plan, review, or prompt files that the worktree cleanup removed and nothing can make again`);
-    }
-    // The checkpoint's block is the full `<diagram>::<box>` key; the resume walk takes it as is, so a bare name is resolved here.
-    const stepsByDiagram: Record<string, { box: string }[]> = JSON.parse(readFileSync(fileURLToPath(new URL("../steps.json", import.meta.url)), "utf-8"));
+    // The checkpoint's block is the full `<diagram>::<box>` key; the resume walk needs that, so a bare name gets resolved.
+    const stepsByDiagram: Record<string, { box: string; script: string }[]> = JSON.parse(readFileSync(fileURLToPath(new URL("../steps.json", import.meta.url)), "utf-8"));
     const stepKeysNamingBlock = Object.entries(stepsByDiagram).flatMap(([diagram, entries]) => entries.filter((entry) => entry.box === block).map(() => `${diagram}::${block}`));
     if (block !== "" && stepKeysNamingBlock.length !== 1) {
         throw new Error(`block ${block} names ${stepKeysNamingBlock.length} steps in steps.json: ${stepKeysNamingBlock.join(", ")}`);
     }
     const stepKey = stepKeysNamingBlock[0] ?? "";
+
+    let scope: ResetScope = {};
+    if (block !== "") {
+        const script = Object.values(stepsByDiagram).flat().find((entry) => entry.box === block)!.script;
+        const blockModule = await import(pathToFileURL(join(fileURLToPath(new URL("../..", import.meta.url)), script)).href);
+        scope = blockModule.resetScope ?? {};
+    }
 
     const repoRoot = execSync("git rev-parse --show-toplevel").toString().trim();
     const tasksFile = join(repoRoot, ".taskTools", "tasks.json");
@@ -46,7 +55,7 @@ export function resetTask(taskNumber: number, block: string): string {
     const leasePath = `${worktreePath}.lease`;
     const branchName = `task-${taskNumber}`;
 
-    if (block === "") {
+    if (block === "" || scope.worktree === true) {
         try { execSync(`git worktree remove --force "${worktreePath}"`, { cwd: repoRoot, stdio: "pipe" }); } catch { /* not registered */ }
         try { execSync(`git branch -D ${branchName}`, { cwd: repoRoot, stdio: "pipe" }); } catch { /* already gone */ }
         if (existsSync(leasePath)) rmSync(leasePath);
@@ -66,7 +75,7 @@ export function resetTask(taskNumber: number, block: string): string {
         if (!existsSync(packetsDirectory)) continue;
         const packetNamesThisTask = readdirSync(packetsDirectory)
             .some((packetFile) => {
-                const packet = JSON.parse(readFileSync(join(packetsDirectory, packetFile), "utf-8"));
+                const packet = readJsonFile(join(packetsDirectory, packetFile)) as { taskNumber?: number; output?: { result?: { taskNumber?: number } } };
                 return packet.taskNumber === taskNumber || packet.output?.result?.taskNumber === taskNumber;
             });
         // A reset to a block reads the block's input from these packets, so they stay.
@@ -110,9 +119,10 @@ export function resetTask(taskNumber: number, block: string): string {
     if (block !== "") {
         const runState = tasks.find((t: any) => t.taskNumber === taskNumber).run;
         const runId: string = runState.history[runState.history.length - 1].runId;
+        if (scope.counters === true) resetAttemptCounts(taskNumber, runId, repoRoot);
         if (!existsSync(worktreePath)) throw new Error(`task ${taskNumber} has no worktree at ${worktreePath}; a reset to a block needs one`);
 
-        // The block's input is the quoted argument of the newest packet for that block from this run. Same scan as resumeRun.ts findStartAtBlockEntry.
+        // The block's input is the quoted argument of its newest packet this run, like resumeRun.ts findStartAtBlockEntry.
         const packetNamePattern = new RegExp(`^${block}-\\d+-\\d+\\.json$`);
         let newestMtimeMs = -Infinity;
         let input: string | null = null;
@@ -146,17 +156,28 @@ export function resetTask(taskNumber: number, block: string): string {
         }
         if (input === null) throw new Error(`no packet for block ${block} of run ${runId} under ${runsDirectory}`);
 
+        if (scope.generatedFiles === true) {
+            const plansFolder = join(worktreePath, "plans");
+            for (const file of existsSync(plansFolder) ? readdirSync(plansFolder) : []) {
+                if (file === "plan.json") rmSync(join(plansFolder, file), { force: true });
+                if (file === "codex-review.json") rmSync(join(plansFolder, file), { force: true });
+                if (file.startsWith("PLAN_THE_TASK.")) rmSync(join(plansFolder, file), { force: true });
+                if (file.endsWith(".prompt.md")) rmSync(join(plansFolder, file), { force: true });
+            }
+        }
+
         writeFileSync(leasePath, JSON.stringify({ pid: process.pid, runId }));
-        mkdirSync(join(worktreePath, "plans"), { recursive: true });
-        writeFileSync(join(worktreePath, "plans", "checkpoint.json"), JSON.stringify({
+        writeCheckpoint(worktreePath, {
             taskNumber, passId: randomUUID(), runId, projectRoot: repoRoot,
             block: stepKey, input, state: "running", sourceLockHeld: false, exitType: "", exitNote: "", resumedFrom: null,
-        }, null, 4));
+        });
         lines.push(`task ${taskNumber} resumes at ${stepKey} on the next /tackle-tasks [${taskNumber}]`);
+        const cleared = Object.entries(scope).filter(([, value]) => value === true).map(([key]) => key);
+        lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);
     }
     return lines.join("\n");
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
 if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
-    console.log(resetTask(Number(process.argv[2]), process.argv[3] ?? ""));
+    console.log(await resetTask(Number(process.argv[2]), process.argv[3] ?? ""));

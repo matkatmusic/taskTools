@@ -1,5 +1,6 @@
 // FIX_IMPLEMENT_TASK_TESTS, from pipeline-fixImplementTaskTests.mmd. Prompt block: fix the task's own tests, never the tests themselves.
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildPromptOutputTemplate } from "../../contracts.ts";
@@ -12,22 +13,24 @@ import type { CommitImplementationIfNeededPacket } from "../commitImplementation
 
 // Double-quoted for the read-file hook's parser; deduped so a path is never listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
+const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 
 function buildFixTaskTestsPrompt(prepared: PreparedTask): string {
     const root = prepared.repoRoot.replace(/\/+$/, "");
     return `## YOUR JOB
 
-Fix the cause of every failure listed under FAILING TASK TESTS, and change no test.
+Fix the cause of every failure listed under FAILING TASK TESTS.
+Read \`~/.claude/guides/tests-and-code-changes.md\` first: it decides, per failing test, whether the code or the test is wrong.
 
 The task's own tests in the worktree \`${root}\` are red.
-You are repairing the codebase, never the tests.
 A test that fails is reporting a real defect until you have proved otherwise.
+A test that checks behavior this task was asked to change is obsolete: comment it out and say which test and why.
 
 ## WHAT TO READ
 
 Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
 \`\`\`
-/read-file ${readFileArgs([...prepared.ownedFilePaths, ...prepared.testFilePaths])}
+/read-file ${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}
 \`\`\`
 
 You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
@@ -38,8 +41,8 @@ ${absolutePathsSection(root)}
 
 ${prepared.ownedFilePaths.map((path) => `- \`${path}\``).join("\n")}
 
-This list is complete.
-Every other path in the tree belongs to another task, including every test file.
+This list is complete, plus any test file whose failure the guide rules obsolete.
+Every other path in the tree belongs to another task.
 
 If fixing the cause needs an edit outside this list, make no edit at all and say so.
 
@@ -57,7 +60,7 @@ ${resumedRunSection(root)}
 
 You are forbidden from doing any of the following actions:
 - weaken, delete, skip, or stub out a test to make a failure disappear;
-- edit a test file at all;
+- edit a test file, except to comment out one the guide rules obsolete;
 - edit any path not listed under WHAT YOU MAY EDIT;
 - add scope or a refactor no listed failure calls for;
 - run the full suite;

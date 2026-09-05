@@ -22,6 +22,13 @@ export function taskFilesProjectRoot(pair: TaskFilePair): string {
     : taskDirectory
 }
 
+// Duplicates taskFilesProjectRoot's project-root logic on purpose: this call site only ever has a bare tasksPath string, never a full TaskFilePair.
+export function taskWorkflowDirectory(tasksPath: string, taskNumber: number): string {
+  const taskDirectory = dirname(tasksPath);
+  const projectRoot = basename(taskDirectory) === '.taskTools' ? dirname(taskDirectory) : taskDirectory;
+  return join(projectRoot, '.taskTools', 'workflows', String(taskNumber));
+}
+
 function pairIn(folder: string): TaskFilePair {
   return { tasksPath: join(folder, "tasks.json"), completedTasksPath: join(folder, "completedTasks.json") };
 }

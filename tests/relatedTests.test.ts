@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { groupEditsByOccurrence } from "../scripts/relatedTests.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
@@ -27,6 +29,7 @@ function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOcc
 }
 
 const rootPath = "/workspace";
+const SCRIPT_PATH = fileURLToPath(new URL("../scripts/relatedTests.ts", import.meta.url));
 
 const root = makeOccurrence({ occurrenceId: "root", checkoutPath: "repo", childOccurrenceIds: ["pluginRepo"] });
 const pluginRepo = makeOccurrence({
@@ -87,4 +90,26 @@ test("test_aNonTestTsFileResolvesToATestFileInTheSameDirectory", () => {
     assert.deepEqual(warnings, []);
     const tests = [...batches.get("tmpRoot")!.byExtension.values()].flatMap((b) => b.tests);
     assert.ok(tests.includes(testFile));
+});
+
+test("test_main_readsTheTurnFlagOnStopAndReportsTypeErrors", () => {
+    const repo = mkdtempSync(join(tmpdir(), "related-tests-hook-"));
+    execFileSync("git", ["-C", repo, "init", "-q", "-b", "main"]);
+    writeFileSync(join(repo, "package.json"), JSON.stringify({ scripts: { test: "exit 0" } }));
+    writeFileSync(join(repo, "tsconfig.json"), JSON.stringify({ compilerOptions: { noEmit: true, strict: true }, include: ["*.ts", "tests"] }));
+    writeFileSync(join(repo, "widget.ts"), "export const n: number = \"not a number\";\n");
+    mkdirSync(join(repo, "tests"));
+    writeFileSync(join(repo, "tests", "widget.test.ts"), "");
+    execFileSync("git", ["-C", repo, "add", "-A"]);
+    execFileSync("git", ["-C", repo, "-c", "user.email=t@e.com", "-c", "user.name=t", "commit", "-q", "-m", "seed"]);
+
+    const home = mkdtempSync(join(tmpdir(), "related-tests-home-"));
+    mkdirSync(join(home, ".claude", "turn-flags"), { recursive: true });
+    writeFileSync(join(home, ".claude", "turn-flags", "session-1"), `${join(repo, "widget.ts")}\n`);
+    const payload = JSON.stringify({ session_id: "session-1", cwd: repo });
+    const run = spawnSync("node", [SCRIPT_PATH], { input: payload, encoding: "utf8", env: { ...process.env, HOME: home } });
+
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /Type errors after editing .*widget\.ts/);
+    assert.match(run.stderr, /error TS2322/);
 });

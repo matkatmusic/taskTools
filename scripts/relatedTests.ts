@@ -1,15 +1,17 @@
 // relatedTests.ts: jot's post_tool_batch_test_hook.py, ported to batch by owning occurrence.
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { getOwningOccurrence } from "./repositoryGraph.ts";
 import type { RepositoryManifest, RepositoryOccurrence } from "./repositoryManifest.ts";
 import { discoverTestPolicy } from "./testPolicy.ts";
 import { createEmptyResolutionManifest } from "./resolutionRequests.ts";
+import { loadRepositoryManifest } from "./prepareTasks.ts";
 import type { ResolutionManifest } from "./resolutionRequests.ts";
 
 type ToolCall = { tool_name?: string; tool_input?: { file_path?: string } };
-type HookInput = { tool_calls?: ToolCall[]; cwd?: string; rootPath?: string; manifestPath: string };
+// A Stop payload names the session; the turn flag file holds the paths edited this turn.
+type HookInput = { session_id?: string; cwd?: string; stop_hook_active?: boolean };
 
 const FILE_MODIFYING_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
@@ -148,19 +150,29 @@ export function runRelatedTests(
         const occurrenceCwd = resolve(rootPath, batch.occurrence.checkoutPath);
         const warning = runOccurrenceTests(occurrenceCwd, batch, resolutionManifest);
         if (warning) warnings.push(warning);
+        if (batch.byExtension.has(".ts")) {
+            const typeErrors = execSync("npx tsc --noEmit 2>&1 | head -30", { cwd: occurrenceCwd, encoding: "utf8" }).trim();
+            if (typeErrors !== "") warnings.push(`Type errors after editing ${batch.byExtension.get(".ts")!.sources.join(", ")}:\n${typeErrors}`);
+        }
     }
     return warnings;
 }
 
-// Entry point: reads {tool_calls, rootPath|cwd, manifestPath} JSON from stdin, exits 2 on failure.
+// Entry point: reads a Stop payload {session_id, cwd} from stdin, exits 2 on failure.
 function main(): void {
     const hookInput: HookInput = JSON.parse(readFileSync(0, "utf8"));
-    const editedFiles = extractEditedFiles(hookInput.tool_calls ?? []);
+    if (hookInput.stop_hook_active) process.exit(0);
+    if (!hookInput.session_id) throw new Error("relatedTests hook input requires session_id");
+    // ponytail: stage-and-summarize-stop.ts deletes this flag when it finishes; read it first thing.
+    const flag = join(process.env.HOME ?? "", ".claude", "turn-flags", hookInput.session_id);
+    if (!existsSync(flag)) process.exit(0);
+    // realpath: git reports the real root, and a /var symlink path would look like it is outside it.
+    const editedFiles = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))].map((file) => realpathSync(file));
     if (editedFiles.length === 0) process.exit(0);
-    const rootPath = hookInput.rootPath ?? hookInput.cwd;
-    if (!rootPath) throw new Error("relatedTests hook input requires rootPath (or cwd)");
-    if (!hookInput.manifestPath) throw new Error("relatedTests hook input requires manifestPath");
-    const manifest: RepositoryManifest = JSON.parse(readFileSync(hookInput.manifestPath, "utf8"));
+    if (!hookInput.cwd) throw new Error("relatedTests hook input requires cwd");
+    const rootPath = execFileSync("git", ["-C", hookInput.cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+    const rootBranch = execFileSync("git", ["-C", rootPath, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    const manifest = loadRepositoryManifest(rootPath, rootBranch);
     const warnings = runRelatedTests(editedFiles, rootPath, manifest, createEmptyResolutionManifest());
     if (warnings.length > 0) {
         process.stderr.write(warnings.join("\n") + "\n");

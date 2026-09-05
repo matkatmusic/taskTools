@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./PLAN_THE_TASK.ts";
+import { clarifyTask } from "../../clarifyTask.ts";
+import { writeTaskBriefToDisk } from "../shared/writeTaskBrief.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.json");
 
@@ -83,6 +85,32 @@ test("test_PLAN_THE_TASK_startsCodexDetachedToDraftThePlanWhenDifficultyIsAtLeas
     for (let i = 0; i < 50 && !existsSync(doneFile); i++) await new Promise((r) => setTimeout(r, 100));
     assert.equal(readFileSync(doneFile, "utf8").trim(), "0");
     assert.match(readFileSync(codexCallFile, "utf8"), /task 35/);
+});
+
+test("test_PLAN_THE_TASK_promptPointsToABriefThatCarriesARecordedClarifyAnswer", () => {
+    const taskNumber = 35;
+    const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-"));
+    mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
+        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", description: "body", clarifyRequest: "where does thing.ts live?" },
+    ]));
+    writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
+    const worktree = join(projectRoot, "worktree");
+    mkdirSync(worktree, { recursive: true });
+
+    clarifyTask({ taskNumber, answer: "thing.ts lives at src/thing.ts" }, projectRoot);
+    const briefFile = writeTaskBriefToDisk(taskNumber, worktree, projectRoot);
+    const packet = JSON.stringify({
+        box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber, runId: "run-1",
+        projectRoot, worktree, branch: `task-${taskNumber}`, docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
+    });
+
+    main(packet);
+
+    const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
+    const promptFileContents = readFileSync(promptFile, "utf8");
+    assert.ok(promptFileContents.includes(briefFile));
+    assert.match(readFileSync(briefFile, "utf8"), /thing\.ts lives at src\/thing\.ts/);
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

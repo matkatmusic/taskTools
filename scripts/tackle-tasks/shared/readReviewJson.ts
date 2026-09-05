@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 export function readReviewJson(filePath: string): unknown {
     const text = readFileSync(filePath, "utf8").trim();
+    if (text === "") throw new Error(`readReviewJson: ${filePath} is empty`);
     let body = text;
     if (body.startsWith("```")) {
         const lines = body.split("\n");

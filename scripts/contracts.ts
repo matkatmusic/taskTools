@@ -20,6 +20,9 @@ export function buildPromptOutputTemplate(box: string): Record<string, unknown> 
 // The one shape every agent answer takes, for every returns_a_prompt block.
 export const AGENT_ANSWER_TEMPLATE = { message: "", additionalData: {} } as const;
 
+// What a `/tackle-tasks reset N <BLOCK>` clears before resuming at that block. A block with no export clears nothing.
+export type ResetScope = { worktree?: boolean; counters?: boolean; generatedFiles?: boolean };
+
 // Throws with every mismatch named, so a bad payload fails loudly at the boundary it crossed.
 export function assertMatchesTemplate(blockName: string, template: unknown, actual: unknown): void {
     const mismatches = getTemplateShapeMismatches(template, actual);

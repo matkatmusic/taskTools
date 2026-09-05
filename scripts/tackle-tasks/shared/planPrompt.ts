@@ -4,7 +4,8 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { absolutePathsSection } from "./promptSections.ts";
-import type { PlanReview } from "./recordPlanReview.ts";
+// Retired (task 11): only used by the dead `extra.planReview` field below.
+// import type { PlanReview } from "./recordPlanReview.ts";
 import { resumedRunSection } from "./resumedRunSection.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 
@@ -21,49 +22,55 @@ const PLAN_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/plan-template.j
 // Resolved here because the read-file hook stats the raw string and never expands a tilde.
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 
-const WRITE_CLARIFY_REQUEST_PATH = fileURLToPath(new URL("./writeClarifyRequest.ts", import.meta.url));
-const RECORD_PLAN_REVIEW_PATH = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
-const UPDATE_TASK_DOCS_PATH = fileURLToPath(new URL("./updateTaskDocs.ts", import.meta.url));
+// Retired (task 11): each only fed clarifyRequestBlock/planReviewBlock/updateDocsBlock below, all now retired.
+// const WRITE_CLARIFY_REQUEST_PATH = fileURLToPath(new URL("./writeClarifyRequest.ts", import.meta.url));
+// const RECORD_PLAN_REVIEW_PATH = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
+// const UPDATE_TASK_DOCS_PATH = fileURLToPath(new URL("./updateTaskDocs.ts", import.meta.url));
 
-// Its own copy, so this file never imports the dispatch hub.
-const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
+// Retired (task 11): only planReviewBlock below called this.
+// // Its own copy, so this file never imports the dispatch hub.
+// const shellQuote = (value: unknown) => `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 
-// Set only by the box that ran, telling the next agent to run the matching script first.
-export type PlanPromptExtra = {
-    clarifyRequest?: string;
-    planReview?: PlanReview;
-    updateDocs?: true;
-};
+// Retired (task 11): no live caller has set any of these fields since commit 8849857.
+// // Set only by the box that ran, telling the next agent to run the matching script first.
+// export type PlanPromptExtra = {
+//     clarifyRequest?: string;
+//     planReview?: PlanReview;
+//     updateDocs?: true;
+// };
 
-const clarifyRequestBlock = (t: PreparedTask, clarifyRequest: string): string => {
-    const payload = JSON.stringify({ projectRoot: t.taskStateRoot, taskNumber: t.number, clarifyRequest, boxId: "WRITE_CLARIFY_REQUEST" });
-    return `Run this first, before doing anything else, exactly as written:
-node ${WRITE_CLARIFY_REQUEST_PATH} <<'TTCLARIFY'
-${payload}
-TTCLARIFY
+// Retired (task 11): dead since commit 8849857, no live caller passes extra.clarifyRequest.
+// const clarifyRequestBlock = (t: PreparedTask, clarifyRequest: string): string => {
+//     const payload = JSON.stringify({ projectRoot: t.taskStateRoot, taskNumber: t.number, clarifyRequest, boxId: "WRITE_CLARIFY_REQUEST" });
+//     return `Run this first, before doing anything else, exactly as written:
+// node ${WRITE_CLARIFY_REQUEST_PATH} <<'TTCLARIFY'
+// ${payload}
+// TTCLARIFY
+//
+// `;
+// };
 
-`;
-};
+// Retired (task 11): dead since commit 8849857, no live caller passes extra.planReview.
+// const planReviewBlock = (t: PreparedTask, planReview: PlanReview): string => {
+//     const payload = JSON.stringify(planReview);
+//     return `Run this first, before doing anything else, exactly as written:
+// node ${RECORD_PLAN_REVIEW_PATH} ${shellQuote(t.taskStateRoot)} ${shellQuote(t.planFile)} ${t.number} UPDATE_TASK_ENTRY <<'TTREVIEW'
+// ${payload}
+// TTREVIEW
+//
+// `;
+// };
 
-const planReviewBlock = (t: PreparedTask, planReview: PlanReview): string => {
-    const payload = JSON.stringify(planReview);
-    return `Run this first, before doing anything else, exactly as written:
-node ${RECORD_PLAN_REVIEW_PATH} ${shellQuote(t.taskStateRoot)} ${shellQuote(t.planFile)} ${t.number} UPDATE_TASK_ENTRY <<'TTREVIEW'
-${payload}
-TTREVIEW
-
-`;
-};
-
-const updateDocsBlock = (t: PreparedTask): string => {
-    const payload = JSON.stringify({ taskNumber: t.number, worktreePath: t.repoRoot, projectRoot: t.taskStateRoot, boxId: "UPDATE_AUTO_GENERATED_DOCS" });
-    return `Run this first, before doing anything else, exactly as written:
-node ${UPDATE_TASK_DOCS_PATH} <<'TTDOCS'
-${payload}
-TTDOCS
-
-`;
-};
+// Retired (task 11): dead since commit 8849857, no live caller passes extra.updateDocs.
+// const updateDocsBlock = (t: PreparedTask): string => {
+//     const payload = JSON.stringify({ taskNumber: t.number, worktreePath: t.repoRoot, projectRoot: t.taskStateRoot, boxId: "UPDATE_AUTO_GENERATED_DOCS" });
+//     return `Run this first, before doing anything else, exactly as written:
+// node ${UPDATE_TASK_DOCS_PATH} <<'TTDOCS'
+// ${payload}
+// TTDOCS
+//
+// `;
+// };
 
 // Retired: the prompt now reads plans/plan-template.json through /read-file instead of pasting it.
 // const planShape = (t: PreparedTask) => {
@@ -76,11 +83,12 @@ TTDOCS
 // plan — writes plan.json in the shape of plans/plan-template.json, spliced in below.
 // ---------------------------------------------------------------------------
 
-export function planPrompt(t: PreparedTask, extra?: PlanPromptExtra): string {
-    const leadingBlocks =
-        (extra?.clarifyRequest !== undefined ? clarifyRequestBlock(t, extra.clarifyRequest) : "") +
-        (extra?.planReview !== undefined ? planReviewBlock(t, extra.planReview) : "") +
-        (extra?.updateDocs ? updateDocsBlock(t) : "");
+export function planPrompt(t: PreparedTask): string {
+    // Retired (task 11): the extra param (clarifyRequest/planReview/updateDocs) had no live caller.
+    // const leadingBlocks =
+    //     (extra?.clarifyRequest !== undefined ? clarifyRequestBlock(t, extra.clarifyRequest) : "") +
+    //     (extra?.planReview !== undefined ? planReviewBlock(t, extra.planReview) : "") +
+    //     (extra?.updateDocs ? updateDocsBlock(t) : "");
     const codexNotes = t.codexReviewNotes.trim() === "" ? "" : `
 ## CODEX'S PREVIOUS REVIEW NOTES
 
@@ -90,7 +98,9 @@ ${t.codexReviewNotes.trim()}
 
 Address every point above in the sections you write.
 `;
-    return `${leadingBlocks}${codexNotes}## YOUR JOB
+    // Retired (task 11): leadingBlocks no longer exists (1g above); this line dropped its interpolation.
+    // return `${leadingBlocks}${codexNotes}## YOUR JOB`
+    return `${codexNotes}## YOUR JOB
 
 You are a read-only agent that is writing an implementation plan for task ${t.number} from \`.taskTools/tasks.json\`.
 The full task brief is below.

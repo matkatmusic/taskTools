@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL, type ResetScope } from "../../contracts.ts";
 import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import type { PreparedTask } from "../shared/preparedTask.ts";
@@ -16,7 +16,7 @@ import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 // Beside the run-log, so `tail -f` on it shows the spawned agent working. The hook sets RUN_STEP_LOG for every block.
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
 
-// Difficulty 7+: codex drafts the plan. It outruns the block's 5-minute cap, so this block starts it detached and the agent waits.
+// Difficulty 7+: codex drafts the plan, taking longer than the block's 5-minute cap, so it starts detached and waits.
 function codexPlanPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const answerFile = `${root}/plans/PLAN_THE_TASK.codex-answer.md`;
@@ -47,6 +47,8 @@ until [ -f ${doneFile} ] || ! kill -0 $(cat ${pidFile}) 2>/dev/null; do sleep 20
 ${whatToReturnSection(`{ "outcome": "<PLAN if ${t.planFile} now exists, else CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<empty when outcome is PLAN; otherwise the question from ${answerFile}>" }`, `checking whether ${t.planFile} exists and reading ${answerFile} for the clarify question`, "")}
 `;
 }
+
+export const resetScope: ResetScope = { counters: true, generatedFiles: true };
 
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as EntryPacket;

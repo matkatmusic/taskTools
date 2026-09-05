@@ -324,20 +324,8 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
         `${JSON.stringify({ input: {}, output: { box: "SECOND_BOX", scriptSignal: "stop", note: "SECOND_BOX.ts for SECOND_BOX", input: "" } }, null, 4)}\n`,
     );
 
-    const stepsConfigPath = join(fixtureRoot, "steps.json");
-    const workflowFilePath = join(fixtureRoot, "workflow.js");
-    const previousRunStepConfig = process.env.RUN_STEP_CONFIG;
-    const previousRunStepWorkflowFile = process.env.RUN_STEP_WORKFLOW_FILE;
-    try {
-        process.env.RUN_STEP_CONFIG = stepsConfigPath;
-        process.env.RUN_STEP_WORKFLOW_FILE = workflowFilePath;
-        skillBody("999999", fixtureRoot);
-    } finally {
-        if (previousRunStepConfig === undefined) delete process.env.RUN_STEP_CONFIG;
-        else process.env.RUN_STEP_CONFIG = previousRunStepConfig;
-        if (previousRunStepWorkflowFile === undefined) delete process.env.RUN_STEP_WORKFLOW_FILE;
-        else process.env.RUN_STEP_WORKFLOW_FILE = previousRunStepWorkflowFile;
-    }
+    const stepsConfigPath = join(fixtureRoot, ".taskTools/workflows/999999/steps.json");
+    skillBody("999999", fixtureRoot);
 
     const runLogPath = join(fixtureRoot, "run-log.json");
     const command = `/run-step pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;

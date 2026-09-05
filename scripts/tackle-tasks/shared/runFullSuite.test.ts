@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { runFullSuite } from "./runFullSuite.ts";
 import { claimTask, endTaskRun, getCurrentTaskRun } from "./taskRunState.ts";
 import { createWorktreeForGroup } from "../../prepareTasks.ts";
+import { writeKnownFailingTests } from "../../taskTestsRunner.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 
@@ -30,6 +31,17 @@ function writePackageJsonWithTestExitCode(repoPath: string, exitCode: number): v
     writeFileSync(
         join(repoPath, "package.json"),
         JSON.stringify({ name: "fixture", scripts: { test: `node -e "process.exit(${exitCode})"` } }),
+    );
+    git(repoPath, "add", "package.json");
+    git(repoPath, "commit", "-q", "-m", "add test script");
+}
+
+// A test script that prints a real reporter-shaped failure, so parseFailingTests can name it.
+function writePackageJsonWithReporterFailure(repoPath: string, file: string, name: string): void {
+    const reporterTail = `✖ ${name} (1ms)\\nℹ fail 1\\n✖ failing tests:\\n\\ntest at ${file}:12:1\\n✖ ${name} (1ms)\\n`;
+    writeFileSync(
+        join(repoPath, "package.json"),
+        JSON.stringify({ name: "fixture", scripts: { test: `printf '${reporterTail}'; exit 1` } }),
     );
     git(repoPath, "add", "package.json");
     git(repoPath, "commit", "-q", "-m", "add test script");
@@ -104,8 +116,25 @@ test("test_runFullSuite_recordsItsWholeDecisionBeforePrinting", () => {
     assert.ok(stored?.checkedAt);
 });
 
+test("test_runFullSuite_keepsALayerGreenWhenItsOnlyFailureIsKnown", () => {
+    // Setup: a layer whose one reported failure is already recorded as a known baseline.
+    const rootOrigin = makeTempRepoWithCommit("main");
+    writePackageJsonWithReporterFailure(rootOrigin, "tests/a.test.ts", "boom");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1);
+    writeKnownFailingTests(rootOrigin, [{ file: "tests/a.test.ts", name: "boom" }]);
+
+    // Test action: run the full suite.
+    const result = runFullSuite(1, RUN_ID, worktreePath, "main", "step-1", rootOrigin);
+
+    // Verification: the known failure keeps the layer, and the overall run, green.
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.layers, [{ occurrenceId: "", passed: true }]);
+    assert.match(result.output, /^known failing test \(ignored\):/);
+});
+
 test("test_runFullSuite_throwsWhenTheExpectedRunIdIsStale", () => {
-    // Setup: a claimed run ends, replaced by a newer claim, while a timed-out process still holds the original run id.
+    // Setup: a claimed run ends, replaced by a newer claim, as a timed-out process still holds the old id.
     const rootOrigin = makeTempRepoWithCommit("main");
     writePackageJsonWithTestExitCode(rootOrigin, 0);
     const worktreePath = createLinkedWorktree(rootOrigin);

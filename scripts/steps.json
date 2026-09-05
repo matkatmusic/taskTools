@@ -494,6 +494,16 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "PREFLIGHT_OK_Q"
+            ]
+        },
+        {
+            "box": "PREFLIGHT_OK_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
                 "MARK_TASK_ACTIVE"
             ]
         },

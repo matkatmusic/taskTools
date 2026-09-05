@@ -31,10 +31,10 @@ const runAgent = (model) => agent(prompt, { label: 'commit-message', phase: 'Com
 
 let result
 try {
-  result = await runAgent('Sonnet 5')
+  result = await runAgent('claude-sonnet-5[1m]')
 } catch {
   result = undefined
 }
-if (result == null) result = await runAgent('Opus 5')
+if (result == null) result = await runAgent('claude-opus-5[1m]')
 
 return result ?? { summaries: [] }

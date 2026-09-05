@@ -9,6 +9,7 @@ import { getTemplateShapeMismatches } from "./templateShape.ts";
 import type { BlockTemplate, StepConfig, StepConfigEntry } from "./generateSteps.ts";
 import { readCheckpoint, writeCheckpoint } from "./tackle-tasks/shared/checkpoint.ts";
 import { writeJsonAtomically } from "./taskStateLock.ts";
+import { readJsonFile } from "./tackle-tasks/shared/readJsonFile.ts";
 import { resetTask } from "./tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "./tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./tackle-tasks/shared/resumeRun.ts";
@@ -20,9 +21,10 @@ process.on("uncaughtException", (error: Error) => {
     const reason = `run-step hook failed: ${error.stack ?? error.message}`;
     process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);
     mkdirSync(dirname(logFile()), { recursive: true });
-    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
-    runLogEntries.push({ block: "HOOK EXCEPTION", reason });
-    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
+    // Never re-reads the existing log: a log that is corrupt at the moment this fires cannot be
+    // safely re-parsed without a try/catch, so this always starts a fresh one instead of risking
+    // a second, unrecoverable throw inside the handler of last resort.
+    writeJsonAtomically(logFile(), [{ block: "HOOK EXCEPTION", reason }]);
     process.exit(0);
 });
 
@@ -123,9 +125,9 @@ function took(ms: number): string {
 function appendStepToRunLog(stepKey: string, tookMs: number): void {
     mkdirSync(dirname(logFile()), { recursive: true });
     // The log is one JSON array; each pass of a run rewrites it whole, and passes never overlap.
-    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+    const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
     runLogEntries.push({ block: stepKey, duration: took(tookMs), durationMs: tookMs });
-    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
+    writeJsonAtomically(logFile(), runLogEntries);
 }
 
 // Single quotes for the log line only: the spawn itself passes an argument list, never a shell string.
@@ -168,7 +170,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     // The log dropped these four values; this per-block packet is where they live now.
     packetSequence += 1;
     mkdirSync(packetsDirectory(), { recursive: true });
-    writeFileSync(join(packetsDirectory(), `${step.box}-${process.pid}-${packetSequence}.json`), JSON.stringify({ input: { invocation }, command, commandOutput, output: stepRun }, null, 4));
+    writeJsonAtomically(join(packetsDirectory(), `${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun });
     appendStepToRunLog(`${step.diagram}::${step.box}`, tookMs);
     return stepRun;
 }
@@ -203,9 +205,9 @@ function isInsideSourceLock(stepKey: string): number {
 // A walk that could not finish has no outcome to report, so the reasons stand on their own.
 function buildFailure(boxesRun: string[], errors: string[]): HookOutput {
     mkdirSync(dirname(logFile()), { recursive: true });
-    const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+    const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
     runLogEntries.push({ block: "FAILURE", invocation, ran: boxesRun, errors });
-    writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
+    writeJsonAtomically(logFile(), runLogEntries);
     const report = `The workflow failed to complete successfully: ${errors.join("\n")}\nSee ${runDirectory} for specific inputs and outputs of each run-step block's execution.`;
     return { ok: false, ran: boxesRun, errors, outcome: null, report };
 }
@@ -270,7 +272,14 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     const startedFromPacketFile = typeof startPacket.packetFile === "string";
     if (typeof startPacket.packetFile === "string") {
         if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));
-        const { prompt: _prompt, startedAt, ...packet } = JSON.parse(readFileSync(startPacket.packetFile, "utf8"));
+        if (!existsSync(startPacket.packetFile)) {
+            return buildFailure([], [`packet file ${startPacket.packetFile} does not exist`]);
+        }
+        const packetFileText = readFileSync(startPacket.packetFile, "utf8");
+        if (packetFileText.trim() === "") {
+            return buildFailure([], [`packet file ${startPacket.packetFile} is empty`]);
+        }
+        const { prompt: _prompt, startedAt, ...packet } = JSON.parse(packetFileText);
         // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
         const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
         const promptBoxStepKey = getStepKeysNamingBox(promptBox)[0];
@@ -279,9 +288,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         }
         const agentTookMs = Date.now() - Number(startedAt);
         mkdirSync(dirname(logFile()), { recursive: true });
-        const runLogEntries = existsSync(logFile()) ? JSON.parse(readFileSync(logFile(), "utf8")) : [];
+        const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
         runLogEntries.push({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs });
-        writeFileSync(logFile(), `${JSON.stringify(runLogEntries, null, 4)}\n`);
+        writeJsonAtomically(logFile(), runLogEntries);
         startInput = JSON.stringify(packet);
     }
     // A launch naming a later block starts there if its worktree, plan, brief and input exist; otherwise it's ignored.
@@ -442,7 +451,7 @@ const isSkillCall = skillName === "run-step";
 // `/tackle-tasks reset N [BLOCK]` is the hook's job: it resets and returns the lines, so the agent runs nothing.
 const resetMatch = promptText.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
 if (resetMatch !== null) {
-    const said = resetTask(Number(resetMatch[1]), resetMatch[2] ?? "");
+    const said = await resetTask(Number(resetMatch[1]), resetMatch[2] ?? "");
     process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: said } })}\n`);
     process.exit(0);
 }

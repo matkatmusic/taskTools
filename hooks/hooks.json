@@ -50,12 +50,6 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/reflow-comments-post.ts\"",
             "statusMessage": "Reflowing wrapped comments..."
-          },
-          {
-            "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts\"",
-            "statusMessage": "Running related tests...",
-            "enabled": true
           }
         ]
       },
@@ -69,6 +63,11 @@
           {
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskTestsHook.ts\"",
+            "timeout": 600
           }
         ]
       }
@@ -80,6 +79,12 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts\"",
+            "statusMessage": "Running related tests and tsc...",
+            "timeout": 600
           }
         ]
       }

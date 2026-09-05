@@ -10,7 +10,7 @@ export function main(input: string): EntryPacket & { next: string } {
     if (readTaskRunState(packet.taskNumber, packet.projectRoot).active) {
         return { ...packet, box: "IS_TASK_ACTIVE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, exitType: "already-active", exitNote: "a previous run left the task active", next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT" };
     }
-    return { ...packet, box: "IS_TASK_ACTIVE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "MARK_TASK_ACTIVE" };
+    return { ...packet, box: "IS_TASK_ACTIVE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "PREFLIGHT_OK_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

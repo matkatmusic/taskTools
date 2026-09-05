@@ -21,7 +21,8 @@ function makeTempRepoWithCommit(): string {
     git(repoPath, "config", "user.email", "fixture@example.com");
     git(repoPath, "config", "user.name", "fixture");
     writeFileSync(join(repoPath, "seed.txt"), "seed\n");
-    git(repoPath, "add", "seed.txt");
+    writeFileSync(join(repoPath, "package.json"), JSON.stringify({ name: "fixture", scripts: { test: 'node --test "tests/**/*.test.ts"' } }));
+    git(repoPath, "add", "seed.txt", "package.json");
     git(repoPath, "commit", "-q", "-m", "seed");
     return repoPath;
 }
