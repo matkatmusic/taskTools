@@ -1,5 +1,6 @@
 // PLAN_THE_TASK, from _pipeline-monolith.mmd returns_a_prompt. Same body as pipeline-plan's; only the input shape changed.
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
@@ -15,7 +16,7 @@ import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 // Beside the run-log, so `tail -f` on it shows the spawned agent working. The hook sets RUN_STEP_LOG for every block.
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
 
-// Difficulty 7+: codex drafts the plan. It outruns one Bash() call, so it runs detached and the agent polls.
+// Difficulty 7+: codex drafts the plan. It outruns the block's 5-minute cap, so this block starts it detached and the agent waits.
 function codexPlanPrompt(t: PreparedTask): string {
     const root = t.repoRoot.replace(/\/+$/, "");
     const answerFile = `${root}/plans/PLAN_THE_TASK.codex-answer.md`;
@@ -29,16 +30,15 @@ function codexPlanPrompt(t: PreparedTask): string {
 cd ${root} && codex exec -s workspace-write -m gpt-5.6-terra -c 'model_reasoning_effort="high"' "$(cat ${codexPromptFile})" </dev/null >${answerFile} 2>&1
 echo $? >${doneFile}
 `);
-    return `You are spawning a plan agent running in the CLI.
-You do not edit any files. Your job is to start codex detached, wait for it to finish, then report.
+    rmSync(doneFile, { force: true });
+    // detached + unref: codex outlives this block; stdio ignore so the hook's spawnSync is not held open.
+    const codex = spawn("sh", [runScript], { detached: true, stdio: "ignore" });
+    codex.unref();
+    writeFileSync(pidFile, String(codex.pid));
+    return `You are waiting on a plan agent running in the CLI.
+You do not edit any files. Codex is already running detached (pid ${codex.pid}). Your job is to wait for it to finish, then report.
 
-## STEP 1 — Run this command verbatim:
-
-\`\`\`sh
-rm -f ${doneFile} && nohup sh ${runScript} >/dev/null 2>&1 </dev/null & echo $! >${pidFile}
-\`\`\`
-
-## STEP 2 — wait. Execute this exact command once, with run_in_background: true. It polls until codex's planning run is complete or its process is gone, then exits; wait for its completion notification.
+## STEP 1 — wait. Run this exact command in the foreground with timeout: 600000. It checks every 20 seconds until codex's planning run is complete or its process is gone, then prints DONE or CODEX DIED. If the call times out before it prints either, run it again, verbatim, until it does. Never use run_in_background or Monitor: a background notification never reaches you.
 
 \`\`\`sh
 until [ -f ${doneFile} ] || ! kill -0 $(cat ${pidFile}) 2>/dev/null; do sleep 20; done; [ -f ${doneFile} ] && echo DONE || echo CODEX DIED

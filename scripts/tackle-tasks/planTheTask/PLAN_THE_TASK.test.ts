@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,26 +44,33 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
     assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
 });
 
-test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () => {
+test("test_PLAN_THE_TASK_startsCodexDetachedToDraftThePlanWhenDifficultyIsAtLeast7", async () => {
     const { projectRoot, worktree } = makeFixture(35, 7);
+    // A fake codex on PATH records its call, so the test proves the detached start without running the real one.
+    const shimDir = join(projectRoot, "shim");
+    mkdirSync(shimDir);
+    const codexCallFile = join(projectRoot, "codex-call.txt");
+    writeFileSync(join(shimDir, "codex"), `#!/bin/sh\nprintf '%s\\n' "$@" >${codexCallFile}\n`, { mode: 0o755 });
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${shimDir}:${savedPath}`;
     const packet = JSON.stringify({
         box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber: 35, runId: "run-1",
         projectRoot, worktree, branch: "task-35", docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
     });
 
-    main(packet);
+    try { main(packet); } finally { process.env.PATH = savedPath; }
 
-    // Codex outruns one Bash() call: the script holds the command, the prompt starts and polls it.
+    // Codex outruns the block's 5-minute cap: the block starts it detached, the prompt only waits for the done marker.
     const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
     const runScript = join(worktree, "plans", "PLAN_THE_TASK.codex-run.sh");
     const doneFile = join(worktree, "plans", "PLAN_THE_TASK.codex-done");
+    const pidFile = join(worktree, "plans", "PLAN_THE_TASK.codex-pid");
     const promptFileContents = readFileSync(promptFile, "utf8");
-    assert.match(promptFileContents, /You are spawning a plan agent running in the CLI\./);
-    // macOS has no setsid; a plain nohup job outlives the Bash() call that started it.
-    assert.ok(promptFileContents.includes(`nohup sh ${runScript} >/dev/null 2>&1 </dev/null &`));
-    assert.doesNotMatch(promptFileContents, /setsid/);
+    assert.match(promptFileContents, /You are waiting on a plan agent running in the CLI\./);
+    assert.doesNotMatch(promptFileContents, /nohup|setsid|run_in_background: true/);
     assert.ok(promptFileContents.includes(`[ -f ${doneFile} ]`));
     assert.doesNotMatch(promptFileContents, /codex exec/);
+    assert.match(readFileSync(pidFile, "utf8"), /^\d+$/);
     const runScriptContents = readFileSync(runScript, "utf8");
     assert.match(runScriptContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
     assert.ok(runScriptContents.includes(`echo $? >${doneFile}`));
@@ -73,6 +80,9 @@ test("test_PLAN_THE_TASK_spawnsCodexToDraftThePlanWhenDifficultyIsAtLeast7", () 
     assert.doesNotMatch(runScriptContents, /PLANEOF/);
     assert.match(readFileSync(codexPromptFile, "utf8"), /task 35/);
     execFileSync("sh", ["-n", runScript]);
+    for (let i = 0; i < 50 && !existsSync(doneFile); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(readFileSync(doneFile, "utf8").trim(), "0");
+    assert.match(readFileSync(codexCallFile, "utf8"), /task 35/);
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

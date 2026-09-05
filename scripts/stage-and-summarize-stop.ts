@@ -90,9 +90,9 @@ const staged = paths.filter((path) => stageSessionHunk(flagDir, sid, path));
 rmSync(flag, { force: true });
 rmSync(join(flagDir, `${sid}.snapshots`), { recursive: true, force: true });
 if (staged.length === 0) process.exit(0);
-process.stdout.write(JSON.stringify({
-  hookSpecificOutput: {
-    hookEventName: "Stop",
-    additionalContext: "This session's changes are staged. Do not commit; invoke the commit-message skill.",
-  },
-}));
+// process.stdout.write(JSON.stringify({
+//   hookSpecificOutput: {
+//     hookEventName: "Stop",
+//     additionalContext: "This session's changes are staged. Do not commit; invoke the commit-message skill.",
+//   },
+// }));

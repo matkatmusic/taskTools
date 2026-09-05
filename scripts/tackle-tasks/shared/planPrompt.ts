@@ -123,6 +123,7 @@ Run this, which puts the exact shape the plan must take into your context:
 /read-file ${readFileArgs([PLAN_TEMPLATE_PATH])}
 \`\`\`
 Write the plan in exactly that shape, replacing every \`<...>\` with a real value, with \`task\` set to ${t.number}.
+The file must be strict JSON: inside every string, escape each double quote as \`\\"\`, each backslash as \`\\\\\`, and each newline as \`\\n\`. Before you return, run \`node -e 'JSON.parse(require("fs").readFileSync("${t.planFile}","utf8"))'\` and fix the file until that command prints nothing.
 
 ## PLAN REQUIREMENTS
 
