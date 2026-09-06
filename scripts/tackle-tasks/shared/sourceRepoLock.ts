@@ -51,6 +51,7 @@ export function readSourceRepoLock(projectRoot: string): LockFile | null {
 // Test-only pause seam: busy-wait until `signalPath` exists. Lets a test hold this process inside the guard while a concurrent process observes or queues behind it.
 function waitForTestSignal(signalPath: string | undefined): void {
     if (signalPath === undefined) return;
+    writeFileSync(`${signalPath}.arrived.${process.pid}`, "");
     while (!existsSync(signalPath)) {
         Atomics.wait(WAIT, 0, 0, 5);
     }
@@ -72,9 +73,7 @@ function isPidAlive(pid: number): boolean {
     }
 }
 
-// A guard whose ownership data cannot be read (bad JSON, or JSON with no numeric pid) is
-// corrupt, not evidence of anything — it throws, naming the guard path and its raw bytes,
-// rather than being silently folded into "not reclaimable".
+// A guard whose ownership data cannot be read (bad JSON, or JSON with no numeric pid) is corrupt, not evidence of anything — it throws, naming the guard path and its raw bytes, rather than being silently folded into "not reclaimable".
 function parseMutationGuardPid(guardPath: string, raw: string): number {
     let parsed: { pid?: unknown };
     try {
@@ -88,11 +87,7 @@ function parseMutationGuardPid(guardPath: string, raw: string): number {
     return parsed.pid;
 }
 
-// Recovers a guard stranded by a process that died holding it. Binds authorization to the
-// exact guard object, not just its pathname: renaming a path off to a private, unique name
-// is atomic, so at most one concurrent reclaimer's rename against the same guardPath can
-// ever succeed — a second reclaimer's rename throws ENOENT because the first already moved
-// it. Only the rename's winner ever inspects, verifies, or deletes the guard it claimed.
+// Recovers a guard stranded by a process that died holding it. Binds authorization to the exact guard object, not just its pathname: renaming a path off to a private, unique name is atomic, so at most one concurrent reclaimer's rename against the same guardPath can ever succeed — a second reclaimer's rename throws ENOENT because the first already moved it. Only the rename's winner ever inspects, verifies, or deletes the guard it claimed.
 function reclaimDeadMutationGuard(guardPath: string, testHooks?: SourceRepoLockTestHooks): boolean {
     let raw: string;
     try {
@@ -113,19 +108,19 @@ function reclaimDeadMutationGuard(guardPath: string, testHooks?: SourceRepoLockT
         throw error;
     }
 
-    // This process now exclusively owns claimedPath: the atomic rename means no other
-    // reclaimer could have raced this exact object away. Re-verify anyway — a live guard can
-    // only appear here if a fresh acquirer created one at guardPath in the instant between
-    // this call's dead-pid check and its rename, an already-vanishingly-narrow window this
-    // refuses loudly rather than silently repairing (repairing would itself reopen a window).
-    if (isPidAlive(parseMutationGuardPid(claimedPath, readFileSync(claimedPath, "utf8")))) {
-        throw new Error(`source-lock mutation guard reclaim at "${guardPath}" raced a live acquirer; retry`);
+    // A different file here is a fresh acquirer's live guard; give it back and lose the race.
+    if (readFileSync(claimedPath, "utf8") !== raw) {
+        renameSync(claimedPath, guardPath);
+        return false;
     }
+    // if (isPidAlive(parseMutationGuardPid(claimedPath, readFileSync(claimedPath, "utf8")))) {
+    //     throw new Error(`source-lock mutation guard reclaim at "${guardPath}" raced a live acquirer; retry`);
+    // }
     unlinkSync(claimedPath);
     return true;
 }
 
-// Same wx/wait/finally shape as withTaskStateLock, but its own path and never shared with the task-state lock. Held by one short-lived process, so PID liveness is a meaningful diagnostic here even though it is meaningless for the durable source lock.
+// Same wx/wait/finally shape as withTaskStateLock, but uses its own path, held by one short-lived process.
 export function withSourceRepoLockMutationGuard<T>(
     projectRoot: string,
     owner: LockOwner,

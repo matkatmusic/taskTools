@@ -413,7 +413,8 @@ test("test_acquireSourceRepoLock_stampsTheMutationGuardWithTheCallersOwnerToken"
         `acquireSourceRepoLock(${JSON.stringify(root)}, ${JSON.stringify(owner)}, `
         + `{ testHooks: { pauseBeforePublishUntilExists: ${JSON.stringify(pausePath)} } })`,
     );
-    await wait(150);
+    // Wait for the subprocess to actually reach the pause, however slowly it started.
+    while (readdirSync(root).filter((name) => name.startsWith("pause-guard-stamp.arrived.")).length < 1) await wait(5);
     // Step: the guard file, read while still held, must carry the caller's owner token.
     let guard: { owner?: unknown; pid?: unknown; createdAt?: unknown };
     try {
@@ -550,7 +551,7 @@ test("test_acquireSourceRepoLock_exactlyOneOfTwoReclaimersEntersTheGuardedAction
     child.kill("SIGKILL");
     await once(child, "exit");
 
-    // Step: two contenders both confirm the stranded pid is dead, then pause at a shared barrier before either renames the guard.
+    // Step: two contenders confirm the stranded pid is dead, then pause at a shared barrier before renaming the guard.
     const barrierPath = join(root, "barrier-508");
     const ownerA = buildLockOwner("run-506", 506);
     const ownerB = buildLockOwner("run-507", 507);
@@ -560,7 +561,8 @@ test("test_acquireSourceRepoLock_exactlyOneOfTwoReclaimersEntersTheGuardedAction
     );
     const callA = contenderCall(ownerA);
     const callB = contenderCall(ownerB);
-    await wait(150);
+    // Release the barrier only once both contenders have arrived at it, however slowly they started.
+    while (readdirSync(root).filter((name) => name.startsWith("barrier-508.arrived.")).length < 2) await wait(5);
     writeFileSync(barrierPath, "");
     const [resultA, resultB] = await Promise.allSettled([callA, callB]);
 
