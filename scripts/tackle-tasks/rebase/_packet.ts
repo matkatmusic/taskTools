@@ -16,6 +16,8 @@ export type RebasePacket = {
     stoppedCheckoutPath: string;
     conflictedFilePaths: string[];
     failureReason: string;
+    // Set only by REBASE_RESUMED_WORKTREE_ONTO_STAGING: where IS_REBASE_FINISHED_Q routes once the rebase is done.
+    returnTo?: string;
 };
 
 // Diagram rule: a mutating box in this pipeline refreshes the source lock's heartbeat.

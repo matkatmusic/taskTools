@@ -14,4 +14,6 @@ export type FixConflictsPacket = {
     stoppedCheckoutPath: string;
     conflictedFilePaths: string[];
     failureReason: string;
+    // Set only by REBASE_RESUMED_WORKTREE_ONTO_STAGING: where IS_REBASE_FINISHED_Q routes once the rebase is done.
+    returnTo?: string;
 };

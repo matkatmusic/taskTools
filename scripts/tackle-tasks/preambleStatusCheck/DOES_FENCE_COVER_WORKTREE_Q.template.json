@@ -1,14 +1,12 @@
 {
     "input": {
-        "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
         "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
         "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
         "branch": "task-1",
-        "docsMode": "",
-        "planFile": "",
         "exitType": "",
         "exitNote": ""
     },

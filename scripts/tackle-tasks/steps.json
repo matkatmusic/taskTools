@@ -150,6 +150,7 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
+                "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q",
                 "ARE_2_CONFLICT_FIXES_DONE_Q"
             ]
         },
@@ -614,7 +615,18 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-failuresExit.mmd::FAILURES_EXIT",
-                "DOES_FENCE_COVER_WORKTREE_Q"
+                "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+            ]
+        },
+        {
+            "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "DOES_FENCE_COVER_WORKTREE_Q",
+                "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q"
             ]
         },
         {

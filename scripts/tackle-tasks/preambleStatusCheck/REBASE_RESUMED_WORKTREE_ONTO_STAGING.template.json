@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "IS_WORKTREE_SAFE_TO_USE_Q",
+        "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,7 +13,7 @@
         "exitNote": ""
     },
     "output": {
-        "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -24,6 +24,13 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+        "rebased": false,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [""],
+        "failureReason": "",
+        "returnTo": "",
+        "next": "DOES_FENCE_COVER_WORKTREE_Q"
     }
 }
