@@ -6,7 +6,7 @@ import {
     COMPLETE_MARKER_PRESENT,
     DONE_MARKER_NOT_STAGED,
     DONE_MARKER_STAGED,
-} from "../scripts/resultCodes.ts";
+} from "../scripts/shared/resultCodes.ts";
 
 export type DoneMonitorOptions = {
     projectRoot: string;

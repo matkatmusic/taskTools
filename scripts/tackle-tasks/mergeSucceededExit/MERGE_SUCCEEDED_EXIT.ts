@@ -1,7 +1,7 @@
 // MERGE_SUCCEEDED_EXIT, from pipeline-mergeSucceededExit.mmd. Verifies the merge refs; never trusts the packet's assertion.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { readPublicationState } from "../shared/readPublicationState.ts";
 import type { MergeSucceededExitPacket } from "./_packet.ts";

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const hookPath = fileURLToPath(new URL("../scripts/taskTestsHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/hooks/taskTestsHook.ts", import.meta.url));
 
 // A throwaway package whose `npm test` prints whatever the caller wants.
 function fakeRepoWhoseTestPrints(shellLine: string): string {

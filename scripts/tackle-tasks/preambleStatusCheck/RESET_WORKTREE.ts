@@ -1,9 +1,9 @@
 // RESET_WORKTREE, from pipeline-preambleStatusCheck.mmd. Mutating: tears down and recreates the worktree. "reset the worktree"
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { deleteTaskMergePersistence, removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
-import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { deleteTaskMergePersistence, removeWorktreeAndBranch } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { createFreshTaskWorktree } from "../shared/_createFreshTaskWorktree.ts";
 import { readTaskRunState, updateCurrentTaskRun } from "../shared/taskRunState.ts";
 import type { EntryPacket } from "./_packet.ts";

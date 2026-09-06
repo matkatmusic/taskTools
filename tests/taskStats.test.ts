@@ -5,9 +5,9 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeTaskStats, formatTaskStats } from "../scripts/taskStats.ts";
+import { computeTaskStats, formatTaskStats } from "../scripts/hooks/taskStats.ts";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "taskStats.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "taskStats.ts");
 const TODAY = "2026-07-31";
 
 function openTask(taskNumber: number, extra: Record<string, unknown> = {}) {

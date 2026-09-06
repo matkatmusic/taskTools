@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main } from "./RECORD_MODIFIED_FILES_FAILURE.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { git, makeCommittedRepo, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(import.meta.dirname, "RECORD_MODIFIED_FILES_FAILURE.template.json");
 

@@ -9,9 +9,9 @@ import { rebaseTaskWorktree } from "./rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

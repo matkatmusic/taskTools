@@ -5,13 +5,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
-import type { RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { createEmptyResolutionManifest } from "../scripts/resolutionRequests.ts";
-import { getAncestorChain } from "../scripts/repositoryGraph.ts";
-import { discoverRepositoryTree } from "../scripts/repositoryDiscovery.ts";
-import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
-import { operationBranchName, setUpOperationBranches } from "../scripts/operationBranches.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
+import type { RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { createEmptyResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
+import { getAncestorChain } from "../scripts/shared/repositoryGraph.ts";
+import { discoverRepositoryTree } from "../scripts/shared/repositoryDiscovery.ts";
+import type { DiscoveryManifest } from "../scripts/shared/repositoryDiscovery.ts";
+import { operationBranchName, setUpOperationBranches } from "../scripts/shared/operationBranches.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

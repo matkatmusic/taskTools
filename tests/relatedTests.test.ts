@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { groupEditsByOccurrence } from "../scripts/relatedTests.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { groupEditsByOccurrence } from "../scripts/hooks/relatedTests.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
 function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOccurrence {
     return {

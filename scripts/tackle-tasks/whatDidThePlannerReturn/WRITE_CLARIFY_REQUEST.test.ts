@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./WRITE_CLARIFY_REQUEST.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { writeCheckpoint, type Checkpoint } from "../shared/checkpoint.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "WRITE_CLARIFY_REQUEST.template.json");

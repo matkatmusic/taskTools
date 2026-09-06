@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { main } from "./CLEAN_UP_WORKTREES.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../shared/sourceRepoLock.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
-import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "CLEAN_UP_WORKTREES.template.json");

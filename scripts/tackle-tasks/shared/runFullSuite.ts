@@ -3,8 +3,8 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { getOccurrencesDeepestFirst } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
-import { discoverTestPolicy } from "../../testPolicy.ts";
-import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
+import { discoverTestPolicy } from "../../shared/testPolicy.ts";
+import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;

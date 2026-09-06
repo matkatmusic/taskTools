@@ -1,10 +1,10 @@
 // The task record every agent prompt is built from; its own module avoids prompt files importing the dispatch hub.
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
-import { TASK_HAS_TESTS } from "../../resultCodes.ts";
-import { modifiableFiles, readOnlyFiles } from "../../prepareTasks.ts";
-import { groupTasksByFileOverlap } from "../../taskGroups.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
+import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
+import { modifiableFiles, readOnlyFiles } from "../../shared/prepareTasks.ts";
+import { groupTasksByFileOverlap } from "../../shared/taskGroups.ts";
 
 function fail(problem: string): never {
     process.stderr.write(`AgentPromptEmitter: ${problem}\n`);

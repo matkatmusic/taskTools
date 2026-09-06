@@ -5,8 +5,8 @@ import {
     resolveRelativeSubmoduleUrl,
     normalizeRepositoryIdentity,
     resolveSubmoduleUpstreamIdentity,
-} from "../scripts/submoduleUrlIdentity.ts";
-import type { SubmoduleOccurrence } from "../scripts/submoduleUrlIdentity.ts";
+} from "../scripts/shared/submoduleUrlIdentity.ts";
+import type { SubmoduleOccurrence } from "../scripts/shared/submoduleUrlIdentity.ts";
 
 // "../x" walks up one directory, replacing only the last path segment.
 test("test_relativeSubmoduleUrlResolvesAgainstParentOrigin", () => {

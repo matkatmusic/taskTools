@@ -1,7 +1,7 @@
 // ARE_2_MERGE_ATTEMPTS_DONE_Q, from pipeline-runFullSuite.mmd. Counts merge attempts, persisted per run.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { MAX_ATTEMPTS, raiseAttemptCount } from "../shared/taskRunState.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
 

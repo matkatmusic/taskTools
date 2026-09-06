@@ -1,7 +1,7 @@
 // CLEAN_UP_WORKTREES, from pipeline-mergeSucceededExit.mmd "clean up worktrees, leases, persistence refs and the source lock". Mutating: also releases the source lock.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { cleanupTaskWorktree } from "../shared/cleanupTaskWorktree.ts";
 
 export type CleanUpWorktreesInput = {

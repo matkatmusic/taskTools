@@ -2,8 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { issueRunAuthorization, runFinalization } from "../scripts/runAuthorization.ts";
+import { basename, join } from "node:path";
+import { issueRunAuthorization, runFinalization } from "../scripts/shared/runAuthorization.ts";
 
 test("test_rejectsACallMissingTheAuthorizationToken", () => {
     // Omitting the token shifts args; runtime guard must reject the resulting non-token value.
@@ -34,11 +34,13 @@ test("test_noProductionModuleOtherThanThePhase4ApprovalRecorderImportsIssueRunAu
     // Scan scripts/ for issueRunAuthorization imports; only allowlisted files (the approval recorder) may use it.
     const allowedImporters = new Set<string>(["approvalGate.ts"]);
     const scriptsDir = join(import.meta.dirname, "..", "scripts");
-    const scriptFiles = readdirSync(scriptsDir).filter((file) => file.endsWith(".ts") && file !== "runAuthorization.ts");
+    const scriptFiles = readdirSync(scriptsDir, { recursive: true })
+        .filter((file): file is string => typeof file === "string" && file.endsWith(".ts") && !file.includes("fixtures"))
+        .filter((file) => basename(file) !== "runAuthorization.ts");
     for (const file of scriptFiles) {
         const contents = readFileSync(join(scriptsDir, file), "utf8");
         if (contents.includes("issueRunAuthorization")) {
-            assert.equal(allowedImporters.has(file), true);
+            assert.equal(allowedImporters.has(basename(file)), true, `${file} imports issueRunAuthorization but is not allowlisted`);
         }
     }
 });

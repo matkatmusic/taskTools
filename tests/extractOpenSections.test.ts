@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "extractOpenSections.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "extractOpenSections.ts");
 
 test("prints banner-labelled sections and stops at the next header", () => {
   const dir = mkdtempSync(join(tmpdir(), "taskTools-extract-"));

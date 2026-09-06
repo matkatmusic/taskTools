@@ -1,4 +1,4 @@
-// Disabled: scripts/tackleTasksHook.ts is unregistered from hooks.json on the v1.6 launch path; these tests assert the retired `valid` brief.
+// Disabled: scripts/tackle-tasks/tackleTasksHook.ts is unregistered from hooks.json on the v1.6 launch path; these tests assert the retired `valid` brief.
 /*
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const hookPath = fileURLToPath(new URL("../scripts/tackleTasksHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/tackle-tasks/tackleTasksHook.ts", import.meta.url));
 
 function withProject(tasks: unknown[], run: (dir: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), "tackle-tasks-hook-"));

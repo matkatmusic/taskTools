@@ -1,8 +1,8 @@
 // Behavioral checks for logicalRepository.ts: grouping occurrences by shared upstream identity.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildLogicalRepositories } from "../scripts/logicalRepository.ts";
-import type { RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
+import { buildLogicalRepositories } from "../scripts/shared/logicalRepository.ts";
+import type { RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
 
 function makeOccurrence(id: string, parentId: string | null, path: string, rawUrl: string): RepositoryOccurrence {
     return {

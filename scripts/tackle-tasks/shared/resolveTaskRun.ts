@@ -1,8 +1,8 @@
 // Replaces bootstrap's "prepare" mode front-end for the box before "is task number valid?".  Mutates nothing: no worktree, no tasks.json write. See plans/tackle-tasks-v1_5-plan.md §Phase 2.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { generateRunId } from "../../prepareTasks.ts";
-import { currentBranchName } from "../../repositoryBranches.ts";
+import { generateRunId } from "../../shared/prepareTasks.ts";
+import { currentBranchName } from "../../shared/repositoryBranches.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ResolveTaskRunOutput = {

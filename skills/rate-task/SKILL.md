@@ -4,5 +4,5 @@ description: score a task's difficulty and split-worthiness on the 1-10 scale, w
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/rateTask.ts" $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/rate-task/rateTask.ts" $ARGUMENTS
 ```

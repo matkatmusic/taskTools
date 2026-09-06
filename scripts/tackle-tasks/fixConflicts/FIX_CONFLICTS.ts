@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { fixConflictsPrompt } from "../shared/FixConflictsBodyEmitter.ts";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "../shared/sourceRepoLock.ts";

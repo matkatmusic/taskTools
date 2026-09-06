@@ -5,11 +5,11 @@ import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow, releaseSourceRepoLoc
 import { taskBranchName } from "./createTaskWorktree.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { GENERATED_ARTIFACT_PATTERNS } from "./writeTaskBrief.ts";
-import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import {
     collectRetainedTaskArtifacts, deleteTaskMergePersistence, removeTaskWorktreeAndBranches,
     type RetainedArtifactTarget, type SourceBranchCleanupTarget,
-} from "../../mergeTaskWorktrees.ts";
+} from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 import { loadSourceManifest } from "./occurrences.ts";
 
 // M3: branchName derives from taskNumber here, not stdin, so a malformed payload can't target another task's deletions.

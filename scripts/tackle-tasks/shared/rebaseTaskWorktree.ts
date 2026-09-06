@@ -7,14 +7,14 @@ import {
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
-import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
+import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import {
     appendStepResult, updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt,
 } from "./taskRunState.ts";
 import {
     rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
-} from "../../mergeTaskWorktrees.ts";
+} from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 
 export type RebaseTaskWorktreeInput = {
     projectRoot: string;

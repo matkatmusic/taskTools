@@ -10,9 +10,9 @@ import {
     runGatedMutatingSteps,
     runStartup,
     type HookCheckResult,
-} from "../scripts/runStartup.ts";
+} from "../scripts/shared/runStartup.ts";
 
-const RUN_STARTUP_SOURCE = readFileSync(join(import.meta.dirname, "..", "scripts", "runStartup.ts"), "utf8");
+const RUN_STARTUP_SOURCE = readFileSync(join(import.meta.dirname, "..", "scripts", "shared", "runStartup.ts"), "utf8");
 const HOOKS_JSON_PATH = join(import.meta.dirname, "..", "hooks", "hooks.json");
 
 function makeProjectRoot(): string {
@@ -37,7 +37,7 @@ function makeHooksJson(dir: string, entryOptions: { present: boolean; enabled?: 
                   hooks: [
                       {
                           type: "command",
-                          command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts"',
+                          command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/hooks/relatedTests.ts"',
                           ...(entryOptions.enabled === undefined ? {} : { enabled: entryOptions.enabled }),
                       },
                   ],
@@ -88,8 +88,8 @@ test("hooks/hooks.json registers the copied relatedTests.ts entry point", () => 
         .flatMap((entry) => entry.hooks ?? [])
         .map((hook) => hook.command ?? "");
     assert.ok(
-        commands.some((command) => command.includes("scripts/relatedTests.ts")),
-        "expected an entry invoking scripts/relatedTests.ts",
+        commands.some((command) => command.includes("scripts/hooks/relatedTests.ts")),
+        "expected an entry invoking scripts/hooks/relatedTests.ts",
     );
     assert.equal(confirmTestHookEnabled(HOOKS_JSON_PATH).enabled, true);
 });

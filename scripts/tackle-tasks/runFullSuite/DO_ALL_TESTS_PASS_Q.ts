@@ -1,7 +1,7 @@
 // DO_ALL_TESTS_PASS_Q, from pipeline-runFullSuite.mmd
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 
 type Input = {
     taskNumber: number;

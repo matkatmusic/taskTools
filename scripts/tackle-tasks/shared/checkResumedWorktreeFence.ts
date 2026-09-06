@@ -3,9 +3,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { computeExemptGitlinkPaths } from "./checkTaskFileFence.ts";
 import { buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { modifiableFiles } from "../../prepareTasks.ts";
-import { currentBranchName } from "../../repositoryBranches.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { modifiableFiles } from "../../shared/prepareTasks.ts";
+import { currentBranchName } from "../../shared/repositoryBranches.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type CheckResumedWorktreeFenceInput = {

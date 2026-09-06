@@ -1,7 +1,7 @@
 // BUILD_CLOSURE_NOTE, from pipeline-mergeSucceededExit.mmd "build the closure note from the recorded run". Read-only: runs correctly even after CLEAN_UP_WORKTREES deletes the worktree.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { buildClosureNote } from "../shared/buildClosureNote.ts";
 
 export type BuildClosureNoteInput = {

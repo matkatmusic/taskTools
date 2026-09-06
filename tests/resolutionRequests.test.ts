@@ -1,7 +1,7 @@
 // resolutionRequests.ts: resumable discovery resolution requests with persisted answers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
+import type { ResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
 import {
     createResolutionRequest,
     createResolutionRequestId,
@@ -15,8 +15,8 @@ import {
     REASON_ZERO_EXACT_TIP_MATCHES,
     REASON_MULTIPLE_EXACT_TIP_MATCHES,
     REASON_BASE_RECONCILIATION,
-} from "../scripts/resolutionRequests.ts";
-import { RESOLUTION_REQUEST_NEEDED, RESOLUTION_REQUEST_NOT_NEEDED } from "../scripts/resultCodes.ts";
+} from "../scripts/shared/resolutionRequests.ts";
+import { RESOLUTION_REQUEST_NEEDED, RESOLUTION_REQUEST_NOT_NEEDED } from "../scripts/shared/resultCodes.ts";
 
 // Zero exact tip matches: request carries that reason and an empty candidate list.
 test("createResolutionRequest records zero-exact-tip-match reason", () => {

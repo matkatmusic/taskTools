@@ -1,10 +1,10 @@
 // The only module that reads or writes task.run. No CLI — see plans/tackle-tasks-v1_5-plan.md §1a.
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
-import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../../prepareTasks.ts";
-import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../taskFiles.ts";
-import { LEASE_COMPATIBLE_WITH_INTENT, LEASE_INCOMPATIBLE_WITH_INTENT } from "../../resultCodes.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../../shared/prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../shared/taskFiles.ts";
+import { LEASE_COMPATIBLE_WITH_INTENT, LEASE_INCOMPATIBLE_WITH_INTENT } from "../../shared/resultCodes.ts";
 
 export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"

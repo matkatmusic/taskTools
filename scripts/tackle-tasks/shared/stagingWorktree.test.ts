@@ -6,7 +6,7 @@ import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureStagingWorktree, stagingWorktreePath } from "./stagingWorktree.ts";
-import { loadRepositoryManifest } from "../../prepareTasks.ts";
+import { loadRepositoryManifest } from "../../shared/prepareTasks.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

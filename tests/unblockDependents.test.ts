@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "unblockDependents.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "unblockDependents.ts");
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-unblock-"));

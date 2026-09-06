@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readTaskFile, resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { readTaskFile, resolveTaskFiles } from "../scripts/shared/taskFiles.ts";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 

@@ -6,9 +6,9 @@ import {
     produceFileHunterPrompt,
     produceBlockerHunterPrompt,
     getOpenTaskLines,
-} from "../scripts/create-task_AgentPromptEmitter.ts";
+} from "../scripts/create-task/create-task_AgentPromptEmitter.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/create-task_AgentPromptEmitter.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/create-task/create-task_AgentPromptEmitter.ts", import.meta.url));
 
 test("test_produceFileHunterPromptEndsWithTheTaskTemplate", () => {
     const taskTemplate = '{"taskNumber": 1}';

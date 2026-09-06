@@ -1,7 +1,7 @@
 // IS_TASK_BLOCKED_Q, from pipeline-preambleStatusCheck.mmd. "is the task blocked?"
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { isTaskBlocked } from "../shared/isTaskBlocked.ts";
 import type { EntryPacket } from "./_packet.ts";
 

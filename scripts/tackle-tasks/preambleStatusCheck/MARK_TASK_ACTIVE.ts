@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { claimTask } from "../shared/taskRunState.ts";
 import type { EntryPacket } from "./_packet.ts";
 

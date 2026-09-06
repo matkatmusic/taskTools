@@ -2,14 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { closeTasksBrief } from "../scripts/closeTasksBrief.ts";
+import { closeTasksBrief } from "../scripts/close-tasks/closeTasksBrief.ts";
 
 // The commit whose SKILL.md still carried the body inline — the source text this script copied.
 const preRefactorCommit = "970625df50ce150b774864e43e3dcb9cf28115b5";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
-const scriptPath = fileURLToPath(new URL("../scripts/closeTasksBrief.ts", import.meta.url));
-const getTaskDetailsPath = fileURLToPath(new URL("../scripts/getTaskDetails.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/close-tasks/closeTasksBrief.ts", import.meta.url));
+const getTaskDetailsPath = fileURLToPath(new URL("../scripts/shared/getTaskDetails.ts", import.meta.url));
 
 function preRefactorBody(): string {
   const skill = execFileSync("git", ["show", `${preRefactorCommit}:skills/close-tasks/SKILL.md`], {
@@ -27,7 +27,7 @@ test("brief reproduces the pre-refactor skill body byte-for-byte once its substi
       '- tasks to close: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts" \'$ARGUMENTS\'`',
       `- tasks to close: ${taskDetails}`,
     )
-    .replaceAll("${CLAUDE_PLUGIN_ROOT}/scripts/closeTasks.ts", `${repoRoot}/scripts/closeTasks.ts`)
+    .replaceAll("${CLAUDE_PLUGIN_ROOT}/scripts/closeTasks.ts", `${repoRoot}/scripts/close-tasks/closeTasks.ts`)
     .replaceAll("$ARGUMENTS", argsValue);
   assert.equal(closeTasksBrief(argsValue, taskDetails), expected);
 });

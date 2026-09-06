@@ -14,7 +14,7 @@ import {
     resolveOccurrenceBaseRef,
 } from "./occurrences.ts";
 import type { Occurrence } from "./occurrences.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";

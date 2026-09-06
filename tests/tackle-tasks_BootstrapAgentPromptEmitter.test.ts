@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks_BootstrapAgentPromptEmitter.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks/shared/tackle-tasks_BootstrapAgentPromptEmitter.ts", import.meta.url));
 const DRIVER_RESULT_PREFIX = "Return exactly this JSON as your structured result, with no other keys added or removed:\n";
 
 function git(repoRoot: string, ...args: string[]): string {

@@ -1,10 +1,10 @@
 // RECORD_MERGE_COMMIT_HASHES, from pipeline-mergeSucceededExit.mmd "record the merge commit hashes to tasks.json". Mutating.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { recordMergeCommits } from "../shared/recordMergeCommits.ts";
 import { getCurrentTaskRun, type TaskCommit } from "../shared/taskRunState.ts";
-import { MERGE_COMMITS_ALREADY_RECORDED, MERGE_COMMITS_NOT_RECORDED } from "../../resultCodes.ts";
+import { MERGE_COMMITS_ALREADY_RECORDED, MERGE_COMMITS_NOT_RECORDED } from "../../shared/resultCodes.ts";
 
 export type RecordMergeCommitHashesInput = {
     box: string;

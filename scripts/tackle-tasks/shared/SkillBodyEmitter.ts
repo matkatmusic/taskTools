@@ -2,12 +2,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { generateSteps, resolveDiagramFolderSetting } from "../../generateSteps.ts";
-import { generateWorkflow } from "../../generateWorkflow.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting } from "../generateSteps.ts";
+import { generateWorkflow } from "../generateWorkflow.ts";
 
 const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
-const DEFAULT_STEPS_CONFIG_PATH = fileURLToPath(new URL("../../steps.json", import.meta.url));
+const DEFAULT_STEPS_CONFIG_PATH = fileURLToPath(new URL("../steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 

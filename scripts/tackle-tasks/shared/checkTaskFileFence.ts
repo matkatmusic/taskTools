@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
 import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { modifiableFiles } from "../../prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { modifiableFiles } from "../../shared/prepareTasks.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 

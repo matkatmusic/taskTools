@@ -1,9 +1,9 @@
 // "where are we?" — decides how /run-step continues a task that has already started once. plans/resume-failed-run-plan.md §0/§3.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { taskFilesProjectRoot } from "../../taskFiles.ts";
-import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { taskFilesProjectRoot } from "../../shared/taskFiles.ts";
+import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { isTaskNumberValid } from "./isTaskNumberValid.ts";
 import { readTaskRunState, reopenTaskRun, endTaskRun } from "./taskRunState.ts";
 import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";

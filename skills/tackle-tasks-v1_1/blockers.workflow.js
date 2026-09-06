@@ -4,7 +4,7 @@ export const meta = {
   phases: [{ title: 'Blockers', detail: 'one investigator per blocked-task/blocker pair' }],
 }
 
-// ponytail: workflow scripts cannot import; these mirror scripts/blockerVerdicts.ts
+// ponytail: workflow scripts cannot import; these mirror scripts/shared/blockerVerdicts.ts
 const BLOCKER_VERDICTS = { DISPROVEN: 'disproven', STILL_BLOCKED: 'still-blocked' }
 const BLOCKER_VERDICT_VALUES = Object.values(BLOCKER_VERDICTS)
 const BLOCKER_VERDICT_SCHEMA_FRAGMENT = { type: 'string', enum: [...BLOCKER_VERDICT_VALUES] }

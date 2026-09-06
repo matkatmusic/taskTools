@@ -6,9 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./DID_CHANGES_STAY_INSIDE_FENCE_Q.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { git, makeCommittedRepo, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "DID_CHANGES_STAY_INSIDE_FENCE_Q.template.json");

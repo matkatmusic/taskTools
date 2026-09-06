@@ -3,10 +3,10 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
 import { isTaskNumberValid } from "../shared/isTaskNumberValid.ts";
-import { taskFilesProjectRoot } from "../../taskFiles.ts";
+import { taskFilesProjectRoot } from "../../shared/taskFiles.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 // The workflow's first input.

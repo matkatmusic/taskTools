@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
+import { getTemplateShapeMismatches } from "../scripts/shared/templateShape.ts";
 
 test("test_getTemplateShapeMismatches_findsNothingWhenTheShapesMatch", () => {
     assert.deepEqual(getTemplateShapeMismatches({ box: "A", signal: "continue" }, { box: "B", signal: "stop" }), []);

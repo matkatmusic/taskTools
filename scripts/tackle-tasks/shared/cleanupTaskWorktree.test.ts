@@ -7,10 +7,10 @@ import { cleanupTaskWorktree } from "./cleanupTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { taskBranchName } from "./createTaskWorktree.ts";
 import { adoptWorktreeLease, claimTask } from "./taskRunState.ts";
-import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
+import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
-import { GIT_REF_EXISTS, GIT_REF_NOT_FOUND } from "../../resultCodes.ts";
+import { GIT_REF_EXISTS, GIT_REF_NOT_FOUND } from "../../shared/resultCodes.ts";
 
 function makeSourceRepoWithSubmodule(): string {
     const childOrigin = makeCommittedRepo("cleanup-worktree-child-", "child-main");

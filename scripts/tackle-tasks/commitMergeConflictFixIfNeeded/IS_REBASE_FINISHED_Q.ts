@@ -1,7 +1,7 @@
 // IS_REBASE_FINISHED_Q, from pipeline-rebase.mmd. Decision: read-only, no lock refresh needed.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { CommitMergeConflictFixIfNeededPacket } from "./_packet.ts";
 
 export function main(input: string): CommitMergeConflictFixIfNeededPacket & { next: string } {

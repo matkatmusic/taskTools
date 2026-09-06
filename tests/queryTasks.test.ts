@@ -20,7 +20,7 @@ function makeFixture(): string {
 }
 
 function runQueryTasks(projectRoot: string, args: string[]): string {
-  const scriptPath = join(import.meta.dirname, "..", "scripts", "queryTasks.ts");
+  const scriptPath = join(import.meta.dirname, "..", "scripts", "shared", "queryTasks.ts");
   return execFileSync("node", [scriptPath, ...args], { cwd: projectRoot, encoding: "utf8" });
 }
 

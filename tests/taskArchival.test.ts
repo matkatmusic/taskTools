@@ -8,8 +8,8 @@ import {
     archivePublishedTasks,
     summarizeTaskMergeResults,
     type RawTaskRepoOutcome,
-} from "../scripts/taskArchival.ts";
-import { writeJsonAtomically } from "../scripts/taskStateLock.ts";
+} from "../scripts/shared/taskArchival.ts";
+import { writeJsonAtomically } from "../scripts/shared/taskStateLock.ts";
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-archival-"));
@@ -83,7 +83,7 @@ test("a fully-published task not named in the explicit list stays open", () => {
 });
 
 test("does not import or call any approval/confirmation code path", () => {
-    const source = readFileSync(join(import.meta.dirname, "..", "scripts", "taskArchival.ts"), "utf8");
+    const source = readFileSync(join(import.meta.dirname, "..", "scripts", "shared", "taskArchival.ts"), "utf8");
     const importLines = source.split("\n").filter((line) => line.trim().startsWith("import"));
     assert.equal(importLines.some((line) => /approvalGate|approvalReadiness/.test(line)), false);
     assert.equal(/recordApproval\(|issueApprovalAuthorization\(/.test(source), false);

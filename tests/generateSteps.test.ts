@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generateSteps, getBoxesInDiagram, getEdgesInDiagram, resolveDiagramFolderSetting } from "../scripts/generateSteps.ts";
+import { generateSteps, getBoxesInDiagram, getEdgesInDiagram, resolveDiagramFolderSetting } from "../scripts/tackle-tasks/generateSteps.ts";
 import { skillBody } from "../scripts/tackle-tasks/shared/SkillBodyEmitter.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -17,9 +17,10 @@ function generateFrom(diagrams: Record<string, string>) {
     const stepsRoot = join(folder, "steps");
     const configPath = join(folder, "steps.json");
     mkdirSync(diagramFolder);
-    // A stub imports SCRIPT_SIGNAL from two folders up, so the throwaway project needs those files too.
-    copyFileSync(join(PROJECT_ROOT, "scripts/contracts.ts"), join(folder, "contracts.ts"));
-    copyFileSync(join(PROJECT_ROOT, "scripts/templateShape.ts"), join(folder, "templateShape.ts"));
+    // A stub imports SCRIPT_SIGNAL from two folders up plus shared/, so the throwaway project needs those files too.
+    mkdirSync(join(folder, "shared"));
+    copyFileSync(join(PROJECT_ROOT, "scripts/shared/contracts.ts"), join(folder, "shared", "contracts.ts"));
+    copyFileSync(join(PROJECT_ROOT, "scripts/shared/templateShape.ts"), join(folder, "shared", "templateShape.ts"));
     for (const [name, contents] of Object.entries(diagrams)) writeFileSync(join(diagramFolder, name), contents);
     const run = () => generateSteps(diagramFolder, stepsRoot, configPath);
     return { config: run(), run, diagramFolder, stepsRoot, configPath, readConfig: () => JSON.parse(readFileSync(configPath, "utf8")) };
@@ -341,7 +342,7 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
 
     const runLogPath = join(fixtureRoot, "run-log.json");
     const command = `/run-step pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;
-    execFileSync("node", ["--no-inspect", join(PROJECT_ROOT, "scripts/runStepHook.ts")], {
+    execFileSync("node", ["--no-inspect", join(PROJECT_ROOT, "scripts/hooks/runStepHook.ts")], {
         encoding: "utf8",
         input: JSON.stringify({ hook_event_name: "SubagentStart", prompt: command }),
         env: { ...process.env, RUN_STEP_CONFIG: stepsConfigPath, RUN_STEP_LOG: runLogPath },

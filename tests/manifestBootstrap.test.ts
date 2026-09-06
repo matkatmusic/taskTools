@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

@@ -5,14 +5,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
-import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
-import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
-import { currentBranchName } from "../scripts/repositoryBranches.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
-import type { ArchiveRequest } from "../scripts/taskArchival.ts";
-import type { DiscoveryManifest } from "../scripts/repositoryDiscovery.ts";
-import type { ResolutionManifest } from "../scripts/resolutionRequests.ts";
+import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/shared/prepareTasks.ts";
+import type { PreparedGroup, WorkflowArguments } from "../scripts/shared/prepareTasks.ts";
+import { currentBranchName } from "../scripts/shared/repositoryBranches.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
+import type { ArchiveRequest } from "../scripts/shared/taskArchival.ts";
+import type { DiscoveryManifest } from "../scripts/shared/repositoryDiscovery.ts";
+import type { ResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
 import {
     defaultMergeStepOperations,
     findUnmergedTaskWorktrees,
@@ -25,13 +25,13 @@ import {
     rebaseSubmoduleLayersDeepestFirst,
     removeWorktreeAndBranch,
     resolveGitlinkConflicts,
-} from "../scripts/mergeTaskWorktrees.ts";
-import type { MergeStepOperations } from "../scripts/mergeTaskWorktrees.ts";
-import { REASON_NO_TEST_CONFIGURATION } from "../scripts/testPolicy.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
-import { GIT_PATH_PRESENT, GIT_PATH_ABSENT } from "../scripts/resultCodes.ts";
+} from "../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
+import type { MergeStepOperations } from "../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { REASON_NO_TEST_CONFIGURATION } from "../scripts/shared/testPolicy.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import { GIT_PATH_PRESENT, GIT_PATH_ABSENT } from "../scripts/shared/resultCodes.ts";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "mergeTaskWorktrees.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "merge-worktree-tasks", "mergeTaskWorktrees.ts");
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

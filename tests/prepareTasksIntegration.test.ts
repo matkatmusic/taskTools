@@ -5,13 +5,13 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
-import { getOwningOccurrence } from "../scripts/repositoryGraph.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
-const prepareTasksModulePath = new URL("../scripts/prepareTasks.ts", import.meta.url).href;
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
+import { getOwningOccurrence } from "../scripts/shared/repositoryGraph.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/shared/prepareTasks.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
+const prepareTasksModulePath = new URL("../scripts/shared/prepareTasks.ts", import.meta.url).href;
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
 function git(cwd: string, args: string[]): void {
     execFileSync("git", args, { cwd, stdio: "ignore" });

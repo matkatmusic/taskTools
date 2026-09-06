@@ -1,6 +1,6 @@
 // "read the publication state from the layer merge refs" — pipeline-merge.mmd. Read-only.
 import { readFileSync } from "node:fs";
-import { findRecordedMergedCommit } from "../../mergeTaskWorktrees.ts";
+import { findRecordedMergedCommit } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 import { taskBranchName } from "./createTaskWorktree.ts";
 import { buildWorktreeOccurrences } from "./occurrences.ts";
 import type { TaskCommit } from "./taskRunState.ts";

@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./MARK_TASK_INACTIVE_SUCCESS.ts";
 import { readTaskRunState, type TaskRunRecord } from "../shared/taskRunState.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "MARK_TASK_INACTIVE_SUCCESS.template.json");
 

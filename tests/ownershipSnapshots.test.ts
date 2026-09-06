@@ -11,9 +11,9 @@ import {
     checkOwnership,
     diffSnapshots,
     takeSnapshot,
-} from "../scripts/ownershipSnapshots.ts";
-import type { Change } from "../scripts/ownershipSnapshots.ts";
-import type { OwnershipEffects } from "../scripts/ownershipKeys.ts";
+} from "../scripts/shared/ownershipSnapshots.ts";
+import type { Change } from "../scripts/shared/ownershipSnapshots.ts";
+import type { OwnershipEffects } from "../scripts/shared/ownershipKeys.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brief } from "../scripts/updateTasksBrief.ts";
+import { brief } from "../scripts/update-tasks/updateTasksBrief.ts";
 
 // Disabled: pinned the brief to the pre-refactor SKILL.md, so it fails on every intentional wording edit.
 //
@@ -8,8 +8,8 @@ import { brief } from "../scripts/updateTasksBrief.ts";
 // import { fileURLToPath } from "node:url";
 // const preRefactorCommit = "2ec24aaf94ece915af99ecf22d0610f48c1f857a";
 // const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
-// const extractOpenSectionsPath = fileURLToPath(new URL("../scripts/extractOpenSections.ts", import.meta.url));
-// const getTaskDetailsPath = fileURLToPath(new URL("../scripts/getTaskDetails.ts", import.meta.url));
+// const extractOpenSectionsPath = fileURLToPath(new URL("../scripts/shared/extractOpenSections.ts", import.meta.url));
+// const getTaskDetailsPath = fileURLToPath(new URL("../scripts/shared/getTaskDetails.ts", import.meta.url));
 //
 // function preRefactorBody(): string {
 //   const skill = execFileSync("git", ["show", `${preRefactorCommit}:skills/update-tasks/SKILL.md`], {

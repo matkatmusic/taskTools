@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkpointPath, readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
-import { START_STEP } from "../scripts/generateWorkflow.ts";
+import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 
-const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/runStepHook.ts");
+const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/hooks/runStepHook.ts");
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
