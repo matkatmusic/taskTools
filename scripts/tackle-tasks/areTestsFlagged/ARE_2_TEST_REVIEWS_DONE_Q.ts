@@ -2,26 +2,17 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { TEST_REVIEW_ALREADY_AMENDED, TEST_REVIEW_NOT_YET_AMENDED } from "../../resultCodes.ts";
+import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";
 
 type Input = AreTestsFlaggedPacket & { next: string };
 
-// A non-empty codexReviewNotes means a prior flagged review already amended this entry once.
-function hasAlreadyBeenAmended(projectRoot: string, taskNumber: number): number {
-    const pair = resolveTaskFiles(projectRoot);
-    const entry = readTaskFile(pair.tasksPath).find((task) => task.taskNumber === taskNumber);
-    if (!entry) throw new Error(`task ${taskNumber} not found in ${pair.tasksPath}`);
-    return typeof entry.codexReviewNotes === "string" && entry.codexReviewNotes.trim() !== ""
-        ? TEST_REVIEW_ALREADY_AMENDED : TEST_REVIEW_NOT_YET_AMENDED;
-}
-
+// Asked before amending, so the first flagged review's fix attempt is not spent yet.
 export function main(input: string): Record<string, unknown> {
     const { box: _box, scriptSignal: _scriptSignal, next: _next, notes, ...core } = JSON.parse(input) as Input;
-    const reviewsDone = hasAlreadyBeenAmended(core.projectRoot, core.taskNumber);
+    const reviewsDone = getAttemptCount(core.taskNumber, "testReviews", core.projectRoot) >= MAX_ATTEMPTS;
     const output = { ...core, box: "ARE_2_TEST_REVIEWS_DONE_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
-    if (reviewsDone === TEST_REVIEW_ALREADY_AMENDED) {
+    if (reviewsDone) {
         return {
             ...output, notes: "", exitType: "tests-flagged", exitNote: "task tests failed codex review",
             next: "pipeline-failuresExit.mmd::FAILURES_EXIT",

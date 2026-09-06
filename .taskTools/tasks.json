@@ -29,64 +29,6 @@
     ]
   },
   {
-    "taskNumber": 113,
-    "schemaVersion": "1.0.1",
-    "version": "94a63561408ad7a01729ae4e89e32707263bbde5",
-    "title": "Reorganize scripts/ into skillBodyGenerators/ plus topic subfolders, updating every reference",
-    "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
-    "description": "scripts/ now holds 96 .ts files, flat. Tasks 71-79 (the skillBodyGenerators/ split) are all closed, so that half of this task is done; the only remaining skill-body-generator file is scripts/reviewPlanBrief.ts, not worth its own folder for one file.\n\nThe real remaining value: reorganize scripts/ to follow the same pattern tackle-tasks' own scripts already use — scripts/tackle-tasks/<blockName>/ holds one folder per pipeline block (areTestsFlagged/, codexReviewsPlan/, implementTask/, planTheTask/, shared/, etc). Every other skill should get its own scripts/<skillName>/ folder holding all the source files that skill's hook and skill body use — not generic topic categories like task/ or git/. Scope is every source file used by any skill or hook, not just the 9 files hooks.json names directly: skills/*/SKILL.md reference many more flat scripts.ts files at the top level (e.g. scripts/clarifyTaskBrief.ts, scripts/rateTask.ts, scripts/splitTask.ts, scripts/taskGroups.ts, scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts) that a reorg must also account for.\n\nhooks/hooks.json names 9 distinct scripts/*.ts command paths: viewTaskHook.ts, readFileHook.ts, runStepHook.ts, taskStatsHook.ts, turn-modified-flag.ts, reflow-comments-post.ts, relatedTests.ts, stage-and-summarize-stop.ts, session-end-cleanup.ts. Each must keep resolving after the move.\n\nThree runtime path computations build script paths as strings, so a move breaks them even with a green typecheck: scripts/prepareTasks.ts:84 (resolveMergeScriptPath), scripts/prepareTasks.ts:103 (resolveMergePhaseScriptPath), and scripts/reviewPlanBrief.ts:7 (fileURLToPath sibling import of planReviewRuling.ts).\n\nscripts/taskStatsBrief.ts no longer exists; it was deleted in commit 284aa0e. Its successor, scripts/taskStatsHook.ts, uses a plain relative import, not a fileURLToPath computation, so it is not on the fragile-path list above.\n\nThis task moves close to 96+ files across every skill. The files array below cannot fence a move that size, so this task must be executed manually, outside the tackle-tasks fence system. The planner and implementer should still treat scripts/, tests/, skills/, and hooks/ as in scope.\n\n## Clarification answer (2026-09-06)\n\nExempt skills/tackle-tasks-v2/SKILL.md from the move. Its line 13 deliberately runs /Users/matkatmusicllc/Programming/taskTools-frozen/scripts/tackleTasksBrief.ts, a frozen driver outside this repo; the comment on line 9 says the skill is deleted only when task 153 lands. Do not retire the skill, do not copy the frozen script into this repo, and make tests/scriptReferences.test.ts skip absolute paths that point outside the repo root so this one link does not fail the sweep.",
-    "modifiableFiles": [
-      "*",
-      "skills/tackle-tasks-v2/SKILL.md"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "Add tests/scriptReferences.test.ts as a no-dangling-reference sweep: walk every command string in hooks/hooks.json, every `!` command line in skills/**/SKILL.md, and every relative import specifier in scripts/ and tests/, resolve each to an absolute path, and assert the file exists. The test must fail against a deliberately broken path, not pass vacuously when a glob matches nothing. Also assert resolveMergeScriptPath() and resolveMergePhaseScriptPath() point at existing files, and that the sibling URL resolved in scripts/reviewPlanBrief.ts exists. Alongside it, the full existing suite and the typecheck must stay green.",
-    "difficulty": 8,
-    "blockedBy": [],
-    "problemSolvedByTask": "A flat 96-file scripts/ folder makes it hard for a human or agent to find which script backs which skill or hook.",
-    "hasTests": true,
-    "goal": [
-      "- Every source file a skill or hook uses lives under scripts/<skillName>/; files shared by more than one skill live under scripts/shared/; scripts/ holds only folders",
-      "- Every path in hooks/hooks.json and skills/*/SKILL.md resolves (tests/scriptReferences.test.ts passes)",
-      "- npm test reports all passing after the move"
-    ],
-    "notInScope": [
-      "- Changing what any script does; only paths move",
-      "- The tackle-tasks block folders under scripts/tackle-tasks/ already follow the pattern and stay as they are"
-    ],
-    "run": {
-      "active": false,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-113",
-      "leaseRunId": "73dc3e16-a9ff-461a-b5ad-8d8b10822e97",
-      "history": [
-        {
-          "runId": "73dc3e16-a9ff-461a-b5ad-8d8b10822e97",
-          "startedAt": "2026-09-05T19:26:10-07:00",
-          "endedAt": "2026-09-05T19:35:09-07:00",
-          "exitType": "clarify-stuck",
-          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
-          "modifiedFiles": [],
-          "commits": [],
-          "implementationNotesFile": null,
-          "taskTests": null,
-          "fullSuite": null,
-          "stepResults": [
-            {
-              "stepId": "init-submodules",
-              "script": "initTaskSubmodules",
-              "result": {
-                "initialized": false
-              }
-            }
-          ],
-          "tailCursor": null
-        }
-      ]
-    }
-  },
-  {
     "taskNumber": 164,
     "schemaVersion": "1.0.1",
     "version": "b2d66ef60db6badfdd4de5fc1413156b4bdb53af",

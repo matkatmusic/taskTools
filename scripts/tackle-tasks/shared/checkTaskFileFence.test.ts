@@ -206,3 +206,22 @@ test("test_checkTaskFileFence_rejectsARelativeWorktreePathBeforeGitOrLockAccess"
     assert.equal(git(rootOrigin, "rev-parse", "HEAD"), headBefore);
     assert.equal(git(rootOrigin, "status", "--porcelain"), statusBefore);
 });
+
+test("test_checkTaskFileFence_acceptsAnyPathWhenTheTaskDeclaresAWildcard", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 113;
+    seedTask(rootOrigin, taskNumber, ["*"]);
+
+    writeFileSync(join(worktreePath, "anywhere.txt"), "moved here\n");
+    git(worktreePath, "add", "anywhere.txt");
+    git(worktreePath, "commit", "-q", "-m", "undeclared root edit");
+
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-113", taskNumber)).status, "acquired");
+    const result = checkTaskFileFence({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-113", rootSourceBranch: "main",
+    });
+
+    assert.equal(result.inside, true);
+    assert.deepEqual(result.violations, []);
+});
