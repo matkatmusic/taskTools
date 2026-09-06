@@ -2,7 +2,7 @@
 import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { recordTaskModifiedFiles } from "../shared/recordTaskModifiedFiles.ts";
 import type { EntryPacket } from "./_packet.ts";
 

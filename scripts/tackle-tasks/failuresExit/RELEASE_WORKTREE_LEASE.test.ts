@@ -5,9 +5,9 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./RELEASE_WORKTREE_LEASE.ts";
-import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { git, makeCommittedRepo } from "../../../tests/support/gitFixtures.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(import.meta.dirname, "RELEASE_WORKTREE_LEASE.template.json");
 

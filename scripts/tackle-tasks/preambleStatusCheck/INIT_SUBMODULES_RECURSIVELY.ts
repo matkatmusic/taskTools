@@ -1,7 +1,7 @@
 // INIT_SUBMODULES_RECURSIVELY, from pipeline-preambleStatusCheck.mmd. Mutating: idempotent submodule init. "init submodules recursively"
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { initTaskSubmodules } from "../shared/initTaskSubmodules.ts";
 import type { EntryPacket } from "./_packet.ts";
 

@@ -9,7 +9,7 @@ import {
     recoveryRefName,
     snapshotSyncRecovery,
     snapshotWorkerRecovery,
-} from "../scripts/recoveryRefs.ts";
+} from "../scripts/shared/recoveryRefs.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

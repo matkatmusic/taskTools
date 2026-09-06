@@ -7,9 +7,9 @@ import {
     issueApprovalAuthorization,
     checkAuthorizationDrift,
     finalizeApprovedRun,
-} from "../scripts/approvalGate.ts";
-import type { ApprovalDigestInput, RunState } from "../scripts/approvalGate.ts";
-import { AUTHORIZATION_DRIFT_DETECTED } from "../scripts/resultCodes.ts";
+} from "../scripts/shared/approvalGate.ts";
+import type { ApprovalDigestInput, RunState } from "../scripts/shared/approvalGate.ts";
+import { AUTHORIZATION_DRIFT_DETECTED } from "../scripts/shared/resultCodes.ts";
 
 function baselineDigestInput(): ApprovalDigestInput {
     return {

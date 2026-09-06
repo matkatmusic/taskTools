@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildPromptOutputTemplate } from "../../contracts.ts";
+import { buildPromptOutputTemplate } from "../../shared/contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { absolutePathsSection } from "../shared/promptSections.ts";
 import { resumedRunSection } from "../shared/resumedRunSection.ts";

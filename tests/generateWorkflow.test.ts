@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StepConfig } from "../scripts/generateSteps.ts";
-import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP } from "../scripts/generateWorkflow.ts";
-import { buildHookOutputSchema } from "../scripts/buildRunStepSchemas.ts";
+import type { StepConfig } from "../scripts/tackle-tasks/generateSteps.ts";
+import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
+import { buildHookOutputSchema } from "../scripts/tackle-tasks/buildRunStepSchemas.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
 function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
@@ -38,7 +38,7 @@ function runWorkflowScript(script: string, args: Record<string, unknown>, agentR
     return new Function("args", "agent", "phase", `return (async () => {\n${body}\n})()`)(args, agent, phase);
 }
 
-const REPO_STEPS_JSON = join(import.meta.dirname, "..", "scripts", "steps.json");
+const REPO_STEPS_JSON = join(import.meta.dirname, "..", "scripts", "tackle-tasks", "steps.json");
 
 // The agent copies two strings; a payload path, never a payload object, so there is nothing to retype.
 test("test_buildHookOutputSchema_closesTheObjectTheHookReturns", () => {
@@ -215,7 +215,7 @@ test("test_generateWorkflow_leavesNoTemporaryFileBehind", () => {
 
 // START_STEP is a constant in this file; the config is the only thing that can drift away from it.
 test("test_START_STEP_isAKeyInTheRepoConfig", () => {
-    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "steps.json"), "utf8")) as StepConfig;
+    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "steps.json"), "utf8")) as StepConfig;
     assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
 });
 

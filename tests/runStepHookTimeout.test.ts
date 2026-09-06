@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const RUN_STEP_HOOK_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "runStepHook.ts");
+const RUN_STEP_HOOK_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "hooks", "runStepHook.ts");
 
 test("test_runStepHook_stepTimeoutMsIsAtLeast300000", () => {
     const source = readFileSync(RUN_STEP_HOOK_PATH, "utf8");

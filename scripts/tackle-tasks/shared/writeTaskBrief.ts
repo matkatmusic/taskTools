@@ -2,8 +2,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { renderTaskBriefContent } from "../../prepareTasks.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { renderTaskBriefContent } from "../../shared/prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { getPreviousTaskRuns, type TaskRunRecord } from "./taskRunState.ts";
 
 const MAX_PREVIOUS_RUNS_SHOWN = 3;

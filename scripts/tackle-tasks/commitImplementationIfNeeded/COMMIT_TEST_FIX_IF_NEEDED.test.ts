@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./COMMIT_TEST_FIX_IF_NEEDED.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

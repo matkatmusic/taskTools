@@ -1,7 +1,7 @@
 // ARCHIVE_TASK, from pipeline-mergeSucceededExit.mmd "move the task to completedTasks.json and update tasks blocked by it". Mutating.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { closeTaskRun } from "../shared/closeTaskRun.ts";
 
 const STEP_ID = "merge-succeeded-exit";

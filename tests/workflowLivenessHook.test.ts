@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const hookPath = fileURLToPath(new URL("../scripts/workflowLivenessHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/hooks/workflowLivenessHook.ts", import.meta.url));
 
 function runHook(payload: unknown): string {
     return execFileSync("node", ["--no-inspect", hookPath], { input: JSON.stringify(payload), encoding: "utf8" });

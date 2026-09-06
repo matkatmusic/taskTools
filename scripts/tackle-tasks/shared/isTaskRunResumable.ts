@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, sep } from "node:path";
 import { acquireAbsentWorktreeLease, adoptWorktreeLease, readTaskRunState } from "./taskRunState.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { NOTES_FILE_CONTAINED, NOTES_FILE_NOT_CONTAINED } from "../../resultCodes.ts";
+import { NOTES_FILE_CONTAINED, NOTES_FILE_NOT_CONTAINED } from "../../shared/resultCodes.ts";
 
 export type IsTaskRunResumableOutput = {
     resumable: boolean;

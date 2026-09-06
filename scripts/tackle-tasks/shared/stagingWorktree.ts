@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { loadRepositoryManifest, resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
+import { loadRepositoryManifest, resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 
 function git(cwd: string, ...args: string[]): string {
     return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();

@@ -79,7 +79,7 @@ test("test_main_throwsWithoutACheckpointAtTheCap", () => {
 
 test("test_main_replansToABoxThatIsStillAValidSuccessorInTheCommittedConfig", () => {
     const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-    const config = JSON.parse(readFileSync(join(repoRoot, "scripts/steps.json"), "utf8"));
+    const config = JSON.parse(readFileSync(join(repoRoot, "scripts/tackle-tasks/steps.json"), "utf8"));
     const entry = config["pipeline-whatIsReviewVerdict.mmd"].find((e: { box: string }) => e.box === "TWO_CODEX_REVIEWS_COMPLETED_Q");
     assert.ok(entry.next.includes("pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"));
 });

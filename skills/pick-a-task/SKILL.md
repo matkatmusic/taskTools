@@ -4,7 +4,7 @@ description: read the open tasks in tasks.json, filter to unblocked, sort by dif
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/pickATaskBrief.ts" <<'PICKATASKEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/pick-a-task/pickATaskBrief.ts" <<'PICKATASKEOF'
 $ARGUMENTS
 PICKATASKEOF
 ```

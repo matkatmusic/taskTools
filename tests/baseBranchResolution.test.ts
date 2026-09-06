@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolveBaseBranchCandidates } from "../scripts/baseBranchResolution.ts";
+import { resolveBaseBranchCandidates } from "../scripts/shared/baseBranchResolution.ts";
 
 function runGitCommand(repoPath: string, args: string[]): string {
     const result = spawnSync("git", args, { cwd: repoPath, encoding: "utf8" });

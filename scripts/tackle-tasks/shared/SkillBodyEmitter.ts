@@ -3,16 +3,16 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
-import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../taskFiles.ts";
-import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../../generateSteps.ts";
-import { generateWorkflow } from "../../generateWorkflow.ts";
+import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
+import { generateWorkflow } from "../generateWorkflow.ts";
 
 // RETIRED (task 10): replaced by taskWorkflowDirectory(tasksFile, taskNumber), computed per task inside skillBody.
 // const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
 // The mutating flag is hand-authored (scripts/generateSteps.ts:182) and only ever carried forward by reading a previous
 // config at the SAME path a task is about to write to. A task's first-ever per-task steps.json has no previous file of
 // its own, so it is seeded from this canonical file first — the plugin's own committed config for the default pipeline.
-const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../../steps.json", import.meta.url));
+const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 

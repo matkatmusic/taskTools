@@ -10,10 +10,10 @@ import { taskBranchName } from "../shared/createTaskWorktree.ts";
 import { cleanupTaskWorktree } from "../shared/cleanupTaskWorktree.ts";
 import { claimTask, readTaskRunState, writeTailCursor } from "../shared/taskRunState.ts";
 import { findResumeEntry } from "../shared/resumeRun.ts";
-import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup, readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule } from "../../../tests/support/gitFixtures.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "CLEAN_UP_WORKTREES.template.json");

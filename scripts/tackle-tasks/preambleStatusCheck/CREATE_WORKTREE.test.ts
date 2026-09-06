@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { main } from "./CREATE_WORKTREE.ts";
 import { claimTask } from "../shared/taskRunState.ts";
 import { taskBranchName, taskWorktreeCreateJournalPath } from "../shared/createTaskWorktree.ts";
-import { resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { git, addSubmodule, makeCommittedRepo } from "../../../tests/support/gitFixtures.ts";
 
 function seedTasksFile(root: string, tasks: unknown[]): void {

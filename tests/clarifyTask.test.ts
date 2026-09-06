@@ -5,9 +5,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clarifyTask } from "../scripts/clarifyTask.ts";
+import { clarifyTask } from "../scripts/clarify-task/clarifyTask.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/clarifyTask.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/clarify-task/clarifyTask.ts", import.meta.url));
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "clarifyTask-"));

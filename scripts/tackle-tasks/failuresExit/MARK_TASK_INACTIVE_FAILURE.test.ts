@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./MARK_TASK_INACTIVE_FAILURE.ts";
 import { readTaskRunState } from "../shared/taskRunState.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(import.meta.dirname, "MARK_TASK_INACTIVE_FAILURE.template.json");
 

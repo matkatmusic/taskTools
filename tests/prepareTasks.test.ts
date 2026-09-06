@@ -25,11 +25,11 @@ import {
     v1_1WorkflowOutputPath,
     withTaskWorktreeLeaseGuard,
     writeTaskBriefFile,
-} from "../scripts/prepareTasks.ts";
+} from "../scripts/shared/prepareTasks.ts";
 import { loadPreparedTask } from "../scripts/tackle-tasks/shared/preparedTask.ts";
-import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
-import type { TaskGroup } from "../scripts/taskGroups.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_SkillBodyEmitter.ts";
+import type { TaskGroup } from "../scripts/shared/taskGroups.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -396,7 +396,7 @@ test("test_twoPrepareProcessesWithNoStagingBranchBothStartFromTheSameStagingTip"
 
 // Real processes, not sequential same-process calls: both block on one "go" file, a genuine race.
 function spawnLeaseRacer(repoRoot: string, groupId: number, runId: string, readyFile: string, goFile: string): ChildProcess {
-    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "prepareTasks.ts")).href;
+    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "shared", "prepareTasks.ts")).href;
     const source = `
       import { createWorktreeForGroup } from ${JSON.stringify(prepareTasksUrl)};
       import { existsSync, writeFileSync } from "node:fs";
@@ -847,7 +847,7 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
         git(repoRoot, "remote", "add", "origin", repoRoot);
 
         const lockModuleUrl = pathToFileURL(
-            join(import.meta.dirname, "..", "scripts", "taskStateLock.ts"),
+            join(import.meta.dirname, "..", "scripts", "shared", "taskStateLock.ts"),
         ).href;
         const widenerSource = `
           import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -871,7 +871,7 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
 
         prepare = spawn(
             process.execPath,
-            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), String(taskNumber)],
+            [join(import.meta.dirname, "..", "scripts", "shared", "prepareTasks.ts"), String(taskNumber)],
             { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
         );
         const prepareDone = captureSuccessfulChild(prepare);
@@ -928,7 +928,7 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
 
         const failing = spawn(
             process.execPath,
-            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), "[1,2]"],
+            [join(import.meta.dirname, "..", "scripts", "shared", "prepareTasks.ts"), "[1,2]"],
             { cwd: repoRoot, stdio: ["ignore", "ignore", "ignore"] },
         );
         const failingCode = await waitForExitCode(failing);
@@ -939,7 +939,7 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
         rmSync(argumentsFile, { recursive: true, force: true });
         const retry = spawn(
             process.execPath,
-            [join(import.meta.dirname, "..", "scripts", "prepareTasks.ts"), "[1,2]"],
+            [join(import.meta.dirname, "..", "scripts", "shared", "prepareTasks.ts"), "[1,2]"],
             { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
         );
         const retryDone = captureSuccessfulChild(retry);
@@ -1053,7 +1053,7 @@ test("withTaskWorktreeLeaseGuard makes one lease transition indivisible across t
     const worktreePath = join(repoRoot, "task-guarded");
     const logPath = join(repoRoot, "guard-log.txt");
     writeFileSync(logPath, "");
-    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "prepareTasks.ts")).href;
+    const prepareTasksUrl = pathToFileURL(join(import.meta.dirname, "..", "scripts", "shared", "prepareTasks.ts")).href;
     const workerSource = `
       import { withTaskWorktreeLeaseGuard } from ${JSON.stringify(prepareTasksUrl)};
       import { appendFileSync } from "node:fs";

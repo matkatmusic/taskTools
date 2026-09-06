@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runFullSuite } from "./runFullSuite.ts";
 import { claimTask, endTaskRun, getCurrentTaskRun } from "./taskRunState.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { writeKnownFailingTests } from "../../taskTestsRunner.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { writeKnownFailingTests } from "../../shared/taskTestsRunner.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

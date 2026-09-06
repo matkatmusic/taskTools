@@ -1,7 +1,7 @@
 // TWO_CODEX_REVIEWS_COMPLETED_Q, from pipeline-reviewPlan.mmd. 2 codex reviews done? NO replans; YES scraps the task, or replans once more on the relaunch after a scrap.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
 import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";

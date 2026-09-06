@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL, type ResetScope } from "../../contracts.ts";
+import { SCRIPT_SIGNAL, type ResetScope } from "../../shared/contracts.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import type { PreparedTask } from "../shared/preparedTask.ts";
 import { planPrompt } from "../shared/planPrompt.ts";

@@ -1,7 +1,7 @@
 // ARE_2_TEST_REVIEWS_DONE_Q, from pipeline-areTestsFlagged.mmd. Ported from archive pipeline-reviewTests/ARE_2_TEST_REVIEWS_DONE.ts.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";
 

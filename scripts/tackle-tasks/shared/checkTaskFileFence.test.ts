@@ -5,8 +5,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { checkTaskFileFence } from "./checkTaskFileFence.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { git, makeCommittedRepo, addSubmodule, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
 function makeSourceRepoWithSubmodule(): string {

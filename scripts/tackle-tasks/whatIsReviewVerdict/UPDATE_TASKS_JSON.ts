@@ -1,9 +1,9 @@
 // UPDATE_TASKS_JSON, from pipeline-reviewPlan.mmd. Mutating: writes codex's notes into tasks.json and raises the planReview counter.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
 import type { WhatIsReviewVerdictPacket } from "./_packet.ts";

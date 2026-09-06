@@ -1,8 +1,8 @@
 // WHAT_DID_THE_PLANNER_RETURN, from pipeline-plan.mmd's decision, ported to route only.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import type { WhatDidThePlannerReturnPacket } from "./_packet.ts";
 

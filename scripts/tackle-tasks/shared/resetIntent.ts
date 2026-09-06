@@ -2,7 +2,7 @@
 // it survives the worktree's own deletion (which also destroys plans/checkpoint.json).
 // resumeRun.ts reads this to resume at RESET_WORKTREE instead of giving up.
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 export type ResetIntent = { taskNumber: number; runId: string; worktreePath: string; branch: string; createdAt: string };
 

@@ -7,13 +7,13 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compileFunction } from "node:vm";
-import { skillBody } from "../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/runMergePhase.ts";
-import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWorkflow, v1_1WorkflowOutputPath } from "../scripts/prepareTasks.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { skillBody } from "../scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_SkillBodyEmitter.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/shared/repositoryManifest.ts";
+import { consumeTaskWorkflowResult, createMergeQueue } from "../scripts/shared/runMergePhase.ts";
+import { V1_1_WORKFLOW_TEMPLATE_PATH, buildWorkflowArguments, materializeTaskWorkflow, v1_1WorkflowOutputPath } from "../scripts/shared/prepareTasks.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks-v1_1_SkillBodyEmitter.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../skills/tackle-tasks-v1_1/SKILL.md", import.meta.url));
 
 // ---------------------------------------------------------------------------
@@ -208,7 +208,8 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /immediately ask that task's own approval gate/);
   assert.match(brief, /`"launch-tail"`:.*Launch that\s+task's `v1_1WorkflowPath`/s);
   assert.match(brief, /`"launch-plan"`:.*Launch that task's\s+`v1_1WorkflowPath`/s);
-  assert.doesNotMatch(brief, /close-tasks/);
+  // Closing happens automatically via closeTasks.ts; this only forbids telling the agent to invoke a `close-tasks` skill.
+  assert.doesNotMatch(brief, /invoke (?:the )?`?\/?close-tasks`?\s+skill/i);
 });
 
 test("merge queue: the next-lap branch waits for an outstanding workflow instead of starting another lap against the same tip", () => {
@@ -298,12 +299,11 @@ test("archived emitter's brief names v1_1WorkflowPath, never bare workflowPath",
   assert.doesNotMatch(brief, /\bworkflowPath\b/);
 });
 
-// Phase 0's rollback purpose only holds if the archived brief never points back at the
-// current pipeline files.
+// Phase 0's rollback purpose only holds if the archived brief never points back at the current pipeline files.
 test("archived emitter's brief has zero references to the current skill dir or current scripts", () => {
   const output = execFileSync("node", [scriptPath], { input: "[1] valid\n", encoding: "utf8" });
   assert.doesNotMatch(output, /skills\/tackle-tasks\//);
-  assert.doesNotMatch(output, /scripts\/tackle-tasks_/);
+  assert.doesNotMatch(output, /scripts\/tackle-tasks[/_]/);
 });
 
 // ---------------------------------------------------------------------------
@@ -315,7 +315,7 @@ const REPO_ROOT_FOR_WORKFLOW = fileURLToPath(new URL("..", import.meta.url));
 const V1_1_WORKFLOW_PATH = join(REPO_ROOT_FOR_WORKFLOW, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js");
 const TASK_WORKFLOW_SOURCE = readFileSync(V1_1_WORKFLOW_PATH, "utf8")
   .replace("export const meta", "const meta");
-const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks-v1_1_AgentPromptEmitter.ts");
+const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT_FOR_WORKFLOW, "scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_AgentPromptEmitter.ts");
 
 type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test" | "merge"; results: Array<Record<string, unknown>> };
 type WorkflowAgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>;

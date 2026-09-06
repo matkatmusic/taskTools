@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "reflow-comments-post.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "reflow-comments-post.ts");
 
 function run(toolInput: object): string {
   return execFileSync("node", ["--no-inspect", SCRIPT], {

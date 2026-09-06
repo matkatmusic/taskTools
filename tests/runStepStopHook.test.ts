@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/runStepStopHook.ts");
+const HOOK = join(dirname(dirname(fileURLToPath(import.meta.url))), "scripts/hooks/runStepStopHook.ts");
 
 // One block B whose input wants message and additionalData, a packet file, and a transcript naming both.
 function buildAgent(packet: Record<string, unknown>, hookOutputInTranscript = true) {

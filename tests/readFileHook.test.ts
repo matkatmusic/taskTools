@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-const hook = new URL("../scripts/readFileHook.ts", import.meta.url).pathname;
+const hook = new URL("../scripts/hooks/readFileHook.ts", import.meta.url).pathname;
 const run = (payload: object) => execFileSync("node", ["--no-inspect", hook], { input: JSON.stringify(payload), encoding: "utf8" });
 const prompt = (text: string) => run({ hook_event_name: "UserPromptSubmit", prompt: text });
 const skill = (args: string) => run({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "read-file", args } });

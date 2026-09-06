@@ -5,7 +5,7 @@ argument-hint: <plan file path> <target>
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/reviewPlanBrief.ts" <<'REVIEWPLANEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/review-plan/reviewPlanBrief.ts" <<'REVIEWPLANEOF'
 $ARGUMENTS
 REVIEWPLANEOF
 ```

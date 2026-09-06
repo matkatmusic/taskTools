@@ -5,13 +5,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { ResetScope } from "../contracts.ts";
+import type { ResetScope } from "../shared/contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./shared/writeTaskBrief.ts";
 import { resetAttemptCounts } from "./shared/taskRunState.ts";
 import { readJsonFile } from "./shared/readJsonFile.ts";
 import { writeCheckpoint } from "./shared/checkpoint.ts";
-import { resolveTaskFiles, taskWorkflowDirectory } from "../taskFiles.ts";
-import { generateSteps, resolveDiagramFolderSetting } from "../generateSteps.ts";
+import { resolveTaskFiles, taskWorkflowDirectory } from "../shared/taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 
 // These blocks read plans/plan.json, plans/codex-review.json, or a prompt file. Cleanup removes those with the worktree and nothing keeps a copy, so a resume there has no input to work from. The brief is the one file a reset can make again.
 // const BLOCKS_THAT_NEED_LOST_WORKTREE_FILES = [
@@ -59,7 +59,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
 
     if (openIndex === -1 && completedIndex === -1) throw new Error(`task ${taskNumber} not found in tasks.json or completedTasks.json`);
 
-    // same worktree-path formula as taskTools-86/scripts/prepareTasks.ts:resolveTaskWorktreeConventionDirectory
+    // same worktree-path formula as taskTools-86/scripts/shared/prepareTasks.ts:resolveTaskWorktreeConventionDirectory
     const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
     const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, `task-${taskNumber}`);
     const leasePath = `${worktreePath}.lease`;

@@ -1,7 +1,7 @@
 // REPORT_ONLY_EXIT, from pipeline-reportOnlyExit.mmd. Merged from the archive's EXIT_TYPE_NOTE_NO_WRITE_INPUT + REPORT_EXIT_TYPE_NO_WRITE: report only, write nothing.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 export function main(input: string): Record<string, unknown> {

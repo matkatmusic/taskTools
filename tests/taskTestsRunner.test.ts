@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFailingTests, newFailingTests, judgeSuite, runCommandInProcessGroup, isProcessGroupKillSupported } from "../scripts/taskTestsRunner.ts";
+import { parseFailingTests, newFailingTests, judgeSuite, runCommandInProcessGroup, isProcessGroupKillSupported } from "../scripts/shared/taskTestsRunner.ts";
 
 test("parseFailingTests reads file/name pairs off a reporter tail", () => {
   const log = [

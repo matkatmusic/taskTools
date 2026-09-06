@@ -5,13 +5,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
+import type { RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
 import {
     OperationBranchConflictError,
     OperationBranchSetupError,
     operationBranchName,
     setUpOperationBranches,
-} from "../scripts/operationBranches.ts";
+} from "../scripts/shared/operationBranches.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

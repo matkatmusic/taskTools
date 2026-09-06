@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyQuota } from "../scripts/reflowQuota.ts";
+import { applyQuota } from "../scripts/hooks/reflowQuota.ts";
 
 const SESSION = "test-session";
 const longComment = (label: string) =>

@@ -3,9 +3,9 @@
 // Shared by scripts/tackle-tasks/amendEntryWithFailingTests.ts (the old CLI entrypoint, still
 // dispatched by path from ImplementBodyEmitter.ts) and
 // scripts/steps/pipeline-taskTests/AMEND_ENTRY_WITH_FAILING_TESTS.ts (the run-step block).
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
 
 export type AmendEntryInput = { projectRoot: string; taskNumber: number };

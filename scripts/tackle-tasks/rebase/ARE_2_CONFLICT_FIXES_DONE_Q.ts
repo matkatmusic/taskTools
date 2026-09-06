@@ -1,7 +1,7 @@
 // ARE_2_CONFLICT_FIXES_DONE_Q, from pipeline-rebase.mmd and pipeline-commitMergeConflictFixIfNeeded.mmd. Mutating: raises the conflict-fix attempt counter before sending another fix.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
 import { getAttemptCount, raiseAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import { refreshLockHeartbeat, type RebasePacket } from "./_packet.ts";

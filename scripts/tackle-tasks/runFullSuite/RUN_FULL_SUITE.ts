@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { runFullSuite } from "../shared/runFullSuite.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import { getAttemptCount } from "../shared/taskRunState.ts";

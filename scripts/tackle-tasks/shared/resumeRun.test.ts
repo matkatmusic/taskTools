@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "./resumeRun.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { readCheckpoint, writeCheckpoint, type Checkpoint } from "./checkpoint.ts";
 import {
     claimTask, endTaskRun, readTaskRunState, updateCurrentTaskRun, writeTailCursor,
@@ -16,9 +16,9 @@ import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 import {
     acquireSourceRepoLock, buildLockOwner, readSourceRepoLock, releaseSourceRepoLock,
 } from "./sourceRepoLock.ts";
-import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { resetIntentPath } from "./resetIntent.ts";
 import { taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { main as resetWorktreeMain } from "../preambleStatusCheck/RESET_WORKTREE.ts";

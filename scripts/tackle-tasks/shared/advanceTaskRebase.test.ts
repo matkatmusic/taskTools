@@ -9,11 +9,11 @@ import { advanceTaskRebase } from "./advanceTaskRebase.ts";
 import { rebaseTaskWorktree } from "./rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "./sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
-import { rebaseInProgress } from "../../mergeTaskWorktrees.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { REBASE_NOT_IN_PROGRESS } from "../../resultCodes.ts";
+import { rebaseInProgress } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { REBASE_NOT_IN_PROGRESS } from "../../shared/resultCodes.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

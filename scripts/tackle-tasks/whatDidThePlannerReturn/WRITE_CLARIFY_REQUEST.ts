@@ -1,12 +1,12 @@
 // WRITE_CLARIFY_REQUEST, from pipeline-plan.mmd. mutating: writes tasks.json's clarifyRequest and raises the clarify counter.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import type { WhatDidThePlannerReturnPacket } from "./_packet.ts";
 
 // Ported from scripts/tackle-tasks/writeClarifyRequest.ts, the box's old home.

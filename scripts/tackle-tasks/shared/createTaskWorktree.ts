@@ -4,11 +4,11 @@ import { dirname, join } from "node:path";
 import {
     createWorktreeForGroup, modifiableFiles, readTaskWorktreeLeaseOwner, resolveTaskWorktreeConventionDirectory,
     taskWorktreeLeasePath, withTaskWorktreeLeaseGuard,
-} from "../../prepareTasks.ts";
-import { removeWorktreeAndBranch } from "../../mergeTaskWorktrees.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+} from "../../shared/prepareTasks.ts";
+import { removeWorktreeAndBranch } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";

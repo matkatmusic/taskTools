@@ -8,14 +8,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./CONTINUE_REBASE.ts";
 import type { CommitMergeConflictFixIfNeededPacket } from "./_packet.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { claimTask } from "../shared/taskRunState.ts";
 import { rebaseTaskWorktree } from "../shared/rebaseTaskWorktree.ts";
-import { rebaseInProgress } from "../../mergeTaskWorktrees.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { REBASE_NOT_IN_PROGRESS } from "../../resultCodes.ts";
+import { rebaseInProgress } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { REBASE_NOT_IN_PROGRESS } from "../../shared/resultCodes.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

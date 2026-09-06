@@ -8,20 +8,20 @@ import {
     verifySync,
     persistGreenReceipt,
     VerificationError,
-} from "../scripts/syncVerification.ts";
+} from "../scripts/shared/syncVerification.ts";
 import type {
     Occurrence,
     SyncReceipt,
     SyncVerificationRunners,
     TreeEntry,
-} from "../scripts/syncVerification.ts";
-import type { TestPolicy } from "../scripts/testPolicy.ts";
+} from "../scripts/shared/syncVerification.ts";
+import type { TestPolicy } from "../scripts/shared/testPolicy.ts";
 import {
     RELATED_TESTS_PASSED,
     RELATED_TESTS_FAILED,
     COMPLETE_SUITE_PASSED,
     COMPLETE_SUITE_FAILED,
-} from "../scripts/resultCodes.ts";
+} from "../scripts/shared/resultCodes.ts";
 
 function makeTreeEntry(overrides: Partial<TreeEntry> = {}): TreeEntry {
     return { path: "src/index.ts", mode: "100644", byteHash: "abc123", ...overrides };

@@ -2,10 +2,10 @@
 import { execFileSync } from "node:child_process";
 import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.ts";
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
-import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
-import { TASK_HAS_TESTS } from "../../resultCodes.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
+import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../taskTestsRunner.ts";
+import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../shared/taskTestsRunner.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 // const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;

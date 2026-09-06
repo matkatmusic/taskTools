@@ -9,10 +9,10 @@ import { mergeTaskWorktree } from "./mergeTaskWorktree.ts";
 import { rebaseTaskWorktree } from "./rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner, releaseSourceRepoLock } from "./sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { currentBranchName } from "../../repositoryBranches.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { currentBranchName } from "../../shared/repositoryBranches.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

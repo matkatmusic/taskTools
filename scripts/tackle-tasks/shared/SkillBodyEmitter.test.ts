@@ -8,9 +8,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after } from "node:test";
 import { skillBody } from "./SkillBodyEmitter.ts";
-import { buildWorkflowScript } from "../../generateWorkflow.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
-import { taskWorkflowDirectory } from "../../taskFiles.ts";
+import { buildWorkflowScript } from "../generateWorkflow.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
+import { taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 
 const emitterPath = fileURLToPath(new URL("./SkillBodyEmitter.ts", import.meta.url));
 const skillMdPath = fileURLToPath(new URL("../../../skills/tackle-tasks/SKILL.md", import.meta.url));

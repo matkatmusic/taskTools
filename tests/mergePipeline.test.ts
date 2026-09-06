@@ -12,9 +12,9 @@ import {
     taskFilesByLogicalId,
     findTaskArchivalValidationFailure,
     type ConsolidationOutcome,
-} from "../scripts/mergePipeline.ts";
-import { archiveIfMerged, type MergePhaseVerdict } from "../scripts/runMergePhase.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
+} from "../scripts/shared/mergePipeline.ts";
+import { archiveIfMerged, type MergePhaseVerdict } from "../scripts/shared/runMergePhase.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

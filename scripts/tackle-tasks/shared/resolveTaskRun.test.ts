@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument } from "./resolveTaskRun.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
 function makeProjectRoot(openTasks: unknown[]): string {

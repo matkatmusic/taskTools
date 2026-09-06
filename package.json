@@ -1,11 +1,11 @@
 {
   "type": "module",
   "scripts": {
-    "steps": "node --no-inspect scripts/generateSteps.ts && node --no-inspect scripts/generateWorkflow.ts",
-    "workflow": "node --no-inspect scripts/generateWorkflow.ts",
-    "steps:watch": "node --no-inspect scripts/generateSteps.ts --watch",
+    "steps": "node --no-inspect scripts/tackle-tasks/generateSteps.ts && node --no-inspect scripts/tackle-tasks/generateWorkflow.ts",
+    "workflow": "node --no-inspect scripts/tackle-tasks/generateWorkflow.ts",
+    "steps:watch": "node --no-inspect scripts/tackle-tasks/generateSteps.ts --watch",
     "test": "node --test \"tests/**/*.test.ts\" \"scripts/tackle-tasks/**/*.test.ts\"",
-    "test:baseline": "node --no-inspect scripts/checkTestBaseline.ts"
+    "test:baseline": "node --no-inspect scripts/shared/checkTestBaseline.ts"
   },
   "devDependencies": {
     "@types/node": "^26.2.0"

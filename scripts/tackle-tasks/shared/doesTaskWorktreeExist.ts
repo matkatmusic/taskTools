@@ -1,7 +1,7 @@
 // "does a worktree exist?" — plans/tackle-tasks-v1_5-plan.md Phase 3.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type DoesTaskWorktreeExistOutput = { exists: boolean; worktree: string | null };

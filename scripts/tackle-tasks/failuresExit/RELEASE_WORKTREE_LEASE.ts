@@ -2,10 +2,10 @@
 import { existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskWorktreeLeaseOwner, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import { taskBranchName } from "../shared/createTaskWorktree.ts";
-import { TASK_BRANCH_REMAINS, TASK_BRANCH_ABSENT } from "../../resultCodes.ts";
+import { TASK_BRANCH_REMAINS, TASK_BRANCH_ABSENT } from "../../shared/resultCodes.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 function taskBranchRemains(projectRoot: string, branchName: string): number {

@@ -8,8 +8,8 @@ import { execFileSync } from "node:child_process";
 import { recordMergeCommits } from "./recordMergeCommits.ts";
 import { appendTaskCommits, claimTask, getCurrentTaskRun } from "./taskRunState.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 function tmpMkdir(prefix: string): string {
     const dir = execFileSync("mktemp", ["-d", join(tmpdir(), `XXXXXX`)], { encoding: "utf8" }).trim();

@@ -11,8 +11,8 @@ import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } fro
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "./taskRunState.ts";
 import {
     createWorktreeForGroup, releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath,
-} from "../../prepareTasks.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+} from "../../shared/prepareTasks.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

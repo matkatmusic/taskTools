@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "stagedDiffs.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "stagedDiffs.ts");
 
 function initRepo(dir: string): void {
   mkdirSync(dir, { recursive: true });

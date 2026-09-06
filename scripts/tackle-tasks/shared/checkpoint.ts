@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readJsonFile } from "./readJsonFile.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 export type Checkpoint = {
     taskNumber: number;

@@ -1,7 +1,7 @@
 // WRITE_EXIT_TYPE_COMPLETED, from pipeline-mergeSucceededExit.mmd. Runs first, before any release: the point of no return.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { writeTaskExitNotes } from "../shared/writeTaskExitNotes.ts";
 
 export type WriteExitTypeCompletedInput = {

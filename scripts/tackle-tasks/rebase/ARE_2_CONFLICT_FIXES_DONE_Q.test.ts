@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./ARE_2_CONFLICT_FIXES_DONE_Q.ts";
 import type { RebasePacket } from "./_packet.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { claimTask } from "../shared/taskRunState.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
 import { writeCheckpoint, type Checkpoint } from "../shared/checkpoint.ts";

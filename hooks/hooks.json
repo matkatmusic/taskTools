@@ -5,24 +5,24 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/viewTaskHook.ts\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/viewTaskHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/readFileHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/readFileHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
             "timeout": 900
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskStatsHook.ts\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/taskStatsHook.ts\""
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskTestsHook.ts\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/taskTestsHook.ts\"",
             "timeout": 600
           }
         ]
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-modified-flag.ts\" --snapshot 2>/dev/null || true"
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/turn-modified-flag.ts\" --snapshot 2>/dev/null || true"
           }
         ]
       }
@@ -45,11 +45,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/turn-modified-flag.ts\" 2>/dev/null || true"
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/turn-modified-flag.ts\" 2>/dev/null || true"
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/reflow-comments-post.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/reflow-comments-post.ts\"",
             "statusMessage": "Reflowing wrapped comments..."
           }
         ]
@@ -59,16 +59,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/readFileHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/readFileHook.ts\""
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/runStepHook.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
             "timeout": 900
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/taskTestsHook.ts\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/taskTestsHook.ts\"",
             "timeout": 600
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/workflowLivenessHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/workflowLivenessHook.ts\""
           }
         ]
       }
@@ -88,12 +88,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/relatedTests.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/relatedTests.ts\"",
             "statusMessage": "Running related tests and tsc...",
             "timeout": 600
           }
@@ -105,7 +105,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/stage-and-summarize-stop.ts\"",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
           }
         ]
@@ -116,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end-cleanup.ts\" 2>/dev/null || true"
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/session-end-cleanup.ts\" 2>/dev/null || true"
           }
         ]
       }

@@ -13,12 +13,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout } from "node:timers/promises";
 import { skillBody } from "../scripts/tackle-tasks/shared/SkillBodyEmitter.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../scripts/prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/shared/prepareTasks.ts";
 import { readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 import { readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
-import { resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/taskFiles.ts";
+import { resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/shared/taskFiles.ts";
 
-const RUN_STEP_HOOK_PATH = fileURLToPath(new URL("../scripts/runStepHook.ts", import.meta.url));
+const RUN_STEP_HOOK_PATH = fileURLToPath(new URL("../scripts/hooks/runStepHook.ts", import.meta.url));
 const WRITE_AGENT_ANSWER_PATH = fileURLToPath(new URL("../scripts/tackle-tasks/shared/writeAgentAnswer.ts", import.meta.url));
 
 function git(repoRoot: string, ...args: string[]): string {

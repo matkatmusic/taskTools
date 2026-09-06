@@ -5,13 +5,13 @@ import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { compileFunction } from 'node:vm'
-import { buildWorkflowArguments } from '../scripts/prepareTasks.ts'
-import type { TaskRecord } from '../scripts/taskFiles.ts'
+import { buildWorkflowArguments } from '../scripts/shared/prepareTasks.ts'
+import type { TaskRecord } from '../scripts/shared/taskFiles.ts'
 
 const REPO_ROOT = process.cwd()
 const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
-const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
+const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks/shared/tackle-tasks_AgentPromptEmitter.ts')
 
 type AgentImpl = (prompt: string, options: { label: string; phase?: string }) => Promise<unknown>
 
@@ -632,7 +632,7 @@ test('a third rejected review with missingFiles widens every downstream implemen
   git(root, 'remote', 'add', 'origin', origin)
 
   const prepared = JSON.parse(
-    execFileSync('node', [join(REPO_ROOT, 'scripts', 'prepareTasks.ts'), String(task.taskNumber)], { cwd: root, encoding: 'utf8' }),
+    execFileSync('node', [join(REPO_ROOT, 'scripts', 'shared', 'prepareTasks.ts'), String(task.taskNumber)], { cwd: root, encoding: 'utf8' }),
   )
   const group = prepared.groups.find((g: { tasks: { number: number }[] }) => g.tasks[0]?.number === task.taskNumber)
   linkScripts(group.worktree)

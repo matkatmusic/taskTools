@@ -5,8 +5,8 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildOwnedOccurrencePaths, getOccurrencesDeepestFirst, parseOccurrencePath, type Occurrence } from "./occurrences.ts";
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 import { appendTaskCommits, getCurrentTaskRun, type TaskCommit } from "./taskRunState.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { modifiableFiles } from "../../prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { modifiableFiles } from "../../shared/prepareTasks.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 
 export type CommitTaskWorkInput = {

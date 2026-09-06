@@ -7,7 +7,7 @@ import { readCheckpoint } from "./checkpoint.ts";
 import { getAttemptCount } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 
 // Same difficulty>=7 rule PLAN_THE_TASK.ts uses to route to codex drafting; no field records this separately.
 const isCodexDraftedPlan = (t: PreparedTask): boolean => {

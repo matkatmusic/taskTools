@@ -5,16 +5,16 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LogicalRepository } from "../scripts/logicalRepository.ts";
-import type { RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { issueRunAuthorization } from "../scripts/runAuthorization.ts";
+import type { LogicalRepository } from "../scripts/shared/logicalRepository.ts";
+import type { RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { issueRunAuthorization } from "../scripts/shared/runAuthorization.ts";
 import {
     NonAncestorRemoteTipError,
     OccurrenceVerificationMismatchError,
     RunNotApprovedError,
     buildPushArgv,
     pushOperationBranches,
-} from "../scripts/operationPush.ts";
+} from "../scripts/shared/operationPush.ts";
 
 const AUTH_DIGEST = "digest-a";
 const token = issueRunAuthorization(AUTH_DIGEST);

@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "turn-modified-flag.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "turn-modified-flag.ts");
 
 test("appends each edited path to the session flag file", () => {
   const home = mkdtempSync(join(tmpdir(), "hook-flag-"));

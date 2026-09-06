@@ -6,9 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { groupEditsByOccurrence } from "../scripts/relatedTests.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { groupEditsByOccurrence } from "../scripts/hooks/relatedTests.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
 function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOccurrence {
     return {
@@ -29,7 +29,7 @@ function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOcc
 }
 
 const rootPath = "/workspace";
-const SCRIPT_PATH = fileURLToPath(new URL("../scripts/relatedTests.ts", import.meta.url));
+const SCRIPT_PATH = fileURLToPath(new URL("../scripts/hooks/relatedTests.ts", import.meta.url));
 
 const root = makeOccurrence({ occurrenceId: "root", checkoutPath: "repo", childOccurrenceIds: ["pluginRepo"] });
 const pluginRepo = makeOccurrence({

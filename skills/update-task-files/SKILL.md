@@ -5,7 +5,7 @@ argument-hint: "[N,N,...]"
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/updateTaskFilesBrief.ts" <<'UPDATETASKFILESEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update-task-files/updateTaskFilesBrief.ts" <<'UPDATETASKFILESEOF'
 $ARGUMENTS
 UPDATETASKFILESEOF
 ```

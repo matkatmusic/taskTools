@@ -6,8 +6,8 @@ import { closeSync, constants, existsSync, mkdirSync, mkdtempSync, openSync, unl
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "stage-and-summarize-stop.ts");
-const FLAG_SCRIPT = join(import.meta.dirname, "..", "scripts", "turn-modified-flag.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "stage-and-summarize-stop.ts");
+const FLAG_SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "turn-modified-flag.ts");
 
 function runFlag(home: string, args: string[], input: object): void {
   execFileSync("node", ["--no-inspect", FLAG_SCRIPT, ...args], {

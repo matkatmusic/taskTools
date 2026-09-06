@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeTaskRun } from "./closeTaskRun.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import type { TaskRunRecord, TaskRunState } from "./taskRunState.ts";
 
 function makeProjectRoot(tasks: unknown[], completed: unknown[] = []): string {

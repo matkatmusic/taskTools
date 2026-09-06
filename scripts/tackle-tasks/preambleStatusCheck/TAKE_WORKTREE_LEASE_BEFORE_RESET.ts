@@ -1,8 +1,8 @@
 // TAKE_WORKTREE_LEASE_BEFORE_RESET, from pipeline-preambleStatusCheck.mmd. Mutating: releases or adopts the worktree's lease before RESET_WORKTREE tears it down.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { releaseTaskWorktreeLease } from "../../prepareTasks.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { releaseTaskWorktreeLease } from "../../shared/prepareTasks.ts";
 import { readTaskRunState, transitionWorktreeLease } from "../shared/taskRunState.ts";
 import type { EntryPacket } from "./_packet.ts";
 

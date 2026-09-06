@@ -5,5 +5,5 @@ allowed-tools: Bash(node *)
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/commitMessageBrief.ts"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/commit-message/commitMessageBrief.ts"
 ```

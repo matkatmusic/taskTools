@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "archiveProcessed.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "archiveProcessed.ts");
 
 test("moves a file into sibling archived/ and reports collisions without overwriting", () => {
   const dir = mkdtempSync(join(tmpdir(), "taskTools-archive-"));

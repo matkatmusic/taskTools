@@ -6,8 +6,8 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./DOCUMENT_GENERATION.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

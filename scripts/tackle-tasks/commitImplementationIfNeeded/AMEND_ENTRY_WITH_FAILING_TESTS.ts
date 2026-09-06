@@ -1,7 +1,7 @@
 // AMEND_ENTRY_WITH_FAILING_TESTS, from pipeline-taskTests.mmd. Writes failing-test notes into tasks.json and raises the fix-attempt counter.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { amendEntryWithFailingTests } from "../shared/amendEntryWithFailingTestsImpl.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";

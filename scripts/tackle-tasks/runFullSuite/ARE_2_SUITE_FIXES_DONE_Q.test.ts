@@ -8,9 +8,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./ARE_2_SUITE_FIXES_DONE_Q.ts";
 import { claimTask } from "../shared/taskRunState.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { writeCheckpoint, type Checkpoint } from "../shared/checkpoint.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "ARE_2_SUITE_FIXES_DONE_Q.template.json");

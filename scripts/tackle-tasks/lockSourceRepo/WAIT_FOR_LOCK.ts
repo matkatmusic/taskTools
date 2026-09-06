@@ -1,7 +1,7 @@
 // WAIT_FOR_LOCK, from pipeline-rebasePreamble/WAIT_FOR_LOCK.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 // Overridable so a test does not spend 5 real seconds per case.

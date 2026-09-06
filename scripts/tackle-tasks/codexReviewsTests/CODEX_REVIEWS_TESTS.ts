@@ -1,7 +1,7 @@
 // CODEX_REVIEWS_TESTS, from pipeline-reviewTests/CODEX_REVIEWS_TESTS.ts, folded with GREEN_IMPLEMENTATION_INPUT's packet validation.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import { reviewTestsPrompt } from "../shared/CodexTestReviewBodyEmitter.ts";

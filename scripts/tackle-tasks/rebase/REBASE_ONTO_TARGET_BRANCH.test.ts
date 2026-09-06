@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./REBASE_ONTO_TARGET_BRANCH.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { claimTask } from "../shared/taskRunState.ts";
 import { createTaskWorktree } from "../shared/createTaskWorktree.ts";
 

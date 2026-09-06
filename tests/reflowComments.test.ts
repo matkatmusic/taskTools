@@ -1,8 +1,8 @@
 // reflowComments joins wrapped prose, skips commented-out code. Run: node --test "tests/*.test.ts"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeReflows, needsRewrite, reflowFile, reflowSource } from "../scripts/reflowComments.ts";
-import { REWRITE_NOT_NEEDED } from "../scripts/resultCodes.ts";
+import { describeReflows, needsRewrite, reflowFile, reflowSource } from "../scripts/hooks/reflowComments.ts";
+import { REWRITE_NOT_NEEDED } from "../scripts/shared/resultCodes.ts";
 
 const WRAPPED = [
   "// Nothing to say unless one of those files still has unstaged work. A porcelain",

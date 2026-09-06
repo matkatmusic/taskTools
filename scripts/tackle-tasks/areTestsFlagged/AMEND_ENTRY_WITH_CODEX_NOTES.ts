@@ -1,9 +1,9 @@
 // AMEND_ENTRY_WITH_CODEX_NOTES, from pipeline-areTestsFlagged.mmd. Ported from archive pipeline-reviewTests/AMEND_ENTRY_WITH_CODEX_NOTES.ts.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { raiseAttemptCount } from "../shared/taskRunState.ts";
 import { readCheckpoint } from "../shared/checkpoint.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";

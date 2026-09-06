@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent, taskWorkflowDirectory } from "../scripts/taskFiles.ts";
+import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent, taskWorkflowDirectory } from "../scripts/shared/taskFiles.ts";
 
 function makeEmptyProjectRoot(): string {
   return mkdtempSync(join(tmpdir(), "taskTools-"));
@@ -105,7 +105,7 @@ test("concurrent first-run seeders leave both task files as valid JSON", async (
   const root = makeEmptyProjectRoot();
   const startFile = join(root, "start");
   const taskFilesModuleUrl = pathToFileURL(
-    join(import.meta.dirname, "..", "scripts", "taskFiles.ts"),
+    join(import.meta.dirname, "..", "scripts", "shared", "taskFiles.ts"),
   ).href;
   const childSource = `
     import { existsSync } from "node:fs";

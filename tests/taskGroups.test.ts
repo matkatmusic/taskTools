@@ -1,12 +1,12 @@
 // Behavioral checks for taskGroups.ts: pure file-overlap grouping, no I/O.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { declaredFiles, groupTasksByFileOverlap, readOnlyFilesOf } from "../scripts/taskGroups.ts";
+import { declaredFiles, groupTasksByFileOverlap, readOnlyFilesOf } from "../scripts/shared/taskGroups.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
-import type { RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import type { RepositoryManifest } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
 function task(taskNumber: number, files?: string[]): TaskRecord {
     return files === undefined ? { taskNumber } : { taskNumber, files };

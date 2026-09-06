@@ -7,14 +7,14 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkpointPath, readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
-import { START_STEP } from "../scripts/generateWorkflow.ts";
+import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 import { writeAgentAnswer } from "../scripts/tackle-tasks/shared/writeAgentAnswer.ts";
 import { readTaskRunState } from "../scripts/tackle-tasks/shared/taskRunState.ts";
 import { git, makeCommittedRepo, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const HOOK = join(REPO_ROOT, "scripts/runStepHook.ts");
+const HOOK = join(REPO_ROOT, "scripts/hooks/runStepHook.ts");
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
@@ -1725,7 +1725,7 @@ test("test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit", () =
         cwd: projectRoot,
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: `/run-step pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO ${heldLockPacketArgument(projectRoot)}` }),
         encoding: "utf8",
-        env: { ...process.env, RUN_STEP_CONFIG: join(dirname(HOOK), "steps.json"), WAIT_FOR_LOCK_MS: "5", LOCK_WAIT_DEADLINE_MS: "20" },
+        env: { ...process.env, RUN_STEP_CONFIG: join(REPO_ROOT, "scripts/tackle-tasks/steps.json"), WAIT_FOR_LOCK_MS: "5", LOCK_WAIT_DEADLINE_MS: "20" },
     });
     const elapsedMs = Date.now() - startedAt;
     const result = JSON.parse(String(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.additionalContext).split("\n")[0]);
@@ -1740,7 +1740,7 @@ test("test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill", () =
         cwd: projectRoot,
         input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "run-step", args: `pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO ${heldLockPacketArgument(projectRoot)}` } }),
         encoding: "utf8",
-        env: { ...process.env, RUN_STEP_CONFIG: join(dirname(HOOK), "steps.json"), WAIT_FOR_LOCK_MS: "5", LOCK_WAIT_DEADLINE_MS: "20" },
+        env: { ...process.env, RUN_STEP_CONFIG: join(REPO_ROOT, "scripts/tackle-tasks/steps.json"), WAIT_FOR_LOCK_MS: "5", LOCK_WAIT_DEADLINE_MS: "20" },
     });
     const elapsedMs = Date.now() - startedAt;
     const result = JSON.parse(String(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.additionalContext).split("\n")[0]);
@@ -1750,7 +1750,7 @@ test("test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill", () =
 
 // Table-driven: inject one real failure at every real failuresExit box, then resume and finish.
 const REAL_FAILURES_EXIT_STEPS = (
-    JSON.parse(readFileSync(join(REPO_ROOT, "scripts/steps.json"), "utf8")) as
+    JSON.parse(readFileSync(join(REPO_ROOT, "scripts/tackle-tasks/steps.json"), "utf8")) as
         Record<string, { box: string; script: string; template: string; producesPrompt?: boolean; next: string[] }[]>
 )["pipeline-failuresExit.mmd"];
 

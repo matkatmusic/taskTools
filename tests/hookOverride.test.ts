@@ -12,9 +12,9 @@ import {
     blockApprovalOnSuiteFailure,
     type ManifestWithHookOverride,
     type SuiteResult,
-} from "../scripts/hookOverride.ts";
-import { readRepositoryManifest, writeRepositoryManifest, REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
-import { HOOK_OVERRIDE_REQUESTED, HOOK_OVERRIDE_NOT_REQUESTED, ALL_SUITES_PASSED, SUITE_FAILURE_DETECTED } from "../scripts/resultCodes.ts";
+} from "../scripts/shared/hookOverride.ts";
+import { readRepositoryManifest, writeRepositoryManifest, REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
+import { HOOK_OVERRIDE_REQUESTED, HOOK_OVERRIDE_NOT_REQUESTED, ALL_SUITES_PASSED, SUITE_FAILURE_DETECTED } from "../scripts/shared/resultCodes.ts";
 
 function withTempDir(body: (dirPath: string) => void): void {
     const dirPath = mkdtempSync(join(tmpdir(), "hook-override-"));

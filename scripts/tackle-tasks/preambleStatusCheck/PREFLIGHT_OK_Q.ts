@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 const MINIMUM_FREE_BYTES = 5 * 1024 * 1024 * 1024;
@@ -71,7 +71,7 @@ export function checkDuplicateHookRegistration(projectRoot: string): string | nu
 }
 
 export function checkScriptPathsInsideRoot(projectRoot: string): string | null {
-    const stepsConfigPath = join(projectRoot, "scripts", "steps.json");
+    const stepsConfigPath = join(projectRoot, "scripts", "tackle-tasks", "steps.json");
     const config = readJsonIfExists(stepsConfigPath) as Record<string, Array<{ script: string }>> | null;
     if (config === null) return null;
     const scriptsRoot = resolve(projectRoot, "scripts");

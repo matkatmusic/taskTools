@@ -1,8 +1,8 @@
 // DOES_RUN_HOLD_LEASE_Q, from pipeline-failuresExit.mmd
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../prepareTasks.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskWorktreeLeaseOwner, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 // leaseReleased/leaseRetained are pre-declared false here so both arms hand the same packet shape downstream.

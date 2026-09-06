@@ -10,7 +10,7 @@ import {
     createBranchInEveryRepository,
     currentBranchName,
     submodulePaths,
-} from "../scripts/repositoryBranches.ts";
+} from "../scripts/shared/repositoryBranches.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

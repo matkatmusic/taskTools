@@ -6,10 +6,10 @@ import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoL
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildWorktreeOccurrences, mergeWorktreeTaskDeepestFirst } from "./occurrences.ts";
 import { getCurrentTaskRun, type TaskCommit, type SourceTipReceipt } from "./taskRunState.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { defaultMergeStepOperations, type MergeLayerOutcome, type MergeTaskWalkReport } from "../../mergeTaskWorktrees.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { defaultMergeStepOperations, type MergeLayerOutcome, type MergeTaskWalkReport } from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 import { logStepOutput } from "./logStepOutput.ts";
-import { STATUS_PATH_IGNORABLE, STATUS_PATH_NOT_IGNORABLE } from "../../resultCodes.ts";
+import { STATUS_PATH_IGNORABLE, STATUS_PATH_NOT_IGNORABLE } from "../../shared/resultCodes.ts";
 
 export type MergeTaskWorktreeInput = {
     projectRoot: string;

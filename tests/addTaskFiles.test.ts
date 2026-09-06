@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const ADD_TASK_FILES_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts")).href;
-const CLOSE_TASKS_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "closeTasks.ts")).href;
+const ADD_TASK_FILES_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "shared", "addTaskFiles.ts")).href;
+const CLOSE_TASKS_URL = pathToFileURL(join(import.meta.dirname, "..", "scripts", "close-tasks", "closeTasks.ts")).href;
 
 function requireExitZero(child: ChildProcess): Promise<void> {
   let stderr = "";
@@ -84,7 +84,7 @@ ${callLine}
   return spawn("node", ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "pipe"] });
 }
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "addTaskFiles.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "addTaskFiles.ts");
 
 function makeProjectRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "taskTools-addTaskFiles-"));

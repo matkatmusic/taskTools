@@ -1,7 +1,7 @@
 // COMMIT_TEST_FIX_IF_NEEDED, from pipeline-commitImplementationIfNeeded.mmd. Commits FIX_IMPLEMENT_TASK_TESTS's fix, if any.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { commitTaskWork } from "../shared/commitTaskWork.ts";
 import { getAttemptCount } from "../shared/taskRunState.ts";
 import type { CommitImplementationIfNeededPacket } from "./_packet.ts";

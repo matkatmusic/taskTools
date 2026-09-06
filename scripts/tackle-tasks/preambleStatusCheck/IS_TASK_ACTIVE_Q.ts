@@ -1,7 +1,7 @@
 // IS_TASK_ACTIVE_Q, from pipeline-preambleStatusCheck.mmd. "is the task active?"
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readTaskRunState } from "../shared/taskRunState.ts";
 import type { EntryPacket } from "./_packet.ts";
 

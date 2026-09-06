@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { doesTaskWorktreeExist } from "./doesTaskWorktreeExist.ts";
-import { resolveTaskWorktreeConventionDirectory } from "../../prepareTasks.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {
     const root = mkdtempSync(join(tmpdir(), "doesTaskWorktreeExist-"));

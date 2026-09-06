@@ -1,9 +1,9 @@
 // WHAT_IS_REVIEW_VERDICT, from pipeline-reviewPlan.mmd. Ruling ported from recordPlanReview.ts; applies AMEND_THEN_ACCEPT fixes to the plan.
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { efficacyPercentage, rulingByFixCount, rulingByPercentage } from "../../planReviewRuling.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { efficacyPercentage, rulingByFixCount, rulingByPercentage } from "../../review-plan/planReviewRuling.ts";
 import { readReviewJson } from "../shared/readReviewJson.ts";
 import { readJsonFile } from "../shared/readJsonFile.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";

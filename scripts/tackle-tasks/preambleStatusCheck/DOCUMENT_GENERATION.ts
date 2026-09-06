@@ -1,7 +1,7 @@
 // DOCUMENT_GENERATION, from pipeline-preambleStatusCheck.mmd. "write the task brief". One successor, so no next.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "../shared/writeTaskBrief.ts";
 import type { EntryPacket } from "./_packet.ts";
 
