@@ -81,7 +81,7 @@ test("test_PREFLIGHT_OK_Q_scriptPathsInsideRootPassesWhenStepsJsonIsMissing", ()
 test("test_PREFLIGHT_OK_Q_scriptPathsInsideRootFailsOnAPathOutsideScripts", () => {
     const root = tempDir();
     mkdirSync(join(root, "scripts", "tackle-tasks"), { recursive: true });
-    writeFileSync(join(root, "scripts", "tackle-tasks", "steps.json"), JSON.stringify({
+    writeFileSync(join(root, "scripts", "tackle-tasks", "diagram-steps.json"), JSON.stringify({
         "pipeline-x.mmd": [{ box: "X", script: "../outside/X.ts" }],
     }));
     const failure = checkScriptPathsInsideRoot(root);

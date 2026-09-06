@@ -28,7 +28,7 @@ process.on("uncaughtException", (error: Error) => {
 });
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
 let CONFIG_FILE: string;
 const SUCCESS_DIAGRAM = "pipeline-mergeSucceededExit.mmd";
 

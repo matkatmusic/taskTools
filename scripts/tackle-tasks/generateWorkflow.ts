@@ -6,7 +6,7 @@ import { buildHookOutputSchema } from "./buildRunStepSchemas.ts";
 import type { StepConfig } from "./generateSteps.ts";
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
 // RETIRED (task 10): no code writes the shared plugin workflow file anymore; every task generates its own under the target project's .taskTools/workflows/<N>/.
 // export const WORKFLOW_FILE = join(PROJECT_ROOT, "skills/tackle-tasks/tackle-tasks.workflow.js");
 export const START_STEP = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";

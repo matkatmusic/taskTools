@@ -6,7 +6,7 @@ import { getTemplateShapeMismatches } from "../shared/templateShape.ts";
 import type { BlockTemplate, StepConfig } from "../tackle-tasks/generateSteps.ts";
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
 // Same log the run-step hook writes, so a run shows whether this hook fired at all.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.json");
 

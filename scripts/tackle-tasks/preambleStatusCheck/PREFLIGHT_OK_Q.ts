@@ -71,7 +71,7 @@ export function checkDuplicateHookRegistration(projectRoot: string): string | nu
 }
 
 export function checkScriptPathsInsideRoot(projectRoot: string): string | null {
-    const stepsConfigPath = join(projectRoot, "scripts", "tackle-tasks", "steps.json");
+    const stepsConfigPath = join(projectRoot, "scripts", "tackle-tasks", "diagram-steps.json");
     const config = readJsonIfExists(stepsConfigPath) as Record<string, Array<{ script: string }>> | null;
     if (config === null) return null;
     const scriptsRoot = resolve(projectRoot, "scripts");

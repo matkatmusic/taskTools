@@ -345,7 +345,7 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
 
 // A stale committed steps.json fails here; npm run steps regenerates it.
 test("test_generateSteps_theCommittedStepsJsonIsUpToDate", () => {
-    const committedStepsJsonPath = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+    const committedStepsJsonPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
     const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-committed-")), "steps.json");
     // Seeds the previous-config read so hand-written `mutating: true` flags carry forward.
     copyFileSync(committedStepsJsonPath, tempConfigPath);

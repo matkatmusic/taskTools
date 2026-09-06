@@ -12,7 +12,7 @@ import { generateWorkflow } from "../generateWorkflow.ts";
 // The mutating flag is hand-authored (scripts/generateSteps.ts:182) and only ever carried forward by reading a previous
 // config at the SAME path a task is about to write to. A task's first-ever per-task steps.json has no previous file of
 // its own, so it is seeded from this canonical file first — the plugin's own committed config for the default pipeline.
-const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../steps.json", import.meta.url));
+const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../diagram-steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 

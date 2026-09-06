@@ -73,7 +73,7 @@ function taskWorktreePath(root: string, taskNumber: number): string {
 
 type ScriptedAnswer = { message: string; additionalData: Record<string, unknown> };
 // One entry per prompt box this scenario expects to hit, in the order they occur; the driver throws if it runs out or hits an unlisted box.
-type AnswerScript = Record<string, () => ScriptedAnswer>;
+type AnswerScript = Record<string, (packetFile: string) => ScriptedAnswer>;
 
 function runHookOnce(box: string, input: string, projectRoot: string, env: NodeJS.ProcessEnv = process.env): { ok: boolean; ran: string[]; outcome: { next: string | null; payload: string } | null; errors: string[] } {
     const command = `/run-step ${box} ${input}`;
@@ -101,7 +101,7 @@ function driveRun(taskNumber: number, tasksFile: string, projectRoot: string, an
         const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
         const answerFn = answers[stoppedAtBox];
         if (answerFn === undefined) throw new Error(`no scripted answer for prompt box ${stoppedAtBox}`);
-        execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome.payload], { input: JSON.stringify(answerFn()) });
+        execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome.payload], { input: JSON.stringify(answerFn(result.outcome.payload)) });
         box = result.outcome.next;
         input = JSON.stringify({ packetFile: result.outcome.payload });
     }
@@ -352,4 +352,25 @@ test("test_acceptance_resumesAfterAnInterruptedCleanup", async () => {
     const result = driveRun(8, tasksFile, root, answers);
     assert.equal(result.ok, true);
     assert.equal(readCheckpoint(worktreePath), null); // gone once the run finishes cleanly.
+});
+
+test("test_acceptance_packetStillCarriesTaskNsIdentityAfterCrossingRealBlocks", async () => {
+    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 9, files: ["a.txt"], difficulty: 1 });
+    const answers = standardHappyPathAnswers(root, 9, "a.txt", "x\n");
+    // The packet reaching IMPLEMENT_TASK has crossed every block from PREAMBLE_STATUS_CHECK through PLAN_THE_TASK.
+    let packetAtImplement: Record<string, unknown> | null = null;
+    const implementAnswer = answers.IMPLEMENT_TASK!;
+    answers.IMPLEMENT_TASK = (packetFile) => {
+        packetAtImplement = JSON.parse(readFileSync(packetFile, "utf8"));
+        return implementAnswer(packetFile);
+    };
+    const result = driveRun(9, tasksFile, root, answers);
+    assert.equal(result.ok, true);
+    const packet = packetAtImplement!;
+    assert.equal(packet.taskNumber, 9);
+    assert.equal(packet.worktree, taskWorktreePath(root, 9));
+    assert.equal(packet.branch, "task-9");
+    assert.equal(typeof packet.runId, "string");
+    assert.equal(packet.planFile, join(taskWorktreePath(root, 9), "plans", "plan.json"));
+    assert.ok("docsMode" in packet);
 });

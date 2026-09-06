@@ -394,7 +394,7 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const commandArguments = process.argv.slice(2);
     const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT);
-    const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+    const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
     console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
 
     if (commandArguments.includes("--watch")) {
