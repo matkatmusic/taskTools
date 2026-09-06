@@ -302,7 +302,11 @@ ${commitMessageSection}`;
   return brief;
 };
 
-// RETIRED (task 163): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.  Closed every non-problematic completed task with one \`close-tasks\` skill call; array of task numbers plus closureNote reasoning.  Orchestrator ran typecheck only; workers ran their own tests. Full verification ran once inside \`close-tasks\`, after user approval.
+// RETIRED (task 163): old close-tasks-skill text superseded by task 152's closeTasks.ts call; see git history.
+
+// Closed every non-problematic completed task with one \`close-tasks\` skill call; array of task numbers plus closureNote reasoning.
+
+// Orchestrator ran typecheck only; workers ran their own tests. Full verification ran once inside \`close-tasks\`, after user approval.
 
 function readStdin(): string {
   try {

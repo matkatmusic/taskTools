@@ -208,7 +208,7 @@ test("merge queue: an approved task launches rebase-test then merge, and the bri
   assert.match(brief, /immediately ask that task's own approval gate/);
   assert.match(brief, /`"launch-tail"`:.*Launch that\s+task's `v1_1WorkflowPath`/s);
   assert.match(brief, /`"launch-plan"`:.*Launch that task's\s+`v1_1WorkflowPath`/s);
-  // Closing happens automatically via scripts/close-tasks/closeTasks.ts (a real path, not a skill invocation); this only forbids telling the agent to invoke a `close-tasks` skill, the thing this test actually guards.
+  // Closing happens automatically via closeTasks.ts; this only forbids telling the agent to invoke a `close-tasks` skill.
   assert.doesNotMatch(brief, /invoke (?:the )?`?\/?close-tasks`?\s+skill/i);
 });
 
