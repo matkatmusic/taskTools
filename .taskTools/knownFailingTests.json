@@ -1,6 +1,10 @@
 [
   {
-    "file": "tests/stage-and-summarize-stop.test.ts",
-    "name": "test_stages_only_the_flagged_session_files"
+    "file": "scripts/tackle-tasks/shared/sourceRepoLock.test.ts",
+    "name": "test_acquireSourceRepoLock_stampsTheMutationGuardWithTheCallersOwnerToken"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-mergeSucceededExit_MERGE_SUCCEEDED_EXIT_producesItsOutputContract"
   }
 ]
