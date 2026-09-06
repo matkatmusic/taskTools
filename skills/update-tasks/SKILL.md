@@ -4,4 +4,4 @@ description: scan plans/ implementation notes and handoffs for open items/questi
 allowed-tools: Bash(git add *)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/updateTasksBrief.ts"`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/update-tasks/updateTasksBrief.ts"`

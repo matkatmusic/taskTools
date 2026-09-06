@@ -1,7 +1,7 @@
 // WHAT_IS_PUBLICATION_STATE_Q, from pipeline-runFullSuite.mmd. merged, no-op, and root-merged-but-not-closed are LANDED.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 
 type PublicationState = "ALL LANDED" | "SOME LANDED" | "NONE LANDED";
 

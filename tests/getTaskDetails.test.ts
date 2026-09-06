@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "getTaskDetails.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "getTaskDetails.ts");
 
 function runScript(cwd: string, ...args: string[]): string {
   return execFileSync("node", ["--no-inspect", SCRIPT, ...args], { cwd, encoding: "utf8" });
@@ -63,7 +63,7 @@ test("full details include the blockedBy field", () => {
 
 test("findTask resolves open first, falls back to completed, and importing runs no CLI", async () => {
   const root = makeProjectRoot();
-  const { findTask } = await import("../scripts/getTaskDetails.ts");
+  const { findTask } = await import("../scripts/shared/getTaskDetails.ts");
   assert.equal(findTask(1, root)?.title, "unblocked task");
   assert.equal(findTask(3, root)?.title, "done task");
   assert.equal(findTask(99, root), undefined);

@@ -10,9 +10,9 @@ import {
   BLOCKER_VERDICT_VALUES,
   BLOCKER_VERDICT_SCHEMA_FRAGMENT,
   buildBlockerInvestigationPrompt,
-} from "../scripts/blockerVerdicts.ts";
+} from "../scripts/shared/blockerVerdicts.ts";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "blockerVerdicts.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "blockerVerdicts.ts");
 
 test("exports the verdict vocabulary, derived values, and schema fragment", () => {
   assert.deepEqual(BLOCKER_VERDICTS, { DISPROVEN: "disproven", STILL_BLOCKED: "still-blocked" });

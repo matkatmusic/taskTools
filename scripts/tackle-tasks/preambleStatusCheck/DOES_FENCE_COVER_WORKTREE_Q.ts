@@ -1,7 +1,7 @@
 // DOES_FENCE_COVER_WORKTREE_Q, from pipeline-preambleStatusCheck.mmd. "does the task's file list cover what the worktree touched?"
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { checkResumedWorktreeFence } from "../shared/checkResumedWorktreeFence.ts";
 import type { EntryPacket } from "./_packet.ts";
 

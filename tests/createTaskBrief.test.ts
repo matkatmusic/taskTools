@@ -3,10 +3,10 @@
 // import assert from "node:assert/strict";
 // import { execFileSync } from "node:child_process";
 // import { fileURLToPath } from "node:url";
-// import { createTaskBrief } from "../scripts/createTaskBrief.ts";
+// import { createTaskBrief } from "../scripts/create-task/createTaskBrief.ts";
 //
-// const scriptPath = fileURLToPath(new URL("../scripts/createTaskBrief.ts", import.meta.url));
-// const nextTaskNumberPath = fileURLToPath(new URL("../scripts/nextTaskNumber.ts", import.meta.url));
+// const scriptPath = fileURLToPath(new URL("../scripts/create-task/createTaskBrief.ts", import.meta.url));
+// const nextTaskNumberPath = fileURLToPath(new URL("../scripts/shared/nextTaskNumber.ts", import.meta.url));
 //
 // // Disabled: pinned the brief to the pre-refactor SKILL.md, so it fails on every intentional wording edit.
 // //

@@ -7,8 +7,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordTaskModifiedFiles } from "./recordTaskModifiedFiles.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 
 // git submodule add/clone needs this in a sandboxed test environment.
 process.env.GIT_ALLOW_PROTOCOL = "file";

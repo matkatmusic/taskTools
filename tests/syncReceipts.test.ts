@@ -1,8 +1,8 @@
 // Behavioral checks for syncReceipts.ts: receipt assembly and lossless (de)serialization.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSyncReceipt, serializeSyncReceipt, parseSyncReceipt } from "../scripts/syncReceipts.ts";
-import type { Occurrence, SyncDestination } from "../scripts/syncReceipts.ts";
+import { buildSyncReceipt, serializeSyncReceipt, parseSyncReceipt } from "../scripts/shared/syncReceipts.ts";
+import type { Occurrence, SyncDestination } from "../scripts/shared/syncReceipts.ts";
 
 const source: Occurrence = { id: "root", parentChain: [] };
 

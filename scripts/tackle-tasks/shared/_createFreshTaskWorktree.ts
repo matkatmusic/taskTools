@@ -1,8 +1,8 @@
 // Shared by CREATE_WORKTREE and RESET_WORKTREE: the physical git worktree creation step, ported from createTaskWorktree.ts minus its F11 journal/rollback wrapper.
 // ponytail: no journal-based rollback across process boundaries; a mid-step crash throws and leaves a partial worktree for a human to clean up. Add the journal back if a run-step block ever needs to recover one automatically.
-import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../taskFiles.ts";
-import { createWorktreeForGroup, modifiableFiles } from "../../prepareTasks.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../shared/taskFiles.ts";
+import { createWorktreeForGroup, modifiableFiles } from "../../shared/prepareTasks.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 import { configureGeneratedArtifactIsolation } from "./writeTaskBrief.ts";
 
 export function createFreshTaskWorktree(taskNumber: number, runId: string, projectRoot: string): string {

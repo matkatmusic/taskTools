@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "../scripts/tackleMetrics.ts";
-import type { WorkflowArguments } from "../scripts/prepareTasks.ts";
+import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "../scripts/shared/tackleMetrics.ts";
+import type { WorkflowArguments } from "../scripts/shared/prepareTasks.ts";
 
 function makeRecord(runId: string) {
     return {

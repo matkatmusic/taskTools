@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { rebaseTaskWorktree } from "../shared/rebaseTaskWorktree.ts";
 import type { RebasePacket } from "./_packet.ts";
 

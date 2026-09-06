@@ -1,10 +1,10 @@
 // Walks a worktree's occurrence tree deepest-submodule-first, root last (rule 8), bridging task-declared and occurrence-tagged paths.
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { attachOperationBranch, loadRepositoryManifest } from "../../prepareTasks.ts";
-import type { DiscoveryManifest } from "../../repositoryDiscovery.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../../repositoryManifest.ts";
-import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
+import { attachOperationBranch, loadRepositoryManifest } from "../../shared/prepareTasks.ts";
+import type { DiscoveryManifest } from "../../shared/repositoryDiscovery.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../../shared/repositoryManifest.ts";
+import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import { ensureStagingWorktree, stagingWorktreePath } from "./stagingWorktree.ts";
 import {
     defaultMergeStepOperations,
@@ -13,7 +13,7 @@ import {
     type MergeStepOperations,
     type MergeTaskWalkReport,
     type SubmoduleLayerWalkReport,
-} from "../../mergeTaskWorktrees.ts";
+} from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
 
 export type Occurrence = {
     occurrenceId: string;

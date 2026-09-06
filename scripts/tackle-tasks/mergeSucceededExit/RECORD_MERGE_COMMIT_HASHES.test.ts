@@ -9,9 +9,9 @@ import { execFileSync } from "node:child_process";
 import { main } from "./RECORD_MERGE_COMMIT_HASHES.ts";
 import { appendTaskCommits, claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "RECORD_MERGE_COMMIT_HASHES.template.json");
 

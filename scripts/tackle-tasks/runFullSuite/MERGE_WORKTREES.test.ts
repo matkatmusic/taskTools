@@ -9,9 +9,9 @@ import { main } from "./MERGE_WORKTREES.ts";
 import { rebaseTaskWorktree } from "../shared/rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner, releaseSourceRepoLock } from "../shared/sourceRepoLock.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

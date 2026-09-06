@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "nextTaskNumber.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "nextTaskNumber.ts");
 
 function runScript(cwd: string): string {
   return execFileSync("node", ["--no-inspect", SCRIPT], { cwd, encoding: "utf8" });

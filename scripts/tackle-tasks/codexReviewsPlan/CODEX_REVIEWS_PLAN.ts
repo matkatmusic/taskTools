@@ -1,7 +1,7 @@
 // CODEX_REVIEWS_PLAN, from pipeline-reviewPlan.mmd. Spawns a review agent; the next diagram reads and rules on the file it writes.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import { planReviewPrompt } from "../shared/CodexReviewBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { PATH_IS_FILE, PATH_IS_NOT_FILE } from "../scripts/resultCodes.ts";
+import { PATH_IS_FILE, PATH_IS_NOT_FILE } from "../scripts/shared/resultCodes.ts";
 
 export type FeedbackMonitorOptions = {
     projectRoot: string;

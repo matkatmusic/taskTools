@@ -1,9 +1,9 @@
 // ARE_TASK_TESTS_SKIPPED_Q, from pipeline-taskTests.mmd. An entry without tests runs no task tests and no codex test review.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../taskFiles.ts";
-import { TASK_HAS_TESTS } from "../../resultCodes.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
+import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
 import type { CommitImplementationIfNeededPacket } from "./_packet.ts";
 
 export function main(input: string): CommitImplementationIfNeededPacket & { next: string } {

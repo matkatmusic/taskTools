@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "./taskRunState.ts";
-import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

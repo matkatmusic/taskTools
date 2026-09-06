@@ -11,7 +11,7 @@ import {
     validateRepositoryManifest,
     type RepositoryOccurrence,
     type RepositoryManifest,
-} from "../scripts/repositoryManifest.ts";
+} from "../scripts/shared/repositoryManifest.ts";
 
 function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOccurrence {
     return {

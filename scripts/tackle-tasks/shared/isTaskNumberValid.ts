@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
-import { resolveTaskFiles } from "../../taskFiles.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 // `reason` is worded here, once, so no caller has to word it again. It names the real task

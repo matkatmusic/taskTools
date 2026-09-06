@@ -1,7 +1,7 @@
 // MARK_TASK_INACTIVE_SUCCESS, from pipeline-mergeSucceededExit.mmd "mark the task inactive in tasks.json". Mutating: shared with pipeline-failuresExit.mmd's exit tail, ending the run there too.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { markTaskInactive } from "../shared/markTaskInactive.ts";
 
 export type MarkTaskInactiveSuccessInput = {

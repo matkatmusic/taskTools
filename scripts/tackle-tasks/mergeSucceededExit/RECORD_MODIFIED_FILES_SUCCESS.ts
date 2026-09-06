@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { buildOccurrencePath } from "../shared/occurrences.ts";
 import { getCurrentTaskRun, updateCurrentTaskRun } from "../shared/taskRunState.ts";
 

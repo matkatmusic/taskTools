@@ -21,7 +21,7 @@ export function resetTask(taskNumber: number, block: string): string {
         throw new Error(`cannot resume at ${block}: it reads plan, review, or prompt files that the worktree cleanup removed and nothing can make again`);
     }
     // The checkpoint's block is the full `<diagram>::<box>` key; the resume walk takes it as is, so a bare name is resolved here.
-    const stepsByDiagram: Record<string, { box: string }[]> = JSON.parse(readFileSync(fileURLToPath(new URL("../steps.json", import.meta.url)), "utf-8"));
+    const stepsByDiagram: Record<string, { box: string }[]> = JSON.parse(readFileSync(fileURLToPath(new URL("./steps.json", import.meta.url)), "utf-8"));
     const stepKeysNamingBlock = Object.entries(stepsByDiagram).flatMap(([diagram, entries]) => entries.filter((entry) => entry.box === block).map(() => `${diagram}::${block}`));
     if (block !== "" && stepKeysNamingBlock.length !== 1) {
         throw new Error(`block ${block} names ${stepKeysNamingBlock.length} steps in steps.json: ${stepKeysNamingBlock.join(", ")}`);
@@ -40,7 +40,7 @@ export function resetTask(taskNumber: number, block: string): string {
 
     if (openIndex === -1 && completedIndex === -1) throw new Error(`task ${taskNumber} not found in tasks.json or completedTasks.json`);
 
-    // same worktree-path formula as taskTools-86/scripts/prepareTasks.ts:resolveTaskWorktreeConventionDirectory
+    // same worktree-path formula as taskTools-86/scripts/shared/prepareTasks.ts:resolveTaskWorktreeConventionDirectory
     const hash = createHash("sha256").update(realpathSync(repoRoot)).digest("hex").slice(0, 8);
     const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, `task-${taskNumber}`);
     const leasePath = `${worktreePath}.lease`;

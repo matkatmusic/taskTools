@@ -6,10 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
-import { appendTaskToTasksJson, buildTaskEntry, type NewTaskPayload } from "../scripts/appendTask.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { appendTaskToTasksJson, buildTaskEntry, type NewTaskPayload } from "../scripts/shared/appendTask.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/appendTask.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/shared/appendTask.ts", import.meta.url));
 
 function makeTemporaryTaskRepo(existingTasks: TaskRecord[]): string {
     const projectRoot = mkdtempSync(join(tmpdir(), "appendTask-"));
@@ -157,7 +157,7 @@ test("test_appendTaskScriptFailsWhenStdinIsEmpty", () => {
 // --- lock races with closeTasks (C86-23): the append must never resurrect a closed task or be lost.
 
 const APPEND_TASK_URL = pathToFileURL(scriptPath).href;
-const CLOSE_TASKS_URL = pathToFileURL(fileURLToPath(new URL("../scripts/closeTasks.ts", import.meta.url))).href;
+const CLOSE_TASKS_URL = pathToFileURL(fileURLToPath(new URL("../scripts/close-tasks/closeTasks.ts", import.meta.url))).href;
 
 function makeRaceRepo(): string {
     const projectRoot = makeTemporaryTaskRepo([{ taskNumber: 1, title: "first" }]);

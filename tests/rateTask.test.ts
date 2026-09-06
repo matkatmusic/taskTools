@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatReport, rateAndPersist } from "../scripts/rateTask.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { formatReport, rateAndPersist } from "../scripts/rate-task/rateTask.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
 const sprawlingTask: TaskRecord = {
     taskNumber: 1,

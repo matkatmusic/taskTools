@@ -1,7 +1,7 @@
 // READ_MERGE_PUBLICATION_STATE, from pipeline-runFullSuite.mmd. Read-only reconciliation over the layer merge refs.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readPublicationState } from "../shared/readPublicationState.ts";
 
 type Input = {

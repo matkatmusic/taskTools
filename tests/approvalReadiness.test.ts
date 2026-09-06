@@ -5,11 +5,11 @@ import {
     assessApprovalReadiness,
     isActionableExerciseMethod,
     reviewGroupExerciseMethod,
-} from "../scripts/approvalReadiness.ts";
-import type { ApprovalReadinessInput } from "../scripts/approvalReadiness.ts";
-import { computeOccurrenceDigests } from "../scripts/approvalGate.ts";
-import type { OccurrenceSnapshot } from "../scripts/approvalGate.ts";
-import { EXERCISE_METHOD_ACTIONABLE, EXERCISE_METHOD_NOT_ACTIONABLE } from "../scripts/resultCodes.ts";
+} from "../scripts/shared/approvalReadiness.ts";
+import type { ApprovalReadinessInput } from "../scripts/shared/approvalReadiness.ts";
+import { computeOccurrenceDigests } from "../scripts/shared/approvalGate.ts";
+import type { OccurrenceSnapshot } from "../scripts/shared/approvalGate.ts";
+import { EXERCISE_METHOD_ACTIONABLE, EXERCISE_METHOD_NOT_ACTIONABLE } from "../scripts/shared/resultCodes.ts";
 
 function baseGreenInput(): ApprovalReadinessInput {
     return {

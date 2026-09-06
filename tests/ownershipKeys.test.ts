@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import {
     computeCanonicalOwnershipKey,
     expandTaskPathEffects,
-} from "../scripts/ownershipKeys.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+} from "../scripts/shared/ownershipKeys.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
 function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOccurrence {
     return {

@@ -6,12 +6,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { compileFunction } from "node:vm";
-import { type RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/prepareTasks.ts";
-import { currentBranchName } from "../scripts/repositoryBranches.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
-import { approveRegatedTask, beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, rejectRegatedTask, shouldEndQueue } from "../scripts/runMergePhase.ts";
-import { LAP_REMAINING, LAPS_EXHAUSTED, LAP_COMPLETE } from "../scripts/resultCodes.ts";
+import { type RepositoryManifest } from "../scripts/shared/repositoryManifest.ts";
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, type WorkflowArguments } from "../scripts/shared/prepareTasks.ts";
+import { currentBranchName } from "../scripts/shared/repositoryBranches.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import { approveRegatedTask, beginNextLap, buildMergeReport, consumeTaskWorkflowResult, createMergeQueue, currentLapIsComplete, enqueueApprovedTask, hasLapRemaining, judgeMergeRun, MAX_LAPS, nextQueueAction, nextQueueStep, nextSchedulerAction, recordMergedNotClosed, recordStageOutcome, rejectRegatedTask, shouldEndQueue } from "../scripts/shared/runMergePhase.ts";
+import { LAP_REMAINING, LAPS_EXHAUSTED, LAP_COMPLETE } from "../scripts/shared/resultCodes.ts";
 
 test("test_hasLapRemainingAllowsExactlyTwoLapsThenStops", () => {
     assert.equal(MAX_LAPS, 2);
@@ -395,7 +395,7 @@ test("test_rejectRegatedTaskRemovesTheTaskFromTheQueueAndReportsItSeparatelyFrom
 const REPO_ROOT = process.cwd();
 const TASK_WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, "skills/tackle-tasks-v1_1/tackle-tasks.workflow.js"), "utf8")
     .replace("export const meta", "const meta");
-const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT, "scripts/tackle-tasks_AgentPromptEmitter.ts");
+const AGENT_PROMPT_EMITTER_PATH = join(REPO_ROOT, "scripts/tackle-tasks/shared/tackle-tasks_AgentPromptEmitter.ts");
 
 type TaskWorkflowResult = { task: number; stage: "plan+implement" | "rebase-test" | "merge"; results: Array<Record<string, unknown>> };
 type WorkflowAgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>;
@@ -501,7 +501,7 @@ type PreparedPipeline = WorkflowArguments & {
 const prepareThroughCli = (root: string, taskNumber: number): PreparedPipeline => {
     const stdout = execFileSync(
         process.execPath,
-        [join(REPO_ROOT, "scripts", "prepareTasks.ts"), String(taskNumber)],
+        [join(REPO_ROOT, "scripts", "shared", "prepareTasks.ts"), String(taskNumber)],
         { cwd: root, encoding: "utf8" },
     );
     return JSON.parse(stdout) as PreparedPipeline;

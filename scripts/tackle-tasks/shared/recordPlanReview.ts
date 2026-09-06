@@ -1,9 +1,9 @@
 // "update tasks.json entry" — pipeline-reviewPlan.mmd. Rules on codex's review and writes it where its next reader looks.
 import { readFileSync } from "node:fs";
-import { efficacyPercentage, Ruling, rulingByFixCount, rulingByPercentage } from "../../planReviewRuling.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
+import { efficacyPercentage, Ruling, rulingByFixCount, rulingByPercentage } from "../../review-plan/planReviewRuling.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { withTaskStateLock, writeJsonAtomically } from "../../taskStateLock.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 import { getCurrentTaskRun } from "./taskRunState.ts";
 

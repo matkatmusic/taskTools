@@ -4,15 +4,15 @@ import { readFileSync } from "node:fs";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
-import { createEmptyResolutionManifest } from "../../resolutionRequests.ts";
+import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import {
     captureSourceTipReceipts, persistRebaseStepResult, persistSourceTipReceipts,
 } from "./rebaseTaskWorktree.ts";
 import {
     rebaseInProgress, rebaseParentOntoSourceAndTest,
     type ParentRebaseOutcome, type SubmoduleLayerOutcome,
-} from "../../mergeTaskWorktrees.ts";
-import { REBASE_IN_PROGRESS } from "../../resultCodes.ts";
+} from "../../merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { REBASE_IN_PROGRESS } from "../../shared/resultCodes.ts";
 
 export type AdvanceTaskRebaseInput = {
     projectRoot: string;

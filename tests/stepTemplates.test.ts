@@ -5,12 +5,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import type { StepConfig, StepConfigEntry } from "../scripts/generateSteps.ts";
-import { buildPromptOutputTemplate } from "../scripts/contracts.ts";
-import { getTemplateShapeMismatches } from "../scripts/templateShape.ts";
+import type { StepConfig, StepConfigEntry } from "../scripts/tackle-tasks/generateSteps.ts";
+import { buildPromptOutputTemplate } from "../scripts/shared/contracts.ts";
+import { getTemplateShapeMismatches } from "../scripts/shared/templateShape.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CONFIG_FILE = join(PROJECT_ROOT, "scripts/steps.json");
+const CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
 
 type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 
@@ -130,7 +130,7 @@ for (const [diagramFile, entries] of Object.entries(config)) {
     }
 }
 
-// A block script picks its own branch, so every next: "X" literal it can print must be a declared edge.
+// A block script picks its own branch; every next literal it prints must be a declared edge.
 const allowedNextByScript = new Map<string, { box: string; allowedNext: Set<string> }>();
 for (const entries of Object.values(config)) {
     for (const entry of entries) {
@@ -151,8 +151,7 @@ for (const [scriptPath, { box, allowedNext }] of allowedNextByScript) {
     });
 }
 
-// A block after a prompt block inherits that block's packet, which still holds the next that routed into it.
-// Source-only check: running these blocks would commit real repositories.
+// A block after a prompt block inherits its packet's next; source-only, since running blocks would commit real repos.
 const boxesAfterAPromptBlock = new Map<string, string>();
 for (const entries of Object.values(config)) {
     for (const entry of entries) {

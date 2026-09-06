@@ -6,9 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./RUN_FULL_SUITE.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { git, makeCommittedRepo, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "RUN_FULL_SUITE.template.json");

@@ -14,9 +14,9 @@ import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 import {
     acquireSourceRepoLock, buildLockOwner, readSourceRepoLock, releaseSourceRepoLock,
 } from "./sourceRepoLock.ts";
-import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../prepareTasks.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { writeJsonAtomically } from "../../taskStateLock.ts";
+import { createWorktreeForGroup, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 process.env.GIT_ALLOW_PROTOCOL = "file";
 

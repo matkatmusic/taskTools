@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./FIX_CONFLICTS.ts";
 import type { FixConflictsPacket } from "./_packet.ts";
-import { buildPromptOutputTemplate } from "../../contracts.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { buildPromptOutputTemplate } from "../../shared/contracts.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "fix-conflicts-run-log.json");

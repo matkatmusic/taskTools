@@ -6,7 +6,7 @@ allowed-tools: Bash(git add *), Bash(git log *), Bash(node *)
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/closeTasksBrief.ts" <<'CLOSETASKSEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/close-tasks/closeTasksBrief.ts" <<'CLOSETASKSEOF'
 $ARGUMENTS
 CLOSETASKSEOF
 ```

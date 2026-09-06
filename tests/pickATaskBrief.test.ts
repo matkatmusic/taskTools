@@ -2,15 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { pickATaskBrief } from "../scripts/pickATaskBrief.ts";
+import { pickATaskBrief } from "../scripts/pick-a-task/pickATaskBrief.ts";
 
 // The commit whose SKILL.md still carried the body inline — the source text this script copied.
 const preRefactorCommit = "2ec24aaf94ece915af99ecf22d0610f48c1f857a";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
-const scriptPath = fileURLToPath(new URL("../scripts/pickATaskBrief.ts", import.meta.url));
-const getTaskDetailsPath = fileURLToPath(new URL("../scripts/getTaskDetails.ts", import.meta.url));
-const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/pick-a-task/pickATaskBrief.ts", import.meta.url));
+const getTaskDetailsPath = fileURLToPath(new URL("../scripts/shared/getTaskDetails.ts", import.meta.url));
+const checkBlockersPath = fileURLToPath(new URL("../scripts/shared/checkBlockers.ts", import.meta.url));
 
 function preRefactorBody(): string {
   const skill = execFileSync("git", ["show", `${preRefactorCommit}:skills/pick-a-task/SKILL.md`], {
@@ -43,6 +43,7 @@ test("brief reproduces the pre-refactor skill body byte-for-byte once its substi
       'Blocked status: !`node "${CLAUDE_PLUGIN_ROOT}/scripts/checkBlockers.ts"`',
       `Blocked status: ${blockedStatus}`,
     )
+    .replaceAll("${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts", getTaskDetailsPath)
     .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot)
     .replaceAll("$ARGUMENTS", argsValue);
   assert.equal(pickATaskBrief(argsValue, openTasks, blockedStatus), expected);

@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StepConfig } from "../scripts/generateSteps.ts";
-import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/generateWorkflow.ts";
-import { buildHookOutputSchema } from "../scripts/buildRunStepSchemas.ts";
+import type { StepConfig } from "../scripts/tackle-tasks/generateSteps.ts";
+import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP, WORKFLOW_FILE } from "../scripts/tackle-tasks/generateWorkflow.ts";
+import { buildHookOutputSchema } from "../scripts/tackle-tasks/buildRunStepSchemas.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
 function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
@@ -133,7 +133,7 @@ test("test_generateWorkflow_theCommittedWorkflowIsUpToDate", () => {
 
 // START_STEP is a constant in this file; the config is the only thing that can drift away from it.
 test("test_START_STEP_isAKeyInTheRepoConfig", () => {
-    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "steps.json"), "utf8")) as StepConfig;
+    const config = JSON.parse(readFileSync(join(import.meta.dirname, "..", "scripts", "tackle-tasks", "steps.json"), "utf8")) as StepConfig;
     assert.doesNotThrow(() => assertStartStepIsInConfig(config, START_STEP));
 });
 

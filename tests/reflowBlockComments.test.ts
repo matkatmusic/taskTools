@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { reflowSource } from "../scripts/reflowComments.ts";
+import { reflowSource } from "../scripts/hooks/reflowComments.ts";
 
 type Block = { startLine: number; endLine: number; source: string };
 const load = (name: string): Block[] =>

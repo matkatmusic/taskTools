@@ -1,7 +1,7 @@
 // REPORT_CLOSURE_NOTE, from pipeline-mergeSucceededExit.mmd "report the closure note". No mutation: hands the archived run's own closure note on to STOP.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 
 export type ReportClosureNoteInput = {
     box: string;

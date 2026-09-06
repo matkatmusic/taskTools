@@ -6,10 +6,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { runFinalizer } from "../scripts/runFinalizer.ts";
-import type { FinalizationRunInput } from "../scripts/runFinalizer.ts";
-import { issueRunAuthorization } from "../scripts/runAuthorization.ts";
-import type { Change } from "../scripts/ownershipSnapshots.ts";
+import { runFinalizer } from "../scripts/shared/runFinalizer.ts";
+import type { FinalizationRunInput } from "../scripts/shared/runFinalizer.ts";
+import { issueRunAuthorization } from "../scripts/shared/runAuthorization.ts";
+import type { Change } from "../scripts/shared/ownershipSnapshots.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

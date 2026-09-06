@@ -6,7 +6,7 @@ allowed-tools: Bash(git add *), Bash(node *)
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/clarifyTaskBrief.ts" <<'CLARIFYTASKEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/clarify-task/clarifyTaskBrief.ts" <<'CLARIFYTASKEOF'
 $ARGUMENTS
 CLARIFYTASKEOF
 ```

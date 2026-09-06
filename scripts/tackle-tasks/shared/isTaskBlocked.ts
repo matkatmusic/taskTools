@@ -1,6 +1,6 @@
 // "is task blocked?" — pipeline.mmd. Reuses blockerReport; blockedBy entries use taskNumber.
 import { readFileSync } from "node:fs";
-import { blockerReport } from "../../checkBlockers.ts";
+import { blockerReport } from "../../shared/checkBlockers.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 // The outer `reason` is this task's, worded here once; each blocker carries its own.

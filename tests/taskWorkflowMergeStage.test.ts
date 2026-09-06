@@ -6,17 +6,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { compileFunction } from 'node:vm'
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/repositoryManifest.ts'
-import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, taskWorktreeLeasePath } from '../scripts/prepareTasks.ts'
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from '../scripts/shared/repositoryManifest.ts'
+import { attachOperationBranch, createWorktreeForGroup, loadRepositoryManifest, taskWorktreeLeasePath } from '../scripts/shared/prepareTasks.ts'
 import {
   beginNextLap, buildMergeReport, consumeCleanupRetryResult, consumeTaskWorkflowResult, createMergeQueue,
   enqueueApprovedTask, nextQueueStep, recordStageOutcome, shouldEndQueue, type CleanupRetryEnvelope, type TaskWorkflowEnvelope,
-} from '../scripts/runMergePhase.ts'
+} from '../scripts/shared/runMergePhase.ts'
 
 const REPO_ROOT = process.cwd()
 const WORKFLOW_SOURCE = readFileSync(join(REPO_ROOT, 'skills/tackle-tasks-v1_1/tackle-tasks.workflow.js'), 'utf8')
   .replace('export const meta', 'const meta')
-const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks_AgentPromptEmitter.ts')
+const EMITTER_PATH = join(REPO_ROOT, 'scripts/tackle-tasks/shared/tackle-tasks_AgentPromptEmitter.ts')
 
 type AgentImpl = (prompt: string, options: { label: string }) => Promise<unknown>
 

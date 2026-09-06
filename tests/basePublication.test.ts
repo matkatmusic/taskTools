@@ -10,10 +10,10 @@ import {
     publishBases,
     publishCanonicalRef,
     rollbackUpdatedRefs,
-} from "../scripts/basePublication.ts";
-import type { CheckoutOperations, PublicationTarget, UpdatedRef } from "../scripts/basePublication.ts";
-import type { RunState } from "../scripts/approvalGate.ts";
-import { CHECKOUT_TRANSITION_FAILED } from "../scripts/resultCodes.ts";
+} from "../scripts/shared/basePublication.ts";
+import type { CheckoutOperations, PublicationTarget, UpdatedRef } from "../scripts/shared/basePublication.ts";
+import type { RunState } from "../scripts/shared/approvalGate.ts";
+import { CHECKOUT_TRANSITION_FAILED } from "../scripts/shared/resultCodes.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

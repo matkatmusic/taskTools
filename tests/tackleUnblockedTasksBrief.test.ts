@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { brief } from "../scripts/tackleUnblockedTasksBrief.ts";
+import { brief } from "../scripts/tackle-unblocked-tasks/tackleUnblockedTasksBrief.ts";
 
 // Retired: the byte-for-byte test used to reconstruct its expected text from the
 // pre-refactor SKILL.md in git history. The new brief body is not sourced from that
@@ -17,7 +17,7 @@ import { brief } from "../scripts/tackleUnblockedTasksBrief.ts";
 //   return skill.split("\n").slice(4).join("\n");
 // }
 
-const checkBlockersPath = fileURLToPath(new URL("../scripts/checkBlockers.ts", import.meta.url));
+const checkBlockersPath = fileURLToPath(new URL("../scripts/shared/checkBlockers.ts", import.meta.url));
 
 test("brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied", () => {
   // Step 1: compute the same unblocked-task-numbers line the script computes.

@@ -25,8 +25,8 @@ import {
     updateCurrentTaskRun,
     type TaskRunRecord,
 } from "./taskRunState.ts";
-import { resolveTaskFiles } from "../../taskFiles.ts";
-import { closeTaskRunChecked } from "../../closeTasks.ts";
+import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { closeTaskRunChecked } from "../../close-tasks/closeTasks.ts";
 import { writeTaskExitNotes } from "./writeTaskExitNotes.ts";
 
 function makeProjectRootWithTasks(tasks: unknown[]): string {

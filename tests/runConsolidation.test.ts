@@ -8,9 +8,9 @@ import { join } from "node:path";
 import {
     consolidateLogicalRepository,
     consolidateRun,
-} from "../scripts/runConsolidation.ts";
-import type { GroupOccurrenceBranch, LogicalRepositoryConsolidationInput } from "../scripts/runConsolidation.ts";
-import { issueRunAuthorization } from "../scripts/runAuthorization.ts";
+} from "../scripts/shared/runConsolidation.ts";
+import type { GroupOccurrenceBranch, LogicalRepositoryConsolidationInput } from "../scripts/shared/runConsolidation.ts";
+import { issueRunAuthorization } from "../scripts/shared/runAuthorization.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" }).trim();

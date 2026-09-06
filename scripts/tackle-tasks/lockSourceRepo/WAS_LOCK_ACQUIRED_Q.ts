@@ -1,7 +1,7 @@
 // WAS_LOCK_ACQUIRED_Q, from pipeline-rebasePreamble/WAS_LOCK_ACQUIRED.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 type Input = EntryPacket & { acquired: boolean; heldByOwner: string };

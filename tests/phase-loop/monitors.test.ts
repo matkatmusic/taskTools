@@ -13,7 +13,7 @@ import {
     parseFeedbackMarker,
     waitForImplementorSignal,
 } from "../../phase-loop/feedback-monitor.ts";
-import { DONE_MARKER_NOT_STAGED } from "../../scripts/resultCodes.ts";
+import { DONE_MARKER_NOT_STAGED } from "../../scripts/shared/resultCodes.ts";
 
 function git(projectRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", projectRoot, ...args], { encoding: "utf8" }).trim();

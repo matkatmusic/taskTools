@@ -1,7 +1,7 @@
 // ARE_TESTS_FLAGGED, from pipeline-areTestsFlagged.mmd. Ported from archive pipeline-reviewTests/ARE_TESTS_FLAGGED.ts.
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { decideTestReview, type TestReview } from "../shared/decideTestReview.ts";
 import { readReviewJson } from "../shared/readReviewJson.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";

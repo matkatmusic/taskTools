@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./WRITE_PUBLICATION_OUTCOME.ts";
 import { readTaskRunState } from "../shared/taskRunState.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(import.meta.dirname, "WRITE_PUBLICATION_OUTCOME.template.json");
 

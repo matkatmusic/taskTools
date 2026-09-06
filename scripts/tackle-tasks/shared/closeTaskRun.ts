@@ -4,7 +4,7 @@
 // only validates input; commit hashes are always derived from the recorded run, never
 // caller-supplied, and an already-archived record is never rewritten.
 import { readFileSync } from "node:fs";
-import { closeTaskRunReconciled, type CloseTaskRunOutput } from "../../closeTasks.ts";
+import { closeTaskRunReconciled, type CloseTaskRunOutput } from "../../close-tasks/closeTasks.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type CloseTaskRunInput = {

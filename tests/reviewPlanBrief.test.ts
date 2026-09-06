@@ -5,9 +5,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { amendmentPath, repoRelativePlanPath, splitPlanPath } from "../scripts/reviewPlanBrief.ts";
+import { amendmentPath, repoRelativePlanPath, splitPlanPath } from "../scripts/review-plan/reviewPlanBrief.ts";
 
-const scriptPath = new URL("../scripts/reviewPlanBrief.ts", import.meta.url).pathname;
+const scriptPath = new URL("../scripts/review-plan/reviewPlanBrief.ts", import.meta.url).pathname;
 
 function runScript(argumentString: string, cwd?: string): string {
   return execFileSync("node", [scriptPath], { input: argumentString, encoding: "utf8", cwd });

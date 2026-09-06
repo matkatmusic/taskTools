@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { initializeSubmodulesInWorktree } from "../../prepareTasks.ts";
+import { initializeSubmodulesInWorktree } from "../../shared/prepareTasks.ts";
 import { appendStepResult } from "./taskRunState.ts";
 
 function git(worktreePath: string, ...args: string[]): string {

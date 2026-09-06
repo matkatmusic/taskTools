@@ -8,8 +8,8 @@ import {
     discoverTestPolicy,
     REASON_NO_TEST_CONFIGURATION,
     REASON_AMBIGUOUS_RELATED_TEST_COMMAND,
-} from "../scripts/testPolicy.ts";
-import { createEmptyResolutionManifest } from "../scripts/resolutionRequests.ts";
+} from "../scripts/shared/testPolicy.ts";
+import { createEmptyResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
 
 function withTempDir(body: (dirPath: string) => void): void {
     const dirPath = mkdtempSync(join(tmpdir(), "test-policy-"));

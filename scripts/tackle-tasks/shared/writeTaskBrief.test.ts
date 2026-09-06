@@ -10,8 +10,8 @@ import {
     generateTaskBriefContents,
     writeTaskBriefToDisk,
 } from "./writeTaskBrief.ts";
-import { createWorktreeForGroup } from "../../prepareTasks.ts";
-import type { TaskGroup } from "../../taskGroups.ts";
+import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
+import type { TaskGroup } from "../../shared/taskGroups.ts";
 import type { TaskRunRecord } from "./taskRunState.ts";
 
 function git(repoRoot: string, ...args: string[]): string {

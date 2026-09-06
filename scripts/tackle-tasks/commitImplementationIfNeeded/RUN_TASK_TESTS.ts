@@ -1,7 +1,7 @@
 // RUN_TASK_TESTS, from pipeline-taskTests.mmd. Runs the task's own tests and records the result for DO_TASK_TESTS_PASS_Q to read.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { runTaskTests } from "../shared/runTaskTestsImpl.ts";
 import type { CommitImplementationIfNeededPacket } from "./_packet.ts";
 

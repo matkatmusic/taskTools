@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertMatchesTemplate } from "../../contracts.ts";
+import { assertMatchesTemplate } from "../../shared/contracts.ts";
 import { buildImplementPrompt, main } from "./IMPLEMENT_TASK.ts";
 import type { PreparedTask } from "../shared/preparedTask.ts";
 
@@ -26,6 +26,9 @@ const fakeTask: PreparedTask = {
     hasTests: true,
     tests: "node --test tests/thing.test.ts",
     codexReviewNotes: "",
+    siblingTasks: [],
+    blockedBy: [],
+    blocks: [],
     repoRoot: "/tmp/fake-worktree",
     taskStateRoot: "/tmp/fake-worktree",
 };

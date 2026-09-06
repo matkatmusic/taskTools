@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./LOCK_SOURCE_REPO.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
-import { getTemplateShapeMismatches } from "../../templateShape.ts";
+import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
 const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "LOCK_SOURCE_REPO.template.json");
 const LOCK_WAIT_STARTED_AT = "2024-01-01T00:00:00.000Z";

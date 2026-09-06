@@ -1,9 +1,9 @@
 // ARE_2_TEST_REVIEWS_DONE_Q, from pipeline-areTestsFlagged.mmd. Ported from archive pipeline-reviewTests/ARE_2_TEST_REVIEWS_DONE.ts.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
-import { readTaskFile, resolveTaskFiles } from "../../taskFiles.ts";
-import { TEST_REVIEW_ALREADY_AMENDED, TEST_REVIEW_NOT_YET_AMENDED } from "../../resultCodes.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { TEST_REVIEW_ALREADY_AMENDED, TEST_REVIEW_NOT_YET_AMENDED } from "../../shared/resultCodes.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";
 
 type Input = AreTestsFlaggedPacket & { next: string };

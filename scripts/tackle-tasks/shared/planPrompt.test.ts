@@ -20,6 +20,9 @@ const fakeTask: PreparedTask = {
     hasTests: true,
     tests: "node --test tests/thing.test.ts",
     codexReviewNotes: "",
+    siblingTasks: [],
+    blockedBy: [],
+    blocks: [],
     repoRoot: "/tmp/fake-worktree",
     taskStateRoot: "/tmp/fake-worktree",
 };

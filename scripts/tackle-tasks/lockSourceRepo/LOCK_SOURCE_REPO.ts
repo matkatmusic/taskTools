@@ -1,7 +1,7 @@
 // LOCK_SOURCE_REPO, from pipeline-rebasePreamble/LOCK_SOURCE_REPO.ts. Tries once; WAS_LOCK_ACQUIRED_Q and the wait loop own the retry.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { requireAbsolutePath } from "../shared/inputPaths.ts";
 import { acquireSourceRepoLock, buildLockOwner } from "../shared/sourceRepoLock.ts";
 import type { EntryPacket } from "./_packet.ts";

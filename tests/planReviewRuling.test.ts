@@ -12,9 +12,9 @@ import {
   Ruling,
   rulingByFixCount,
   rulingByPercentage,
-} from "../scripts/planReviewRuling.ts";
+} from "../scripts/review-plan/planReviewRuling.ts";
 
-const scriptPath = new URL("../scripts/planReviewRuling.ts", import.meta.url).pathname;
+const scriptPath = new URL("../scripts/review-plan/planReviewRuling.ts", import.meta.url).pathname;
 
 function planWithSections(count: number): string {
   return ["# Title", ...Array.from({ length: count }, (_, i) => `## Section ${i}`)].join("\n");

@@ -1,7 +1,7 @@
 // IS_PREVIOUS_RUN_RESUMABLE_Q, from pipeline-preambleStatusCheck.mmd. Mutating: establishes lease ownership. "is the previous run's work resumable? adopt the lease for this run"
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { isTaskRunResumable } from "../shared/isTaskRunResumable.ts";
 import type { EntryPacket } from "./_packet.ts";
 

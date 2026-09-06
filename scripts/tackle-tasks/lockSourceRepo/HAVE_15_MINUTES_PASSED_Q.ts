@@ -1,7 +1,7 @@
 // HAVE_15_MINUTES_PASSED_Q, from pipeline-rebasePreamble/HAVE_15_MINUTES_PASSED.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 // Comfortably short of the operator's stuck-lock recovery script, per the diagram's rule 4.

@@ -1,7 +1,7 @@
 // ARE_2_TEST_FIXES_DONE_Q, from pipeline-taskTests.mmd. Asked before amending, so the first failure's fix attempt is not spent yet.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { getAttemptCount, MAX_ATTEMPTS } from "../shared/taskRunState.ts";
 import type { CommitImplementationIfNeededPacket } from "./_packet.ts";
 

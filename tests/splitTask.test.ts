@@ -15,7 +15,7 @@ import {
     validateChildNumbers,
     validateFileGroups,
     verifyChildFiles,
-} from "../scripts/splitTask.ts";
+} from "../scripts/split-task/splitTask.ts";
 
 function writeTaskFiles(root: string, tasks: unknown[], completed: unknown[]): void {
     mkdirSync(join(root, ".taskTools"), { recursive: true });
