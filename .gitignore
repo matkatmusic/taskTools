@@ -24,3 +24,5 @@ scripts/steps/pipeline-suite/fixtures/.fixture-marker
 scripts/steps/pipeline-suite/fixtures/worktree/src/thing.ts
 scripts/steps/pipeline-rebase/fixtures/worktree/
 .taskTools/workflows/
+__pycache__/
+.DS_Store
