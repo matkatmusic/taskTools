@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { main } from "./FIX_IMPLEMENT_TASK_TESTS.ts";
+import { main, buildFixTaskTestsPromptSkeleton, fixTaskTestsChoices } from "./FIX_IMPLEMENT_TASK_TESTS.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "fix-implement-task-tests-run-log.json");
 
@@ -43,6 +43,13 @@ test("test_FIX_IMPLEMENT_TASK_TESTS_namesTheOwnedFilesAndTheFailingNotes", () =>
     const promptFileContents = readFileSync(join(worktree, "plans", "FIX_IMPLEMENT_TASK_TESTS.prompt.md"), "utf8");
     assert.match(promptFileContents, new RegExp(`${worktree}/a\\.ts`));
     assert.match(promptFileContents, /the failing test notes text/);
+});
+
+test("test_buildFixTaskTestsPromptSkeleton_holdsAllTheSectionsSinceThereAreNoChoices", () => {
+    const skeleton = buildFixTaskTestsPromptSkeleton(fixTaskTestsChoices());
+    for (const header of ["## YOUR JOB", "## WHAT TO READ", "## WHAT YOU MAY EDIT", "## HOW TO FIX", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`", "## FAILING TASK TESTS"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
 });
 
 test("test_FIX_IMPLEMENT_TASK_TESTS_runsTwiceWithTheSameInput", () => {

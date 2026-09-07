@@ -74,7 +74,7 @@
       "- Changing how staging is moved; ensureStagingWorktree, CREATE_WORKTREE, and REBASE_RESUMED_WORKTREE_ONTO_STAGING stay as they are."
     ],
     "problemSolvedByTask": "a failing test suite that existing on the branch that 'staging' and the worktree were cut from prevents the workflow from getting past the 'run the test suite' block, blocking the entire run from completing, because the workflow agents can't touch the files causing the failing tests, because those files are not in the task's modifiableFiles list.",
-    "description": "Insert two new blocks into the preamble diagram between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION: RUN_SUITE_ON_FRESH_WORKTREE (mutating, calls scripts/tackle-tasks/shared/runFullSuite.ts, modeled on scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts's structure) and DOES_FRESH_WORKTREE_SUITE_PASS_Q (decision: YES continues to DOCUMENT_GENERATION, NO sets a new `staging-suite-red` exitType/exitNote and routes to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT, same pattern as IS_TASK_BLOCKED_Q.ts's \"blocked\" exit). Only run RUN_SUITE_ON_FRESH_WORKTREE on the CREATE_WORKTREE/RESET_WORKTREE path (fresh or reset worktree with no task commits yet), not on the REBASE_RESUMED_WORKTREE_ONTO_STAGING path (resumed worktree with existing task commits) — the diagram's DOES_FENCE_COVER_WORKTREE_Q branch continues straight to INIT_SUBMODULES_RECURSIVELY/DOCUMENT_GENERATION as today. `staging-suite-red` must be added to the TaskExitType union in scripts/tackle-tasks/shared/taskRunState.ts and the EXIT_TYPES array in scripts/tackle-tasks/shared/writeTaskExitNotes.ts, mirroring how `blocked`/`invalid-number`/existing `suite-red` are registered. RUN_FULL_SUITE's existing pattern (scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts) always targets \"staging\" as the base branch and reads the baseline via runFullSuite's own readKnownFailingTests(projectRoot) call (scripts/tackle-tasks/shared/taskTestsRunner.ts) — the new block reuses this without needing prepared-task fencing data (ownedFilePaths/testFilePaths), since no task changes exist yet. diagram-steps.json is generated output (see scripts/tackle-tasks/generateSteps or similar) and must be regenerated, not hand-edited, with the new block(s) marked mutating. tests/tackleTasksAcceptance.test.ts drives the preamble via runHookOnce and asserts each fixture's `ran` array of visited box names — every driver whose fixture worktree is freshly created (not a resumed-with-commits case) needs the two new box names inserted between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION.",
+    "description": "Insert two new blocks into the preamble diagram between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION: RUN_SUITE_ON_FRESH_WORKTREE (mutating, calls scripts/tackle-tasks/shared/runFullSuite.ts, modeled on scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts's structure) and DOES_FRESH_WORKTREE_SUITE_PASS_Q (decision: YES continues to DOCUMENT_GENERATION, NO sets a new `staging-suite-red` exitType/exitNote and routes to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT, same pattern as IS_TASK_BLOCKED_Q.ts's \"blocked\" exit). Only run RUN_SUITE_ON_FRESH_WORKTREE on the CREATE_WORKTREE/RESET_WORKTREE path (fresh or reset worktree with no task commits yet), not on the REBASE_RESUMED_WORKTREE_ONTO_STAGING path (resumed worktree with existing task commits) — the diagram's DOES_FENCE_COVER_WORKTREE_Q branch continues straight to INIT_SUBMODULES_RECURSIVELY/DOCUMENT_GENERATION as today. `staging-suite-red` must be added to the TaskExitType union in scripts/tackle-tasks/shared/taskRunState.ts and the EXIT_TYPES array in scripts/tackle-tasks/shared/writeTaskExitNotes.ts, mirroring how `blocked`/`invalid-number`/existing `suite-red` are registered. RUN_FULL_SUITE's existing pattern (scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts) always targets \"staging\" as the base branch and reads the baseline via runFullSuite's own readKnownFailingTests(projectRoot) call (scripts/tackle-tasks/shared/taskTestsRunner.ts) — the new block reuses this without needing prepared-task fencing data (ownedFilePaths/testFilePaths), since no task changes exist yet. diagram-steps.json is generated output (see scripts/tackle-tasks/generateSteps or similar) and must be regenerated, not hand-edited, with the new block(s) marked mutating. tests/tackleTasksAcceptance.test.ts drives the preamble via runHookOnce and asserts each fixture's `ran` array of visited box names — every driver whose fixture worktree is freshly created (not a resumed-with-commits case) needs the two new box names inserted between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION.\n\n## Clarification answer (2026-09-07)\n\nDo not edit `scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts` or its template. Use a new decision block instead.\n\nThe packet already carries `docsMode` when it reaches INIT_SUBMODULES_RECURSIVELY (field declared in `scripts/tackle-tasks/preambleStatusCheck/_packet.ts`). `TAKE_WORKTREE_LEASE.ts` and `RESET_WORKTREE.ts` set it to `AUTOGEN` (fresh or reset worktree). `DOES_FENCE_COVER_WORKTREE_Q.ts` sets it to `UPDATE` (resumed worktree with task commits). That value is the fresh-vs-resumed signal.\n\nRouting:\n- In `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd`, change the edge `INIT_SUBMODULES_RECURSIVELY --> DOCUMENT_GENERATION` to `INIT_SUBMODULES_RECURSIVELY --> IS_WORKTREE_FRESH_Q`.\n- New decision block `IS_WORKTREE_FRESH_Q` (shape of `DOES_WORKTREE_EXIST_Q.ts`: strip `next`, return `{...packet, box, scriptSignal: CONTINUE, next}`). `docsMode === \"AUTOGEN\"` -> `next: \"RUN_SUITE_ON_FRESH_WORKTREE\"`. `docsMode === \"UPDATE\"` -> `next: \"DOCUMENT_GENERATION\"`. Any other value: throw, the same way `DOCUMENT_GENERATION.ts` throws on an unknown docs mode.\n- `RUN_SUITE_ON_FRESH_WORKTREE --> DOES_FRESH_WORKTREE_SUITE_PASS_Q`; YES -> `DOCUMENT_GENERATION`, NO -> report-only exit `staging-suite-red`, as the task already says.\n\nThe three IS_WORKTREE_FRESH_Q files are added to this task's owned files.\n\n## Clarification answer (2026-09-07)\n\nDo not add `scripts/tackle-tasks/generateSteps.ts`. It must not change.\n\nThe mutating flag is hand-written by design. `scripts/tackle-tasks/generateSteps.ts` line 182 says: \"The mutating flag is hand-written, so regenerating from the arrows must not drop it.\" `getMutatingFromPreviousConfig` reads the flag from the existing `scripts/tackle-tasks/diagram-steps.json` and carries it forward; the generator never derives it from a template or script. Every existing mutating block (CREATE_WORKTREE, RESET_WORKTREE, RUN_FULL_SUITE, and the rest) got its flag that way.\n\nProcedure for the new block:\n1. Run the generator so `scripts/tackle-tasks/diagram-steps.json` gains the new entries.\n2. Add `\"mutating\": true` to the `RUN_SUITE_ON_FRESH_WORKTREE` entry in `scripts/tackle-tasks/diagram-steps.json` by hand. The task owns that file. This is the one field in that file that is meant to be hand-edited.\n3. Run the generator again and confirm the flag survives. That confirms step 2 is correct.\n\n`IS_WORKTREE_FRESH_Q` and `DOES_FRESH_WORKTREE_SUITE_PASS_Q` are decisions and get no flag.\n\n## Clarification answer (2026-09-07)\n\nCorrection to the earlier answer: `scripts/tackle-tasks/generateSteps.ts` IS in this task's owned files, for one edit only.\n\nThat file keeps a hand-written owner map, `BLOCKS_BY_OWNER_FOLDER` (line 11). Its `assertNoOrphanBoxScripts` guard throws when a box script exists in a folder but the box is not listed under that folder. Commit af19d91 added its new preamble boxes the same way.\n\nThe only permitted edit to that file: add `\"IS_WORKTREE_FRESH_Q\"`, `\"RUN_SUITE_ON_FRESH_WORKTREE\"`, and `\"DOES_FRESH_WORKTREE_SUITE_PASS_Q\"` to the `preambleStatusCheck` array of `BLOCKS_BY_OWNER_FOLDER`. Change nothing else in it.\n\nThen run the generator (`node scripts/tackle-tasks/generateSteps.ts`) so `scripts/tackle-tasks/diagram-steps.json` is generated, not hand-written. After it runs, add `\"mutating\": true` to the `RUN_SUITE_ON_FRESH_WORKTREE` entry by hand, and run the generator once more to confirm the flag survives.\n\nThe task worktree already holds the nine new block files, the diagram edit, the exit-type registration, and the acceptance tests, all uncommitted. Keep that work. Do not start over.",
     "modifiableFiles": [
       "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
       "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.ts",
@@ -87,7 +87,11 @@
       "scripts/tackle-tasks/shared/runFullSuite.ts",
       "scripts/tackle-tasks/shared/writeTaskExitNotes.ts",
       "scripts/tackle-tasks/shared/taskRunState.ts",
-      "tests/tackleTasksAcceptance.test.ts"
+      "tests/tackleTasksAcceptance.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.test.ts",
+      "scripts/tackle-tasks/generateSteps.ts"
     ],
     "readOnlyFiles": [
       "*"
@@ -95,6 +99,80 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "In tests/tackleTasksAcceptance.test.ts: a fixture repo whose staging has one failing test outside the task's files. Drive /run-step from PREAMBLE_STATUS_CHECK. Assert the run exits with exitType staging-suite-red before DOCUMENT_GENERATION, the worktree still exists, and the task is inactive. A second fixture with a green staging reaches DOCUMENT_GENERATION.",
-    "difficulty": 7
+    "difficulty": 7,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-196",
+      "leaseRunId": "d12230c8-4b01-431b-8fca-0247ba5fe9dd",
+      "history": [
+        {
+          "runId": "fc332635-7227-4d78-91f7-20d66fd8a3c7",
+          "startedAt": "2026-09-07T00:23:27-07:00",
+          "endedAt": "2026-09-07T00:35:07-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        },
+        {
+          "runId": "4333e1a9-a6fd-40cc-9465-6492bbba0695",
+          "startedAt": "2026-09-07T01:28:26-07:00",
+          "endedAt": "2026-09-07T01:38:44-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        },
+        {
+          "runId": "d12230c8-4b01-431b-8fca-0247ba5fe9dd",
+          "startedAt": "2026-09-07T01:40:49-07:00",
+          "endedAt": "2026-09-07T02:38:06-07:00",
+          "exitType": "implementation-incomplete",
+          "exitNote": "Created and green (7/7 tests, tsc clean): scripts/tackle-tasks/preambleStatusCheck/{IS_WORKTREE_FRESH_Q,RUN_SUITE_ON_FRESH_WORKTREE,DOES_FRESH_WORKTREE_SUITE_PASS_Q}.{ts,template.json,test.ts}. Wired diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd (labels, edges, class list) exactly as specified. Registered \"staging-suite-red\" in scripts/tackle-tasks/shared/writeTaskExitNotes.ts and taskRunState.ts. Added the two new acceptance tests to tests/tackleTasksAcceptance.test.ts. Hand-edited scripts/tackle-tasks/diagram-steps.json to the plan's literal target JSON (valid, verified) instead of running the generator, because `node scripts/tackle-tasks/generateSteps.ts` throws: assertNoOrphanBoxScripts requires the 3 new boxes to be listed in that file's own BLOCKS_BY_OWNER_FOLDER map, which is not in WHAT YOU MAY EDIT and the plan's own clarification says generateSteps.ts must not change. That throw is not confined to the CLI command the plan names: scripts/tackle-tasks/shared/SkillBodyEmitter.ts's ensureTaskWorkflowPair calls generateSteps() on every skillBody() invocation for any task not already mid-run, so it now breaks essentially the whole acceptance suite, not just this task's new tests -- node --test tests/tackleTasksAcceptance.test.ts fails the same way on tests that predate this task (e.g. test_acceptance_releasesTheSourceLockWhenAFailureHappensWhileItIsHeld, test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt, test_acceptance_resumesAfterAnInterruptedCleanup), plus the two new ones. Left plans/implementation-notes-196.md with the exact reproduction and the fix a precedent commit (af19d91) already established for this same diagram: a 3-name addition to generateSteps.ts's BLOCKS_BY_OWNER_FOLDER.preambleStatusCheck array. Stopped here rather than edit a file outside this task's owned-files fence on my own judgment; needs a human/planner decision to extend the fence or choose another resolution.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        }
+      ]
+    },
+    "codexReviewNotes": "[implement-blocks] Route the false branch in DOES_FRESH_WORKTREE_SUITE_PASS_Q, the diagram edge, the decision template, and diagram-steps.json to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT; remove the decision's direct lease release and use the report-only exit's established cleanup path.\n\nDurable because: This preserves the required worktree and uses the same inactive-and-lease-release lifecycle as the other report-only outcomes.\n\n[red-tests] Replace the two commented RUN_SUITE_ON_FRESH_WORKTREE test skeletons with complete literal test code, including imports, fixture repository/worktree creation, task claim, committed green/red baseline files, exact main invocation, and assertions.\n\nDurable because: The tests will directly exercise the new block's real baseline-aware suite behavior instead of requiring the implementer to invent coverage.\n\n[implement-blocks] Replace the template prose with three complete `old: (file absent)` / `new:` JSON diffs that enumerate every input and output field and the exact green and red routing values for each new block.\n\nDurable because: Each template becomes reproducible and remains synchronized with the packet contracts and generated step configuration."
   }
 ]

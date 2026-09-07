@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { main } from "./FIX_THE_CODEBASE_FOR_SUITE.ts";
+import { main, buildSuiteFixPromptSkeleton, suiteFixChoices } from "./FIX_THE_CODEBASE_FOR_SUITE.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "fix-the-codebase-for-suite-run-log.json");
 
@@ -32,6 +32,13 @@ test("test_FIX_THE_CODEBASE_FOR_SUITE_namesTheOwnedFilesAndTheFailingOutput", ()
     const promptFileContents = readFileSync(join(worktree, "plans", "FIX_THE_CODEBASE_FOR_SUITE.prompt.md"), "utf8");
     assert.match(promptFileContents, new RegExp(`${worktree}/a\\.ts`));
     assert.match(promptFileContents, /the failing suite text/);
+});
+
+test("test_buildSuiteFixPromptSkeleton_holdsAllTheSectionsSinceThereAreNoChoices", () => {
+    const skeleton = buildSuiteFixPromptSkeleton(suiteFixChoices());
+    for (const header of ["## YOUR JOB", "## WHAT TO READ", "## WHAT YOU MAY EDIT", "## HOW TO FIX", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`", "## FAILING SUITE OUTPUT"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
 });
 
 test("test_FIX_THE_CODEBASE_FOR_SUITE_runsTwiceWithTheSameInput", () => {

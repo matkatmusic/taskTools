@@ -20,32 +20,121 @@ function conflictedPaths(checkoutPath: string): string[] {
     return output.split("\0").filter((line) => line.length > 0);
 }
 
-export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, projectRoot: string, runId: string, sourceBranch: string): string {
-    const root = checkoutPath.replace(/\/+$/, "");
-    const paths = conflictedPaths(checkoutPath);
-    if (paths.length === 0) throw new Error(`fix-conflicts: no unmerged paths in ${root}; this box runs only on a stopped rebase`);
-    const absolutePaths = paths.map((path) => `${root}/${path}`);
-    return `## YOUR JOB
+// Retired (prompt shapes): one template literal became FIX_CONFLICTS_SECTIONS below, so the skeleton view cannot drift.
+// export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, projectRoot: string, runId: string, sourceBranch: string): string {
+//     const root = checkoutPath.replace(/\/+$/, "");
+//     const paths = conflictedPaths(checkoutPath);
+//     if (paths.length === 0) throw new Error(`fix-conflicts: no unmerged paths in ${root}; this box runs only on a stopped rebase`);
+//     const absolutePaths = paths.map((path) => `${root}/${path}`);
+//     return `## YOUR JOB
+//
+// A rebase inside \`${root}\` is stopped on live conflict markers.
+// It is stopped, not aborted, so the markers are still in the files.
+// Resolve every conflict in the files listed under WHAT YOU MAY EDIT, and nothing else.
+//
+// ## WHAT TO READ
+//
+// Run this, verbatim:
+// \`\`\`
+// /read-file ${readFileArgs(absolutePaths)}
+// \`\`\`
+// This skill puts the files into your context without spending a Read tool call, so you can read them all at once.
+//
+// You may read any other file, anywhere in the tree, to understand a conflict: callers, callees, tests, other layers.
+//
+// ${absolutePathsSection(root)}
+//
+// ## WHAT YOU MAY EDIT
+//
+// ${absolutePaths.map((path) => `- \`${path}\``).join("\n")}
+//
+// You may also edit a file in a DIFFERENT repository when resolving a conflict requires it.
+// Resolving a conflict often means updating a call site, and a call site can live in another repository.
+//
+// This list is complete.
+// Never search the repository for more conflicted files.
+//
+// ${resumedRunSection(root)}
+//
+// ## HOW TO RESOLVE
+//
+// For each file listed above:
+// 1. Find every \`<<<<<<<\`, \`=======\` and \`>>>>>>>\` block.
+// 2. Combine the two sides so both sides' intent survives.
+// 3. Delete the three marker lines.
+//
+// ## DO NOT DRIVE THE REBASE
+//
+// Never run \`git rebase --continue\` or \`git rebase --abort\`.
+// A later box advances the rebase after you return.
+//
+// ## FORBIDDEN ACTIONS
+//
+// You are forbidden from doing any of the following actions:
+// - weaken, delete, or stub out code to make a conflict disappear;
+// - keep one side and discard the other when both sides carry intent;
+// - edit a file that is not listed above and is not a call site a listed conflict forces you to update;
+// - force-push or hard-reset anything you did not create;
+// - run \`git rebase --continue\` or \`git rebase --abort\`;
+// - stage or commit anything by hand;
+// - leave a required edit in another repository unmade.
+//
+// Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
+// It is not a failure, and it is always better than a guess.
+//
+// ${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
+// }
 
-A rebase inside \`${root}\` is stopped on live conflict markers. 
+// The prompt never branches, so there is exactly one combo, "default".
+export type FixConflictsChoices = Record<string, never>;
+
+// Every value spliced into the prompt; the skeleton view passes each one as its expression text instead.
+export type FixConflictsVars = {
+    root: string;
+    readFileArgs: string;
+    absolutePaths: string;
+    editablePathsList: string;
+    resumedRun: string;
+    whatToReturn: string;
+};
+
+export type FixConflictsSection = { name: string; when: (c: FixConflictsChoices) => boolean; render: (v: FixConflictsVars) => string };
+
+export const FIX_CONFLICTS_SECTIONS: FixConflictsSection[] = [
+    {
+        name: "YOUR JOB",
+        when: () => true,
+        render: (v) => `## YOUR JOB
+
+A rebase inside \`${v.root}\` is stopped on live conflict markers. 
 It is stopped, not aborted, so the markers are still in the files.
 Resolve every conflict in the files listed under WHAT YOU MAY EDIT, and nothing else.
 
-## WHAT TO READ
+`,
+    },
+    {
+        name: "WHAT TO READ",
+        when: () => true,
+        render: (v) => `## WHAT TO READ
 
 Run this, verbatim:
 \`\`\`
-/read-file ${readFileArgs(absolutePaths)}
+/read-file ${v.readFileArgs}
 \`\`\`
 This skill puts the files into your context without spending a Read tool call, so you can read them all at once.
 
 You may read any other file, anywhere in the tree, to understand a conflict: callers, callees, tests, other layers.
 
-${absolutePathsSection(root)}
+${v.absolutePaths}
 
-## WHAT YOU MAY EDIT
+`,
+    },
+    {
+        name: "WHAT YOU MAY EDIT",
+        when: () => true,
+        render: (v) => `## WHAT YOU MAY EDIT
 
-${absolutePaths.map((path) => `- \`${path}\``).join("\n")}
+${v.editablePathsList}
 
 You may also edit a file in a DIFFERENT repository when resolving a conflict requires it. 
 Resolving a conflict often means updating a call site, and a call site can live in another repository.
@@ -53,21 +142,36 @@ Resolving a conflict often means updating a call site, and a call site can live 
 This list is complete.
 Never search the repository for more conflicted files.
 
-${resumedRunSection(root)}
+${v.resumedRun}
 
-## HOW TO RESOLVE
+`,
+    },
+    {
+        name: "HOW TO RESOLVE",
+        when: () => true,
+        render: () => `## HOW TO RESOLVE
 
 For each file listed above:
 1. Find every \`<<<<<<<\`, \`=======\` and \`>>>>>>>\` block.
 2. Combine the two sides so both sides' intent survives.
 3. Delete the three marker lines.
 
-## DO NOT DRIVE THE REBASE
+`,
+    },
+    {
+        name: "DO NOT DRIVE THE REBASE",
+        when: () => true,
+        render: () => `## DO NOT DRIVE THE REBASE
 
 Never run \`git rebase --continue\` or \`git rebase --abort\`. 
 A later box advances the rebase after you return.
 
-## FORBIDDEN ACTIONS
+`,
+    },
+    {
+        name: "FORBIDDEN ACTIONS",
+        when: () => true,
+        render: () => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
 - weaken, delete, or stub out code to make a conflict disappear;
@@ -81,5 +185,64 @@ You are forbidden from doing any of the following actions:
 Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
 It is not a failure, and it is always better than a guess.
 
-${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
+`,
+    },
+    {
+        name: "WHAT YOU, THE SPAWNING AGENT, RETURNS",
+        when: () => true,
+        render: (v) => v.whatToReturn,
+    },
+];
+
+export function fixConflictsChoices(): FixConflictsChoices {
+    return {};
+}
+
+// Each value is the source expression, so the skeleton view names what the rendered view splices in.
+export const FIX_CONFLICTS_SKELETON_VARS: FixConflictsVars = {
+    root: "`${root}`",
+    readFileArgs: "`${readFileArgs(absolutePaths)}`",
+    absolutePaths: "`${absolutePathsSection(root)}`",
+    editablePathsList: '`${absolutePaths.map((path) => `- \\`${path}\\`` ).join("\\n")}`',
+    resumedRun: "`${resumedRunSection(root)}`",
+    whatToReturn: "`${whatToReturnSection(...)}`",
+};
+
+export function renderFixConflictsSections(choices: FixConflictsChoices, vars: FixConflictsVars): string {
+    return FIX_CONFLICTS_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
+}
+
+export function fixConflictsPromptSkeleton(choices: FixConflictsChoices): string {
+    return renderFixConflictsSections(choices, FIX_CONFLICTS_SKELETON_VARS);
+}
+
+export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, projectRoot: string, runId: string, sourceBranch: string): string {
+    const root = checkoutPath.replace(/\/+$/, "");
+    const paths = conflictedPaths(checkoutPath);
+    if (paths.length === 0) throw new Error(`fix-conflicts: no unmerged paths in ${root}; this box runs only on a stopped rebase`);
+    const absolutePaths = paths.map((path) => `${root}/${path}`);
+    return renderFixConflictsSections(fixConflictsChoices(), {
+        root,
+        readFileArgs: readFileArgs(absolutePaths),
+        absolutePaths: absolutePathsSection(root),
+        editablePathsList: absolutePaths.map((path) => `- \`${path}\``).join("\n"),
+        resumedRun: resumedRunSection(root),
+        whatToReturn: whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
+    });
+}
+
+// Bypasses git entirely: conflictedPaths shells out to a real repo, and faking that output was ruled out.
+export function fixConflictsCombos(): { name: string; skeleton: string; rendered: string }[] {
+    const c = fixConflictsChoices();
+    const root = "/tmp/fake-worktree";
+    const absolutePaths = ["src/a.ts", "src/b.ts"].map((path) => `${root}/${path}`);
+    const vars: FixConflictsVars = {
+        root,
+        readFileArgs: readFileArgs(absolutePaths),
+        absolutePaths: absolutePathsSection(root),
+        editablePathsList: absolutePaths.map((path) => `- \`${path}\``).join("\n"),
+        resumedRun: resumedRunSection(root),
+        whatToReturn: whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
+    };
+    return [{ name: "default", skeleton: fixConflictsPromptSkeleton(c), rendered: renderFixConflictsSections(c, vars) }];
 }

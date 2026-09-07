@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { reviewTestsPrompt } from "./CodexTestReviewBodyEmitter.ts";
+import { reviewTestsPrompt, reviewTestsQuestionSkeleton } from "./CodexTestReviewBodyEmitter.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "codex-test-review-body-run-log.json");
@@ -156,6 +156,16 @@ test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
     const task = makeTaskFixture();
     writeFileSync(join(task.taskStateRoot, "tasks.json"), JSON.stringify([{ taskNumber: 99, files: [], run: { active: true, worktree: null, leaseRunId: null, history: [{ runId: "r1", taskTests: null }] } }]));
     assert.throws(() => reviewTestsPrompt(task), /no recorded task-test run/);
+});
+
+test("test_reviewTestsQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
+    const skeleton = reviewTestsQuestionSkeleton({ isRecheck: false, hasPreExistingTestFiles: true });
+    for (const header of ["reviewing the tests written for task", "## STRICT INPUT ALLOWLIST", "## MISSING-FILE RESPONSE", "## WHAT YOU READ", "## TESTS THIS TASK DID NOT CREATE", "## WHAT ALREADY RAN", "## NEVER RUN THE TESTS", "## HOW TO JUDGE THE TESTS", "## DO NOT FLAG", "## DOCUMENTING EVIDENCE", "## WHAT YOU, THE REVIEWING AGENT, RETURNS", "## WHAT TO OUTPUT"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    assert.equal(skeleton.includes("rechecking the tests written for task"), false);
+    assert.equal(skeleton.includes("- (none)"), false);
+    assert.equal(skeleton.includes("audit you wrote in round one"), false);
 });
 
 test("test_reviewTestsPrompt_tellsTheAgentToReturnTheReviewFilePathEvenWhenTheCommandFails", () => {

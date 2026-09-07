@@ -26,45 +26,166 @@ type ImplementTaskInput = {
 // Double-quoted for the read-file hook's parser; deduped so an owned test file is not listed twice.
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 
-const testsSection = (t: PreparedTask) => {
-    if (t.tests === "skip" || !t.hasTests) return `## DO NOT CREATE TESTS
-
-this task does not require any tests to be created.`;
-    return `## TESTS
-
-Each owned file is paired with \`tests/<its base name>.test.ts\`.
-The paired files that already exist are in your context from the read-file skill above.
-Import \`test\` from \`node:test\` and \`assert\` from \`node:assert\`; never import from \`bun:test\`.
-Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.`;
-};
+// Retired (prompt shapes): inlined as the "TESTS: skip" / "TESTS: tdd" sections below.
+// const testsSection = (t: PreparedTask) => {
+//     if (t.tests === "skip" || !t.hasTests) return `## DO NOT CREATE TESTS
+//
+// this task does not require any tests to be created.`;
+//     return `## TESTS
+//
+// Each owned file is paired with \`tests/<its base name>.test.ts\`.
+// The paired files that already exist are in your context from the read-file skill above.
+// Import \`test\` from \`node:test\` and \`assert\` from \`node:assert\`; never import from \`bun:test\`.
+// Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.`;
+// };
 
 const ownedPathMap = (t: PreparedTask) => t.files
     .map((file) => `- \`${file}\` => \`${t.repoRoot.replace(/\/+$/, "")}/${file}\``)
     .join("\n");
 
-export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
-    const rootedTypecheck = `(cd -- '${t.repoRoot}' && ${typecheckCommand})`;
-    const note = t.codexReviewNotes;
-    const runNote = note.trim() === "" ? "" : `
+// Retired (prompt shapes): one template literal became IMPLEMENT_SECTIONS below, so the skeleton view cannot drift.
+// export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
+//     const rootedTypecheck = `(cd -- '${t.repoRoot}' && ${typecheckCommand})`;
+//     const note = t.codexReviewNotes;
+//     const runNote = note.trim() === "" ? "" : `
+// ## NOTE FOR THIS RUN
+//
+// ${note.trim()}
+// `;
+//     return `${runNote}
+// ## YOUR JOB
+//
+// You are implementing exactly one pre-planned task, task ${t.number}, inside the worktree \`${t.repoRoot}\`.
+// The plan is already written and already reviewed.
+// Decide nothing the plan already decided.
+//
+// ## WHAT TO READ
+//
+// Run this, which puts the brief, the plan, the files this task owns, and the guides you must follow into your context:
+// \`\`\`
+// /read-file ${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}
+// \`\`\`
+//
+// ## OBEY THE REVIEW NOTES
+//
+// Every section of the plan carries a \`codexNotes\` field.
+// An empty \`codexNotes\` means the section stands as written.
+//
+// If a section's \`codexNotes\` is not empty, a reviewer wrote a required fix for that section.
+// When a \`codexNotes\` field is not empty, do what the field says while you implement that section.
+//
+// ${absolutePathsSection(t.repoRoot)}
+//
+// ## WHAT YOU MAY EDIT
+//
+// ${ownedPathMap(t)}
+// - the implementation log at \`${t.notesFile}\`
+// - the test file paired with each owned file, at \`${t.repoRoot}/tests/<owned file's base name>.test.ts\`
+//
+// You are forbidden from editing any other file not listed above.
+//
+// ${resumedRunSection(t.repoRoot)}
+//
+// ${testsSection(t)}
+//
+// ## HOW TO IMPLEMENT
+//
+// 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
+// 2. Run \`${rootedTypecheck}\` and fix every error it reports in the paths you own.
+// 3. Run each paired test file with \`(cd -- '${t.repoRoot}' && node --test <absolute test path>)\`.
+// 4. While any test fails, fix the cause, then repeat steps 2 and 3. Stop after ${maxFixRounds} rounds.
+//
+// Never run the full suite. That gate belongs to a separate phase, not to you.
+//
+// ## KEEP AN IMPLEMENTATION LOG
+//
+// Write a running log to exactly \`${t.notesFile}\`, and update it as you work.
+// Record only what the plan does not already say, under these four headings:
+// - Design decisions: a choice you made where the plan was ambiguous.
+// - Deviations: a place you departed from the plan, and why.
+// - Tradeoffs: an alternative you considered, and why you rejected it.
+// - Open questions: anything the user should confirm.
+//
+// Stamp each entry with an ISO date and time.
+// You have no user to ask, so never stop and wait for an answer.
+// An open question that blocks the plan is a reason to return \`implemented: false\`, not a reason to guess.
+//
+// ## NEVER COMMIT
+//
+// Never stage, commit, or run any git command. A later step commits your work for you.
+//
+// ## FORBIDDEN ACTIONS
+//
+// You are forbidden from doing any of the following actions:
+// - edit anything outside the paths listed under WHAT YOU MAY EDIT;
+// - add scope or a refactor the plan does not call for;
+// - redecide anything the plan already decided;
+// - run the full suite;
+// - stage or commit anything, or run any git command;
+// - attempt more than ${maxFixRounds} fix rounds;
+// - return \`implemented: true\` while a test fails or the typecheck reports an error. A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.
+//
+// Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
+//
+// ${whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", "")}`;
+// }
+
+export type ImplementChoices = { hasCodexNotes: boolean; testsField: "skip" | "tdd" };
+
+export type ImplementVars = {
+    number: string;
+    repoRoot: string;
+    codexNotes: string;
+    readFileArgs: string;
+    absolutePaths: string;
+    ownedPathMap: string;
+    notesFile: string;
+    resumedRun: string;
+    rootedTypecheck: string;
+    maxFixRounds: string;
+    whatToReturn: string;
+};
+
+export type ImplementSection = { name: string; when: (c: ImplementChoices) => boolean; render: (v: ImplementVars) => string };
+
+export const IMPLEMENT_SECTIONS: ImplementSection[] = [
+    {
+        name: "NOTE FOR THIS RUN",
+        when: (c) => c.hasCodexNotes,
+        render: (v) => `
 ## NOTE FOR THIS RUN
 
-${note.trim()}
-`;
-    return `${runNote}
+${v.codexNotes}
+`,
+    },
+    {
+        name: "YOUR JOB",
+        when: () => true,
+        render: (v) => `
 ## YOUR JOB
 
-You are implementing exactly one pre-planned task, task ${t.number}, inside the worktree \`${t.repoRoot}\`.
+You are implementing exactly one pre-planned task, task ${v.number}, inside the worktree \`${v.repoRoot}\`.
 The plan is already written and already reviewed.
 Decide nothing the plan already decided.
 
-## WHAT TO READ
+`,
+    },
+    {
+        name: "WHAT TO READ",
+        when: () => true,
+        render: (v) => `## WHAT TO READ
 
 Run this, which puts the brief, the plan, the files this task owns, and the guides you must follow into your context:
 \`\`\`
-/read-file ${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}
+/read-file ${v.readFileArgs}
 \`\`\`
 
-## OBEY THE REVIEW NOTES
+`,
+    },
+    {
+        name: "OBEY THE REVIEW NOTES",
+        when: () => true,
+        render: (v) => `## OBEY THE REVIEW NOTES
 
 Every section of the plan carries a \`codexNotes\` field.
 An empty \`codexNotes\` means the section stands as written.
@@ -72,32 +193,66 @@ An empty \`codexNotes\` means the section stands as written.
 If a section's \`codexNotes\` is not empty, a reviewer wrote a required fix for that section.
 When a \`codexNotes\` field is not empty, do what the field says while you implement that section.
 
-${absolutePathsSection(t.repoRoot)}
+${v.absolutePaths}
 
-## WHAT YOU MAY EDIT
+`,
+    },
+    {
+        name: "WHAT YOU MAY EDIT",
+        when: () => true,
+        render: (v) => `## WHAT YOU MAY EDIT
 
-${ownedPathMap(t)}
-- the implementation log at \`${t.notesFile}\`
-- the test file paired with each owned file, at \`${t.repoRoot}/tests/<owned file's base name>.test.ts\`
+${v.ownedPathMap}
+- the implementation log at \`${v.notesFile}\`
+- the test file paired with each owned file, at \`${v.repoRoot}/tests/<owned file's base name>.test.ts\`
 
 You are forbidden from editing any other file not listed above.
 
-${resumedRunSection(t.repoRoot)}
+${v.resumedRun}
 
-${testsSection(t)}
+`,
+    },
+    {
+        name: "TESTS: skip",
+        when: (c) => c.testsField === "skip",
+        render: () => `## DO NOT CREATE TESTS
 
-## HOW TO IMPLEMENT
+this task does not require any tests to be created.
+
+`,
+    },
+    {
+        name: "TESTS: tdd",
+        when: (c) => c.testsField === "tdd",
+        render: () => `## TESTS
+
+Each owned file is paired with \`tests/<its base name>.test.ts\`.
+The paired files that already exist are in your context from the read-file skill above.
+Import \`test\` from \`node:test\` and \`assert\` from \`node:assert\`; never import from \`bun:test\`.
+Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.
+
+`,
+    },
+    {
+        name: "HOW TO IMPLEMENT",
+        when: () => true,
+        render: (v) => `## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
-2. Run \`${rootedTypecheck}\` and fix every error it reports in the paths you own.
-3. Run each paired test file with \`(cd -- '${t.repoRoot}' && node --test <absolute test path>)\`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3. Stop after ${maxFixRounds} rounds.
+2. Run \`${v.rootedTypecheck}\` and fix every error it reports in the paths you own.
+3. Run each paired test file with \`(cd -- '${v.repoRoot}' && node --test <absolute test path>)\`.
+4. While any test fails, fix the cause, then repeat steps 2 and 3. Stop after ${v.maxFixRounds} rounds.
 
 Never run the full suite. That gate belongs to a separate phase, not to you.
 
-## KEEP AN IMPLEMENTATION LOG
+`,
+    },
+    {
+        name: "KEEP AN IMPLEMENTATION LOG",
+        when: () => true,
+        render: (v) => `## KEEP AN IMPLEMENTATION LOG
 
-Write a running log to exactly \`${t.notesFile}\`, and update it as you work.
+Write a running log to exactly \`${v.notesFile}\`, and update it as you work.
 Record only what the plan does not already say, under these four headings:
 - Design decisions: a choice you made where the plan was ambiguous.
 - Deviations: a place you departed from the plan, and why.
@@ -108,11 +263,21 @@ Stamp each entry with an ISO date and time.
 You have no user to ask, so never stop and wait for an answer.
 An open question that blocks the plan is a reason to return \`implemented: false\`, not a reason to guess.
 
-## NEVER COMMIT
+`,
+    },
+    {
+        name: "NEVER COMMIT",
+        when: () => true,
+        render: () => `## NEVER COMMIT
 
 Never stage, commit, or run any git command. A later step commits your work for you.
 
-## FORBIDDEN ACTIONS
+`,
+    },
+    {
+        name: "FORBIDDEN ACTIONS",
+        when: () => true,
+        render: (v) => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
 - edit anything outside the paths listed under WHAT YOU MAY EDIT;
@@ -120,12 +285,98 @@ You are forbidden from doing any of the following actions:
 - redecide anything the plan already decided;
 - run the full suite;
 - stage or commit anything, or run any git command;
-- attempt more than ${maxFixRounds} fix rounds;
+- attempt more than ${v.maxFixRounds} fix rounds;
 - return \`implemented: true\` while a test fails or the typecheck reports an error. A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
 
-${whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", "")}`;
+`,
+    },
+    {
+        name: "WHAT YOU, THE SPAWNING AGENT, RETURNS",
+        when: () => true,
+        render: (v) => v.whatToReturn,
+    },
+];
+
+export function implementChoices(t: PreparedTask): ImplementChoices {
+    return {
+        hasCodexNotes: t.codexReviewNotes.trim() !== "",
+        testsField: t.tests === "skip" || !t.hasTests ? "skip" : "tdd",
+    };
+}
+
+export const IMPLEMENT_SKELETON_VARS: ImplementVars = {
+    number: "`${t.number}`",
+    repoRoot: "`${t.repoRoot}`",
+    codexNotes: "`${t.codexReviewNotes.trim()}`",
+    readFileArgs: '`${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`',
+    absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
+    ownedPathMap: "`${ownedPathMap(t)}`",
+    notesFile: "`${t.notesFile}`",
+    resumedRun: "`${resumedRunSection(t.repoRoot)}`",
+    rootedTypecheck: "`${rootedTypecheck}`",
+    maxFixRounds: "`${maxFixRounds}`",
+    whatToReturn: "`${whatToReturnSection(...)}`",
+};
+
+export function renderImplementSections(choices: ImplementChoices, vars: ImplementVars): string {
+    return IMPLEMENT_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
+}
+
+export function buildImplementPromptSkeleton(choices: ImplementChoices): string {
+    return renderImplementSections(choices, IMPLEMENT_SKELETON_VARS);
+}
+
+export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
+    const rootedTypecheck = `(cd -- '${t.repoRoot}' && ${typecheckCommand})`;
+    return renderImplementSections(implementChoices(t), {
+        number: String(t.number),
+        repoRoot: t.repoRoot,
+        codexNotes: t.codexReviewNotes.trim(),
+        readFileArgs: readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")]),
+        absolutePaths: absolutePathsSection(t.repoRoot),
+        ownedPathMap: ownedPathMap(t),
+        notesFile: t.notesFile,
+        resumedRun: resumedRunSection(t.repoRoot),
+        rootedTypecheck,
+        maxFixRounds: String(maxFixRounds),
+        whatToReturn: whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", ""),
+    });
+}
+
+export function implementPromptCombos(): { name: string; skeleton: string; rendered: string }[] {
+    const fakeTask: PreparedTask = {
+        number: 99,
+        briefFile: "/tmp/fake-worktree/plans/brief-99.md",
+        planFile: "/tmp/fake-worktree/plans/plan.json",
+        reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
+        reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
+        testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
+        notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
+        files: ["src/thing.ts"],
+        readOnlyFiles: ["*"],
+        ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        testFilePaths: [],
+        hasTests: true,
+        tests: "node --test tests/thing.test.ts",
+        codexReviewNotes: "",
+        siblingTasks: [],
+        blockedBy: [],
+        blocks: [],
+        repoRoot: "/tmp/fake-worktree",
+        taskStateRoot: "/tmp/fake-worktree",
+    };
+    const combos: { name: string; skeleton: string; rendered: string }[] = [];
+    for (const codexReviewNotes of ["", "Point one.\nPoint two."]) {
+        for (const [hasTests, tests] of [[false, null], [true, "skip"], [true, "node --test tests/thing.test.ts"]] as const) {
+            const task = { ...fakeTask, codexReviewNotes, hasTests, tests };
+            const c = implementChoices(task);
+            const name = `codex-${c.hasCodexNotes ? "notes" : "none"}_tests-${c.testsField}`;
+            combos.push({ name, skeleton: buildImplementPromptSkeleton(c), rendered: buildImplementPrompt(task, "npx tsc --noEmit", 3) });
+        }
+    }
+    return combos;
 }
 
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");

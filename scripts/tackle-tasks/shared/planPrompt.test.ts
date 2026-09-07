@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/tackle-tasks/planPrompt.ts, extracted from PlannerBodyEmitter.test.ts so this shared module (also used by scripts/steps/pipeline-plan/PLAN_THE_TASK.ts) has its own home.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPrompt } from "./planPrompt.ts";
+import { planPrompt, planPromptSkeleton } from "./planPrompt.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
 // A hand-built PreparedTask for structural tests that never touch a real worktree.
@@ -70,3 +70,25 @@ test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () =>
 //     // Verification: the prompt says a name in the task description is unverified until the planner finds it in the owned files.
 //     assert.match(prompt, /Treat every such name as unverified: search the owned files for it before you plan against it\./);
 // });
+
+test("test_planPrompt_tellsThePlannerItMayReadAnyFileWhenReadOnlyFilesIsWildcard", () => {
+    const prompt = planPrompt(fakeTask);
+    assert.match(prompt, /You are allowed to read any file in the repository/);
+    assert.equal(prompt.includes("and nothing else"), false);
+    const fenced = planPrompt({ ...fakeTask, readOnlyFiles: ["src/other.ts"] });
+    assert.match(fenced, /and nothing else/);
+    assert.match(fenced, /src\/other\.ts/);
+});
+
+test("test_planPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
+    const skeleton = planPromptSkeleton({ hasCodexNotes: true, readsAnyFile: false, testsField: "skip" });
+    for (const header of ["## CODEX'S PREVIOUS REVIEW NOTES", "## YOUR JOB", "## DESIRED OUTPUT", "## WHAT TO READ", "## FORMATTING THE PLAN", "## PLAN REQUIREMENTS", "## ANSWERING A LEFT-BEHIND CLARIFY REQUEST", "## WHEN TO STOP PLANNING", "## FORBIDDEN ACTIONS", "## ALLOWED ACTIONS", "---- TESTS_FIELD", "`${whatToReturnSection(...)}`"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    assert.match(skeleton, /and nothing else/);
+    assert.equal(skeleton.includes("read any file in the repository"), false);
+    assert.match(skeleton, /----\nskip\n/);
+    assert.equal(skeleton.includes("`${t.tests}`"), false);
+    assert.equal(skeleton.includes("the user wrote no example"), false);
+    assert.match(skeleton, /`\$\{t\.codexReviewNotes\.trim\(\)\}`/);
+});

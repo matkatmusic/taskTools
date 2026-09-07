@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertMatchesTemplate } from "../../shared/contracts.ts";
-import { buildImplementPrompt, main } from "./IMPLEMENT_TASK.ts";
+import { buildImplementPrompt, buildImplementPromptSkeleton, main } from "./IMPLEMENT_TASK.ts";
 import type { PreparedTask } from "../shared/preparedTask.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "implement-task-run-log.json");
@@ -64,6 +64,14 @@ test("test_buildImplementPrompt_tellsTheAgentToReturnMessageAndAdditionalData", 
     const prompt = buildImplementPrompt(fakeTask, "npx tsc --noEmit", 3);
     assert.match(prompt, /"message": "", "additionalData": \{ "implemented": </);
     assert.match(prompt, /"implemented"/);
+});
+
+test("test_buildImplementPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
+    const skeleton = buildImplementPromptSkeleton({ hasCodexNotes: true, testsField: "skip" });
+    for (const header of ["## NOTE FOR THIS RUN", "## YOUR JOB", "## WHAT TO READ", "## OBEY THE REVIEW NOTES", "## WHAT YOU MAY EDIT", "## DO NOT CREATE TESTS", "## HOW TO IMPLEMENT", "## KEEP AN IMPLEMENTATION LOG", "## NEVER COMMIT", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    assert.equal(skeleton.includes("## TESTS\n"), false);
 });
 
 function tmpMkdir(prefix: string): string {

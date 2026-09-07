@@ -1,0 +1,17 @@
+%% How buildImplementPrompt picks its sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart LR
+    codexNotes[/t.codexReviewNotes/] --> hasNotes{trim is empty?}
+    hasNotes -- no --> NOTE["NOTE FOR THIS RUN"]
+    hasNotes -- yes --> dropNote[section absent]
+    NOTE --> ALWAYS
+    dropNote --> ALWAYS
+    ALWAYS["YOUR JOB<br>WHAT TO READ<br>OBEY THE REVIEW NOTES (absolutePathsSection)<br>WHAT YOU MAY EDIT (ownedPathMap, resumedRunSection)"]
+    tests[/t.tests, t.hasTests/] --> skipTests{tests is "skip" or hasTests is false?}
+    ALWAYS --> skipTests
+    skipTests -- yes --> SKIP["TESTS: skip"]
+    skipTests -- no --> TDD["TESTS: tdd"]
+    SKIP --> REST
+    TDD --> REST
+    REST["HOW TO IMPLEMENT<br>KEEP AN IMPLEMENTATION LOG<br>NEVER COMMIT<br>FORBIDDEN ACTIONS"]
+    REST --> RETURN
+    RETURN["WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)"]

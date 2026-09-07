@@ -1,0 +1,23 @@
+%% How planPrompt.ts picks its sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart LR
+    codexNotes[/t.codexReviewNotes/] --> hasNotes{trim is empty?}
+    hasNotes -- no --> CODEX["CODEX'S PREVIOUS REVIEW NOTES"]
+    hasNotes -- yes --> dropCodex[section absent]
+    CODEX --> ALWAYS
+    dropCodex --> ALWAYS
+    ALWAYS["YOUR JOB<br>DESIRED OUTPUT<br>WHAT TO READ (absolutePathsSection, resumedRunSection)<br>FORMATTING THE PLAN<br>PLAN REQUIREMENTS<br>ANSWERING A LEFT-BEHIND CLARIFY REQUEST<br>WHEN TO STOP PLANNING<br>FORBIDDEN ACTIONS"]
+    readOnly[/t.readOnlyFiles/] --> hasStar{includes star?}
+    ALWAYS --> hasStar
+    hasStar -- yes --> ANY["ALLOWED ACTIONS: any file"]
+    hasStar -- no --> LIST["ALLOWED ACTIONS: listed files"]
+    tests[/t.hasTests, t.tests/] --> hasTests{hasTests?}
+    ANY --> hasTests
+    LIST --> hasTests
+    hasTests -- no --> SKIP["TESTS_FIELD: skip"]
+    hasTests -- yes --> testsNull{tests is null?}
+    testsNull -- no --> EXAMPLE["TESTS_FIELD: user example"]
+    testsNull -- yes --> NOEXAMPLE["TESTS_FIELD: no example"]
+    SKIP --> RETURN
+    EXAMPLE --> RETURN
+    NOEXAMPLE --> RETURN
+    RETURN["WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)"]

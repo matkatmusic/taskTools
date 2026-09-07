@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planReviewPrompt, reviewQuestion } from "./CodexReviewBodyEmitter.ts";
+import { planReviewPrompt, reviewQuestion, reviewQuestionSkeleton } from "./CodexReviewBodyEmitter.ts";
 import { writeCheckpoint } from "./checkpoint.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
@@ -148,4 +148,14 @@ test("test_planReviewPrompt_statesNoSiblingsOrBlockersWhenNoneExist", () => {
     assert.match(prompt, /No other open task shares files with task 99\./);
     assert.match(prompt, /No open task blocks task 99\./);
     assert.match(prompt, /Task 99 blocks no open task\./);
+});
+
+test("test_reviewQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
+    const skeleton = reviewQuestionSkeleton({ variant: "recheck", adversarial: false });
+    for (const header of ["## STRICT INPUT ALLOWLIST", "## MISSING-FILE RESPONSE", "## WHAT YOU READ", "## HOW TO JUDGE THE PLAN", "## DOCUMENTING EVIDENCE", "## WHAT YOU, THE REVIEWING AGENT, RETURNS", "## WHAT TO OUTPUT"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    for (const excluded of ["## SIBLING AND BLOCKER SCOPE", "## DO NOT FLAG", "## A REJECTION IS YOUR FAILURE", "Approve the plan."]) {
+        assert.equal(skeleton.includes(excluded), false, `unexpected "${excluded}"`);
+    }
 });

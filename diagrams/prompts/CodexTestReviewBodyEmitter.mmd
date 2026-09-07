@@ -1,0 +1,31 @@
+%% How reviewTestsQuestion and reviewTestsPrompt pick their sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart LR
+    attempt[/getAttemptCount testReviews/] --> isRecheck{attempts > 0?}
+    isRecheck -- no --> HEADER_REVIEW["HEADER: review"]
+    isRecheck -- yes --> HEADER_RECHECK["HEADER: recheck"]
+    HEADER_REVIEW --> ALWAYS1
+    HEADER_RECHECK --> ALWAYS1
+    ALWAYS1["STRICT INPUT ALLOWLIST<br>MISSING-FILE RESPONSE"]
+    ALWAYS1 --> isRecheck2{attempts > 0?}
+    isRecheck2 -- no --> READ_REVIEW["WHAT YOU READ: review"]
+    isRecheck2 -- yes --> READ_RECHECK["WHAT YOU READ: recheck"]
+    preExisting[/preExistingTestFiles/] --> hasPreExisting{length is 0?}
+    READ_REVIEW --> hasPreExisting
+    hasPreExisting -- yes --> NONE["TESTS THIS TASK DID NOT CREATE: none"]
+    hasPreExisting -- no --> LIST["TESTS THIS TASK DID NOT CREATE: list"]
+    NONE --> RANONLY
+    LIST --> RANONLY
+    RANONLY["WHAT ALREADY RAN<br>NEVER RUN THE TESTS"]
+    RANONLY --> HOWREVIEW["HOW TO JUDGE THE TESTS: review"]
+    HOWREVIEW --> DONOTFLAG["DO NOT FLAG"]
+    DONOTFLAG --> DOCREVIEW["DOCUMENTING EVIDENCE: review"]
+    DOCREVIEW --> RETURNREVIEW["WHAT YOU, THE REVIEWING AGENT, RETURNS: review"]
+    RETURNREVIEW --> OUTPUT
+    READ_RECHECK --> HOWRECHECK["HOW TO JUDGE THE TESTS: recheck"]
+    HOWRECHECK --> DOCRECHECK["DOCUMENTING EVIDENCE: recheck"]
+    DOCRECHECK --> RETURNRECHECK["WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck"]
+    RETURNRECHECK --> OUTPUT
+    OUTPUT["WHAT TO OUTPUT"]
+    OUTPUT --> QUESTIONVAR[/reviewTestsQuestion text/]
+    QUESTIONVAR --> SHELL["SPAWN HEADER AND SHELL BLOCK (spawnAgentHeader, codexExecCommand, spawnClaudeFableCli, spawnClaudeOpus48Cli)"]
+    SHELL --> RETURN["WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)"]

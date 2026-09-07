@@ -15,48 +15,149 @@ import type { CommitImplementationIfNeededPacket } from "../commitImplementation
 const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${path}"`).join(" ");
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
 
-function buildFixTaskTestsPrompt(prepared: PreparedTask): string {
-    const root = prepared.repoRoot.replace(/\/+$/, "");
-    return `## YOUR JOB
+// Retired (prompt shapes): one template literal became FIX_TASK_TESTS_SECTIONS below, so the skeleton view cannot drift.
+// export function buildFixTaskTestsPrompt(prepared: PreparedTask): string {
+//     const root = prepared.repoRoot.replace(/\/+$/, "");
+//     return `## YOUR JOB
+//
+// Fix the cause of every failure listed under FAILING TASK TESTS.
+// Read \`~/.claude/guides/tests-and-code-changes.md\` first: it decides, per failing test, whether the code or the test is wrong.
+//
+// The task's own tests in the worktree \`${root}\` are red.
+// A test that fails is reporting a real defect until you have proved otherwise.
+// A test that checks behavior this task was asked to change is obsolete: comment it out and say which test and why.
+//
+// ## WHAT TO READ
+//
+// Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
+// \`\`\`
+// /read-file ${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}
+// \`\`\`
+//
+// You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
+//
+// ${absolutePathsSection(root)}
+//
+// ## WHAT YOU MAY EDIT
+//
+// ${prepared.ownedFilePaths.map((path) => `- \`${path}\``).join("\n")}
+//
+// This list is complete, plus any test file whose failure the guide rules obsolete.
+// Every other path in the tree belongs to another task.
+//
+// If fixing the cause needs an edit outside this list, make no edit at all and say so.
+//
+// ${resumedRunSection(root)}
+//
+// ## HOW TO FIX
+//
+// 1. Read the failing test notes below and name the single defect behind each failure.
+// 2. Fix that defect in the paths listed above.
+// 3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${root}\`.
+// 4. Repeat until every listed failure is addressed.
+// 5. Never run the full suite.
+//
+// ## FORBIDDEN ACTIONS
+//
+// You are forbidden from doing any of the following actions:
+// - weaken, delete, skip, or stub out a test to make a failure disappear;
+// - edit a test file, except to comment out one the guide rules obsolete;
+// - edit any path not listed under WHAT YOU MAY EDIT;
+// - add scope or a refactor no listed failure calls for;
+// - run the full suite;
+// - stage or commit anything by hand;
+// - force-push or hard-reset anything you did not create.
+//
+// Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
+// It is not a failure, and it is always better than a guess.
+//
+// ${whatToReturnSection('{ "fixSummary": "..." }', "where \\`fixSummary\\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why", "")}
+//
+// ## FAILING TASK TESTS
+//
+// \`\`\`
+// ${prepared.codexReviewNotes}
+// \`\`\``;
+// }
+
+export type FixTaskTestsChoices = {};
+
+export type FixTaskTestsVars = {
+    root: string;
+    readFileArgs: string;
+    absolutePaths: string;
+    ownedPaths: string;
+    resumedRun: string;
+    whatToReturn: string;
+    codexReviewNotes: string;
+};
+
+export type FixTaskTestsSection = { name: string; when: (c: FixTaskTestsChoices) => boolean; render: (v: FixTaskTestsVars) => string };
+
+export const FIX_TASK_TESTS_SECTIONS: FixTaskTestsSection[] = [
+    {
+        name: "YOUR JOB",
+        when: () => true,
+        render: (v) => `## YOUR JOB
 
 Fix the cause of every failure listed under FAILING TASK TESTS.
 Read \`~/.claude/guides/tests-and-code-changes.md\` first: it decides, per failing test, whether the code or the test is wrong.
 
-The task's own tests in the worktree \`${root}\` are red.
+The task's own tests in the worktree \`${v.root}\` are red.
 A test that fails is reporting a real defect until you have proved otherwise.
 A test that checks behavior this task was asked to change is obsolete: comment it out and say which test and why.
 
-## WHAT TO READ
+`,
+    },
+    {
+        name: "WHAT TO READ",
+        when: () => true,
+        render: (v) => `## WHAT TO READ
 
 Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
 \`\`\`
-/read-file ${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}
+/read-file ${v.readFileArgs}
 \`\`\`
 
 You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
 
-${absolutePathsSection(root)}
+${v.absolutePaths}
 
-## WHAT YOU MAY EDIT
+`,
+    },
+    {
+        name: "WHAT YOU MAY EDIT",
+        when: () => true,
+        render: (v) => `## WHAT YOU MAY EDIT
 
-${prepared.ownedFilePaths.map((path) => `- \`${path}\``).join("\n")}
+${v.ownedPaths}
 
 This list is complete, plus any test file whose failure the guide rules obsolete.
 Every other path in the tree belongs to another task.
 
 If fixing the cause needs an edit outside this list, make no edit at all and say so.
 
-${resumedRunSection(root)}
+${v.resumedRun}
 
-## HOW TO FIX
+`,
+    },
+    {
+        name: "HOW TO FIX",
+        when: () => true,
+        render: (v) => `## HOW TO FIX
 
 1. Read the failing test notes below and name the single defect behind each failure.
 2. Fix that defect in the paths listed above.
-3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${root}\`.
+3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${v.root}\`.
 4. Repeat until every listed failure is addressed.
 5. Never run the full suite.
 
-## FORBIDDEN ACTIONS
+`,
+    },
+    {
+        name: "FORBIDDEN ACTIONS",
+        when: () => true,
+        render: () => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
 - weaken, delete, skip, or stub out a test to make a failure disappear;
@@ -70,13 +171,85 @@ You are forbidden from doing any of the following actions:
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
 It is not a failure, and it is always better than a guess.
 
-${whatToReturnSection('{ "fixSummary": "..." }', "where \\`fixSummary\\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why", "")}
+`,
+    },
+    {
+        name: "WHAT YOU, THE SPAWNING AGENT, RETURNS",
+        when: () => true,
+        render: (v) => `${v.whatToReturn}
 
-## FAILING TASK TESTS
+`,
+    },
+    {
+        name: "FAILING TASK TESTS",
+        when: () => true,
+        render: (v) => `## FAILING TASK TESTS
 
 \`\`\`
-${prepared.codexReviewNotes}
-\`\`\``;
+${v.codexReviewNotes}
+\`\`\``,
+    },
+];
+
+export function fixTaskTestsChoices(): FixTaskTestsChoices {
+    return {};
+}
+
+export const FIX_TASK_TESTS_SKELETON_VARS: FixTaskTestsVars = {
+    root: "`${root}`",
+    readFileArgs: '`${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}`',
+    absolutePaths: "`${absolutePathsSection(root)}`",
+    ownedPaths: '`${prepared.ownedFilePaths.map((path) => `- \\`${path}\\``).join("\\n")}`',
+    resumedRun: "`${resumedRunSection(root)}`",
+    whatToReturn: "`${whatToReturnSection(...)}`",
+    codexReviewNotes: "`${prepared.codexReviewNotes}`",
+};
+
+export function renderFixTaskTestsSections(choices: FixTaskTestsChoices, vars: FixTaskTestsVars): string {
+    return FIX_TASK_TESTS_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
+}
+
+export function buildFixTaskTestsPromptSkeleton(choices: FixTaskTestsChoices): string {
+    return renderFixTaskTestsSections(choices, FIX_TASK_TESTS_SKELETON_VARS);
+}
+
+export function buildFixTaskTestsPrompt(prepared: PreparedTask): string {
+    const root = prepared.repoRoot.replace(/\/+$/, "");
+    return renderFixTaskTestsSections(fixTaskTestsChoices(), {
+        root,
+        readFileArgs: readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths]),
+        absolutePaths: absolutePathsSection(root),
+        ownedPaths: prepared.ownedFilePaths.map((path) => `- \`${path}\``).join("\n"),
+        resumedRun: resumedRunSection(root),
+        whatToReturn: whatToReturnSection('{ "fixSummary": "..." }', "where \\`fixSummary\\` is one paragraph naming which failures you fixed, and any failure left unaddressed and why", ""),
+        codexReviewNotes: prepared.codexReviewNotes,
+    });
+}
+
+export function fixTaskTestsPromptCombos(): { name: string; skeleton: string; rendered: string }[] {
+    const fakeTask: PreparedTask = {
+        number: 99,
+        briefFile: "/tmp/fake-worktree/plans/brief-99.md",
+        planFile: "/tmp/fake-worktree/plans/plan.json",
+        reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
+        reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
+        testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
+        notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
+        files: ["src/thing.ts"],
+        readOnlyFiles: ["*"],
+        ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        testFilePaths: ["/tmp/fake-worktree/tests/thing.test.ts"],
+        hasTests: true,
+        tests: "node --test tests/thing.test.ts",
+        codexReviewNotes: "the failing test notes text",
+        siblingTasks: [],
+        blockedBy: [],
+        blocks: [],
+        repoRoot: "/tmp/fake-worktree",
+        taskStateRoot: "/tmp/fake-worktree",
+    };
+    const c = fixTaskTestsChoices();
+    return [{ name: "default", skeleton: buildFixTaskTestsPromptSkeleton(c), rendered: buildFixTaskTestsPrompt(fakeTask) }];
 }
 
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");

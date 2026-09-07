@@ -1,0 +1,24 @@
+%% How reviewQuestion and planReviewPrompt pick their sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart LR
+    resumed[/readCheckpoint resumedFrom.exitType/] --> scrapped{plan-scrapped?}
+    attempts[/getAttemptCount planReview/] --> attempted{count >= 1?}
+    difficulty[/isCodexDraftedPlan task difficulty/] --> adversarial{difficulty >= 7?}
+
+    scrapped -- yes --> APPROVE
+    scrapped -- no --> attempted
+    attempted -- yes --> RECHECK
+    attempted -- no --> adversarial
+
+    APPROVE["APPROVE: intro<br>WHAT YOU READ: standard<br>WHAT YOU, THE REVIEWING AGENT, RETURNS: approve<br>WHAT TO OUTPUT: approve"]
+
+    RECHECK["ROLE: recheck<br>STRICT INPUT ALLOWLIST: recheck<br>MISSING-FILE RESPONSE: recheck<br>WHAT YOU READ: recheck<br>HOW TO JUDGE THE PLAN: recheck<br>DOCUMENTING EVIDENCE: recheck<br>WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck<br>WHAT TO OUTPUT: recheck"]
+
+    adversarial -- yes --> ROLE_ADV["ROLE: adversarial"]
+    adversarial -- no --> ROLE_ORD["ROLE: ordinary"]
+    ROLE_ADV --> DEFAULT
+    ROLE_ORD --> DEFAULT
+    DEFAULT["STRICT INPUT ALLOWLIST: reviewByDefault<br>MISSING-FILE RESPONSE: reviewByDefault<br>WHAT YOU READ: standard<br>SIBLING AND BLOCKER SCOPE<br>HOW TO JUDGE THE PLAN: reviewByDefault<br>DO NOT FLAG<br>DOCUMENTING EVIDENCE: reviewByDefault<br>WHAT YOU, THE REVIEWING AGENT, RETURNS: reviewByDefault<br>A REJECTION IS YOUR FAILURE<br>WHAT TO OUTPUT: reviewByDefault"]
+
+    subgraph planReviewPrompt [planReviewPrompt: always the same three sections]
+        HEADER["SPAWN AGENT HEADER (spawnAgentHeader)"] --> SHELL["SHELL INVOCATION (createCodexShellInvocation, embeds reviewQuestion above)"] --> RETURN["WHAT TO RETURN (whatToReturnSection)"]
+    end

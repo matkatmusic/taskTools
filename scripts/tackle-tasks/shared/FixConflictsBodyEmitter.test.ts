@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fixConflictsPrompt } from "./FixConflictsBodyEmitter.ts";
+import { fixConflictsPrompt, fixConflictsPromptSkeleton } from "./FixConflictsBodyEmitter.ts";
 
 const git = (repo: string, ...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
 
@@ -69,4 +69,12 @@ test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {
     // A later box advances the rebase; an agent that continues it strands the caller.
     const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.match(prompt, /Never run `git rebase --continue` or `git rebase --abort`/);
+});
+
+test("test_fixConflictsPromptSkeleton_holdsEverySectionSinceThePromptNeverBranches", () => {
+    const skeleton = fixConflictsPromptSkeleton({});
+    for (const header of ["## YOUR JOB", "## WHAT TO READ", "## WHAT YOU MAY EDIT", "## HOW TO RESOLVE", "## DO NOT DRIVE THE REBASE", "## FORBIDDEN ACTIONS"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    assert.equal(skeleton.includes("`${whatToReturnSection(...)}`"), true);
 });
