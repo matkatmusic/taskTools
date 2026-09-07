@@ -61,7 +61,7 @@ test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () =>
     const prompt = planPrompt(fakeTask);
     assert.match(prompt, /\/read-file "[^"]*\/plans\/plan-template\.json"/);
     assert.equal(prompt.includes('"sections": ['), false);
-    assert.match(prompt, /with `task` set to 99\./);
+    assert.match(prompt, /Set `task` to 99\./);
 });
 
 // test("test_planPrompt_tellsThePlannerToVerifyNamedIdentifiersAgainstTheCode", () => {
@@ -76,7 +76,7 @@ test("test_planPrompt_tellsThePlannerItMayReadAnyFileWhenReadOnlyFilesIsWildcard
     assert.match(prompt, /You are allowed to read any file in the repository/);
     assert.equal(prompt.includes("and nothing else"), false);
     const fenced = planPrompt({ ...fakeTask, readOnlyFiles: ["src/other.ts"] });
-    assert.match(fenced, /and nothing else/);
+    assert.match(fenced, /nothing else/);
     assert.match(fenced, /src\/other\.ts/);
 });
 
@@ -85,7 +85,7 @@ test("test_planPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
     for (const header of ["## CODEX'S PREVIOUS REVIEW NOTES", "## YOUR JOB", "## DESIRED OUTPUT", "## WHAT TO READ", "## FORMATTING THE PLAN", "## PLAN REQUIREMENTS", "## ANSWERING A LEFT-BEHIND CLARIFY REQUEST", "## WHEN TO STOP PLANNING", "## FORBIDDEN ACTIONS", "## ALLOWED ACTIONS", "---- TESTS_FIELD", "`${whatToReturnSection(...)}`"]) {
         assert.ok(skeleton.includes(header), `missing "${header}"`);
     }
-    assert.match(skeleton, /and nothing else/);
+    assert.match(skeleton, /nothing else/);
     assert.equal(skeleton.includes("read any file in the repository"), false);
     assert.match(skeleton, /----\nskip\n/);
     assert.equal(skeleton.includes("`${t.tests}`"), false);
