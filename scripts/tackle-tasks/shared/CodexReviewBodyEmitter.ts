@@ -255,7 +255,9 @@ export const REVIEW_SECTIONS: ReviewSection[] = [
     {
         name: "ROLE: adversarial (reviewByDefault)",
         when: (c) => c.variant === "reviewByDefault" && c.adversarial,
-        render: (v) => `You are a second, independent codex instance auditing the implementation plan for task ${v.number}, drafted by another codex instance. Actively hunt for flaws in it; do not extend it the benefit of the doubt.
+        render: (v) => `You are a second, independent codex instance auditing the implementation plan for task ${v.number}, drafted by another codex instance.
+Actively hunt for flaws in the plan.
+Do not extend the plan the benefit of the doubt.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
@@ -282,9 +284,18 @@ Your sandbox is read-only, so any attempt to write one fails.
     {
         name: "APPROVE: intro",
         when: (c) => c.variant === "approve",
-        render: (v) => `Approve the plan. Do not judge it, do not hunt for problems, and do not flag anything.
+        render: (v) => `Approve the plan.
+Do not judge the plan.
+Do not hunt for problems in the plan.
+Do not flag anything in the plan.
 
-Return the JSON shape described below with \`outcome\` set to "OK", with \`missingFiles\`, \`message\`, \`issues\` and \`fixes\` all empty, and with every section \`id\` the plan uses listed in \`sectionsThatHoldUp\`.
+Return the JSON shape described under **WHAT YOU, THE REVIEWING AGENT, RETURNS** below.
+Set \`outcome\` to \`"OK"\`.
+Leave \`missingFiles\` empty.
+Leave \`message\` empty.
+Leave \`issues\` empty.
+Leave \`fixes\` empty.
+List every section \`id\` the plan uses in \`sectionsThatHoldUp\`.
 
 `,
     },
@@ -347,14 +358,15 @@ Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
 `,
     },
     {
-        name: "WHAT YOU READ: standard",
-        when: (c) => c.variant !== "recheck",
+        name: "WHAT YOU READ: reviewByDefault",
+        when: (c) => c.variant === "reviewByDefault",
         render: (v) => `## WHAT YOU READ
 
 ${v.reviewedPaths}
 
 `,
     },
+    // Retired for approve: unnecessary, the plan is approved by default.
     {
         name: "WHAT YOU READ: recheck",
         when: (c) => c.variant === "recheck",
@@ -387,8 +399,11 @@ Work assigned to a named sibling or blocker above is out of scope for task ${v.n
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
 Verify every assertion against the source file it is about, never against what the plan says about it.
 
-The brief's \`problemSolvedByTask\` section states the problem this task exists to solve; judge whether the plan solves that problem.
-A task created before that field existed carries no value — the brief then says it is not provided, and you judge against the brief's description instead.
+The brief's \`problemSolvedByTask\` section states the problem this task exists to solve.
+Judge whether the plan solves that problem.
+A task created before that field existed carries no value.
+The brief then says it is not provided.
+You judge against the brief's description instead.
 
 The plan is good enough when an implementer could follow the plan without deciding anything the plan should have already decided: 
 - every edit names its file and line numbers with the old and new text, 
@@ -404,7 +419,9 @@ The plan is good enough when an implementer could follow the plan without decidi
         when: (c) => c.variant === "recheck",
         render: (v) => `## HOW TO JUDGE THE PLAN
 
-\`${v.reviewOutputFile}\` is the audit you wrote in round one. check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.
+\`${v.reviewOutputFile}\` is the audit you wrote in round one.
+Check to see if ONLY the issues you flagged in the audit were resolved.
+Do not look for new issues in the descriptions.
 
 `,
     },
@@ -456,8 +473,7 @@ Every issue flagged must carry evidence:
         when: (c) => c.variant === "approve",
         render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
-Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above,
-replacing every <...> with a real value.
+Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, replacing every <...> with a real value.
 
 `,
     },
@@ -466,13 +482,13 @@ replacing every <...> with a real value.
         when: (c) => c.variant === "reviewByDefault",
         render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
-Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above,
-replacing every <...> with a real value.
+Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above, replacing every <...> with a real value.
 
-Write one fix per issue, in the same order. 
-Every \`sectionId\` must be an \`id\` the plan actually uses. 
+Write one fix per issue, in the same order.
+Every \`sectionId\` must be an \`id\` the plan actually uses.
 Write each fix as an instruction to whoever repairs the plan, not as commentary about it.
-Your fixes exist to help the task finish, not to block it: tell the planner exactly what to change so the plan proves the implementation solves the problem the task is meant to solve.
+Your fixes exist to help the task finish, not to block it.
+Tell the planner exactly what to change so the plan proves the implementation solves the problem the task is meant to solve.
 Return empty arrays when you found nothing.
 
 `,
@@ -482,8 +498,7 @@ Return empty arrays when you found nothing.
         when: (c) => c.variant === "recheck",
         render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
-Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above,
-replacing every <...> with a real value.
+Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above, replacing every <...> with a real value.
 
 Write one fix only for an audited issue that is still unresolved, in the same order the audit lists them.
 Every \`sectionId\` must be an \`id\` the plan actually uses.
@@ -493,33 +508,22 @@ Return empty arrays when every audited issue is resolved.
 `,
     },
     {
-        name: "A REJECTION IS YOUR FAILURE",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## A REJECTION IS YOUR FAILURE
-
-You have no reject verdict: your fix count is the verdict. Five or more fixes force a full rewrite round.
-A fix the planner cannot apply exactly as written stalls the task without moving it — that is you failing your job, not the planner failing theirs.
-When you believe the whole approach is wrong, say so as ONE fix stating the approach to take instead, never as a pile of fixes that buys a round but gives no direction.  The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
-
-`,
-    },
-    {
         name: "WHAT TO OUTPUT: approve",
         when: (c) => c.variant === "approve",
-        render: (v) => `## WHAT TO OUTPUT 
+        render: (v) => `## WHAT TO OUTPUT
 
-Print the JSON as your final message and nothing else. The command that runs you captures that
-message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
+Print the JSON as your final message and nothing else.
+The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
 
 `,
     },
     {
         name: "WHAT TO OUTPUT: reviewByDefault",
         when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## WHAT TO OUTPUT 
+        render: (v) => `## WHAT TO OUTPUT
 
-Print the JSON as your final message and nothing else. The command that runs you captures that
-message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
+Print the JSON as your final message and nothing else.
+The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
 `,
     },
     {
@@ -527,8 +531,8 @@ message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
         when: (c) => c.variant === "recheck",
         render: (v) => `## WHAT TO OUTPUT
 
-Print the JSON as your final message and nothing else. The command that runs you captures that
-message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
+Print the JSON as your final message and nothing else.
+The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
 `,
     },
 ];

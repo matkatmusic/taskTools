@@ -68,7 +68,7 @@ test("test_buildImplementPrompt_tellsTheAgentToReturnMessageAndAdditionalData", 
 
 test("test_buildImplementPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
     const skeleton = buildImplementPromptSkeleton({ hasCodexNotes: true, testsField: "skip" });
-    for (const header of ["## NOTE FOR THIS RUN", "## YOUR JOB", "## WHAT TO READ", "## OBEY THE REVIEW NOTES", "## WHAT YOU MAY EDIT", "## DO NOT CREATE TESTS", "## HOW TO IMPLEMENT", "## KEEP AN IMPLEMENTATION LOG", "## NEVER COMMIT", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`"]) {
+    for (const header of ["## NOTE FOR THIS RUN", "## YOUR JOB", "## BEFORE YOU IMPLEMENT", "## WHAT TO READ", "## OBEY THE REVIEW NOTES", "## WHAT YOU MAY EDIT", "## DO NOT CREATE TESTS", "## HOW TO IMPLEMENT", "## NEVER COMMIT", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`"]) {
         assert.ok(skeleton.includes(header), `missing "${header}"`);
     }
     assert.equal(skeleton.includes("## TESTS\n"), false);

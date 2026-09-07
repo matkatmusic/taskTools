@@ -100,12 +100,16 @@ export const FIX_TASK_TESTS_SECTIONS: FixTaskTestsSection[] = [
         when: () => true,
         render: (v) => `## YOUR JOB
 
-Fix the cause of every failure listed under FAILING TASK TESTS.
-Read \`~/.claude/guides/tests-and-code-changes.md\` first: it decides, per failing test, whether the code or the test is wrong.
-
+You are an agent fixing the task's own failing tests.
+Your job is to fix the cause of every failure listed under FAILING TASK TESTS.
+Your goal is to fix the real defect behind each failure.
+Read \`~/.claude/guides/tests-and-code-changes.md\` first.
+That guide decides, per failing test, whether the code or the test is wrong.
 The task's own tests in the worktree \`${v.root}\` are red.
 A test that fails is reporting a real defect until you have proved otherwise.
-A test that checks behavior this task was asked to change is obsolete: comment it out and say which test and why.
+A test that checks behavior this task was asked to change is obsolete.
+Comment it out.
+Say which test and why.
 
 `,
     },
@@ -114,10 +118,11 @@ A test that checks behavior this task was asked to change is obsolete: comment i
         when: () => true,
         render: (v) => `## WHAT TO READ
 
-Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
+invoke this skill exactly:
 \`\`\`
 /read-file ${v.readFileArgs}
 \`\`\`
+This puts the files into your context without spending a Read tool call.
 
 You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
 
@@ -128,14 +133,16 @@ ${v.absolutePaths}
     {
         name: "WHAT YOU MAY EDIT",
         when: () => true,
+        // Retired (rule 7): "This list is complete, plus any test file whose failure the guide rules obsolete."
         render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPaths}
 
-This list is complete, plus any test file whose failure the guide rules obsolete.
+You may also edit any test file whose failure the guide rules obsolete.
 Every other path in the tree belongs to another task.
 
-If fixing the cause needs an edit outside this list, make no edit at all and say so.
+If fixing the cause needs an edit outside the file paths listed above, make no edit at all.
+Say so.
 
 ${v.resumedRun}
 
@@ -146,7 +153,8 @@ ${v.resumedRun}
         when: () => true,
         render: (v) => `## HOW TO FIX
 
-1. Read the failing test notes below and name the single defect behind each failure.
+1. Read the failing test notes below.
+Name the single defect behind each failure.
 2. Fix that defect in the paths listed above.
 3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${v.root}\`.
 4. Repeat until every listed failure is addressed.
@@ -169,7 +177,8 @@ You are forbidden from doing any of the following actions:
 - force-push or hard-reset anything you did not create.
 
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
-It is not a failure, and it is always better than a guess.
+It is not a failure.
+It is always better than a guess.
 
 `,
     },

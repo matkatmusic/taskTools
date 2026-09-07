@@ -100,7 +100,7 @@ test("test_reviewByDefaultPrompt_usesAdversarialLanguageWhenTheDifficultyIsAtLea
     const prompt = planReviewPrompt(codexDraftedTask);
 
     assert.match(prompt, /second, independent codex instance auditing/);
-    assert.match(prompt, /do not extend it the benefit of the doubt/);
+    assert.match(prompt, /Do not extend the plan the benefit of the doubt/);
     assert.match(prompt, /A REJECTION IS YOUR FAILURE/);
 });
 

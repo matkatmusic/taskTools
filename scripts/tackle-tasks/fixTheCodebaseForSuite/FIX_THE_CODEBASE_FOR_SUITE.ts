@@ -109,11 +109,13 @@ export const SUITE_FIX_SECTIONS: SuiteFixSection[] = [
         when: () => true,
         render: (v) => `## YOUR JOB
 
-Fix the cause of every failure listed under FAILING SUITE OUTPUT, and change nothing else.
+You are repairing the codebase, never the suite.
 
 The full test suite in the worktree \`${v.root}\` is red.
-You are repairing the codebase, never the suite.
 A test that fails is reporting a real defect until you have proved otherwise.
+
+Fix the cause of every failure listed under FAILING SUITE OUTPUT.
+Change nothing else.
 
 `,
     },
@@ -122,10 +124,11 @@ A test that fails is reporting a real defect until you have proved otherwise.
         when: () => true,
         render: (v) => `## WHAT TO READ
 
-Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
+invoke this skill exactly:
 \`\`\`
 /read-file ${v.readFileArgs}
 \`\`\`
+The skill puts the owned files and the test files into your context without spending a Read tool call.
 
 You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
 
@@ -136,14 +139,12 @@ ${v.absolutePaths}
     {
         name: "WHAT YOU MAY EDIT",
         when: () => true,
+        // Retired: "list is complete" and cross-task file warning; tasks now run in separate worktrees.
         render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPaths}
 
-This list is complete.
-Every other path in the tree belongs to another task, including every test file.
-
-If fixing the cause needs an edit outside this list, make no edit at all and say so.
+If fixing the cause needs an edit outside the WHAT YOU MAY EDIT list, make no edit at all and say so.
 
 ${v.resumedRun}
 
@@ -154,10 +155,11 @@ ${v.resumedRun}
         when: () => true,
         render: (v) => `## HOW TO FIX
 
-1. Read the failing suite output below and name the single defect behind each failure.
-2. Fix that defect in the paths listed above.
-3. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${v.root}\`.
-4. Repeat until every listed failure is addressed.
+1. Read the failing suite output below.
+2. Name the single defect behind each failure.
+3. Fix that defect in the paths listed above.
+4. Re-run only the individual test that failed, with \`node --test <absolute test path>\`, run inside \`${v.root}\`.
+5. Repeat until every listed failure is addressed.
 
 `,
     },
@@ -176,7 +178,8 @@ You are forbidden from doing any of the following actions:
 - force-push or hard-reset anything you did not create.
 
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
-It is not a failure, and it is always better than a guess.
+Leaving a failure unaddressed is not a failure.
+Leaving a failure unaddressed is always better than a guess.
 
 `,
     },

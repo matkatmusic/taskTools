@@ -1,7 +1,8 @@
 // Ported to pipeline-reviewTests/CODEX_REVIEWS_TESTS.ts; stays live until AgentPromptEmitter.ts migrates too.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
 import { getAttemptCount, getCurrentTaskRun } from "./taskRunState.ts";
@@ -240,7 +241,8 @@ export const REVIEW_QUESTION_SECTIONS: ReviewQuestionSection[] = [
     {
         name: "HEADER: review",
         when: (c) => !c.isRecheck,
-        render: (v) => `You are a read-only review agent tasked with reviewing the tests written for task ${v.number}.
+        render: (v) => `You are a read-only review agent.
+Your job is to review the tests written for task ${v.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
@@ -249,7 +251,8 @@ Your sandbox is read-only, so any attempt to write one fails.
     {
         name: "HEADER: recheck",
         when: (c) => c.isRecheck,
-        render: (v) => `You are a read-only review agent rechecking the tests written for task ${v.number}.
+        render: (v) => `You are a read-only review agent.
+Your job is to recheck the tests written for task ${v.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
@@ -280,7 +283,8 @@ If any required file is missing or unreadable, return only the following JSON:
 ${v.errorTemplate}
 \`\`\`
 This error response overrides the normal review-tests JSON template.
-Leave \`"issues"\` and \`"testsThatHoldUp"\` empty.
+Set \`"issues"\` to \`[]\` in that JSON.
+Set \`"testsThatHoldUp"\` to \`[]\` in that JSON.
 
 `,
     },
@@ -311,7 +315,7 @@ ${v.reviewedPathsWithReviewFileList}
 
 - (none)
 
-A test in that list existed before this task.
+A test listed above existed before this task.
 Flag it only when this task's diff broke it, never for asserting something this task did not ask for.
 
 `,
@@ -323,7 +327,7 @@ Flag it only when this task's diff broke it, never for asserting something this 
 
 ${v.preExistingList}
 
-A test in that list existed before this task.
+A test listed above existed before this task.
 Flag it only when this task's diff broke it, never for asserting something this task did not ask for.
 
 `,
@@ -333,7 +337,8 @@ Flag it only when this task's diff broke it, never for asserting something this 
         when: (c) => !c.isRecheck,
         render: (v) => `## WHAT ALREADY RAN
 
-The task tests ran as \`${v.testCommand}\`, and printed this:
+The task tests ran as \`${v.testCommand}\`.
+They printed this:
 \`\`\`
 ${v.testOutput}
 \`\`\`
@@ -348,7 +353,8 @@ You are still judging what they assert, not whether they pass.
         render: () => `## NEVER RUN THE TESTS
 
 You are judging what each test asserts, not whether the test passes.
-Never run a test, and never run the full suite.
+Never run a test.
+Never run the full suite.
 
 `,
     },
@@ -359,8 +365,11 @@ Never run a test, and never run the full suite.
 
 Judge each test against what \`${v.briefFile}\` and \`${v.planFile}\` asked for.
 
-The brief's \`problemSolvedByTask\` section states the problem this task exists to solve; judge whether the tests prove that problem is solved.
-A task created before that field existed carries no value — the brief then says it is not provided, and you judge against the brief and plan instead.
+The brief's \`problemSolvedByTask\` section states the problem this task exists to solve.
+Judge whether the tests prove that problem is solved.
+A task created before that field existed carries no value.
+The brief then says it is not provided.
+You judge against the brief and plan instead.
 
 Flag a test only when one of these is true:
 - the test asserts something the brief and the plan do not call for, or
@@ -374,7 +383,9 @@ Flag a test only when one of these is true:
         when: (c) => c.isRecheck,
         render: (v) => `## HOW TO JUDGE THE TESTS
 
-\`${v.testReviewFile}\` is the audit you wrote in round one. check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.
+\`${v.testReviewFile}\` is the audit you wrote in round one.
+Check whether ONLY the issues you flagged in the audit were resolved.
+Do not look for new issues in the descriptions.
 
 `,
     },
@@ -399,7 +410,8 @@ Every issue flagged must carry evidence:
 - include the repo-relative path and the exact line numbers you read, as \`tests/thing.test.ts:12-40\`.
 - An issue you cannot evidence does not go in the review.
 
-If a test holds up, say so and move on.
+If a test holds up, say so.
+Move on.
 - "no issues found" is a valid and useful answer, so never manufacture issues to fill the report.
 
 `,
@@ -424,8 +436,9 @@ Return only JSON in the shape given by \`${v.reviewTestsTemplatePath}\`, which y
 
 Write one fix per issue, in the same order.
 Write each fix as an instruction to whoever repairs the test, not as commentary about it.
-Your fixes exist to help the task finish, not to block it: tell the test writer exactly what to change so the tests prove the implementation solves the problem the task is meant to solve.
-Return empty arrays when you found nothing.
+Your fixes exist to help the task finish, not to block it.
+Tell the test writer exactly what to change so the tests prove the implementation solves the problem the task is meant to solve.
+Set \`"issues"\` to \`[]\` when you found none.
 
 `,
     },
@@ -438,7 +451,7 @@ Return only JSON in the shape given by \`${v.reviewTestsTemplatePath}\`, which y
 
 Write one fix only for an audited issue that is still unresolved, in the same order the audit lists them.
 Write each fix as an instruction to whoever repairs the test, not as commentary about it.
-Return empty arrays when every audited issue is resolved.
+Set \`"issues"\` to \`[]\` when every audited issue is resolved.
 
 `,
     },
@@ -621,6 +634,7 @@ const fakeTask: PreparedTask = {
 // reviewTestsQuestion never shells out to git; every combo of its choices renders directly here.
 export function reviewTestsCombos(): Combo[] {
     const combos: Combo[] = [];
+    let reviewQuestionForPrompt = "";
     for (const isRecheck of [false, true]) {
         for (const hasPreExistingTestFiles of [false, true]) {
             const choices: ReviewQuestionChoices = { isRecheck, hasPreExistingTestFiles };
@@ -640,10 +654,23 @@ export function reviewTestsCombos(): Combo[] {
                 reviewTestsTemplatePath: REVIEW_TESTS_TEMPLATE_PATH,
             };
             const name = `reviewTestsQuestion_recheck-${isRecheck}_preExisting-${hasPreExistingTestFiles}`;
-            combos.push({ name, skeleton: reviewTestsQuestionSkeleton(choices), rendered: renderReviewQuestionSections(choices, vars) });
+            const rendered = renderReviewQuestionSections(choices, vars);
+            combos.push({ name, skeleton: reviewTestsQuestionSkeleton(choices), rendered });
+            // No git or test run here, so reuse this rendering as reviewTestsPrompt's stand-in.
+            if (!isRecheck && !hasPreExistingTestFiles) reviewQuestionForPrompt = rendered;
         }
     }
-    // reviewTestsPrompt shells out to git (writeImplementationDiff); only its skeleton renders here, never its rendered text.
-    combos.push({ name: "reviewTestsPrompt_skeleton-only", skeleton: reviewTestsPromptSkeleton(reviewTestsPromptChoices()), rendered: "" });
+    process.env.RUN_STEP_LOG ??= join(tmpdir(), "review-tests-prompt-combos-run-log.json");
+    const promptRenderVars: ReviewTestsPromptVars = {
+        spawnHeader: spawnAgentHeader("review", true),
+        reviewQuestion: reviewQuestionForPrompt,
+        testReviewFile: fakeTask.testReviewFile,
+        codexLogFile: codexLogFile(),
+        codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),
+        spawnClaudeFableCli: spawnClaudeFableCli("medium"),
+        spawnClaudeOpus48Cli: spawnClaudeOpus48Cli("high"),
+        whatToReturn: whatToReturnSection(`{ "reviewFile": "${fakeTask.testReviewFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable."),
+    };
+    combos.push({ name: "reviewTestsPrompt_skeleton-only", skeleton: reviewTestsPromptSkeleton(reviewTestsPromptChoices()), rendered: renderReviewTestsPromptSections(reviewTestsPromptChoices(), promptRenderVars) });
     return combos;
 }

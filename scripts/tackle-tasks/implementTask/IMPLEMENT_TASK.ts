@@ -135,6 +135,7 @@ export type ImplementChoices = { hasCodexNotes: boolean; testsField: "skip" | "t
 export type ImplementVars = {
     number: string;
     repoRoot: string;
+    planFile: string;
     codexNotes: string;
     readFileArgs: string;
     absolutePaths: string;
@@ -152,17 +153,16 @@ export const IMPLEMENT_SECTIONS: ImplementSection[] = [
     {
         name: "NOTE FOR THIS RUN",
         when: (c) => c.hasCodexNotes,
-        render: (v) => `
-## NOTE FOR THIS RUN
+        render: (v) => `## NOTE FOR THIS RUN
 
 ${v.codexNotes}
+
 `,
     },
     {
         name: "YOUR JOB",
         when: () => true,
-        render: (v) => `
-## YOUR JOB
+        render: (v) => `## YOUR JOB
 
 You are implementing exactly one pre-planned task, task ${v.number}, inside the worktree \`${v.repoRoot}\`.
 The plan is already written and already reviewed.
@@ -171,27 +171,45 @@ Decide nothing the plan already decided.
 `,
     },
     {
+        name: "BEFORE YOU IMPLEMENT",
+        when: () => true,
+        render: (v) => `## BEFORE YOU IMPLEMENT
+
+invoke this skill exactly:
+\`\`\`
+/ponytail ultra
+\`\`\`
+
+then
+
+invoke this skill exactly:
+\`\`\`
+/jot:implement ${v.planFile}
+\`\`\`
+
+`,
+    },
+    {
         name: "WHAT TO READ",
         when: () => true,
+        // Retired: "Run this, which puts..." phrasing; now uses the rule-5 skill-invocation shape.
         render: (v) => `## WHAT TO READ
 
-Run this, which puts the brief, the plan, the files this task owns, and the guides you must follow into your context:
+invoke this skill exactly:
 \`\`\`
 /read-file ${v.readFileArgs}
 \`\`\`
+puts the brief, the plan, the files this task owns, and the guides you must follow into your context.
 
 `,
     },
     {
         name: "OBEY THE REVIEW NOTES",
         when: () => true,
+        // Retired: 3 overlapping codexNotes sentences, folded into the line below.
         render: (v) => `## OBEY THE REVIEW NOTES
 
-Every section of the plan carries a \`codexNotes\` field.
-An empty \`codexNotes\` means the section stands as written.
-
-If a section's \`codexNotes\` is not empty, a reviewer wrote a required fix for that section.
-When a \`codexNotes\` field is not empty, do what the field says while you implement that section.
+Do not ignore, and instead follow, any non-empty \`codexNotes\` field in each section of the plan.
 
 ${v.absolutePaths}
 
@@ -228,7 +246,9 @@ this task does not require any tests to be created.
 
 Each owned file is paired with \`tests/<its base name>.test.ts\`.
 The paired files that already exist are in your context from the read-file skill above.
-Import \`test\` from \`node:test\` and \`assert\` from \`node:assert\`; never import from \`bun:test\`.
+Import \`test\` from \`node:test\`.
+Import \`assert\` from \`node:assert\`.
+Never import from \`bun:test\`.
 Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.
 
 `,
@@ -239,38 +259,43 @@ Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that sat
         render: (v) => `## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
-2. Run \`${v.rootedTypecheck}\` and fix every error it reports in the paths you own.
+2. Run \`${v.rootedTypecheck}\`.
+Fix every error it reports in the paths you own.
 3. Run each paired test file with \`(cd -- '${v.repoRoot}' && node --test <absolute test path>)\`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3. Stop after ${v.maxFixRounds} rounds.
+4. While any test fails, fix the cause, then repeat steps 2 and 3.
+Stop after ${v.maxFixRounds} rounds.
 
-Never run the full suite. That gate belongs to a separate phase, not to you.
-
-`,
-    },
-    {
-        name: "KEEP AN IMPLEMENTATION LOG",
-        when: () => true,
-        render: (v) => `## KEEP AN IMPLEMENTATION LOG
-
-Write a running log to exactly \`${v.notesFile}\`, and update it as you work.
-Record only what the plan does not already say, under these four headings:
-- Design decisions: a choice you made where the plan was ambiguous.
-- Deviations: a place you departed from the plan, and why.
-- Tradeoffs: an alternative you considered, and why you rejected it.
-- Open questions: anything the user should confirm.
-
-Stamp each entry with an ISO date and time.
-You have no user to ask, so never stop and wait for an answer.
-An open question that blocks the plan is a reason to return \`implemented: false\`, not a reason to guess.
+Never run the full suite.
+That gate belongs to a separate phase, not to you.
 
 `,
     },
+    // Retired: replaced by the /jot:implement invocation under BEFORE YOU IMPLEMENT.
+    // {
+    //     name: "KEEP AN IMPLEMENTATION LOG",
+    //     when: () => true,
+    //     render: (v) => `## KEEP AN IMPLEMENTATION LOG
+    //
+    // Write a running log to exactly \`${v.notesFile}\`, and update it as you work.
+    // Record only what the plan does not already say, under these four headings:
+    // - Design decisions: a choice you made where the plan was ambiguous.
+    // - Deviations: a place you departed from the plan, and why.
+    // - Tradeoffs: an alternative you considered, and why you rejected it.
+    // - Open questions: anything the user should confirm.
+    //
+    // Stamp each entry with an ISO date and time.
+    // You have no user to ask, so never stop and wait for an answer.
+    // An open question that blocks the plan is a reason to return \`implemented: false\`, not a reason to guess.
+    //
+    // `,
+    // },
     {
         name: "NEVER COMMIT",
         when: () => true,
         render: () => `## NEVER COMMIT
 
-Never stage, commit, or run any git command. A later step commits your work for you.
+Never stage, commit, or run any git command.
+A later step commits your work for you.
 
 `,
     },
@@ -286,7 +311,8 @@ You are forbidden from doing any of the following actions:
 - run the full suite;
 - stage or commit anything, or run any git command;
 - attempt more than ${v.maxFixRounds} fix rounds;
-- return \`implemented: true\` while a test fails or the typecheck reports an error. A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.
+- return \`implemented: true\` while a test fails or the typecheck reports an error.
+A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
 
@@ -309,6 +335,7 @@ export function implementChoices(t: PreparedTask): ImplementChoices {
 export const IMPLEMENT_SKELETON_VARS: ImplementVars = {
     number: "`${t.number}`",
     repoRoot: "`${t.repoRoot}`",
+    planFile: "`${t.planFile}`",
     codexNotes: "`${t.codexReviewNotes.trim()}`",
     readFileArgs: '`${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`',
     absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
@@ -333,6 +360,7 @@ export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, 
     return renderImplementSections(implementChoices(t), {
         number: String(t.number),
         repoRoot: t.repoRoot,
+        planFile: t.planFile,
         codexNotes: t.codexReviewNotes.trim(),
         readFileArgs: readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")]),
         absolutePaths: absolutePathsSection(t.repoRoot),

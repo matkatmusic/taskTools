@@ -121,7 +121,7 @@ test("test_reviewTestsPrompt_capsCodexExecWithAPerlAlarm", () => {
 });
 
 test("test_reviewTestsPrompt_forbidsRunningTheTests", () => {
-    assert.match(reviewTestsPrompt(fakeTask), /Never run a test, and never run the full suite\./);
+    assert.match(reviewTestsPrompt(fakeTask), /Never run a test\.\s*Never run the full suite\./);
 });
 
 test("test_reviewTestsPrompt_carriesOneQuestionOnly", () => {
@@ -142,7 +142,7 @@ test("test_reviewTestsPrompt_writesTheImplementationDiffAndNamesItForTheReviewer
 test("test_reviewTestsPrompt_separatesTestsThisTaskDidNotCreate", () => {
     const prompt = reviewTestsPrompt(makeTaskFixture());
     assert.match(prompt, /## TESTS THIS TASK DID NOT CREATE\n\n- tests\/older\.test\.ts/);
-    assert.equal(prompt.includes("- tests/thing.test.ts\n\nA test in that list"), false);
+    assert.equal(prompt.includes("- tests/thing.test.ts\n\nA test listed above"), false);
 });
 
 test("test_reviewTestsPrompt_carriesTheTestCommandAndItsRecordedOutput", () => {
@@ -160,10 +160,10 @@ test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
 
 test("test_reviewTestsQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
     const skeleton = reviewTestsQuestionSkeleton({ isRecheck: false, hasPreExistingTestFiles: true });
-    for (const header of ["reviewing the tests written for task", "## STRICT INPUT ALLOWLIST", "## MISSING-FILE RESPONSE", "## WHAT YOU READ", "## TESTS THIS TASK DID NOT CREATE", "## WHAT ALREADY RAN", "## NEVER RUN THE TESTS", "## HOW TO JUDGE THE TESTS", "## DO NOT FLAG", "## DOCUMENTING EVIDENCE", "## WHAT YOU, THE REVIEWING AGENT, RETURNS", "## WHAT TO OUTPUT"]) {
+    for (const header of ["review the tests written for task", "## STRICT INPUT ALLOWLIST", "## MISSING-FILE RESPONSE", "## WHAT YOU READ", "## TESTS THIS TASK DID NOT CREATE", "## WHAT ALREADY RAN", "## NEVER RUN THE TESTS", "## HOW TO JUDGE THE TESTS", "## DO NOT FLAG", "## DOCUMENTING EVIDENCE", "## WHAT YOU, THE REVIEWING AGENT, RETURNS", "## WHAT TO OUTPUT"]) {
         assert.ok(skeleton.includes(header), `missing "${header}"`);
     }
-    assert.equal(skeleton.includes("rechecking the tests written for task"), false);
+    assert.equal(skeleton.includes("recheck the tests written for task"), false);
     assert.equal(skeleton.includes("- (none)"), false);
     assert.equal(skeleton.includes("audit you wrote in round one"), false);
 });
