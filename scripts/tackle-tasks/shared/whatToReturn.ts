@@ -17,7 +17,8 @@ TTANSWER
 Never edit the packet file by hand; the script keeps the keys already there and fails loudly when the object is not valid JSON.
 3. Only after step 2 is done, return the hook output verbatim.
 
-If the command above could not be run at all, write that same shape anyway. ${explanationOfReturnShape}`.trimEnd();
+If the command above could not be run at all, write that same shape anyway.
+${explanationOfReturnShape}`.trimEnd();
 }
 
 // The section a spawned `claude -p` ends with; it prints JSON that the spawning agent copies into the packet.

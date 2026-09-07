@@ -1,17 +1,20 @@
 ## YOUR JOB
 
-Fix the cause of every failure listed under FAILING SUITE OUTPUT, and change nothing else.
+You are repairing the codebase, never the suite.
 
 The full test suite in the worktree `/tmp/fake-worktree` is red.
-You are repairing the codebase, never the suite.
 A test that fails is reporting a real defect until you have proved otherwise.
+
+Fix the cause of every failure listed under FAILING SUITE OUTPUT.
+Change nothing else.
 
 ## WHAT TO READ
 
-Run this, which puts the files into your context without spending a Read tool call, so you can read them all at once:
+invoke this skill exactly:
 ```
 /read-file "/tmp/fake-worktree/a.ts" "/tmp/fake-worktree/tests/a.test.ts"
 ```
+The skill puts the owned files and the test files into your context without spending a Read tool call.
 
 You may read any other file, anywhere in the tree, to understand a failure: callers, callees, tests, other layers.
 
@@ -25,19 +28,15 @@ Every shell command must run inside `/tmp/fake-worktree`.
 
 - `/tmp/fake-worktree/a.ts`
 
-This list is complete.
-Every other path in the tree belongs to another task, including every test file.
-
-If fixing the cause needs an edit outside this list, make no edit at all and say so.
-
-
+If fixing the cause needs an edit outside the WHAT YOU MAY EDIT list, make no edit at all and say so.
 
 ## HOW TO FIX
 
-1. Read the failing suite output below and name the single defect behind each failure.
-2. Fix that defect in the paths listed above.
-3. Re-run only the individual test that failed, with `node --test <absolute test path>`, run inside `/tmp/fake-worktree`.
-4. Repeat until every listed failure is addressed.
+1. Read the failing suite output below.
+2. Name the single defect behind each failure.
+3. Fix that defect in the paths listed above.
+4. Re-run only the individual test that failed, with `node --test <absolute test path>`, run inside `/tmp/fake-worktree`.
+5. Repeat until every listed failure is addressed.
 
 ## FORBIDDEN ACTIONS
 
@@ -51,7 +50,8 @@ You are forbidden from doing any of the following actions:
 - force-push or hard-reset anything you did not create.
 
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
-It is not a failure, and it is always better than a guess.
+Leaving a failure unaddressed is not a failure.
+Leaving a failure unaddressed is always better than a guess.
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 

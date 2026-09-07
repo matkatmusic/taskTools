@@ -1,9 +1,17 @@
 You are spawning a review agent running in the CLI.
-You do not edit any files. Your job is to run the following command. The command runs a review agent.
+You do not edit any files.
+Your job is to run the following command.
+The command runs a review agent.
 
 ## THE COMMAND
 
-Run the following multi-line command using Bash(), verbatim, as one single call. It can take many minutes; wait for it rather than abandoning it. `</dev/null` matters — codex hangs forever waiting on stdin without it. `-o` keeps codex from mixing its banner into the answer, and `--output-schema` makes it bare JSON.
+Run the following multi-line command using Bash(), verbatim, as one single call.
+It can take many minutes.
+Wait for it rather than abandoning it.
+`</dev/null` matters.
+Codex hangs forever waiting on stdin without it.
+`-o` keeps codex from mixing its banner into the answer.
+`--output-schema` makes it bare JSON.
 
 ````sh
 REVIEW_PROMPT=$(cat <<'REVIEWEOF'
@@ -58,8 +66,11 @@ Work assigned to a named sibling or blocker above is out of scope for task 99 an
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
 Verify every assertion against the source file it is about, never against what the plan says about it.
 
-The brief's `problemSolvedByTask` section states the problem this task exists to solve; judge whether the plan solves that problem.
-A task created before that field existed carries no value — the brief then says it is not provided, and you judge against the brief's description instead.
+The brief's `problemSolvedByTask` section states the problem this task exists to solve.
+Judge whether the plan solves that problem.
+A task created before that field existed carries no value.
+The brief then says it is not provided.
+You judge against the brief's description instead.
 
 The plan is good enough when an implementer could follow the plan without deciding anything the plan should have already decided: 
 - every edit names its file and line numbers with the old and new text, 
@@ -89,32 +100,37 @@ Every issue flagged must carry evidence:
 If a section holds up, say so and move on.
 - "no issues found" is a valid and useful answer, so never manufacture issues to fill the report.
 
-## WHAT YOU, THE REVIEWING AGENT, RETURNS
-
-Return only JSON in the shape given by `/Users/matkatmusicllc/Programming/taskTools-86/plans/review-plan-template.json`, which you read above,
-replacing every <...> with a real value.
-
-Write one fix per issue, in the same order. 
-Every `sectionId` must be an `id` the plan actually uses. 
-Write each fix as an instruction to whoever repairs the plan, not as commentary about it.
-Your fixes exist to help the task finish, not to block it: tell the planner exactly what to change so the plan proves the implementation solves the problem the task is meant to solve.
-Return empty arrays when you found nothing.
-
 ## A REJECTION IS YOUR FAILURE
 
-You have no reject verdict: your fix count is the verdict. Five or more fixes force a full rewrite round.
-A fix the planner cannot apply exactly as written stalls the task without moving it — that is you failing your job, not the planner failing theirs.
-When you believe the whole approach is wrong, say so as ONE fix stating the approach to take instead, never as a pile of fixes that buys a round but gives no direction.  The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
+You have no reject verdict.
+Your fix count is the verdict.
+Five or more fixes force a full rewrite round.
+A fix the planner cannot apply exactly as written stalls the task without moving it.
+That is you failing your job, not the planner failing theirs.
+When you believe the whole approach is wrong, say so as ONE fix stating the approach to take instead, never as a pile of fixes that buys a round but gives no direction.
+The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
 
-## WHAT TO OUTPUT 
+## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
-Print the JSON as your final message and nothing else. The command that runs you captures that
-message to `/tmp/fake-worktree/plans/codex-review.json`, so do not try to write the file yourself.
+Return only JSON in the shape given by `/Users/matkatmusicllc/Programming/taskTools-86/plans/review-plan-template.json`, which you read above, replacing every <...> with a real value.
+
+Write one fix per issue, in the same order.
+Every `sectionId` must be an `id` the plan actually uses.
+Write each fix as an instruction to whoever repairs the plan, not as commentary about it.
+Your fixes exist to help the task finish, not to block it.
+Tell the planner exactly what to change so the plan proves the implementation solves the problem the task is meant to solve.
+Return empty arrays when you found nothing.
+
+## WHAT TO OUTPUT
+
+Print the JSON as your final message and nothing else.
+The command that runs you captures that message to `/tmp/fake-worktree/plans/codex-review.json`.
+Do not try to write the file yourself.
 
 REVIEWEOF
 )
 REVIEW_FILE=/tmp/fake-worktree/plans/codex-review.json
-CODEX_LOG=/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/codex-review-prompt-combos-codex-review.log
+CODEX_LOG=/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/review-tests-prompt-combos-codex-review.log
 
 perl -e 'alarm shift; exec @ARGV' 300 \
   codex exec \
@@ -142,4 +158,5 @@ TTANSWER
 Never edit the packet file by hand; the script keeps the keys already there and fails loudly when the object is not valid JSON.
 3. Only after step 2 is done, return the hook output verbatim.
 
-If the command above could not be run at all, write that same shape anyway. The next block reads the file and fails loudly when it is missing or unusable.
+If the command above could not be run at all, write that same shape anyway.
+The next block reads the file and fails loudly when it is missing or unusable.

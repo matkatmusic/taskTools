@@ -146,9 +146,7 @@ ${v.ownedPaths}
 
 If fixing the cause needs an edit outside the WHAT YOU MAY EDIT list, make no edit at all and say so.
 
-${v.resumedRun}
-
-`,
+${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
     },
     {
         name: "HOW TO FIX",

@@ -1,6 +1,6 @@
 %% How buildFixTaskTestsPrompt picks its sections. No choices branch this prompt; every section always renders.
-flowchart LR
+flowchart TD
     prepared[/prepared: PreparedTask/] --> ALWAYS
-    ALWAYS["YOUR JOB<br>WHAT TO READ<br>WHAT YOU MAY EDIT (absolutePathsSection, resumedRunSection)<br>HOW TO FIX<br>FORBIDDEN ACTIONS"]
-    ALWAYS --> RETURN["WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)"]
-    RETURN --> FAILING["FAILING TASK TESTS (prepared.codexReviewNotes)"]
+    ALWAYS["#60;YOUR JOB#62;<br>#60;WHAT TO READ#62;<br>#60;WHAT YOU MAY EDIT (absolutePathsSection, resumedRunSection)#62;<br>#60;HOW TO FIX#62;<br>#60;FORBIDDEN ACTIONS#62;"]
+    ALWAYS --> RETURN["#60;WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)#62;"]
+    RETURN --> FAILING["#60;FAILING TASK TESTS (prepared.codexReviewNotes)#62;"]

@@ -199,7 +199,7 @@ invoke this skill exactly:
 \`\`\`
 /read-file ${v.readFileArgs}
 \`\`\`
-puts the brief, the plan, the files this task owns, and the guides you must follow into your context.
+The skill puts the brief, the plan, the files this task owns, and the guides you must follow into your context.
 
 `,
     },
@@ -226,16 +226,14 @@ ${v.ownedPathMap}
 
 You are forbidden from editing any other file not listed above.
 
-${v.resumedRun}
-
-`,
+${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
     },
     {
         name: "TESTS: skip",
         when: (c) => c.testsField === "skip",
         render: () => `## DO NOT CREATE TESTS
 
-this task does not require any tests to be created.
+This task does not require any tests to be created.
 
 `,
     },

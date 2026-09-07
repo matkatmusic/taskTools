@@ -295,7 +295,8 @@ Set \`"testsThatHoldUp"\` to \`[]\` in that JSON.
 
 ${v.reviewedPathsList}
 
-\`${v.diffPath}\` is what this task changed. Judge each test against that diff, never against the whole file it sits in.
+\`${v.diffPath}\` is what this task changed.
+Judge each test against that diff, never against the whole file it sits in.
 
 `,
     },

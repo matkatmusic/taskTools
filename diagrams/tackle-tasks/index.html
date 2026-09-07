@@ -57,13 +57,13 @@
     ['pipeline-reportOnlyExit.mmd', 'report only exit'],
     ['pipeline-failuresExit.mmd', 'failures exit'],
     ['pipeline-mergeSucceededExit.mmd', 'merge succeeded exit'],
-    ['../prompts/planPrompt.mmd', 'prompt: planPrompt'],
-    ['../prompts/FixConflictsBodyEmitter.mmd', 'prompt: fixConflicts'],
-    ['../prompts/CodexTestReviewBodyEmitter.mmd', 'prompt: reviewTests'],
-    ['../prompts/CodexReviewBodyEmitter.mmd', 'prompt: reviewPlan'],
-    ['../prompts/IMPLEMENT_TASK.mmd', 'prompt: implementTask'],
-    ['../prompts/FIX_IMPLEMENT_TASK_TESTS.mmd', 'prompt: fixTaskTests'],
-    ['../prompts/FIX_THE_CODEBASE_FOR_SUITE.mmd', 'prompt: suiteFix'],
+    ['prompts/planPrompt.mmd', 'prompt: planPrompt'],
+    ['prompts/FixConflictsBodyEmitter.mmd', 'prompt: fixConflicts'],
+    ['prompts/CodexTestReviewBodyEmitter.mmd', 'prompt: reviewTests'],
+    ['prompts/CodexReviewBodyEmitter.mmd', 'prompt: reviewPlan'],
+    ['prompts/IMPLEMENT_TASK.mmd', 'prompt: implementTask'],
+    ['prompts/FIX_IMPLEMENT_TASK_TESTS.mmd', 'prompt: fixTaskTests'],
+    ['prompts/FIX_THE_CODEBASE_FOR_SUITE.mmd', 'prompt: suiteFix'],
   ].map(([href, label]) =>
     `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
   let last = null

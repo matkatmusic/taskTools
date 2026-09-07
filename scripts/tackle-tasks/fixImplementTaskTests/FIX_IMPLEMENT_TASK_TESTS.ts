@@ -144,9 +144,7 @@ Every other path in the tree belongs to another task.
 If fixing the cause needs an edit outside the file paths listed above, make no edit at all.
 Say so.
 
-${v.resumedRun}
-
-`,
+${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
     },
     {
         name: "HOW TO FIX",

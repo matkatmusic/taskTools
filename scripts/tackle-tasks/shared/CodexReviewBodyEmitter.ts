@@ -469,6 +469,21 @@ Every issue flagged must carry evidence:
 `,
     },
     {
+        name: "A REJECTION IS YOUR FAILURE",
+        when: (c) => c.variant === "reviewByDefault",
+        render: () => `## A REJECTION IS YOUR FAILURE
+
+You have no reject verdict.
+Your fix count is the verdict.
+Five or more fixes force a full rewrite round.
+A fix the planner cannot apply exactly as written stalls the task without moving it.
+That is you failing your job, not the planner failing theirs.
+When you believe the whole approach is wrong, say so as ONE fix stating the approach to take instead, never as a pile of fixes that buys a round but gives no direction.
+The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
+
+`,
+    },
+    {
         name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: approve",
         when: (c) => c.variant === "approve",
         render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
@@ -513,8 +528,8 @@ Return empty arrays when every audited issue is resolved.
         render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
-The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
-
+The command that runs you captures that message to \`${v.reviewOutputFile}\`.
+Do not try to write the file yourself.
 `,
     },
     {
@@ -523,7 +538,8 @@ The command that runs you captures that message to \`${v.reviewOutputFile}\`, so
         render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
-The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
+The command that runs you captures that message to \`${v.reviewOutputFile}\`.
+Do not try to write the file yourself.
 `,
     },
     {
@@ -532,7 +548,8 @@ The command that runs you captures that message to \`${v.reviewOutputFile}\`, so
         render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
-The command that runs you captures that message to \`${v.reviewOutputFile}\`, so do not try to write the file yourself.
+The command that runs you captures that message to \`${v.reviewOutputFile}\`.
+Do not try to write the file yourself.
 `,
     },
 ];

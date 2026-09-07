@@ -35,13 +35,17 @@ export function claudeCliCommand(): string {
 
 // The header every spawning prompt starts with; the sh block that runs the agent follows it.
 export function spawnAgentHeader(agentType: string, isCodex: boolean): string {
-    const codexSentence = " `</dev/null` matters — codex hangs forever waiting on stdin without it. `-o` keeps codex from mixing its banner into the answer, and `--output-schema` makes it bare JSON.";
+    const codexSentence = "\n`</dev/null` matters.\nCodex hangs forever waiting on stdin without it.\n`-o` keeps codex from mixing its banner into the answer.\n`--output-schema` makes it bare JSON.";
     return `You are spawning a ${agentType} agent running in the CLI.
-You do not edit any files. Your job is to run the following command. The command runs a ${agentType} agent.
+You do not edit any files.
+Your job is to run the following command.
+The command runs a ${agentType} agent.
 
 ## THE COMMAND
 
-Run the following multi-line command using Bash(), verbatim, as one single call. It can take many minutes; wait for it rather than abandoning it.${isCodex ? codexSentence : ""}`;
+Run the following multi-line command using Bash(), verbatim, as one single call.
+It can take many minutes.
+Wait for it rather than abandoning it.${isCodex ? codexSentence : ""}`;
 }
 
 export function spawnClaudeCliPrompt(box: string, worktree: string, promptFile: string, value: string): string {

@@ -27,7 +27,9 @@ Leave `"issues"`, `"fixes"` and `"sectionsThatHoldUp"` empty.
 
 ## HOW TO JUDGE THE PLAN
 
-``${t.reviewOutputFile}`` is the audit you wrote in round one. check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions.
+``${t.reviewOutputFile}`` is the audit you wrote in round one.
+Check to see if ONLY the issues you flagged in the audit were resolved.
+Do not look for new issues in the descriptions.
 
 ## DOCUMENTING EVIDENCE
 
@@ -38,8 +40,7 @@ Every issue flagged must carry evidence:
 
 ## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
-Return only JSON in the shape given by ``${REVIEW_PLAN_TEMPLATE_PATH}``, which you read above,
-replacing every <...> with a real value.
+Return only JSON in the shape given by ``${REVIEW_PLAN_TEMPLATE_PATH}``, which you read above, replacing every <...> with a real value.
 
 Write one fix only for an audited issue that is still unresolved, in the same order the audit lists them.
 Every `sectionId` must be an `id` the plan actually uses.
@@ -48,5 +49,6 @@ Return empty arrays when every audited issue is resolved.
 
 ## WHAT TO OUTPUT
 
-Print the JSON as your final message and nothing else. The command that runs you captures that
-message to ``${t.reviewOutputFile}``, so do not try to write the file yourself.
+Print the JSON as your final message and nothing else.
+The command that runs you captures that message to ``${t.reviewOutputFile}``.
+Do not try to write the file yourself.

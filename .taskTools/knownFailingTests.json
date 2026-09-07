@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "file": "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.test.ts",
+    "name": "test_buildImplementPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/CodexReviewBodyEmitter.test.ts",
+    "name": "test_reviewByDefaultPrompt_usesAdversarialLanguageWhenTheDifficultyIsAtLeast7"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.test.ts",
+    "name": "test_reviewTestsPrompt_forbidsRunningTheTests"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/CodexTestReviewBodyEmitter.test.ts",
+    "name": "test_reviewTestsQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn"
+  }
+]
