@@ -29,7 +29,7 @@ function seedActiveTaskWithBrief(rootOrigin: string, worktree: string, taskNumbe
     writeFileSync(join(worktree, `plans/brief-${taskNumber}.md`), "brief\n");
 }
 
-test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", () => {
+test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", async () => {
     const rootOrigin = makeCommittedRepo();
     writeFileSync(join(rootOrigin, "package.json"), FIXTURE_PACKAGE_JSON);
     git(rootOrigin, "add", "package.json");
@@ -39,7 +39,7 @@ test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", () => 
     seedActiveTaskWithBrief(rootOrigin, worktree, taskNumber);
 
     const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
-    const output = main(input);
+    const output = await main(input);
 
     assert.equal(output.box, "RUN_FULL_SUITE");
     assert.equal(output.scriptSignal, "continue");
@@ -53,7 +53,7 @@ test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", () => 
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
-test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", () => {
+test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", async () => {
     const rootOrigin = makeCommittedRepo();
     writeFileSync(join(rootOrigin, "package.json"), FIXTURE_PACKAGE_JSON);
     git(rootOrigin, "add", "package.json");
@@ -64,10 +64,10 @@ test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", () => {
 
     const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
 
-    const first = main(input);
+    const first = await main(input);
     const { checkedAt: _checkedAtFirst, ...fullSuiteAfterFirst } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
 
-    const second = main(input);
+    const second = await main(input);
     const { checkedAt: _checkedAtSecond, ...fullSuiteAfterSecond } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
 
     assert.deepEqual(second, first);

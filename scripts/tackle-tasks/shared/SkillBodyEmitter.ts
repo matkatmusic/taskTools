@@ -1,15 +1,57 @@
 // The tackle-tasks skill body: one workflow launch, with the task number and the tasks file the preamble reads.
-import { readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
-import { resolveTaskFiles } from "../../shared/taskFiles.ts";
-import { generateSteps, resolveDiagramFolderSetting } from "../generateSteps.ts";
+import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
+import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
 import { generateWorkflow } from "../generateWorkflow.ts";
+import { resolveAgentOptions } from "./resolveAgentOptions.ts";
 
-const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
-const DEFAULT_STEPS_CONFIG_PATH = fileURLToPath(new URL("../steps.json", import.meta.url));
+// RETIRED (task 10): replaced by taskWorkflowDirectory(tasksFile, taskNumber), computed per task inside skillBody.
+// const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
+// The mutating flag is hand-authored (scripts/generateSteps.ts:182) and only ever carried forward by reading a previous
+// config at the SAME path a task is about to write to. A task's first-ever per-task steps.json has no previous file of
+// its own, so it is seeded from this canonical file first — the plugin's own committed config for the default pipeline.
+const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../diagram-steps.json", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
+
+function isTaskActive(tasksFile: string, taskNumber: number): boolean {
+    const task = readTaskFile(tasksFile).find((entry) => entry.taskNumber === taskNumber);
+    if (task === undefined) {
+        return false;
+    }
+    const run = task.run as { active?: boolean } | undefined;
+    if (run === undefined) {
+        return false;
+    }
+    return run.active === true;
+}
+
+// Reuses an active task's pair untouched to protect checkpoint files; otherwise regenerates fresh from canonical config, preserving hand-authored flags.
+function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFolderSetting: DiagramFolderSetting): { workflowFile: string; stepsConfigPath: string } {
+    const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
+    const stepsConfigPath = join(workflowDirectory, "steps.json");
+    const workflowFile = join(workflowDirectory, "workflow.js");
+    if (isTaskActive(tasksFile, taskNumber)) {
+        if (existsSync(workflowFile)) {
+            if (existsSync(stepsConfigPath)) {
+                return { workflowFile, stepsConfigPath };
+            }
+        }
+    }
+    mkdirSync(workflowDirectory, { recursive: true });
+    if (!existsSync(stepsConfigPath)) {
+        if (existsSync(CANONICAL_STEPS_CONFIG_PATH)) {
+            copyFileSync(CANONICAL_STEPS_CONFIG_PATH, stepsConfigPath);
+        }
+    }
+    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+    resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
+    generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
+    return { workflowFile, stepsConfigPath };
+}
 
 export const skillBody = (argsValue: string, projectRoot: string): string => {
     // `reset N [BLOCK]`: the run-step hook already ran the reset on this prompt and injected its lines above.
@@ -30,17 +72,15 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     }
     */
 
-    // Made fresh on every run, so the shapes in it always match the diagrams on disk.
+    // Regenerated fresh each run to match diagrams on disk, unless ensureTaskWorkflowPair reuses an active task's existing pair untouched.
     const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
-    const stepsConfigPath = process.env.RUN_STEP_CONFIG ?? DEFAULT_STEPS_CONFIG_PATH;
-    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
-    const workflowFile = process.env.RUN_STEP_WORKFLOW_FILE ?? TASK_WORKFLOW_PATH;
-    generateWorkflow(workflowFile);
+    const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
     const startingBlock = parseStartingBlockArgument(argsValue);
     const workflowLines = taskNumbers.map((taskNumber, index) => {
+        const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
         const workflowArgs: Record<string, unknown> = {
             task: taskNumber,
-            tasksFile: resolveTaskFiles(projectRoot).tasksPath,
+            tasksFile,
             // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
         };
         if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
@@ -63,6 +103,7 @@ Never serialize the runs yourself: each run takes the source-repository lock aro
 
 Wait for every launched run's completion notification, then report one line per task in the order given.
 A run that returns \`report\` failed: print its \`report\` verbatim to the user, in a code block, under that task's line.
+A run without \`report\` stopped at an exit: read the file at its \`outcome.payload\`, say its exitType and exitNote under that task's line, then do what the exitNote says.
 `;
 };
 

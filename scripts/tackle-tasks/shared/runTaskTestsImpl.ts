@@ -5,6 +5,7 @@ import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
 import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
+import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../shared/taskTestsRunner.ts";
 
 const MAX_OUTPUT_LENGTH = 8000;
 // const TEST_FILE_PATTERN = /^tests\/.*\.test\.ts$/;
@@ -18,6 +19,8 @@ export type RunTaskTestsOutput = {
     deletedTestFiles: string[];
     missingTests: boolean;
     output: string;
+    newFailingTests: FailingTest[];
+    knownFailingTests: FailingTest[];
 };
 
 function truncateOutput(output: string): string {
@@ -63,28 +66,29 @@ function isTestPath(path: string | undefined): path is string {
     return path !== undefined && TEST_FILE_PATTERN.test(path);
 }
 
-function runNodeTest(checkoutPath: string, relativeTestFiles: string[]): { passed: boolean; output: string } {
-    try {
-        // ponytail: strip NODE_TEST_CONTEXT so a red child suite can't inherit a green parent's test context
-        const { NODE_TEST_CONTEXT: _parentTestContext, ...env } = process.env;
-        const stdout = execFileSync("node", ["--test", ...relativeTestFiles], {
-            cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env,
-        });
-        return { passed: true, output: stdout };
-    } catch (error) {
-        const execError = error as { status?: number | null; stdout?: string; stderr?: string };
-        if (execError.status === undefined || execError.status === null) throw error;
-        return { passed: false, output: `${execError.stdout ?? ""}${execError.stderr ?? ""}` };
-    }
-}
+// function runNodeTest(checkoutPath: string, relativeTestFiles: string[]): { passed: boolean; output: string } {
+//     try {
+//         // ponytail: strip NODE_TEST_CONTEXT so a red child suite can't inherit a green parent's test context
+//         const { NODE_TEST_CONTEXT: _parentTestContext, ...env } = process.env;
+//         const stdout = execFileSync("node", ["--test", ...relativeTestFiles], {
+//             cwd: checkoutPath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env,
+//         });
+//         return { passed: true, output: stdout };
+//     } catch (error) {
+//         const execError = error as { status?: number | null; stdout?: string; stderr?: string };
+//         if (execError.status === undefined || execError.status === null) throw error;
+//         return { passed: false, output: `${execError.stdout ?? ""}${execError.stderr ?? ""}` };
+//     }
+// }
 
-export function runTaskTests(
+export async function runTaskTests(
     taskNumber: number,
     expectedRunId: string,
     worktreePath: string,
     stepId: string,
     projectRoot: string,
-): RunTaskTestsOutput {
+    timeoutMs: number = SUITE_TIMEOUT_MS,
+): Promise<RunTaskTestsOutput> {
     requireAbsolutePath("projectRoot", projectRoot);
     requireAbsolutePath("worktreePath", worktreePath);
     // const baseBranch = execFileSync("git", ["-C", projectRoot, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
@@ -119,6 +123,8 @@ export function runTaskTests(
 
     let passed: boolean;
     let missingTests: boolean;
+    let taskNewFailingTests: FailingTest[] = [];
+    let taskKnownFailingTests: FailingTest[] = [];
     const outputParts: string[] = [];
     if (testFiles.length === 0) {
         missingTests = taskDeclaresTests;
@@ -126,11 +132,23 @@ export function runTaskTests(
         if (missingTests) outputParts.push("the task declares tests but the branch added none");
     } else {
         missingTests = false;
-        const runs = occurrences
-            .filter((occurrence) => relativeTestFilesByOccurrenceId.has(occurrence.occurrenceId))
-            .map((occurrence) => runNodeTest(occurrence.checkoutPath, relativeTestFilesByOccurrenceId.get(occurrence.occurrenceId)!));
-        passed = runs.every((run) => run.passed);
-        outputParts.push(...runs.map((run) => run.output));
+        // ponytail: runs the top-level worktree's suite only; submodule suites are not run here.
+        const suite = await runSuite(worktreePath, timeoutMs);
+        const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
+        const known = readKnownFailingTests(projectRoot);
+        const newFailures = newFailingTests(failing, known);
+        if (suite.timedOut) {
+            passed = false;
+        } else {
+            passed = judgeSuite(suite.allPassing, failing, newFailures);
+        }
+        taskNewFailingTests = newFailures;
+        taskKnownFailingTests = failing.filter((test) => !newFailures.includes(test));
+        outputParts.push(...taskNewFailingTests.map((test) => `new failing test: ${test.file} — ${test.name}`));
+        outputParts.push(...taskKnownFailingTests.map((test) => `known failing test (ignored): ${test.file} — ${test.name}`));
+        if (suite.timedOut) outputParts.push(`the branch's test suite timed out after ${timeoutMs}ms and was killed`);
+        outputParts.push(suite.output);
+        outputParts.push(truncateOutput(suite.log));
     }
 
     // A deleted test is an explicit deterministic red, never an accidental node --test file-not-found on a missing path.
@@ -139,9 +157,12 @@ export function runTaskTests(
         outputParts.push(`the branch deleted test file(s): ${deletedTestFiles.join(", ")}`);
     }
 
-    const output = truncateOutput(outputParts.join("\n"));
+    const output = outputParts.join("\n");
 
-    const result: RunTaskTestsOutput = { stepId, passed, testFiles, createdTestFiles, deletedTestFiles, missingTests, output };
+    const result: RunTaskTestsOutput = {
+        stepId, passed, testFiles, createdTestFiles, deletedTestFiles, missingTests, output,
+        newFailingTests: taskNewFailingTests, knownFailingTests: taskKnownFailingTests,
+    };
     updateCurrentTaskRun(taskNumber, expectedRunId, { taskTests: { ...result, checkedAt: getLocalIsoTimestamp() } }, projectRoot);
     return result;
 }

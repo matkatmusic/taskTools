@@ -13,7 +13,8 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
+            "timeout": 900
           },
           {
             "type": "command",
@@ -50,12 +51,6 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/reflow-comments-post.ts\"",
             "statusMessage": "Reflowing wrapped comments..."
-          },
-          {
-            "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/relatedTests.ts\"",
-            "statusMessage": "Running related tests...",
-            "enabled": true
           }
         ]
       },
@@ -68,7 +63,22 @@
           },
           {
             "type": "command",
-            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\""
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
+            "timeout": 900
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/taskTestsHook.ts\"",
+            "timeout": 600
+          }
+        ]
+      },
+      {
+        "matcher": "Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/workflowLivenessHook.ts\""
           }
         ]
       }
@@ -80,6 +90,12 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/relatedTests.ts\"",
+            "statusMessage": "Running related tests and tsc...",
+            "timeout": 600
           }
         ]
       }
@@ -91,6 +107,11 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepStopHook.ts\"",
+            "statusMessage": "Checking the run-step packet..."
           }
         ]
       }

@@ -55,13 +55,14 @@ test("test_fixConflictsPrompt_throwsWhenNoRebaseIsStopped", () => {
     assert.throws(() => fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main"), /no unmerged paths/);
 });
 
-test("test_fixConflictsPrompt_endsWithTheSharedWhatToReturnSectionAndCarriesNoDataBlock", () => {
+test("test_fixConflictsPrompt_endsWithTheSharedWhatToReturnSectionCarryingTheConflictReceiptShape", () => {
     // The old prompt returned its shape from a trailing DATA block full of ALL_CAPS placeholders.
     const prompt = fixConflictsPrompt(makeConflictedRepo(), 99, "/tmp/fake-project-root", "run-1", "main");
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/\b(CHECKOUT_PATH|CONFLICTED_PATHS)\b/.test(prompt), false);
-    assert.match(prompt, /## WHAT YOU PRINT/);
-    assert.match(prompt, /Print `\{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \}` as your final message and nothing else, replacing every `<\.\.\.>` with a real value\./);
+    assert.match(prompt, /## WHAT YOU, THE SPAWNING AGENT, RETURNS/);
+    assert.match(prompt, /"message": "", "additionalData": \{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \}/);
+    assert.equal(/## WHAT YOU PRINT/.test(prompt), false);
 });
 
 test("test_fixConflictsPrompt_forbidsDrivingTheRebaseItself", () => {

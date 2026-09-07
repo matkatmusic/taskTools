@@ -29,31 +29,33 @@ const fakeTask: PreparedTask = {
 
 test("test_planPrompt_isUnchangedWhenNoNewPayloadFieldsArePresent", () => {
     const prompt = planPrompt(fakeTask);
-    assert.equal(prompt, planPrompt(fakeTask, {}));
+    // Retired (task 11): planPrompt no longer takes a second argument to compare against.
+    // assert.equal(prompt, planPrompt(fakeTask, {}));
     assert.ok(prompt.startsWith("## YOUR JOB"));
     for (const marker of ["writeClarifyRequest.ts", "recordPlanReview.ts", "updateTaskDocs.ts", "TTCLARIFY", "TTREVIEW", "TTDOCS"]) {
         assert.equal(prompt.includes(marker), false, `unexpected "${marker}" in a default prompt`);
     }
 });
 
-test("test_planPrompt_prependsACommandBlockPerPresentPayloadField", () => {
-    const clarifyPrompt = planPrompt(fakeTask, { clarifyRequest: "need the migration file" });
-    assert.match(clarifyPrompt, /node \S*writeClarifyRequest\.ts <<'TTCLARIFY'/);
-    assert.ok(clarifyPrompt.indexOf("TTCLARIFY") < clarifyPrompt.indexOf("## YOUR JOB"));
-
-    const review = { outcome: "OK" as const, missingFiles: [], message: "", issues: [], fixes: [], sectionsThatHoldUp: [] };
-    const reviewPrompt = planPrompt(fakeTask, { planReview: review });
-    assert.match(reviewPrompt, /node \S*recordPlanReview\.ts .* <<'TTREVIEW'/);
-    assert.ok(reviewPrompt.indexOf("TTREVIEW") < reviewPrompt.indexOf("## YOUR JOB"));
-
-    const docsPrompt = planPrompt(fakeTask, { updateDocs: true });
-    assert.match(docsPrompt, /node \S*updateTaskDocs\.ts <<'TTDOCS'/);
-    assert.ok(docsPrompt.indexOf("TTDOCS") < docsPrompt.indexOf("## YOUR JOB"));
-
-    // A clarify round always re-enters with both fields set, so the order must be clarify then docs.
-    const combined = planPrompt(fakeTask, { clarifyRequest: "need X", updateDocs: true });
-    assert.ok(combined.indexOf("TTCLARIFY") < combined.indexOf("TTDOCS"));
-});
+// Retired (task 11): planPrompt's extra param (clarifyRequest/planReview/updateDocs) is retired; see planPrompt.ts.
+// test("test_planPrompt_prependsACommandBlockPerPresentPayloadField", () => {
+//     const clarifyPrompt = planPrompt(fakeTask, { clarifyRequest: "need the migration file" });
+//     assert.match(clarifyPrompt, /node \S*writeClarifyRequest\.ts <<'TTCLARIFY'/);
+//     assert.ok(clarifyPrompt.indexOf("TTCLARIFY") < clarifyPrompt.indexOf("## YOUR JOB"));
+//
+//     const review = { outcome: "OK" as const, missingFiles: [], message: "", issues: [], fixes: [], sectionsThatHoldUp: [] };
+//     const reviewPrompt = planPrompt(fakeTask, { planReview: review });
+//     assert.match(reviewPrompt, /node \S*recordPlanReview\.ts .* <<'TTREVIEW'/);
+//     assert.ok(reviewPrompt.indexOf("TTREVIEW") < reviewPrompt.indexOf("## YOUR JOB"));
+//
+//     const docsPrompt = planPrompt(fakeTask, { updateDocs: true });
+//     assert.match(docsPrompt, /node \S*updateTaskDocs\.ts <<'TTDOCS'/);
+//     assert.ok(docsPrompt.indexOf("TTDOCS") < docsPrompt.indexOf("## YOUR JOB"));
+//
+//     // A clarify round always re-enters with both fields set, so the order must be clarify then docs.
+//     const combined = planPrompt(fakeTask, { clarifyRequest: "need X", updateDocs: true });
+//     assert.ok(combined.indexOf("TTCLARIFY") < combined.indexOf("TTDOCS"));
+// });
 
 test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () => {
     const prompt = planPrompt(fakeTask);

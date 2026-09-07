@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
+import { raiseAttemptCount } from "../shared/taskRunState.ts";
+import { readCheckpoint } from "../shared/checkpoint.ts";
 import type { AreTestsFlaggedPacket } from "./_packet.ts";
 
 type Input = AreTestsFlaggedPacket & { next: string };
@@ -24,6 +26,9 @@ export function main(input: string): Record<string, unknown> {
     const { box: _box, scriptSignal: _scriptSignal, next: _next, flagged: _flagged, notes, ...core } = JSON.parse(input) as Input;
     if (notes.trim() === "") throw new Error("amend-entry: no reviewer notes to write; this box runs only on a flagged review");
     amendEntryWithCodexNotes(core.projectRoot, core.taskNumber, notes);
+    const checkpoint = readCheckpoint(core.worktree);
+    if (checkpoint === null) throw new Error(`AMEND_ENTRY_WITH_CODEX_NOTES: no checkpoint in ${core.worktree}`);
+    raiseAttemptCount(core.taskNumber, core.runId, "testReviews", checkpoint.passId, core.projectRoot);
     return { ...core, box: "AMEND_ENTRY_WITH_CODEX_NOTES", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
 }
 

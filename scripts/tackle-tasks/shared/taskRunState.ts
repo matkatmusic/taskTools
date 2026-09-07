@@ -5,12 +5,14 @@ import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLo
 import { readTaskWorktreeLeaseOwner, withTaskWorktreeLeaseGuard } from "../../shared/prepareTasks.ts";
 import { readTaskFile, resolveTaskFiles, type TaskRecord } from "../../shared/taskFiles.ts";
 import { LEASE_COMPATIBLE_WITH_INTENT, LEASE_INCOMPATIBLE_WITH_INTENT } from "../../shared/resultCodes.ts";
+import type { FailingTest } from "../../shared/taskTestsRunner.ts";
 
 export type TaskExitType =
     | "completed" | "invalid-number" | "already-active" | "blocked"
     | "plan-scrapped" | "tests-red" | "tests-flagged" | "suite-red"
     | "rebase-stuck" | "merge-failed" | "fence-violation" | "run-failed"
-    | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable";
+    | "clarify-stuck" | "agent-failed" | "partially-published" | "not-resumable" | "implementation-incomplete"
+    | "block-failed";
 
 // F2: `stepId` names the logical step that produced this commit. Merge-kind commits omit it.
 export type TaskCommit = { occurrenceId: string; hash: string; kind: "work" | "repair" | "merge"; stepId?: string };
@@ -23,6 +25,8 @@ export type TaskTestResult = {
     missingTests: boolean;
     passed: boolean;
     output: string;
+    newFailingTests: FailingTest[];
+    knownFailingTests: FailingTest[];
     checkedAt: string;
 };
 
@@ -74,6 +78,8 @@ export type TaskRunRecord = {
     attempts?: Record<string, number>;
     // Hook passIds already counted per counter, so a re-run of the same block counts once.
     countedPasses?: Record<string, string[]>;
+    // Where an exit-tail resume continues when the checkpoint is untrusted. Null when done. Set by writeTailCursor, read by findResumeEntry.
+    tailCursor?: { block: string; input: string } | null;
 };
 
 // Every retry in this pipeline caps at two attempts.
@@ -275,7 +281,7 @@ export function claimTask(taskNumber: number, runId: string, projectRoot: string
             const held = current.history[current.history.length - 1] ?? null;
             return { status: "refused", heldByRunId: held?.runId ?? null };
         }
-        // Rule 12: inactive is not the same as claimable. A run that exited completed leaves the task closing until its archive lands.
+        // Rule 12: inactive isn't claimable if the newest run ended completed but its archive hasn't landed yet.
         const newest = current.history[current.history.length - 1];
         if (newest !== undefined && newest.endedAt !== null && newest.exitType === "completed") {
             return { status: "closing" };
@@ -292,7 +298,7 @@ export function claimTask(taskNumber: number, runId: string, projectRoot: string
     });
 }
 
-// Lock order: task-state lock outermost, worktree-lease guard innermost. Every path here — and the reconciliation it runs first — takes them in that order; never the reverse.
+// Lock order: task-state lock outermost, worktree-lease guard innermost, always, even during reconciliation; never reversed.
 export function adoptWorktreeLease(taskNumber: number, runId: string, projectRoot: string): { adopted: boolean } {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     return withTaskStateLock(tasksPath, () => {
@@ -379,7 +385,7 @@ export type LeaseTransitionOutcome =
     | { status: "absent" }
     | { status: "refused-owner-mismatch"; heldByRunId: string };
 
-// F4/F5: the single atomic replacement for "adopt, and if that fails, catch-and-release" — resetTaskWorktree's old dance, which swallowed an owner-mismatch throw and then deleted a worktree another run still legitimately held. Re-reads state inside both guards, so a destructive caller never decides from an unlocked snapshot.  Lease policy (F5): a worktree whose lease names an ENDED run is released here, never silently adopted — this operation is for callers about to reset/discard the worktree, not resume it. Resuming still goes through adoptWorktreeLease. A physical lease that already names expectedRunId is treated as already-adopted (idempotent retry of a half-finished reset). Any other mismatch between tasks.json and the physical lease refuses and mutates nothing, because that disagreement means someone else has a real claim.
+// F4/F5: atomically resets or releases a worktree lease, releasing (not adopting) an ended run's lease, refusing real mismatches.
 export function transitionWorktreeLease(
     taskNumber: number,
     expectedRunId: string,
@@ -422,7 +428,7 @@ export function transitionWorktreeLease(
     });
 }
 
-// F7: the other half of establishing lease ownership — a fresh acquisition rather than an adoption. Only succeeds when the caller's run is the newest active claimant, the task carries a worktree, and no lease currently exists for it. Journals the transition intent before either authority changes, then the physical lease, then tasks.json — the same order and the same reconciliation as adoptWorktreeLease, so a death between the two durable writes is always recoverable instead of stranding the worktree as permanently non-resumable.
+// F7: acquires a fresh, absent lease for the newest active run, journaling intent first like adoptWorktreeLease for crash recovery.
 export function acquireAbsentWorktreeLease(
     taskNumber: number,
     expectedRunId: string,
@@ -488,7 +494,7 @@ export function acquireAbsentWorktreeLease(
     });
 }
 
-// Fences a late writer against a run the workflow has already ended and replaced (rule 11): expectedRunId must name the newest active record, checked inside this same lock window.
+// Rule 11: fences late writers; expectedRunId must name the newest active run, checked inside this lock.
 export function updateCurrentTaskRun(
     taskNumber: number,
     expectedRunId: string,
@@ -520,7 +526,7 @@ export function updateCurrentTaskRun(
     });
 }
 
-// F3/F10: persists a step-result receipt onto the run named by expectedRunId, whether that run is still active or has already ended (releaseTaskRunHolds runs after markTaskInactive, so this must not require `active`). Locates the run by runId anywhere as the newest history entry — same fencing rule as updateCurrentTaskRun — and replaces any prior receipt for the same stepId rather than accumulating duplicates across retries.
+// F3/F10: persists a step receipt on the named run, active or ended, replacing any prior receipt for that stepId.
 export function appendStepResult(
     taskNumber: number,
     expectedRunId: string,
@@ -549,6 +555,31 @@ export function appendStepResult(
     });
 }
 
+// F-tail: saves the resume point. Unlike updateCurrentTaskRun, ignores state.active, since failures-exit may run after inactive.
+export function writeTailCursor(
+    taskNumber: number,
+    expectedRunId: string,
+    cursor: { block: string; input: string } | null,
+    projectRoot: string,
+): TaskRunState {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    return withTaskStateLock(tasksPath, () => {
+        const tasks = readTaskFile(tasksPath) as TaskRecordWithRun[];
+        const task = findTask(tasks, taskNumber);
+        if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+        const state = getRunState(task);
+        const newest = state.history[state.history.length - 1];
+        if (newest === undefined || newest.runId !== expectedRunId) {
+            throw new Error(`task ${taskNumber}'s newest run is not "${expectedRunId}"`);
+        }
+        const nextRecord: TaskRunRecord = { ...newest, tailCursor: cursor };
+        const nextState: TaskRunState = { ...state, history: [...state.history.slice(0, -1), nextRecord] };
+        task.run = nextState;
+        writeJsonAtomically(tasksPath, tasks);
+        return nextState;
+    });
+}
+
 // Reads the current run's counter, or zero when it has never been raised.
 export function getAttemptCount(taskNumber: number, counter: string, projectRoot: string): number {
     const state = readTaskRunState(taskNumber, projectRoot);
@@ -556,7 +587,7 @@ export function getAttemptCount(taskNumber: number, counter: string, projectRoot
     return newest?.attempts?.[counter] ?? 0;
 }
 
-// Raises the current run's counter by one and persists it, returning the new value.  Idempotent per passId: a re-run of the same hook block counts once, not twice.
+// Raises and persists the current run's counter by one, returning the new value; idempotent per passId.
 export function raiseAttemptCount(
     taskNumber: number,
     expectedRunId: string,
@@ -678,7 +709,7 @@ export function reopenTaskRun(taskNumber: number, expectedRunId: string, project
     });
 }
 
-// Replaces the specified ended run's outcome, never "whichever run is newest" implicitly: expectedRunId must name that newest record, checked in the same lock window as the write.
+// Replaces the specified ended run's outcome; expectedRunId must name the newest record, checked within the same lock.
 export function replaceEndedRunOutcome(
     taskNumber: number,
     expectedRunId: string,

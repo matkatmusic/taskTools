@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./PLAN_THE_TASK.ts";
+import { clarifyTask } from "../../clarify-task/clarifyTask.ts";
+import { writeTaskBriefToDisk } from "../shared/writeTaskBrief.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "plan-the-task-run-log.json");
 
@@ -44,45 +46,30 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
     assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
 });
 
-test("test_PLAN_THE_TASK_startsCodexDetachedToDraftThePlanWhenDifficultyIsAtLeast7", async () => {
-    const { projectRoot, worktree } = makeFixture(35, 7);
-    // A fake codex on PATH records its call, so the test proves the detached start without running the real one.
-    const shimDir = join(projectRoot, "shim");
-    mkdirSync(shimDir);
-    const codexCallFile = join(projectRoot, "codex-call.txt");
-    writeFileSync(join(shimDir, "codex"), `#!/bin/sh\nprintf '%s\\n' "$@" >${codexCallFile}\n`, { mode: 0o755 });
-    const savedPath = process.env.PATH;
-    process.env.PATH = `${shimDir}:${savedPath}`;
+test("test_PLAN_THE_TASK_promptPointsToABriefThatCarriesARecordedClarifyAnswer", () => {
+    const taskNumber = 35;
+    const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-"));
+    mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
+        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", description: "body", clarifyRequest: "where does thing.ts live?" },
+    ]));
+    writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
+    const worktree = join(projectRoot, "worktree");
+    mkdirSync(worktree, { recursive: true });
+
+    clarifyTask({ taskNumber, answer: "thing.ts lives at src/thing.ts" }, projectRoot);
+    const briefFile = writeTaskBriefToDisk(taskNumber, worktree, projectRoot);
     const packet = JSON.stringify({
-        box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber: 35, runId: "run-1",
-        projectRoot, worktree, branch: "task-35", docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
+        box: "DOCUMENT_GENERATION", scriptSignal: "continue", taskNumber, runId: "run-1",
+        projectRoot, worktree, branch: `task-${taskNumber}`, docsMode: "AUTOGEN", planFile: "", exitType: "", exitNote: "",
     });
 
-    try { main(packet); } finally { process.env.PATH = savedPath; }
+    main(packet);
 
-    // Codex outruns the block's 5-minute cap: the block starts it detached, the prompt only waits for the done marker.
     const promptFile = join(worktree, "plans", "PLAN_THE_TASK.prompt.md");
-    const runScript = join(worktree, "plans", "PLAN_THE_TASK.codex-run.sh");
-    const doneFile = join(worktree, "plans", "PLAN_THE_TASK.codex-done");
-    const pidFile = join(worktree, "plans", "PLAN_THE_TASK.codex-pid");
     const promptFileContents = readFileSync(promptFile, "utf8");
-    assert.match(promptFileContents, /You are waiting on a plan agent running in the CLI\./);
-    assert.doesNotMatch(promptFileContents, /nohup|setsid|run_in_background: true/);
-    assert.ok(promptFileContents.includes(`[ -f ${doneFile} ]`));
-    assert.doesNotMatch(promptFileContents, /codex exec/);
-    assert.match(readFileSync(pidFile, "utf8"), /^\d+$/);
-    const runScriptContents = readFileSync(runScript, "utf8");
-    assert.match(runScriptContents, /codex exec -s workspace-write -m gpt-5\.6-terra -c 'model_reasoning_effort="high"'/);
-    assert.ok(runScriptContents.includes(`echo $? >${doneFile}`));
-    // macOS sh chokes on a heredoc inside $(...) holding an apostrophe, so the prompt is a file.
-    const codexPromptFile = join(worktree, "plans", "PLAN_THE_TASK.codex-prompt.md");
-    assert.ok(runScriptContents.includes(`"$(cat ${codexPromptFile})"`));
-    assert.doesNotMatch(runScriptContents, /PLANEOF/);
-    assert.match(readFileSync(codexPromptFile, "utf8"), /task 35/);
-    execFileSync("sh", ["-n", runScript]);
-    for (let i = 0; i < 50 && !existsSync(doneFile); i++) await new Promise((r) => setTimeout(r, 100));
-    assert.equal(readFileSync(doneFile, "utf8").trim(), "0");
-    assert.match(readFileSync(codexCallFile, "utf8"), /task 35/);
+    assert.ok(promptFileContents.includes(briefFile));
+    assert.match(readFileSync(briefFile, "utf8"), /thing\.ts lives at src\/thing\.ts/);
 });
 
 test("test_PLAN_THE_TASK_runsTwiceWithTheSameInput", () => {

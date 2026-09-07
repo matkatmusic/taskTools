@@ -22,13 +22,14 @@ function baseBranch(projectRoot: string): string {
 // Narrows down to the core packet: ownedFilePaths/testFilePaths were only needed for the suite-fix loop.
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as Input;
-    const { inside } = checkTaskFileFence({
+    const { inside, violations } = checkTaskFileFence({
         projectRoot: packet.projectRoot,
         worktreePath: packet.worktree,
         taskNumber: packet.taskNumber,
         runId: packet.runId,
         rootSourceBranch: baseBranch(packet.projectRoot),
     });
+    const exitNote = `paused, fence-violation: these changed files are outside the task's file fence: ${violations.join(", ")}. nothing merged. worktree preserved. Review those files. Small and part of the task: add them to the task's modifiableFiles or files in tasks.json, then run /tackle-tasks [${packet.taskNumber}] DO_ALL_TESTS_PASS_Q to resume at "do all tests pass?". Large or not part of the task: ask the user what to do.`;
     return {
         box: "DID_CHANGES_STAY_INSIDE_FENCE_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
@@ -39,7 +40,7 @@ export function main(input: string): Record<string, unknown> {
         branch: packet.branch,
         next: inside ? "MERGE_WORKTREES" : "pipeline-failuresExit.mmd::FAILURES_EXIT",
         exitType: inside ? "" : "fence-violation",
-        exitNote: inside ? "" : "a repair edited files the task does not own. nothing merged. worktree preserved.",
+        exitNote: inside ? "" : exitNote,
     };
 }
 

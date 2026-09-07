@@ -18,14 +18,14 @@ export function main(input: string): Record<string, unknown> {
         if (checkpoint === null) throw new Error(`TWO_CODEX_REVIEWS_COMPLETED_Q: no checkpoint in ${packet.worktree}`);
         // The relaunch after a scrap replans once more; reviewQuestion() then approves that plan.
         if (checkpoint.resumedFrom?.exitType === "plan-scrapped") {
-            return { ...output, next: "pipeline-planTheTask.mmd::PLAN_THE_TASK" };
+            return { ...output, next: "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q" };
         }
         return {
             ...output, exitType: "plan-scrapped", exitNote: "codex did not accept the plan in two reviews",
             next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
         };
     }
-    return { ...output, next: "pipeline-planTheTask.mmd::PLAN_THE_TASK" };
+    return { ...output, next: "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q" };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.

@@ -295,3 +295,15 @@ test("test_configureGeneratedArtifactIsolation_isANoOpWhenNoGeneratedPathIsTrack
     const marked = configureGeneratedArtifactIsolation(10, worktreePath);
     assert.deepEqual(marked, []);
 });
+
+test("test_generateTaskBriefContents_rendersTheTasksTitleDescriptionsAndModifiableFiles", () => {
+    // Scenario: the brief for task N must carry task N's own title, both descriptions, and its file list.
+    const repoRoot = makeTempRepoWithCommit();
+    writeFileSync(join(repoRoot, "fileA.txt"), "x\n");
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", userDescription: "user asked for the thing", modifiableFiles: ["fileA.txt"] }]);
+    const brief = generateTaskBriefContents(1, repoRoot);
+    assert.ok(brief.includes("# Task 1: t1"));
+    assert.ok(brief.includes("do the thing"));
+    assert.ok(brief.includes("user asked for the thing"));
+    assert.ok(brief.includes("@fileA.txt"));
+});

@@ -10,7 +10,7 @@ import { buildPromptOutputTemplate } from "../scripts/shared/contracts.ts";
 import { getTemplateShapeMismatches } from "../scripts/shared/templateShape.ts";
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+const CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
 
 type BlockTemplate = { input: unknown; output?: unknown; agentAnswer?: unknown };
 

@@ -58,7 +58,7 @@ function seedTaskAndMarkActiveAndLock(projectRoot: string, taskNumber: number, t
 function answer(projectRoot: string, worktree: string, taskNumber: number, runId: string): string {
     const packet: CommitMergeConflictFixIfNeededPacket = {
         box: "FIX_CONFLICTS", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree, branch: `task-${taskNumber}`,
-        exitType: "", exitNote: "", message: "resolved the conflict", additionalData: {}, stoppedOccurrenceId: "",
+        exitType: "", exitNote: "", message: "resolved the conflict", additionalData: { resolved: true, unresolvedPaths: [] }, stoppedOccurrenceId: "",
         stoppedCheckoutPath: worktree, conflictedFilePaths: [], conflicted: true, finished: false, failureReason: "",
     };
     return JSON.stringify(packet);
@@ -111,4 +111,54 @@ test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_carriesTheStoppedLayerThroughUnch
 
     assert.equal(output.stoppedCheckoutPath, worktreePath);
     assert.equal(output.conflicted, true);
+});
+
+test("test_main_throwsWhenAdditionalDataHasNoBooleanResolved", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-4");
+    const packet = JSON.parse(answer(rootOrigin, worktreePath, taskNumber, "run-4"));
+    packet.additionalData = {};
+
+    assert.throws(() => main(JSON.stringify(packet)), /additionalData holds no boolean "resolved"/);
+});
+
+test("test_main_throwsWhenAdditionalDataHasNoArrayUnresolvedPaths", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-5");
+    const packet = JSON.parse(answer(rootOrigin, worktreePath, taskNumber, "run-5"));
+    packet.additionalData = { resolved: true };
+
+    assert.throws(() => main(JSON.stringify(packet)), /additionalData holds no array "unresolvedPaths"/);
+});
+
+test("test_main_throwsWhenResolvedTrueButAConflictMarkerRemains", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-X");
+    writeFileSync(join(worktreePath, "resolved.txt"), "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n");
+    const packet = JSON.parse(answer(rootOrigin, worktreePath, taskNumber, "run-X"));
+    packet.conflictedFilePaths = ["resolved.txt"];
+
+    assert.throws(() => main(JSON.stringify(packet)), /conflict marker/);
+    assert.throws(() => main(JSON.stringify(packet)), /resolved\.txt/);
+    assert.deepEqual(getCurrentTaskRun(taskNumber, rootOrigin)?.commits, []);
+});
+
+test("test_main_skipsCommitWhenResolvedIsFalse", () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-Y");
+    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    const packet = JSON.parse(answer(rootOrigin, worktreePath, taskNumber, "run-Y"));
+    packet.additionalData = { resolved: false, unresolvedPaths: ["resolved.txt"] };
+    packet.conflictedFilePaths = ["resolved.txt"];
+
+    const output = main(JSON.stringify(packet));
+
+    assert.equal(output.box, "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED");
+    assert.equal(output.scriptSignal, "continue");
+    assert.deepEqual(getCurrentTaskRun(taskNumber, rootOrigin)?.commits, []);
+    assert.equal(git(worktreePath, "status", "--porcelain"), "?? resolved.txt");
 });

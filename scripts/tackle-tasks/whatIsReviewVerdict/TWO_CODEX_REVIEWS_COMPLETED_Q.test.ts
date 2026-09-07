@@ -1,9 +1,10 @@
 // Behavioral checks for TWO_CODEX_REVIEWS_COMPLETED_Q.ts. Ported from pipeline-reviewPlan's ARE_2_REVIEWS_DONE test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { main } from "./TWO_CODEX_REVIEWS_COMPLETED_Q.ts";
 import { claimTask, raiseAttemptCount } from "../shared/taskRunState.ts";
 import { writeCheckpoint } from "../shared/checkpoint.ts";
@@ -37,7 +38,7 @@ function packet(projectRoot: string) {
 test("test_main_replansWhenTheCounterHasNeverBeenRaised", () => {
     const projectRoot = makeFixture();
     const output = main(JSON.stringify(packet(projectRoot)));
-    assert.equal(output.next, "pipeline-planTheTask.mmd::PLAN_THE_TASK");
+    assert.equal(output.next, "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q");
     assert.equal(output.exitType, "");
 });
 
@@ -45,7 +46,7 @@ test("test_main_replansWhenOnlyOneReviewHasHappened", () => {
     const projectRoot = makeFixture();
     raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
     const output = main(JSON.stringify(packet(projectRoot)));
-    assert.equal(output.next, "pipeline-planTheTask.mmd::PLAN_THE_TASK");
+    assert.equal(output.next, "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q");
 });
 
 test("test_main_scrapsTheTaskWhenTwoReviewsAreDone", () => {
@@ -65,7 +66,7 @@ test("test_main_replansOnceMoreOnTheRelaunchAfterAScrap", () => {
     raiseAttemptCount(42, "run-1", "planReview", "pass-2", projectRoot);
     writeCheckpointResumedFrom(projectRoot, "plan-scrapped");
     const output = main(JSON.stringify(packet(projectRoot)));
-    assert.equal(output.next, "pipeline-planTheTask.mmd::PLAN_THE_TASK");
+    assert.equal(output.next, "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q");
     assert.equal(output.exitType, "");
 });
 
@@ -74,4 +75,11 @@ test("test_main_throwsWithoutACheckpointAtTheCap", () => {
     raiseAttemptCount(42, "run-1", "planReview", "pass-1", projectRoot);
     raiseAttemptCount(42, "run-1", "planReview", "pass-2", projectRoot);
     assert.throws(() => main(JSON.stringify(packet(projectRoot))), /no checkpoint/);
+});
+
+test("test_main_replansToABoxThatIsStillAValidSuccessorInTheCommittedConfig", () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    const config = JSON.parse(readFileSync(join(repoRoot, "scripts/tackle-tasks/diagram-steps.json"), "utf8"));
+    const entry = config["pipeline-whatIsReviewVerdict.mmd"].find((e: { box: string }) => e.box === "TWO_CODEX_REVIEWS_COMPLETED_Q");
+    assert.ok(entry.next.includes("pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"));
 });

@@ -149,3 +149,30 @@ test("test_main_carriesTaskIdentityForward", () => {
     assert.equal(output.runId, "run-1");
     assert.equal(output.branch, "main");
 });
+
+test("test_main_throwsNamingThePathWhenPlanFileIsEmpty", () => {
+    const { projectRoot, planFile } = makeFixture();
+    writeFileSync(planFile, "");
+    const output = () => main(JSON.stringify(packet(projectRoot, planFile, review([]))));
+    assert.throws(output, new RegExp(planFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("test_main_throwsNamingThePlanFileWhenSectionsIsNotAnArray", () => {
+    const { projectRoot, planFile } = makeFixture();
+    writeFileSync(planFile, JSON.stringify({ task: 7, revision: 1 }));
+    const output = () => main(JSON.stringify(packet(projectRoot, planFile, review([]))));
+    assert.throws(output, new RegExp(planFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("test_main_throwsNamingTheReviewFileWhenOutcomeIsNotOkOrError", () => {
+    const { projectRoot, planFile } = makeFixture();
+    const reviewOutputFile = join(projectRoot, "codex-review.json");
+    writeFileSync(reviewOutputFile, JSON.stringify({ outcome: "MAYBE" }));
+    const badPacket = {
+        box: "CODEX_REVIEWS_PLAN", scriptSignal: "continue",
+        taskNumber: 7, runId: "run-1", projectRoot, worktree: projectRoot, branch: "main", docsMode: "",
+        planFile, exitType: "", exitNote: "", message: "", additionalData: { reviewFile: reviewOutputFile },
+    };
+    const output = () => main(JSON.stringify(badPacket));
+    assert.throws(output, new RegExp(reviewOutputFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});

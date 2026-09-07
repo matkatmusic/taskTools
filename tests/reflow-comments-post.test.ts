@@ -21,15 +21,15 @@ function fileWith(contents: string): string {
   return path;
 }
 
-test("long wrapped comment: rewrites the file and blocks", () => {
+test("long wrapped comment: rewrites the file without blocking; the Stop hook owns the rewrite ask", () => {
   const path = fileWith(["// A wrapped comment that runs well past the twenty word cap once it",
     "// has been joined back together into one single long line of prose here.",
     "const x = 1;"].join("\n"));
   const out = JSON.parse(run({ file_path: path }));
-  assert.equal(out.decision, "block");
-  assert.deepEqual(JSON.parse(out.reason).files, [
-    { path, lines: [1], show: `nl -ba '${path}' | sed -n '1p'` },
-  ]);
+  assert.equal(out.decision, undefined);
+  const payload = JSON.parse(out.hookSpecificOutput.additionalContext);
+  assert.deepEqual(payload.rewritten, [{ file: path, lines: [1] }]);
+  assert.equal(payload.instruction, undefined);
   assert.equal(readFileSync(path, "utf8").split("\n").length, 2);
 });
 

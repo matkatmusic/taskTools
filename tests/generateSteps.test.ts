@@ -294,7 +294,7 @@ test("test_generateSteps_usesAuthoredScriptsInACustomFolderWithoutThrowing", () 
 test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeline", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "tackle-tasks-custom-"));
     mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
-    writeFileSync(join(fixtureRoot, ".taskTools/tasks.json"), "[]\n");
+    writeFileSync(join(fixtureRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 999999, difficulty: 1 }]));
     const diagramFolder = join(fixtureRoot, "diagrams");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
@@ -325,20 +325,8 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
         `${JSON.stringify({ input: {}, output: { box: "SECOND_BOX", scriptSignal: "stop", note: "SECOND_BOX.ts for SECOND_BOX", input: "" } }, null, 4)}\n`,
     );
 
-    const stepsConfigPath = join(fixtureRoot, "steps.json");
-    const workflowFilePath = join(fixtureRoot, "workflow.js");
-    const previousRunStepConfig = process.env.RUN_STEP_CONFIG;
-    const previousRunStepWorkflowFile = process.env.RUN_STEP_WORKFLOW_FILE;
-    try {
-        process.env.RUN_STEP_CONFIG = stepsConfigPath;
-        process.env.RUN_STEP_WORKFLOW_FILE = workflowFilePath;
-        skillBody("999999", fixtureRoot);
-    } finally {
-        if (previousRunStepConfig === undefined) delete process.env.RUN_STEP_CONFIG;
-        else process.env.RUN_STEP_CONFIG = previousRunStepConfig;
-        if (previousRunStepWorkflowFile === undefined) delete process.env.RUN_STEP_WORKFLOW_FILE;
-        else process.env.RUN_STEP_WORKFLOW_FILE = previousRunStepWorkflowFile;
-    }
+    const stepsConfigPath = join(fixtureRoot, ".taskTools/workflows/999999/steps.json");
+    skillBody("999999", fixtureRoot);
 
     const runLogPath = join(fixtureRoot, "run-log.json");
     const command = `/run-step pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK ${JSON.stringify({ taskNumber: 999999, tasksFile: join(fixtureRoot, ".taskTools/tasks.json") })}`;
@@ -353,4 +341,14 @@ test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeli
         "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK",
         "pipeline-preambleStatusCheck.mmd::SECOND_BOX",
     ]);
+});
+
+// A stale committed steps.json fails here; npm run steps regenerates it.
+test("test_generateSteps_theCommittedStepsJsonIsUpToDate", () => {
+    const committedStepsJsonPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-committed-")), "steps.json");
+    // Seeds the previous-config read so hand-written `mutating: true` flags carry forward.
+    copyFileSync(committedStepsJsonPath, tempConfigPath);
+    generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    assert.equal(readFileSync(tempConfigPath, "utf8"), readFileSync(committedStepsJsonPath, "utf8"));
 });

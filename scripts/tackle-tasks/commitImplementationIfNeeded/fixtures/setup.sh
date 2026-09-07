@@ -84,6 +84,7 @@ cat > runTests/root/.taskTools/tasks.json <<'JSON'
 ]
 JSON
 echo fixture > runTests/root/.fixture-marker
+echo '{"name":"fixture","scripts":{"test":"node --test \"tests/**/*.test.ts\""}}' > runTests/root/package.json
 git -C runTests/root add -A
 git -C runTests/root commit -q -m root
 git -C runTests/root branch staging

@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, existsSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent } from "../scripts/shared/taskFiles.ts";
+import { leadingTaskNumbers, resolveTaskFiles, seedTaskFilesIfAbsent, taskWorkflowDirectory } from "../scripts/shared/taskFiles.ts";
 
 function makeEmptyProjectRoot(): string {
   return mkdtempSync(join(tmpdir(), "taskTools-"));
@@ -71,6 +71,36 @@ test("test_seedCreatesBothFilesWithEmptyArrays", () => {
   assert.equal(JSON.parse(readFileSync(pair.tasksPath, "utf8")).length, 1);
 });
 
+test("test_seedTaskFilesIfAbsent_addsCheckpointAndWorkflowsPatternsToAFreshGitignore", () => {
+    // Scenario: a brand-new project seeds its task files for the first time.
+    // Step: the project root is empty.
+    const root = makeEmptyProjectRoot();
+    const pair = resolveTaskFiles(root);
+    // Test action: seed the task files.
+    seedTaskFilesIfAbsent(pair);
+    // Verification: the checkpoint and per-task workflow patterns are both in .gitignore.
+    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+    assert.match(gitignore, /^\*\*\/plans\/checkpoint\.json$/m);
+    assert.match(gitignore, /^\.taskTools\/workflows\/$/m);
+});
+
+test("test_seedTaskFilesIfAbsent_addsMissingPatternsWhenTaskToolsAlreadyExists", () => {
+    // Scenario: an established project already has .taskTools/tasks.json, from before these patterns existed.
+    // Step: create .taskTools/tasks.json and completedTasks.json directly, with no .gitignore at all.
+    const root = makeEmptyProjectRoot();
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 1, title: "t" }]));
+    writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]\n");
+    const pair = resolveTaskFiles(root);
+    // Test action: seed the task files again, the same call every skill invocation already makes.
+    seedTaskFilesIfAbsent(pair);
+    // Verification: the established project now has the ignore patterns, and its existing task did not move.
+    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
+    assert.match(gitignore, /^\*\*\/plans\/checkpoint\.json$/m);
+    assert.match(gitignore, /^\.taskTools\/workflows\/$/m);
+    assert.equal(JSON.parse(readFileSync(pair.tasksPath, "utf8")).length, 1);
+});
+
 test("concurrent first-run seeders leave both task files as valid JSON", async () => {
   const root = makeEmptyProjectRoot();
   const startFile = join(root, "start");
@@ -108,6 +138,10 @@ test("concurrent first-run seeders leave both task files as valid JSON", async (
       readdirSync(join(root, ".taskTools")).some((name) => name.endsWith(".tmp")),
       false,
     );
+    const gitignoreLines = readFileSync(join(root, ".gitignore"), "utf8").split("\n").filter((line) => line !== "");
+    for (const pattern of ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/", "**/plans/checkpoint.json", ".taskTools/workflows/"]) {
+        assert.equal(gitignoreLines.filter((line) => line === pattern).length, 1);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -129,6 +163,22 @@ test("test_leadingTaskNumbersStopsAtFreeTextReasoning", () => {
     const numbers = leadingTaskNumbers([invocation]);
     // Verification: only the array contributes, so numbers inside the prose are not picked up.
     assert.deepEqual(numbers, [268, 270]);
+});
+
+test("test_taskWorkflowDirectory_isNamedByTheProjectRootAndTheTaskNumber", () => {
+    // Scenario: a project uses the .taskTools/ layout.
+    const root = "/repo";
+    // Test action: ask where task 74's workflow pair lives.
+    const directory = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 74);
+    // Verification: it is a task-numbered subfolder of .taskTools/workflows in the project root, not the plugin.
+    assert.equal(directory, join(root, ".taskTools", "workflows", "74"));
+});
+
+test("test_taskWorkflowDirectory_givesTwoTaskNumbersTwoDifferentDirectories", () => {
+    const root = "/repo";
+    const first = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 3);
+    const second = taskWorkflowDirectory(join(root, ".taskTools", "tasks.json"), 5);
+    assert.notEqual(first, second);
 });
 
 test("test_everyOpenTaskHasAGoalAndNotInScope", () => {

@@ -34,8 +34,11 @@ export function checkResumedWorktreeFence(input: CheckResumedWorktreeFenceInput)
     // const rootSourceBranch = currentBranchName(input.projectRoot);
     // Worktrees are cut from staging (prepareTasks.ts), so the fence diffs against staging, like DID_CHANGES_STAY_INSIDE_FENCE_Q.
     const rootSourceBranch = "staging";
+    const declared = declaredFiles(input.taskNumber, input.projectRoot);
+    // A task that declares "*" owns every path, so nothing can fall outside its fence.
+    if (declared.includes("*")) return { inside: true, violations: [] };
     const occurrences = getOccurrencesDeepestFirst(input.worktreePath, input.projectRoot, rootSourceBranch);
-    const ownedPaths = new Set(buildOwnedOccurrencePaths(declaredFiles(input.taskNumber, input.projectRoot), occurrences));
+    const ownedPaths = new Set(buildOwnedOccurrencePaths(declared, occurrences));
 
     const changedPathsByOccurrenceId = new Map<string, string[]>();
     const allChangedPaths: string[] = [];

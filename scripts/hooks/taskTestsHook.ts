@@ -1,54 +1,44 @@
-import { spawnSync } from "node:child_process";
+// Runs /task-tests as a typed prompt or a Skill call, and records its failures as the known baseline.
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { runSuite, parseFailingTests, writeKnownFailingTests } from "../shared/taskTestsRunner.ts";
 
-const payload = JSON.parse(readFileSync(0, "utf8")) as { prompt?: string; cwd?: string };
-
-const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
-if (prompt !== "/task-tests" && !prompt.startsWith("/task-tests ")) {
+let payload: { hook_event_name?: unknown; prompt?: unknown; cwd?: unknown; tool_input?: Record<string, unknown> };
+try {
+    payload = JSON.parse(readFileSync(0, "utf8"));
+} catch {
     process.exit(0);
 }
 
-const LOG_PATH = "/tmp/tasktools-npm-test.log";
+// Plugin skills reach the hook namespaced, as /taskTools:task-tests and taskTools:task-tests.
+const prompt = (typeof payload.prompt === "string" ? payload.prompt.trimStart() : "").replace(/^\/[\w-]+:/, "/");
+const input = payload.tool_input ?? {};
+const skill = String(input.skill ?? "").replace(/^[\w-]+:/, "");
 
-// INITIAL_PASS from ~/.claude/CLAUDE.md "Full Suite Testing", verbatim.
-const INITIAL_PASS = `set -o pipefail
-npm test 2>&1 \\
-| tee ${LOG_PATH} \\
-| awk '
-    /^✖ / { print }
-    /^ℹ fail / { saw_summary = 1; failures = $3 + 0 }
-    END {
-        if (saw_summary && failures == 0) {
-        print "all passing"
-        } else if (!saw_summary) {
-        print "✖ test runner stopped before producing a summary; see ${LOG_PATH}"
-        exit 2
-        }
-    }
-    '`;
+const args = prompt === "/task-tests" || prompt.startsWith("/task-tests ")
+    ? prompt.slice("/task-tests".length).trim()
+    : skill === "task-tests"
+        ? String(input.args ?? "").trim()
+        : undefined;
+if (args === undefined) process.exit(0);
 
-const run = spawnSync("bash", ["-c", INITIAL_PASS], { cwd: payload.cwd ?? process.cwd(), encoding: "utf8" });
-const output = `${run.stdout}${run.stderr}`.trim();
+if (args !== "" && !args.startsWith("/")) {
+    throw new Error(`task-tests: path must be absolute: ${args}`);
+}
+const cwd = args !== "" ? args : (typeof payload.cwd === "string" ? payload.cwd : process.cwd());
+const projectRoot = execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
 function emit(additionalContext: string): never {
-    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext } }));
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext } }));
     process.exit(0);
 }
 
-if (output === "all passing") {
-    emit("all tests passed");
-}
+const suite = await runSuite(cwd);
+const failing = suite.allPassing ? [] : parseFailingTests(suite.log);
+writeKnownFailingTests(projectRoot, failing);
 
-// The node test reporter ends with "✖ failing tests:" then pairs of "test at FILE:LINE:COL" / "✖ NAME (ms)".
-const log = readFileSync(LOG_PATH, "utf8");
-const summary = log.slice(log.indexOf("✖ failing tests:"));
-const failingTests: string[] = [];
-const lines = summary.split("\n");
-for (let i = 0; i < lines.length; i++) {
-    const location = lines[i].match(/^test at (.+):\d+:\d+$/);
-    if (!location) continue;
-    const name = lines[i + 1]?.replace(/^✖ /, "").replace(/ \(\d+(\.\d+)?ms\)$/, "");
-    failingTests.push(`- ${location[1]} — ${name}`);
+if (suite.allPassing) {
+    emit(`all tests passed; recorded 0 known failing tests in ${projectRoot}`);
 }
 
 emit([
@@ -58,5 +48,7 @@ emit([
     "  3. Re-run each fixed test file alone with `node --test <file>` and report pass/fail counts. Do not stage or commit.",
     "",
     "Failing tests (file — name):",
-    ...(failingTests.length > 0 ? failingTests : [output]),
+    ...(failing.length > 0 ? failing.map((test) => `- ${test.file} — ${test.name}`) : [suite.output]),
+    "",
+    `Recorded ${failing.length} known failing tests in ${projectRoot}; the tackle-tasks test gate now ignores exactly these.`,
 ].join("\n"));

@@ -10,25 +10,25 @@ const REGENERATE_DELAY_MS = 50;
 // The one folder under scripts/tackle-tasks/ that owns each block's script: the diagram the block belongs to.
 const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
     preambleStatusCheck: [
-        "PREAMBLE_STATUS_CHECK", "IS_TASK_BLOCKED_Q", "IS_TASK_ACTIVE_Q", "MARK_TASK_ACTIVE", "DOES_WORKTREE_EXIST_Q",
+        "PREAMBLE_STATUS_CHECK", "IS_TASK_BLOCKED_Q", "IS_TASK_ACTIVE_Q", "PREFLIGHT_OK_Q", "MARK_TASK_ACTIVE", "DOES_WORKTREE_EXIST_Q",
         "CREATE_WORKTREE", "TAKE_WORKTREE_LEASE", "IS_WORKTREE_SAFE_TO_USE_Q", "TAKE_WORKTREE_LEASE_BEFORE_RESET",
-        "RESET_WORKTREE", "IS_PREVIOUS_RUN_RESUMABLE_Q", "DOES_FENCE_COVER_WORKTREE_Q", "INIT_SUBMODULES_RECURSIVELY",
+        "RESET_WORKTREE", "IS_PREVIOUS_RUN_RESUMABLE_Q", "REBASE_RESUMED_WORKTREE_ONTO_STAGING", "DOES_FENCE_COVER_WORKTREE_Q", "INIT_SUBMODULES_RECURSIVELY",
         "DOCUMENT_GENERATION",
     ],
     reportOnlyExit: ["REPORT_ONLY_EXIT", "STOP"],
-    planTheTask: ["PLAN_THE_TASK"],
+    planTheTask: ["IS_DIFFICULTY_7_PLUS_Q", "PLAN_THE_TASK", "PLAN_THE_TASK_CODEX"],
     whatDidThePlannerReturn: ["WHAT_DID_THE_PLANNER_RETURN", "ARE_2_CLARIFY_ROUNDS_DONE_Q", "WRITE_CLARIFY_REQUEST"],
     codexReviewsPlan: ["CODEX_REVIEWS_PLAN"],
     whatIsReviewVerdict: ["WHAT_IS_REVIEW_VERDICT", "UPDATE_TASKS_JSON", "TWO_CODEX_REVIEWS_COMPLETED_Q"],
     implementTask: ["IMPLEMENT_TASK"],
     commitImplementationIfNeeded: [
-        "COMMIT_IMPLEMENTATION_IF_NEEDED", "ARE_TASK_TESTS_SKIPPED_Q", "RUN_TASK_TESTS", "DO_TASK_TESTS_PASS_Q",
+        "COMMIT_IMPLEMENTATION_IF_NEEDED", "COMMIT_TEST_FIX_IF_NEEDED", "ARE_TASK_TESTS_SKIPPED_Q", "RUN_TASK_TESTS", "DO_TASK_TESTS_PASS_Q",
         "ARE_2_TEST_FIXES_DONE_Q", "AMEND_ENTRY_WITH_FAILING_TESTS",
     ],
     fixImplementTaskTests: ["FIX_IMPLEMENT_TASK_TESTS"],
     codexReviewsTests: ["CODEX_REVIEWS_TESTS"],
     areTestsFlagged: ["ARE_TESTS_FLAGGED", "ARE_2_TEST_REVIEWS_DONE_Q", "AMEND_ENTRY_WITH_CODEX_NOTES"],
-    lockSourceRepo: ["LOCK_SOURCE_REPO", "WAS_LOCK_ACQUIRED_Q", "HAVE_15_MINUTES_PASSED_Q", "WAIT_FOR_LOCK"],
+    lockSourceRepo: ["LOCK_SOURCE_REPO", "WAS_LOCK_ACQUIRED_Q", "HAS_LOCK_WAIT_DEADLINE_PASSED_Q", "WAIT_FOR_LOCK"],
     rebase: ["REBASE_ONTO_TARGET_BRANCH", "DID_REBASE_REPORT_CONFLICTS_Q", "ARE_2_CONFLICT_FIXES_DONE_Q"],
     fixConflicts: ["FIX_CONFLICTS"],
     commitMergeConflictFixIfNeeded: ["COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", "CONTINUE_REBASE", "IS_REBASE_FINISHED_Q"],
@@ -53,7 +53,8 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 );
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
-export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; next: string[] };
+export type AgentOptions = { model: string; effort: string };
+export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -394,7 +395,7 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const commandArguments = process.argv.slice(2);
     const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT);
-    const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+    const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
     console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs)));
 
     if (commandArguments.includes("--watch")) {

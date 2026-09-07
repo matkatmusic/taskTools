@@ -121,7 +121,7 @@ You are forbidden from doing any of the following actions:
 - run the full suite;
 - stage or commit anything, or run any git command;
 - attempt more than ${maxFixRounds} fix rounds;
-- return \`implemented: true\` while a test fails or the typecheck reports an error.
+- return \`implemented: true\` while a test fails or the typecheck reports an error. A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
 

@@ -46,6 +46,13 @@ function forceRemovalFailureForTest(): void {
     throw new Error("test-forced worktree removal failure");
 }
 
+// Test-only: SIGKILLs this process right after the named step finishes, so a retry can be
+// exercised against a real process death, not a thrown error.
+const CREATE_TASK_WORKTREE_TEST_KILL_AFTER_ENV = "CREATETASKWORKTREE_TEST_KILL_AFTER";
+function killSelfForTest(step: "state" | "isolation"): void {
+    if (process.env[CREATE_TASK_WORKTREE_TEST_KILL_AFTER_ENV] === step) process.kill(process.pid, "SIGKILL");
+}
+
 // F11 rollback: removes worktree/lease only if still owned by this run; otherwise retains the journal for Phase 8.
 function rollbackCreateTaskWorktree(
     projectRoot: string,
@@ -137,6 +144,7 @@ function recoverRetainedCreateJournal(
 
         // Task state and the physical lease must both name this run before the creation counts as finished.
         if (stateMatchesJournal && owner !== null) {
+            configureGeneratedArtifactIsolation(journal.taskNumber, journal.worktreePath);
             unlinkSync(journalPath);
             recovered = { worktree: journal.worktreePath, branch: journal.branch };
             return;
@@ -183,12 +191,14 @@ export function createTaskWorktree(taskNumber: number, runId: string, projectRoo
     try {
         worktree = createWorktreeForGroup(projectRoot, group, runId);
         updateCurrentTaskRun(taskNumber, runId, { worktree, leaseRunId: runId }, projectRoot);
+        killSelfForTest("state");
     } catch (originalError) {
         rollbackCreateTaskWorktree(projectRoot, journal, journalPath, originalError);
     }
 
-    unlinkSync(journalPath);
     configureGeneratedArtifactIsolation(taskNumber, worktree);
+    killSelfForTest("isolation");
+    unlinkSync(journalPath);
     return { worktree, branch };
 }
 

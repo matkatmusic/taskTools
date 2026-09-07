@@ -59,6 +59,16 @@
             "template": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_IMPLEMENTATION_IF_NEEDED.template.json",
             "producesPrompt": false,
             "next": [
+                "ARE_TASK_TESTS_SKIPPED_Q",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "COMMIT_TEST_FIX_IF_NEEDED",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_TEST_FIX_IF_NEEDED.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_TEST_FIX_IF_NEEDED.template.json",
+            "producesPrompt": false,
+            "next": [
                 "ARE_TASK_TESTS_SKIPPED_Q"
             ]
         },
@@ -140,6 +150,7 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
+                "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q",
                 "ARE_2_CONFLICT_FIXES_DONE_Q"
             ]
         },
@@ -292,7 +303,7 @@
             "template": "scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.template.json",
             "producesPrompt": true,
             "next": [
-                "pipeline-commitImplementationIfNeeded.mmd::COMMIT_IMPLEMENTATION_IF_NEEDED"
+                "pipeline-commitImplementationIfNeeded.mmd::COMMIT_TEST_FIX_IF_NEEDED"
             ]
         }
     ],
@@ -335,13 +346,13 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH",
-                "HAVE_15_MINUTES_PASSED_Q"
+                "HAS_LOCK_WAIT_DEADLINE_PASSED_Q"
             ]
         },
         {
-            "box": "HAVE_15_MINUTES_PASSED_Q",
-            "script": "scripts/tackle-tasks/lockSourceRepo/HAVE_15_MINUTES_PASSED_Q.ts",
-            "template": "scripts/tackle-tasks/lockSourceRepo/HAVE_15_MINUTES_PASSED_Q.template.json",
+            "box": "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
+            "script": "scripts/tackle-tasks/lockSourceRepo/HAS_LOCK_WAIT_DEADLINE_PASSED_Q.ts",
+            "template": "scripts/tackle-tasks/lockSourceRepo/HAS_LOCK_WAIT_DEADLINE_PASSED_Q.template.json",
             "producesPrompt": false,
             "next": [
                 "WAIT_FOR_LOCK",
@@ -456,6 +467,25 @@
     ],
     "pipeline-planTheTask.mmd": [
         {
+            "box": "IS_DIFFICULTY_7_PLUS_Q",
+            "script": "scripts/tackle-tasks/planTheTask/IS_DIFFICULTY_7_PLUS_Q.ts",
+            "template": "scripts/tackle-tasks/planTheTask/IS_DIFFICULTY_7_PLUS_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "PLAN_THE_TASK_CODEX",
+                "PLAN_THE_TASK"
+            ]
+        },
+        {
+            "box": "PLAN_THE_TASK_CODEX",
+            "script": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.ts",
+            "template": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
+            ]
+        },
+        {
             "box": "PLAN_THE_TASK",
             "script": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK.ts",
             "template": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK.template.json",
@@ -491,6 +521,16 @@
             "box": "IS_TASK_ACTIVE_Q",
             "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.ts",
             "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "PREFLIGHT_OK_Q"
+            ]
+        },
+        {
+            "box": "PREFLIGHT_OK_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.template.json",
             "producesPrompt": false,
             "next": [
                 "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
@@ -575,7 +615,18 @@
             "producesPrompt": false,
             "next": [
                 "pipeline-failuresExit.mmd::FAILURES_EXIT",
-                "DOES_FENCE_COVER_WORKTREE_Q"
+                "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+            ]
+        },
+        {
+            "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "DOES_FENCE_COVER_WORKTREE_Q",
+                "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q"
             ]
         },
         {
@@ -606,7 +657,7 @@
             "producesPrompt": false,
             "mutating": true,
             "next": [
-                "pipeline-planTheTask.mmd::PLAN_THE_TASK"
+                "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"
             ]
         }
     ],
@@ -810,7 +861,7 @@
             "template": "scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.template.json",
             "producesPrompt": false,
             "next": [
-                "pipeline-planTheTask.mmd::PLAN_THE_TASK",
+                "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q",
                 "pipeline-failuresExit.mmd::FAILURES_EXIT"
             ]
         }

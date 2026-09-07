@@ -21,7 +21,7 @@ function packet(taskNumber: number, worktree: string, runId: string, projectRoot
     });
 }
 
-test("test_IS_PREVIOUS_RUN_RESUMABLE_Q_choosesDoesFenceCoverWorktreeWhenTheEndedRunLeftContainedNotes", () => {
+test("test_IS_PREVIOUS_RUN_RESUMABLE_Q_choosesRebaseResumedWorktreeWhenTheEndedRunLeftContainedNotes", () => {
     const root = makeProjectRoot([{ taskNumber: 1, title: "t1", files: [] }]);
     const worktree = mkdtempSync(join(tmpdir(), "IS_PREVIOUS_RUN_RESUMABLE_Q-worktree-"));
     claimTask(1, "run-old", root);
@@ -33,7 +33,7 @@ test("test_IS_PREVIOUS_RUN_RESUMABLE_Q_choosesDoesFenceCoverWorktreeWhenTheEnded
 
     const output = main(packet(1, worktree, "run-new", root));
 
-    assert.equal(output.next, "DOES_FENCE_COVER_WORKTREE_Q");
+    assert.equal(output.next, "REBASE_RESUMED_WORKTREE_ONTO_STAGING");
     assert.equal(output.exitType, "");
 });
 

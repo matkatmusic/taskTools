@@ -36,3 +36,8 @@ test("test_readReviewJson_throwsOnTextThatIsNotJson", () => {
     const file = writeTempFile("not json at all");
     assert.throws(() => readReviewJson(file), SyntaxError);
 });
+
+test("test_readReviewJson_throwsNamingThePathWhenTheFileIsEmpty", () => {
+    const file = writeTempFile("");
+    assert.throws(() => readReviewJson(file), new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});

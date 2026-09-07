@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "HAVE_15_MINUTES_PASSED_Q",
+        "box": "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",

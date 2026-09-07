@@ -28,7 +28,7 @@ test("test_COMMIT_SUITE_FIX_IF_NEEDED_commitsDirtyWorkAndForwardsTheCorePacket",
     seedActiveTask(rootOrigin, taskNumber);
     writeFileSync(join(worktree, "fixed.txt"), "fixed\n");
 
-    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}`, message: "", additionalData: { fixSummary: "fixed it" } });
     const output = main(input);
 
     assert.equal(output.box, "COMMIT_SUITE_FIX_IF_NEEDED");
@@ -47,7 +47,7 @@ test("test_COMMIT_SUITE_FIX_IF_NEEDED_runsTwiceWithTheSameInput", () => {
     seedActiveTask(rootOrigin, taskNumber);
     writeFileSync(join(worktree, "fixed.txt"), "fixed\n");
 
-    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}`, message: "", additionalData: { fixSummary: "fixed it" } });
 
     const first = main(input);
     const logAfterFirst = git(worktree, "log", "--format=%H %s");
@@ -66,9 +66,33 @@ test("test_COMMIT_SUITE_FIX_IF_NEEDED_isIdempotentWhenNothingIsDirty", () => {
     const taskNumber = 802;
     seedActiveTask(rootOrigin, taskNumber);
 
-    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}`, message: "", additionalData: { fixSummary: "fixed it" } });
     const output = main(input);
 
     assert.equal(output.box, "COMMIT_SUITE_FIX_IF_NEEDED");
     assert.equal(git(worktree, "status", "--porcelain"), "");
+});
+
+test("test_main_throwsWhenAdditionalDataHasNoStringFixSummary", () => {
+    const rootOrigin = makeCommittedRepo();
+    const worktree = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 804;
+    seedActiveTask(rootOrigin, taskNumber);
+
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}`, message: "", additionalData: {} });
+
+    assert.throws(() => main(input), /additionalData holds no string "fixSummary"/);
+});
+
+test("test_main_carriesFixSummaryForwardOnTheOutputPacket", () => {
+    const rootOrigin = makeCommittedRepo();
+    const worktree = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 805;
+    seedActiveTask(rootOrigin, taskNumber);
+    writeFileSync(join(worktree, "fixed.txt"), "fixed\n");
+
+    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}`, message: "fixed it", additionalData: { fixSummary: "renamed the failing assertion" } });
+    const output = main(input);
+
+    assert.equal(output.fixSummary, "renamed the failing assertion");
 });

@@ -24,6 +24,6 @@
         "planFile": "",
         "exitType": "",
         "exitNote": "",
-        "next": "DOES_FENCE_COVER_WORKTREE_Q"
+        "next": "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
     }
 }

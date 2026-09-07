@@ -28,6 +28,6 @@
         "exitNote": "",
         "verdict": "AMEND",
         "notes": "[step-1] repair step-1.\n\nDurable because: reason",
-        "next": "pipeline-planTheTask.mmd::PLAN_THE_TASK"
+        "next": "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"
     }
 }

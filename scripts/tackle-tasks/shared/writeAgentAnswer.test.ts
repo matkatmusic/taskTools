@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeAgentAnswer } from "./writeAgentAnswer.ts";
 
@@ -34,6 +34,12 @@ test("test_writeAgentAnswer_throwsWhenMessageOrAdditionalDataIsMissing", () => {
     const packetFile = makePacketFile();
     assert.throws(() => writeAgentAnswer(packetFile, JSON.stringify({ additionalData: {} })), /no string "message"/);
     assert.throws(() => writeAgentAnswer(packetFile, JSON.stringify({ message: "" })), /no object "additionalData"/);
+});
+
+test("test_writeAgentAnswer_writesThePacketAtomically", () => {
+    const packetFile = makePacketFile();
+    writeAgentAnswer(packetFile, JSON.stringify({ message: "", additionalData: { outcome: "PLAN" } }));
+    assert.equal(readdirSync(dirname(packetFile)).some((name) => name.endsWith(".tmp")), false);
 });
 
 test("test_writeAgentAnswer_cliReadsTheAnswerFromStdin", () => {

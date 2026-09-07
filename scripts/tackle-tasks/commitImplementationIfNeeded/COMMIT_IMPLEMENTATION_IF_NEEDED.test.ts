@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./COMMIT_IMPLEMENTATION_IF_NEEDED.ts";
 import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
+import { stagingWorktreePath } from "../shared/stagingWorktree.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 function git(repoPath: string, ...args: string[]): string {
@@ -45,10 +46,10 @@ test("test_main_commitsADirtyWorktreeAndDropsTheAgentAnswer", () => {
     const { projectRoot, worktree } = makeFixture(taskNumber);
     writeFileSync(join(worktree, "widget.txt"), "widget\n");
 
-    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { ok: true } };
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { implemented: true, notes: "" } };
     const output = main(JSON.stringify(input));
 
-    assert.deepEqual(output, { ...corePacket(projectRoot, worktree, taskNumber), box: "COMMIT_IMPLEMENTATION_IF_NEEDED", scriptSignal: "continue" });
+    assert.deepEqual(output, { ...corePacket(projectRoot, worktree, taskNumber), box: "COMMIT_IMPLEMENTATION_IF_NEEDED", scriptSignal: "continue", next: "ARE_TASK_TESTS_SKIPPED_Q" });
     assert.equal(getCurrentTaskRun(taskNumber, projectRoot)?.commits.length, 1);
 });
 
@@ -56,9 +57,10 @@ test("test_main_returnsCleanlyWhenTheWorktreeIsAlreadyClean", () => {
     const taskNumber = 9102;
     const { projectRoot, worktree } = makeFixture(taskNumber);
 
-    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "", additionalData: {} };
-    main(JSON.stringify(input));
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "", additionalData: { implemented: true, notes: "" } };
+    const output = main(JSON.stringify(input));
 
+    assert.deepEqual(output, { ...corePacket(projectRoot, worktree, taskNumber), box: "COMMIT_IMPLEMENTATION_IF_NEEDED", scriptSignal: "continue", next: "ARE_TASK_TESTS_SKIPPED_Q" });
     assert.deepEqual(getCurrentTaskRun(taskNumber, projectRoot)?.commits, []);
 });
 
@@ -67,11 +69,65 @@ test("test_COMMIT_IMPLEMENTATION_IF_NEEDED_runsTwiceWithTheSameInput", () => {
     const { projectRoot, worktree } = makeFixture(taskNumber);
     writeFileSync(join(worktree, "widget.txt"), "widget\n");
 
-    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { ok: true } };
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { implemented: true, notes: "" } };
     const firstOutput = main(JSON.stringify(input));
     const secondOutput = main(JSON.stringify(input));
 
     assert.deepEqual(secondOutput, firstOutput);
     assert.equal(getCurrentTaskRun(taskNumber, projectRoot)?.commits.length, 1);
     assert.equal(git(worktree, "log", "--oneline").split("\n").length, 2);
+});
+
+test("test_main_usesStagingAsTheBaseBranchWhenTheSourceCheckoutIsOnAnotherBranch", () => {
+    const taskNumber = 9104;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+    git(projectRoot, "checkout", "-q", "-b", "feature-branch");
+    writeFileSync(join(worktree, "widget.txt"), "widget\n");
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { implemented: true, notes: "" } };
+    main(JSON.stringify(input));
+
+    assert.equal(git(stagingWorktreePath(projectRoot), "branch", "--show-current"), "staging");
+});
+
+test("test_main_throwsWhenAdditionalDataHasNoBooleanImplemented", () => {
+    const taskNumber = 9105;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "?", additionalData: { ok: true } };
+
+    assert.throws(() => main(JSON.stringify(input)), /additionalData holds no boolean "implemented"/);
+});
+
+test("test_main_routesToFailuresExitWhenImplementedIsFalse", () => {
+    const taskNumber = 9106;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "gave up", additionalData: { implemented: false, notes: "an open question blocks the plan" } };
+    const output = main(JSON.stringify(input));
+
+    assert.equal(output.next, "pipeline-failuresExit.mmd::FAILURES_EXIT");
+    assert.notEqual(output.exitType, "");
+    assert.equal(output.exitNote, "an open question blocks the plan");
+    assert.deepEqual(getCurrentTaskRun(taskNumber, projectRoot)?.commits, []);
+});
+
+// Retired: the fixSummary path now belongs to COMMIT_TEST_FIX_IF_NEEDED, reached via FIX_IMPLEMENT_TASK_TESTS directly.
+// test("test_main_doesNotThrowWhenReachedFromTheTestFixPathWithNoImplementedKey", () => {
+//     const taskNumber = 9107;
+//     const { projectRoot, worktree } = makeFixture(taskNumber);
+//
+//     const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "fixed the failing test", additionalData: { fixSummary: "renamed the assertion" } };
+//     const output = main(JSON.stringify(input));
+//
+//     assert.equal(output.next, "ARE_TASK_TESTS_SKIPPED_Q");
+// });
+
+test("test_main_throwsWhenAdditionalDataHasOnlyFixSummary", () => {
+    const taskNumber = 9107;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "fixed the failing test", additionalData: { fixSummary: "renamed the assertion" } };
+
+    assert.throws(() => main(JSON.stringify(input)), /additionalData holds no boolean "implemented"/);
 });

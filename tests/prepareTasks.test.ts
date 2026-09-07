@@ -1,7 +1,7 @@
 // Behavioral checks for prepareTasks.ts: brief writing, worktree creation, workflow args.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -140,8 +140,8 @@ test("test_createWorktreeForGroupCreatesStagingFromHeadWhenItIsMissing", () => {
     assert.equal(git(repoRoot, "rev-parse", "staging").trim(), headTip);
 });
 
-test("test_createWorktreeForGroupMovesAMergedStagingToHead", () => {
-    // Setup: staging sits at B; the current branch has moved on to O, so staging is fully merged.
+test("test_createWorktreeForGroupKeepsAMergedStagingAtItsExistingTip", () => {
+    // Setup: staging sits at B; the current branch has moved on to O, so staging is fully merged into HEAD.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
     const oldStagingTip = git(repoRoot, "rev-parse", "staging").trim();
@@ -153,26 +153,28 @@ test("test_createWorktreeForGroupMovesAMergedStagingToHead", () => {
     // Test action: cut a worktree.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
-    // Verification: staging moved to HEAD, and the worktree sits there too.
-    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
-    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), headTip);
+    // Verification: staging never moved, and the new worktree still sits at the old staging tip.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), oldStagingTip);
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), oldStagingTip);
 });
 
-test("test_createWorktreeForGroupFastForwardsAMergedStagingThatIsCheckedOutElsewhere", () => {
-    // Setup: staging is merged into HEAD but another worktree has it checked out, so git branch -f refuses.
+test("test_createWorktreeForGroupDoesNotMoveAStagingBranchCheckedOutInAnotherWorktree", () => {
+    // Setup: staging is merged into HEAD, but a second worktree has it checked out.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
+    const oldStagingTip = git(repoRoot, "rev-parse", "staging").trim();
     const stagingWorktree = mkdtempSync(join(tmpdir(), "staging-checkout-"));
     git(repoRoot, "worktree", "add", "-q", stagingWorktree, "staging");
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
-    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
-    // Test action and verification: staging moves to HEAD inside that checkout.
+    // Test action: cut a worktree.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
-    createWorktreeForGroup(repoRoot, group);
-    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
-    assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), headTip);
+    const worktreePath = createWorktreeForGroup(repoRoot, group);
+    // Verification: staging never moved, the other worktree's HEAD never moved, and the new worktree sits at the old staging tip.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), oldStagingTip);
+    assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), oldStagingTip);
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), oldStagingTip);
 });
 
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
@@ -530,6 +532,35 @@ test("test_recoverStaleTaskWorktreeLeaseRemovesALeaseWhoseWorktreeIsAlreadyGone"
     // Verification: the freed path is acquirable by a normal prepare.
     const reused = createWorktreeForGroup(repoRoot, group, "new-run");
     assert.equal(reused, worktreePath);
+});
+
+test("test_createWorktreeForGroupRecoversAStaleLeaseWhoseOwnerProcessIsDead", () => {
+    // Setup: a crashed run's lease names a pid that is provably no longer alive.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    const deadPid = spawnSync(process.execPath, ["-e", ""]).pid!;
+    releaseTaskWorktreeLease({ worktreePath, runId: "stale-run" });
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "stale-run", pid: deadPid, createdAt: Date.now() }));
+
+    // Test action: a new run reuses the worktree; the dead-pid lease is recovered instead of throwing.
+    const reused = createWorktreeForGroup(repoRoot, group, "new-run");
+
+    // Verification: the new run now holds the lease.
+    assert.equal(reused, worktreePath);
+    assert.equal(JSON.parse(readFileSync(`${worktreePath}.lease`, "utf8")).runId, "new-run");
+});
+
+test("test_createWorktreeForGroupStillThrowsWhenTheLeaseOwnerProcessIsAlive", () => {
+    // Setup: a lease names this test process's own pid, which is alive.
+    const repoRoot = makeTempRepoWithCommit();
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
+    const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
+    releaseTaskWorktreeLease({ worktreePath, runId: "stale-run" });
+    writeFileSync(`${worktreePath}.lease`, JSON.stringify({ runId: "stale-run", pid: process.pid, createdAt: Date.now() }));
+
+    // Test action and verification: a live owner still refuses.
+    assert.throws(() => createWorktreeForGroup(repoRoot, group, "new-run"), /already owned by a live run/);
 });
 
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {

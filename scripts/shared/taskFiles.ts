@@ -22,6 +22,13 @@ export function taskFilesProjectRoot(pair: TaskFilePair): string {
     : taskDirectory
 }
 
+// Duplicates taskFilesProjectRoot's project-root logic on purpose: this call site only ever has a bare tasksPath string, never a full TaskFilePair.
+export function taskWorkflowDirectory(tasksPath: string, taskNumber: number): string {
+  const taskDirectory = dirname(tasksPath);
+  const projectRoot = basename(taskDirectory) === '.taskTools' ? dirname(taskDirectory) : taskDirectory;
+  return join(projectRoot, '.taskTools', 'workflows', String(taskNumber));
+}
+
 function pairIn(folder: string): TaskFilePair {
   return { tasksPath: join(folder, "tasks.json"), completedTasksPath: join(folder, "completedTasks.json") };
 }
@@ -37,13 +44,13 @@ export function resolveTaskFiles(root: string): TaskFilePair {
   }
 }
 
-const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/"];
+const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", ".taskTools/runs/", "**/plans/checkpoint.json", ".taskTools/workflows/"];
 
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
   const taskFolder = dirname(pair.tasksPath);
-  if (!existsSync(taskFolder)) seedGitignore(dirname(taskFolder));
   mkdirSync(taskFolder, { recursive: true });
   withTaskStateLock(pair.tasksPath, () => {
+    seedGitignore(taskFilesProjectRoot(pair));
     for (const path of [pair.tasksPath, pair.completedTasksPath]) {
       if (!existsSync(path)) writeJsonAtomically(path, []);
     }

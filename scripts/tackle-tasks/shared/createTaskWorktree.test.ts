@@ -1,13 +1,17 @@
 // Behavioral checks for createTaskWorktree.ts. Run alone: node --test tests/createTaskWorktree.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { createTaskWorktree, taskBranchName, taskWorktreeCreateJournalPath } from "./createTaskWorktree.ts";
 import { claimTask, readTaskRunState, updateCurrentTaskRun } from "./taskRunState.ts";
-import { createWorktreeForGroup, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath } from "../../shared/prepareTasks.ts";
+import {
+    createWorktreeForGroup, releaseTaskWorktreeLease, resolveTaskWorktreeConventionDirectory, taskWorktreeLeasePath,
+} from "../../shared/prepareTasks.ts";
 import type { TaskGroup } from "../../shared/taskGroups.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
@@ -34,6 +38,17 @@ function makeProjectRootWithLocalSubmodule(): { root: string; submoduleOrigin: s
     git(root, "submodule", "add", "-q", submoduleOrigin, "vendor");
     git(root, "commit", "-q", "-m", "add submodule");
     return { root, submoduleOrigin };
+}
+
+function makeProjectRootWithCommit(): string {
+    const root = mkdtempSync(join(tmpdir(), "createTaskWorktree-"));
+    git(root, "init", "-q");
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test");
+    writeFileSync(join(root, "fileA.txt"), "root file\n");
+    git(root, "add", "fileA.txt");
+    git(root, "commit", "-q", "-m", "seed");
+    return root;
 }
 
 function seedTasksFile(root: string, tasks: unknown[]): void {
@@ -351,4 +366,159 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButTheP
     assert.ok(existsSync(worktree));
     assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
     assert.ok(existsSync(journalPath));
+});
+
+// Task 24 (PRE-12): kills a real child process right after the named createWorktreeForGroup
+// step, so recovery is proven against a real process death, not a thrown error.
+async function runCreateTaskWorktreeInChildAndKillAfter(
+    root: string,
+    taskNumber: number,
+    runId: string,
+    step: "lease" | "gitCreate" | "gitReset",
+): Promise<void> {
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "createTaskWorktree.ts")).href;
+    const childSource = `
+        import { createTaskWorktree } from ${JSON.stringify(moduleUrl)};
+        createTaskWorktree(${taskNumber}, ${JSON.stringify(runId)}, ${JSON.stringify(root)});
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], {
+        stdio: "inherit",
+        env: { ...process.env, CREATEWORKTREEFORGROUP_TEST_KILL_AFTER: step },
+    });
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
+}
+
+test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterAcquiringTheLease", async () => {
+    // Setup: a real repo, an active claimed run, no prior worktree.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+
+    // Test action: kill the child right after it acquires the lease, before any git worktree exists.
+    await runCreateTaskWorktreeInChildAndKillAfter(root, 1, "run-a", "lease");
+
+    // Verification: the lease survived the kill, naming this run; no git worktree exists yet.
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(expectedWorktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-a");
+    assert.ok(!existsSync(expectedWorktree));
+
+    // Test action: retry in-process.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: a real worktree now exists on task-1, and no journal remains.
+    assert.equal(output.branch, "task-1");
+    assert.ok(existsSync(output.worktree));
+    assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
+});
+
+test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterResettingAnExistingBranch", async () => {
+    // Setup: a leftover worktree directory a previous run left behind after its lease was cleanly released.
+    const root = makeProjectRootWithCommit();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
+    const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
+    createWorktreeForGroup(root, group, "run-a");
+    releaseTaskWorktreeLease({ worktreePath: expectedWorktree, runId: "run-a" });
+    claimTask(1, "run-b", root);
+
+    // Test action: kill the child right after it resets the existing branch.
+    await runCreateTaskWorktreeInChildAndKillAfter(root, 1, "run-b", "gitReset");
+
+    // Verification: the lease and create-journal both survived the kill, naming this run.
+    const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(expectedWorktree), "utf8"));
+    assert.equal(leaseOwner.runId, "run-b");
+    const journal = JSON.parse(readFileSync(taskWorktreeCreateJournalPath(expectedWorktree), "utf8"));
+    assert.equal(journal.runId, "run-b");
+
+    // Test action: retry in-process.
+    const output = createTaskWorktree(1, "run-b", root);
+
+    // Verification: creation completes on task-1, task state records run-b, no journal remains.
+    assert.equal(output.branch, "task-1");
+    const state = readTaskRunState(1, root);
+    assert.equal(state.leaseRunId, "run-b");
+    assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
+});
+
+async function runCreateTaskWorktreeInChildAndKillAfterOwnStep(
+    root: string,
+    taskNumber: number,
+    runId: string,
+    step: "state" | "isolation",
+): Promise<void> {
+    const moduleUrl = pathToFileURL(join(import.meta.dirname, "createTaskWorktree.ts")).href;
+    const childSource = `
+        import { createTaskWorktree } from ${JSON.stringify(moduleUrl)};
+        createTaskWorktree(${taskNumber}, ${JSON.stringify(runId)}, ${JSON.stringify(root)});
+    `;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", childSource], {
+        stdio: "inherit",
+        env: { ...process.env, CREATETASKWORKTREE_TEST_KILL_AFTER: step },
+    });
+    const [, signal] = await once(child, "exit");
+    assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after step "${step}"`);
+}
+
+function isSkipWorktree(worktreePath: string, relativeFile: string): boolean {
+    const line = git(worktreePath, "ls-files", "-v", "--", relativeFile);
+    return line.startsWith("S");
+}
+
+// A tracked plans/brief-*.md so configureGeneratedArtifactIsolation has something real to flag.
+function trackABriefFileInRoot(root: string): void {
+    mkdirSync(join(root, "plans"), { recursive: true });
+    writeFileSync(join(root, "plans", "brief-1.md"), "brief\n");
+    git(root, "add", "plans/brief-1.md");
+    git(root, "commit", "-q", "-m", "add brief");
+}
+
+test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterRecordingTaskState", async () => {
+    // Setup: a tracked generated-artifact file so configureGeneratedArtifactIsolation has something to flag.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    trackABriefFileInRoot(root);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+
+    // Test action: kill right after task state is published, before isolation is configured.
+    await runCreateTaskWorktreeInChildAndKillAfterOwnStep(root, 1, "run-a", "state");
+
+    // Verification: task state is published, the journal survives, and isolation is not yet installed.
+    const state = readTaskRunState(1, root);
+    assert.ok(state.worktree !== null);
+    assert.equal(state.leaseRunId, "run-a");
+    assert.ok(existsSync(taskWorktreeCreateJournalPath(state.worktree!)));
+    assert.equal(isSkipWorktree(state.worktree!, "plans/brief-1.md"), false);
+
+    // Test action: retry in-process.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: the same worktree is returned, the journal is gone, and isolation is now installed.
+    assert.equal(output.worktree, state.worktree);
+    assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
+    assert.equal(isSkipWorktree(output.worktree, "plans/brief-1.md"), true);
+});
+
+test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterConfiguringIsolation", async () => {
+    // Setup: same fixture as above.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    trackABriefFileInRoot(root);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    claimTask(1, "run-a", root);
+
+    // Test action: kill right after isolation is configured, before the journal is unlinked.
+    await runCreateTaskWorktreeInChildAndKillAfterOwnStep(root, 1, "run-a", "isolation");
+
+    // Verification: isolation is installed, but the journal still exists.
+    const state = readTaskRunState(1, root);
+    assert.equal(isSkipWorktree(state.worktree!, "plans/brief-1.md"), true);
+    assert.ok(existsSync(taskWorktreeCreateJournalPath(state.worktree!)));
+
+    // Test action: retry in-process.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: the journal is gone and isolation remains installed (re-running it is a no-op).
+    assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
+    assert.equal(isSkipWorktree(output.worktree, "plans/brief-1.md"), true);
 });

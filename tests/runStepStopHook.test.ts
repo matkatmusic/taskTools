@@ -61,6 +61,23 @@ test("test_runStepStopHook_blocksTheStopWhenTheAnswerIsMissingFromThePacketFile"
     assert.match(readLog(), /blocked the stop: /);
 });
 
+// The regex must still match when "agent" sits after "payload" in the outcome.
+test("test_stopHook_matchesAnOutcomeThatCarriesAgentOptions", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-stop-"));
+    const templateFile = join(folder, "B.template.json");
+    writeFileSync(templateFile, JSON.stringify({ input: { taskNumber: 0, message: "", additionalData: {} }, output: { box: "B", scriptSignal: "stop" } }));
+    const configFile = join(folder, "steps.json");
+    writeFileSync(configFile, JSON.stringify({ "one.mmd": [{ box: "B", script: "B.ts", template: templateFile, producesPrompt: false, next: [] }] }));
+    const packetFile = join(folder, "A-1.json");
+    writeFileSync(packetFile, JSON.stringify({ taskNumber: 7, message: "hi", additionalData: {} }));
+    const hookOutput = JSON.stringify({ ok: true, ran: ["one.mmd::A"], errors: [], outcome: { next: "one.mmd::B", payload: packetFile, agent: { model: "m", effort: "e" } } });
+    const transcriptFile = join(folder, "agent-1.jsonl");
+    writeFileSync(transcriptFile, `${JSON.stringify({ type: "user", content: `${hookOutput}\nRead that file.` })}\n`);
+    const { stdout, stderr, status, readLog } = runStopHook(transcriptFile, configFile);
+    assert.deepEqual({ stdout, stderr, status }, { stdout: "", stderr: "", status: 0 });
+    assert.match(readLog(), new RegExp(`${packetFile} is ready for one\\.mmd::B`));
+});
+
 // Every invocation leaves a line, so a run shows the hook fired, even when it says nothing.
 test("test_runStepStopHook_logsEveryTimeItFires", () => {
     const { configFile, transcriptFile } = buildAgent({ taskNumber: 7, prompt: "answer" }, false);

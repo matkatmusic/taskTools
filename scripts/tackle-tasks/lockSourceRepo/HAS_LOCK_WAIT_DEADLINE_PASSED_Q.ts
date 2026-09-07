@@ -1,16 +1,17 @@
-// HAVE_15_MINUTES_PASSED_Q, from pipeline-rebasePreamble/HAVE_15_MINUTES_PASSED.ts
+// HAS_LOCK_WAIT_DEADLINE_PASSED_Q, from pipeline-rebasePreamble/HAVE_15_MINUTES_PASSED.ts
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import type { EntryPacket } from "./_packet.ts";
 
-// Comfortably short of the operator's stuck-lock recovery script, per the diagram's rule 4.
-const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+// Covers only this box's own wait; Step 2 sizes the hook timeout around this plus the worst-case
+// step that can precede LOCK_SOURCE_REPO in the same hook invocation, not around this value alone.
+export const LOCK_WAIT_DEADLINE_MS = Number(process.env.LOCK_WAIT_DEADLINE_MS ?? 5 * 60 * 1000);
 
 export function main(input: string): EntryPacket & { next: string } {
     const parsed = JSON.parse(input) as EntryPacket;
     const packet: EntryPacket = {
-        box: "HAVE_15_MINUTES_PASSED_Q",
+        box: "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         taskNumber: parsed.taskNumber,
         runId: parsed.runId,
@@ -22,11 +23,11 @@ export function main(input: string): EntryPacket & { next: string } {
         lockWaitStartedAt: parsed.lockWaitStartedAt,
     };
     const elapsedMs = Date.now() - Date.parse(parsed.lockWaitStartedAt);
-    if (elapsedMs >= FIFTEEN_MINUTES_MS) {
+    if (elapsedMs >= LOCK_WAIT_DEADLINE_MS) {
         return {
             ...packet,
             exitType: "run-failed",
-            exitNote: "the source repo lock did not come free within 15 minutes",
+            exitNote: "the source repo lock did not come free within 5 minutes",
             next: "pipeline-failuresExit.mmd::FAILURES_EXIT",
         };
     }

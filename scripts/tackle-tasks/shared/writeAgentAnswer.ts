@@ -1,5 +1,6 @@
 // Agents record answers only through this validated merge, never by hand-editing packet JSON.
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 export function writeAgentAnswer(packetFile: string, answerJson: string): void {
     const answer = JSON.parse(answerJson) as Record<string, unknown>;
@@ -8,7 +9,7 @@ export function writeAgentAnswer(packetFile: string, answerJson: string): void {
         throw new Error(`writeAgentAnswer: answer holds no object "additionalData"`);
     }
     const packet = JSON.parse(readFileSync(packetFile, "utf8")) as Record<string, unknown>;
-    writeFileSync(packetFile, JSON.stringify({ ...packet, message: answer.message, additionalData: answer.additionalData }, null, 4));
+    writeJsonAtomically(packetFile, { ...packet, message: answer.message, additionalData: answer.additionalData });
 }
 
 if (process.argv[1]?.endsWith("writeAgentAnswer.ts")) {

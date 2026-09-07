@@ -81,8 +81,11 @@ export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFil
     const owner = buildLockOwner(input.runId, input.taskNumber);
     refreshOwnedSourceRepoLockOrThrow(input.projectRoot, owner);
 
+    const declared = declaredFiles(input.taskNumber, input.projectRoot);
+    // A task that declares "*" owns every path, so nothing can fall outside its fence.
+    if (declared.includes("*")) return { inside: true, violations: [] };
     const occurrences = getOccurrencesDeepestFirst(input.worktreePath, input.projectRoot, input.rootSourceBranch);
-    const ownedPaths = new Set(buildOwnedOccurrencePaths(declaredFiles(input.taskNumber, input.projectRoot), occurrences));
+    const ownedPaths = new Set(buildOwnedOccurrencePaths(declared, occurrences));
 
     const changedPathsByOccurrenceId = new Map<string, string[]>();
     const allChangedPaths: string[] = [];

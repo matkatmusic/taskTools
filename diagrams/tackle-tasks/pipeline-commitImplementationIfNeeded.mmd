@@ -4,6 +4,7 @@ flowchart TB
   subgraph commitImplementationIfNeeded ["Input: [IMPLEMENT_TASK]'s result"]
     direction TB
     COMMIT_IMPLEMENTATION_IF_NEEDED["COMMIT_IMPLEMENTATION_IF_NEEDED"]
+    COMMIT_TEST_FIX_IF_NEEDED["COMMIT_TEST_FIX_IF_NEEDED"]
     ARE_TASK_TESTS_SKIPPED_Q["is the entry's hasTests false?"]
     RUN_TASK_TESTS["run the task tests"]
     DO_TASK_TESTS_PASS_Q["do the task tests pass?"]
@@ -20,6 +21,8 @@ flowchart TB
   commitImplementationIfNeeded ~~~ commitImplementationIfNeededNext
 
   COMMIT_IMPLEMENTATION_IF_NEEDED --> ARE_TASK_TESTS_SKIPPED_Q
+  COMMIT_IMPLEMENTATION_IF_NEEDED -- "NO<br/>implementation incomplete" --> FAILURES_EXIT
+  COMMIT_TEST_FIX_IF_NEEDED --> ARE_TASK_TESTS_SKIPPED_Q
   ARE_TASK_TESTS_SKIPPED_Q -- "YES<br/>no task tests, no codex test review" --> LOCK_SOURCE_REPO
   ARE_TASK_TESTS_SKIPPED_Q -- "NO" --> RUN_TASK_TESTS
   RUN_TASK_TESTS --> DO_TASK_TESTS_PASS_Q
@@ -35,5 +38,5 @@ flowchart TB
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
-  class COMMIT_IMPLEMENTATION_IF_NEEDED,ARE_TASK_TESTS_SKIPPED_Q,RUN_TASK_TESTS,DO_TASK_TESTS_PASS_Q,ARE_2_TEST_FIXES_DONE_Q,AMEND_ENTRY_WITH_FAILING_TESTS script
+  class COMMIT_IMPLEMENTATION_IF_NEEDED,COMMIT_TEST_FIX_IF_NEEDED,ARE_TASK_TESTS_SKIPPED_Q,RUN_TASK_TESTS,DO_TASK_TESTS_PASS_Q,ARE_2_TEST_FIXES_DONE_Q,AMEND_ENTRY_WITH_FAILING_TESTS script
   class CODEX_REVIEWS_TESTS,LOCK_SOURCE_REPO,FAILURES_EXIT,FIX_IMPLEMENT_TASK_TESTS next_diagram

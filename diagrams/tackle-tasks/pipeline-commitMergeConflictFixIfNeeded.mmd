@@ -18,7 +18,8 @@ flowchart TB
 
   COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE
   CONTINUE_REBASE --> IS_REBASE_FINISHED_Q
-  IS_REBASE_FINISHED_Q -- "YES" --> RUN_FULL_SUITE
+  IS_REBASE_FINISHED_Q -- "YES<br/>no returnTo: the merge-time rebase" --> RUN_FULL_SUITE
+  IS_REBASE_FINISHED_Q -- "YES<br/>returnTo set: release the source lock,<br/>back to the preamble" --> DOES_FENCE_COVER_WORKTREE_Q
   IS_REBASE_FINISHED_Q -- "NO<br/>it stopped on new conflicts" --> ARE_2_CONFLICT_FIXES_DONE_Q
   ARE_2_CONFLICT_FIXES_DONE_Q -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS
   ARE_2_CONFLICT_FIXES_DONE_Q -- "YES<br/>rebase-stuck" --> FAILURES_EXIT
@@ -29,4 +30,4 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
   class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,CONTINUE_REBASE,IS_REBASE_FINISHED_Q,ARE_2_CONFLICT_FIXES_DONE_Q script
-  class FIX_CONFLICTS,RUN_FULL_SUITE,FAILURES_EXIT next_diagram
+  class FIX_CONFLICTS,RUN_FULL_SUITE,FAILURES_EXIT,DOES_FENCE_COVER_WORKTREE_Q next_diagram

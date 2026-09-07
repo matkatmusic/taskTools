@@ -12,6 +12,12 @@ export function buildHookOutputSchema(): Record<string, unknown> {
         properties: {
             next: { type: ["string", "null"] },
             payload: { type: "string" },
+            agent: {
+                type: "object",
+                properties: { model: { type: "string" }, effort: { type: "string" } },
+                required: ["model", "effort"],
+                additionalProperties: false,
+            },
         },
         required: ["next", "payload"],
         additionalProperties: false,

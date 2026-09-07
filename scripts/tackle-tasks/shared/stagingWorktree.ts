@@ -12,14 +12,16 @@ export function stagingWorktreePath(projectRoot: string): string {
     return join(resolveTaskWorktreeConventionDirectory(projectRoot), "staging");
 }
 
-// A rebuilt source .git orphans this worktree's gitdir pointer; check it's still live.
-function isLiveWorktree(worktreePath: string): boolean {
-    return spawnSync("git", ["-C", worktreePath, "rev-parse", "--git-dir"], { stdio: "ignore" }).status === 0;
+// Checks the worktree is live and still points at sourceCheckoutPath, not a stale unrelated repo with a valid gitdir.
+function isLiveWorktree(worktreePath: string, sourceCheckoutPath: string): boolean {
+    const result = spawnSync("git", ["-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" });
+    if (result.status !== 0) return false;
+    return result.stdout.trim() === git(sourceCheckoutPath, "rev-parse", "--path-format=absolute", "--git-common-dir");
 }
 
 // --force: branch is always already checked out at sourceCheckoutPath, since that's how baseBranch gets derived.
 function addOrVerifyLinkedWorktree(sourceCheckoutPath: string, worktreePath: string, branch: string): void {
-    if (!existsSync(join(worktreePath, ".git")) || !isLiveWorktree(worktreePath)) {
+    if (!existsSync(join(worktreePath, ".git")) || !isLiveWorktree(worktreePath, sourceCheckoutPath)) {
         rmSync(worktreePath, { recursive: true, force: true });
         git(sourceCheckoutPath, "worktree", "add", "--quiet", "--force", worktreePath, branch);
         return;

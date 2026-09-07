@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
-import { getCurrentTaskRun } from "./taskRunState.ts";
+import { getAttemptCount, getCurrentTaskRun } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
 
@@ -213,7 +213,7 @@ The command that runs you captures that message to \`${t.testReviewFile}\`, so d
 }
 
 export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExistingTestFiles: string[], testCommand: string, testOutput: string): string {
-    if (t.codexReviewNotes.trim() !== "") return recheckOnlyPrompt(t, diffPath);
+    if (getAttemptCount(t.number, "testReviews", t.taskStateRoot) > 0) return recheckOnlyPrompt(t, diffPath);
     return reviewByDefaultPrompt(t, diffPath, preExistingTestFiles, testCommand, testOutput);
 }
 

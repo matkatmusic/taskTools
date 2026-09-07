@@ -6,7 +6,7 @@ import { getTemplateShapeMismatches } from "../shared/templateShape.ts";
 import type { BlockTemplate, StepConfig } from "../tackle-tasks/generateSteps.ts";
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/tackle-tasks/steps.json");
+const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
 // Same log the run-step hook writes, so a run shows whether this hook fired at all.
 const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.json");
 
@@ -25,7 +25,7 @@ if (typeof input.agent_transcript_path !== "string") {
 
 // The run-step hook output sits inside the transcript as an escaped string; the last one is this pass's.
 const transcript = readFileSync(input.agent_transcript_path, "utf8");
-const matches = [...transcript.matchAll(/\\"outcome\\":\{\\"next\\":\\"([^\\"]+)\\",\\"payload\\":\\"([^\\"]+)\\"\}/g)];
+const matches = [...transcript.matchAll(/\\"outcome\\":\{\\"next\\":\\"([^\\"]+)\\",\\"payload\\":\\"([^\\"]+)\\"/g)];
 if (matches.length === 0) {
     log("no run-step prompt stop in this transcript; nothing to check");
     process.exit(0);
