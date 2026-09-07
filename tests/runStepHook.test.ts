@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkpointPath, readCheckpoint } from "../scripts/tackle-tasks/shared/checkpoint.ts";
+import type { AgentOptions } from "../scripts/tackle-tasks/generateSteps.ts";
 import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 import { writeAgentAnswer } from "../scripts/tackle-tasks/shared/writeAgentAnswer.ts";
@@ -19,10 +20,11 @@ const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const [PREAMBLE_DIAGRAM, PREAMBLE_BOX] = START_STEP.split("::");
 
 function runHook(prompt: string, configFile?: string, worktree?: string, priorPacketCommand?: string) {
-    const logFile = join(mkdtempSync(join(tmpdir(), "run-step-")), "run-log.json");
-    // An earlier pass's packet sits beside this run's log, the way .taskTools/runs/ holds every run.
+    const runsFolder = mkdtempSync(join(tmpdir(), "run-step-"));
+    const logFile = join(runsFolder, "run", "run-log.json");
+    // An earlier pass's packet sits in a sibling stamp folder, the way .taskTools/runs/ holds every run.
     if (priorPacketCommand !== undefined) {
-        const packetsFolder = join(dirname(logFile), "0000", "packets");
+        const packetsFolder = join(runsFolder, "0000", "packets");
         mkdirSync(packetsFolder, { recursive: true });
         writeFileSync(join(packetsFolder, "X-0-1.json"), JSON.stringify({ input: {}, command: priorPacketCommand, commandOutput: "", output: {} }));
     }
@@ -46,7 +48,7 @@ function runHook(prompt: string, configFile?: string, worktree?: string, priorPa
 }
 
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
-function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; producesPrompt?: boolean; next: string[] }[]>) {
+function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; producesPrompt?: boolean; agent?: AgentOptions; next: string[] }[]>) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
     const outputByBox: Record<string, Record<string, unknown>> = {};
     const writeStep = (box: string, result: Record<string, unknown>) => {
@@ -285,13 +287,105 @@ test("test_runStepHook_walksIntoAPromptBlockAndHandsItsInputAsThePacket", () => 
             { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    const { result } = runHook("/run-step A", configFile);
-    assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
+    const walkerStop = runHook("/run-step A", configFile).result;
+    assert.deepEqual(walkerStop.ran, ["one.mmd::A"]);
+    assert.equal(walkerStop.outcome.next, "one.mmd::B");
+    const { result } = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.outcome.payload })}`, configFile);
+    assert.deepEqual(result.ran, ["one.mmd::B"]);
     assert.equal(result.outcome.next, "one.mmd::C");
     // The prompt packet also carries when the prompt block started, so the next pass can log the agent's time.
     const { startedAt, ...packet } = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
     assert.equal(typeof startedAt, "number");
     assert.deepEqual(packet, { box: "A", scriptSignal: "continue", taskNumber: 7, runId: "run-1", input: "", prompt: "answer" });
+});
+
+// A prompt block runs under its own model, so the walk stops before it and names it as next.
+test("test_walkStopsBeforeAPromptBlockAndNamesItAsNext", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.ran, ["one.mmd::A"]);
+    assert.equal(result.outcome.next, "one.mmd::B");
+    const payload = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
+    assert.equal("prompt" in payload, false);
+});
+
+test("test_walkStopReturnsTheNextBlocksAgentOptions", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, agent: { model: "m", effort: "e" }, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.deepEqual(result.outcome.agent, { model: "m", effort: "e" });
+});
+
+test("test_walkStopOmitsAgentWhenTheNextBlockHasNone", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal("agent" in result.outcome, false);
+});
+
+test("test_promptBlockRunsWhenTheWalkStartsAtIt", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const walkerStop = runHook("/run-step A", configFile).result;
+    const { result } = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.outcome.payload })}`, configFile);
+    assert.deepEqual(result.ran, ["one.mmd::B"]);
+    const payload = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
+    assert.equal("prompt" in payload, true);
+    assert.equal(result.outcome.next, "one.mmd::C");
+});
+
+test("test_walkStopInstructionsDoNotAskForAnAnswer", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const instructions = runHook("/run-step A", configFile).instructions;
+    assert.match(instructions, /^The walk stopped before one\.mmd::B\. Do not run it/);
+    assert.doesNotMatch(instructions, /writeAgentAnswer|holds a prompt/);
+});
+
+test("test_workerStartFromAWalkerPacketLogsNoAgentTime", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "prompt", prompt: "answer" }), producesPrompt: true, next: ["C"] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const walkerStop = runHook("/run-step A", configFile).result;
+    const afterWalkerPacket = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.outcome.payload })}`, configFile);
+    const walkerLog: { block: string }[] = JSON.parse(afterWalkerPacket.readLog());
+    assert.equal(walkerLog.some(entry => entry.block.endsWith(" agent")), false);
+
+    const promptStop = afterWalkerPacket.result;
+    const afterPromptPacket = runHook(`/run-step C ${JSON.stringify({ packetFile: promptStop.outcome.payload })}`, configFile);
+    const promptLog: { block: string }[] = JSON.parse(afterPromptPacket.readLog());
+    assert.equal(promptLog.some(entry => entry.block.endsWith(" agent")), true);
 });
 
 // A pass starting at the prompt block runs it; the packet is that pass's given input.
@@ -626,7 +720,7 @@ test("test_runStepHook_storesTheInputAsPartOfThePasteableCommand", () => {
     }));
     const { result } = runHook(`/run-step A it's here`, configFile);
     const packetsFolder = dirname(result.outcome.payload);
-    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
     const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
     assert.match(packet.command, /^node --no-inspect .*A\.ts 'it'\\''s here'$/);
 });
@@ -680,7 +774,7 @@ test("test_runStepHook_storesTheThreadedOutputAsThePasteableCommand", () => {
     }));
     const { result } = runHook("/run-step A", configFile);
     const packetsFolder = dirname(result.outcome.payload);
-    const packetName = readdirSync(packetsFolder).find(name => /^B-\d+-2\.json$/.test(name))!;
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-B-\d+-2\.json$/.test(name))!;
     const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
     assert.match(packet.command, /node --no-inspect .*B\.ts '\{"box":"A","scriptSignal":"continue","input":""\}'/);
 });
@@ -751,10 +845,10 @@ function runHookIn(cwd: string, prompt: string, configFile: string) {
     return { result, runsFolder, runsEntries: () => readdirSync(runsFolder).sort() };
 }
 
-const STAMPED_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+-run-log\.json$/;
+const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+$/;
 
 test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
-    // A fresh /run-step run names its log and packets by one timestamp; A continues into B, which stops.
+    // A fresh /run-step run names its folder by one timestamp; A continues into B, which stops.
     const configFile = configWith(writeStep => ({
         "one.mmd": [
             { box: "A", script: writeStep("A", { scriptSignal: "continue" }), next: ["B"] },
@@ -763,25 +857,25 @@ test("test_runStepHook_writesOneStampedRunLogAndOnePacketsFolderPerRun", () => {
     }));
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { result, runsFolder, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
-    // The runs folder holds exactly <stamp>-run-log.json and the <stamp> folder.
-    const [stampFolder, logName] = runsEntries();
-    assert.match(logName, STAMPED_LOG);
-    assert.equal(logName, `${stampFolder}-run-log.json`);
-    // The packet sits under <stamp>/packets.
+    // The runs folder holds exactly the one <stamp> folder.
+    const [stampFolder] = runsEntries();
+    assert.equal(runsEntries().length, 1);
+    assert.match(stampFolder, STAMP);
+    // The run log and packets both sit inside that stamp folder.
     assert.equal(dirname(result.outcome.payload), join(runsFolder, stampFolder, "packets"));
-    assert.ok(JSON.parse(readFileSync(join(runsFolder, logName), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::A"));
+    const logPath = join(runsFolder, stampFolder, "run-log.json");
+    assert.ok(JSON.parse(readFileSync(logPath, "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::A"));
 });
 
 test("test_runStepHook_namesTheRunLogWithTheTaskNumberWhenInputCarriesOne", () => {
-    // Input naming a taskNumber gets it woven into the log file name: <stamp>-task-<N>-run-log.json.
+    // Input naming a taskNumber gets it woven into the log file name: <stamp>/task-<N>-run-log.json.
     const configFile = configWith(writeStep => ({
         "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
     }));
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     const { runsFolder, runsEntries } = runHookIn(cwd, `/run-step A ${JSON.stringify({ taskNumber: 42 })}`, configFile);
-    const [stampFolder, logName] = runsEntries();
-    assert.equal(logName, `${stampFolder}-task-42-run-log.json`);
-    assert.ok(existsSync(join(runsFolder, logName)));
+    const [stampFolder] = runsEntries();
+    assert.ok(existsSync(join(runsFolder, stampFolder, "task-42-run-log.json")));
 });
 
 test("test_runStepHook_appendsAPacketFilePassToTheSamePassAsTaskLog", () => {
@@ -795,13 +889,13 @@ test("test_runStepHook_appendsAPacketFilePassToTheSamePassAsTaskLog", () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
     // Action, pass 1: a fresh /run-step call whose own input carries taskNumber.
     const pass1 = runHookIn(cwd, `/run-step A ${JSON.stringify({ taskNumber: 42 })}`, configFile);
-    const stampFolder = pass1.runsEntries().find(name => !name.endsWith("run-log.json"))!;
+    const [stampFolder] = pass1.runsEntries();
     // Action, pass 2: answers A's prompt using only the packet file, the shape real resumes and agent() calls use.
     const pass2 = runHookIn(cwd, `/run-step B ${JSON.stringify({ packetFile: pass1.result.outcome.payload })}`, configFile);
-    // Verification: exactly one run-log file exists for this stamp — no untagged sibling appeared.
-    assert.deepEqual(pass2.runsEntries(), [stampFolder, `${stampFolder}-task-42-run-log.json`]);
+    // Verification: still exactly one stamp folder — no untagged sibling appeared.
+    assert.deepEqual(pass2.runsEntries(), [stampFolder]);
     // Verification: pass 2's own entries landed inside that one file, not a sibling.
-    const mergedLog = JSON.parse(readFileSync(join(pass2.runsFolder, `${stampFolder}-task-42-run-log.json`), "utf8"));
+    const mergedLog = JSON.parse(readFileSync(join(pass2.runsFolder, stampFolder, "task-42-run-log.json"), "utf8"));
     assert.ok(mergedLog.some((entry: { block: string }) => entry.block === "one.mmd::A"));
     assert.ok(mergedLog.some((entry: { block: string }) => entry.block === "one.mmd::A agent"));
     assert.ok(mergedLog.some((entry: { block: string }) => entry.block === "one.mmd::B"));
@@ -816,8 +910,8 @@ test("test_runStepHook_namesTheRunFolderWithTheProcessId", () => {
     const { result, runsEntries } = runHookIn(cwd, "/run-step A", configFile);
     // Step: read the hook process's pid out of the packet file name it already checks.
     const packetsFolder = dirname(result.outcome.payload);
-    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
-    const pid = packetName.match(/^A-(\d+)-1\.json$/)![1];
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
+    const pid = packetName.match(/^\d+-A-(\d+)-1\.json$/)![1];
     // Step: the run folder name is a timestamp followed by that pid.
     const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     assert.match(stampFolder, /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+$/);
@@ -839,8 +933,8 @@ test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     const packetNames = readdirSync(packetsFolder);
     // One packet ran per block, named by box, pid, and run order: A is 1, B is 2.
-    const aPacketName = packetNames.find(name => /^A-\d+-1\.json$/.test(name))!;
-    const bPacketName = packetNames.find(name => /^B-\d+-2\.json$/.test(name))!;
+    const aPacketName = packetNames.find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
+    const bPacketName = packetNames.find(name => /^\d+-B-\d+-2\.json$/.test(name))!;
     assert.ok(aPacketName);
     assert.ok(bPacketName);
     for (const packetName of [aPacketName, bPacketName]) {
@@ -864,7 +958,7 @@ test("test_runStepHook_writesAPacketForABlockThatFailed", () => {
     assert.equal(result.ok, false);
     const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
-    const packetName = readdirSync(packetsFolder).find(name => /^A-\d+-1\.json$/.test(name))!;
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
     const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
     assert.match(packet.commandOutput, /boom from A/);
 });
@@ -891,9 +985,9 @@ test("test_runStepHook_writesOnePacketPerPassWhenABlockRunsTwice", () => {
     const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
     const packetsFolder = join(runsFolder, stampFolder, "packets");
     // Two packet files for box A; the pass number differs between them.
-    const aPacketNames = readdirSync(packetsFolder).filter(name => /^A-\d+-\d+\.json$/.test(name));
+    const aPacketNames = readdirSync(packetsFolder).filter(name => /^\d+-A-\d+-\d+\.json$/.test(name));
     assert.equal(aPacketNames.length, 2);
-    const passNumbers = aPacketNames.map(name => Number(name.match(/^A-\d+-(\d+)\.json$/)![1])).sort((a, b) => a - b);
+    const passNumbers = aPacketNames.map(name => Number(name.match(/^\d+-A-\d+-(\d+)\.json$/)![1])).sort((a, b) => a - b);
     assert.notEqual(passNumbers[0], passNumbers[1]);
 });
 
@@ -910,10 +1004,10 @@ test("test_runStepHook_appendsAPacketFilePassToTheRunThePacketBelongsTo", () => 
             { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
         ],
     }));
-    // The pass that consumes it logs to S-run-log.json and writes its packet under S/packets.
+    // The pass that consumes it logs to S/run-log.json and writes its packet under S/packets.
     const { result, runsFolder, runsEntries } = runHookIn(cwd, `/run-step C ${JSON.stringify({ packetFile })}`, configFile);
-    assert.deepEqual(runsEntries(), ["S", "S-run-log.json"]);
-    assert.ok(JSON.parse(readFileSync(join(runsFolder, "S-run-log.json"), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::C"));
+    assert.deepEqual(runsEntries(), ["S"]);
+    assert.ok(JSON.parse(readFileSync(join(runsFolder, "S", "run-log.json"), "utf8")).some((entry: { block: string }) => entry.block === "one.mmd::C"));
     assert.equal(dirname(result.outcome.payload), packetsFolder);
 });
 
@@ -993,8 +1087,9 @@ test("test_runStepHook_keepsTheCheckpointWhenTheBlockAfterAPromptDies", () => {
         };
     });
     const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
-    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
-    const { result, checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    const walkerStop = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const promptStop = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.result.outcome.payload })}`, configFile, worktree);
+    const { result, checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: promptStop.result.outcome.payload })}`, configFile, worktree);
     assert.equal(result.ok, false);
     assert.equal(checkpoint?.block, "one.mmd::A");
     assert.equal(checkpoint?.state, "running");
@@ -1026,8 +1121,9 @@ test("test_runStepHook_failsTheBlockAfterAPromptBackToTheBlockBeforeIt", () => {
         ],
     }));
     const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
-    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
-    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    const walkerStop = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const promptStop = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.result.outcome.payload })}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: promptStop.result.outcome.payload })}`, configFile, worktree);
     assert.equal(checkpoint?.block, "one.mmd::A");
     assert.equal(checkpoint?.state, "failed");
     assert.equal(checkpoint?.exitType, "run-failed");
@@ -1613,11 +1709,12 @@ test("test_runStepHook_movesTheCheckpointToTheBlockAfterAPromptOnceItSucceeds", 
         ],
     }));
     const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
-    const first = runHook(`/run-step A ${startInput}`, configFile, worktree);
-    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: first.result.outcome.payload })}`, configFile, worktree);
+    const walkerStop = runHook(`/run-step A ${startInput}`, configFile, worktree);
+    const promptStop = runHook(`/run-step B ${JSON.stringify({ packetFile: walkerStop.result.outcome.payload })}`, configFile, worktree);
+    const { checkpoint } = runHook(`/run-step one.mmd::C ${JSON.stringify({ packetFile: promptStop.result.outcome.payload })}`, configFile, worktree);
     assert.equal(checkpoint?.block, "one.mmd::C");
     assert.equal(checkpoint?.state, "running");
-    const { prompt: _prompt, startedAt: _startedAt, ...packetC } = JSON.parse(readFileSync(first.result.outcome.payload, "utf8"));
+    const { prompt: _prompt, startedAt: _startedAt, ...packetC } = JSON.parse(readFileSync(promptStop.result.outcome.payload, "utf8"));
     assert.equal(checkpoint?.input, JSON.stringify(packetC));
 });
 

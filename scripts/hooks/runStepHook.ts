@@ -1,12 +1,12 @@
 // Runs one diagram block for /run-step, typed as a prompt so it fires inside a workflow subagent.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, readdirSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { buildPromptOutputTemplate, KNOWN_SCRIPT_SIGNALS, SCRIPT_SIGNAL, type ScriptSignal } from "../shared/contracts.ts";
 import { getTemplateShapeMismatches } from "../shared/templateShape.ts";
-import type { BlockTemplate, StepConfig, StepConfigEntry } from "../tackle-tasks/generateSteps.ts";
+import type { AgentOptions, BlockTemplate, StepConfig, StepConfigEntry } from "../tackle-tasks/generateSteps.ts";
 import { readCheckpoint, writeCheckpoint } from "../tackle-tasks/shared/checkpoint.ts";
 import { writeJsonAtomically } from "../shared/taskStateLock.ts";
 import { readJsonFile } from "../tackle-tasks/shared/readJsonFile.ts";
@@ -64,7 +64,7 @@ function runStamp(): string {
 let runDirectory = process.env.RUN_STEP_LOG ? dirname(process.env.RUN_STEP_LOG) : join(process.cwd(), ".taskTools/runs", runStamp());
 let packetSequence = 0;
 let currentTaskNumber: number | null = null;
-const logFile = () => process.env.RUN_STEP_LOG ?? `${runDirectory}${currentTaskNumber === null ? "" : `-task-${currentTaskNumber}`}-run-log.json`;
+const logFile = () => process.env.RUN_STEP_LOG ?? join(runDirectory, `${currentTaskNumber === null ? "" : `task-${currentTaskNumber}-`}run-log.json`);
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block; the full suite takes about 2 minutes, and the hook ceiling is 10 minutes.
 const STEP_TIMEOUT_MS = 300_000;
@@ -88,6 +88,7 @@ type StepRun = {
 type Outcome = {
     next: string | null;
     payload: string;
+    agent?: AgentOptions;
 };
 type HookOutput = {
     ok: boolean;
@@ -191,7 +192,9 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     // The log dropped these four values; this per-block packet is where they live now.
     packetSequence += 1;
     mkdirSync(packetsDirectory(), { recursive: true });
-    writeJsonAtomically(join(packetsDirectory(), `${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun });
+    // NN is the count of files already in the folder, so a listing sorts in write order across every pass.
+    const traceOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
+    writeJsonAtomically(join(packetsDirectory(), `${traceOrdinal}-${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun });
     appendStepToRunLog(`${step.diagram}::${step.box}`, tookMs);
     return stepRun;
 }
@@ -313,12 +316,23 @@ function buildSuccess(boxesRun: string[], stoppedAt: string, stepRun: StepRun, i
     const next = output.scriptSignal === SCRIPT_SIGNAL.STOP ? null : getNextStepAfter(stoppedAt, output);
     // What the next block starts from: after a prompt, its input, prompt, and start time; otherwise this block's output.
     const packet = output.scriptSignal === SCRIPT_SIGNAL.PROMPT ? { ...getPacketFromInput(input), prompt: output.prompt, startedAt: stepRun.startedAt } : output;
-    const payload = join(packetsDirectory(), `${String(output.box)}-${process.pid}.json`);
-    mkdirSync(dirname(payload), { recursive: true });
+    mkdirSync(packetsDirectory(), { recursive: true });
+    const payloadOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
+    const payload = join(packetsDirectory(), `${payloadOrdinal}-${String(output.box)}-${process.pid}.json`);
     writeJsonAtomically(payload, packet);
     // A run that completed has no next pass to feed; its log stays, its packets go.
     // if (next === null && stoppedAt.startsWith(`${SUCCESS_DIAGRAM}::`)) rmSync(packetsDirectory(), { recursive: true, force: true });
-    return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload } };
+    return { ok: true, ran: boxesRun, errors: [], outcome: { next, payload, agent: STEPS_BY_KEY.get(String(next))?.agent } };
+}
+
+// The packet is the previous block's output, unchanged; only the next block and its agent options are new.
+function buildWalkerStop(boxesRun: string[], nextStepKey: string, packet: Record<string, unknown>): HookOutput {
+    const nextStep = STEPS_BY_KEY.get(nextStepKey)!;
+    mkdirSync(packetsDirectory(), { recursive: true });
+    const payloadOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
+    const payload = join(packetsDirectory(), `${payloadOrdinal}-${nextStep.box}-${process.pid}.json`);
+    writeJsonAtomically(payload, packet);
+    return { ok: true, ran: boxesRun, errors: [], outcome: { next: nextStepKey, payload, agent: nextStep.agent } };
 }
 
 // Runs a step, then keeps going while the graph names exactly one next box and the step says continue.
@@ -339,22 +353,24 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
         const { prompt: _prompt, startedAt, ...packet } = JSON.parse(packetFileText);
         if (packet.taskNumber !== undefined) currentTaskNumber = Number(packet.taskNumber);
         // The prompt block's own entry counted only its script; the agent's time runs from that start until this call.
-        const promptBox = basename(startPacket.packetFile).replace(/-\d+\.json$/, "");
+        const promptBox = basename(startPacket.packetFile).replace(/^\d+-/, "").replace(/-\d+\.json$/, "");
         const promptBoxStepKey = getStepKeysNamingBox(promptBox)[0];
         if (promptBoxStepKey === undefined) {
             throw new Error(`no block named ${promptBox}`);
         }
-        const agentTookMs = Date.now() - Number(startedAt);
-        mkdirSync(dirname(logFile()), { recursive: true });
-        const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
-        runLogEntries.push({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs });
-        writeJsonAtomically(logFile(), runLogEntries);
+        if (startedAt !== undefined) {
+            const agentTookMs = Date.now() - Number(startedAt);
+            mkdirSync(dirname(logFile()), { recursive: true });
+            const runLogEntries = existsSync(logFile()) ? readJsonFile(logFile()) as unknown[] : [];
+            runLogEntries.push({ block: `${promptBoxStepKey} agent`, duration: took(agentTookMs), durationMs: agentTookMs });
+            writeJsonAtomically(logFile(), runLogEntries);
+        }
         startInput = JSON.stringify(packet);
     }
     // A launch naming a later block starts there if its worktree, plan, brief and input exist; otherwise it's ignored.
     if (startStepKey !== START_STEP_KEY && typeof startPacket.tasksFile === "string") {
         const taskNumber = Number(startPacket.taskNumber);
-        const entry = findStartAtBlockEntry(taskNumber, String(startPacket.tasksFile), STEPS_BY_KEY.get(startStepKey)!.box, dirname(logFile()));
+        const entry = findStartAtBlockEntry(taskNumber, String(startPacket.tasksFile), STEPS_BY_KEY.get(startStepKey)!.box, dirname(runDirectory));
         if (entry === null) return walkFromStep(START_STEP_KEY, startInput, invocation);
         prepareResume({ taskNumber, runId: entry.runId, projectRoot: entry.projectRoot, sourceLockHeld: isInsideSourceLock(startStepKey) === SOURCE_LOCK_REACHABLE });
         resetAttemptCounts(taskNumber, entry.runId, entry.projectRoot);
@@ -377,6 +393,10 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     while (true) {
         const step = STEPS_BY_KEY.get(stepKey)!;
         const packet = getPacketFromInput(input);
+        // A prompt block runs under its own model; the walk stops and names it for the next agent.
+        if (step.producesPrompt && boxesRun.length > 0) {
+            return buildWalkerStop(boxesRun, stepKey, packet);
+        }
         const worktree = typeof packet.worktree === "string" ? packet.worktree : "";
         const worktreeExists = worktree !== "" && existsSync(worktree);
         // A prompt block and its answer-consuming block checkpoint at the block that feeds the prompt, so resuming reproduces it.
@@ -531,6 +551,10 @@ function getInstructionsForAgent(result: HookOutput): string {
     }
     if (result.outcome === null || result.outcome.next === null) {
         return "";
+    }
+    // The walk stopped before a prompt block, so the packet holds no prompt; the agent only relays output.
+    if (STEPS_BY_KEY.get(result.outcome.next)!.producesPrompt) {
+        return `The walk stopped before ${result.outcome.next}. Do not run it, do not read its packet, do not delegate it. Your only job now: return the JSON object above verbatim.`;
     }
     return [
         `The file at ${result.outcome.payload} holds a prompt under the key "prompt". Do these four steps in order.`,

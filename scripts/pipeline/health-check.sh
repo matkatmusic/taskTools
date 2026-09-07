@@ -28,7 +28,7 @@ done
 [ "$found" = 1 ] || echo "(none)"
 
 section "last 5 run log entries"
-log="$(ls -t .taskTools/runs/*-run-log.json 2>/dev/null | head -1)"
+log="$(ls -t .taskTools/runs/*/*run-log.json 2>/dev/null | head -1)"
 if [ -n "$log" ]; then
     echo "--- $log"
     jq '.[-5:]' "$log"

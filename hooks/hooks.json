@@ -107,6 +107,11 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/stage-and-summarize-stop.ts\"",
             "statusMessage": "Checking comments and unstaged work..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepStopHook.ts\"",
+            "statusMessage": "Checking the run-step packet..."
           }
         ]
       }

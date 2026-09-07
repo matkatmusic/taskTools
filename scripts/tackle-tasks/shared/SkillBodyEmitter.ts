@@ -6,6 +6,7 @@ import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel
 import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
 import { generateWorkflow } from "../generateWorkflow.ts";
+import { resolveAgentOptions } from "./resolveAgentOptions.ts";
 
 // RETIRED (task 10): replaced by taskWorkflowDirectory(tasksFile, taskNumber), computed per task inside skillBody.
 // const TASK_WORKFLOW_PATH = fileURLToPath(new URL("../../../skills/tackle-tasks/tackle-tasks.workflow.js", import.meta.url));
@@ -47,6 +48,7 @@ function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFo
         }
     }
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+    resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
     generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
     return { workflowFile, stepsConfigPath };
 }

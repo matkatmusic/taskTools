@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { main } from "./DO_TASK_TESTS_PASS_Q.ts";
 import { claimTask, updateCurrentTaskRun } from "../shared/taskRunState.ts";
 
-const TASK_TESTS_RESULT = { stepId: "RUN_TASK_TESTS", testFiles: [], createdTestFiles: [], deletedTestFiles: [], missingTests: false, output: "", checkedAt: "2026-01-01T00:00:00+00:00" };
+const TASK_TESTS_RESULT = { stepId: "RUN_TASK_TESTS", testFiles: [], createdTestFiles: [], deletedTestFiles: [], missingTests: false, output: "", newFailingTests: [], knownFailingTests: [], checkedAt: "2026-01-01T00:00:00+00:00" };
 
 function makeClaimedProjectRoot(taskNumber: number, passed: boolean, difficulty: number): string {
     const root = mkdtempSync(join(tmpdir(), "do-task-tests-pass-"));

@@ -36,8 +36,10 @@ test("test_workflowLivenessHook_printsNoLogYetWhenNoneExists", () => {
 
 test("test_workflowLivenessHook_printsTheFirstBlockNameAndAgeFromTheNewestRunLog", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
     writeFileSync(
-        join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"),
+        join(stampDir, "task-7-run-log.json"),
         JSON.stringify([{ block: "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK", duration: "1 ms", durationMs: 1 }]),
     );
     const stdout = runHook(workflowPayload(projectRoot, 7));
@@ -49,8 +51,12 @@ test("test_workflowLivenessHook_printsTheFirstBlockNameAndAgeFromTheNewestRunLog
 test("test_workflowLivenessHook_picksTheNewestRunLogWhenMultipleExistForTheTask", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
     const runsDir = runsDirFor(projectRoot);
-    const olderPath = join(runsDir, "2026-09-05T00-00-00-1-task-7-run-log.json");
-    const newerPath = join(runsDir, "2026-09-05T00-05-00-2-task-7-run-log.json");
+    const olderDir = join(runsDir, "2026-09-05T00-00-00-1");
+    const newerDir = join(runsDir, "2026-09-05T00-05-00-2");
+    mkdirSync(olderDir, { recursive: true });
+    mkdirSync(newerDir, { recursive: true });
+    const olderPath = join(olderDir, "task-7-run-log.json");
+    const newerPath = join(newerDir, "task-7-run-log.json");
     writeFileSync(olderPath, JSON.stringify([{ block: "OLD_BLOCK", duration: "1 ms", durationMs: 1 }]));
     writeFileSync(newerPath, JSON.stringify([{ block: "NEW_BLOCK", duration: "1 ms", durationMs: 1 }]));
     const oldTime = new Date("2026-09-05T00:00:00Z");
@@ -67,18 +73,20 @@ test("test_workflowLivenessHook_usesTasksFileNotCwdToFindTheProject", () => {
     // The session cwd points at an unrelated directory; args.tasksFile names the fixture repo.
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
     const unrelatedCwd = mkdtempSync(join(tmpdir(), "workflow-liveness-unrelated-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), JSON.stringify([{ block: "FROM_FIXTURE_REPO" }]));
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
+    writeFileSync(join(stampDir, "task-7-run-log.json"), JSON.stringify([{ block: "FROM_FIXTURE_REPO" }]));
     const stdout = runHook(workflowPayload(projectRoot, 7, unrelatedCwd));
     const { additionalContext } = JSON.parse(stdout).hookSpecificOutput;
     assert.match(additionalContext, /FROM_FIXTURE_REPO/);
 });
 
 test("test_workflowLivenessHook_reportsAStaleLogHonestlyWhenANewLaunchFailedBeforeWritingAnything", () => {
-    // Scenario the newest-log-alone approach gets wrong: an hour-old log exists; a brand-new launch for
-    // the same task fails before writing anything. The hook must still report the old log's real age,
-    // never implying it is evidence of the just-returned call.
+    // A stale log must be reported honestly, even after a new launch fails before writing anything.
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    const staleLogPath = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json");
+    const staleStampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(staleStampDir, { recursive: true });
+    const staleLogPath = join(staleStampDir, "task-7-run-log.json");
     writeFileSync(staleLogPath, JSON.stringify([{ block: "OLD_LAUNCH_BLOCK" }]));
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     utimesSync(staleLogPath, oneHourAgo, oneHourAgo);
@@ -115,28 +123,36 @@ test("test_workflowLivenessHook_staysSilentWhenArgsTasksFileIsMissing", () => {
 
 test("test_workflowLivenessHook_reportsUnreadableForInvalidJson", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), "{not valid json");
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
+    writeFileSync(join(stampDir, "task-7-run-log.json"), "{not valid json");
     const stdout = runHook(workflowPayload(projectRoot, 7));
     assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /unreadable/);
 });
 
 test("test_workflowLivenessHook_reportsUnreadableForANonArray", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), JSON.stringify({ not: "an array" }));
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
+    writeFileSync(join(stampDir, "task-7-run-log.json"), JSON.stringify({ not: "an array" }));
     const stdout = runHook(workflowPayload(projectRoot, 7));
     assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /unreadable/);
 });
 
 test("test_workflowLivenessHook_reportsEmptyForAnEmptyArray", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), "[]");
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
+    writeFileSync(join(stampDir, "task-7-run-log.json"), "[]");
     const stdout = runHook(workflowPayload(projectRoot, 7));
     assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /empty/);
 });
 
 test("test_workflowLivenessHook_reportsUnreadableWhenTheFirstEntryHasNoBlockField", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "workflow-liveness-"));
-    writeFileSync(join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1-task-7-run-log.json"), JSON.stringify([{ duration: "1 ms" }]));
+    const stampDir = join(runsDirFor(projectRoot), "2026-09-05T00-00-00-1");
+    mkdirSync(stampDir, { recursive: true });
+    writeFileSync(join(stampDir, "task-7-run-log.json"), JSON.stringify([{ duration: "1 ms" }]));
     const stdout = runHook(workflowPayload(projectRoot, 7));
     assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /unreadable/);
 });

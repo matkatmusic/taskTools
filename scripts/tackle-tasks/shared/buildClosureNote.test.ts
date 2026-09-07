@@ -38,7 +38,7 @@ test("test_buildClosureNote_namesEveryCommitIncludingSubmoduleOnes", () => {
                 modifiedFiles: ["scripts/foo.ts", "sub/a::tests/bar.test.ts"],
                 taskTests: {
                     stepId: "s1", testFiles: ["tests/bar.test.ts"], createdTestFiles: [], deletedTestFiles: [],
-                    missingTests: false, passed: true, output: "", checkedAt: "2026-08-01T00:05:00-07:00",
+                    missingTests: false, passed: true, output: "", newFailingTests: [], knownFailingTests: [], checkedAt: "2026-08-01T00:05:00-07:00",
                 },
                 fullSuite: {
                     stepId: "s2", layers: [{ occurrenceId: "", passed: true }],

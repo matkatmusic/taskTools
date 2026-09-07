@@ -1,6 +1,4 @@
-// Acceptance test: drives the real tackle-tasks hook loop against a real target repository, distinct from this
-// plugin checkout, end to end through worktree creation, task tests, staging merge, and archive.
-// Run: node --test tests/tackleTasksAcceptance.test.ts
+// Acceptance test: runs tackle-tasks on a real repo, separate from this checkout, through worktree, tests, merge, archive.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -72,10 +70,10 @@ function taskWorktreePath(root: string, taskNumber: number): string {
 }
 
 type ScriptedAnswer = { message: string; additionalData: Record<string, unknown> };
-// One entry per prompt box this scenario expects to hit, in the order they occur; the driver throws if it runs out or hits an unlisted box.
+// One entry per expected prompt box, in order; the driver throws on running out or an unlisted box.
 type AnswerScript = Record<string, (packetFile: string) => ScriptedAnswer>;
 
-function runHookOnce(box: string, input: string, projectRoot: string, env: NodeJS.ProcessEnv = process.env): { ok: boolean; ran: string[]; outcome: { next: string | null; payload: string } | null; errors: string[] } {
+function runHookOnce(box: string, input: string, projectRoot: string, env: NodeJS.ProcessEnv = process.env): { ok: boolean; ran: string[]; outcome: { next: string | null; payload: string; agent?: { model: string; effort: string } } | null; errors: string[] } {
     const command = `/run-step ${box} ${input}`;
     const raw = execFileSync("node", ["--no-inspect", RUN_STEP_HOOK_PATH], {
         cwd: projectRoot,
@@ -98,10 +96,13 @@ function driveRun(taskNumber: number, tasksFile: string, projectRoot: string, an
         if (result.outcome === null || result.outcome.next === null) {
             return { ok: result.ok, errors: result.errors };
         }
-        const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
-        const answerFn = answers[stoppedAtBox];
-        if (answerFn === undefined) throw new Error(`no scripted answer for prompt box ${stoppedAtBox}`);
-        execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome.payload], { input: JSON.stringify(answerFn(result.outcome.payload)) });
+        const packet = JSON.parse(readFileSync(result.outcome.payload, "utf8")) as Record<string, unknown>;
+        if ("prompt" in packet) {
+            const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
+            const answerFn = answers[stoppedAtBox];
+            if (answerFn === undefined) throw new Error(`no scripted answer for prompt box ${stoppedAtBox}`);
+            execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome.payload], { input: JSON.stringify(answerFn(result.outcome.payload)) });
+        }
         box = result.outcome.next;
         input = JSON.stringify({ packetFile: result.outcome.payload });
     }
@@ -111,8 +112,7 @@ test("test_driveRun_dispatchesToTheBoxThatActuallyStoppedNotTheOneThePassStarted
     // Scenario: task 1 walks from PREAMBLE_STATUS_CHECK through several green preamble boxes before PLAN_THE_TASK prompts.
     const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt"], difficulty: 1 });
     let sawPlanPrompt = false;
-    // The scripted plan answer alone does not resolve the prompt after it (IMPLEMENT_TASK), so the driver throws
-    // naming that box — proof it dispatched to the box that actually stopped, not to PREAMBLE_STATUS_CHECK.
+    // The scripted plan answer alone does not resolve the prompt after it (IMPLEMENT_TASK), so the driver throws naming that box — proof it dispatched to the box that actually stopped, not to PREAMBLE_STATUS_CHECK.
     assert.throws(() => driveRun(1, tasksFile, root, {
         PLAN_THE_TASK: () => {
             sawPlanPrompt = true;
@@ -121,6 +121,55 @@ test("test_driveRun_dispatchesToTheBoxThatActuallyStoppedNotTheOneThePassStarted
     }), /no scripted answer for prompt box IMPLEMENT_TASK/);
     // Verification: the driver found and answered PLAN_THE_TASK, not PREAMBLE_STATUS_CHECK (which never prompts).
     assert.equal(sawPlanPrompt, true);
+});
+
+test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () => {
+    // Scenario: difficulty 5 routes the plan through codex review before IMPLEMENT_TASK, unlike difficulty 1 above.
+    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 10, files: ["a.txt"], difficulty: 5 });
+    const worktreePath = taskWorktreePath(root, 10);
+    const answers: AnswerScript = {
+        PLAN_THE_TASK: () => {
+            const planFile = join(worktreePath, "plans", "plan.json");
+            mkdirSync(dirname(planFile), { recursive: true });
+            writeFileSync(planFile, JSON.stringify({ sections: [], revision: 0 }));
+            return { message: "planned", additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } };
+        },
+        CODEX_REVIEWS_PLAN: () => {
+            const reviewFile = join(worktreePath, "plans", "review.json");
+            writeFileSync(reviewFile, JSON.stringify({ outcome: "OK", missingFiles: [], message: "", fixes: [] }));
+            return { message: "reviewed", additionalData: { reviewFile } };
+        },
+    };
+    skillBody("[10]", root);
+    let box = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
+    let input = JSON.stringify({ taskNumber: 10, tasksFile });
+    const outcomes: { next: string | null; agent?: { model: string; effort: string } }[] = [];
+    // Stop once every outcome this test cares about has been seen, before an unanswered IMPLEMENT_TASK prompt could throw.
+    while (true) {
+        const result = runHookOnce(box, input, root);
+        if (result.outcome === null || result.outcome.next === null) break;
+        outcomes.push(result.outcome);
+        if (
+            outcomes.some((o) => o.next?.endsWith("::IMPLEMENT_TASK"))
+            && outcomes.some((o) => o.next?.endsWith("::CODEX_REVIEWS_PLAN"))
+            && outcomes.some((o) => o.next?.endsWith("::COMMIT_IMPLEMENTATION_IF_NEEDED"))
+        ) break;
+        const packet = JSON.parse(readFileSync(result.outcome.payload, "utf8")) as Record<string, unknown>;
+        if ("prompt" in packet) {
+            const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
+            const answerFn = answers[stoppedAtBox];
+            if (answerFn === undefined) throw new Error(`no scripted answer for prompt box ${stoppedAtBox}`);
+            execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome.payload], { input: JSON.stringify(answerFn(result.outcome.payload)) });
+        }
+        box = result.outcome.next;
+        input = JSON.stringify({ packetFile: result.outcome.payload });
+    }
+    const implementOutcome = outcomes.find((o) => o.next?.endsWith("::IMPLEMENT_TASK"));
+    const codexOutcome = outcomes.find((o) => o.next?.endsWith("::CODEX_REVIEWS_PLAN"));
+    const commitOutcome = outcomes.find((o) => o.next?.endsWith("::COMMIT_IMPLEMENTATION_IF_NEEDED"));
+    assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(codexOutcome?.agent, { model: "haiku", effort: "high" });
+    assert.deepEqual(commitOutcome?.agent, { model: "haiku", effort: "high" });
 });
 
 function standardHappyPathAnswers(root: string, taskNumber: number, fileName: string, newContent: string, hasTests: boolean = false): AnswerScript {
@@ -189,8 +238,7 @@ test("test_acceptance_runsTwoConcurrentTargetRepositoriesWithoutCrossingWires", 
     const second = makeFixtureRepository({ taskNumber: 4, files: ["b.txt"], difficulty: 1 });
     const startFile = join(tmpdir(), `tackle-tasks-concurrency-start-${process.pid}`);
 
-    // One process per project; each waits for the same start file, then drives its own task 4 through the same
-    // fileName/content pair a real driveRun would, without depending on anything defined in this test's own process.
+    // One process per project; each waits for the same start file, then drives its own task 4 through the same fileName/content pair a real driveRun would, without depending on anything defined in this test's own process.
     const skillBodyEmitterUrl = pathToFileURL(fileURLToPath(new URL("../scripts/tackle-tasks/shared/SkillBodyEmitter.ts", import.meta.url))).href;
     const childSource = (fileName: string, content: string, projectRoot: string, worktreePath: string) => `
         import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -227,8 +275,11 @@ test("test_acceptance_runsTwoConcurrentTargetRepositoriesWithoutCrossingWires", 
         while (true) {
             const result = runHookOnce(box, input);
             if (result.outcome === null || result.outcome.next === null) { ok = result.ok; break; }
-            const stoppedAtBox = result.ran[result.ran.length - 1].split("::").pop();
-            execFileSync("node", ["--no-inspect", ${JSON.stringify(WRITE_AGENT_ANSWER_PATH)}, result.outcome.payload], { input: JSON.stringify(answers[stoppedAtBox]()) });
+            const packet = JSON.parse(readFileSync(result.outcome.payload, "utf8"));
+            if ("prompt" in packet) {
+                const stoppedAtBox = result.ran[result.ran.length - 1].split("::").pop();
+                execFileSync("node", ["--no-inspect", ${JSON.stringify(WRITE_AGENT_ANSWER_PATH)}, result.outcome.payload], { input: JSON.stringify(answers[stoppedAtBox]()) });
+            }
             box = result.outcome.next;
             input = JSON.stringify({ packetFile: result.outcome.payload });
         }
@@ -277,8 +328,7 @@ test("test_acceptance_reportsAFailureWhenWorktreeCreationCannotWrite", async () 
 
 test("test_acceptance_releasesTheSourceLockWhenAFailureHappensWhileItIsHeld", async () => {
     const { root, tasksFile } = makeFixtureRepository({ taskNumber: 6, files: ["a.txt"], difficulty: 1 });
-    // Setup: staging now names an all-zero SHA, an invalid object. Every git command resolving "staging" fails the
-    // same way — deterministic, and confined to this one fixture repo's own .git.
+    // Setup: staging now names an all-zero SHA, an invalid object. Every git command resolving "staging" fails the same way — deterministic, and confined to this one fixture repo's own .git.
     writeFileSync(join(root, ".git/refs/heads/staging"), `${"0".repeat(40)}\n`);
     const result = driveRun(6, tasksFile, root, standardHappyPathAnswers(root, 6, "a.txt", "x\n"));
     // Verification: the run failed, and the lock file this task's run held is gone, not orphaned.
@@ -294,17 +344,15 @@ test("test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt", async ()
     // right after the worktree (already branched from staging's prior tip) has made its own commit — the rebase
     // stage that follows must now hit a real conflict on a.txt.
     const implementAnswer = answers.IMPLEMENT_TASK!;
-    answers.IMPLEMENT_TASK = () => {
-        const answer = implementAnswer();
+    answers.IMPLEMENT_TASK = (packetFile) => {
+        const answer = implementAnswer(packetFile);
         writeFileSync(join(root, "a.txt"), "staging change\n");
         execFileSync("git", ["-C", root, "checkout", "staging"]);
         execFileSync("git", ["-C", root, "add", "a.txt"]);
         execFileSync("git", ["-C", root, "commit", "-m", "conflicting staging change"]);
         return answer;
     };
-    // FIX_CONFLICTS.template.json (task 22): additionalData is {resolved, unresolvedPaths}, checked against live
-    // `git diff --name-only --diff-filter=U` by COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED. The resolution itself is a real
-    // side effect: pick the task's own change and stage it, the way a real conflict resolution would.
+    // FIX_CONFLICTS.template.json (task 22): additionalData is {resolved, unresolvedPaths}, checked against live `git diff --name-only --diff-filter=U` by COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED. The resolution itself is a real side effect: pick the task's own change and stage it, the way a real conflict resolution would.
     answers.FIX_CONFLICTS = () => {
         writeFileSync(join(worktreePath, "a.txt"), "task change\n");
         execFileSync("git", ["-C", worktreePath, "add", "a.txt"]);
@@ -324,10 +372,15 @@ test("test_acceptance_resumesAfterAnInterruptedCleanup", async () => {
     skillBody("[8]", root);
     let box = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
     let input = JSON.stringify({ taskNumber: 8, tasksFile });
-    for (let hop = 0; hop < 2; hop++) {
+    let answersWritten = 0;
+    while (answersWritten < 2) {
         const result = runHookOnce(box, input, root);
-        const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
-        execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome!.payload], { input: JSON.stringify(answers[stoppedAtBox]!()) });
+        const packet = JSON.parse(readFileSync(result.outcome!.payload, "utf8")) as Record<string, unknown>;
+        if ("prompt" in packet) {
+            const stoppedAtBox = result.ran[result.ran.length - 1]!.split("::").pop()!;
+            execFileSync("node", ["--no-inspect", WRITE_AGENT_ANSWER_PATH, result.outcome!.payload], { input: JSON.stringify(answers[stoppedAtBox]!(result.outcome!.payload)) });
+            answersWritten++;
+        }
         box = result.outcome!.next!;
         input = JSON.stringify({ packetFile: result.outcome!.payload });
     }
@@ -347,8 +400,7 @@ test("test_acceptance_resumesAfterAnInterruptedCleanup", async () => {
     // Verification before resume: a checkpoint survives the kill.
     assert.equal(readCheckpoint(worktreePath)?.block, "pipeline-mergeSucceededExit.mmd::CLEAN_UP_WORKTREES");
 
-    // Test action: relaunch from scratch input; PREAMBLE_STATUS_CHECK's own findResumeEntry (runStepHook.ts lines
-    // 296-300) finds the checkpoint and continues from CLEAN_UP_WORKTREES, not from PLAN_THE_TASK again.
+    // Test action: relaunch from scratch input; PREAMBLE_STATUS_CHECK's own findResumeEntry (runStepHook.ts lines 296-300) finds the checkpoint and continues from CLEAN_UP_WORKTREES, not from PLAN_THE_TASK again.
     const result = driveRun(8, tasksFile, root, answers);
     assert.equal(result.ok, true);
     assert.equal(readCheckpoint(worktreePath), null); // gone once the run finishes cleanly.

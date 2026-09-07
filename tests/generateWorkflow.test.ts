@@ -3,39 +3,33 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StepConfig } from "../scripts/tackle-tasks/generateSteps.ts";
+import type { AgentOptions, StepConfig, StepConfigEntry } from "../scripts/tackle-tasks/generateSteps.ts";
 import { assertStartStepIsInConfig, buildWorkflowScript, generateWorkflow, START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { buildHookOutputSchema } from "../scripts/tackle-tasks/buildRunStepSchemas.ts";
+import { runWorkflowScript } from "./helpers/runWorkflowScript.ts";
 
 // Builds a throwaway project holding one steps.json and the template files it points at.
-function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[] }[]) {
+function buildProject(blocks: { box: string; output: Record<string, unknown>; producesPrompt?: boolean; next?: string[]; diagram?: string; agent?: AgentOptions }[]) {
     const projectRoot = mkdtempSync(join(tmpdir(), "generate-workflow-"));
     mkdirSync(join(projectRoot, "steps"));
-    const entries = blocks.map(block => {
+    const config: StepConfig = {};
+    for (const block of blocks) {
+        const diagram = block.diagram ?? "one.mmd";
         writeFileSync(join(projectRoot, "steps", `${block.box}.template.json`), JSON.stringify({ input: {}, output: block.output }));
-        return {
+        const entry: StepConfigEntry = {
             box: block.box,
             script: `steps/${block.box}.ts`,
             template: `steps/${block.box}.template.json`,
             producesPrompt: block.producesPrompt ?? false,
             next: block.next ?? [],
         };
-    });
-    const config: StepConfig = { "one.mmd": entries };
+        if (block.agent !== undefined) entry.agent = block.agent;
+        config[diagram] = config[diagram] ?? [];
+        config[diagram]!.push(entry);
+    }
     const configFile = join(projectRoot, "steps.json");
     writeFileSync(configFile, JSON.stringify(config));
     return { projectRoot, config, configFile };
-}
-
-// Runs the generated workflow the way the harness would: async body, args/agent/phase as free names.
-// Reuses tackleTasksRetry.test.ts's exact "export const meta" -> "const meta" rewrite for the same reason:
-// the harness's sandbox never sees a top-level `export`.
-function runWorkflowScript(script: string, args: Record<string, unknown>, agentResults: unknown[]): Promise<Record<string, unknown>> {
-    let call = 0;
-    const agent = () => Promise.resolve(agentResults[call++]);
-    const phase = () => {};
-    const body = script.replace("export const meta", "const meta");
-    return new Function("args", "agent", "phase", `return (async () => {\n${body}\n})()`)(args, agent, phase);
 }
 
 const REPO_STEPS_JSON = join(import.meta.dirname, "..", "scripts", "tackle-tasks", "diagram-steps.json");
@@ -53,6 +47,19 @@ test("test_buildHookOutputSchema_closesTheObjectTheHookReturns", () => {
 test("test_buildHookOutputSchema_allowsAnOutcomeOfNull", () => {
     const schema = buildHookOutputSchema() as Record<string, any>;
     assert.deepEqual(schema.properties.outcome.anyOf[1], { type: "null" });
+});
+
+// A prompt block runs on its own model; the outcome carries that model and effort forward.
+test("test_buildHookOutputSchema_allowsAgentOptionsOnTheOutcome", () => {
+    const schema = buildHookOutputSchema() as Record<string, any>;
+    const outcome = schema.properties.outcome.anyOf[0];
+    assert.deepEqual(outcome.properties.agent, {
+        type: "object",
+        properties: { model: { type: "string" }, effort: { type: "string" } },
+        required: ["model", "effort"],
+        additionalProperties: false,
+    });
+    assert.deepEqual(outcome.required, ["next", "payload"]);
 });
 
 // The harness rejects a script unless meta is the first statement, so the generated comment comes after it.
@@ -100,7 +107,7 @@ test("test_buildWorkflowScript_refusesARuntimeTaskNumberThatDisagreesWithTheBake
 test("test_buildWorkflowScript_usesOneHookOutputSchemaForEveryPass", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
     assert.match(script, /const START_STEP = 'pipeline-preambleStatusCheck\.mmd::PREAMBLE_STATUS_CHECK'/);
-    assert.match(script, /^let blockToRun = args\.startingBlock \?\? START_STEP$/m);
+    assert.match(script, /^let blockToRun = startingBlockKeys\[0\] \?\? START_STEP$/m);
     assert.match(script, /schema: HOOK_OUTPUT_SCHEMA \}\)/);
     assert.doesNotMatch(script, /AGENT_SCHEMAS/);
     assert.doesNotMatch(script, /scriptSignal/);
@@ -111,8 +118,14 @@ test("test_buildWorkflowScript_usesOneHookOutputSchemaForEveryPass", () => {
 // After every pass the next block reads the packet file the hook named; the answer is already inside it.
 test("test_buildWorkflowScript_handsThePacketFileToTheNextBlock", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
-    assert.match(script, /input = \{ packetFile: result\.outcome\.payload \}$/m);
+    assert.match(script, /input = \{ packetFile: result\.outcome\.payload, agent: result\.outcome\.agent \}$/m);
     assert.doesNotMatch(script, /\.\.\.result\.outcome\.payload/);
+});
+
+// The hook's agent options for the next block ride along in input, next to the packet file.
+test("test_buildWorkflowScript_carriesTheHookAgentOptionsIntoTheNextInput", () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    assert.match(script, /^    input = \{ packetFile: result\.outcome\.payload, agent: result\.outcome\.agent \}$/m);
 });
 
 // An agent that answers with text instead of the hook output must not crash the loop and lose that text.
@@ -132,7 +145,7 @@ test("test_buildWorkflowScript_takesTheNextStepFromTheHookResult", () => {
 // A caller-named starting block skips ahead of the preamble; no name given still starts at START_STEP.
 test("test_buildWorkflowScript_startsAtArgsStartingBlockWhenGiven", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
-    assert.match(script, /let blockToRun = args\.startingBlock \?\? START_STEP/);
+    assert.match(script, /let blockToRun = startingBlockKeys\[0\] \?\? START_STEP/);
 });
 
 test("test_buildWorkflowScript_reportsAgentDeathWhenAgentReturnsNull", async () => {
@@ -163,6 +176,15 @@ test("test_buildWorkflowScript_stopsAndForwardsTheReportWhenTheHookOutputSaysNot
     assert.deepEqual(result.ran, ["one.mmd::A"]);
     assert.deepEqual(result.errors, ["boom"]);
     assert.equal(result.report, "see the run for detail");
+});
+
+test("test_buildWorkflowScript_failsWhenThePayloadIsNotAFilePath", async () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    const result = await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [
+        { ok: true, ran: ["pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK"], errors: [], outcome: { next: null, payload: '{"box": "STOP", "scriptSignal": "stop"}' } },
+    ]);
+    assert.equal(result.ok, false);
+    assert.match(String((result.errors as string[])[0]), /payload is not a file path/);
 });
 
 test("test_buildWorkflowScript_reportsEmptyRanWhenTheAgentSkippedTheHook", async () => {
@@ -228,4 +250,96 @@ test("test_buildWorkflowScript_titlesEveryPhaseWithTheBlockNameAlone", () => {
 test("test_buildWorkflowScript_labelsEveryAgentWithTheBlockNameAlone", () => {
     // The agent label is the box after the last "::", the same name the phase shows.
     assert.match(buildWorkflowScript(1, REPO_STEPS_JSON), /label: `run-step:\$\{blockName\}`/);
+});
+
+const START_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
+const IMPLEMENT_TASK_KEY = "pipeline-implementTask.mmd::IMPLEMENT_TASK";
+
+// START and B, each carrying its own agent options, the way a resolved per-task steps.json does.
+function buildStartAndPromptFixture() {
+    return buildProject([
+        { box: "PREAMBLE_STATUS_CHECK", diagram: "pipeline-preambleStatusCheck.mmd", output: {}, next: [IMPLEMENT_TASK_KEY], agent: { model: "haiku", effort: "low" } },
+        { box: "IMPLEMENT_TASK", diagram: "pipeline-implementTask.mmd", output: {}, producesPrompt: true, agent: { model: "m", effort: "e" } },
+    ]);
+}
+
+test("test_buildWorkflowScript_bakesAgentOptionsByBlockFromTheConfig", () => {
+    const { configFile } = buildStartAndPromptFixture();
+    const script = buildWorkflowScript(1, configFile);
+    const start = script.indexOf("const AGENT_BY_BLOCK = ") + "const AGENT_BY_BLOCK = ".length;
+    const end = script.indexOf("\n// One shape for every pass:");
+    const agentByBlock = JSON.parse(script.slice(start, end));
+    assert.deepEqual(agentByBlock, {
+        [START_KEY]: { model: "haiku", effort: "low" },
+        [IMPLEMENT_TASK_KEY]: { model: "m", effort: "e" },
+    });
+});
+
+test("test_buildWorkflowScript_startsWithTheFirstBlocksAgentOptionsInInput", () => {
+    const { configFile } = buildStartAndPromptFixture();
+    const script = buildWorkflowScript(1, configFile);
+    assert.match(script, /^let input = \{ taskNumber: args\.task, tasksFile: args\.tasksFile, agent: AGENT_BY_BLOCK\[blockToRun\] \}$/m);
+});
+
+test("test_buildWorkflowScript_passesInputAgentOptionsToAgent", () => {
+    const script = buildWorkflowScript(1, REPO_STEPS_JSON);
+    assert.match(script, /agent\(prompt, \{ label: `run-step:\$\{blockName\}`, \.\.\.input\.agent, schema: HOOK_OUTPUT_SCHEMA \}\)/);
+});
+
+test("test_buildWorkflowScript_runsEachPassWithTheModelTheHookNamed", async () => {
+    const { configFile } = buildStartAndPromptFixture();
+    const script = buildWorkflowScript(1, configFile);
+    const calls: Record<string, unknown>[] = [];
+    await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json" }, [
+        (_prompt: string, options: Record<string, unknown>) => {
+            calls.push(options);
+            return { ok: true, ran: [START_KEY], errors: [], outcome: { next: IMPLEMENT_TASK_KEY, payload: "/tmp/p.json", agent: { model: "m", effort: "e" } } };
+        },
+        (_prompt: string, options: Record<string, unknown>) => {
+            calls.push(options);
+            return { ok: true, ran: [IMPLEMENT_TASK_KEY], errors: [], outcome: { next: null, payload: "/tmp/q.json" } };
+        },
+    ]);
+    assert.equal(calls[0]!.model, "haiku");
+    assert.equal(calls[0]!.effort, "low");
+    assert.equal(calls[1]!.model, "m");
+    assert.equal(calls[1]!.effort, "e");
+});
+
+test("test_buildWorkflowScript_resolvesABareStartingBlockToItsKey", async () => {
+    const { configFile } = buildStartAndPromptFixture();
+    const script = buildWorkflowScript(1, configFile);
+    const calls: { prompt: string; options: Record<string, unknown> }[] = [];
+    await runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json", startingBlock: "IMPLEMENT_TASK" }, [
+        (prompt: string, options: Record<string, unknown>) => {
+            calls.push({ prompt, options });
+            return { ok: true, ran: [IMPLEMENT_TASK_KEY], errors: [], outcome: { next: null, payload: "/tmp/q.json" } };
+        },
+    ]);
+    assert.equal(calls[0]!.options.model, "m");
+    assert.match(calls[0]!.prompt, /\/taskTools:run-step pipeline-implementTask\.mmd::IMPLEMENT_TASK/);
+});
+
+test("test_buildWorkflowScript_throwsWhenAStartingBlockMatchesNoKeyOrManyKeys", async () => {
+    const { configFile } = buildStartAndPromptFixture();
+    const script = buildWorkflowScript(1, configFile);
+    await assert.rejects(
+        runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json", startingBlock: "NOPE" }, []),
+        /NOPE/,
+    );
+    await assert.rejects(
+        runWorkflowScript(script, { task: 1, tasksFile: "/tmp/tasks.json", startingBlock: "NOPE" }, []),
+        /matches 0 blocks/,
+    );
+
+    const { configFile: twoDiagramConfigFile } = buildProject([
+        { box: "PREAMBLE_STATUS_CHECK", diagram: "pipeline-preambleStatusCheck.mmd", output: {}, next: [IMPLEMENT_TASK_KEY], agent: { model: "haiku", effort: "low" } },
+        { box: "IMPLEMENT_TASK", diagram: "pipeline-implementTask.mmd", output: {}, producesPrompt: true, agent: { model: "m", effort: "e" } },
+        { box: "IMPLEMENT_TASK", diagram: "other.mmd", output: {}, producesPrompt: true, agent: { model: "m2", effort: "e2" } },
+    ]);
+    const twoDiagramScript = buildWorkflowScript(1, twoDiagramConfigFile);
+    await assert.rejects(
+        runWorkflowScript(twoDiagramScript, { task: 1, tasksFile: "/tmp/tasks.json", startingBlock: "IMPLEMENT_TASK" }, []),
+        /matches 2 blocks/,
+    );
 });

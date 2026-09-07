@@ -29,7 +29,7 @@ const makeTargetRepository = (taskNumbers: number[] = [1]): string => {
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "Test");
     mkdirSync(join(root, ".taskTools"), { recursive: true });
-    const tasks = taskNumbers.map((taskNumber) => ({ taskNumber, title: `Target task ${taskNumber}` }));
+    const tasks = taskNumbers.map((taskNumber) => ({ taskNumber, title: `Target task ${taskNumber}`, difficulty: 1 }));
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify(tasks));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), JSON.stringify([]));
     git("add", ".taskTools");
@@ -54,7 +54,7 @@ test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyTheArgumentParser", ()
     // Verification: still no subprocess, and the hook walks the preamble, so nothing of it is imported.
     assert.doesNotMatch(source, /execFileSync|spawn/);
     const relativeImports = [...source.matchAll(/from "\.\/([^"]+)"/g)].map((match) => match[1]);
-    assert.deepEqual(relativeImports.sort(), ["resolveTaskRun.ts"]);
+    assert.deepEqual(relativeImports.sort(), ["resolveAgentOptions.ts", "resolveTaskRun.ts"]);
 });
 
 // The preamble's first box reads the task number and the tasks file.
@@ -99,10 +99,7 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     const defaultRoot = makeTargetRepository([9]);
     const customRoot = makeTargetRepository([9]);
     const customDiagramFolder = join(customRoot, "diagrams");
-    // buildWorkflowScript's START_STEP is fixed to pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK, so any
-    // custom diagram folder must still supply it — the same shape tests/generateSteps.test.ts's own custom-diagram
-    // fixture uses (read in full at lines 293-330): a folder named after the diagram (minus "pipeline-" and ".mmd")
-    // holds PREAMBLE_STATUS_CHECK.ts, and a folder named after the diagram (minus ".mmd") holds SECOND_BOX.ts.
+    // buildWorkflowScript's START_STEP is fixed to pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK, so any custom diagram folder must still supply it — the same shape tests/generateSteps.test.ts's own custom-diagram fixture uses (read in full at lines 293-330): a folder named after the diagram (minus "pipeline-" and ".mmd") holds PREAMBLE_STATUS_CHECK.ts, and a folder named after the diagram (minus ".mmd") holds SECOND_BOX.ts.
     mkdirSync(customDiagramFolder, { recursive: true });
     writeFileSync(join(customDiagramFolder, "pipeline-preambleStatusCheck.mmd"), "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n");
     const preambleFolder = join(customDiagramFolder, "preambleStatusCheck");
@@ -152,11 +149,32 @@ test("test_skillBody_preservesHandAuthoredMutatingFlagsOnATasksFirstGeneration",
     // Setup: a fresh target repository, task 9's first-ever launch.
     const root = makeTargetRepository([9]);
     skillBody("[9]", root);
-    // Verification: a box hand-marked mutating in the plugin's own canonical scripts/steps.json (RECORD_MERGE_COMMIT_HASHES)
-    // kept that flag on task 9's brand-new per-task config, which had no previous file of its own to carry it forward from.
+    // Verification: RECORD_MERGE_COMMIT_HASHES kept its hand-authored mutating flag on task 9's brand-new config.
     const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/9/steps.json"), "utf8"));
     const entry = stepsConfig["pipeline-mergeSucceededExit.mmd"].find((e: { box: string }) => e.box === "RECORD_MERGE_COMMIT_HASHES");
     assert.equal(entry.mutating, true);
+});
+
+test("test_ensureTaskWorkflowPair_writesResolvedAgentOptionsIntoTheTaskStepsJson", () => {
+    // Setup: task 9 at difficulty 5, a band block.
+    const root = makeTargetRepository([9]);
+    const tasksPath = join(root, ".taskTools/tasks.json");
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    tasks[0].difficulty = 5;
+    writeFileSync(tasksPath, JSON.stringify(tasks));
+
+    skillBody("[9]", root);
+
+    const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/9/steps.json"), "utf8"));
+    const findEntry = (box: string) => {
+        for (const entries of Object.values(stepsConfig) as { box: string; agent?: unknown }[][]) {
+            const found = entries.find((e) => e.box === box);
+            if (found) return found;
+        }
+        throw new Error(`box ${box} not found`);
+    };
+    assert.deepEqual(findEntry("IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(findEntry("IS_DIFFICULTY_7_PLUS_Q").agent, { model: "haiku", effort: "high" });
 });
 
 test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {

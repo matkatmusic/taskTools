@@ -19,8 +19,8 @@ const runsDirectory = join(projectRoot, ".taskTools", "runs");
 
 function newestRunLogPathForTask(directory: string, task: number): string | null {
     if (!existsSync(directory)) return null;
-    const taskLogPattern = new RegExp(`-task-${task}-run-log\\.json$`);
-    const matchingNames = readdirSync(directory).filter((name) => taskLogPattern.test(name));
+    // Each run folder holds its own log: runs/<stamp>/task-<N>-run-log.json.
+    const matchingNames = readdirSync(directory).map((stamp) => join(stamp, `task-${task}-run-log.json`)).filter((name) => existsSync(join(directory, name)));
     if (matchingNames.length === 0) return null;
     const namesByNewestFirst = matchingNames
         .map((name) => ({ name, mtimeMs: statSync(join(directory, name)).mtimeMs }))

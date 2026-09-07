@@ -294,7 +294,7 @@ test("test_generateSteps_usesAuthoredScriptsInACustomFolderWithoutThrowing", () 
 test("test_tackleTasks_walksACustomDiagramFoldersBlocksAndNoneOfTheDefaultPipeline", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "tackle-tasks-custom-"));
     mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
-    writeFileSync(join(fixtureRoot, ".taskTools/tasks.json"), "[]\n");
+    writeFileSync(join(fixtureRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 999999, difficulty: 1 }]));
     const diagramFolder = join(fixtureRoot, "diagrams");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));

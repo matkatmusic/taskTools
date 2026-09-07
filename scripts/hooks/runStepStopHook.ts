@@ -25,7 +25,7 @@ if (typeof input.agent_transcript_path !== "string") {
 
 // The run-step hook output sits inside the transcript as an escaped string; the last one is this pass's.
 const transcript = readFileSync(input.agent_transcript_path, "utf8");
-const matches = [...transcript.matchAll(/\\"outcome\\":\{\\"next\\":\\"([^\\"]+)\\",\\"payload\\":\\"([^\\"]+)\\"\}/g)];
+const matches = [...transcript.matchAll(/\\"outcome\\":\{\\"next\\":\\"([^\\"]+)\\",\\"payload\\":\\"([^\\"]+)\\"/g)];
 if (matches.length === 0) {
     log("no run-step prompt stop in this transcript; nothing to check");
     process.exit(0);

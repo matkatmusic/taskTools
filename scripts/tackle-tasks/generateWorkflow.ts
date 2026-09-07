@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildHookOutputSchema } from "./buildRunStepSchemas.ts";
-import type { StepConfig } from "./generateSteps.ts";
+import type { AgentOptions, StepConfig } from "./generateSteps.ts";
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const DEFAULT_CONFIG_FILE = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
@@ -28,6 +28,13 @@ export function buildWorkflowScript(taskNumber: number, configFile: string): str
     const config = JSON.parse(readFileSync(configFile, "utf8")) as StepConfig;
     assertStartStepIsInConfig(config, START_STEP);
     const hookOutputSchemaText = JSON.stringify(buildHookOutputSchema(), null, 4);
+    const agentByBlock: Record<string, AgentOptions> = {};
+    for (const [diagram, entries] of Object.entries(config)) {
+        for (const entry of entries) {
+            if (entry.agent !== undefined) agentByBlock[`${diagram}::${entry.box}`] = entry.agent;
+        }
+    }
+    const agentByBlockText = JSON.stringify(agentByBlock, null, 4);
     return `export const meta = {
     name: 'Tackle-task ${taskNumber}',
     description: 'Tackle tasks.json:[N]',
@@ -36,6 +43,7 @@ export function buildWorkflowScript(taskNumber: number, configFile: string): str
 
 const START_STEP = '${START_STEP}'
 const TASK_NUMBER = ${taskNumber}
+const AGENT_BY_BLOCK = ${agentByBlockText}
 // One shape for every pass: the answer to a prompt lives in the packet file, never in this object.
 const HOOK_OUTPUT_SCHEMA = ${hookOutputSchemaText}
 
@@ -49,16 +57,21 @@ if (args.task !== TASK_NUMBER) {
 
 function createPromptForAgent(blockToRun, input) {
     // The block output belongs to the hook. Saying so stops the agent authoring one of its own.
-    const command = \`/run-step \${blockToRun} \${JSON.stringify(input)}\`
+    const command = \`/taskTools:run-step \${blockToRun} \${JSON.stringify(input)}\`
     return [
         \`COMMAND: \\\`\${command}\\\`\`,
-        'invoke COMMAND and follow instructions.',
+        'Call the Skill tool exactly once: skill "taskTools:run-step", args = the text after "/taskTools:run-step " in COMMAND, copied byte for byte.',
+        'The first word of args is the block key. The rest is one JSON object. Do not reorder, rewrap, rename, or add keys.',
+        'Then follow the instructions the hook injects.',
         'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
     ].join('\\n')
 }
 
-let blockToRun = args.startingBlock ?? START_STEP
-let input = { taskNumber: args.task, tasksFile: args.tasksFile }
+// A bare starting block name matches by box suffix; zero or multiple matches is an error.
+const startingBlockKeys = Object.keys(AGENT_BY_BLOCK).filter(key => key === args.startingBlock || key.endsWith(\`::\${args.startingBlock}\`))
+if (args.startingBlock !== undefined && startingBlockKeys.length !== 1) throw new Error(\`startingBlock \${args.startingBlock} matches \${startingBlockKeys.length} blocks\`)
+let blockToRun = startingBlockKeys[0] ?? START_STEP
+let input = { taskNumber: args.task, tasksFile: args.tasksFile, agent: AGENT_BY_BLOCK[blockToRun] }
 // Only ran accumulates across passes. Everything else belongs to the pass that produced it.
 const ran = []
 let currentDiagram = ''
@@ -71,7 +84,7 @@ while (true) {
         currentDiagram = diagram
     }
     const prompt = createPromptForAgent(blockToRun, input)
-    const result = await agent(prompt, { label: \`run-step:\${blockName}\`, schema: HOOK_OUTPUT_SCHEMA })
+    const result = await agent(prompt, { label: \`run-step:\${blockName}\`, ...input.agent, schema: HOOK_OUTPUT_SCHEMA })
 
     // API error. the only shape agent() produces that is not the hook output.
     if (result === null) {
@@ -93,13 +106,18 @@ while (true) {
         return { ok: false, ran, errors: [\`\${blockName}: agent answered without a hook output/payload/packet\`], prompt, outcome: null }
     }
 
+    // The hook always writes the payload to a file; anything but a path means the agent rewrote the hook output.
+    if (!String(result.outcome.payload).startsWith('/')) {
+        return { ok: false, ran, errors: [\`\${blockName}: agent rewrote the hook output; payload is not a file path\`, String(result.outcome.payload).slice(0, 200)], prompt, outcome: null }
+    }
+
     // the hook says nothing follows the block the walk stopped at, so this run is done.
     if (result.outcome.next === null) {
         return { ok: true, ran, errors: [], prompt, outcome: result.outcome }
     }
     blockToRun = result.outcome.next
     // outcome.payload is the packet file the next block starts from; a prompt answer was written into it.
-    input = { packetFile: result.outcome.payload }
+    input = { packetFile: result.outcome.payload, agent: result.outcome.agent }
 }
 `;
 }

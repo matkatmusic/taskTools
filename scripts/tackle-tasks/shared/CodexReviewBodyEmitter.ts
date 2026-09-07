@@ -231,7 +231,7 @@ export function reviewQuestion(t: PreparedTask): string {
 }
 
 // Logs beside the run-log so `tail -f` shows codex working; the hook sets RUN_STEP_LOG.
-const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.json$/, "-codex-review.log");
+const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/run-log\.json$/, "codex-review.log");
 
 // Failed experiment: a spawned shell has no controlling terminal, so /dev/tty tricks fail codex before it starts.
 function createCodexShellInvocationTTY(t: PreparedTask): string {
