@@ -26,7 +26,8 @@ function runHook(prompt: string, configFile?: string, worktree?: string, priorPa
     if (priorPacketCommand !== undefined) {
         const packetsFolder = join(runsFolder, "0000", "packets");
         mkdirSync(packetsFolder, { recursive: true });
-        writeFileSync(join(packetsFolder, "X-0-1.json"), JSON.stringify({ input: {}, command: priorPacketCommand, commandOutput: "", output: {} }));
+        // Named the way runStepHook.ts:197 names a block-pass packet: <ordinal>-<box>-<pid>-<n>.json.
+        writeFileSync(join(packetsFolder, "1-X-0-1.json"), JSON.stringify({ input: {}, command: priorPacketCommand, commandOutput: "", output: {} }));
     }
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }),

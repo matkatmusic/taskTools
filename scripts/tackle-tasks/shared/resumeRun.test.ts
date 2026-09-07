@@ -74,11 +74,11 @@ function quoteArgumentLikeTheHook(argument: string): string {
     return `'${argument.replaceAll("'", `'\\''`)}'`;
 }
 
-// One block-pass packet, written by hand for a test run folder: <runsFolder>/<stamp>/packets/<box>-<pid>-<n>.json.
+// One block-pass packet, named the way runStepHook.ts:197 names it: <runsFolder>/<stamp>/packets/<ordinal>-<box>-<pid>-<n>.json.
 function writePacketFile(runsFolder: string, stamp: string, box: string, pid: number, n: number, command: string): string {
     const packetsFolder = join(runsFolder, stamp, "packets");
     mkdirSync(packetsFolder, { recursive: true });
-    const packetPath = join(packetsFolder, `${box}-${pid}-${n}.json`);
+    const packetPath = join(packetsFolder, `${n}-${box}-${pid}-${n}.json`);
     writeFileSync(packetPath, JSON.stringify({ input: {}, command, commandOutput: "", output: {} }));
     return packetPath;
 }
@@ -202,9 +202,7 @@ test("test_findResumeEntry_prefersTheTailCursorOverAnExistingUsableCheckpoint", 
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     const entry = findResumeEntry(taskNumber, tasksPath);
 
-    // Verification: the tail cursor wins even though a usable checkpoint also exists — this is
-    // the exact ordering task 23's failures-exit chain depends on, since that chain leaves a
-    // stale checkpoint alive throughout the tail.
+    // Verification: tail cursor wins over usable checkpoint, per task 23's failures-exit chain, leaving a stale checkpoint alive.
     assert.deepEqual(entry, cursor);
 });
 
@@ -279,8 +277,7 @@ test("test_findResumeEntry_resumesAtResetWorktreeAfterAKillRightAfterDeletingThe
     const [, signal] = await once(child, "exit");
     assert.equal(signal, "SIGKILL", `expected the child to die of SIGKILL after tearing down the old worktree`);
 
-    // Verification: the old worktree and branch are gone (the lease was already released by
-    // TAKE_WORKTREE_LEASE_BEFORE_RESET before RESET_WORKTREE ran), but a new reset-intent survives it.
+    // Verification: TAKE_WORKTREE_LEASE_BEFORE_RESET released the lease before RESET_WORKTREE removed the worktree and branch, but reset-intent survives.
     assert.ok(!existsSync(firstWorktree));
     assert.throws(() => git(rootOrigin, "rev-parse", "--verify", `refs/heads/${taskBranchName(taskNumber)}`));
     assert.ok(!existsSync(taskWorktreeLeasePath(firstWorktree)));

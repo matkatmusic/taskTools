@@ -35,9 +35,7 @@ export function findResumeEntry(taskNumber: number, tasksFile: string): { block:
             box: "CLEAN_UP_WORKTREES", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
             projectRoot, taskNumber, runId: newest.runId,
         });
-        // Always BUILD_CLOSURE_NOTE, active or not: ARCHIVE_TASK needs a closureNote this packet
-        // never carries, and BUILD_CLOSURE_NOTE / MARK_TASK_INACTIVE_SUCCESS are both idempotent,
-        // so replaying them before ARCHIVE_TASK is always safe (MSE-19).
+        // Always BUILD_CLOSURE_NOTE, active or not: ARCHIVE_TASK needs closureNote; replaying it and MARK_TASK_INACTIVE_SUCCESS before ARCHIVE_TASK is safe, both idempotent (MSE-19).
         return { block: "pipeline-mergeSucceededExit.mmd::BUILD_CLOSURE_NOTE", input };
     }
 
@@ -82,7 +80,7 @@ export function prepareResume(checkpoint: Pick<Checkpoint, "taskNumber" | "runId
     }
 }
 
-// Finds the most recently logged input for `box` under `runId`, so /run-step can start a fresh walk at any block in an existing run.
+// Finds the most recent logged input for `box` under `runId`, so /run-step can start at any block.
 export function findStartAtBlockEntry(
     taskNumber: number,
     tasksFile: string,
@@ -120,8 +118,8 @@ export function findStartAtBlockEntry(
     //     }
     // }
 
-    // The command string now comes from the newest packet naming this box, for this run, across every stamp folder in the runs folder.
-    const packetNamePattern = new RegExp(`^${box}-\\d+-\\d+\\.json$`);
+    // The command comes from the newest packet naming this box across all stamp folders; runStepHook.ts names it `<ordinal>-<box>-<pid>-<n>.json`.
+    const packetNamePattern = new RegExp(`^\\d+-${box}-\\d+-\\d+\\.json$`);
     let newestMtimeMs = -Infinity;
     for (const stampEntry of readdirSync(runLogFolder)) {
         const packetsFolder = join(runLogFolder, stampEntry, "packets");
@@ -161,7 +159,7 @@ export function findStartAtBlockEntry(
     return { input: foundInput, runId: newest.runId, projectRoot };
 }
 
-// A failure exit always becomes resumedFrom; a kill records itself only when nothing is there yet, so a scrap survives later kills.
+// A failure exit always becomes resumedFrom; a kill records itself only if empty, so a scrap survives later kills.
 export function markCheckpointResumed(worktree: string, checkpoint: Checkpoint): void {
     const keepExisting = checkpoint.state === "running" && checkpoint.resumedFrom !== null;
     writeCheckpoint(worktree, {
