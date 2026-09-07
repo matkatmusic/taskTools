@@ -6,10 +6,9 @@ import { join } from "node:path";
 // Per process: a suite that runs this hook under test would otherwise truncate the outer run's log.
 export const LOG_PATH = `/tmp/tasktools-npm-test-${process.pid}.log`;
 
-// Below runStepHook.ts's own 300s per-block kill (scripts/runStepHook.ts:47) — the production default when a caller passes none.
-export const SUITE_TIMEOUT_MS = 240_000;
-// Caps the in-memory buffer a noisy hanging child can grow while still running — the last MAX_LIVE_OUTPUT_LENGTH
-// characters are always what a timeout reports, independent of how long the child ran or how much it printed.
+// Below runStepHook.ts's own 660s per-block kill (scripts/hooks/runStepHook.ts:70) — the production default when a caller passes none.
+export const SUITE_TIMEOUT_MS = 600_000;
+// Caps the in-memory buffer for a noisy hanging child, so a timeout always reports the last MAX_LIVE_OUTPUT_LENGTH characters.
 const MAX_LIVE_OUTPUT_LENGTH = 8_000;
 
 export type ProcessGroupResult = { code: number | null; timedOut: boolean; output: string };

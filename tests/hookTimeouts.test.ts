@@ -25,7 +25,7 @@ test("test_hookTimeouts_runStepHookHasAnExplicitTimeoutOnBothRegistrations", () 
     assert.equal(typeof postToolUseSkillTimeout, "number");
 });
 
-const STEP_TIMEOUT_MS = 300_000; // scripts/runStepHook.ts:47, duplicated here so this test has no import cycle on runStepHook.ts.
+const STEP_TIMEOUT_MS = 660_000; // scripts/hooks/runStepHook.ts:70, duplicated here so this test has no import cycle on runStepHook.ts.
 
 test("test_hookTimeouts_lockWaitDeadlineLeavesRoomForOneWorstCaseStepUnderTheHookTimeout", () => {
     const userPromptSubmitTimeout = findRunStepHookTimeout(hooksConfig.hooks.UserPromptSubmit, undefined)!;

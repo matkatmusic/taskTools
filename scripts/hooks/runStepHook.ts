@@ -66,8 +66,8 @@ let packetSequence = 0;
 let currentTaskNumber: number | null = null;
 const logFile = () => process.env.RUN_STEP_LOG ?? join(runDirectory, `${currentTaskNumber === null ? "" : `task-${currentTaskNumber}-`}run-log.json`);
 const packetsDirectory = () => join(runDirectory, "packets");
-// ponytail: one flat cap per block; the full suite takes about 2 minutes, and the hook ceiling is 10 minutes.
-const STEP_TIMEOUT_MS = 300_000;
+// ponytail: one flat cap per block; the full suite budget is 10 minutes, and the hook ceiling is 20 minutes.
+const STEP_TIMEOUT_MS = 660_000;
 const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
@@ -192,7 +192,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     // The log dropped these four values; this per-block packet is where they live now.
     packetSequence += 1;
     mkdirSync(packetsDirectory(), { recursive: true });
-    // NN is the count of files already in the folder, so a listing sorts in write order across every pass.
+    // NN is the count of files already in the folder, so a listing sorts in write order.
     const traceOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
     writeJsonAtomically(join(packetsDirectory(), `${traceOrdinal}-${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun });
     appendStepToRunLog(`${step.diagram}::${step.box}`, tookMs);

@@ -14,7 +14,7 @@
           {
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
-            "timeout": 900
+            "timeout": 1200
           },
           {
             "type": "command",
@@ -64,7 +64,7 @@
           {
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepHook.ts\"",
-            "timeout": 900
+            "timeout": 1200
           },
           {
             "type": "command",
