@@ -22,7 +22,7 @@ const FIXTURE_PACKAGE_JSON = JSON.stringify({
 function seedActiveTaskWithBrief(rootOrigin: string, worktree: string, taskNumber: number): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", modifiableFiles: [] }]);
     const outcome = claimTask(taskNumber, "run-1", rootOrigin);
     assert.equal(outcome.status, "claimed");
     mkdirSync(join(worktree, "plans"), { recursive: true });

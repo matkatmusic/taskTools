@@ -16,11 +16,11 @@ function makeProjectRoot(): string {
     writeFileSync(
         join(root, "tasks.json"),
         JSON.stringify([
-            { taskNumber: 1, title: "partial rollback", files: ["a.ts"] },
-            { taskNumber: 2, title: "fully published", files: ["b.ts"] },
-            { taskNumber: 3, title: "conflicted", files: ["c.ts"] },
-            { taskNumber: 4, title: "skipped", files: ["d.ts"] },
-            { taskNumber: 5, title: "not in explicit list", files: ["e.ts"] },
+            { taskNumber: 1, title: "partial rollback", modifiableFiles: ["a.ts"] },
+            { taskNumber: 2, title: "fully published", modifiableFiles: ["b.ts"] },
+            { taskNumber: 3, title: "conflicted", modifiableFiles: ["c.ts"] },
+            { taskNumber: 4, title: "skipped", modifiableFiles: ["d.ts"] },
+            { taskNumber: 5, title: "not in explicit list", modifiableFiles: ["e.ts"] },
         ]),
     );
     writeFileSync(join(root, "completedTasks.json"), "[]");
@@ -147,7 +147,7 @@ test("a fully-published task declaring modifiableFiles instead of legacy files s
 test("a fully-published task with no declared files blocks the whole batch, archiving nothing", () => {
     const root = makeProjectRoot();
     const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
-    tasks.find((t: any) => t.taskNumber === 2).files = [];
+    tasks.find((t: any) => t.taskNumber === 2).modifiableFiles = [];
     writeFileSync(join(root, "tasks.json"), JSON.stringify(tasks));
     const raw: RawTaskRepoOutcome[] = [
         { taskNumber: 1, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },

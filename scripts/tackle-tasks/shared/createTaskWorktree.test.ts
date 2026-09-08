@@ -58,7 +58,7 @@ function seedTasksFile(root: string, tasks: unknown[]): void {
 test("test_createTaskWorktree_createsARealWorktreeOnTheTasksBranchWithSubmodulesPopulated", () => {
     // Setup: a real repo with a real submodule, and an active claimed run for task 1.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: ["fileA.txt"] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     claimTask(1, "run-a", root);
 
     // Test action: create the task worktree.
@@ -75,7 +75,7 @@ test("test_createTaskWorktree_createsARealWorktreeOnTheTasksBranchWithSubmodules
 test("test_createTaskWorktree_recordsTheWorktreePathOnTheActiveRun", () => {
     // Setup: a real repo, an active claimed run.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
 
     // Test action: create the worktree.
@@ -92,7 +92,7 @@ test("test_createTaskWorktree_rollsBackTheWorktreeAndLeaseWhenTaskStateRecording
     // "run-b" so updateCurrentTaskRun's expectedRunId check fails after the real worktree and
     // lease already exist on disk.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
 
@@ -113,7 +113,7 @@ test("test_createTaskWorktree_retainsTheLeaseAndExactJournalWhenRemovalFails", (
     // Setup: same task-state mismatch as above, but rollback's own worktree/branch removal is
     // sabotaged (simulating a real `git worktree remove` failure).
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     process.env.CREATETASKWORKTREE_TEST_FORCE_REMOVAL_FAILURE = "1";
@@ -144,7 +144,7 @@ test("test_createTaskWorktree_neverTouchesAnotherOwnersLeaseWorktreeOrBranchDuri
     // has legitimately taken it over (the F11 finding: the old code released this run's lease
     // and then deleted the worktree anyway, destroying the new owner's claim).
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     process.env.CREATETASKWORKTREE_TEST_CORRUPT_LEASE_BEFORE_ROLLBACK = "1";
@@ -175,7 +175,7 @@ test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfter
     // add` itself still succeeds, but the submodule-init step inside createWorktreeForGroup
     // fails afterward.
     const { root, submoduleOrigin } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     rmSync(join(root, ".git", "modules", "vendor"), { recursive: true, force: true });
@@ -204,7 +204,7 @@ test("test_createTaskWorktree_recoversALateCompletedJournalWithoutTouchingTheGoo
     // overwrite this one, collide with the existing lease (EEXIST), and its own rollback would
     // then DESTROY this already-good worktree/branch before rethrowing - real data loss.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
@@ -242,7 +242,7 @@ test("test_createTaskWorktree_recoversARetainedJournalWithNoTaskStateRecordedYet
     // would overwrite the journal, collide with the existing lease (EEXIST), trigger rollback,
     // and throw instead of transparently recovering in one call.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
@@ -278,7 +278,7 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhys
     // corrupting the exact ownership record Phase 8 reconciliation depends on - even though its
     // own EEXIST-triggered rollback happens to also refuse to touch run-c's worktree here.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     createTaskWorktree(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
@@ -314,7 +314,7 @@ test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithout
     // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written
     // back to simulate death right before its own unlink - a completed retained journal for run-a.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const created = createTaskWorktree(1, "run-a", root);
     const journalPath = taskWorktreeCreateJournalPath(created.worktree);
@@ -345,7 +345,7 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButTheP
     // Setup: a real worktree/branch exist and task state is recorded to match, but the physical
     // lease file is then removed - task state claims a lease that no longer physically exists.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
@@ -392,7 +392,7 @@ async function runCreateTaskWorktreeInChildAndKillAfter(
 test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterAcquiringTheLease", async () => {
     // Setup: a real repo, an active claimed run, no prior worktree.
     const { root } = makeProjectRootWithLocalSubmodule();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
 
@@ -416,7 +416,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterAcquiringTheLeas
 test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterResettingAnExistingBranch", async () => {
     // Setup: a leftover worktree directory a previous run left behind after its lease was cleanly released.
     const root = makeProjectRootWithCommit();
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     const expectedWorktree = join(resolveTaskWorktreeConventionDirectory(root), "task-1");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "declared" };
     createWorktreeForGroup(root, group, "run-a");
@@ -478,7 +478,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterRecordingTaskSta
     // Setup: a tracked generated-artifact file so configureGeneratedArtifactIsolation has something to flag.
     const { root } = makeProjectRootWithLocalSubmodule();
     trackABriefFileInRoot(root);
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
 
     // Test action: kill right after task state is published, before isolation is configured.
@@ -504,7 +504,7 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterConfiguringIsola
     // Setup: same fixture as above.
     const { root } = makeProjectRootWithLocalSubmodule();
     trackABriefFileInRoot(root);
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
 
     // Test action: kill right after isolation is configured, before the journal is unlinked.

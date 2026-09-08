@@ -30,7 +30,7 @@ function seedTasksFile(root: string, tasks: unknown[]): void {
 
 test("test_DOCUMENT_GENERATION_writesTheBriefInAutogenMode", () => {
     const repoRoot = makeTempRepo();
-    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", files: ["fileA.txt"] }]);
+    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
@@ -47,7 +47,7 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInAutogenMode", () => {
 
 test("test_DOCUMENT_GENERATION_writesTheBriefInUpdateMode", () => {
     const repoRoot = makeTempRepo();
-    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", files: ["fileA.txt"] }]);
+    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const packet = {
@@ -65,7 +65,7 @@ test("test_DOCUMENT_GENERATION_writesTheBriefInUpdateMode", () => {
 
 test("test_DOCUMENT_GENERATION_runsTwiceWithTheSameInput", () => {
     const repoRoot = makeTempRepo();
-    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", files: ["fileA.txt"] }]);
+    seedTasksFile(repoRoot, [{ taskNumber: 9, title: "t9", description: "do it", modifiableFiles: ["fileA.txt"] }]);
     const group: TaskGroup = { groupId: 9, taskNumbers: [9], filePaths: [], scope: "declared" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
     const input = JSON.stringify({

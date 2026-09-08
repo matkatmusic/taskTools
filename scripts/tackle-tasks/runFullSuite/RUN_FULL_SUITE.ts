@@ -1,4 +1,4 @@
-// RUN_FULL_SUITE, from pipeline-runFullSuite.mmd. Mutating: runs the target worktree's real test suite.  Entered from COMMIT_SUITE_FIX_IF_NEEDED (loop-back) or, cross-diagram, straight from pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH.
+// RUN_FULL_SUITE (pipeline-runFullSuite.mmd), mutating: runs the real suite; entered from COMMIT_SUITE_FIX_IF_NEEDED or REBASE_ONTO_TARGET_BRANCH.
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -34,6 +34,7 @@ export async function main(input: string): Promise<Record<string, unknown>> {
         box: "RUN_FULL_SUITE",
         scriptSignal: SCRIPT_SIGNAL.CONTINUE,
         ownedFilePaths: prepared.ownedFilePaths,
+        readFilePaths: prepared.readFilePaths,
         testFilePaths: prepared.testFilePaths,
         passed: result.passed,
         output: result.output,

@@ -79,8 +79,8 @@ test("test_everyOccurrenceHasANonEmptyOriginUrl", () => {
 
 test("test_buildWorkflowArgumentsCreatesOneWorktreePerTaskAgainstARealRepo", () => {
     const tasks: TaskRecord[] = [
-        { taskNumber: 1, files: ["scripts/foo.ts"] },
-        { taskNumber: 2, files: ["external/sub/src/bar.ts"] },
+        { taskNumber: 1, modifiableFiles: ["scripts/foo.ts"] },
+        { taskNumber: 2, modifiableFiles: ["external/sub/src/bar.ts"] },
     ];
 
     // Bun drops process.env edits for children, so only a spawned process can carry the git override.

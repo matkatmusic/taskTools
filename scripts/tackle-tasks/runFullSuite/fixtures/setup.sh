@@ -24,7 +24,7 @@ cat > .taskTools/tasks.json <<'EOF'
 [
     {
         "taskNumber": 1,
-        "files": ["src/thing.ts"],
+        "modifiableFiles": ["src/thing.ts"],
         "run": {
             "active": true,
             "worktree": "scripts/tackle-tasks/runFullSuite/fixtures/worktree",

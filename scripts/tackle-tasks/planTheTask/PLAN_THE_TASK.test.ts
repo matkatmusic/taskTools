@@ -18,7 +18,7 @@ function makeFixture(taskNumber = 35, difficulty?: number): { projectRoot: strin
     const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-"));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
-        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", difficulty },
+        { taskNumber, modifiableFiles: ["src/thing.ts"], createsFiles: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", difficulty },
     ]));
     writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
     const worktree = join(projectRoot, "worktree");
@@ -43,7 +43,7 @@ test("test_PLAN_THE_TASK_returnsAPromptNamingTheTaskWithNoContinuationInstructio
     assert.doesNotMatch(String(output.prompt), /\/run-step|invoke the skill/i);
     const promptFileContents = readFileSync(promptFile, "utf8");
     assert.match(promptFileContents, /task 35/);
-    assert.match(promptFileContents, /Codex reviews this plan before it is implemented\./);
+    assert.doesNotMatch(promptFileContents, /Codex reviews this plan before it is implemented\./);
 });
 
 test("test_PLAN_THE_TASK_promptPointsToABriefThatCarriesARecordedClarifyAnswer", () => {
@@ -51,7 +51,7 @@ test("test_PLAN_THE_TASK_promptPointsToABriefThatCarriesARecordedClarifyAnswer",
     const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-"));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
-        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", description: "body", clarifyRequest: "where does thing.ts live?" },
+        { taskNumber, modifiableFiles: ["src/thing.ts"], createsFiles: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "", description: "body", clarifyRequest: "where does thing.ts live?" },
     ]));
     writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
     const worktree = join(projectRoot, "worktree");

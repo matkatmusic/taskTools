@@ -9,12 +9,7 @@ import { absolutePathsSection } from "./promptSections.ts";
 import { resumedRunSection } from "./resumedRunSection.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 
-// Retired (prompt audit): the TESTS_FIELD rules now live as bullets in the PLAN REQUIREMENTS section.
-// const TESTS_FIELD_INSTRUCTION = `If TESTS_FIELD below is the literal string "skip", do not require TDD; write ordinary
-// verification commands instead. Otherwise the task has tests: the plan's verification section
-// must name the concrete tests to write and run. When TESTS_FIELD holds an example test the user
-// wrote, put it in as that check, expanded with a few extra cases covering the individual
-// functions/subparts it touches.`;
+// Retired (prompt audit): TESTS_FIELD rules now live as bullets in PLAN REQUIREMENTS.
 
 // Double-quoted for the read-file hook's parser, not a shell: a quoted run keeps a spaced path whole.
 const readFileArgs = (paths: string[]) => paths.map((path) => `"${path}"`).join(" ");
@@ -219,6 +214,12 @@ export type PlanVars = {
     readOnlyFiles: string;
     tests: string;
     whatToReturn: string;
+    // JSON array copied from the task record; the plan's createsFiles must equal it.
+    createsFiles: string;
+    // "" when difficulty <= 3, where no Codex plan review runs.
+    codexPlanReviewLine: string;
+    // "" on a first planning round; the repeat-round rule when the task record carries a clarifyRequest.
+    repeatClarifyRule: string;
 };
 
 export type PlanSection = { name: string; when: (c: PlanChoices) => boolean; render: (v: PlanVars) => string };
@@ -265,11 +266,12 @@ The plan must be formatted in the exact shape shown under **FORMATTING THE PLAN*
         when: () => true,
         render: (v) => `## WHAT TO READ
 
-Invoke the following skill:
+invoke this skill exactly:
 \`\`\`
 /read-file ${v.planningReadFileArgs}
 \`\`\`
 The skill puts the brief, the files this task owns, the guides you must follow, and the return shape you must produce into your context.
+The files this task owns are the task record's \`modifiableFiles\`.
 
 ${v.absolutePaths}
 
@@ -293,7 +295,7 @@ ${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
         when: () => true,
         render: (v) => `## FORMATTING THE PLAN
 
-Invoke the following skill:
+invoke this skill exactly:
 \`\`\`
 /read-file ${v.templateReadFileArgs}
 \`\`\`
@@ -316,7 +318,7 @@ Fix the file until that command prints nothing.
     {
         name: "PLAN REQUIREMENTS",
         when: () => true,
-        render: () => `## PLAN REQUIREMENTS
+        render: (v) => `## PLAN REQUIREMENTS
 
 The plan must be exact enough that the implementer makes no discovery of its own.
 The plan must be comprehensive enough that the implementer makes no discovery of its own.
@@ -330,8 +332,8 @@ The plan must be comprehensive enough that the implementer makes no discovery of
 - - Never say "replace the whole file".
 - - Show the exact text to remove and insert, and where.
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
-- Fill in \`createsFiles\` with every owned file that does not exist yet on disk.
-- Leave \`createsFiles\` empty when the plan creates nothing new.
+- Set \`createsFiles\` to exactly \`${v.createsFiles}\`, copied from the task record.
+- Never add a file to \`createsFiles\`; a missing file the task does not create is a CLARIFY.
 - Resolve every question while planning.
 - Write no conditional instruction:
 - - no "re-check",
@@ -356,7 +358,7 @@ The plan must be comprehensive enough that the implementer makes no discovery of
     {
         name: "ANSWERING A LEFT-BEHIND CLARIFY REQUEST",
         when: () => true,
-        render: () => `## ANSWERING A LEFT-BEHIND CLARIFY REQUEST
+        render: (v) => `## ANSWERING A LEFT-BEHIND CLARIFY REQUEST
 
 The brief may hold a \`clarifyRequest\` field.
 That field is a question a previous planning round asked.
@@ -368,7 +370,7 @@ When it is there, answer the question yourself, from the code, before you plan:
 Return outcome CLARIFY again only when the answer is a decision only the user can make.
 Naming choices, tradeoffs, and product scope are such decisions.
 Nothing the code can resolve is such a decision.
-
+${v.repeatClarifyRule}
 `,
     },
     {
@@ -425,8 +427,7 @@ You are forbidden from doing any of the following actions:
 - edit any file other than \`${v.planFile}\`;
 - leave a decision for the implementer;
 - write a plan step whose exact target you did not read.
-The Codex plan review rejects any plan step whose target the plan does not quote from a file you read.
-
+${v.codexPlanReviewLine}
 `,
     },
     {
@@ -497,14 +498,24 @@ export const PLAN_SKELETON_VARS: PlanVars = {
     number: "`${t.number}`",
     planFile: "`${t.planFile}`",
     codexNotes: "`${t.codexReviewNotes.trim()}`",
-    planningReadFileArgs: '`${readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`',
+    planningReadFileArgs: '`${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`',
     absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
     resumedRun: "`${resumedRunSection(t.repoRoot)}`",
     templateReadFileArgs: "`${readFileArgs([PLAN_TEMPLATE_PATH])}`",
     readOnlyFiles: '`${t.readOnlyFiles.join(", ")}`',
     tests: "`${t.tests}`",
     whatToReturn: "`${whatToReturnSection(...)}`",
+    createsFiles: "`${JSON.stringify(t.createsFiles)}`",
+    codexPlanReviewLine: "`${t.difficulty <= 3 ? \"\" : CODEX_PLAN_REVIEW_LINE}`",
+    repeatClarifyRule: "`${t.clarifyRequest === \"\" ? \"\" : REPEAT_CLARIFY_RULE}`",
 };
+
+const CODEX_PLAN_REVIEW_LINE = "The Codex plan review rejects any plan step whose target the plan does not quote from a file you read.\n";
+
+const REPEAT_CLARIFY_RULE = `This is a repeat round: the brief's \`clarifyRequest\` was already asked and no user answered it.
+Do not ask the same question again; re-asking it with more evidence returns the same silence.
+Either answer it from the code and return PLAN, or return CLARIFY with a different question.
+`;
 
 export function renderPlanSections(choices: PlanChoices, vars: PlanVars): string {
     return PLAN_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
@@ -519,12 +530,15 @@ export function planPrompt(t: PreparedTask): string {
         number: String(t.number),
         planFile: t.planFile,
         codexNotes: t.codexReviewNotes.trim(),
-        planningReadFileArgs: readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")]),
+        planningReadFileArgs: readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")]),
         absolutePaths: absolutePathsSection(t.repoRoot),
         resumedRun: resumedRunSection(t.repoRoot),
         templateReadFileArgs: readFileArgs([PLAN_TEMPLATE_PATH]),
         readOnlyFiles: t.readOnlyFiles.join(", "),
         tests: t.tests ?? "",
         whatToReturn: whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>" }`, "replacing every `<...>` with a real value", ""),
+        createsFiles: JSON.stringify(t.createsFiles),
+        codexPlanReviewLine: t.difficulty <= 3 ? "" : CODEX_PLAN_REVIEW_LINE,
+        repeatClarifyRule: t.clarifyRequest === "" ? "" : REPEAT_CLARIFY_RULE,
     });
 }

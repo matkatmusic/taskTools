@@ -32,7 +32,7 @@ test("a task is blocked only by blockers that are still open", () => {
 });
 
 test("reports how many open tasks declare files", () => {
-    const open = [openTask(1, { files: ["a.ts"] }), openTask(2), openTask(3, { files: [] })];
+    const open = [openTask(1, { modifiableFiles: ["a.ts"] }), openTask(2), openTask(3, { modifiableFiles: [] })];
     const stats = computeTaskStats(open, [], TODAY);
     assert.equal(stats.openWithFiles, 1);
     assert.equal(stats.openWithoutFiles, 2);
@@ -76,9 +76,9 @@ test("counts completed tasks that recorded commit hashes", () => {
 
 test("group forecast joins tasks sharing a file and separates disjoint ones", () => {
     const open = [
-        openTask(1, { files: ["shared.ts"] }),
-        openTask(2, { files: ["shared.ts", "b.ts"] }),
-        openTask(3, { files: ["c.ts"] }),
+        openTask(1, { modifiableFiles: ["shared.ts"] }),
+        openTask(2, { modifiableFiles: ["shared.ts", "b.ts"] }),
+        openTask(3, { modifiableFiles: ["c.ts"] }),
     ];
     const stats = computeTaskStats(open, [], TODAY);
     assert.equal(stats.groupCount, 2);
@@ -87,8 +87,8 @@ test("group forecast joins tasks sharing a file and separates disjoint ones", ()
 
 test("group forecast excludes blocked tasks and tasks declaring no files", () => {
     const open = [
-        openTask(1, { files: ["a.ts"] }),
-        openTask(2, { files: ["b.ts"], blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] }),
+        openTask(1, { modifiableFiles: ["a.ts"] }),
+        openTask(2, { modifiableFiles: ["b.ts"], blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] }),
         openTask(3),
     ];
     const stats = computeTaskStats(open, [], TODAY);
@@ -98,9 +98,9 @@ test("group forecast excludes blocked tasks and tasks declaring no files", () =>
 
 test("contended files rank paths claimed by more than one open task", () => {
     const open = [
-        openTask(1, { files: ["hot.ts", "cold.ts"] }),
-        openTask(2, { files: ["hot.ts"] }),
-        openTask(3, { files: ["hot.ts"] }),
+        openTask(1, { modifiableFiles: ["hot.ts", "cold.ts"] }),
+        openTask(2, { modifiableFiles: ["hot.ts"] }),
+        openTask(3, { modifiableFiles: ["hot.ts"] }),
     ];
     const stats = computeTaskStats(open, [], TODAY);
     assert.deepEqual(stats.contendedFiles[0], { path: "hot.ts", taskCount: 3 });
@@ -108,7 +108,7 @@ test("contended files rank paths claimed by more than one open task", () => {
 });
 
 test("formatted output names every headline number", () => {
-    const text = formatTaskStats(computeTaskStats([openTask(1, { files: ["a.ts"] })], [closedTask(2, "2026-07-30")], TODAY));
+    const text = formatTaskStats(computeTaskStats([openTask(1, { modifiableFiles: ["a.ts"] })], [closedTask(2, "2026-07-30")], TODAY));
     for (const fragment of ["open", "completed", "closed", "groups", "files"]) {
         assert.match(text, new RegExp(fragment));
     }
@@ -116,7 +116,7 @@ test("formatted output names every headline number", () => {
 
 test("CLI prints stats for the project it is run from", () => {
     const root = mkdtempSync(join(tmpdir(), "taskTools-taskStats-"));
-    writeFileSync(join(root, "tasks.json"), JSON.stringify([openTask(1, { files: ["a.ts"] }), openTask(2)]));
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([openTask(1, { modifiableFiles: ["a.ts"] }), openTask(2)]));
     writeFileSync(join(root, "completedTasks.json"), JSON.stringify([closedTask(3, "2026-07-30")]));
     const output = execFileSync("node", [SCRIPT], { cwd: root, encoding: "utf8" });
     assert.match(output, /2 open/);
@@ -136,7 +136,7 @@ test("each parallel command holds at most 6 tasks that share no files", () => {
         ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => [n, ["hot.ts"]] as [number, string[]]),
         ...[10, 11, 12, 13, 14, 15, 16].map(n => [n, [`solo-${n}.ts`]] as [number, string[]]),
     ]);
-    const open = [...filesOf].map(([taskNumber, files]) => openTask(taskNumber, { files }));
+    const open = [...filesOf].map(([taskNumber, files]) => openTask(taskNumber, { modifiableFiles: files }));
     const stats = computeTaskStats(open, [], TODAY);
 
     assert.deepEqual(stats.parallelBatches.flat().sort((a, b) => a - b), open.map(t => t.taskNumber));

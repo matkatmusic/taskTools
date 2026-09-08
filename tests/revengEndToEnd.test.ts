@@ -53,8 +53,8 @@ function writeTaskState(rootPath: string, taskFiles: string[]): void {
     const taskToolsPath = join(rootPath, ".taskTools");
     mkdirSync(taskToolsPath, { recursive: true });
     writeFileSync(join(taskToolsPath, "tasks.json"), JSON.stringify([
-        ...taskFiles.map((file, index) => ({ taskNumber: TASK_NUMBERS[index], title: file, description: file, files: [file], difficulty: 1, blockedBy: [] })),
-        { taskNumber: 3699, title: "unpublished", description: "unpublished", files: ["unpublished.txt"], difficulty: 1, blockedBy: [] },
+        ...taskFiles.map((file, index) => ({ taskNumber: TASK_NUMBERS[index], title: file, description: file, modifiableFiles: [file], difficulty: 1, blockedBy: [] })),
+        { taskNumber: 3699, title: "unpublished", description: "unpublished", modifiableFiles: ["unpublished.txt"], difficulty: 1, blockedBy: [] },
     ]) + "\n");
     writeFileSync(join(taskToolsPath, "completedTasks.json"), "[]\n");
 }
@@ -119,7 +119,7 @@ test("test_revengGraphConsolidatesRepeatedOccurrencesOnlyAfterApproval", async (
     assert.deepEqual(JSON.parse(readFileSync(join(fixture.rootPath, ".taskTools", "tasks.json"), "utf8")).map((task: { taskNumber: number }) => task.taskNumber), [...TASK_NUMBERS, 3699]);
     assert.equal(JSON.parse(readFileSync(join(fixture.rootPath, ".taskTools", "completedTasks.json"), "utf8")).length, 0);
 
-    // Execute the fixture's deterministic suite in every child and ancestor checkout of every real group worktree before minting green receipts.
+    // Run the suite in every child and ancestor checkout of each group worktree before green receipts.
     for (const group of groups) {
         for (const occurrenceId of REVENG_OCCURRENCE_IDS) execFileSync("sh", ["verify.sh"], { cwd: occurrencePathInWorktree(group.worktree, occurrenceId), encoding: "utf8" });
     }
@@ -141,7 +141,7 @@ test("test_revengGraphConsolidatesRepeatedOccurrencesOnlyAfterApproval", async (
     assert.ok(greenOutput.archiveRequest);
     assert.deepEqual(greenOutput.archiveRequest?.publishedTaskNumbers, [...TASK_NUMBERS]);
 
-    // One prepared integration exists per logical repository, and each repeated source's independently named payload converges into all of its copies.
+    // Each logical repository gets one integration; a repeated source's payload converges into all its copies.
     const targetsByOid = new Map<string, string[]>();
     for (const target of greenOutput.publicationTargets) targetsByOid.set(target.targetOid, [...(targetsByOid.get(target.targetOid) ?? []), target.repositoryPath]);
     assert.equal(targetsByOid.size, 6);

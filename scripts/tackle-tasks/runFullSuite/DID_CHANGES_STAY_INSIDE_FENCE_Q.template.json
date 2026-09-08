@@ -8,6 +8,7 @@
         "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
         "branch": "task-1",
         "ownedFilePaths": [""],
+        "readFilePaths": [""],
         "testFilePaths": [""],
         "passed": true,
         "output": ""

@@ -113,8 +113,12 @@ export function attachOperationBranch(occurrences: RepositoryOccurrence[], branc
 }
 
 export function modifiableFiles(task: TaskRecord): string[] {
+    if (Array.isArray(task.files)) {
+        throw new Error(`task ${task.taskNumber}: the "files" key is no longer supported; use "modifiableFiles" and "readOnlyFiles"`);
+    }
     if (Array.isArray((task as any).modifiableFiles)) return (task as any).modifiableFiles as string[];
-    return Array.isArray(task.files) ? (task.files as string[]) : [];
+    // return Array.isArray(task.files) ? (task.files as string[]) : []; // retired: "files" key no longer supported
+    return [];
 }
 
 export function readOnlyFiles(task: TaskRecord): string[] {
@@ -384,8 +388,7 @@ export function resolveTaskWorktreeConventionDirectory(repoRoot: string): string
     return join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`);
 }
 
-// Test-only: SIGKILLs this process right after the named step of createWorktreeForGroup
-// finishes, so a retry can be exercised against a real process death, not a thrown error.
+// Test-only: SIGKILLs this process after the named step, so a retry can be tested against real process death.
 const CREATE_WORKTREE_FOR_GROUP_TEST_KILL_AFTER_ENV = "CREATEWORKTREEFORGROUP_TEST_KILL_AFTER";
 function killSelfForTest(step: "lease" | "gitCreate" | "gitReset"): void {
     if (process.env[CREATE_WORKTREE_FOR_GROUP_TEST_KILL_AFTER_ENV] === step) process.kill(process.pid, "SIGKILL");
@@ -646,6 +649,17 @@ function runAsCli(): void {
             throw new Error("this repository does not have an origin remote. set one to continue to use 'tackle-tasks'");
         }
         tasks = selectRequestedTasks(openTasks, requestedNumbers);
+        // retired: the new pipeline never runs this CLI; the missing-file check lives in preparedTask.ts loadPreparedTask.
+        // for (const task of tasks) {
+        //     const createsFiles = Array.isArray(task.createsFiles) ? (task.createsFiles as string[]) : [];
+        //     const missing = modifiableFiles(task).filter((file) => !createsFiles.includes(file) && !existsSync(join(repoRoot, file)));
+        //     if (missing.length > 0) {
+        //         throw new Error(
+        //             `task ${task.taskNumber} names files that do not exist on disk: ${missing.join(", ")}. `
+        //             + `List each new file the task creates in its "createsFiles" array, or run the task that creates it first.`,
+        //         );
+        //     }
+        // }
     } catch (error) {
         process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
         process.exit(1);

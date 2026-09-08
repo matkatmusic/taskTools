@@ -22,7 +22,7 @@ invoke this skill exactly:
 
 invoke this skill exactly:
 ```
-/read-file `${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`
+/read-file `${readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`
 ```
 The skill puts the brief, the plan, the files this task owns, and the guides you must follow into your context.
 
@@ -54,10 +54,8 @@ Per `~/.claude/guides/tdd.md`, write the failing test before the code that satis
 ## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the `sections` array gives them, editing only the paths listed above.
-2. Run ``${rootedTypecheck}``.
-Fix every error it reports in the paths you own.
-3. Run each paired test file with `(cd -- '`${t.repoRoot}`' && node --test <absolute test path>)`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3.
+2. Run each paired test file with `(cd -- '`${t.repoRoot}`' && node --test <absolute test path>)`.
+3. While any test fails, fix the cause, then repeat step 2.
 Stop after `${maxFixRounds}` rounds.
 
 Never run the full suite.

@@ -8,8 +8,8 @@ import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 import type { RepositoryManifest } from "../scripts/shared/repositoryManifest.ts";
 import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
-function task(taskNumber: number, files?: string[]): TaskRecord {
-    return files === undefined ? { taskNumber } : { taskNumber, files };
+function task(taskNumber: number, modifiableFiles?: string[]): TaskRecord {
+    return modifiableFiles === undefined ? { taskNumber } : { taskNumber, modifiableFiles };
 }
 
 const flatManifest: RepositoryManifest = {
@@ -81,11 +81,7 @@ test("test_groupTasksByFileOverlapStillWorksWithNoManifestArgument", () => {
 });
 
 test("test_declaredFilesReturnsModifiableFilesWhenTheTaskDeclaresIt", () => {
-    assert.deepEqual(declaredFiles({ taskNumber: 1, modifiableFiles: ["a.ts"], files: ["legacy.ts"] } as TaskRecord), ["a.ts"]);
-});
-
-test("test_declaredFilesFallsBackToFilesWhenModifiableFilesIsAbsent", () => {
-    assert.deepEqual(declaredFiles({ taskNumber: 1, files: ["a.ts"] } as TaskRecord), ["a.ts"]);
+    assert.deepEqual(declaredFiles({ taskNumber: 1, modifiableFiles: ["a.ts"] } as TaskRecord), ["a.ts"]);
 });
 
 test("test_declaredFilesReturnsEmptyArrayWhenTheTaskDeclaresNeitherKey", () => {
@@ -98,14 +94,6 @@ test("test_readOnlyFilesOfDefaultsToWildcardWhenAbsent", () => {
 
 test("test_readOnlyFilesOfReturnsTheDeclaredListWhenPresent", () => {
     assert.deepEqual(readOnlyFilesOf({ taskNumber: 1, readOnlyFiles: ["b.ts"] } as TaskRecord), ["b.ts"]);
-});
-
-test("test_groupTasksByFileOverlapGroupsATaskDeclaringModifiableFilesWithALegacyTaskSharingTheSameFile", () => {
-    const legacyTask: TaskRecord = { taskNumber: 1, files: ["fileA"] };
-    const modernTask = { taskNumber: 2, modifiableFiles: ["fileA"] } as TaskRecord;
-    const groups = groupTasksByFileOverlap([legacyTask, modernTask], flatManifest);
-    assert.equal(groups.length, 1);
-    assert.deepEqual(groups[0].taskNumbers, [1, 2]);
 });
 
 test("test_tasksJsonEveryEntryHasReadOnlyFilesAndModifiableFilesAndNoFilesKey", () => {

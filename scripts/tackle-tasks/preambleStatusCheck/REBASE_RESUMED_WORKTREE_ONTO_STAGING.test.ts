@@ -1,4 +1,4 @@
-// REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts is "rebase the worktree onto staging when staging has moved" in pipeline-preambleStatusCheck.mmd, against real git repos. Run alone: node --test scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.test.ts
+// Tests rebasing the worktree onto staging when staging has moved, per pipeline-preambleStatusCheck.mmd, against real git repos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -25,7 +25,7 @@ function makeProjectRoot(taskNumber: number): string {
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "seed");
     git(root, "branch", "staging");
-    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber, title: "t", files: [] }]));
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber, title: "t", modifiableFiles: [] }]));
     return root;
 }
 

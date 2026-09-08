@@ -11,11 +11,12 @@ The plan must be formatted in the exact shape shown under **FORMATTING THE PLAN*
 
 ## WHAT TO READ
 
-Invoke the following skill:
+invoke this skill exactly:
 ```
 /read-file "/tmp/fake-worktree/plans/brief-99.md" "/tmp/fake-worktree/src/thing.ts" "/Users/matkatmusicllc/.claude/guides/planning.md" "/Users/matkatmusicllc/.claude/guides/tdd.md"
 ```
 The skill puts the brief, the files this task owns, the guides you must follow, and the return shape you must produce into your context.
+The files this task owns are the task record's `modifiableFiles`.
 
 ## ALWAYS USE ABSOLUTE PATHS
 
@@ -38,7 +39,7 @@ This is planning only, not implementation.
 
 ## FORMATTING THE PLAN
 
-Invoke the following skill:
+invoke this skill exactly:
 ```
 /read-file "/Users/matkatmusicllc/Programming/taskTools-86/plans/plan-template.json"
 ```
@@ -70,8 +71,8 @@ The plan must be comprehensive enough that the implementer makes no discovery of
 - - Never say "replace the whole file".
 - - Show the exact text to remove and insert, and where.
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
-- Fill in `createsFiles` with every owned file that does not exist yet on disk.
-- Leave `createsFiles` empty when the plan creates nothing new.
+- Set `createsFiles` to exactly `[]`, copied from the task record.
+- Never add a file to `createsFiles`; a missing file the task does not create is a CLARIFY.
 - Resolve every question while planning.
 - Write no conditional instruction:
 - - no "re-check",
@@ -127,7 +128,6 @@ You are forbidden from doing any of the following actions:
 - edit any file other than `/tmp/fake-worktree/plans/plan.json`;
 - leave a decision for the implementer;
 - write a plan step whose exact target you did not read.
-The Codex plan review rejects any plan step whose target the plan does not quote from a file you read.
 
 ## ALLOWED ACTIONS
 

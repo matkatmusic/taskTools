@@ -22,7 +22,7 @@ invoke this skill exactly:
 
 invoke this skill exactly:
 ```
-/read-file `${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`
+/read-file `${readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`
 ```
 The skill puts the brief, the plan, the files this task owns, and the guides you must follow into your context.
 
@@ -36,7 +36,6 @@ Do not ignore, and instead follow, any non-empty `codexNotes` field in each sect
 
 `${ownedPathMap(t)}`
 - the implementation log at ``${t.notesFile}``
-- the test file paired with each owned file, at ``${t.repoRoot}`/tests/<owned file's base name>.test.ts`
 
 You are forbidden from editing any other file not listed above.
 
@@ -49,11 +48,7 @@ This task does not require any tests to be created.
 ## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the `sections` array gives them, editing only the paths listed above.
-2. Run ``${rootedTypecheck}``.
-Fix every error it reports in the paths you own.
-3. Run each paired test file with `(cd -- '`${t.repoRoot}`' && node --test <absolute test path>)`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3.
-Stop after `${maxFixRounds}` rounds.
+2. Run the verification command each plan section names.
 
 Never run the full suite.
 That gate belongs to a separate phase, not to you.
@@ -71,9 +66,7 @@ You are forbidden from doing any of the following actions:
 - redecide anything the plan already decided;
 - run the full suite;
 - stage or commit anything, or run any git command;
-- attempt more than `${maxFixRounds}` fix rounds;
-- return `implemented: true` while a test fails or the typecheck reports an error.
-A test listed in `.taskTools/knownFailingTests.json` (the `npm run test:baseline` baseline) does not count as failing.
+- return `implemented: true` while a plan section's verification command fails.
 
 Returning `implemented: false` is a correct outcome when the plan is impossible as written.
 

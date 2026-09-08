@@ -93,8 +93,8 @@ function makeProjectRoot(): string {
     join(root, ".taskTools", "tasks.json"),
     JSON.stringify(
       [
-        { taskNumber: 1, title: "first", files: ["existing.ts"] },
-        { taskNumber: 2, title: "second", files: [] },
+        { taskNumber: 1, title: "first", modifiableFiles: ["existing.ts"] },
+        { taskNumber: 2, title: "second", modifiableFiles: [] },
       ],
       null,
       2,
@@ -128,22 +128,22 @@ test("appends new paths in order, deduping against what the task already owns", 
   const root = makeProjectRoot();
   run(root, "[1]", "existing.ts", "new.ts");
   const task = readTasks(root).find((t) => t.taskNumber === 1);
-  assert.deepEqual(task.files, ["existing.ts", "new.ts"]);
+  assert.deepEqual(task.modifiableFiles, ["existing.ts", "new.ts"]);
 });
 
 test("the same incoming path repeated on one call is appended only once", () => {
   const root = makeProjectRoot();
   run(root, "[2]", "a.ts", "b.ts", "a.ts");
   const task = readTasks(root).find((t) => t.taskNumber === 2);
-  assert.deepEqual(task.files, ["a.ts", "b.ts"]);
+  assert.deepEqual(task.modifiableFiles, ["a.ts", "b.ts"]);
 });
 
 test("a multi-task-number call appends the same paths to every named task", () => {
   const root = makeProjectRoot();
   run(root, "[1,2]", "shared.ts");
   const tasks = readTasks(root);
-  assert.deepEqual(tasks.find((t) => t.taskNumber === 1).files, ["existing.ts", "shared.ts"]);
-  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).files, ["shared.ts"]);
+  assert.deepEqual(tasks.find((t) => t.taskNumber === 1).modifiableFiles, ["existing.ts", "shared.ts"]);
+  assert.deepEqual(tasks.find((t) => t.taskNumber === 2).modifiableFiles, ["shared.ts"]);
 });
 
 test("an unknown task number exits non-zero and leaves tasks.json byte-for-byte unchanged", () => {
@@ -203,7 +203,7 @@ test("concurrent CLI wideners preserve the full union in both authoritative file
   await Promise.all(children.map(requireExitZero));
 
   const task = readTasks(root).find((t) => t.taskNumber === 1);
-  assert.deepEqual(new Set(task.files), new Set(["existing.ts", ...paths]));
+  assert.deepEqual(new Set(task.modifiableFiles), new Set(["existing.ts", ...paths]));
   const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
   assert.deepEqual(new Set(snapshot.groups[0].tasks[0].files), new Set(["existing.ts", ...paths]));
 });
@@ -228,7 +228,7 @@ test("root and nested-cwd writers use the same authoritative lock", async () => 
   await Promise.all(children.map(requireExitZero));
 
   const task = readTasks(root).find((t) => t.taskNumber === 1);
-  assert.deepEqual(new Set(task.files), new Set(["existing.ts", ...rootPaths, ...nestedPaths]));
+  assert.deepEqual(new Set(task.modifiableFiles), new Set(["existing.ts", ...rootPaths, ...nestedPaths]));
   const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
   assert.deepEqual(new Set(snapshot.groups[0].tasks[0].files), new Set(["existing.ts", ...rootPaths, ...nestedPaths]));
   assert.equal(existsSync(join(nested, ".taskTools", "task-state.lock")), false);
@@ -256,7 +256,7 @@ test("widener wins the lock, closer follows: the archived task carries the widen
   assert.equal(readTasks(root).some((t) => t.taskNumber === 1), false);
   const completed = JSON.parse(readFileSync(join(root, ".taskTools", "completedTasks.json"), "utf8"));
   const archived = completed.find((t: any) => t.taskNumber === 1);
-  assert.deepEqual(archived.files, ["existing.ts", "b.ts"]);
+  assert.deepEqual(archived.modifiableFiles, ["existing.ts", "b.ts"]);
   const snapshot = JSON.parse(readFileSync(join(root, ".taskTools", "run-arguments.json"), "utf8"));
   assert.deepEqual(snapshot.groups[0].tasks[0].files, ["existing.ts", "b.ts"]);
 });

@@ -35,7 +35,7 @@ function makePacket() {
     writeFileSync(join(worktree, "plans", "brief-99.md"), "# brief\n");
 
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([{
-        taskNumber: 99, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts",
+        taskNumber: 99, modifiableFiles: ["src/thing.ts"], tests: "node --test tests/thing.test.ts",
         run: {
             active: true, worktree, leaseRunId: "run-1",
             history: [{

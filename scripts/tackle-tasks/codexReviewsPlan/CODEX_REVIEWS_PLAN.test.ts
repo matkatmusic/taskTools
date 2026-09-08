@@ -16,7 +16,7 @@ function makeFixture(): { worktree: string; projectRoot: string } {
     writeFileSync(join(repoRoot, "plans/brief-42.md"), "the brief");
     writeFileSync(join(repoRoot, "plans/plan.json"), JSON.stringify({ task: 42, revision: 1, createsFiles: [], sections: [{ id: "step-1", title: "one", body: "b" }] }));
     writeFileSync(join(repoRoot, "src/owned.ts"), "export const x = 1;");
-    writeFileSync(join(repoRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 42, files: ["src/owned.ts"] }]));
+    writeFileSync(join(repoRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 42, modifiableFiles: ["src/owned.ts"] }]));
     return { worktree: repoRoot, projectRoot: repoRoot };
 }
 

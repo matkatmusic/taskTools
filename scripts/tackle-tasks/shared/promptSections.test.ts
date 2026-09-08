@@ -21,6 +21,10 @@ const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    createsFiles: [],
+    difficulty: 1,
+    clarifyRequest: "",
     testFilePaths: [],
     hasTests: true,
     tests: "node --test tests/thing.test.ts",
@@ -63,7 +67,7 @@ test("test_absolutePathsSection_namesTheRootInEveryRuleThatNeedsIt", () => {
     assert.equal(section.split("/tmp/SENTINEL_ROOT_ps1").length, 3);
 });
 
-// planPrompt and fixConflictsPrompt are the two v1.6 prompt builders left that call this section; IMPLEMENT_TASK and FIX_THE_CODEBASE_FOR_SUITE build their own prompts in-file instead.
+// planPrompt and fixConflictsPrompt still call this shared section; IMPLEMENT_TASK and FIX_THE_CODEBASE_FOR_SUITE build prompts independently.
 test("test_everyPromptUsesTheSharedAbsolutePathsSectionVerbatim", () => {
     const repo = makeConflictedRepo();
     const prompts = [planPrompt(fakeTask), fixConflictsPrompt(repo, 99, "/tmp/fake-project-root", "run-1", "main")];

@@ -489,6 +489,23 @@ test("test_runStepHook_runsTheResetForATackleTasksResetPrompt", () => {
     assert.equal("run" in task, false);
 });
 
+// An agent's Skill call sends "reset N" in tool_input.args; the hook must run the reset the same way.
+test("test_runStepHook_runsTheResetForATackleTasksSkillCall", () => {
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-reset-skill-")));
+    spawnSync("git", ["-C", cwd, "init", "-q"]);
+    mkdirSync(join(cwd, ".taskTools"), { recursive: true });
+    writeFileSync(join(cwd, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t", run: { active: false, history: [] }, codexReviewNotes: [] }]));
+    writeFileSync(join(cwd, ".taskTools", "completedTasks.json"), "[]");
+    const { RUN_STEP_LOG: _unset, ...env } = process.env;
+    const spawned = spawnSync("node", ["--no-inspect", HOOK], {
+        cwd, input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { skill: "taskTools:tackle-tasks", args: "reset 7" } }), encoding: "utf8", env,
+    });
+    const additionalContext = String(JSON.parse(spawned.stdout.trim()).hookSpecificOutput.additionalContext);
+    assert.match(additionalContext, /task 7 run state cleared/);
+    const [task] = JSON.parse(readFileSync(join(cwd, ".taskTools", "tasks.json"), "utf8"));
+    assert.equal("run" in task, false);
+});
+
 test("test_runStepHook_namesTheBranchTheBlockChoseAsTheNextStep", () => {
     const configFile = configWith(writeStep => ({
         "one.mmd": [

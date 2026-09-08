@@ -16,7 +16,7 @@ function makeProjectRoot(): string {
   mkdirSync(join(worktree, "plans"), { recursive: true });
   writeFileSync(join(worktree, "plans", "checkpoint.json"), "{}\n");
   const tasks = [
-    { taskNumber: 1, title: "answered later", description: "body", files: ["a.ts"], clarifyRequest: "where is X?",
+    { taskNumber: 1, title: "answered later", description: "body", modifiableFiles: ["a.ts"], clarifyRequest: "where is X?",
       run: { active: false, worktree, history: [
         { runId: "r1", attempts: { clarify: 1 }, countedPasses: { clarify: ["p1"] } },
         { runId: "r2", attempts: { clarify: 2 }, countedPasses: { clarify: ["p2", "p3"] } },
@@ -38,7 +38,7 @@ test("test_clarifyTaskRecordsTheAnswerAndClearsEveryHistoryEntrysAttemptCounters
   clarifyTask({ taskNumber: 1, answer: "X lives in b.ts", files: ["b.ts", "a.ts"], blockedBy: [{ taskNumber: 9, reason: "defines X" }] }, root);
   const task = readTasks(root)[0];
   assert.match(task.description, /^body\n\n## Clarification answer \(\d{4}-\d{2}-\d{2}\)\n\nX lives in b\.ts$/);
-  assert.deepEqual(task.files, ["a.ts", "b.ts"]);
+  assert.deepEqual(task.modifiableFiles, ["a.ts", "b.ts"]);
   assert.deepEqual(task.blockedBy, [{ taskNumber: 9, reason: "defines X" }]);
   assert.equal("clarifyRequest" in task, false);
   for (const record of task.run.history) {

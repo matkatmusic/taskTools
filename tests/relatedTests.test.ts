@@ -113,3 +113,31 @@ test("test_main_readsTheTurnFlagOnStopAndReportsTypeErrors", () => {
     assert.match(run.stderr, /Type errors after editing .*widget\.ts/);
     assert.match(run.stderr, /error TS2322/);
 });
+
+test("test_main_editedFileInASecondGitRepoGetsThatRepoAsItsRoot", () => {
+    function seedRepo(repo: string, badFile: string) {
+        execFileSync("git", ["-C", repo, "init", "-q", "-b", "main"]);
+        writeFileSync(join(repo, "package.json"), JSON.stringify({ scripts: { test: "exit 0" } }));
+        writeFileSync(join(repo, "tsconfig.json"), JSON.stringify({ compilerOptions: { noEmit: true, strict: true }, include: ["*.ts", "tests"] }));
+        writeFileSync(join(repo, badFile), "export const n: number = \"not a number\";\n");
+        mkdirSync(join(repo, "tests"));
+        writeFileSync(join(repo, "tests", `${badFile.replace(".ts", "")}.test.ts`), "");
+        execFileSync("git", ["-C", repo, "add", "-A"]);
+        execFileSync("git", ["-C", repo, "-c", "user.email=t@e.com", "-c", "user.name=t", "commit", "-q", "-m", "seed"]);
+    }
+
+    const repoA = mkdtempSync(join(tmpdir(), "related-tests-repoA-"));
+    const repoB = mkdtempSync(join(tmpdir(), "related-tests-repoB-"));
+    seedRepo(repoA, "widgetA.ts");
+    seedRepo(repoB, "widgetB.ts");
+
+    const home = mkdtempSync(join(tmpdir(), "related-tests-home-"));
+    mkdirSync(join(home, ".claude", "turn-flags"), { recursive: true });
+    writeFileSync(join(home, ".claude", "turn-flags", "session-2"), `${join(repoA, "widgetA.ts")}\n${join(repoB, "widgetB.ts")}\n`);
+    const payload = JSON.stringify({ session_id: "session-2", cwd: repoA });
+    const run = spawnSync("node", [SCRIPT_PATH], { input: payload, encoding: "utf8", env: { ...process.env, HOME: home } });
+
+    assert.equal(run.status, 2, run.stderr);
+    assert.match(run.stderr, /Type errors after editing .*widgetA\.ts/);
+    assert.match(run.stderr, /Type errors after editing .*widgetB\.ts/);
+});

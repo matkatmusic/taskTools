@@ -6,7 +6,7 @@ import { main } from "./DO_ALL_TESTS_PASS_Q.ts";
 function packet(passed: boolean): string {
     return JSON.stringify({
         taskNumber: 1, runId: "run-1", projectRoot: "/root", worktree: "/worktree",
-        ownedFilePaths: [], testFilePaths: [], passed, output: "suite output",
+        ownedFilePaths: [], readFilePaths: [], testFilePaths: [], passed, output: "suite output",
     });
 }
 

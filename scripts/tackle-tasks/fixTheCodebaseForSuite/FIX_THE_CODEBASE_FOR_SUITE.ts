@@ -19,6 +19,7 @@ type Input = {
     exitType: string;
     exitNote: string;
     ownedFilePaths: string[];
+    readFilePaths: string[];
     testFilePaths: string[];
     output: string;
 };
@@ -205,7 +206,7 @@ export function suiteFixChoices(): SuiteFixChoices {
 
 export const SUITE_FIX_SKELETON_VARS: SuiteFixVars = {
     root: "`${root}`",
-    readFileArgs: "`${readFileArgs([...packet.ownedFilePaths, ...packet.testFilePaths])}`",
+    readFileArgs: "`${readFileArgs([...packet.readFilePaths, ...packet.testFilePaths])}`",
     absolutePaths: "`${absolutePathsSection(root)}`",
     ownedPaths: '`${packet.ownedFilePaths.map((path) => `- \\`${path}\\``).join("\\n")}`',
     resumedRun: "`${resumedRunSection(root)}`",
@@ -225,7 +226,7 @@ export function buildSuiteFixPrompt(packet: Input): string {
     const root = packet.worktree.replace(/\/+$/, "");
     return renderSuiteFixSections(suiteFixChoices(), {
         root,
-        readFileArgs: readFileArgs([...packet.ownedFilePaths, ...packet.testFilePaths]),
+        readFileArgs: readFileArgs([...packet.readFilePaths, ...packet.testFilePaths]),
         absolutePaths: absolutePathsSection(root),
         ownedPaths: packet.ownedFilePaths.map((path) => `- \`${path}\``).join("\n"),
         resumedRun: resumedRunSection(root),
@@ -246,6 +247,7 @@ export function suiteFixPromptCombos(): { name: string; skeleton: string; render
         exitType: "",
         exitNote: "",
         ownedFilePaths: ["/tmp/fake-worktree/a.ts"],
+        readFilePaths: ["/tmp/fake-worktree/a.ts"],
         testFilePaths: ["/tmp/fake-worktree/tests/a.test.ts"],
         output: "the failing suite text",
     };

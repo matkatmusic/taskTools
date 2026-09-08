@@ -23,7 +23,7 @@ function makeProjectRootWithActiveTask(taskNumber: number, runId: string): strin
     const projectRoot = tmpMkdir("suite-fix-attempts-step-");
     const { tasksPath } = resolveTaskFiles(projectRoot);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "seed task", files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "seed task", modifiableFiles: [] }]);
     const outcome = claimTask(taskNumber, runId, projectRoot);
     assert.equal(outcome.status, "claimed");
     return projectRoot;
@@ -36,7 +36,7 @@ function worktreeOf(projectRoot: string): string {
 function packet(taskNumber: number, runId: string, projectRoot: string): string {
     return JSON.stringify({
         taskNumber, runId, projectRoot, worktree: worktreeOf(projectRoot), branch: `task-${taskNumber}`,
-        ownedFilePaths: [], testFilePaths: [], passed: false, output: "failing output",
+        ownedFilePaths: [], readFilePaths: [], testFilePaths: [], passed: false, output: "failing output",
     });
 }
 

@@ -29,10 +29,10 @@ function makeProjectRoot(): string {
         taskNumber: 58,
         title: "Big task",
         description: "desc",
-        files: ["a.ts", "b.ts", "c.ts", "d.ts"],
+        modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"],
     };
-    const childTaskA = { taskNumber: 66, title: "Child A", description: "desc", files: ["a.ts", "b.ts"] };
-    const childTaskB = { taskNumber: 67, title: "Child B", description: "desc", files: ["c.ts", "d.ts"] };
+    const childTaskA = { taskNumber: 66, title: "Child A", description: "desc", modifiableFiles: ["a.ts", "b.ts"] };
+    const childTaskB = { taskNumber: 67, title: "Child B", description: "desc", modifiableFiles: ["c.ts", "d.ts"] };
     const closedTask = { taskNumber: 40, title: "Already closed", description: "desc" };
     writeTaskFiles(root, [parentTask, childTaskA, childTaskB], [closedTask]);
     return root;
@@ -50,7 +50,7 @@ test("readParentTask loads the parent by number", () => {
     const root = makeProjectRoot();
     const parent = readParentTask(58, root);
     assert.equal(parent.taskNumber, 58);
-    assert.deepEqual(parent.files, ["a.ts", "b.ts", "c.ts", "d.ts"]);
+    assert.deepEqual(parent.modifiableFiles, ["a.ts", "b.ts", "c.ts", "d.ts"]);
 });
 
 test("readParentTask throws when the task number does not exist", () => {
@@ -179,9 +179,9 @@ test("closeParentTask throws and leaves the parent open when a child omits a fil
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["c.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["c.ts"] },
         ],
         [],
     );
@@ -194,9 +194,9 @@ test("closeParentTask throws and leaves the parent open when a child claims a fi
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "z.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["b.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "z.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["b.ts"] },
         ],
         [],
     );
@@ -209,9 +209,9 @@ test("closeParentTask throws and leaves the parent open when a child's files dri
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts", "d.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "b.ts", "z.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["c.ts", "d.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "b.ts", "z.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["c.ts", "d.ts"] },
         ],
         [],
     );
@@ -224,9 +224,9 @@ test("closeParentTask succeeds with a non-contiguous file grouping that fully pa
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts", "d.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "c.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["b.ts", "d.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "c.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["b.ts", "d.ts"] },
         ],
         [],
     );
@@ -251,11 +251,11 @@ test("findSplitCandidates lists open tasks qualifying on difficulty or file coun
     writeTaskFiles(
         root,
         [
-            { taskNumber: 91, title: "Hard task", difficulty: 5, files: ["a.ts"] },
-            { taskNumber: 12, title: "Wide task", difficulty: 1, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] },
-            { taskNumber: 5, title: "Small task", difficulty: 2, files: ["a.ts", "b.ts"] },
+            { taskNumber: 91, title: "Hard task", difficulty: 5, modifiableFiles: ["a.ts"] },
+            { taskNumber: 12, title: "Wide task", difficulty: 1, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] },
+            { taskNumber: 5, title: "Small task", difficulty: 2, modifiableFiles: ["a.ts", "b.ts"] },
         ],
-        [{ taskNumber: 999, title: "Closed but would qualify", difficulty: 9, files: ["a.ts", "b.ts", "c.ts", "d.ts"] }],
+        [{ taskNumber: 999, title: "Closed but would qualify", difficulty: 9, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] }],
     );
     const candidates = findSplitCandidates(root);
     assert.deepEqual(
@@ -290,8 +290,8 @@ test("closeParentTask validates against the parent's modifiableFiles when it has
         root,
         [
             { taskNumber: 80, title: "Modern parent", modifiableFiles: ["p.ts", "q.ts"] },
-            { taskNumber: 81, title: "Child A", files: ["p.ts"] },
-            { taskNumber: 82, title: "Child B", files: ["q.ts"] },
+            { taskNumber: 81, title: "Child A", modifiableFiles: ["p.ts"] },
+            { taskNumber: 82, title: "Child B", modifiableFiles: ["q.ts"] },
         ],
         [],
     );

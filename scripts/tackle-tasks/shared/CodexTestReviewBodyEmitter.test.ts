@@ -47,7 +47,7 @@ function makeTaskFixture(): PreparedTask {
         },
     };
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([{
-        taskNumber: 99, files: ["src/thing.ts"],
+        taskNumber: 99, modifiableFiles: ["src/thing.ts"],
         run: { active: true, worktree, leaseRunId: "r1", history: [run] },
     }]));
 
@@ -62,6 +62,10 @@ function makeTaskFixture(): PreparedTask {
         files: ["src/thing.ts"],
         readOnlyFiles: ["*"],
         ownedFilePaths: [join(worktree, "src", "thing.ts")],
+        readFilePaths: [join(worktree, "src", "thing.ts")],
+        createsFiles: [],
+        difficulty: 1,
+        clarifyRequest: "",
         testFilePaths: [join(worktree, "tests", "thing.test.ts")],
         hasTests: true,
         tests: "node --test tests/thing.test.ts",
@@ -154,7 +158,7 @@ test("test_reviewTestsPrompt_carriesTheTestCommandAndItsRecordedOutput", () => {
 test("test_reviewTestsPrompt_throwsWhenNoTaskTestRunIsRecorded", () => {
     // Running this box before the task tests is a caller error, not a review with no evidence.
     const task = makeTaskFixture();
-    writeFileSync(join(task.taskStateRoot, "tasks.json"), JSON.stringify([{ taskNumber: 99, files: [], run: { active: true, worktree: null, leaseRunId: null, history: [{ runId: "r1", taskTests: null }] } }]));
+    writeFileSync(join(task.taskStateRoot, "tasks.json"), JSON.stringify([{ taskNumber: 99, modifiableFiles: [], run: { active: true, worktree: null, leaseRunId: null, history: [{ runId: "r1", taskTests: null }] } }]));
     assert.throws(() => reviewTestsPrompt(task), /no recorded task-test run/);
 });
 

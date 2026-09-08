@@ -1,5 +1,4 @@
-// Rewrites plans/prompt-shapes/<builder>/<combo>/{skeleton,rendered}.md for every input combination of every prompt builder.
-// Run after tweaking a prompt: `node scripts/tackle-tasks/shared/dumpPromptShapes.ts`, then `git diff plans/prompt-shapes`.
+// Rewrites skeleton/rendered prompt-shape markdown for every builder input combo; run after tweaking a prompt, then diff.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { PreparedTask } from "./preparedTask.ts";
@@ -25,6 +24,10 @@ export const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    createsFiles: [],
+    difficulty: 1,
+    clarifyRequest: "",
     testFilePaths: [],
     hasTests: true,
     tests: "node --test tests/thing.test.ts",

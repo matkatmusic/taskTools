@@ -18,7 +18,7 @@ const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
     testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
-    files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], testFilePaths: [],
+    files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], readFilePaths: ["/wt/src/thing.ts"], createsFiles: [], difficulty: 1, clarifyRequest: "", testFilePaths: [],
     hasTests: false, tests: null, codexReviewNotes: "", siblingTasks: [], blockedBy: [], blocks: [], repoRoot: "/wt", taskStateRoot: baseTaskStateRoot,
 };
 

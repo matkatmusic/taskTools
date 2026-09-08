@@ -32,7 +32,7 @@ function makeProjectRoot(): string {
 }
 
 function seedTasksFile(root: string, taskNumber: number): void {
-    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber, title: "t", files: [] }]));
+    writeFileSync(join(root, "tasks.json"), JSON.stringify([{ taskNumber, title: "t", modifiableFiles: [] }]));
 }
 
 function packet(projectRoot: string, worktree: string, taskNumber: number, runId: string): string {

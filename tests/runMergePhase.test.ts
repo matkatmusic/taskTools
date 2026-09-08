@@ -525,7 +525,7 @@ const makeQueueFixtureRepoV2 = (taskNumber: number, ownedFiles: string[]) => {
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
 
-    const task: TaskRecord = { taskNumber, title: "fixture", files: ownedFiles, blockedBy: [] };
+    const task: TaskRecord = { taskNumber, title: "fixture", modifiableFiles: ownedFiles, blockedBy: [] };
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([task]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
@@ -1065,7 +1065,7 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
 
-    const task: TaskRecord = { taskNumber, title: "fixture", files: ownedFiles, blockedBy: [] };
+    const task: TaskRecord = { taskNumber, title: "fixture", modifiableFiles: ownedFiles, blockedBy: [] };
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([task]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
@@ -1360,7 +1360,7 @@ test("literal worker commit steps commit a grandchild-owned file through every a
     git(root, "add", "package.json");
     git(root, "commit", "-q", "-m", "add test script");
 
-    const task: TaskRecord = { taskNumber, title: "fixture", files: ["vendor/nested/x.ts"], blockedBy: [] };
+    const task: TaskRecord = { taskNumber, title: "fixture", modifiableFiles: ["vendor/nested/x.ts"], blockedBy: [] };
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([task]));
     writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");

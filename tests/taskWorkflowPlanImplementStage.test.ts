@@ -67,8 +67,8 @@ const makeTwoTaskSourceRepo = (): { root: string; tasks: TaskRecord[] } => {
   git(root, 'commit', '-q', '-m', 'init')
 
   const tasks: TaskRecord[] = [
-    { taskNumber: 1, title: 'task one', files: ['a.ts'], blockedBy: [] },
-    { taskNumber: 2, title: 'task two', files: ['b.ts'], blockedBy: [] },
+    { taskNumber: 1, title: 'task one', modifiableFiles: ['a.ts'], blockedBy: [] },
+    { taskNumber: 2, title: 'task two', modifiableFiles: ['b.ts'], blockedBy: [] },
   ]
   mkdirSync(join(root, '.taskTools'), { recursive: true })
   writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify(tasks))
@@ -695,7 +695,7 @@ test('a third rejected review with missingFiles widens every downstream implemen
     assert.deepEqual(implementResult.fenceViolations, [])
 
     const authoritativeTasks = JSON.parse(readFileSync(join(root, '.taskTools', 'tasks.json'), 'utf8')) as TaskRecord[]
-    assert.deepEqual(authoritativeTasks.find((t) => t.taskNumber === task.taskNumber)!.files, ['a.ts', 'b.ts'])
+    assert.deepEqual(authoritativeTasks.find((t) => t.taskNumber === task.taskNumber)!.modifiableFiles, ['a.ts', 'b.ts'])
     assert.equal(readFileSync(planResult.planFile as string, 'utf8'), 'plan v2, now edits b.ts\n')
 
     const runArguments = JSON.parse(readFileSync(join(root, '.taskTools', 'run-arguments.json'), 'utf8'))

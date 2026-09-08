@@ -45,7 +45,6 @@ Every shell command must run inside `/tmp/fake-worktree`.
 
 - `src/thing.ts` => `/tmp/fake-worktree/src/thing.ts`
 - the implementation log at `/tmp/fake-worktree/plans/implementation-notes-99.md`
-- the test file paired with each owned file, at `/tmp/fake-worktree/tests/<owned file's base name>.test.ts`
 
 You are forbidden from editing any other file not listed above.
 
@@ -56,11 +55,7 @@ This task does not require any tests to be created.
 ## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the `sections` array gives them, editing only the paths listed above.
-2. Run `(cd -- '/tmp/fake-worktree' && npx tsc --noEmit)`.
-Fix every error it reports in the paths you own.
-3. Run each paired test file with `(cd -- '/tmp/fake-worktree' && node --test <absolute test path>)`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3.
-Stop after 3 rounds.
+2. Run the verification command each plan section names.
 
 Never run the full suite.
 That gate belongs to a separate phase, not to you.
@@ -78,16 +73,14 @@ You are forbidden from doing any of the following actions:
 - redecide anything the plan already decided;
 - run the full suite;
 - stage or commit anything, or run any git command;
-- attempt more than 3 fix rounds;
-- return `implemented: true` while a test fails or the typecheck reports an error.
-A test listed in `.taskTools/knownFailingTests.json` (the `npm run test:baseline` baseline) does not count as failing.
+- return `implemented: true` while a plan section's verification command fails.
 
 Returning `implemented: false` is a correct outcome when the plan is impossible as written.
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
 Do these three steps in order.
-1. Build `{ "message": "", "additionalData": { "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" } }`, where \`message\` is a one-line summary of what you did.
+1. Build `{ "message": "", "additionalData": { "implemented": <true only when every plan step is done and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" } }`, where \`message\` is a one-line summary of what you did.
 2. Write that object into the packet file named by `outcome.payload` in the hook output (the same file this prompt came from) by running, with the object on stdin:
 ```
 node /Users/matkatmusicllc/Programming/taskTools-86/scripts/tackle-tasks/shared/writeAgentAnswer.ts "<the outcome.payload path>" <<'TTANSWER'

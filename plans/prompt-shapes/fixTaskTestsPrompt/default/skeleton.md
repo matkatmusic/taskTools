@@ -15,7 +15,7 @@ Say which test and why.
 
 invoke this skill exactly:
 ```
-/read-file `${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}`
+/read-file `${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.readFilePaths, ...prepared.testFilePaths])}`
 ```
 This puts the files into your context without spending a Read tool call.
 

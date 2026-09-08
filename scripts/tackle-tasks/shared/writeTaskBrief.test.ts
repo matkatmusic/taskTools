@@ -67,7 +67,7 @@ test("test_generateTaskBriefContents_writesNothingToDisk", () => {
     // Scenario: rendering a brief must be a pure read, no side effects on disk.
     const repoRoot = makeTempRepoWithCommit();
     writeFileSync(join(repoRoot, "fileA.txt"), "MARKER-abc123\n");
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: ["fileA.txt"] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: ["fileA.txt"] }]);
     // Snapshot the project directory before rendering.
     const before = listFilesRecursively(repoRoot);
     // Render the brief.
@@ -80,7 +80,7 @@ test("test_generateTaskBriefContents_writesNothingToDisk", () => {
 test("test_generateTaskBriefContents_rendersTheTasksClarifyRequest", () => {
     // Scenario: a stored clarifyRequest must reach the planner through the brief.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [], clarifyRequest: "which file holds the parser?" }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [], clarifyRequest: "which file holds the parser?" }]);
     const brief = generateTaskBriefContents(1, repoRoot);
     assert.ok(brief.includes("## clarifyRequest"));
     assert.ok(brief.includes("which file holds the parser?"));
@@ -89,7 +89,7 @@ test("test_generateTaskBriefContents_rendersTheTasksClarifyRequest", () => {
 test("test_generateTaskBriefContents_omitsTheClarifyRequestSectionWhenTheTaskHasNone", () => {
     // Scenario: no clarifyRequest on the task, no clarifyRequest heading in the brief.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     const brief = generateTaskBriefContents(1, repoRoot);
     assert.ok(!brief.includes("## clarifyRequest"));
 });
@@ -97,7 +97,7 @@ test("test_generateTaskBriefContents_omitsTheClarifyRequestSectionWhenTheTaskHas
 test("test_generateTaskBriefContents_rendersProblemSolvedByTaskVerbatim", () => {
     // Scenario: a task with problemSolvedByTask carries it verbatim into the brief.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [], problemSolvedByTask: "reviewers cannot tell what problem the task solves" }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [], problemSolvedByTask: "reviewers cannot tell what problem the task solves" }]);
     const brief = generateTaskBriefContents(1, repoRoot);
     assert.ok(brief.includes("## problemSolvedByTask"));
     assert.ok(brief.includes("reviewers cannot tell what problem the task solves"));
@@ -106,7 +106,7 @@ test("test_generateTaskBriefContents_rendersProblemSolvedByTaskVerbatim", () => 
 test("test_generateTaskBriefContents_saysWhenProblemSolvedByTaskIsNotProvided", () => {
     // Scenario: an older task without the field gets an explicit not-provided line.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     const brief = generateTaskBriefContents(1, repoRoot);
     assert.ok(brief.includes("## problemSolvedByTask"));
     assert.ok(brief.includes("(not provided: this task was created before the problemSolvedByTask field existed)"));
@@ -115,7 +115,7 @@ test("test_generateTaskBriefContents_saysWhenProblemSolvedByTaskIsNotProvided", 
 test("test_generateTaskBriefContents_returnsTheSameBytesWriteTaskBriefToDiskWrites", () => {
     // Scenario: writeTaskBriefToDisk writes exactly what generateTaskBriefContents computes.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     const worktreePath = mkdtempSync(join(tmpdir(), "write-task-brief-wt-"));
     // Render, then write, and compare bytes.
     const rendered = generateTaskBriefContents(1, repoRoot);
@@ -127,7 +127,7 @@ test("test_generateTaskBriefContents_returnsTheSameBytesWriteTaskBriefToDiskWrit
 test("test_writeTaskBriefToDisk_isIdempotent", () => {
     // Scenario: running writeTaskBriefToDisk twice must produce the same file with the same bytes.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     const worktreePath = mkdtempSync(join(tmpdir(), "write-task-brief-wt-"));
     // Write once.
     const firstPath = writeTaskBriefToDisk(1, worktreePath, repoRoot);
@@ -145,7 +145,7 @@ test("test_generateTaskBriefContents_carriesAtMostThreePreviousRuns", () => {
     const repoRoot = makeTempRepoWithCommit();
     const history = ["run-1", "run-2", "run-3", "run-4", "run-5"].map((runId) => endedRun({ runId }));
     writeTasksFile(repoRoot, [{
-        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
@@ -163,7 +163,7 @@ test("test_generateTaskBriefContents_saysHowManyEarlierRunsWereOmitted", () => {
     const repoRoot = makeTempRepoWithCommit();
     const history = Array.from({ length: 7 }, (_, index) => endedRun({ runId: `run-${index + 1}` }));
     writeTasksFile(repoRoot, [{
-        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
@@ -175,7 +175,7 @@ test("test_generateTaskBriefContents_saysHowManyEarlierRunsWereOmitted", () => {
 test("test_generateTaskBriefContents_omitsThePreviousRunSectionWhenThereAreNone", () => {
     // Scenario: a task has never run before.
     const repoRoot = makeTempRepoWithCommit();
-    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", files: [] }]);
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     // Render the brief.
     const brief = generateTaskBriefContents(1, repoRoot);
     // No "previous runs" heading appears anywhere in the brief.
@@ -191,7 +191,7 @@ test("test_generateTaskBriefContents_carriesTheFieldsThatTellTwoRunsApart", () =
         implementationNotesFile: "plans/implementation-notes-1.md",
     })];
     writeTasksFile(repoRoot, [{
-        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     const brief = generateTaskBriefContents(1, repoRoot);
@@ -211,7 +211,7 @@ test("test_generateTaskBriefContents_ordersPreviousRunsNewestFirstAndSkipsRunsWi
         endedRun({ runId: "run-new", startedAt: "2026-08-03T00:00:00-07:00" }),
     ];
     writeTasksFile(repoRoot, [{
-        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     const brief = generateTaskBriefContents(1, repoRoot);
@@ -223,7 +223,7 @@ test("test_generateTaskBriefContents_writesThePreviousRunsHeadingExactlyOnce", (
     // The old box appended a second "## Previous runs" heading; one renderer must mean one heading.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{
-        taskNumber: 1, title: "t1", description: "do the thing", files: [],
+        taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history: [endedRun()] },
     }]);
     const brief = generateTaskBriefContents(1, repoRoot);

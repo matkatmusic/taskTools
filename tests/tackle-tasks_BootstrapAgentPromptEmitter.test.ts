@@ -22,8 +22,8 @@ function makeFixtureRepo(): string {
   git(root, "remote", "add", "origin", "https://example.com/root.git");
   mkdirSync(join(root, ".taskTools"), { recursive: true });
   writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([
-    { taskNumber: 1, title: "open blocker", files: ["a.txt"] },
-    { taskNumber: 2, title: "blocked by open task", files: ["b.txt"], blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] },
+    { taskNumber: 1, title: "open blocker", modifiableFiles: ["a.txt"] },
+    { taskNumber: 2, title: "blocked by open task", modifiableFiles: ["b.txt"], blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] },
   ]));
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), JSON.stringify([{ taskNumber: 3, title: "already done" }]));
   writeFileSync(join(root, "a.txt"), "a\n");

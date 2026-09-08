@@ -11,6 +11,7 @@ $ARGUMENTS
 CLOSETASKSEOF
 ```
 
+<!-- retired: moved to /migrate-task-files
 ## Migration: `files` → `modifiableFiles`
 
 On every close-tasks invocation, unconditionally rename any remaining `files` key to `modifiableFiles` on every task still holding one in the project's tasks.json — not just the tasks being closed this run, and regardless of whether any task actually closes this run. This is bookkeeping-subagent work (see the related-memory note in the brief): if the run closes zero tasks and would otherwise not write tasks.json, still write it when a legacy `files` key is present so the migration happens; do not skip the write just because there is nothing to archive.
@@ -23,3 +24,5 @@ Rules, applied per task:
 - Never reorder tasks and never renumber a task's `taskNum` (or any other field) while doing this rename.
 
 This is a rename-only pass performed by the bookkeeping subagent. When the run also archives closed tasks, the rename and the archive write happen in the same tasks.json write. When the run closes nothing, the rename still happens in its own write.
+-->
+

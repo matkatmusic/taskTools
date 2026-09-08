@@ -34,7 +34,7 @@ cat > tasks.json <<JSON
 [
   {
     "taskNumber": 1,
-    "files": ["src/thing.ts"],
+    "modifiableFiles": ["src/thing.ts"],
     "tests": "node --test tests/thing.test.ts",
     "run": {
       "active": true,

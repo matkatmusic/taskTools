@@ -169,11 +169,20 @@ function main(): void {
     // realpath: git reports the real root, and a /var symlink path would look like it is outside it.
     const editedFiles = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))].map((file) => realpathSync(file));
     if (editedFiles.length === 0) process.exit(0);
-    if (!hookInput.cwd) throw new Error("relatedTests hook input requires cwd");
-    const rootPath = execFileSync("git", ["-C", hookInput.cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-    const rootBranch = execFileSync("git", ["-C", rootPath, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
-    const manifest = loadRepositoryManifest(rootPath, rootBranch);
-    const warnings = runRelatedTests(editedFiles, rootPath, manifest, createEmptyResolutionManifest());
+    // if (!hookInput.cwd) throw new Error("relatedTests hook input requires cwd");
+    const filesByRoot = new Map<string, string[]>();
+    for (const file of editedFiles) {
+        const root = execFileSync("git", ["-C", dirname(file), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+        const filesInRoot = filesByRoot.get(root) ?? [];
+        filesInRoot.push(file);
+        filesByRoot.set(root, filesInRoot);
+    }
+    const warnings: string[] = [];
+    for (const [rootPath, filesInRoot] of filesByRoot) {
+        const rootBranch = execFileSync("git", ["-C", rootPath, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+        const manifest = loadRepositoryManifest(rootPath, rootBranch);
+        warnings.push(...runRelatedTests(filesInRoot, rootPath, manifest, createEmptyResolutionManifest()));
+    }
     if (warnings.length > 0) {
         process.stderr.write(warnings.join("\n") + "\n");
         process.exit(2);

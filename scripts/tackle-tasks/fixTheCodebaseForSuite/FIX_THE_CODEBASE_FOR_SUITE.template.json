@@ -10,6 +10,7 @@
         "exitType": "",
         "exitNote": "",
         "ownedFilePaths": ["{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree/src/thing.ts"],
+        "readFilePaths": ["{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree/src/thing.ts"],
         "testFilePaths": ["{{PROJECT_ROOT}}/scripts/tackle-tasks/fixTheCodebaseForSuite/fixtures/worktree/tests/thing.test.ts"],
         "output": ""
     },

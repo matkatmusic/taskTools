@@ -22,6 +22,10 @@ const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    createsFiles: [],
+    difficulty: 1,
+    clarifyRequest: "",
     testFilePaths: [],
     hasTests: true,
     tests: "node --test tests/thing.test.ts",
@@ -55,7 +59,7 @@ test("test_buildImplementPrompt_takesTheNoteFromTheEntryAndOmitsTheSectionWhenIt
 
 test("test_buildImplementPrompt_readFileListNamesAnOwnedTestFileOnlyOnce", () => {
     const owned = "/tmp/fake-worktree/tests/thing.test.ts";
-    const task: PreparedTask = { ...fakeTask, ownedFilePaths: [owned], testFilePaths: [owned] };
+    const task: PreparedTask = { ...fakeTask, ownedFilePaths: [owned], readFilePaths: [owned], testFilePaths: [owned] };
     const readFileLine = buildImplementPrompt(task, "npx tsc --noEmit", 3).split("\n").find((line) => line.startsWith("/read-file "));
     assert.equal(readFileLine?.split(`"${owned}"`).length, 2);
 });
@@ -82,7 +86,7 @@ test("test_main_printsAPromptSignalAndMentionsTheTaskFromDisk", () => {
     const worktreePath = tmpMkdir("implement-task-");
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     writeFileSync(join(worktreePath, "plans", "brief-7.md"), "brief\n");
-    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "widget", files: ["a.ts"] }]));
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "widget", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"] }]));
 
     const input = JSON.stringify({
         taskNumber: 7, projectRoot: worktreePath, worktree: worktreePath,
@@ -100,7 +104,7 @@ test("test_implementTaskPrompt_carriesTheResumedRunNotice", () => {
     const worktreePath = tmpMkdir("implement-task-");
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     writeFileSync(join(worktreePath, "plans", "brief-9.md"), "brief\n");
-    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 9, title: "widget", files: ["a.ts"] }]));
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 9, title: "widget", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"] }]));
     writeFileSync(join(worktreePath, "plans", "checkpoint.json"), JSON.stringify({
         taskNumber: 9, passId: "pass-1", runId: "run-1", projectRoot: worktreePath,
         block: "diagram.mmd::OLD_BOX", input: "{}", state: "running",
@@ -121,7 +125,7 @@ test("test_IMPLEMENT_TASK_runsTwiceWithTheSameInput", () => {
     const worktreePath = tmpMkdir("implement-task-");
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     writeFileSync(join(worktreePath, "plans", "brief-11.md"), "brief\n");
-    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 11, title: "widget", files: ["a.ts"] }]));
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 11, title: "widget", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"] }]));
 
     const input = JSON.stringify({
         taskNumber: 11, projectRoot: worktreePath, worktree: worktreePath,
@@ -140,7 +144,8 @@ test("test_main_defaultsMaxFixRoundsWhenTheSenderOmitsIt", () => {
     const worktreePath = tmpMkdir("implement-task-");
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     writeFileSync(join(worktreePath, "plans", "brief-8.md"), "brief\n");
-    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 8, title: "widget", files: ["a.ts"] }]));
+    // The fix-round cap renders only for a task with tests; a no-tests task has no test loop to cap.
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 8, title: "widget", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"], schemaVersion: "1.0.1", hasTests: true }]));
 
     const input = JSON.stringify({ taskNumber: 8, projectRoot: worktreePath, worktree: worktreePath });
     main(input);

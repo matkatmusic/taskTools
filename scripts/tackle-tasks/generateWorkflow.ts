@@ -60,9 +60,13 @@ function createPromptForAgent(blockToRun, input) {
     const command = \`/taskTools:run-step \${blockToRun} \${JSON.stringify(input)}\`
     return [
         \`COMMAND: \\\`\${command}\\\`\`,
-        'Call the Skill tool exactly once: skill "taskTools:run-step", args = the text after "/taskTools:run-step " in COMMAND, copied byte for byte.',
+        'Your first tool call is the Skill tool: skill "taskTools:run-step", args = the text after "/taskTools:run-step " in COMMAND, copied byte for byte.',
         'The first word of args is the block key. The rest is one JSON object. Do not reorder, rewrap, rename, or add keys.',
         'Then follow the instructions the hook injects.',
+        'Every line in those instructions that says "invoke this skill exactly:" is one more Skill tool call.',
+        'Make each of those Skill tool calls in the order the instructions give them.',
+        'In the fenced line under it, the word after the slash is the skill name and the rest of the line is the args.',
+        'Never replace a Skill tool call with cat, head, sed, Read, or any other tool.',
         'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
     ].join('\\n')
 }
@@ -106,7 +110,7 @@ while (true) {
         return { ok: false, ran, errors: [\`\${blockName}: agent answered without a hook output/payload/packet\`], prompt, outcome: null }
     }
 
-    // The hook always writes the payload to a file; anything but a path means the agent rewrote the hook output.
+    // The hook always writes the payload to a file; anything not a path means the agent rewrote it.
     if (!String(result.outcome.payload).startsWith('/')) {
         return { ok: false, ran, errors: [\`\${blockName}: agent rewrote the hook output; payload is not a file path\`, String(result.outcome.payload).slice(0, 200)], prompt, outcome: null }
     }

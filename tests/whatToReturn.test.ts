@@ -19,6 +19,7 @@ test("test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysS
         "Never edit the packet file by hand; the script keeps the keys already there and fails loudly when the object is not valid JSON.",
         "3. Only after step 2 is done, return the hook output verbatim.",
         "",
-        "If the command above could not be run at all, write that same shape anyway. The next block reads the file and fails loudly when it is missing or unusable.",
+        "If the command above could not be run at all, write that same shape anyway.",
+        "The next block reads the file and fails loudly when it is missing or unusable.",
     ].join("\n"));
 });

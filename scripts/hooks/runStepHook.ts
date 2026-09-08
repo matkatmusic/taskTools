@@ -534,7 +534,9 @@ const skillName = String(toolInput.skill ?? "").replace(/^[\w-]+:/, "");
 const isTypedCommand = promptText.startsWith("/run-step");
 const isSkillCall = skillName === "run-step";
 // `/tackle-tasks reset N [BLOCK]` is the hook's job: it resets and returns the lines, so the agent runs nothing.
-const resetMatch = promptText.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
+// A Skill call carries "reset N" in tool_input.args; rebuild the typed line so one pattern serves both shapes.
+const resetLine = skillName === "tackle-tasks" ? `/tackle-tasks ${String(toolInput.args ?? "")}` : promptText;
+const resetMatch = resetLine.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
 if (resetMatch !== null) {
     const said = await resetTask(Number(resetMatch[1]), resetMatch[2] ?? "");
     process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: payload.hook_event_name, additionalContext: said } })}\n`);

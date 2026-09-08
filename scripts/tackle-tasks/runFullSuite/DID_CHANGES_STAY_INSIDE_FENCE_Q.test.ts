@@ -16,13 +16,13 @@ const TEMPLATE_PATH = join(dirname(fileURLToPath(import.meta.url)), "DID_CHANGES
 function seedTask(rootOrigin: string, taskNumber: number, files: string[]): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", files }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "fixture task", modifiableFiles: files }]);
 }
 
 function packet(taskNumber: number, projectRoot: string, worktree: string): string {
     return JSON.stringify({
         taskNumber, runId: "run-1", projectRoot, worktree, branch: `task-${taskNumber}`,
-        ownedFilePaths: [], testFilePaths: [], passed: true, output: "suite output",
+        ownedFilePaths: [], readFilePaths: [], testFilePaths: [], passed: true, output: "suite output",
     });
 }
 

@@ -11,7 +11,7 @@ import { resumedRunSection } from "../shared/resumedRunSection.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
 
 const GUIDE = (name: string) => `${homedir()}/.claude/guides/${name}`;
-const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit";
+// const DEFAULT_TYPECHECK_COMMAND = "npx tsc --noEmit"; // retired: typecheck now runs in a SubagentStop hook.
 // ponytail: no sender sets maxFixRounds yet, default until one does.
 const DEFAULT_MAX_FIX_ROUNDS = 3;
 
@@ -142,7 +142,7 @@ export type ImplementVars = {
     ownedPathMap: string;
     notesFile: string;
     resumedRun: string;
-    rootedTypecheck: string;
+    // rootedTypecheck: string; // retired: typecheck now runs in a SubagentStop hook.
     maxFixRounds: string;
     whatToReturn: string;
 };
@@ -216,8 +216,20 @@ ${v.absolutePaths}
 `,
     },
     {
-        name: "WHAT YOU MAY EDIT",
-        when: () => true,
+        name: "WHAT YOU MAY EDIT: skip",
+        when: (c) => c.testsField === "skip",
+        render: (v) => `## WHAT YOU MAY EDIT
+
+${v.ownedPathMap}
+- the implementation log at \`${v.notesFile}\`
+
+You are forbidden from editing any other file not listed above.
+
+${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
+    },
+    {
+        name: "WHAT YOU MAY EDIT: tdd",
+        when: (c) => c.testsField === "tdd",
         render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPathMap}
@@ -252,15 +264,27 @@ Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that sat
 `,
     },
     {
-        name: "HOW TO IMPLEMENT",
-        when: () => true,
+        name: "HOW TO IMPLEMENT: skip",
+        when: (c) => c.testsField === "skip",
+        render: () => `## HOW TO IMPLEMENT
+
+1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
+2. Run the verification command each plan section names.
+
+Never run the full suite.
+That gate belongs to a separate phase, not to you.
+
+`,
+    },
+    {
+        name: "HOW TO IMPLEMENT: tdd",
+        when: (c) => c.testsField === "tdd",
+        // Retired: typecheck instruction removed; a SubagentStop hook runs typecheck instead.
         render: (v) => `## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
-2. Run \`${v.rootedTypecheck}\`.
-Fix every error it reports in the paths you own.
-3. Run each paired test file with \`(cd -- '${v.repoRoot}' && node --test <absolute test path>)\`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3.
+2. Run each paired test file with \`(cd -- '${v.repoRoot}' && node --test <absolute test path>)\`.
+3. While any test fails, fix the cause, then repeat step 2.
 Stop after ${v.maxFixRounds} rounds.
 
 Never run the full suite.
@@ -298,8 +322,25 @@ A later step commits your work for you.
 `,
     },
     {
-        name: "FORBIDDEN ACTIONS",
-        when: () => true,
+        name: "FORBIDDEN ACTIONS: skip",
+        when: (c) => c.testsField === "skip",
+        render: () => `## FORBIDDEN ACTIONS
+
+You are forbidden from doing any of the following actions:
+- edit anything outside the paths listed under WHAT YOU MAY EDIT;
+- add scope or a refactor the plan does not call for;
+- redecide anything the plan already decided;
+- run the full suite;
+- stage or commit anything, or run any git command;
+- return \`implemented: true\` while a plan section's verification command fails.
+
+Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
+
+`,
+    },
+    {
+        name: "FORBIDDEN ACTIONS: tdd",
+        when: (c) => c.testsField === "tdd",
         render: (v) => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
@@ -335,12 +376,12 @@ export const IMPLEMENT_SKELETON_VARS: ImplementVars = {
     repoRoot: "`${t.repoRoot}`",
     planFile: "`${t.planFile}`",
     codexNotes: "`${t.codexReviewNotes.trim()}`",
-    readFileArgs: '`${readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`',
+    readFileArgs: '`${readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`',
     absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
     ownedPathMap: "`${ownedPathMap(t)}`",
     notesFile: "`${t.notesFile}`",
     resumedRun: "`${resumedRunSection(t.repoRoot)}`",
-    rootedTypecheck: "`${rootedTypecheck}`",
+    // rootedTypecheck: "`${rootedTypecheck}`", // retired: typecheck now runs in a SubagentStop hook.
     maxFixRounds: "`${maxFixRounds}`",
     whatToReturn: "`${whatToReturnSection(...)}`",
 };
@@ -354,20 +395,20 @@ export function buildImplementPromptSkeleton(choices: ImplementChoices): string 
 }
 
 export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, maxFixRounds: number): string {
-    const rootedTypecheck = `(cd -- '${t.repoRoot}' && ${typecheckCommand})`;
+    // const rootedTypecheck = `(cd -- '${t.repoRoot}' && ${typecheckCommand})`; // retired: typecheck now runs in a SubagentStop hook.
     return renderImplementSections(implementChoices(t), {
         number: String(t.number),
         repoRoot: t.repoRoot,
         planFile: t.planFile,
         codexNotes: t.codexReviewNotes.trim(),
-        readFileArgs: readFileArgs([t.briefFile, t.planFile, ...t.ownedFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")]),
+        readFileArgs: readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")]),
         absolutePaths: absolutePathsSection(t.repoRoot),
         ownedPathMap: ownedPathMap(t),
         notesFile: t.notesFile,
         resumedRun: resumedRunSection(t.repoRoot),
-        rootedTypecheck,
+        // rootedTypecheck, // retired: typecheck now runs in a SubagentStop hook.
         maxFixRounds: String(maxFixRounds),
-        whatToReturn: whatToReturnSection('{ "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", ""),
+        whatToReturn: whatToReturnSection('{ "implemented": <true only when every plan step is done and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" }', "where \\`message\\` is a one-line summary of what you did", ""),
     });
 }
 
@@ -383,6 +424,10 @@ export function implementPromptCombos(): { name: string; skeleton: string; rende
         files: ["src/thing.ts"],
         readOnlyFiles: ["*"],
         ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        createsFiles: [],
+        difficulty: 1,
+        clarifyRequest: "",
         testFilePaths: [],
         hasTests: true,
         tests: "node --test tests/thing.test.ts",
@@ -412,7 +457,9 @@ export function main(input: string): Record<string, unknown> {
     const t = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const promptFile = `${packet.worktree.replace(/\/+$/, "")}/plans/IMPLEMENT_TASK.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
-    writeFileSync(promptFile, buildImplementPrompt(t, packet.typecheckCommand || DEFAULT_TYPECHECK_COMMAND, packet.maxFixRounds ?? DEFAULT_MAX_FIX_ROUNDS));
+    // typecheck now runs in a SubagentStop hook; packet.typecheckCommand is no longer read.
+    // writeFileSync(promptFile, buildImplementPrompt(t, packet.typecheckCommand || DEFAULT_TYPECHECK_COMMAND, packet.maxFixRounds ?? DEFAULT_MAX_FIX_ROUNDS));
+    writeFileSync(promptFile, buildImplementPrompt(t, "", packet.maxFixRounds ?? DEFAULT_MAX_FIX_ROUNDS));
     // const prompt = spawnClaudeCliPrompt(...): retired, the workflow agent reads the prompt file and follows it.
     const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;
     return { box: "IMPLEMENT_TASK", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt };

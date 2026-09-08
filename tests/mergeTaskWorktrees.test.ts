@@ -1928,7 +1928,7 @@ test("test_findUnmergedTaskWorktreesRecoversATaskNWorktreeWithACommitAndADirtyOw
     git(group.worktree, "commit", "-q", "-m", "add owned.ts");
     writeFileSync(join(group.worktree, "owned.ts"), "committed\ndirty\n");
 
-    const openTasks: TaskRecord[] = [{ taskNumber: 1, title: "task one", files: ["owned.ts"] }];
+    const openTasks: TaskRecord[] = [{ taskNumber: 1, title: "task one", modifiableFiles: ["owned.ts"] }];
     const [recovery] = findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks);
 
     assert.equal(recovery.branch, group.branch);

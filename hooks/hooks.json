@@ -112,6 +112,12 @@
             "type": "command",
             "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/runStepStopHook.ts\"",
             "statusMessage": "Checking the run-step packet..."
+          },
+          {
+            "type": "command",
+            "command": "node --no-inspect \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/relatedTests.ts\"",
+            "statusMessage": "Running related tests and tsc...",
+            "timeout": 600
           }
         ]
       }

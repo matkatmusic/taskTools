@@ -62,7 +62,7 @@ function makeTempRepoWithLocalSubmodule(): { repoRoot: string; submoduleOrigin: 
 test("test_writeTaskBriefFileEmbedsTheDeclaredFilePointers", () => {
     const repoRoot = makeTempRepoWithCommit();
     writeFileSync(join(repoRoot, "fileA.txt"), "MARKER-abc123\n");
-    const task = { taskNumber: 1, title: "t1", description: "do the thing", files: ["fileA.txt"] };
+    const task = { taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: ["fileA.txt"] };
     const briefFile = writeTaskBriefFile(task, repoRoot);
     assert.equal(briefFile, join(repoRoot, "plans", "brief-1.md"));
     const text = readFileSync(briefFile, "utf8");
@@ -73,7 +73,7 @@ test("test_writeTaskBriefFileEmbedsTheDeclaredFilePointers", () => {
 
 test("test_writeTaskBriefFileAnnotatesMissingFilesWithoutThrowing", () => {
     const repoRoot = makeTempRepoWithCommit();
-    const task = { taskNumber: 2, title: "t2", description: "desc", files: ["missing.txt"] };
+    const task = { taskNumber: 2, title: "t2", description: "desc", modifiableFiles: ["missing.txt"] };
     const briefFile = writeTaskBriefFile(task, repoRoot);
     const text = readFileSync(briefFile, "utf8");
     assert.match(text, /missing\.txt/);
@@ -85,7 +85,7 @@ test("test_writeTaskBriefFileJoinsTheGoalArrayIntoOneMarkdownBlock", () => {
     const repoRoot = makeTempRepoWithCommit();
     const chainGoal = ["Tasks 1-2 ship it", "end to end"];
     const goal = ["- the gate passes", "- renaming is task 2, not this task"];
-    const briefFile = writeTaskBriefFile({ taskNumber: 3, title: "t3", chainGoal, goal, description: "desc", files: [] }, repoRoot);
+    const briefFile = writeTaskBriefFile({ taskNumber: 3, title: "t3", chainGoal, goal, description: "desc", modifiableFiles: [] }, repoRoot);
     const text = readFileSync(briefFile, "utf8");
     assert.match(text, /## Chain goal\n\nTasks 1-2 ship it\nend to end/);
     assert.match(text, /## Goal\n\n\*\*This task is considered done when all of these are true:\*\*\n\n- the gate passes\n- renaming is task 2, not this task/);
@@ -95,7 +95,7 @@ test("test_writeTaskBriefFileJoinsTheGoalArrayIntoOneMarkdownBlock", () => {
 test("test_writeTaskBriefFileOmitsTheGoalHeadingWhenNoGoalIsDeclared", () => {
     // Tasks written before the goal field must produce the same brief they always did.
     const repoRoot = makeTempRepoWithCommit();
-    const briefFile = writeTaskBriefFile({ taskNumber: 4, title: "t4", description: "desc", files: [] }, repoRoot);
+    const briefFile = writeTaskBriefFile({ taskNumber: 4, title: "t4", description: "desc", modifiableFiles: [] }, repoRoot);
     assert.doesNotMatch(readFileSync(briefFile, "utf8"), /## Goal/);
 });
 
@@ -141,7 +141,7 @@ test("test_createWorktreeForGroupCreatesStagingFromHeadWhenItIsMissing", () => {
 });
 
 test("test_createWorktreeForGroupKeepsAMergedStagingAtItsExistingTip", () => {
-    // Setup: staging sits at B; the current branch has moved on to O, so staging is fully merged into HEAD.
+    // Setup: staging sits at B; current branch moved on to O, so staging is fully merged into HEAD.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
     const oldStagingTip = git(repoRoot, "rev-parse", "staging").trim();
@@ -171,7 +171,7 @@ test("test_createWorktreeForGroupDoesNotMoveAStagingBranchCheckedOutInAnotherWor
     // Test action: cut a worktree.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
-    // Verification: staging never moved, the other worktree's HEAD never moved, and the new worktree sits at the old staging tip.
+    // Verification: staging and the other worktree's HEAD never moved; the new worktree sits at the old staging tip.
     assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), oldStagingTip);
     assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), oldStagingTip);
     assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), oldStagingTip);
@@ -566,8 +566,8 @@ test("test_createWorktreeForGroupStillThrowsWhenTheLeaseOwnerProcessIsAlive", ()
 test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [
-        { taskNumber: 268, files: ["a.ts"] },
-        { taskNumber: 270, files: ["b.ts"] },
+        { taskNumber: 268, modifiableFiles: ["a.ts"] },
+        { taskNumber: 270, modifiableFiles: ["b.ts"] },
     ];
     const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     const tasks = workflowArguments.groups.flatMap((g) => g.tasks);
@@ -577,7 +577,7 @@ test("test_buildWorkflowArgumentsDictatesThePlanFilePathForEveryTask", () => {
 
 test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () => {
     const repoRoot = makeTempRepoWithCommit();
-    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }];
     const first = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords, "run-1");
     releaseTaskWorktreeLease({ worktreePath: first.groups[0]!.worktree, runId: "run-1" });
     const second = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords, "run-2");
@@ -587,8 +587,8 @@ test("test_buildWorkflowArgumentsProducesIdenticalOutputForIdenticalInput", () =
 test("test_buildWorkflowArgumentsRollsBackEarlierCandidateLeasesWhenALaterTaskHasAForeignLease", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [
-        { taskNumber: 1, files: ["a.ts"] },
-        { taskNumber: 2, files: ["b.ts"] },
+        { taskNumber: 1, modifiableFiles: ["a.ts"] },
+        { taskNumber: 2, modifiableFiles: ["b.ts"] },
     ];
     const worktree1 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1");
     const worktree2 = join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-2");
@@ -632,7 +632,7 @@ test("test_selectRequestedTasksRefusesWhenARequestedNumberIsNotOpen", () => {
 
 test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
     // Setup: task 2 is blocked by open task 1; both are requested.
-    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNumber: 1, reason: "needs task 1" }], files: ["b.ts"] }];
+    const openTasks = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNumber: 1, reason: "needs task 1" }], modifiableFiles: ["b.ts"] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
     // Verification: only the unblocked task survives, so no worktree is built for blocked work.
@@ -641,7 +641,7 @@ test("test_selectRequestedTasksExcludesTasksBlockedByAnOpenTask", () => {
 
 test("test_selectRequestedTasksRefusesTasksWithNoFilesArray", () => {
     // Setup: task 1 declares files, task 2 has no files key at all; both are requested.
-    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2 }];
+    const openTasks = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }, { taskNumber: 2 }];
     // Verification: the run stops, names only the undeclared task, and points at modifiableFiles, never the legacy "files" key.
     let message = "";
     try { selectRequestedTasks(openTasks, [1, 2]); } catch (error) { message = (error as Error).message; }
@@ -652,7 +652,7 @@ test("test_selectRequestedTasksRefusesTasksWithNoFilesArray", () => {
 
 test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
     // Setup: task 1 carries an explicitly empty files array.
-    const openTasks = [{ taskNumber: 1, files: [] }];
+    const openTasks = [{ taskNumber: 1, modifiableFiles: [] }];
     // Verification: an empty array is refused like a missing one; message names modifiableFiles, never "files".
     let message = "";
     try { selectRequestedTasks(openTasks, [1]); } catch (error) { message = (error as Error).message; }
@@ -662,7 +662,7 @@ test("test_selectRequestedTasksTreatsAnEmptyFilesArrayAsUndeclared", () => {
 
 test("test_selectRequestedTasksIgnoresMissingFilesOnABlockedTask", () => {
     // Setup: task 2 is blocked by open task 1 and declares no files; task 1 declares files.
-    const openTasks = [{ taskNumber: 1, files: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] }];
+    const openTasks = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }, { taskNumber: 2, blockedBy: [{ taskNumber: 1, reason: "needs task 1" }] }];
     // Test action: select both requested tasks.
     const selected = selectRequestedTasks(openTasks, [1, 2]);
     // Verification: the blocked task is dropped before the files check, not stopping the run.
@@ -682,19 +682,19 @@ test("test_selectRequestedTasksPointsAtTheUpdateTaskFilesSkillThatActuallyExists
     assert.ok(existsSync(join(import.meta.dirname, "..", "skills", "update-task-files", "SKILL.md")));
 });
 
-test("test_modifiableFilesFallsBackToTheLegacyFilesKeyWhenModifiableFilesIsAbsent", () => {
-    // Verification: a legacy task with only "files" still resolves through the modifiable accessor.
-    assert.deepEqual(modifiableFiles({ taskNumber: 1, files: ["a.ts"] }), ["a.ts"]);
+test("test_modifiableFilesThrowsWhenTheFilesKeyIsPresent", () => {
+    // Verification: the retired "files" key is refused outright, and the message names the task and the new keys.
+    assert.throws(() => modifiableFiles({ taskNumber: 1, files: ["a.ts"] }), /task 1:.*"files".*no longer supported.*"modifiableFiles".*"readOnlyFiles"/);
 });
 
-test("test_modifiableFilesPrefersTheModifiableFilesKeyWhenPresent", () => {
-    // Verification: the new "modifiableFiles" key takes precedence over the legacy "files" key, even when both are declared.
-    assert.deepEqual(modifiableFiles({ taskNumber: 1, modifiableFiles: ["a.ts"], files: ["legacy.ts"] } as TaskRecord), ["a.ts"]);
+test("test_modifiableFilesThrowsWhenTheFilesKeyIsPresentEvenAlongsideModifiableFiles", () => {
+    // Verification: "files" is banned outright, even when the modern "modifiableFiles" key is also declared.
+    assert.throws(() => modifiableFiles({ taskNumber: 1, modifiableFiles: ["a.ts"], files: ["legacy.ts"] } as TaskRecord), /"files".*no longer supported/);
 });
 
 test("test_readOnlyFilesDefaultsToWildcardWhenAbsent", () => {
     // Verification: an absent read fence widens to "*" rather than narrowing to the modifiable files.
-    assert.deepEqual(readOnlyFiles({ taskNumber: 1, files: ["a.ts"] }), ["*"]);
+    assert.deepEqual(readOnlyFiles({ taskNumber: 1, modifiableFiles: ["a.ts"] }), ["*"]);
 });
 
 test("test_readOnlyFilesReturnsTheDeclaredReadOnlyFilesKeyWhenPresent", () => {
@@ -702,13 +702,13 @@ test("test_readOnlyFilesReturnsTheDeclaredReadOnlyFilesKeyWhenPresent", () => {
     assert.deepEqual(readOnlyFiles({ taskNumber: 1, readOnlyFiles: ["b.ts"] } as TaskRecord), ["b.ts"]);
 });
 
-test("test_modifiableFilesAndReadOnlyFilesResolveIdenticallyForAModernTaskAndItsLegacyEquivalent", () => {
-    // Setup: a modern task that declares both keys, and a legacy task that only declares "files".
+test("test_modifiableFilesAndReadOnlyFilesThrowForALegacyTaskThatOnlyDeclaresFiles", () => {
+    // Setup: a modern task declaring both keys, and a legacy task that only declares the retired "files" key.
     const modernTask = { taskNumber: 1, modifiableFiles: ["a.ts"], readOnlyFiles: ["*"] } as TaskRecord;
     const legacyTask = { taskNumber: 2, files: ["a.ts"] } as TaskRecord;
-    // Verification: the legacy fallback is invisible downstream — both resolve to the same values.
-    assert.deepEqual(modifiableFiles(modernTask), modifiableFiles(legacyTask));
-    assert.deepEqual(readOnlyFiles(modernTask), readOnlyFiles(legacyTask));
+    // Verification: the modern task still resolves; the legacy task is refused instead of silently falling back.
+    assert.deepEqual(modifiableFiles(modernTask), ["a.ts"]);
+    assert.throws(() => modifiableFiles(legacyTask), /task 2:.*"files".*no longer supported/);
 });
 
 test("test_loadPreparedTaskCarriesReadOnlyFilesFromTheTaskRecordThroughToThePreparedTask", () => {
@@ -716,13 +716,91 @@ test("test_loadPreparedTaskCarriesReadOnlyFilesFromTheTaskRecordThroughToThePrep
     const repoRoot = makeTempRepoWithCommit();
     const taskDirectory = join(repoRoot, ".taskTools");
     mkdirSync(taskDirectory, { recursive: true });
-    const task = { taskNumber: 1, title: "t1", description: "desc", files: ["a.ts"], readOnlyFiles: ["b.ts"] };
+    writeFileSync(join(repoRoot, "b.ts"), "b\n");
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"], readOnlyFiles: ["b.ts"] };
     writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
     writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
     writeTaskBriefFile(task, repoRoot);
     // Verification: the field survives from the task record through loadPreparedTask's construction site.
     const prepared = loadPreparedTask(1, repoRoot, repoRoot);
     assert.deepEqual(prepared.readOnlyFiles, ["b.ts"]);
+});
+
+test("test_loadPreparedTaskThrowsWhenTheFilesKeyIsPresent", () => {
+    // Setup: a legacy task that still declares "files" instead of "modifiableFiles".
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 1, title: "t1", description: "desc", files: ["a.ts"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    // The brief is written directly: writeTaskBriefFile would itself hit the same banned key first.
+    mkdirSync(join(repoRoot, "plans"), { recursive: true });
+    writeFileSync(join(repoRoot, "plans", "brief-1.md"), "brief\n");
+    // Verification: loadPreparedTask refuses the retired "files" key instead of silently resolving it.
+    assert.throws(() => loadPreparedTask(1, repoRoot, repoRoot), /"files".*no longer supported/);
+});
+
+test("test_loadPreparedTaskThrowsWhenAReadOnlyFileIsMissingOnDisk", () => {
+    // Setup: a task naming a readOnlyFiles entry that does not exist in the worktree.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"], readOnlyFiles: ["missing.ts"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: the stale readOnlyFiles entry stops the run instead of silently pointing at nothing.
+    assert.throws(
+        () => loadPreparedTask(1, repoRoot, repoRoot),
+        /task 1: readOnlyFiles names .*missing\.ts but the file does not exist/,
+    );
+});
+
+test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCreatesFiles", () => {
+    // This fails before any planner runs; the error names the missing file and the createsFiles fix.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 2, title: "t2", description: "desc", modifiableFiles: ["index.html"], readOnlyFiles: ["*"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: the run stops before any planner launches, naming the file and the createsFiles fix.
+    assert.throws(
+        () => loadPreparedTask(2, repoRoot, repoRoot),
+        /task 2: modifiableFiles names .*index\.html but the file does not exist.*"createsFiles"/,
+    );
+});
+
+test("test_loadPreparedTaskReadFilePathsExcludesAnAbsentOwnedFileAndIncludesAnExistingOne", () => {
+    // Setup: task owns two files; only one exists (the other is a file the task will create).
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    writeFileSync(join(repoRoot, "existing.ts"), "existing\n");
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["existing.ts", "new.ts"], createsFiles: ["new.ts"], readOnlyFiles: ["*"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: readFilePaths carries the existing owned file, not the one the task will create.
+    const prepared = loadPreparedTask(1, repoRoot, repoRoot);
+    assert.deepEqual(prepared.readFilePaths, [join(repoRoot, "existing.ts")]);
+});
+
+test("test_loadPreparedTaskReadFilePathsOmitsReadOnlyEntriesWhenTheListIsWildcard", () => {
+    // Setup: task declares readOnlyFiles as ["*"], meaning no named read-only paths.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    writeFileSync(join(repoRoot, "a.ts"), "a\n");
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["a.ts"], readOnlyFiles: ["*"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: readFilePaths holds only the owned file, no wildcard entry.
+    const prepared = loadPreparedTask(1, repoRoot, repoRoot);
+    assert.deepEqual(prepared.readFilePaths, [join(repoRoot, "a.ts")]);
 });
 
 test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
@@ -736,14 +814,14 @@ test("test_createWorktreeForGroupPutsSubmoduleOnTheGroupBranch", () => {
 test("test_buildWorkflowArgumentsRefusesADetachedSubmoduleWithoutCreatingAWorktreeDirectory", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
     git(join(repoRoot, "vendor"), "checkout", "--detach", "HEAD");
-    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }];
     assert.throws(() => buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords));
     assert.equal(existsSync(join(resolveTaskWorktreeConventionDirectory(repoRoot), "task-1")), false);
 });
 
 test("test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch", () => {
     const { repoRoot } = makeTempRepoWithLocalSubmodule();
-    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"] }];
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, modifiableFiles: ["a.ts"] }];
     const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     const paths = workflowArguments.repositorySources.map((source) => source.path);
     assert.ok(paths.includes(""));
@@ -753,8 +831,8 @@ test("test_buildWorkflowArgumentsRecordsEachRepositorysSourceBranch", () => {
 test("test_buildWorkflowArgumentsGivesEachTaskItsOwnFilesNotTheCombinedList", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [
-        { taskNumber: 1, files: ["a.ts"] },
-        { taskNumber: 2, files: ["b.ts"] },
+        { taskNumber: 1, modifiableFiles: ["a.ts"] },
+        { taskNumber: 2, modifiableFiles: ["b.ts"] },
     ];
     const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     const tasks = workflowArguments.groups.flatMap((g) => g.tasks);
@@ -765,7 +843,7 @@ test("test_buildWorkflowArgumentsGivesEachTaskItsOwnFilesNotTheCombinedList", ()
 test("test_buildWorkflowArgumentsCarriesReadOnlyFilesThroughToThePrintedPipelineArgs", () => {
     // Verification: readOnlyFiles survives from the type through buildWorkflowArguments's construction site.
     const repoRoot = makeTempRepoWithCommit();
-    const taskRecords: TaskRecord[] = [{ taskNumber: 1, files: ["a.ts"], readOnlyFiles: ["b.ts"] } as TaskRecord];
+    const taskRecords: TaskRecord[] = [{ taskNumber: 1, modifiableFiles: ["a.ts"], readOnlyFiles: ["b.ts"] } as TaskRecord];
     const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     assert.deepEqual(workflowArguments.groups[0]!.tasks[0]!.readOnlyFiles, ["b.ts"]);
 });
@@ -773,8 +851,8 @@ test("test_buildWorkflowArgumentsCarriesReadOnlyFilesThroughToThePrintedPipeline
 test("test_buildWorkflowArgumentsGivesEachTaskItsOwnWorktreeAndBranchAsASingletonGroup", () => {
     const repoRoot = makeTempRepoWithCommit();
     const taskRecords: TaskRecord[] = [
-        { taskNumber: 1, files: ["a.ts"] },
-        { taskNumber: 2, files: ["b.ts"] },
+        { taskNumber: 1, modifiableFiles: ["a.ts"] },
+        { taskNumber: 2, modifiableFiles: ["b.ts"] },
     ];
     const workflowArguments = buildWorkflowArguments(repoRoot, "npx tsc --noEmit", taskRecords);
     assert.equal(workflowArguments.groups.length, 2);
@@ -841,7 +919,7 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
         git(repoRoot, "commit", "-q", "-m", "add task files");
         mkdirSync(taskDirectory, { recursive: true });
         writeFileSync(tasksPath, JSON.stringify([
-            { taskNumber, title: "fixture", files: ["existing.ts"], blockedBy: [] },
+            { taskNumber, title: "fixture", modifiableFiles: ["existing.ts"], blockedBy: [] },
         ]));
         writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
         git(repoRoot, "remote", "add", "origin", repoRoot);
@@ -858,7 +936,7 @@ test("prepareTasks publishes a widening that lands under the task-state lock", a
             writeFileSync(${JSON.stringify(readyFile)}, "ready\\n");
             while (!existsSync(${JSON.stringify(releaseFile)})) Atomics.wait(wait, 0, 0, 10);
             const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
-            tasks[0].files.push("widened.ts");
+            tasks[0].modifiableFiles.push("widened.ts");
             writeJsonAtomically(tasksPath, tasks);
           });
         `;
@@ -918,8 +996,8 @@ test("prepareTasks CLI rolls back every candidate lease when run-arguments publi
         git(repoRoot, "commit", "-q", "-m", "add task files");
         mkdirSync(taskDirectory, { recursive: true });
         writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([
-            { taskNumber: 1, title: "one", files: ["a.ts"], blockedBy: [] },
-            { taskNumber: 2, title: "two", files: ["b.ts"], blockedBy: [] },
+            { taskNumber: 1, title: "one", modifiableFiles: ["a.ts"], blockedBy: [] },
+            { taskNumber: 2, title: "two", modifiableFiles: ["b.ts"], blockedBy: [] },
         ]));
         writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
         git(repoRoot, "remote", "add", "origin", repoRoot);
@@ -1014,7 +1092,7 @@ test("buildWorkflowArguments releases the worktree lease and leaves no sibling f
     writeFileSync(currentOutput, "blocked\n", { mode: 0o444 });
 
     try {
-        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, files: ["seed.txt"] }]));
+        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, modifiableFiles: ["seed.txt"] }]));
         assert.equal(existsSync(`${worktree}.lease`), false);
         assert.equal(existsSync(currentOutput), false);
         assert.equal(existsSync(v1_1Output), false);
@@ -1034,7 +1112,7 @@ test("buildWorkflowArguments releases the worktree lease and leaves no sibling f
     writeFileSync(v1_1Output, "blocked\n", { mode: 0o444 });
 
     try {
-        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, files: ["seed.txt"] }]));
+        assert.throws(() => buildWorkflowArguments(repoRoot, "true", [{ taskNumber: 1, modifiableFiles: ["seed.txt"] }]));
         assert.equal(existsSync(`${worktree}.lease`), false);
         assert.equal(existsSync(currentOutput), false, "the first call's successfully-written file must not survive");
         assert.equal(existsSync(v1_1Output), false);

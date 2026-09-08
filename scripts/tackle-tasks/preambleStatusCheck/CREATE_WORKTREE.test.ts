@@ -19,7 +19,7 @@ test("test_CREATE_WORKTREE_createsARealWorktreeOnTheTasksBranchWithSubmodulesPop
     const submoduleOrigin = makeCommittedRepo("CREATE_WORKTREE-sub-");
     const root = makeCommittedRepo("CREATE_WORKTREE-root-");
     addSubmodule(root, submoduleOrigin, "vendor");
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
 
     const output = main(JSON.stringify({
@@ -38,7 +38,7 @@ test("test_CREATE_WORKTREE_recoversAfterBeingKilledRightAfterGitWorktreeAdd", as
     const submoduleOrigin = makeCommittedRepo("CREATE_WORKTREE-sub-");
     const root = makeCommittedRepo("CREATE_WORKTREE-root-");
     addSubmodule(root, submoduleOrigin, "vendor");
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
     const packet = JSON.stringify({
         box: "DOES_WORKTREE_EXIST_Q", scriptSignal: "continue", taskNumber: 1, runId: "run-a", projectRoot: root,

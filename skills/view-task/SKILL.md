@@ -1,5 +1,6 @@
 ---
 name: view-task
+disable-model-invocation: true
 description: show a human-readable version of a task's description from tasks.json or completedTasks.json (real newlines instead of the JSON-escaped blob)
 argument-hint: <N...>
 ---

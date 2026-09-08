@@ -16,7 +16,7 @@ cat > commit/root/.taskTools/tasks.json <<'JSON'
     "title": "fixture task 1",
     "schemaVersion": "1.0.1",
     "hasTests": true,
-    "files": ["src/thing.ts"],
+    "modifiableFiles": ["src/thing.ts"],
     "run": {
       "active": true,
       "worktree": "commit/worktree",

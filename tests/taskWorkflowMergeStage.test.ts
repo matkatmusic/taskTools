@@ -111,14 +111,14 @@ const removeFixture = (root: string, worktreePath: string) => {
 // A real merge lap closes the task, so the main repo needs both task files or closeTasks throws.
 const seedTaskFiles = (root: string, taskNumber: number, files: string[] = []) => {
   mkdirSync(join(root, '.taskTools'), { recursive: true })
-  writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files, blockedBy: [] }]))
+  writeFileSync(join(root, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', modifiableFiles: files, createsFiles: files, blockedBy: [] }]))
   writeFileSync(join(root, '.taskTools', 'completedTasks.json'), '[]')
 }
 
 // A real task worktree already has its own checked-out .taskTools/tasks.json; loadPreparedTask reads it from cwd.
 const seedWorktreeTaskFile = (worktreePath: string, taskNumber: number, files: string[] = []) => {
   mkdirSync(join(worktreePath, '.taskTools'), { recursive: true })
-  writeFileSync(join(worktreePath, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', files, blockedBy: [] }]))
+  writeFileSync(join(worktreePath, '.taskTools', 'tasks.json'), JSON.stringify([{ taskNumber, title: 'fixture', modifiableFiles: files, createsFiles: files, blockedBy: [] }]))
 }
 
 // A real worktree tracks these; commit the fixture's untracked stand-ins so they don't read as touched.

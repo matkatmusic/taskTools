@@ -69,7 +69,7 @@ test("test_renderTaskBriefContent_matchesWhatWriteTaskBriefFileWrites", () => {
         taskNumber: 999,
         title: "example task",
         description: "example description",
-        files: ["seed.txt"],
+        modifiableFiles: ["seed.txt"],
     } as TaskRecord;
 
     // Test action: render the brief content purely, then write the brief file for real.

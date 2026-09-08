@@ -29,7 +29,7 @@ function makeTempGitRepo(prefix: string): string {
 function makeFixture(taskNumber: number): { projectRoot: string; worktree: string } {
     const projectRoot = makeTempGitRepo("commit-test-fix-if-needed-root-");
     const worktree = makeTempGitRepo("commit-test-fix-if-needed-worktree-");
-    writeJsonAtomically(join(projectRoot, "tasks.json"), [{ taskNumber, title: "widget", files: ["widget.txt"] }]);
+    writeJsonAtomically(join(projectRoot, "tasks.json"), [{ taskNumber, title: "widget", modifiableFiles: ["widget.txt"] }]);
     const outcome = claimTask(taskNumber, "run-1", projectRoot);
     assert.equal(outcome.status, "claimed");
     return { projectRoot, worktree };

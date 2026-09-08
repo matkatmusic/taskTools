@@ -204,7 +204,7 @@ export function fixTaskTestsChoices(): FixTaskTestsChoices {
 
 export const FIX_TASK_TESTS_SKELETON_VARS: FixTaskTestsVars = {
     root: "`${root}`",
-    readFileArgs: '`${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths])}`',
+    readFileArgs: '`${readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.readFilePaths, ...prepared.testFilePaths])}`',
     absolutePaths: "`${absolutePathsSection(root)}`",
     ownedPaths: '`${prepared.ownedFilePaths.map((path) => `- \\`${path}\\``).join("\\n")}`',
     resumedRun: "`${resumedRunSection(root)}`",
@@ -224,7 +224,7 @@ export function buildFixTaskTestsPrompt(prepared: PreparedTask): string {
     const root = prepared.repoRoot.replace(/\/+$/, "");
     return renderFixTaskTestsSections(fixTaskTestsChoices(), {
         root,
-        readFileArgs: readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.ownedFilePaths, ...prepared.testFilePaths]),
+        readFileArgs: readFileArgs([GUIDE("tests-and-code-changes.md"), ...prepared.readFilePaths, ...prepared.testFilePaths]),
         absolutePaths: absolutePathsSection(root),
         ownedPaths: prepared.ownedFilePaths.map((path) => `- \`${path}\``).join("\n"),
         resumedRun: resumedRunSection(root),
@@ -245,6 +245,10 @@ export function fixTaskTestsPromptCombos(): { name: string; skeleton: string; re
         files: ["src/thing.ts"],
         readOnlyFiles: ["*"],
         ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+        createsFiles: [],
+        difficulty: 1,
+        clarifyRequest: "",
         testFilePaths: ["/tmp/fake-worktree/tests/thing.test.ts"],
         hasTests: true,
         tests: "node --test tests/thing.test.ts",

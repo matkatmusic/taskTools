@@ -11,11 +11,12 @@ The plan must be formatted in the exact shape shown under **FORMATTING THE PLAN*
 
 ## WHAT TO READ
 
-Invoke the following skill:
+invoke this skill exactly:
 ```
-/read-file `${readFileArgs([t.briefFile, ...t.ownedFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`
+/read-file `${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`
 ```
 The skill puts the brief, the files this task owns, the guides you must follow, and the return shape you must produce into your context.
+The files this task owns are the task record's `modifiableFiles`.
 
 `${absolutePathsSection(t.repoRoot)}`
 
@@ -36,7 +37,7 @@ This is planning only, not implementation.
 
 ## FORMATTING THE PLAN
 
-Invoke the following skill:
+invoke this skill exactly:
 ```
 /read-file `${readFileArgs([PLAN_TEMPLATE_PATH])}`
 ```
@@ -68,8 +69,8 @@ The plan must be comprehensive enough that the implementer makes no discovery of
 - - Never say "replace the whole file".
 - - Show the exact text to remove and insert, and where.
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
-- Fill in `createsFiles` with every owned file that does not exist yet on disk.
-- Leave `createsFiles` empty when the plan creates nothing new.
+- Set `createsFiles` to exactly ``${JSON.stringify(t.createsFiles)}``, copied from the task record.
+- Never add a file to `createsFiles`; a missing file the task does not create is a CLARIFY.
 - Resolve every question while planning.
 - Write no conditional instruction:
 - - no "re-check",
@@ -101,7 +102,7 @@ When it is there, answer the question yourself, from the code, before you plan:
 Return outcome CLARIFY again only when the answer is a decision only the user can make.
 Naming choices, tradeoffs, and product scope are such decisions.
 Nothing the code can resolve is such a decision.
-
+`${t.clarifyRequest === "" ? "" : REPEAT_CLARIFY_RULE}`
 ## WHEN TO STOP PLANNING
 
 Return outcome CLARIFY when any of these is true:
@@ -125,8 +126,7 @@ You are forbidden from doing any of the following actions:
 - edit any file other than ``${t.planFile}``;
 - leave a decision for the implementer;
 - write a plan step whose exact target you did not read.
-The Codex plan review rejects any plan step whose target the plan does not quote from a file you read.
-
+`${t.difficulty <= 3 ? "" : CODEX_PLAN_REVIEW_LINE}`
 ## ALLOWED ACTIONS
 
 You are allowed to read any file in the repository.

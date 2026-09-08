@@ -21,7 +21,8 @@ export function main(input: string): Record<string, unknown> {
     const prepared = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const promptFile = `${prepared.repoRoot.replace(/\/+$/, "")}/plans/PLAN_THE_TASK.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
-    const body = `${planPrompt(prepared)}\nCodex reviews this plan before it is implemented.`;
+    // const body = `${planPrompt(prepared)}\nCodex reviews this plan before it is implemented.`; // retired: false when difficulty <= 3.
+    const body = planPrompt(prepared);
     writeFileSync(promptFile, body);
     // const prompt = spawnClaudeCliPrompt(...): retired, the workflow agent reads the prompt file and follows it.
     const prompt = `invoke '/read-file "${promptFile}"' and follow the instructions.`;

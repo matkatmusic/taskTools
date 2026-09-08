@@ -12,7 +12,7 @@ Change nothing else.
 
 invoke this skill exactly:
 ```
-/read-file `${readFileArgs([...packet.ownedFilePaths, ...packet.testFilePaths])}`
+/read-file `${readFileArgs([...packet.readFilePaths, ...packet.testFilePaths])}`
 ```
 The skill puts the owned files and the test files into your context without spending a Read tool call.
 

@@ -22,7 +22,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesInitSubmodulesRecursivelyAndSetsDo
     const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
     const groupId = 900_401;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
-    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", files: ["seed.txt"] }]);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", modifiableFiles: ["seed.txt"] }]);
     writeFileSync(join(worktreePath, "seed.txt"), "edited\n");
 
     const output = main(packet(groupId, worktreePath, rootOrigin));
@@ -36,7 +36,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_ignoresTheResumedRunsOwnCheckpointFile", 
     const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
     const groupId = 900_403;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
-    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", files: ["seed.txt"] }]);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", modifiableFiles: ["seed.txt"] }]);
     mkdirSync(join(worktreePath, "plans"), { recursive: true });
     writeFileSync(join(worktreePath, "plans", "checkpoint.json"), "{}\n");
     git(worktreePath, "add", "plans/checkpoint.json");
@@ -51,7 +51,7 @@ test("test_DOES_FENCE_COVER_WORKTREE_Q_choosesFailuresExitWhenAnEditTouchesAnUnd
     const rootOrigin = makeCommittedRepo("DOES_FENCE_COVER_WORKTREE_Q-");
     const groupId = 900_402;
     const worktreePath = makeLinkedWorktree(rootOrigin, groupId);
-    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", files: ["seed.txt"] }]);
+    seedTasksFile(rootOrigin, [{ taskNumber: groupId, title: "t", modifiableFiles: ["seed.txt"] }]);
     writeFileSync(join(worktreePath, "outside.txt"), "not owned\n");
     git(worktreePath, "add", "outside.txt");
 

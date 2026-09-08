@@ -52,6 +52,7 @@ function makeFixtureRepository({ taskNumber, files, difficulty, hasTests = false
         userDescription: "",
         description: "",
         modifiableFiles: files,
+        createsFiles: files,
         readOnlyFiles: ["*"],
         goal: "",
         notInScope: "",

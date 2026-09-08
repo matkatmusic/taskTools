@@ -13,7 +13,7 @@ function packet(worktree: string): string {
         box: "ARE_2_SUITE_FIXES_DONE_Q", scriptSignal: "continue",
         taskNumber: 1, runId: "run-1", projectRoot: "/root", worktree, branch: "main",
         exitType: "", exitNote: "",
-        ownedFilePaths: [`${worktree}/a.ts`], testFilePaths: [`${worktree}/tests/a.test.ts`],
+        ownedFilePaths: [`${worktree}/a.ts`], readFilePaths: [`${worktree}/a.ts`], testFilePaths: [`${worktree}/tests/a.test.ts`],
         output: "the failing suite text",
     });
 }

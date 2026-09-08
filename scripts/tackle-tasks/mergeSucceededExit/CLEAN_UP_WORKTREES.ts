@@ -23,11 +23,15 @@ export function main(input: string): Record<string, unknown> {
         { block: "pipeline-mergeSucceededExit.mmd::CLEAN_UP_WORKTREES", input },
         packet.projectRoot,
     );
-    // A prior failed attempt's catch (cleanupTaskWorktree.ts:82-85) always releases this lock even
-    // though cleanup did not finish, so a retry must be able to reacquire it, not merely refresh it
-    // (the same "acquired or already-held-by-me, else throw" shape resumeRun.ts's prepareResume uses).
+    // A prior failed attempt's catch always releases the lock before cleanup finishes, so retry must reacquire, not refresh, it.
     const lockOutcome = acquireSourceRepoLock(packet.projectRoot, owner);
     if (lockOutcome.status === "acquired" || lockOutcome.status === "already-held-by-me") {
+        // TEMPORARY (prompt diagnosis): keep the worktree so its rendered prompt files survive; the test session cleans up by hand.
+        releaseSourceRepoLock(packet.projectRoot, owner);
+        return {
+            box: "CLEAN_UP_WORKTREES", scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+            projectRoot: packet.projectRoot, taskNumber: packet.taskNumber, runId: packet.runId,
+        };
         const output = cleanupTaskWorktree({
             projectRoot: packet.projectRoot, worktreePath: packet.worktree, taskNumber: packet.taskNumber, runId: packet.runId,
             rootSourceBranch: "staging",

@@ -16,6 +16,10 @@ const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    createsFiles: [],
+    difficulty: 1,
+    clarifyRequest: "",
     testFilePaths: [],
     hasTests: true,
     tests: "node --test tests/thing.test.ts",
@@ -91,4 +95,23 @@ test("test_planPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
     assert.equal(skeleton.includes("`${t.tests}`"), false);
     assert.equal(skeleton.includes("the user wrote no example"), false);
     assert.match(skeleton, /`\$\{t\.codexReviewNotes\.trim\(\)\}`/);
+});
+
+test("test_planPrompt_gatesTheCodexPlanReviewLineOnDifficultyAboveThree", () => {
+    const easy = planPrompt({ ...fakeTask, difficulty: 3 });
+    assert.equal(easy.includes("The Codex plan review rejects"), false);
+    const hard = planPrompt({ ...fakeTask, difficulty: 4 });
+    assert.match(hard, /The Codex plan review rejects/);
+});
+
+test("test_planPrompt_addsTheRepeatClarifyRuleOnlyWhenTheTaskCarriesAClarifyRequest", () => {
+    const repeat = planPrompt({ ...fakeTask, clarifyRequest: "why?" });
+    assert.match(repeat, /This is a repeat round/);
+    const first = planPrompt({ ...fakeTask, clarifyRequest: "" });
+    assert.equal(first.includes("This is a repeat round"), false);
+});
+
+test("test_planPrompt_writesCreatesFilesAsTheExactTaskRecordJson", () => {
+    const prompt = planPrompt({ ...fakeTask, createsFiles: ["src/new-file.ts"] });
+    assert.ok(prompt.includes(JSON.stringify(["src/new-file.ts"])));
 });

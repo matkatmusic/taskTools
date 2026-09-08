@@ -8,6 +8,7 @@
         "worktree": "",
         "branch": "task-1",
         "ownedFilePaths": [""],
+        "readFilePaths": [""],
         "testFilePaths": [""],
         "passed": true,
         "output": ""
@@ -21,6 +22,7 @@
         "worktree": "",
         "branch": "task-1",
         "ownedFilePaths": [""],
+        "readFilePaths": [""],
         "testFilePaths": [""],
         "passed": true,
         "output": "",

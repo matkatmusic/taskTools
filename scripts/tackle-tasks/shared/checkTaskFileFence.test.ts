@@ -19,7 +19,7 @@ function makeSourceRepoWithSubmodule(): string {
 function seedTask(rootOrigin: string, taskNumber: number, files: string[]): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", files }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: files }]);
 }
 
 // Empty commit moves the child's gitlink HEAD but changes no tracked file, so its diff against baseRef is empty.

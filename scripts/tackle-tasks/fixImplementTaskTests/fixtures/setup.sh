@@ -11,7 +11,7 @@ cat > projectRoot/tasks.json <<'EOF'
   {
     "taskNumber": 1,
     "title": "fixture task",
-    "files": ["a.ts"],
+    "modifiableFiles": ["a.ts"],
     "codexReviewNotes": "The task tests failed. Fix the cause, and change no test.\n\nfixture failing test output"
   }
 ]

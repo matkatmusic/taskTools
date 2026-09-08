@@ -56,10 +56,8 @@ Per `~/.claude/guides/tdd.md`, write the failing test before the code that satis
 ## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the `sections` array gives them, editing only the paths listed above.
-2. Run `(cd -- '/tmp/fake-worktree' && npx tsc --noEmit)`.
-Fix every error it reports in the paths you own.
-3. Run each paired test file with `(cd -- '/tmp/fake-worktree' && node --test <absolute test path>)`.
-4. While any test fails, fix the cause, then repeat steps 2 and 3.
+2. Run each paired test file with `(cd -- '/tmp/fake-worktree' && node --test <absolute test path>)`.
+3. While any test fails, fix the cause, then repeat step 2.
 Stop after 3 rounds.
 
 Never run the full suite.
@@ -87,7 +85,7 @@ Returning `implemented: false` is a correct outcome when the plan is impossible 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
 Do these three steps in order.
-1. Build `{ "message": "", "additionalData": { "implemented": <true only when every plan step is done, the typecheck is clean and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" } }`, where \`message\` is a one-line summary of what you did.
+1. Build `{ "message": "", "additionalData": { "implemented": <true only when every plan step is done and every test passed, false otherwise>, "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>" } }`, where \`message\` is a one-line summary of what you did.
 2. Write that object into the packet file named by `outcome.payload` in the hook output (the same file this prompt came from) by running, with the object on stdin:
 ```
 node /Users/matkatmusicllc/Programming/taskTools-86/scripts/tackle-tasks/shared/writeAgentAnswer.ts "<the outcome.payload path>" <<'TTANSWER'

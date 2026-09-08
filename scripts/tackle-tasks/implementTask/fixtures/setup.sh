@@ -7,7 +7,7 @@ rm -f worktree/plans/IMPLEMENT_TASK.prompt.md
 mkdir -p .taskTools worktree/plans
 cat > .taskTools/tasks.json <<'EOF'
 [
-    { "taskNumber": 42, "files": ["src/thing.ts"] }
+    { "taskNumber": 42, "modifiableFiles": ["src/thing.ts"], "createsFiles": ["src/thing.ts"] }
 ]
 EOF
 cat > worktree/plans/brief-42.md <<'EOF'

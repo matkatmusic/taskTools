@@ -16,7 +16,7 @@ function makeFixture(taskNumber = 35): { projectRoot: string; worktree: string }
     const projectRoot = mkdtempSync(join(tmpdir(), "plan-the-task-codex-"));
     mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
     writeFileSync(join(projectRoot, ".taskTools/tasks.json"), JSON.stringify([
-        { taskNumber, files: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "" },
+        { taskNumber, modifiableFiles: ["src/thing.ts"], createsFiles: ["src/thing.ts"], tests: "node --test tests/thing.test.ts", codexReviewNotes: "" },
     ]));
     writeFileSync(join(projectRoot, ".taskTools/completedTasks.json"), "[]");
     const worktree = join(projectRoot, "worktree");
@@ -27,7 +27,7 @@ function makeFixture(taskNumber = 35): { projectRoot: string; worktree: string }
 
 test("test_PLAN_THE_TASK_CODEX_startsCodexDetachedToDraftThePlan", async () => {
     const { projectRoot, worktree } = makeFixture(35);
-    // A fake codex on PATH records its call, so the test proves the detached start without running the real one.
+    // A fake codex on PATH records its call, proving the detached start runs without the real codex.
     const shimDir = join(projectRoot, "shim");
     mkdirSync(shimDir);
     const codexCallFile = join(projectRoot, "codex-call.txt");

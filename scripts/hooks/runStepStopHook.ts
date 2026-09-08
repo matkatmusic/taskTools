@@ -7,18 +7,18 @@ import type { BlockTemplate, StepConfig } from "../tackle-tasks/generateSteps.ts
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const CONFIG_FILE = process.env.RUN_STEP_CONFIG ?? join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
-// Same log the run-step hook writes, so a run shows whether this hook fired at all.
-const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.json");
-
-function log(note: string): void {
-    mkdirSync(dirname(LOG_FILE), { recursive: true });
-    const runLogEntries = existsSync(LOG_FILE) ? JSON.parse(readFileSync(LOG_FILE, "utf8")) : [];
-    runLogEntries.push({ block: "STOP HOOK", at: new Date().toISOString(), note });
-    writeFileSync(LOG_FILE, `${JSON.stringify(runLogEntries, null, 4)}\n`);
-}
+// ponytail: logging retired; it wrote a stray <cwd>/.taskTools/runs/run-log.json the run-step hook never shared.
+// const LOG_FILE = process.env.RUN_STEP_LOG ?? join(process.cwd(), ".taskTools/runs/run-log.json");
+//
+// function log(note: string): void {
+//     mkdirSync(dirname(LOG_FILE), { recursive: true });
+//     const runLogEntries = existsSync(LOG_FILE) ? JSON.parse(readFileSync(LOG_FILE, "utf8")) : [];
+//     runLogEntries.push({ block: "STOP HOOK", at: new Date().toISOString(), note });
+//     writeFileSync(LOG_FILE, `${JSON.stringify(runLogEntries, null, 4)}\n`);
+// }
 
 const input: { agent_transcript_path?: unknown } = JSON.parse(readFileSync(0, "utf8"));
-log(`fired for ${JSON.stringify(input.agent_transcript_path)}`);
+// log(`fired for ${JSON.stringify(input.agent_transcript_path)}`);
 if (typeof input.agent_transcript_path !== "string") {
     process.exit(0);
 }
@@ -27,7 +27,7 @@ if (typeof input.agent_transcript_path !== "string") {
 const transcript = readFileSync(input.agent_transcript_path, "utf8");
 const matches = [...transcript.matchAll(/\\"outcome\\":\{\\"next\\":\\"([^\\"]+)\\",\\"payload\\":\\"([^\\"]+)\\"/g)];
 if (matches.length === 0) {
-    log("no run-step prompt stop in this transcript; nothing to check");
+    // log("no run-step prompt stop in this transcript; nothing to check");
     process.exit(0);
 }
 const [, nextStepKey, packetFile] = matches.at(-1)!;
@@ -39,7 +39,7 @@ const templateInput = (JSON.parse(readFileSync(resolve(PROJECT_ROOT, entry.templ
 const { prompt: _prompt, ...packet } = JSON.parse(readFileSync(String(packetFile), "utf8"));
 const mismatches = getTemplateShapeMismatches(templateInput, packet);
 if (mismatches.length === 0) {
-    log(`${packetFile} is ready for ${nextStepKey}`);
+    // log(`${packetFile} is ready for ${nextStepKey}`);
     process.exit(0);
 }
 const reason = [
@@ -47,5 +47,5 @@ const reason = [
     `Follow the prompt in that file and write your answer by piping it on stdin to: node ${PROJECT_ROOT}/scripts/tackle-tasks/shared/writeAgentAnswer.ts "${packetFile}" — never edit the packet file by hand.`,
     "Then return the hook output verbatim.",
 ].join(" ");
-log(`blocked the stop: ${reason}`);
+// log(`blocked the stop: ${reason}`);
 process.stdout.write(`${JSON.stringify({ decision: "block", reason })}\n`);

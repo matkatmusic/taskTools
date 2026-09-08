@@ -12,7 +12,7 @@ function setupFixture(): { projectRoot: string; worktree: string } {
     const projectRoot = mkdtempSync(join(tmpdir(), "fix-implement-task-tests-project-"));
     const worktree = mkdtempSync(join(tmpdir(), "fix-implement-task-tests-worktree-"));
     writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify([
-        { taskNumber: 1, files: ["a.ts"], codexReviewNotes: "the failing test notes text" },
+        { taskNumber: 1, modifiableFiles: ["a.ts"], codexReviewNotes: "the failing test notes text" },
     ]));
     writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
     mkdirSync(join(worktree, "plans"), { recursive: true });

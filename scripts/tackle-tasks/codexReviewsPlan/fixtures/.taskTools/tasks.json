@@ -1,6 +1,6 @@
 [
     {
         "taskNumber": 42,
-        "files": ["src/owned.ts"]
+        "modifiableFiles": ["src/owned.ts"]
     }
 ]

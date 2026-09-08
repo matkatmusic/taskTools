@@ -26,7 +26,8 @@ function firstRejectedPath(paths: string[]): string | null {
 }
 
 function appendFiles(task: TaskRecord, paths: string[]): void {
-    const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files";
+    // const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files"; // retired: "files" key no longer supported
+    const key = "modifiableFiles";
     const existing = Array.isArray(task[key]) ? (task[key] as string[]) : [];
     const seen = new Set(existing);
     const merged = [...existing];
@@ -35,14 +36,16 @@ function appendFiles(task: TaskRecord, paths: string[]): void {
         seen.add(path);
         merged.push(path);
     }
-    task[key] = merged;
+    // task[key] = merged; // retired: dynamic key could resolve to "files"
+    task.modifiableFiles = merged;
 }
 
 export type RunArgumentsSnapshot = { groups: { tasks: { number: number; files: string[] }[] }[] } & Record<string, unknown>;
 
 export function refreshRunArgumentsSnapshotInMemory(snapshot: RunArgumentsSnapshot, tasks: TaskRecord[]): void {
     const filesByNumber = new Map(tasks.map((task) => {
-        const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files";
+        // const key = Array.isArray(task.modifiableFiles) ? "modifiableFiles" : "files"; // retired: "files" key no longer supported
+        const key = "modifiableFiles";
         return [task.taskNumber, (task[key] as string[] | undefined) ?? []];
     }));
     for (const group of snapshot.groups) {

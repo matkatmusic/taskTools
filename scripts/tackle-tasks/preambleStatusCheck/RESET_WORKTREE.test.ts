@@ -18,7 +18,7 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
     const submoduleOrigin = makeCommittedRepo("RESET_WORKTREE-sub-");
     const root = makeCommittedRepo("RESET_WORKTREE-root-");
     addSubmodule(root, submoduleOrigin, "vendor");
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-old", root);
     const firstWorktree = createFreshTaskWorktree(1, "run-old", root);
     updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);
@@ -41,7 +41,7 @@ test("test_RESET_WORKTREE_tearsDownAndRecreatesACleanWorktreeOnTheTaskBranch", (
 
 test("test_RESET_WORKTREE_runsTwiceWithTheSameInput", () => {
     const root = makeCommittedRepo("RESET_WORKTREE-root2-");
-    seedTasksFile(root, [{ taskNumber: 1, title: "t1", files: [] }]);
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", modifiableFiles: [] }]);
     claimTask(1, "run-old", root);
     const firstWorktree = createFreshTaskWorktree(1, "run-old", root);
     updateCurrentTaskRun(1, "run-old", { worktree: firstWorktree, leaseRunId: "run-old" }, root);

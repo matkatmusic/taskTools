@@ -24,6 +24,13 @@ export type PreparedTask = {
     readOnlyFiles: string[];
     // The same files as absolute paths, so a prompt can name them without rebuilding the join.
     ownedFilePaths: string[];
+    // Every /read-file line: readOnlyFiles' absolute paths, then the owned files that exist on disk.
+    readFilePaths: string[];
+    // The task record's createsFiles; the planner copies it into the plan, never decides it.
+    createsFiles: string[];
+    difficulty: number;
+    // The question the previous planning round left on the task record; "" when none.
+    clarifyRequest: string;
     // The test file paired with each owned file by the naming convention, kept to the ones that exist.
     testFilePaths: string[];
     hasTests: boolean;
@@ -59,6 +66,16 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     }
     const files: string[] = modifiableFiles(task);
     const root = worktree.replace(/\/+$/, "");
+    const declaredReadOnlyFiles = readOnlyFiles(task);
+    const readOnlyFilePaths = declaredReadOnlyFiles.filter((file) => file !== "*").map((file) => `${root}/${file}`);
+    for (const path of readOnlyFilePaths) {
+        if (!existsSync(path)) throw new Error(`task ${taskNumber}: readOnlyFiles names ${path} but the file does not exist`);
+    }
+    const createsFiles: string[] = Array.isArray((task as any).createsFiles) ? (task as any).createsFiles : [];
+    for (const file of files) {
+        if (createsFiles.includes(file)) continue;
+        if (!existsSync(`${root}/${file}`)) throw new Error(`task ${taskNumber}: modifiableFiles names ${root}/${file} but the file does not exist; list it in "createsFiles" if this task creates it, or run the task that creates it first`);
+    }
     const group = groupTasksByFileOverlap(allTasks).find((g) => g.taskNumbers.includes(taskNumber));
     const siblingTasks = (group ? group.taskNumbers.filter((n) => n !== taskNumber) : [])
         .map((n) => allTasks.find((entry: any) => entry.taskNumber === n))
@@ -80,8 +97,12 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
         testReviewFile: `${worktree}/plans/test-review.json`,
         notesFile: `${worktree}/plans/implementation-notes-${taskNumber}.md`,
         files,
-        readOnlyFiles: readOnlyFiles(task),
+        readOnlyFiles: declaredReadOnlyFiles,
         ownedFilePaths: files.map((file) => `${root}/${file}`),
+        readFilePaths: [...readOnlyFilePaths, ...files.map((file) => `${root}/${file}`).filter((path) => existsSync(path))],
+        createsFiles,
+        difficulty: Number((task as any).difficulty),
+        clarifyRequest: typeof (task as any).clarifyRequest === "string" ? (task as any).clarifyRequest : "",
         testFilePaths: files.map((file) => pairedTestPath(root, file)).filter((path) => existsSync(path)),
         hasTests: taskHasTests(task) === TASK_HAS_TESTS,
         tests: typeof (task as any).tests === "string" ? (task as any).tests : null,
