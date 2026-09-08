@@ -1,4 +1,4 @@
-// IS_PLAN_APPROVED_BY_DEFAULT_Q, from pipeline-codexReviewsPlan.mmd. A task re-run after a scrapped-plan exit skips the review agent: YES writes an approved review file.
+// From pipeline-codexReviewsPlan.mmd: a task re-run after a scrapped-plan exit skips review by writing an approved review file.
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

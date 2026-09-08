@@ -169,8 +169,8 @@ test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () =>
     const codexOutcome = outcomes.find((o) => o.next?.endsWith("::CODEX_REVIEWS_PLAN"));
     const commitOutcome = outcomes.find((o) => o.next?.endsWith("::COMMIT_IMPLEMENTATION_IF_NEEDED"));
     assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
-    assert.deepEqual(codexOutcome?.agent, { model: "haiku", effort: "high" });
-    assert.deepEqual(commitOutcome?.agent, { model: "haiku", effort: "high" });
+    assert.deepEqual(codexOutcome?.agent, { model: "sonnet", effort: "high" });
+    assert.deepEqual(commitOutcome?.agent, { model: "sonnet", effort: "high" });
 });
 
 function standardHappyPathAnswers(root: string, taskNumber: number, fileName: string, newContent: string, hasTests: boolean = false): AnswerScript {

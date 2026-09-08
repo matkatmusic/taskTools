@@ -1,0 +1,33 @@
+{
+  "outcome": "OK",
+  "missingFiles": [],
+  "message": "",
+  "issues": [],
+  "fixes": [
+    {
+      "sectionId": "step-1",
+      "fix": "forced scrap fix 1",
+      "durableBecause": "forced scrap for the task 48 live check"
+    },
+    {
+      "sectionId": "step-1",
+      "fix": "forced scrap fix 2",
+      "durableBecause": "forced scrap for the task 48 live check"
+    },
+    {
+      "sectionId": "step-1",
+      "fix": "forced scrap fix 3",
+      "durableBecause": "forced scrap for the task 48 live check"
+    },
+    {
+      "sectionId": "step-1",
+      "fix": "forced scrap fix 4",
+      "durableBecause": "forced scrap for the task 48 live check"
+    },
+    {
+      "sectionId": "step-1",
+      "fix": "forced scrap fix 5",
+      "durableBecause": "forced scrap for the task 48 live check"
+    }
+  ]
+}

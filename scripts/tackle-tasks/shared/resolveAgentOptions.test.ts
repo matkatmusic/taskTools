@@ -84,8 +84,8 @@ test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet",
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
     const config = readConfig(stepsConfigPath);
-    assert.deepEqual(findEntry(config, "IS_DIFFICULTY_7_PLUS_Q").agent, { model: "haiku", effort: "high" });
-    assert.deepEqual(findEntry(config, "CODEX_REVIEWS_PLAN").agent, { model: "haiku", effort: "high" });
+    assert.deepEqual(findEntry(config, "IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "high" });
+    assert.deepEqual(findEntry(config, "CODEX_REVIEWS_PLAN").agent, { model: "sonnet", effort: "high" });
 });
 
 test("test_resolveAgentOptions_throwsWhenTheTaskHasNoDifficulty", () => {

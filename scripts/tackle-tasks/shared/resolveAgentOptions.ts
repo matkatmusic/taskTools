@@ -10,7 +10,7 @@ export const DEFAULT_AGENT_BANDS: AgentBand[] = [
 ];
 // The blocks where the agent does the work itself. Every other block, decision or codex relay, runs on RELAY_AGENT.
 export const BAND_BLOCKS = new Set(["PLAN_THE_TASK", "IMPLEMENT_TASK", "FIX_IMPLEMENT_TASK_TESTS", "FIX_CONFLICTS", "FIX_THE_CODEBASE_FOR_SUITE"]);
-export const RELAY_AGENT: AgentOptions = { model: "haiku", effort: "high" };
+export const RELAY_AGENT: AgentOptions = { model: "sonnet", effort: "high" };
 
 // Sets agent per block: task override, else band for band blocks, else relay agent.
 export function resolveAgentOptions(stepsConfigPath: string, tasksFile: string, taskNumber: number): void {

@@ -6,9 +6,6 @@ import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import { planReviewPrompt } from "../shared/CodexReviewBodyEmitter.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
 import { whatToReturnSection } from "../shared/whatToReturn.ts";
-// TEMPORARY (task 48 live check) imports for the canned SCRAP review.
-import { readJsonFile } from "../shared/readJsonFile.ts";
-import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
 const REVIEW_PLAN_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-plan-schema.json", import.meta.url));
 
@@ -34,17 +31,7 @@ const REVIEW_PLAN_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-pla
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as EntryPacket;
     const t = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
-    // TEMPORARY (task 48 live check): a canned SCRAP review, no codex. Remove after the forced scrapped-plan re-run.
-    const plan = readJsonFile(packet.planFile) as { sections: { id: string }[] };
-    const sectionId = plan.sections[0]!.id;
-    const fixes = Array.from({ length: 5 }, (_, i) => ({ sectionId, fix: `forced scrap fix ${i + 1}`, durableBecause: "forced scrap for the task 48 live check" }));
-    writeJsonAtomically(t.reviewOutputFile, { outcome: "OK", missingFiles: [], message: "", issues: [], fixes });
-    const cannedPrompt = `The review file is already written at \`${t.reviewOutputFile}\`. Do not run codex. Do not read or edit any file.
-
-${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path above, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}
-`;
-    return { box: "CODEX_REVIEWS_PLAN", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: cannedPrompt };
-    // return { box: "CODEX_REVIEWS_PLAN", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: planReviewPrompt(t) };
+    return { box: "CODEX_REVIEWS_PLAN", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: planReviewPrompt(t) };
 }
 
 // realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
