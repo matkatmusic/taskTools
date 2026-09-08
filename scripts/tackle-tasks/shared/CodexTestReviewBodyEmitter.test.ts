@@ -151,7 +151,7 @@ test("test_reviewTestsPrompt_separatesTestsThisTaskDidNotCreate", () => {
 
 test("test_reviewTestsPrompt_carriesTheTestCommandAndItsRecordedOutput", () => {
     const prompt = reviewTestsPrompt(makeTaskFixture());
-    assert.match(prompt, /ran as `node --test tests\/thing\.test\.ts`/);
+    assert.match(prompt, /ran as `npm test`/);
     assert.match(prompt, /SENTINEL_TASK_TEST_OUTPUT/);
 });
 

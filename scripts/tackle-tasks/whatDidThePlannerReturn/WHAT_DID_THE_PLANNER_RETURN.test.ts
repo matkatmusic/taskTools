@@ -21,7 +21,7 @@ function base(projectRoot: string) {
 
 test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeToCodexReviewsPlan", () => {
     const output = main(JSON.stringify({ ...base(makeProjectRootWithDifficulty(5)), additionalData: { outcome: "PLAN", planFile: "plans/plan-35.json", clarifyRequest: "" } }));
-    assert.equal(output.next, "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN");
+    assert.equal(output.next, "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q");
     assert.equal(output.scriptSignal, "continue");
     assert.equal(output.planFile, "plans/plan-35.json");
 });

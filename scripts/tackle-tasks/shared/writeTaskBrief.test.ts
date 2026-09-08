@@ -71,17 +71,28 @@ test("test_generateTaskBriefContents_writesNothingToDisk", () => {
     // Snapshot the project directory before rendering.
     const before = listFilesRecursively(repoRoot);
     // Render the brief.
-    generateTaskBriefContents(1, repoRoot);
+    generateTaskBriefContents(1, repoRoot, repoRoot);
     // The directory listing is unchanged: nothing was written.
     const after = listFilesRecursively(repoRoot);
     assert.deepEqual(after, before);
+});
+
+test("test_generateTaskBriefContents_readsOwnedFilesFromTheWorktreeNotTheProjectRoot", () => {
+    // Scenario: the file exists only in the worktree (cut from staging), not in the project checkout.
+    const repoRoot = makeTempRepoWithCommit();
+    const worktree = makeTempRepoWithCommit();
+    writeFileSync(join(worktree, "index.html"), "MARKER-worktree\n");
+    writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: ["index.html"] }]);
+    const brief = generateTaskBriefContents(1, worktree, repoRoot);
+    assert.ok(brief.includes("@index.html"));
+    assert.ok(!brief.includes("(missing: file not found on disk)"));
 });
 
 test("test_generateTaskBriefContents_rendersTheTasksClarifyRequest", () => {
     // Scenario: a stored clarifyRequest must reach the planner through the brief.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [], clarifyRequest: "which file holds the parser?" }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(brief.includes("## clarifyRequest"));
     assert.ok(brief.includes("which file holds the parser?"));
 });
@@ -90,7 +101,7 @@ test("test_generateTaskBriefContents_omitsTheClarifyRequestSectionWhenTheTaskHas
     // Scenario: no clarifyRequest on the task, no clarifyRequest heading in the brief.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(!brief.includes("## clarifyRequest"));
 });
 
@@ -98,7 +109,7 @@ test("test_generateTaskBriefContents_rendersProblemSolvedByTaskVerbatim", () => 
     // Scenario: a task with problemSolvedByTask carries it verbatim into the brief.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [], problemSolvedByTask: "reviewers cannot tell what problem the task solves" }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(brief.includes("## problemSolvedByTask"));
     assert.ok(brief.includes("reviewers cannot tell what problem the task solves"));
 });
@@ -107,7 +118,7 @@ test("test_generateTaskBriefContents_saysWhenProblemSolvedByTaskIsNotProvided", 
     // Scenario: an older task without the field gets an explicit not-provided line.
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(brief.includes("## problemSolvedByTask"));
     assert.ok(brief.includes("(not provided: this task was created before the problemSolvedByTask field existed)"));
 });
@@ -118,7 +129,7 @@ test("test_generateTaskBriefContents_returnsTheSameBytesWriteTaskBriefToDiskWrit
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     const worktreePath = mkdtempSync(join(tmpdir(), "write-task-brief-wt-"));
     // Render, then write, and compare bytes.
-    const rendered = generateTaskBriefContents(1, repoRoot);
+    const rendered = generateTaskBriefContents(1, repoRoot, repoRoot);
     const briefFile = writeTaskBriefToDisk(1, worktreePath, repoRoot);
     const written = readFileSync(briefFile, "utf8");
     assert.equal(written, rendered);
@@ -149,7 +160,7 @@ test("test_generateTaskBriefContents_carriesAtMostThreePreviousRuns", () => {
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     // Only the three most recent runs appear; the two oldest are absent.
     assert.ok(brief.includes("run-3"));
     assert.ok(brief.includes("run-4"));
@@ -167,7 +178,7 @@ test("test_generateTaskBriefContents_saysHowManyEarlierRunsWereOmitted", () => {
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
     // Render the brief.
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     // The exact omission wording appears.
     assert.ok(brief.includes("(4 earlier runs omitted)"));
 });
@@ -177,7 +188,7 @@ test("test_generateTaskBriefContents_omitsThePreviousRunSectionWhenThereAreNone"
     const repoRoot = makeTempRepoWithCommit();
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [] }]);
     // Render the brief.
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     // No "previous runs" heading appears anywhere in the brief.
     assert.ok(!/previous runs/i.test(brief));
 });
@@ -194,7 +205,7 @@ test("test_generateTaskBriefContents_carriesTheFieldsThatTellTwoRunsApart", () =
         taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(brief.includes("### Run run-a — 2026-08-02T03:04:05-07:00"));
     assert.ok(brief.includes("Exit type: tests-red"));
     assert.ok(brief.includes("Exit note: task tests failed"));
@@ -214,7 +225,7 @@ test("test_generateTaskBriefContents_ordersPreviousRunsNewestFirstAndSkipsRunsWi
         taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history },
     }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(!brief.includes("run-silent"));
     assert.ok(brief.indexOf("run-new") < brief.indexOf("run-old"));
 });
@@ -226,7 +237,7 @@ test("test_generateTaskBriefContents_writesThePreviousRunsHeadingExactlyOnce", (
         taskNumber: 1, title: "t1", description: "do the thing", modifiableFiles: [],
         run: { active: false, worktree: null, leaseRunId: null, history: [endedRun()] },
     }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.equal(brief.split("## Previous runs").length - 1, 1);
 });
 
@@ -301,7 +312,7 @@ test("test_generateTaskBriefContents_rendersTheTasksTitleDescriptionsAndModifiab
     const repoRoot = makeTempRepoWithCommit();
     writeFileSync(join(repoRoot, "fileA.txt"), "x\n");
     writeTasksFile(repoRoot, [{ taskNumber: 1, title: "t1", description: "do the thing", userDescription: "user asked for the thing", modifiableFiles: ["fileA.txt"] }]);
-    const brief = generateTaskBriefContents(1, repoRoot);
+    const brief = generateTaskBriefContents(1, repoRoot, repoRoot);
     assert.ok(brief.includes("# Task 1: t1"));
     assert.ok(brief.includes("do the thing"));
     assert.ok(brief.includes("user asked for the thing"));

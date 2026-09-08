@@ -45,18 +45,19 @@ function renderPreviousRunsSection(previousRuns: TaskRunRecord[]): string {
     ].join("\n");
 }
 
-export function generateTaskBriefContents(taskNumber: number, projectRoot: string): string {
+// Owned files are read from the worktree; tasks.json and run history come from the project root.
+export function generateTaskBriefContents(taskNumber: number, worktreePath: string, projectRoot: string): string {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     if (task === undefined) throw new Error(`task ${taskNumber} not found`);
     const previousRuns = getPreviousTaskRuns(taskNumber, projectRoot);
-    return renderTaskBriefContent(task, projectRoot) + renderPreviousRunsSection(previousRuns);
+    return renderTaskBriefContent(task, worktreePath) + renderPreviousRunsSection(previousRuns);
 }
 
 export function writeTaskBriefToDisk(taskNumber: number, worktreePath: string, projectRoot: string): string {
     const briefFile = join(worktreePath, "plans", `brief-${taskNumber}.md`);
     mkdirSync(dirname(briefFile), { recursive: true });
-    writeFileSync(briefFile, generateTaskBriefContents(taskNumber, projectRoot));
+    writeFileSync(briefFile, generateTaskBriefContents(taskNumber, worktreePath, projectRoot));
     return briefFile;
 }
 

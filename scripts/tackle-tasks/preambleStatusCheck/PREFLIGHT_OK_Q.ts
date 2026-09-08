@@ -4,6 +4,9 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { spawnSync } from "node:child_process";
+import { modifiableFiles, readStagingTip } from "../../shared/prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import type { EntryPacket } from "./_packet.ts";
 
 const MINIMUM_FREE_BYTES = 5 * 1024 * 1024 * 1024;
@@ -103,6 +106,25 @@ export function main(input: string): EntryPacket & { next: string } {
                 next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
             };
         }
+    }
+    // The worktree is cut from staging, or from HEAD when staging does not exist yet; check that same tree.
+    const task = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((entry) => entry.taskNumber === packet.taskNumber);
+    if (task === undefined) throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
+    const createsFiles: string[] = Array.isArray((task as any).createsFiles) ? (task as any).createsFiles : [];
+    const baseTree = readStagingTip(packet.projectRoot) ?? "HEAD";
+    const missingFiles = modifiableFiles(task).filter((file) =>
+        !createsFiles.includes(file)
+        && spawnSync("git", ["-C", packet.projectRoot, "cat-file", "-e", `${baseTree}:${file}`], { stdio: "ignore" }).status !== 0,
+    );
+    if (missingFiles.length > 0) {
+        return {
+            ...packet,
+            box: "PREFLIGHT_OK_Q",
+            scriptSignal: SCRIPT_SIGNAL.CONTINUE,
+            exitType: "preflight-failed",
+            exitNote: `task ${packet.taskNumber}: modifiableFiles names ${missingFiles.join(", ")} but ${missingFiles.length === 1 ? "that file is" : "those files are"} not in the tree the worktree is cut from (${baseTree}); list each in "createsFiles" if this task creates it, or run the task that creates it first`,
+            next: "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+        };
     }
     return { ...packet, box: "PREFLIGHT_OK_Q", scriptSignal: SCRIPT_SIGNAL.CONTINUE, next: "MARK_TASK_ACTIVE" };
 }

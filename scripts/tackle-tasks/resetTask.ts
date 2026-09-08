@@ -10,6 +10,7 @@ import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./sha
 import { resetAttemptCounts } from "./shared/taskRunState.ts";
 import { readJsonFile } from "./shared/readJsonFile.ts";
 import { writeCheckpoint } from "./shared/checkpoint.ts";
+import { stagingWorktreePath } from "./shared/stagingWorktree.ts";
 import { resolveTaskFiles, taskWorkflowDirectory } from "../shared/taskFiles.ts";
 import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 
@@ -101,16 +102,22 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         const stagingTip = execSync("git rev-parse staging", { cwd: repoRoot }).toString().trim();
         if (stagingTip !== mergeCommit) throw new Error(`refusing: staging (${stagingTip}) is not task ${taskNumber}'s merge commit (${mergeCommit}) — something else was merged after it. Reset manually.`);
         const resetTarget = execSync(`git rev-parse ${workCommit}^`, { cwd: repoRoot }).toString().trim();
-        execSync(`git checkout staging`, { cwd: repoRoot, stdio: "pipe" });
-        execSync(`git reset --hard ${resetTarget}`, { cwd: repoRoot, stdio: "pipe" });
-        execSync(`git checkout ${foundBranch}`, { cwd: repoRoot, stdio: "pipe" });
+        // The pipeline keeps staging checked out in its own worktree; git refuses a second checkout of it.
+        const stagingCheckout = stagingWorktreePath(repoRoot);
+        if (existsSync(join(stagingCheckout, ".git"))) {
+            execSync(`git reset --hard ${resetTarget}`, { cwd: stagingCheckout, stdio: "pipe" });
+        } else {
+            execSync(`git checkout staging`, { cwd: repoRoot, stdio: "pipe" });
+            execSync(`git reset --hard ${resetTarget}`, { cwd: repoRoot, stdio: "pipe" });
+            execSync(`git checkout ${foundBranch}`, { cwd: repoRoot, stdio: "pipe" });
+        }
 
         const { completionDate, commitHashes, closureNote, run, ...restored } = entry;
         completed.splice(completedIndex, 1);
         tasks.unshift(block === "" ? restored : { ...restored, run });
         writeFileSync(tasksFile, JSON.stringify(tasks, null, 2));
         writeFileSync(completedFile, JSON.stringify(completed, null, 2));
-        lines.push(`task ${taskNumber} restored to tasks.json; master reset to ${resetTarget}`);
+        lines.push(`task ${taskNumber} restored to tasks.json; staging reset to ${resetTarget}`);
         if (block !== "") {
             // The merge commit's second parent is the task branch tip before the merge.
             execSync(`git branch -f ${branchName} ${mergeCommit}^2`, { cwd: repoRoot, stdio: "pipe" });

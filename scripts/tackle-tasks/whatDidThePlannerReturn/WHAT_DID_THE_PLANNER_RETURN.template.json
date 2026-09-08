@@ -30,6 +30,6 @@
         "exitNote": "",
         "outcome": "PLAN",
         "clarifyRequest": "",
-        "next": "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN"
+        "next": "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q"
     }
 }

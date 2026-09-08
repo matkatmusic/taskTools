@@ -18,7 +18,7 @@ const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
     reportOnlyExit: ["REPORT_ONLY_EXIT", "STOP"],
     planTheTask: ["IS_DIFFICULTY_7_PLUS_Q", "PLAN_THE_TASK", "PLAN_THE_TASK_CODEX"],
     whatDidThePlannerReturn: ["WHAT_DID_THE_PLANNER_RETURN", "ARE_2_CLARIFY_ROUNDS_DONE_Q", "WRITE_CLARIFY_REQUEST"],
-    codexReviewsPlan: ["CODEX_REVIEWS_PLAN"],
+    codexReviewsPlan: ["IS_PLAN_APPROVED_BY_DEFAULT_Q", "CODEX_REVIEWS_PLAN"],
     whatIsReviewVerdict: ["WHAT_IS_REVIEW_VERDICT", "UPDATE_TASKS_JSON", "TWO_CODEX_REVIEWS_COMPLETED_Q"],
     implementTask: ["IMPLEMENT_TASK"],
     commitImplementationIfNeeded: [

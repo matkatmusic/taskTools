@@ -150,7 +150,8 @@ export function runRelatedTests(
         const occurrenceCwd = resolve(rootPath, batch.occurrence.checkoutPath);
         const warning = runOccurrenceTests(occurrenceCwd, batch, resolutionManifest);
         if (warning) warnings.push(warning);
-        if (batch.byExtension.has(".ts")) {
+        // ponytail: no tsconfig.json means tsc prints its help text, not type errors; skip the check.
+        if (batch.byExtension.has(".ts") && existsSync(join(occurrenceCwd, "tsconfig.json"))) {
             const typeErrors = execSync("npx tsc --noEmit 2>&1 | head -30", { cwd: occurrenceCwd, encoding: "utf8" }).trim();
             if (typeErrors !== "") warnings.push(`Type errors after editing ${batch.byExtension.get(".ts")!.sources.join(", ")}:\n${typeErrors}`);
         }

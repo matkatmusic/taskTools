@@ -2,7 +2,7 @@
 
 ````sh
 REVIEW_PROMPT=$(cat <<'REVIEWEOF'
-`${reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test command recorded)", taskTests.output)}`
+`${reviewTestsQuestion(t, diffPath, preExistingTestFiles, "npm test", taskTests.output)}`
 REVIEWEOF
 )
 REVIEW_FILE=`${t.testReviewFile}`

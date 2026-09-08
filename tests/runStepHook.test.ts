@@ -1298,6 +1298,39 @@ test("test_runStepHook_routesANonZeroExitHardFailureIntoTheFailuresExitTail", ()
     assert.match(checkpoint?.exitNote ?? "", /one\.mmd::A exited 1/);
 });
 
+test("test_runStepHook_keepsOnlyTheThrownMessageLineInTheExitNoteOfAThrowingBlock", () => {
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    mkdirSync(join(worktree, ".git"));
+    writeFileSync(join(worktree, "tasks.json"), JSON.stringify([{
+        taskNumber: 7,
+        run: {
+            active: true, worktree: null, leaseRunId: null,
+            history: [{
+                runId: "r1", startedAt: "t", endedAt: null, exitType: null, exitNote: null,
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    const configFile = configWith((writeStep, folder) => {
+        const throwScriptPath = join(folder, "A-throw.ts");
+        writeFileSync(throwScriptPath, "throw new Error('task 7: modifiableFiles names x but the file does not exist');\n");
+        return {
+            "one.mmd": [
+                { box: "A", script: throwScriptPath, next: ["B"] },
+                { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            ],
+            ...failuresExitTailConfig(writeStep, worktree),
+        };
+    });
+    const startInput = JSON.stringify({ taskNumber: 7, worktree, runId: "r1", projectRoot: worktree });
+    const { result, checkpoint } = runHook(`/run-step A ${startInput}`, configFile, worktree);
+
+    assert.equal(result.ok, false);
+    assert.equal(checkpoint?.exitNote, "one.mmd::A exited 1\nError: task 7: modifiableFiles names x but the file does not exist");
+    // The full stack still reaches the hook's errors list for the run log.
+    assert.match(result.errors.join("\n"), /at .*A-throw\.ts/);
+});
+
 test("test_runStepHook_routesAMissingResultObjectHardFailureIntoTheFailuresExitTail", () => {
     const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
     mkdirSync(join(worktree, ".git"));

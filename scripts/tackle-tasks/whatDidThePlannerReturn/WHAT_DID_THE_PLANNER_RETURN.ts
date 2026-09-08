@@ -18,7 +18,7 @@ export function main(input: string): WhatDidThePlannerReturnPacket & { next: str
         if (Number(entry.difficulty) <= 3) {
             return { ...output, next: "pipeline-implementTask.mmd::IMPLEMENT_TASK" };
         }
-        return { ...output, next: "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN" };
+        return { ...output, next: "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q" };
     }
     if (outcome === "CLARIFY") {
         return { ...output, next: "ARE_2_CLARIFY_ROUNDS_DONE_Q" };

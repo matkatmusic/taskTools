@@ -32,6 +32,17 @@
     ],
     "pipeline-codexReviewsPlan.mmd": [
         {
+            "box": "IS_PLAN_APPROVED_BY_DEFAULT_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/IS_PLAN_APPROVED_BY_DEFAULT_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/IS_PLAN_APPROVED_BY_DEFAULT_Q.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "CODEX_REVIEWS_PLAN",
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT"
+            ]
+        },
+        {
             "box": "CODEX_REVIEWS_PLAN",
             "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts",
             "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.template.json",
@@ -808,7 +819,7 @@
             "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.template.json",
             "producesPrompt": false,
             "next": [
-                "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN",
+                "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q",
                 "pipeline-implementTask.mmd::IMPLEMENT_TASK",
                 "ARE_2_CLARIFY_ROUNDS_DONE_Q"
             ]

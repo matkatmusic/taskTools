@@ -572,7 +572,7 @@ export function reviewTestsPromptChoices(): ReviewTestsPromptChoices {
 // Each value is the source expression, so the skeleton view names what the rendered view splices in.
 export const REVIEW_TESTS_PROMPT_SKELETON_VARS: ReviewTestsPromptVars = {
     spawnHeader: '`${spawnAgentHeader("review", true)}`',
-    reviewQuestion: '`${reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test command recorded)", taskTests.output)}`',
+    reviewQuestion: '`${reviewTestsQuestion(t, diffPath, preExistingTestFiles, "npm test", taskTests.output)}`',
     testReviewFile: "`${t.testReviewFile}`",
     codexLogFile: "`${codexLogFile()}`",
     codexExecCommand: "`${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)}`",
@@ -597,7 +597,7 @@ export function reviewTestsPrompt(t: PreparedTask): string {
     const diffPath = writeImplementationDiff(t, root);
     return renderReviewTestsPromptSections(reviewTestsPromptChoices(), {
         spawnHeader: spawnAgentHeader("review", true),
-        reviewQuestion: reviewTestsQuestion(t, diffPath, preExistingTestFiles, t.tests ?? "(no test command recorded)", taskTests.output),
+        reviewQuestion: reviewTestsQuestion(t, diffPath, preExistingTestFiles, "npm test", taskTests.output),
         testReviewFile: t.testReviewFile,
         codexLogFile: codexLogFile(),
         codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),

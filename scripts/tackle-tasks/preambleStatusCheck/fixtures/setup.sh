@@ -9,7 +9,7 @@ cat > .taskTools/tasks.json <<'EOF'
   {
     "taskNumber": 1,
     "title": "fixture task",
-    "files": [],
+    "modifiableFiles": [],
     "run": {
       "active": false,
       "worktree": null,

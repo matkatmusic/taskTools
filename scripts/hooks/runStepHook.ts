@@ -249,7 +249,9 @@ function buildFailure(
     const sourceLockHeld = readSourceRepoLock(String(context.packet.projectRoot ?? ""))?.owner
         === buildLockOwner(String(context.packet.runId ?? ""), Number(context.packet.taskNumber));
     const consumedAPrompt = context.startedFromPacketFile && boxesRun.length === 1;
-    const exitNote = errors.join("\n");
+    // The run log keeps the whole stack; the note keeps the thrown message line only, when there is one.
+    const thrownMessageLine = errors.slice(1).join("\n").split("\n").find((line) => /^\w*Error: /.test(line));
+    const exitNote = thrownMessageLine === undefined ? errors.join("\n") : `${errors[0]}\n${thrownMessageLine}`;
     if (consumedAPrompt && existing === null) throw new Error(`${stepKey} answered a prompt but ${worktree} holds no checkpoint`);
     writeCheckpoint(worktree, {
         taskNumber: Number(context.packet.taskNumber),
@@ -533,8 +535,7 @@ const skillName = String(toolInput.skill ?? "").replace(/^[\w-]+:/, "");
 // A person types the whole line. An agent calls the skill, so the name and the args arrive apart.
 const isTypedCommand = promptText.startsWith("/run-step");
 const isSkillCall = skillName === "run-step";
-// `/tackle-tasks reset N [BLOCK]` is the hook's job: it resets and returns the lines, so the agent runs nothing.
-// A Skill call carries "reset N" in tool_input.args; rebuild the typed line so one pattern serves both shapes.
+// The hook runs `/tackle-tasks reset N` itself, typed or as a Skill call; the agent runs nothing.
 const resetLine = skillName === "tackle-tasks" ? `/tackle-tasks ${String(toolInput.args ?? "")}` : promptText;
 const resetMatch = resetLine.match(/^\/tackle-tasks\s+reset\s+(\d+)(?:\s+(\S+))?\s*$/);
 if (resetMatch !== null) {
