@@ -734,6 +734,7 @@
             "producesPrompt": false,
             "mutating": true,
             "next": [
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
                 "DOCUMENT_GENERATION"
             ]
         },

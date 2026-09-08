@@ -757,6 +757,45 @@ test("test_loadPreparedTaskThrowsWhenAReadOnlyFileIsMissingOnDisk", () => {
     );
 });
 
+test("test_loadPreparedTaskAddsHandoffFilePathsToReadFilePathsAfterReadOnlyFiles", () => {
+    // Setup: a task with one readOnlyFiles entry, one handoffFilePaths entry, and one owned file, all on disk.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    writeFileSync(join(repoRoot, "a.ts"), "a\n");
+    writeFileSync(join(repoRoot, "b.ts"), "b\n");
+    mkdirSync(join(repoRoot, "plans", "archived"), { recursive: true });
+    writeFileSync(join(repoRoot, "plans", "archived", "note.md"), "note\n");
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["a.ts"], readOnlyFiles: ["b.ts"], handoffFilePaths: ["plans/archived/note.md"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Action: build the prepared task.
+    const prepared = loadPreparedTask(1, repoRoot, repoRoot);
+    // Verification: read-only first, handoff second, owned last; every path is absolute.
+    assert.deepEqual(prepared.readFilePaths, [
+        `${repoRoot}/b.ts`,
+        `${repoRoot}/plans/archived/note.md`,
+        `${repoRoot}/a.ts`,
+    ]);
+});
+
+test("test_loadPreparedTaskThrowsWhenAHandoffFileIsMissingOnDisk", () => {
+    // Setup: a task naming a handoffFilePaths entry that does not exist in the worktree.
+    const repoRoot = makeTempRepoWithCommit();
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"], handoffFilePaths: ["plans/archived/gone.md"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: the stale handoff path stops the run instead of silently pointing at nothing.
+    assert.throws(
+        () => loadPreparedTask(1, repoRoot, repoRoot),
+        /task 1: handoffFilePaths names .*gone\.md but the file does not exist/,
+    );
+});
+
 test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCreatesFiles", () => {
     // This fails before any planner runs; the error names the missing file and the createsFiles fix.
     const repoRoot = makeTempRepoWithCommit();
