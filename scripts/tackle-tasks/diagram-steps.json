@@ -48,6 +48,44 @@
             "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.template.json",
             "producesPrompt": true,
             "next": [
+                "DID_CODEX_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_CODEX_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT",
+                "CODEX_REVIEW_FALLBACK_FABLE"
+            ]
+        },
+        {
+            "box": "CODEX_REVIEW_FALLBACK_FABLE",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_FABLE_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_FABLE_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT",
+                "CODEX_REVIEW_FALLBACK_OPUS"
+            ]
+        },
+        {
+            "box": "CODEX_REVIEW_FALLBACK_OPUS",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_OPUS.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_OPUS.template.json",
+            "producesPrompt": true,
+            "next": [
                 "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT"
             ]
         }
@@ -57,6 +95,44 @@
             "box": "CODEX_REVIEWS_TESTS",
             "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts",
             "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_CODEX_TEST_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_CODEX_TEST_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED",
+                "CODEX_TEST_REVIEW_FALLBACK_FABLE"
+            ]
+        },
+        {
+            "box": "CODEX_TEST_REVIEW_FALLBACK_FABLE",
+            "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_FABLE_TEST_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_FABLE_TEST_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED",
+                "CODEX_TEST_REVIEW_FALLBACK_OPUS"
+            ]
+        },
+        {
+            "box": "CODEX_TEST_REVIEW_FALLBACK_OPUS",
+            "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_OPUS.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_OPUS.template.json",
             "producesPrompt": true,
             "next": [
                 "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED"

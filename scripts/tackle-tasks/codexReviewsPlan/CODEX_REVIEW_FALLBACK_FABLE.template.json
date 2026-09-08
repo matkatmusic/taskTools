@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "box": "DID_CODEX_REVIEW_SUCCEED_Q",
         "scriptSignal": "continue",
         "taskNumber": 42,
         "runId": "run-1",
@@ -15,7 +15,7 @@
         "message": "",
         "additionalData": {
             "reviewFile": "",
-            "codexSucceeded": false
+            "fableSucceeded": false
         }
     }
 }

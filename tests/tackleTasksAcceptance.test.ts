@@ -138,7 +138,7 @@ test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () =>
         CODEX_REVIEWS_PLAN: () => {
             const reviewFile = join(worktreePath, "plans", "review.json");
             writeFileSync(reviewFile, JSON.stringify({ outcome: "OK", missingFiles: [], message: "", fixes: [] }));
-            return { message: "reviewed", additionalData: { reviewFile } };
+            return { message: "reviewed", additionalData: { reviewFile, codexSucceeded: true } };
         },
     };
     skillBody("[10]", root);
@@ -168,9 +168,9 @@ test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () =>
     const implementOutcome = outcomes.find((o) => o.next?.endsWith("::IMPLEMENT_TASK"));
     const codexOutcome = outcomes.find((o) => o.next?.endsWith("::CODEX_REVIEWS_PLAN"));
     const commitOutcome = outcomes.find((o) => o.next?.endsWith("::COMMIT_IMPLEMENTATION_IF_NEEDED"));
-    assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
-    assert.deepEqual(codexOutcome?.agent, { model: "sonnet", effort: "high" });
-    assert.deepEqual(commitOutcome?.agent, { model: "sonnet", effort: "high" });
+    assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "high" });
+    assert.deepEqual(codexOutcome?.agent, { model: "sonnet", effort: "low" });
+    assert.deepEqual(commitOutcome?.agent, { model: "sonnet", effort: "low" });
 });
 
 function standardHappyPathAnswers(root: string, taskNumber: number, fileName: string, newContent: string, hasTests: boolean = false): AnswerScript {

@@ -19,6 +19,8 @@ function makeStepsConfig(): string {
             { box: "PLAN_THE_TASK", script: "", template: "", producesPrompt: true, next: [] },
             { box: "CODEX_REVIEWS_PLAN", script: "", template: "", producesPrompt: true, next: [] },
             { box: "IS_DIFFICULTY_7_PLUS_Q", script: "", template: "", producesPrompt: false, next: [] },
+            { box: "CODEX_REVIEW_FALLBACK_FABLE", script: "", template: "", producesPrompt: true, next: [] },
+            { box: "CODEX_TEST_REVIEW_FALLBACK_OPUS", script: "", template: "", producesPrompt: true, next: [] },
         ],
     };
     writeFileSync(configPath, JSON.stringify(config, null, 4));
@@ -86,6 +88,16 @@ test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet",
     const config = readConfig(stepsConfigPath);
     assert.deepEqual(findEntry(config, "IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "low" });
     assert.deepEqual(findEntry(config, "CODEX_REVIEWS_PLAN").agent, { model: "sonnet", effort: "low" });
+});
+
+test("test_resolveAgentOptions_givesTheFallbackReviewersTheirOwnModelNotTheBand", () => {
+    const stepsConfigPath = makeStepsConfig();
+    const tasksFile = makeTasksFile([{ taskNumber: 1, difficulty: 4 }]);
+
+    resolveAgentOptions(stepsConfigPath, tasksFile, 1);
+    const config = readConfig(stepsConfigPath);
+    assert.deepEqual(findEntry(config, "CODEX_REVIEW_FALLBACK_FABLE").agent, { model: "claude-fable-5-1[1m]", effort: "medium" });
+    assert.deepEqual(findEntry(config, "CODEX_TEST_REVIEW_FALLBACK_OPUS").agent, { model: "claude-opus-4-8[1m]", effort: "high" });
 });
 
 test("test_resolveAgentOptions_throwsWhenTheTaskHasNoDifficulty", () => {

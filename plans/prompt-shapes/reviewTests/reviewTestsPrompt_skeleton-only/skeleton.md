@@ -7,12 +7,7 @@ REVIEWEOF
 )
 REVIEW_FILE=`${t.testReviewFile}`
 CODEX_LOG=`${codexLogFile()}`
-`${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)}` \
-  || `${spawnClaudeFableCli("medium")}` \
-  || `${spawnClaudeOpus48Cli("high")}`
+`${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)}`
 ````
 
-The `||` chain is the fallback.
-A non-zero exit means that reviewer was unavailable, not that the tests are bad, so the next one runs.
-
-`${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}" }`, "the path \`$REVIEW_FILE\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}`
+`${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \`$REVIEW_FILE\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer.")}`

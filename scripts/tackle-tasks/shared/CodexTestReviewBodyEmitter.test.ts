@@ -107,9 +107,9 @@ test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () =>
 });
 
 test("test_reviewTestsPrompt_everyCliLineRedirectsStdinAndCodexIsSchemaBound", () => {
-    // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
+    // codex exec hangs without </dev/null; fable/opus fallbacks are now their own blocks, not chained here.
     const cliLines = reviewTestsPrompt(fakeTask).replace(/\\\n(?!\s*\|\|)\s*/g, "").split("\n").filter((line) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(line));
-    assert.equal(cliLines.length, 3);
+    assert.equal(cliLines.length, 1);
     for (const line of cliLines) assert.match(line, /<\/dev\/null/);
     assert.match(cliLines[0], /--output-schema \S*review-tests-schema\.json/);
     assert.match(cliLines[0], /-o "\$REVIEW_FILE"/);
@@ -178,6 +178,6 @@ test("test_reviewTestsPrompt_tellsTheAgentToReturnTheReviewFilePathEvenWhenTheCo
     // The spawning agent returns the file path only; ARE_TESTS_FLAGGED reads it and rules on it.
     const task = makeTaskFixture();
     const prompt = reviewTestsPrompt(task);
-    assert.match(prompt, new RegExp(`"additionalData": \\{ "reviewFile": "${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}" \\}`));
+    assert.match(prompt, new RegExp(`"additionalData": \\{ "reviewFile": "${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}", "codexSucceeded"`));
     assert.match(prompt, /write that same shape anyway/);
 });

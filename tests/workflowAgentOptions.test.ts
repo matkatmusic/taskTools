@@ -95,7 +95,7 @@ test("test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride
     await runWorkflowScript(script, { task: TASK_NUMBER, tasksFile }, agentResults);
 
     assert.equal(calls[0]!.options.model, "sonnet");
-    assert.equal(calls[0]!.options.effort, "high");
+    assert.equal(calls[0]!.options.effort, "low");
     assert.equal(calls[1]!.options.model, "claude-opus-4-8[1m]");
     assert.equal(calls[1]!.options.effort, "high");
     const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${IMPLEMENT_KEY} `);

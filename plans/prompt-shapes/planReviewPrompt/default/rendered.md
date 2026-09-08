@@ -139,9 +139,7 @@ perl -e 'alarm shift; exec @ARGV' 300 \
     --output-schema /Users/matkatmusicllc/Programming/taskTools-86/plans/review-plan-schema.json \
     -o "$REVIEW_FILE" \
     "$REVIEW_PROMPT" \
-    </dev/null >/dev/null 2>>"$CODEX_LOG" \
-  || claude -p "$REVIEW_PROMPT" --tools "Read" --model fable --effort medium </dev/null >"$REVIEW_FILE" \
-  || claude -p "$REVIEW_PROMPT" --tools "Read" --model claude-opus-4-8 --effort high </dev/null >"$REVIEW_FILE"
+    </dev/null >/dev/null 2>>"$CODEX_LOG"
     
 ````
 
