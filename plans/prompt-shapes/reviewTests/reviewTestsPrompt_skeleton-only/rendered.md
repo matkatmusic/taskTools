@@ -136,16 +136,5 @@ perl -e 'alarm shift; exec @ARGV' 300 \
 
 ## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
-Do these three steps in order.
-1. Build `{ "message": "", "additionalData": { "reviewFile": "/tmp/fake-worktree/plans/test-review.json", "codexSucceeded": <true if the codex command above exited zero, else false> } }`, the path \`$REVIEW_FILE\` was set to (never its contents) and whether the codex command exited zero.
-2. Write that object into the packet file named by `outcome.payload` in the hook output (the same file this prompt came from) by running, with the object on stdin:
-```
-node /Users/matkatmusicllc/Programming/taskTools-86/scripts/tackle-tasks/shared/writeAgentAnswer.ts "<the outcome.payload path>" <<'TTANSWER'
-<the object from step 1>
-TTANSWER
-```
-Never edit the packet file by hand; the script keeps the keys already there and fails loudly when the object is not valid JSON.
-3. Only after step 2 is done, return the hook output verbatim.
-
-If the command above could not be run at all, write that same shape anyway.
-The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer.
+Run `node /Users/matkatmusicllc/Programming/taskTools-86/scripts/tackle-tasks/shared/writeReviewAnswer.ts "<the outcome.payload path>" /tmp/fake-worktree/plans/test-review.json`.
+Then return the hook output verbatim.

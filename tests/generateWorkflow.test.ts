@@ -55,7 +55,7 @@ test("test_buildHookOutputSchema_allowsAgentOptionsOnTheOutcome", () => {
     const outcome = schema.properties.outcome.anyOf[0];
     assert.deepEqual(outcome.properties.agent, {
         type: "object",
-        properties: { model: { type: "string" }, effort: { type: "string" } },
+        properties: { model: { type: "string" }, effort: { type: "string" }, agentType: { type: "string" } },
         required: ["model", "effort"],
         additionalProperties: false,
     });

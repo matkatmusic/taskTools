@@ -706,7 +706,7 @@ export function createCodexShellInvocation(t: PreparedTask) : string {
 // }
 
 // Replaces whatToReturnSection here: the review file path is already known, so one script writes the packet answer.
-function reviewAnswerSection(reviewOutputFile: string): string {
+export function reviewAnswerSection(reviewOutputFile: string): string {
     return `## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
 Run \`node ${WRITE_REVIEW_ANSWER_SCRIPT} "<the outcome.payload path>" ${reviewOutputFile}\`.

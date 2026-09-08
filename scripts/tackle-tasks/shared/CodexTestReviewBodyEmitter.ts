@@ -8,7 +8,7 @@ import type { PreparedTask } from "./preparedTask.ts";
 import { getAttemptCount, getCurrentTaskRun } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
-import { fallbackReviewerSection } from "./CodexReviewBodyEmitter.ts";
+import { fallbackReviewerSection, reviewAnswerSection } from "./CodexReviewBodyEmitter.ts";
 
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
@@ -597,7 +597,7 @@ export const REVIEW_TESTS_PROMPT_SKELETON_VARS: ReviewTestsPromptVars = {
     codexExecCommand: "`${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)}`",
     spawnClaudeFableCli: '`${spawnClaudeFableCli("medium")}`',
     spawnClaudeOpus48Cli: '`${spawnClaudeOpus48Cli("high")}`',
-    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer.")}`',
+    whatToReturn: "`${reviewAnswerSection(t.testReviewFile)}`",
 };
 
 export function renderReviewTestsPromptSections(choices: ReviewTestsPromptChoices, vars: ReviewTestsPromptVars): string {
@@ -622,7 +622,7 @@ export function reviewTestsPrompt(t: PreparedTask): string {
         codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),
         spawnClaudeFableCli: spawnClaudeFableCli("medium"),
         spawnClaudeOpus48Cli: spawnClaudeOpus48Cli("high"),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer."),
+        whatToReturn: reviewAnswerSection(t.testReviewFile),
     });
 }
 
@@ -721,7 +721,7 @@ export function reviewTestsCombos(): Combo[] {
         codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),
         spawnClaudeFableCli: spawnClaudeFableCli("medium"),
         spawnClaudeOpus48Cli: spawnClaudeOpus48Cli("high"),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${fakeTask.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer."),
+        whatToReturn: reviewAnswerSection(fakeTask.testReviewFile),
     };
     combos.push({ name: "reviewTestsPrompt_skeleton-only", skeleton: reviewTestsPromptSkeleton(reviewTestsPromptChoices()), rendered: renderReviewTestsPromptSections(reviewTestsPromptChoices(), promptRenderVars) });
     return combos;

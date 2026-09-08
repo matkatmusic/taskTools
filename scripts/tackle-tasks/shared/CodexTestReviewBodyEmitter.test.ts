@@ -174,10 +174,11 @@ test("test_reviewTestsQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", ()
     assert.equal(skeleton.includes("audit you wrote in round one"), false);
 });
 
-test("test_reviewTestsPrompt_tellsTheAgentToReturnTheReviewFilePathEvenWhenTheCommandFails", () => {
-    // The spawning agent returns the file path only; ARE_TESTS_FLAGGED reads it and rules on it.
+test("test_reviewTestsPrompt_tellsTheAgentToRunTheReviewAnswerScriptNotHandTypeTheAnswer", () => {
+    // The script derives codexSucceeded and writes the packet answer; the agent only relays the hook output.
     const task = makeTaskFixture();
     const prompt = reviewTestsPrompt(task);
-    assert.match(prompt, new RegExp(`"additionalData": \\{ "reviewFile": "${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}", "codexSucceeded"`));
-    assert.match(prompt, /write that same shape anyway/);
+    assert.match(prompt, new RegExp(`node \\S*writeReviewAnswer\\.ts "<the outcome\\.payload path>" ${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(prompt, /Then return the hook output verbatim/);
+    assert.equal(prompt.includes('"codexSucceeded"'), false);
 });

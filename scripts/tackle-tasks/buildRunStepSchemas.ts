@@ -14,7 +14,7 @@ export function buildHookOutputSchema(): Record<string, unknown> {
             payload: { type: "string" },
             agent: {
                 type: "object",
-                properties: { model: { type: "string" }, effort: { type: "string" } },
+                properties: { model: { type: "string" }, effort: { type: "string" }, agentType: { type: "string" } },
                 required: ["model", "effort"],
                 additionalProperties: false,
             },
