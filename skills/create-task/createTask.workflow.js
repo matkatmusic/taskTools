@@ -10,10 +10,11 @@ const FILE_HUNTER_SCHEMA = {
     type: 'object',
     properties: {
         files: { type: 'array', items: { type: 'string' } },
+        createsFiles: { type: 'array', items: { type: 'string' } },
         description: { type: 'string' },
         difficulty: { type: 'number' },
     },
-    required: ['files', 'description', 'difficulty'],
+    required: ['files', 'createsFiles', 'description', 'difficulty'],
 }
 
 const BLOCKER_HUNTER_SCHEMA = {
@@ -65,6 +66,7 @@ const [fileFindings, blockerFindings] = await parallel([
 
 return {
     files: fileFindings?.files ?? [],
+    createsFiles: fileFindings?.createsFiles ?? [],
     description: fileFindings?.description ?? '',
     difficulty: fileFindings?.difficulty ?? 5,
     blockedBy: blockerFindings?.blockedBy ?? [],

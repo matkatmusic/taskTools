@@ -16,6 +16,8 @@ Populate \`description\` with only the agent's derived understanding gathered wh
 
 Populate \`files\` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
 
+Populate \`createsFiles\` with the subset of \`files\` that do not exist yet — the pipeline refuses a task whose \`files\` entry is absent on disk unless it is listed here. Use an empty array when every file already exists.
+
 Populate \`difficulty\` on a 1-10 scale measuring implementation effort and risk, not importance: 1 = typo, comment, or constant edit with no behavior change; 10 = wide blast radius, unclear scope, or a previously reverted attempt. The full scale is documented in the template below.
 
 Task described by the user: ${taskDescription}

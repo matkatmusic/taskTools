@@ -4,7 +4,7 @@ import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 
 import { resolveTaskFiles, readTaskFile } from "../shared/taskFiles.ts";
-import { writeTaskBriefFile, attachOperationBranch, releaseTaskWorktreeLease, taskWorktreeLeasePath } from "../shared/prepareTasks.ts";
+import { writeTaskBriefFile, attachOperationBranch, releaseTaskWorktreeLease, taskWorktreeLeasePath, modifiableFiles } from "../shared/prepareTasks.ts";
 import { addTaskFiles } from "../shared/addTaskFiles.ts";
 import {
   rebaseSubmoduleLayersDeepestFirst,
@@ -69,7 +69,7 @@ type PreparedTask = {
 function readTaskApprovedFiles(): string[] {
   const pair = resolveTaskFiles(SOURCE_ROOT);
   const task = readTaskFile(pair.tasksPath).find((entry: any) => entry.taskNumber === N);
-  return task && Array.isArray(task.files) ? task.files : [];
+  return task ? modifiableFiles(task) : [];
 }
 
 // Task state (ownership, widening) is authoritative under SOURCE_ROOT; only the brief/plan/notes/edits live under WORKTREE.
@@ -83,7 +83,7 @@ function loadPreparedTask(): PreparedTask {
     briefFile,
     planFile: `${WORKTREE}/plans/task-${N}-plan.md`,
     notesFile: `${WORKTREE}/plans/task-${N}-implementation-notes.md`,
-    files: Array.isArray(task.files) ? task.files : [],
+    files: modifiableFiles(task),
     tests: typeof task.tests === 'string' ? task.tests : null,
     repoRoot: WORKTREE,
     taskStateRoot: SOURCE_ROOT,
@@ -593,7 +593,7 @@ function roleWidenFiles() {
   const widenedTask = widened.find((entry: any) => entry.taskNumber === N)
   if (!widenedTask) fail(`task ${N} disappeared from tasks.json`)
   writeTaskBriefFile(widenedTask, WORKTREE)
-  printResult({ files: Array.isArray(widenedTask.files) ? widenedTask.files : [] })
+  printResult({ files: modifiableFiles(widenedTask) })
 }
 
 // Accepts no PAYLOAD path; the expected plan file is always the same one loadPreparedTask computes.

@@ -1,6 +1,7 @@
 import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { listTaskTitles, readTaskLists } from "../shared/getTaskDetails.ts";
 
 // Absolute, because the reading agent's shell has no CLAUDE_PLUGIN_ROOT to expand
 const getTaskDetailsPath = fileURLToPath(new URL("../shared/getTaskDetails.ts", import.meta.url));
@@ -26,7 +27,7 @@ If fewer than N tasks qualify, report the ones that do and add the line \`Only <
 
 Otherwise end your report with exactly:
 \`start a session with: 'claude --name "task <N...>"'\`
-\`prompt: "/tackle-tasks [<N,...>] valid"\`
+\`prompt: "/tackle-tasks [<N,...>]"\`
 where \`<N...>\` is the chosen task numbers space-separated, and \`[<N,...>]\` is the same numbers as a JSON array with no spaces (\`[268,270]\`) — the argument form tackle-tasks and close-tasks require.
 `;
 
@@ -38,15 +39,21 @@ function readStdin(): string {
   }
 }
 
-// grep exits non-zero when it matches nothing; that is not a failure here, just an empty result.
+// A task with an active run is already being worked; it is not a candidate.
 function openTasksReport(): string {
-  try {
-    return execSync(`node "${getTaskDetailsPath}" | grep ^OPEN`, { encoding: "utf8" }).trimEnd();
-  } catch (error) {
-    const stdout = (error as { stdout?: string }).stdout;
-    return typeof stdout === "string" ? stdout.trimEnd() : "";
-  }
+  const { openTasks } = readTaskLists();
+  const inactive = openTasks.filter((task) => !(task.run as { active?: boolean } | undefined)?.active);
+  return listTaskTitles("OPEN", inactive).join("\n");
 }
+// grep exits non-zero when it matches nothing; that is not a failure here, just an empty result.
+// function openTasksReport(): string {
+//   try {
+//     return execSync(`node "${getTaskDetailsPath}" | grep ^OPEN`, { encoding: "utf8" }).trimEnd();
+//   } catch (error) {
+//     const stdout = (error as { stdout?: string }).stdout;
+//     return typeof stdout === "string" ? stdout.trimEnd() : "";
+//   }
+// }
 
 // Arguments arrive on stdin, so an empty read must stop here rather than emit a brief pointing nowhere.
 function fail(problem: string): never {

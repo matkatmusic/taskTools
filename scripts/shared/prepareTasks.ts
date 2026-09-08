@@ -166,9 +166,31 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     return briefFile;
 }
 
+// The remote may lack a gitlink commit; the source checkout's submodule has it, so clone from there, at every depth.
+function cloneSubmodulesFromLocalCheckout(checkoutPath: string, sourcePath: string): void {
+    if (!existsSync(join(checkoutPath, ".gitmodules"))) return;
+    const pathEntries = execFileSync("git", ["-C", checkoutPath, "config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"], { encoding: "utf8" }).trim().split("\n");
+    for (const entry of pathEntries) {
+        const [pathKey, submodulePath] = entry.split(" ") as [string, string];
+        const name = pathKey.slice("submodule.".length, -".path".length);
+        const localSource = join(sourcePath, submodulePath);
+        if (!existsSync(join(localSource, ".git"))) continue;
+        execFileSync(
+            "git",
+            ["-C", checkoutPath, "-c", `submodule.${name}.url=${localSource}`, "submodule", "update", "--init", "--", submodulePath],
+            { stdio: ["ignore", "ignore", "inherit"] },
+        );
+        const remoteUrl = execFileSync("git", ["-C", sourcePath, "config", `submodule.${name}.url`], { encoding: "utf8" }).trim();
+        execFileSync("git", ["-C", join(checkoutPath, submodulePath), "remote", "set-url", "origin", remoteUrl], { stdio: ["ignore", "ignore", "inherit"] });
+        cloneSubmodulesFromLocalCheckout(join(checkoutPath, submodulePath), localSource);
+    }
+}
+
 // `git worktree add` leaves submodule directories empty; a worker needs them populated.
 export function initializeSubmodulesInWorktree(worktreePath: string): void {
     if (!existsSync(join(worktreePath, ".gitmodules"))) return;
+    const sourceRoot = dirname(execFileSync("git", ["-C", worktreePath, "rev-parse", "--path-format=absolute", "--git-common-dir"], { encoding: "utf8" }).trim());
+    cloneSubmodulesFromLocalCheckout(worktreePath, sourceRoot);
     execFileSync(
         "git",
         ["-C", worktreePath, "submodule", "update", "--init", "--recursive"],

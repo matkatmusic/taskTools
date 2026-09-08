@@ -30,7 +30,7 @@ export function produceSkillBody(taskDescription: string): string {
 
 WORKFLOW: ${workflowArgs}
 
-8. Pipe the merged payload into \`appendTask.ts\`, combining the user-settled \`title\`, \`userDescription\`, \`goal\`, \`hasTests\`, \`tests\`, \`schemaVersion\`, \`problemSolvedByTask\`, \`notInScope\`, and optional \`chainGoal\` with the workflow's \`files\`, \`description\`, \`difficulty\`, and \`blockedBy\`. Populate \`userDescription\` with the task description verbatim, exactly as typed — never edit, summarize, or reword it. If the request names the source note/handoff file(s) the task came from (e.g. an \`update-tasks\` harvest), also include \`"handoffFilePaths": [<those repo-relative paths>]\` in the object; otherwise omit the field. Run this with Bash, with the payload filled in:
+8. Pipe the merged payload into \`appendTask.ts\`, combining the user-settled \`title\`, \`userDescription\`, \`goal\`, \`hasTests\`, \`tests\`, \`schemaVersion\`, \`problemSolvedByTask\`, \`notInScope\`, and optional \`chainGoal\` with the workflow's \`files\`, \`createsFiles\`, \`description\`, \`difficulty\`, and \`blockedBy\`. Populate \`userDescription\` with the task description verbatim, exactly as typed — never edit, summarize, or reword it. If the request names the source note/handoff file(s) the task came from (e.g. an \`update-tasks\` harvest), also include \`"handoffFilePaths": [<those repo-relative paths>]\` in the object; otherwise omit the field. Run this with Bash, with the payload filled in:
 
 node "${appendTaskPath}" <<'APPENDTASKEOF'
 <payload JSON here>

@@ -1,13 +1,15 @@
 // Rewrites skeleton/rendered prompt-shape markdown for every builder input combo; run after tweaking a prompt, then diff.
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { PreparedTask } from "./preparedTask.ts";
+import { loadPreparedTask, type PreparedTask } from "./preparedTask.ts";
 import { planChoices, planPrompt, planPromptSkeleton } from "./planPrompt.ts";
 import { fixConflictsCombos } from "./FixConflictsBodyEmitter.ts";
 import { reviewTestsCombos } from "./CodexTestReviewBodyEmitter.ts";
-import { planReviewPromptCombos, reviewQuestionCombos } from "./CodexReviewBodyEmitter.ts";
-import { implementPromptCombos } from "../implementTask/IMPLEMENT_TASK.ts";
-import { fixTaskTestsPromptCombos } from "../fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts";
+import { planReviewPrompt, planReviewPromptCombos, reviewQuestionCombos } from "./CodexReviewBodyEmitter.ts";
+import { buildImplementPrompt, implementPromptCombos } from "../implementTask/IMPLEMENT_TASK.ts";
+import { buildFixTaskTestsPrompt, fixTaskTestsPromptCombos } from "../fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts";
+import { writeTaskBriefFile } from "../../shared/prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { suiteFixPromptCombos } from "../fixTheCodebaseForSuite/FIX_THE_CODEBASE_FOR_SUITE.ts";
 
 const OUT_ROOT = fileURLToPath(new URL("../../../plans/prompt-shapes", import.meta.url));
@@ -67,7 +69,23 @@ const BUILDERS: Record<string, () => Combo[]> = {
     suiteFixPrompt: suiteFixPromptCombos,
 };
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// `node dumpPromptShapes.ts <N>`: renders the task-driven prompts for real open task N into plans/prompt-shapes/task-N/.
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== undefined) {
+    const taskNumber = Number(process.argv[2]);
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url)).replace(/\/$/, "");
+    const record = readTaskFile(resolveTaskFiles(repoRoot).tasksPath).find((entry) => entry.taskNumber === taskNumber);
+    if (record === undefined) throw new Error(`task ${taskNumber} not found in tasks.json`);
+    const briefFile = writeTaskBriefFile(record, repoRoot);
+    const task = loadPreparedTask(taskNumber, repoRoot, repoRoot);
+    const dir = `${OUT_ROOT}/task-${taskNumber}`;
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    renameSync(briefFile, `${dir}/brief.md`);
+    writeFileSync(`${dir}/planPrompt.md`, planPrompt(task));
+    writeFileSync(`${dir}/planReviewPrompt.md`, planReviewPrompt(task));
+    writeFileSync(`${dir}/implementPrompt.md`, buildImplementPrompt(task, "npx tsc --noEmit", 3));
+    writeFileSync(`${dir}/fixTaskTestsPrompt.md`, buildFixTaskTestsPrompt(task));
+} else if (process.argv[1] === fileURLToPath(import.meta.url)) {
     rmSync(OUT_ROOT, { recursive: true, force: true });
     for (const [builder, combos] of Object.entries(BUILDERS)) {
         for (const combo of combos()) {

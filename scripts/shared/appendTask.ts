@@ -16,6 +16,7 @@ export type NewTaskPayload = {
     problemSolvedByTask?: string;
     chainGoal?: string[];
     files?: string[];
+    createsFiles?: string[];
     description?: string;
     difficulty?: number;
     blockedBy?: { taskNumber: number; reason: string }[];
@@ -57,6 +58,9 @@ export function buildTaskEntry(payload: NewTaskPayload, taskNumber: number, comm
     // }
     entry.modifiableFiles = payload.files ?? [];
     entry.readOnlyFiles = ["*"];
+    if (payload.createsFiles && payload.createsFiles.length > 0) {
+        entry.createsFiles = payload.createsFiles;
+    }
     entry.schemaVersion = payload.schemaVersion;
     entry.hasTests = payload.hasTests;
     entry.tests = payload.tests;

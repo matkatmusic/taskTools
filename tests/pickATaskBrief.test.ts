@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { pickATaskBrief } from "../scripts/pick-a-task/pickATaskBrief.ts";
 
 // The commit whose SKILL.md still carried the body inline — the source text this script copied.
@@ -45,7 +48,8 @@ test("brief reproduces the pre-refactor skill body byte-for-byte once its substi
     )
     .replaceAll("${CLAUDE_PLUGIN_ROOT}/scripts/getTaskDetails.ts", getTaskDetailsPath)
     .replaceAll("${CLAUDE_PLUGIN_ROOT}", repoRoot)
-    .replaceAll("$ARGUMENTS", argsValue);
+    .replaceAll("$ARGUMENTS", argsValue)
+    .replace('[<N,...>] valid"', '[<N,...>]"');
   assert.equal(pickATaskBrief(argsValue, openTasks, blockedStatus), expected);
 });
 
@@ -60,6 +64,19 @@ test("script reads arguments from stdin and embeds the live checkBlockers.ts out
   const expectedStatus = execFileSync("node", [checkBlockersPath], { encoding: "utf8" }).trimEnd();
   const output = execFileSync("node", [scriptPath], { input: `${argsValue}\n`, encoding: "utf8" });
   assert.match(output, new RegExp(`Blocked status: ${expectedStatus.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+});
+
+test("script leaves tasks with an active run out of the open-task list", () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "pick-a-task-"));
+  const tasks = [
+    { taskNumber: 1, title: "being worked", run: { active: true, worktree: null, leaseRunId: null, history: [] } },
+    { taskNumber: 2, title: "waiting" },
+  ];
+  writeFileSync(join(projectRoot, "tasks.json"), JSON.stringify(tasks));
+  writeFileSync(join(projectRoot, "completedTasks.json"), "[]");
+  const output = execFileSync("node", [scriptPath], { cwd: projectRoot, input: "1\n", encoding: "utf8" });
+  assert.match(output, /OPEN 2: waiting/);
+  assert.doesNotMatch(output, /OPEN 1: being worked/);
 });
 
 test("script fails loudly rather than emitting a brief that points nowhere", () => {

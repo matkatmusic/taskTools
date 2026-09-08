@@ -13,6 +13,7 @@
   ],
   "description": "<only the agent's derived understanding gathered while writing the task: file paths, function names, root-cause findings, constraints, and decisions; must not restate the raw prompt; under ten sentences; no line numbers — they go stale>",
   "files": ["<repo-relative path this task will touch>"],
+  "createsFiles": ["<repo-relative path this task creates; the pipeline stops if a path in files is absent and not listed here; omit when empty>"],
   "schemaVersion": "1.0.1",
   "hasTests": <true when the task needs tests written for it, false when the user skips them>,
   "tests": "<the user's example test as prose or pseudocode when hasTests is true; the empty string when it is false>",

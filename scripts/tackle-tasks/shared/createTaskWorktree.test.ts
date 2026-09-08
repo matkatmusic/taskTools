@@ -72,6 +72,42 @@ test("test_createTaskWorktree_createsARealWorktreeOnTheTasksBranchWithSubmodules
     assert.ok(existsSync(join(output.worktree, "vendor", "seed.txt")));
 });
 
+test("test_createTaskWorktree_populatesASubmoduleWhoseGitlinkTheRemoteDoesNotHaveYet", () => {
+    // Setup: vendor gains a nested submodule; both vendor and the nested one hold an unpushed commit that the gitlinks name.
+    const { root, submoduleOrigin } = makeProjectRootWithLocalSubmodule();
+    const vendor = join(root, "vendor");
+    git(vendor, "config", "user.email", "test@example.com");
+    git(vendor, "config", "user.name", "Test");
+    const innerOrigin = mkdtempSync(join(tmpdir(), "createTaskWorktree-inner-"));
+    git(innerOrigin, "init", "-q");
+    git(innerOrigin, "config", "user.email", "test@example.com");
+    git(innerOrigin, "config", "user.name", "Test");
+    git(innerOrigin, "commit", "-q", "--allow-empty", "-m", "seed");
+    git(vendor, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendor, "commit", "-q", "-m", "add inner");
+    const inner = join(vendor, "inner");
+    git(inner, "config", "user.email", "test@example.com");
+    git(inner, "config", "user.name", "Test");
+    git(inner, "commit", "-q", "--allow-empty", "-m", "inner unpushed");
+    git(vendor, "add", "inner");
+    git(vendor, "commit", "-q", "-m", "vendor unpushed: bump inner gitlink");
+    git(root, "add", "vendor");
+    git(root, "commit", "-q", "-m", "bump vendor gitlink to unpushed commit");
+    const vendorGitlink = git(root, "rev-parse", "HEAD:vendor").trim();
+    const innerGitlink = git(vendor, "rev-parse", "HEAD:inner").trim();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: ["fileA.txt"] }]);
+    claimTask(1, "run-a", root);
+
+    // Test action: create the task worktree.
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: both submodules sit on their unpushed commits and still name their real remotes.
+    assert.equal(git(join(output.worktree, "vendor"), "rev-parse", "HEAD").trim(), vendorGitlink);
+    assert.equal(git(join(output.worktree, "vendor", "inner"), "rev-parse", "HEAD").trim(), innerGitlink);
+    assert.equal(git(join(output.worktree, "vendor"), "remote", "get-url", "origin").trim(), submoduleOrigin);
+    assert.equal(git(join(output.worktree, "vendor", "inner"), "remote", "get-url", "origin").trim(), innerOrigin);
+});
+
 test("test_createTaskWorktree_recordsTheWorktreePathOnTheActiveRun", () => {
     // Setup: a real repo, an active claimed run.
     const { root } = makeProjectRootWithLocalSubmodule();
@@ -88,9 +124,7 @@ test("test_createTaskWorktree_recordsTheWorktreePathOnTheActiveRun", () => {
 });
 
 test("test_createTaskWorktree_rollsBackTheWorktreeAndLeaseWhenTaskStateRecordingFails", () => {
-    // Setup: a claimed run "run-a", but createTaskWorktree is invoked with an unrelated runId
-    // "run-b" so updateCurrentTaskRun's expectedRunId check fails after the real worktree and
-    // lease already exist on disk.
+    // Setup: a claimed run "run-a", but createTaskWorktree is invoked with an unrelated runId "run-b" so updateCurrentTaskRun's expectedRunId check fails after the real worktree and lease already exist on disk.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -110,8 +144,7 @@ test("test_createTaskWorktree_rollsBackTheWorktreeAndLeaseWhenTaskStateRecording
 });
 
 test("test_createTaskWorktree_retainsTheLeaseAndExactJournalWhenRemovalFails", () => {
-    // Setup: same task-state mismatch as above, but rollback's own worktree/branch removal is
-    // sabotaged (simulating a real `git worktree remove` failure).
+    // Setup: same task-state mismatch as above, but rollback's own worktree/branch removal is sabotaged (simulating a real `git worktree remove` failure).
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -140,9 +173,7 @@ test("test_createTaskWorktree_retainsTheLeaseAndExactJournalWhenRemovalFails", (
 });
 
 test("test_createTaskWorktree_neverTouchesAnotherOwnersLeaseWorktreeOrBranchDuringRollback", () => {
-    // Setup: same task-state mismatch, but before rollback re-reads the lease, another owner
-    // has legitimately taken it over (the F11 finding: the old code released this run's lease
-    // and then deleted the worktree anyway, destroying the new owner's claim).
+    // Setup: same task-state mismatch, but before rollback re-reads the lease, another owner has legitimately taken it over (the F11 finding: the old code released this run's lease and then deleted the worktree anyway, destroying the new owner's claim).
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -170,10 +201,7 @@ test("test_createTaskWorktree_neverTouchesAnotherOwnersLeaseWorktreeOrBranchDuri
 });
 
 test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfterWorktreeCreation", () => {
-    // Setup: a real repo with a real submodule, and an active claimed run for task 1. Break the
-    // submodule's only source of objects (both the cached copy and its origin) so `git worktree
-    // add` itself still succeeds, but the submodule-init step inside createWorktreeForGroup
-    // fails afterward.
+    // Setup: a real repo with a real submodule, and an active claimed run for task 1. Break the submodule's only source of objects (both the cached copy and its origin) so `git worktree add` itself still succeeds, but the submodule-init step inside createWorktreeForGroup fails afterward.
     const { root, submoduleOrigin } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -184,8 +212,7 @@ test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfter
     // Test action + verification: the broken submodule init throws.
     assert.throws(() => createTaskWorktree(1, "run-a", root));
 
-    // Verification: same full-rollback contract as a task-state recording failure — nothing
-    // this attempt created (worktree, branch, lease, journal) survives.
+    // Verification: same full-rollback contract as a task-state recording failure — nothing this attempt created (worktree, branch, lease, journal) survives.
     assert.ok(!existsSync(expectedWorktree));
     assert.ok(!existsSync(taskWorktreeLeasePath(expectedWorktree)));
     assert.ok(!existsSync(taskWorktreeCreateJournalPath(expectedWorktree)));
@@ -195,14 +222,9 @@ test("test_createTaskWorktree_rollsBackFullyWhenCreateWorktreeForGroupFailsAfter
     assert.equal(state.leaseRunId, null);
 });
 
-// F1: fault injection for a journal retained by an earlier call that died AFTER task state was
-// written but BEFORE it deleted its own journal - the creation genuinely finished.
+// F1: fault injection for a journal retained by an earlier call that died AFTER task state was written but BEFORE it deleted its own journal - the creation genuinely finished.
 test("test_createTaskWorktree_recoversALateCompletedJournalWithoutTouchingTheGoodWorktree", () => {
-    // Setup: a real worktree/lease created and task state recorded for real (the creation truly
-    // finished), then a journal is hand-written back to simulate death right before its unlink.
-    // Before the fix, createTaskWorktree never looked for a retained journal at all: it would
-    // overwrite this one, collide with the existing lease (EEXIST), and its own rollback would
-    // then DESTROY this already-good worktree/branch before rethrowing - real data loss.
+    // Setup: a real worktree/lease created and task state recorded for real (the creation truly finished), then a journal is hand-written back to simulate death right before its unlink.  Before the fix, createTaskWorktree never looked for a retained journal at all: it would overwrite this one, collide with the existing lease (EEXIST), and its own rollback would then DESTROY this already-good worktree/branch before rethrowing - real data loss.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -234,13 +256,9 @@ test("test_createTaskWorktree_recoversALateCompletedJournalWithoutTouchingTheGoo
     assert.equal(state.leaseRunId, "run-a");
 });
 
-// F1: fault injection for a journal retained by an earlier call that died with a real
-// worktree/branch/lease created, but BEFORE task state was ever written.
+// F1: fault injection for a journal retained by an earlier call that died with a real worktree/branch/lease created, but BEFORE task state was ever written.
 test("test_createTaskWorktree_recoversARetainedJournalWithNoTaskStateRecordedYet", () => {
-    // Setup: a real worktree/lease exist and a journal is hand-written to match, but
-    // updateCurrentTaskRun never ran - task.run.worktree is still null. Before the fix this call
-    // would overwrite the journal, collide with the existing lease (EEXIST), trigger rollback,
-    // and throw instead of transparently recovering in one call.
+    // Setup: a real worktree/lease exist and a journal is hand-written to match, but updateCurrentTaskRun never ran - task.run.worktree is still null. Before the fix this call would overwrite the journal, collide with the existing lease (EEXIST), trigger rollback, and throw instead of transparently recovering in one call.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -268,15 +286,9 @@ test("test_createTaskWorktree_recoversARetainedJournalWithNoTaskStateRecordedYet
     assert.equal(state.leaseRunId, "run-a");
 });
 
-// F1: fault injection for a retained journal whose named run is no longer the physical lease
-// owner - a live third owner now legitimately holds it and must never be touched.
+// F1: fault injection for a retained journal whose named run is no longer the physical lease owner - a live third owner now legitimately holds it and must never be touched.
 test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhysicalLease", () => {
-    // Setup: a completed creation under run-a, then a journal is hand-written back naming run-a
-    // (simulating a retained journal), and the physical lease is separately overwritten to name
-    // run-c (a live third owner). Before the fix, createTaskWorktree would blindly overwrite the
-    // retained journal with a new one naming the CALLING run before it ever inspected the lease -
-    // corrupting the exact ownership record Phase 8 reconciliation depends on - even though its
-    // own EEXIST-triggered rollback happens to also refuse to touch run-c's worktree here.
+    // Setup: a completed creation under run-a, then a journal is hand-written back naming run-a (simulating a retained journal), and the physical lease is separately overwritten to name run-c (a live third owner). Before the fix, createTaskWorktree would blindly overwrite the retained journal with a new one naming the CALLING run before it ever inspected the lease - corrupting the exact ownership record Phase 8 reconciliation depends on - even though its own EEXIST-triggered rollback happens to also refuse to touch run-c's worktree here.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -298,21 +310,15 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenAThirdOwnerHoldsThePhys
     assert.equal(leaseOwner.runId, "run-c");
     assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
 
-    // Verification: the journal is retained UNCHANGED - still naming its original run-a, never
-    // overwritten with the new caller's identity before the conflict was discovered.
+    // Verification: the journal is retained UNCHANGED - still naming its original run-a, never overwritten with the new caller's identity before the conflict was discovered.
     assert.ok(existsSync(journalPath));
     const journal = JSON.parse(readFileSync(journalPath, "utf8"));
     assert.equal(journal.runId, "run-a");
 });
 
-// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the current call's
-// runId was never compared with the retained journal's runId, so a call for run B could consume
-// a completed journal for run A and return run A's worktree without ever acquiring ownership for
-// run B. Before the fix this test's assert.throws would fail: run-a's completed journal would be
-// silently adopted (unlinked and returned) by the call made for run-b.
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: the current call's runId was never compared with the retained journal's runId, so a call for run B could consume a completed journal for run A and return run A's worktree without ever acquiring ownership for run B. Before the fix this test's assert.throws would fail: run-a's completed journal would be silently adopted (unlinked and returned) by the call made for run-b.
 test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithoutTouchingIt", () => {
-    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written
-    // back to simulate death right before its own unlink - a completed retained journal for run-a.
+    // Setup: task 1's creation genuinely completed under run-a, then a journal is hand-written back to simulate death right before its own unlink - a completed retained journal for run-a.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -326,8 +332,7 @@ test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithout
     // Test action + verification: a call under run-b must not adopt run-a's completed journal.
     assert.throws(() => createTaskWorktree(1, "run-b", root));
 
-    // Verification: run-a's worktree, branch and lease are all untouched - not returned to run-b
-    // and not destroyed.
+    // Verification: run-a's worktree, branch and lease are all untouched - not returned to run-b and not destroyed.
     assert.ok(existsSync(created.worktree));
     const leaseOwner = JSON.parse(readFileSync(taskWorktreeLeasePath(created.worktree), "utf8"));
     assert.equal(leaseOwner.runId, "run-a");
@@ -337,13 +342,9 @@ test("test_createTaskWorktree_refusesARetainedJournalOwnedByADifferentRunWithout
     assert.equal(journal.runId, "run-a");
 });
 
-// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching
-// the journal was accepted as proof of a finished creation even when the physical lease was
-// absent. Before the fix this test's assert.throws would fail: the mismatched state (task state
-// says leased, no lease file exists) would be silently treated as a completed creation.
+// Remediation for phase8-9-audit finding 1 / feedback-phase8-1 finding 1: task state matching the journal was accepted as proof of a finished creation even when the physical lease was absent. Before the fix this test's assert.throws would fail: the mismatched state (task state says leased, no lease file exists) would be silently treated as a completed creation.
 test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButThePhysicalLeaseIsMissing", () => {
-    // Setup: a real worktree/branch exist and task state is recorded to match, but the physical
-    // lease file is then removed - task state claims a lease that no longer physically exists.
+    // Setup: a real worktree/branch exist and task state is recorded to match, but the physical lease file is then removed - task state claims a lease that no longer physically exists.
     const { root } = makeProjectRootWithLocalSubmodule();
     seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
     claimTask(1, "run-a", root);
@@ -361,15 +362,13 @@ test("test_createTaskWorktree_refusesARetainedJournalWhenTaskStateMatchesButTheP
     // Test action + verification: state alone must not be trusted as proof of a finished creation.
     assert.throws(() => createTaskWorktree(1, "run-a", root));
 
-    // Verification: nothing is destroyed - the worktree and branch task state still claims are
-    // leased are left exactly as found, and the journal is retained.
+    // Verification: nothing is destroyed - the worktree and branch task state still claims are leased are left exactly as found, and the journal is retained.
     assert.ok(existsSync(worktree));
     assert.doesNotThrow(() => git(root, "rev-parse", "--verify", "refs/heads/task-1"));
     assert.ok(existsSync(journalPath));
 });
 
-// Task 24 (PRE-12): kills a real child process right after the named createWorktreeForGroup
-// step, so recovery is proven against a real process death, not a thrown error.
+// Task 24 (PRE-12): kills a real child process right after the named createWorktreeForGroup step, so recovery is proven against a real process death, not a thrown error.
 async function runCreateTaskWorktreeInChildAndKillAfter(
     root: string,
     taskNumber: number,

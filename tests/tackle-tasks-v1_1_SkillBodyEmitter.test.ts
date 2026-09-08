@@ -121,8 +121,8 @@ test("real lease mechanism: a whole-array prepare followed by a per-task re-prep
   execFileSync("git", ["-C", root, "remote", "add", "origin", "https://example.com/root.git"]);
 
   const tasks: TaskRecord[] = [
-    { taskNumber: 1, files: ["README.md"] } as TaskRecord,
-    { taskNumber: 2, files: ["README.md"] } as TaskRecord,
+    { taskNumber: 1, modifiableFiles: ["README.md"] } as TaskRecord,
+    { taskNumber: 2, modifiableFiles: ["README.md"] } as TaskRecord,
   ];
   try {
     // The old order: a whole-array prepare (what used to run unconditionally before the series loop)...
@@ -134,7 +134,7 @@ test("real lease mechanism: a whole-array prepare followed by a per-task re-prep
     );
 
     // Fixed order: a lone per-task prepare on a fresh worktree, no prior lease to collide with.
-    const solo: TaskRecord[] = [{ taskNumber: 3, files: ["README.md"] } as TaskRecord];
+    const solo: TaskRecord[] = [{ taskNumber: 3, modifiableFiles: ["README.md"] } as TaskRecord];
     assert.doesNotThrow(() => buildWorkflowArguments(root, "true", solo, "run-series-task-3"));
   } finally {
     rmSync(join(tmpdir(), "taskTools-wt", basename(root)), { recursive: true, force: true });
@@ -373,7 +373,7 @@ const makeWorkflowFixtureRepo = (taskNumber: number) => {
   mkdirSync(join(worktreePath, "plans"), { recursive: true });
   symlinkSync(join(REPO_ROOT_FOR_WORKFLOW, "scripts"), join(worktreePath, "scripts"));
   mkdirSync(join(root, ".taskTools"), { recursive: true });
-  const taskRecord = { taskNumber, title: "fixture", files: ["taskfile.txt"], blockedBy: [] };
+  const taskRecord = { taskNumber, title: "fixture", modifiableFiles: ["taskfile.txt"], blockedBy: [] };
   writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([taskRecord]));
   writeFileSync(join(root, ".taskTools", "completedTasks.json"), "[]");
   mkdirSync(join(worktreePath, ".taskTools"), { recursive: true });
