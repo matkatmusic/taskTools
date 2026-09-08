@@ -15,13 +15,12 @@ If any file is missing or unreadable, stop immediately without reviewing any oth
 
 ## MISSING-FILE RESPONSE
 
-If any required file is missing or unreadable, return only the following JSON:
+If any required file is missing or unreadable, run:
 ```
-`${readFileSync(REVIEW_TESTS_ERROR_TEMPLATE_PATH, "utf8").trim()}`
+node `${MISSING_TEST_FILES_REVIEW_SCRIPT}` <exact path you could not read> [<exact path you could not read> ...]
 ```
+and return that command's output exactly as your final message.
 This error response overrides the normal review-tests JSON template.
-Set `"issues"` to `[]` in that JSON.
-Set `"testsThatHoldUp"` to `[]` in that JSON.
 
 ## WHAT YOU READ
 

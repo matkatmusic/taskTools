@@ -12,6 +12,7 @@ import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpu
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
 const REVIEW_TESTS_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-error-template.json", import.meta.url));
+const MISSING_TEST_FILES_REVIEW_SCRIPT = fileURLToPath(new URL("./missingTestFilesReview.ts", import.meta.url));
 
 // A generated artifact, matching plans/implementation-diff-*.patch in .gitignore.
 const diffFile = (t: PreparedTask, root: string) => `${root}/plans/implementation-diff-${t.number}.patch`;
@@ -223,6 +224,7 @@ export type ReviewQuestionChoices = { isRecheck: boolean; hasPreExistingTestFile
 export type ReviewQuestionVars = {
     number: string;
     errorTemplate: string;
+    missingFileReviewScript: string;
     reviewedPathsList: string;
     diffPath: string;
     reviewedPathsWithReviewFileList: string;
@@ -278,13 +280,12 @@ If any file is missing or unreadable, stop immediately without reviewing any oth
         when: () => true,
         render: (v) => `## MISSING-FILE RESPONSE
 
-If any required file is missing or unreadable, return only the following JSON:
+If any required file is missing or unreadable, run:
 \`\`\`
-${v.errorTemplate}
+node ${v.missingFileReviewScript} <exact path you could not read> [<exact path you could not read> ...]
 \`\`\`
+and return that command's output exactly as your final message.
 This error response overrides the normal review-tests JSON template.
-Set \`"issues"\` to \`[]\` in that JSON.
-Set \`"testsThatHoldUp"\` to \`[]\` in that JSON.
 
 `,
     },
@@ -478,6 +479,7 @@ export function reviewQuestionChoices(t: PreparedTask, preExistingTestFiles: str
 export const REVIEW_QUESTION_SKELETON_VARS: ReviewQuestionVars = {
     number: "`${t.number}`",
     errorTemplate: '`${readFileSync(REVIEW_TESTS_ERROR_TEMPLATE_PATH, "utf8").trim()}`',
+    missingFileReviewScript: "`${MISSING_TEST_FILES_REVIEW_SCRIPT}`",
     reviewedPathsList: '`${reviewedPaths(t, diffPath).map((path) => `- ${path}`).join("\\n")}`',
     diffPath: "`${diffPath}`",
     reviewedPathsWithReviewFileList: '`${[...reviewedPaths(t, diffPath), t.testReviewFile].map((path) => `- ${path}`).join("\\n")}`',
@@ -502,6 +504,7 @@ export function reviewTestsQuestion(t: PreparedTask, diffPath: string, preExisti
     return renderReviewQuestionSections(reviewQuestionChoices(t, preExistingTestFiles), {
         number: String(t.number),
         errorTemplate: readFileSync(REVIEW_TESTS_ERROR_TEMPLATE_PATH, "utf8").trim(),
+        missingFileReviewScript: MISSING_TEST_FILES_REVIEW_SCRIPT,
         reviewedPathsList: reviewedPaths(t, diffPath).map((path) => `- ${path}`).join("\n"),
         diffPath,
         reviewedPathsWithReviewFileList: [...reviewedPaths(t, diffPath), t.testReviewFile].map((path) => `- ${path}`).join("\n"),
@@ -647,6 +650,7 @@ export function reviewTestsCombos(): Combo[] {
             const vars: ReviewQuestionVars = {
                 number: String(fakeTask.number),
                 errorTemplate: readFileSync(REVIEW_TESTS_ERROR_TEMPLATE_PATH, "utf8").trim(),
+                missingFileReviewScript: MISSING_TEST_FILES_REVIEW_SCRIPT,
                 reviewedPathsList: reviewedPaths(fakeTask, "/tmp/fake-worktree/plans/implementation-diff-99.patch").map((path) => `- ${path}`).join("\n"),
                 diffPath: "/tmp/fake-worktree/plans/implementation-diff-99.patch",
                 reviewedPathsWithReviewFileList: [...reviewedPaths(fakeTask, "/tmp/fake-worktree/plans/implementation-diff-99.patch"), fakeTask.testReviewFile].map((path) => `- ${path}`).join("\n"),
