@@ -93,7 +93,9 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     });
     const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
 
-    return `Launch every one of the following as a background workflow, in the same message, so they run concurrently:
+    return `First, call the Agent tool once: subagent_type "general-purpose", model "haiku", prompt "say ok". Wait for it. That call refreshes the agent registry so the fenced agent files written above are visible to the workflows; nothing else this turn does.
+
+Then launch every one of the following as a background workflow, in the same message, so they run concurrently:
 
 ${workflowLines.join("\n\n")}
 

@@ -82,7 +82,7 @@ test("test_buildWorkflowScript_loopsUntilTheWalkEndsOrFails", () => {
 test("test_buildWorkflowScript_returnsTheHookOutputAndThePromptThatMadeIt", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
     assert.match(script, /return \{ ok: true, ran, errors: \[\], prompt, outcome: result\.outcome \}/);
-    // Scoped to the walking loop: it must always return, never throw. The baked task-number guard above the loop throws on purpose.
+    // Scoped to the walking loop: it must always return, never throw; the guard above may throw.
     assert.doesNotMatch(script.slice(script.indexOf("while (true) {")), /throw new Error\(`/);
 });
 
@@ -128,7 +128,7 @@ test("test_buildWorkflowScript_carriesTheHookAgentOptionsIntoTheNextInput", () =
     assert.match(script, /^    input = \{ packetFile: result\.outcome\.payload, agent: result\.outcome\.agent \}$/m);
 });
 
-// An agent that answers with text instead of the hook output must not crash the loop and lose that text.
+// A text answer instead of hook output must not crash the loop or get lost.
 test("test_buildWorkflowScript_reportsATextAnswerInsteadOfSpreadingIt", () => {
     const script = buildWorkflowScript(1, REPO_STEPS_JSON);
     const textGuard = script.indexOf("if (typeof result === 'string') {");
