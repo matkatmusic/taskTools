@@ -77,7 +77,7 @@ test("test_resolveAgentOptions_usesTheTaskOverrideForThatBlockOnly", () => {
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
     const config = readConfig(stepsConfigPath);
     assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "custom-model", effort: "custom-effort", agentType: "task-1-implement-task" });
-    assert.deepEqual(findEntry(config, "PLAN_THE_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high" });
+    assert.deepEqual(findEntry(config, "PLAN_THE_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-1-plan-the-task" });
 });
 
 test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet", () => {
@@ -114,7 +114,7 @@ test("test_bandBlocks_areAllPromptBlocksInTheRepoConfig", () => {
     }
 });
 
-test("test_resolveAgentOptions_writesAFencedAgentFileForAFencedBandBlockOnly", () => {
+test("test_resolveAgentOptions_writesAFencedAgentFileForEveryBandBlock", () => {
     const stepsConfigPath = makeStepsConfig();
     const tasksFile = makeTasksFile([{ taskNumber: 1, difficulty: 4 }]);
     const projectRoot = dirname(tasksFile);
@@ -124,11 +124,13 @@ test("test_resolveAgentOptions_writesAFencedAgentFileForAFencedBandBlockOnly", (
     const agentFile = join(projectRoot, ".claude", "agents", "task-1-implement-task.md");
     const content = readFileSync(agentFile, "utf8");
     assert.match(content, /name: task-1-implement-task/);
-    assert.match(content, /"Bash\(git \*\)"/);
-    assert.match(content, /"Bash\(npm test\*\)"/);
+    // disallowedTools would strip Bash wholesale; the Bash hook filters commands instead.
+    assert.doesNotMatch(content, /disallowedTools/);
+    assert.match(content, /matcher: "Bash"\n      hooks:\n        - type: command\n          command: ".*agentBashHook\.ts\\""/);
     assert.match(content, /matcher: "Edit\|Write"/);
-    assert.match(content, /agentFenceHook\.ts\\" 1 /);
+    assert.match(content, /agentFenceHook\.ts\\" 1 \\".*tasks\.json\\" IMPLEMENT_TASK"/);
 
-    assert.equal(existsSync(join(projectRoot, ".claude", "agents", "plan-the-task.md")), false);
-    assert.equal(existsSync(join(projectRoot, ".claude", "agents", "task-1-plan-the-task.md")), false);
+    const plannerFile = join(projectRoot, ".claude", "agents", "task-1-plan-the-task.md");
+    assert.match(readFileSync(plannerFile, "utf8"), /agentFenceHook\.ts\\" 1 \\".*tasks\.json\\" PLAN_THE_TASK"/);
+    assert.equal(existsSync(join(projectRoot, ".claude", "agents", "task-1-codex-reviews-plan.md")), false);
 });
