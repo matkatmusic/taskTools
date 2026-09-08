@@ -42,7 +42,8 @@ test("test_buildImplementPrompt_citesNoCommitInvocationAndNoDataBlock", () => {
     const prompt = buildImplementPrompt(fakeTask, "npx tsc --noEmit", 3);
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/commitTaskWork\.ts/.test(prompt), false);
-    assert.match(prompt, /Never stage, commit, or run any git command/);
+    // task 51: the git prohibition is retired prose; the fenced agent's disallowedTools denies Bash(git *) instead.
+    assert.equal(/Never stage, commit, or run any git command/.test(prompt), false);
 });
 
 test("test_buildImplementPrompt_tellsTheImplementerToObeyTheSectionCodexNotes", () => {
@@ -72,7 +73,7 @@ test("test_buildImplementPrompt_tellsTheAgentToReturnMessageAndAdditionalData", 
 
 test("test_buildImplementPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
     const skeleton = buildImplementPromptSkeleton({ hasCodexNotes: true, testsField: "skip" });
-    for (const header of ["## NOTE FOR THIS RUN", "## YOUR JOB", "## BEFORE YOU IMPLEMENT", "## WHAT TO READ", "## OBEY THE REVIEW NOTES", "## WHAT YOU MAY EDIT", "## DO NOT CREATE TESTS", "## HOW TO IMPLEMENT", "## NEVER COMMIT", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`"]) {
+    for (const header of ["## NOTE FOR THIS RUN", "## YOUR JOB", "## BEFORE YOU IMPLEMENT", "## WHAT TO READ", "## OBEY THE REVIEW NOTES", "## WHAT YOU MAY EDIT", "## DO NOT CREATE TESTS", "## HOW TO IMPLEMENT", "## FORBIDDEN ACTIONS", "`${whatToReturnSection(...)}`"]) {
         assert.ok(skeleton.includes(header), `missing "${header}"`);
     }
     assert.equal(skeleton.includes("## TESTS\n"), false);

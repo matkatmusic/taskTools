@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/tackle-tasks/shared/resolveAgentOptions.ts.
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -54,16 +54,16 @@ test("test_resolveAgentOptions_picksTheBandWithTheLargestMinDifficultyNotAboveTh
     ]);
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-1-implement-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 2);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh", agentType: "task-2-implement-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 3);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh", agentType: "task-3-implement-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 4);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium", agentType: "task-4-implement-task" });
 });
 
 test("test_resolveAgentOptions_usesTheTaskOverrideForThatBlockOnly", () => {
@@ -74,7 +74,7 @@ test("test_resolveAgentOptions_usesTheTaskOverrideForThatBlockOnly", () => {
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
     const config = readConfig(stepsConfigPath);
-    assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "custom-model", effort: "custom-effort" });
+    assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "custom-model", effort: "custom-effort", agentType: "task-1-implement-task" });
     assert.deepEqual(findEntry(config, "PLAN_THE_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high" });
 });
 
@@ -100,4 +100,23 @@ test("test_bandBlocks_areAllPromptBlocksInTheRepoConfig", () => {
     for (const box of BAND_BLOCKS) {
         assert.equal(findEntry(config, box).producesPrompt, true, `${box} must be producesPrompt: true`);
     }
+});
+
+test("test_resolveAgentOptions_writesAFencedAgentFileForAFencedBandBlockOnly", () => {
+    const stepsConfigPath = makeStepsConfig();
+    const tasksFile = makeTasksFile([{ taskNumber: 1, difficulty: 4 }]);
+    const projectRoot = dirname(tasksFile);
+
+    resolveAgentOptions(stepsConfigPath, tasksFile, 1);
+
+    const agentFile = join(projectRoot, ".claude", "agents", "task-1-implement-task.md");
+    const content = readFileSync(agentFile, "utf8");
+    assert.match(content, /name: task-1-implement-task/);
+    assert.match(content, /"Bash\(git \*\)"/);
+    assert.match(content, /"Bash\(npm test\*\)"/);
+    assert.match(content, /matcher: "Edit\|Write"/);
+    assert.match(content, /agentFenceHook\.ts\\" 1 /);
+
+    assert.equal(existsSync(join(projectRoot, ".claude", "agents", "plan-the-task.md")), false);
+    assert.equal(existsSync(join(projectRoot, ".claude", "agents", "task-1-plan-the-task.md")), false);
 });

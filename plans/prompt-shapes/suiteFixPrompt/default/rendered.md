@@ -43,11 +43,7 @@ If fixing the cause needs an edit outside the WHAT YOU MAY EDIT list, make no ed
 You are forbidden from doing any of the following actions:
 - weaken, delete, skip, or stub out a test to make a failure disappear;
 - edit a test file at all;
-- edit any path not listed under WHAT YOU MAY EDIT;
-- add scope or a refactor no listed failure calls for;
-- run the full suite;
-- stage or commit anything by hand;
-- force-push or hard-reset anything you did not create.
+- add scope or a refactor no listed failure calls for.
 
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
 Leaving a failure unaddressed is not a failure.

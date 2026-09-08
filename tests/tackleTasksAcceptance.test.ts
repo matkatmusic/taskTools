@@ -113,7 +113,7 @@ test("test_driveRun_dispatchesToTheBoxThatActuallyStoppedNotTheOneThePassStarted
     // Scenario: task 1 walks from PREAMBLE_STATUS_CHECK through several green preamble boxes before PLAN_THE_TASK prompts.
     const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt"], difficulty: 1 });
     let sawPlanPrompt = false;
-    // The scripted plan answer alone does not resolve the prompt after it (IMPLEMENT_TASK), so the driver throws naming that box — proof it dispatched to the box that actually stopped, not to PREAMBLE_STATUS_CHECK.
+    // The driver throws naming IMPLEMENT_TASK, proving it dispatched to the box that actually stopped, not PREAMBLE_STATUS_CHECK.
     assert.throws(() => driveRun(1, tasksFile, root, {
         PLAN_THE_TASK: () => {
             sawPlanPrompt = true;
@@ -168,7 +168,7 @@ test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () =>
     const implementOutcome = outcomes.find((o) => o.next?.endsWith("::IMPLEMENT_TASK"));
     const codexOutcome = outcomes.find((o) => o.next?.endsWith("::CODEX_REVIEWS_PLAN"));
     const commitOutcome = outcomes.find((o) => o.next?.endsWith("::COMMIT_IMPLEMENTATION_IF_NEEDED"));
-    assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(implementOutcome?.agent, { model: "claude-sonnet-5[1m]", effort: "xhigh", agentType: "task-10-implement-task" });
     assert.deepEqual(codexOutcome?.agent, { model: "sonnet", effort: "high" });
     assert.deepEqual(commitOutcome?.agent, { model: "sonnet", effort: "high" });
 });
@@ -386,7 +386,7 @@ test("test_acceptance_resumesAfterAnInterruptedCleanup", async () => {
         input = JSON.stringify({ packetFile: result.outcome!.payload });
     }
 
-    // Test action: spawn the final pass as a real child process, so it can be killed mid-flight instead of run to completion.
+    // Spawns the final pass as a real child process so it can be killed mid-flight.
     const child = spawn("node", ["--no-inspect", RUN_STEP_HOOK_PATH], { cwd: root, stdio: ["pipe", "ignore", "ignore"] });
     child.stdin.end(JSON.stringify({ hook_event_name: "SubagentStart", prompt: `/run-step ${box} ${input}` }));
     // Setup: poll the worktree's own checkpoint until the walk reaches CLEAN_UP_WORKTREES, then kill it right there.

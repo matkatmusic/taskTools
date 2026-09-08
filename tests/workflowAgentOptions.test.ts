@@ -99,7 +99,7 @@ test("test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride
     assert.equal(calls[1]!.options.model, "claude-opus-4-8[1m]");
     assert.equal(calls[1]!.options.effort, "high");
     const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${IMPLEMENT_KEY} `);
-    assert.deepEqual(input.agent, { model: "claude-opus-4-8[1m]", effort: "high" });
+    assert.deepEqual(input.agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-7-implement-task" });
 });
 
 test("test_workflow_inputAndAgentCallCarryTheTaskOverride", async () => {
@@ -120,7 +120,7 @@ test("test_workflow_inputAndAgentCallCarryTheTaskOverride", async () => {
     assert.equal(calls[1]!.options.model, "claude-sonnet-5[1m]");
     assert.equal(calls[1]!.options.effort, "medium");
     const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${IMPLEMENT_KEY} `);
-    assert.deepEqual(input.agent, { model: "claude-sonnet-5[1m]", effort: "medium" });
+    assert.deepEqual(input.agent, { model: "claude-sonnet-5[1m]", effort: "medium", agentType: "task-7-implement-task" });
 });
 
 test("test_workflow_labelsTheWorkerCallWithThePromptBlock", async () => {

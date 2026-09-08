@@ -218,25 +218,23 @@ ${v.absolutePaths}
     {
         name: "WHAT YOU MAY EDIT: skip",
         when: (c) => c.testsField === "skip",
+        // Retired (task 51): the fenced PreToolUse hook now denies editing unlisted files.
         render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPathMap}
 - the implementation log at \`${v.notesFile}\`
-
-You are forbidden from editing any other file not listed above.
 
 ${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
     },
     {
         name: "WHAT YOU MAY EDIT: tdd",
         when: (c) => c.testsField === "tdd",
+        // Retired (task 51): the fenced PreToolUse hook now denies editing unlisted files.
         render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPathMap}
 - the implementation log at \`${v.notesFile}\`
 - the test file paired with each owned file, at \`${v.repoRoot}/tests/<owned file's base name>.test.ts\`
-
-You are forbidden from editing any other file not listed above.
 
 ${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
     },
@@ -266,29 +264,24 @@ Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that sat
     {
         name: "HOW TO IMPLEMENT: skip",
         when: (c) => c.testsField === "skip",
+        // Retired (task 51): the fenced disallowedTools now denies running the full suite.
         render: () => `## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
 2. Run the verification command each plan section names.
-
-Never run the full suite.
-That gate belongs to a separate phase, not to you.
 
 `,
     },
     {
         name: "HOW TO IMPLEMENT: tdd",
         when: (c) => c.testsField === "tdd",
-        // Retired: typecheck instruction removed; a SubagentStop hook runs typecheck instead.
+        // Retired: typecheck now runs via SubagentStop hook; disallowedTools also denies running the full suite.
         render: (v) => `## HOW TO IMPLEMENT
 
 1. Implement every section of the plan, in the order the \`sections\` array gives them, editing only the paths listed above.
 2. Run each paired test file with \`(cd -- '${v.repoRoot}' && node --test <absolute test path>)\`.
 3. While any test fails, fix the cause, then repeat step 2.
 Stop after ${v.maxFixRounds} rounds.
-
-Never run the full suite.
-That gate belongs to a separate phase, not to you.
 
 `,
     },
@@ -311,27 +304,26 @@ That gate belongs to a separate phase, not to you.
     //
     // `,
     // },
-    {
-        name: "NEVER COMMIT",
-        when: () => true,
-        render: () => `## NEVER COMMIT
-
-Never stage, commit, or run any git command.
-A later step commits your work for you.
-
-`,
-    },
+    // Retired (task 51): the section's entire content was the git prohibition; the fenced agent's disallowedTools now denies Bash(git *).
+    // {
+    //     name: "NEVER COMMIT",
+    //     when: () => true,
+    //     render: () => `## NEVER COMMIT
+    //
+    // Never stage, commit, or run any git command.
+    // A later step commits your work for you.
+    //
+    // `,
+    // },
     {
         name: "FORBIDDEN ACTIONS: skip",
         when: (c) => c.testsField === "skip",
+        // Retired (task 51): "edit anything outside..." (the fenced hook denies it), "run the full suite" and "stage or commit anything, or run any git command" (the fenced disallowedTools deny both).
         render: () => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
-- edit anything outside the paths listed under WHAT YOU MAY EDIT;
 - add scope or a refactor the plan does not call for;
 - redecide anything the plan already decided;
-- run the full suite;
-- stage or commit anything, or run any git command;
 - return \`implemented: true\` while a plan section's verification command fails.
 
 Returning \`implemented: false\` is a correct outcome when the plan is impossible as written.
@@ -341,14 +333,12 @@ Returning \`implemented: false\` is a correct outcome when the plan is impossibl
     {
         name: "FORBIDDEN ACTIONS: tdd",
         when: (c) => c.testsField === "tdd",
+        // Retired (task 51): "edit anything outside..." (the fenced hook denies it), "run the full suite" and "stage or commit anything, or run any git command" (the fenced disallowedTools deny both).
         render: (v) => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
-- edit anything outside the paths listed under WHAT YOU MAY EDIT;
 - add scope or a refactor the plan does not call for;
 - redecide anything the plan already decided;
-- run the full suite;
-- stage or commit anything, or run any git command;
 - attempt more than ${v.maxFixRounds} fix rounds;
 - return \`implemented: true\` while a test fails or the typecheck reports an error.
 A test listed in \`.taskTools/knownFailingTests.json\` (the \`npm run test:baseline\` baseline) does not count as failing.

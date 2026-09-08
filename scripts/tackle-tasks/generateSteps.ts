@@ -53,7 +53,7 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 );
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
-export type AgentOptions = { model: string; effort: string };
+export type AgentOptions = { model: string; effort: string; agentType?: string };
 export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
 export type StepConfig = Record<string, StepConfigEntry[]>;
