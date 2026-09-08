@@ -1,5 +1,5 @@
 // relatedTests.ts: jot's post_tool_batch_test_hook.py, ported to batch by owning occurrence.
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { getOwningOccurrence } from "../shared/repositoryGraph.ts";
@@ -173,6 +173,8 @@ function main(): void {
     // if (!hookInput.cwd) throw new Error("relatedTests hook input requires cwd");
     const filesByRoot = new Map<string, string[]>();
     for (const file of editedFiles) {
+        // A scratchpad or /tmp edit has no repo and no related tests; skip it.
+        if (spawnSync("git", ["-C", dirname(file), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).status !== 0) continue;
         const root = execFileSync("git", ["-C", dirname(file), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
         const filesInRoot = filesByRoot.get(root) ?? [];
         filesInRoot.push(file);

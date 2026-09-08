@@ -6,6 +6,8 @@ const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/run-log\.json$/, "
 
 // Expects the caller's shell to have set REVIEW_PROMPT, REVIEW_FILE and CODEX_LOG.
 export function codexExecCommand(schemaPath: string): string {
+    // Test switch: a set TASKTOOLS_FORCE_CODEX_FAIL renders a failing command, so the fallback reviewer blocks run.
+    if (process.env.TASKTOOLS_FORCE_CODEX_FAIL) return `echo "codex forced to fail: TASKTOOLS_FORCE_CODEX_FAIL is set" >>"$CODEX_LOG"; false`;
     return `perl -e 'alarm shift; exec @ARGV' 300 \\
   codex exec \\
     -m gpt-5.6-terra -c 'model_reasoning_effort="medium"' \\

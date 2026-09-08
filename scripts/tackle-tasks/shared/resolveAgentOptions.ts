@@ -1,5 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const AGENT_FENCE_HOOK = fileURLToPath(new URL("../../hooks/agentFenceHook.ts", import.meta.url));
 import { readTaskFile } from "../../shared/taskFiles.ts";
 import type { AgentOptions, StepConfig } from "../generateSteps.ts";
 
@@ -34,7 +37,8 @@ function writeFencedAgentFile(tasksFile: string, taskNumber: number, box: string
     const name = `task-${taskNumber}-${box.toLowerCase().replace(/_/g, "-")}`;
     const directory = agentsDirectory(tasksFile);
     mkdirSync(directory, { recursive: true });
-    const hookCommand = `node --no-inspect "\${CLAUDE_PLUGIN_ROOT}/scripts/hooks/agentFenceHook.ts" ${taskNumber} ${JSON.stringify(tasksFile)}`;
+    // Absolute path: hooks in a generated agent file are not plugin-associated, so ${CLAUDE_PLUGIN_ROOT} never expands there.
+    const hookCommand = `node --no-inspect ${JSON.stringify(AGENT_FENCE_HOOK)} ${taskNumber} ${JSON.stringify(tasksFile)}`;
     const content = `---
 name: ${name}
 description: ${box} for task ${taskNumber}, fenced to the task's modifiableFiles

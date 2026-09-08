@@ -63,7 +63,7 @@ test("test_planPrompt_isUnchangedWhenNoNewPayloadFieldsArePresent", () => {
 
 test("test_planPrompt_readsThePlanShapeThroughReadFileInsteadOfPastingIt", () => {
     const prompt = planPrompt(fakeTask);
-    assert.match(prompt, /\/read-file "[^"]*\/plans\/plan-template\.json"/);
+    assert.match(prompt, /\/read-file [^\n]*"[^"]*\/plans\/plan-template\.json"/);
     assert.equal(prompt.includes('"sections": ['), false);
     assert.match(prompt, /Set `task` to 99\./);
 });

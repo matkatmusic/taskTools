@@ -23,7 +23,7 @@ The plan must be formatted in the exact shape shown under **FORMATTING THE PLAN*
 
 invoke this skill exactly:
 ```
-/read-file `${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`
+/read-file `${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md"), PLAN_TEMPLATE_PATH])}`
 ```
 The skill puts the brief, the files this task owns, the guides you must follow, and the return shape you must produce into your context.
 The files this task owns are the task record's `modifiableFiles`.
@@ -47,11 +47,7 @@ This is planning only, not implementation.
 
 ## FORMATTING THE PLAN
 
-invoke this skill exactly:
-```
-/read-file `${readFileArgs([PLAN_TEMPLATE_PATH])}`
-```
-The skill puts the exact shape the plan must take into your context.
+The read-file skill above put `plan-template.json`, the exact shape the plan must take, into your context.
 Write the plan in exactly that shape.
 Replace every `<...>` with a real value.
 Set `task` to `${t.number}`.

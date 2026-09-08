@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { readTaskFile } from "../shared/taskFiles.ts";
 import { modifiableFiles } from "../shared/prepareTasks.ts";
 
+// A throw exits 1, which is non-blocking; exit 2 blocks the tool and shows the error.
+process.on("uncaughtException", (error) => { process.stderr.write(`${error.stack ?? error}\n`); process.exit(2); });
+
 const taskNumber = Number(process.argv[2]);
 const tasksFile = process.argv[3]!;
 const input = JSON.parse(readFileSync(0, "utf8"));

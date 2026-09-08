@@ -47,5 +47,6 @@ test("throws loudly when the task number is not in tasks.json", () => {
     const tasksFile = makeTasksFile();
     assert.throws(() => execFileSync("node", ["--no-inspect", SCRIPT, "99", tasksFile], {
         input: JSON.stringify({ tool_name: "Edit", tool_input: { file_path: "/worktree/src/thing.ts" } }),
-    }));
+    // Exit 2 is the blocking exit; exit 1 would let the edit through.
+    }), (error: { status: number }) => error.status === 2);
 });

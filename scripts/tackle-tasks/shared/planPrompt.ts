@@ -295,11 +295,7 @@ ${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
         when: () => true,
         render: (v) => `## FORMATTING THE PLAN
 
-invoke this skill exactly:
-\`\`\`
-/read-file ${v.templateReadFileArgs}
-\`\`\`
-The skill puts the exact shape the plan must take into your context.
+The read-file skill above put \`plan-template.json\`, the exact shape the plan must take, into your context.
 Write the plan in exactly that shape.
 Replace every \`<...>\` with a real value.
 Set \`task\` to ${v.number}.
@@ -498,7 +494,7 @@ export const PLAN_SKELETON_VARS: PlanVars = {
     number: "`${t.number}`",
     planFile: "`${t.planFile}`",
     codexNotes: "`${t.codexReviewNotes.trim()}`",
-    planningReadFileArgs: '`${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")])}`',
+    planningReadFileArgs: '`${readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md"), PLAN_TEMPLATE_PATH])}`',
     absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
     resumedRun: "`${resumedRunSection(t.repoRoot)}`",
     templateReadFileArgs: "`${readFileArgs([PLAN_TEMPLATE_PATH])}`",
@@ -530,7 +526,7 @@ export function planPrompt(t: PreparedTask): string {
         number: String(t.number),
         planFile: t.planFile,
         codexNotes: t.codexReviewNotes.trim(),
-        planningReadFileArgs: readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md")]),
+        planningReadFileArgs: readFileArgs([t.briefFile, ...t.readFilePaths, GUIDE("planning.md"), GUIDE("tdd.md"), PLAN_TEMPLATE_PATH]),
         absolutePaths: absolutePathsSection(t.repoRoot),
         resumedRun: resumedRunSection(t.repoRoot),
         templateReadFileArgs: readFileArgs([PLAN_TEMPLATE_PATH]),

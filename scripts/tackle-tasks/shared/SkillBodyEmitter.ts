@@ -14,6 +14,7 @@ import { resolveAgentOptions } from "./resolveAgentOptions.ts";
 // config at the SAME path a task is about to write to. A task's first-ever per-task steps.json has no previous file of
 // its own, so it is seeded from this canonical file first — the plugin's own committed config for the default pipeline.
 const CANONICAL_STEPS_CONFIG_PATH = fileURLToPath(new URL("../diagram-steps.json", import.meta.url));
+const WAIT_FOR_AGENT_REGISTRY_PATH = fileURLToPath(new URL("./waitForAgentRegistry.ts", import.meta.url));
 
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 
@@ -93,9 +94,10 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     });
     const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
 
-    return `First, call the Agent tool once: subagent_type "general-purpose", model "haiku", prompt "say ok". Wait for it. That call refreshes the agent registry so the fenced agent files written above are visible to the workflows; nothing else this turn does.
+    return `Run this first, with Bash and run_in_background set to true: \`node ${WAIT_FOR_AGENT_REGISTRY_PATH}\`
+Then end your turn. Launch nothing until the notification that this command finished arrives.
 
-Then launch every one of the following as a background workflow, in the same message, so they run concurrently:
+When that notification arrives, launch every one of the following as a background workflow, in the same message, so they run concurrently:
 
 ${workflowLines.join("\n\n")}
 
