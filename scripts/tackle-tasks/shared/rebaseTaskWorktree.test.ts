@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { rebaseTaskWorktree } from "./rebaseTaskWorktree.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "./sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
-import { claimTask, getCurrentTaskRun } from "./taskRunState.ts";
+import { appendTaskCommits, claimTask, getCurrentTaskRun } from "./taskRunState.ts";
 import { createWorktreeForGroup } from "../../shared/prepareTasks.ts";
 import { resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
@@ -202,4 +202,28 @@ test("test_rebaseTaskWorktree_releasesTheSourceLockWhenAnOperationalFailureThrow
 
     // Verification: the source lock this call acquired is released, not stranded.
     assert.equal(readSourceRepoLock(rootOrigin), null);
+});
+
+test("test_rebaseTaskWorktree_rewritesRecordedWorkHashesToTheRebasedCommits", async () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
+    seedTaskAndClaim(rootOrigin, taskNumber, "run-1");
+    writeFileSync(join(worktreePath, "root-work.txt"), "root work\n");
+    git(worktreePath, "add", "root-work.txt");
+    git(worktreePath, "commit", "-q", "-m", "root work\n\nTask-Step: implement");
+    const hashBeforeRebase = git(worktreePath, "rev-parse", "HEAD");
+    appendTaskCommits(taskNumber, "run-1", [{ occurrenceId: "", hash: hashBeforeRebase, kind: "work", stepId: "implement" }], rootOrigin);
+    writeFileSync(join(rootOrigin, "main-work.txt"), "main work\n");
+    git(rootOrigin, "add", "main-work.txt");
+    git(rootOrigin, "commit", "-q", "-m", "main moved on");
+
+    const output = await rebaseTaskWorktree({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "rebase-1", rootSourceBranch: "main",
+    });
+
+    assert.equal(output.conflicted, false);
+    const recorded = getCurrentTaskRun(taskNumber, rootOrigin)?.commits ?? [];
+    assert.equal(recorded.length, 1);
+    assert.notEqual(recorded[0].hash, hashBeforeRebase);
+    assert.equal(recorded[0].hash, git(worktreePath, "rev-parse", "HEAD"));
 });

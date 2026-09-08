@@ -9,7 +9,7 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import {
-    appendStepResult, updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt,
+    appendStepResult, getCurrentTaskRun, updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt,
 } from "./taskRunState.ts";
 import {
     rebaseParentOntoSourceAndTest,
@@ -134,6 +134,28 @@ export function persistSourceTipReceipts(
     updateCurrentTaskRun(taskNumber, runId, { sourceTipsAtRebase: receipts, rebaseStepReceipt }, projectRoot);
 }
 
+// A rebase rewrites every recorded work/repair hash; each commit is found again by its Task-Step trailer, newest first.
+export function persistRewrittenCommitHashes(
+    taskNumber: number, runId: string, worktreePath: string, projectRoot: string, rootSourceBranch: string,
+): void {
+    const run = getCurrentTaskRun(taskNumber, projectRoot);
+    if (run === null) throw new Error(`task ${taskNumber} has no active run`);
+    const checkoutPaths = new Map(
+        buildWorktreeOccurrences(worktreePath, projectRoot, rootSourceBranch).map((occurrence) => [occurrence.occurrenceId, occurrence.worktreeCheckoutPath]),
+    );
+    const commits = run.commits.map((commit) => {
+        if (commit.stepId === undefined) return commit;
+        const checkoutPath = checkoutPaths.get(commit.occurrenceId);
+        if (checkoutPath === undefined) throw new Error(`task ${taskNumber}: recorded commit's occurrence "${commit.occurrenceId}" is not in the worktree`);
+        const hash = execFileSync(
+            "git", ["-C", checkoutPath, "log", "-1", "--format=%H", `--grep=^Task-Step: ${commit.stepId}$`, "HEAD"], { encoding: "utf8" },
+        ).trim();
+        if (hash === "") throw new Error(`task ${taskNumber}: no commit carries "Task-Step: ${commit.stepId}" after the rebase in ${checkoutPath}`);
+        return { ...commit, hash };
+    });
+    updateCurrentTaskRun(taskNumber, runId, { commits }, projectRoot);
+}
+
 function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWorktreeOutput, "lock" | "heldByOwner" | "recoveryCommand"> {
     const stoppedAtField = { occurrenceId: stoppedAt.occurrenceId, checkoutPath: stoppedAt.checkoutPath };
     if (stoppedAt.status === "conflicted") {
@@ -213,6 +235,7 @@ export async function rebaseTaskWorktree(
         if (mapped.stoppedAt === null && mapped.failureReason === null) {
             const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
             persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
+            persistRewrittenCommitHashes(input.taskNumber, input.runId, worktreePath, projectRoot, input.rootSourceBranch);
         }
         const result: RebaseTaskWorktreeOutput = { lock: "acquired", heldByOwner: null, recoveryCommand: null, ...mapped };
         persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);

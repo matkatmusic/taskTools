@@ -80,9 +80,10 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     // for (const entry of existsSync(join(repoRoot, ".taskTools", "runs")) ? readdirSync(join(repoRoot, ".taskTools", "runs")) : []) {
     //     rmSync(join(repoRoot, ".taskTools", "runs", entry, "packets"), { recursive: true, force: true });
     // }
-    // Only this task's packets go: each packet JSON names its taskNumber.
+    // Only this task's run directories go: each packet JSON names its taskNumber.
     const runsDirectory = join(repoRoot, ".taskTools", "runs");
-    for (const packetsDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry, "packets")) : []) {
+    for (const runDirectory of existsSync(runsDirectory) ? readdirSync(runsDirectory).map((entry) => join(runsDirectory, entry)) : []) {
+        const packetsDirectory = join(runDirectory, "packets");
         if (!existsSync(packetsDirectory)) continue;
         const packetNamesThisTask = readdirSync(packetsDirectory)
             .some((packetFile) => {
@@ -90,7 +91,14 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
                 return packet.taskNumber === taskNumber || packet.output?.result?.taskNumber === taskNumber;
             });
         // A reset to a block reads the block's input from these packets, so they stay.
-        if (packetNamesThisTask && block === "") rmSync(packetsDirectory, { recursive: true, force: true });
+        if (packetNamesThisTask && block === "") rmSync(runDirectory, { recursive: true, force: true });
+    }
+    if (block === "") {
+        try { execSync(`git update-ref -d refs/taskTools/merged-commits/${branchName}`, { cwd: repoRoot, stdio: "pipe" }); } catch { /* never merged */ }
+        const agentsDirectory = join(repoRoot, ".claude", "agents");
+        for (const agentFile of existsSync(agentsDirectory) ? readdirSync(agentsDirectory) : []) {
+            if (agentFile.startsWith(`task-${taskNumber}-`) && agentFile.endsWith(".md")) rmSync(join(agentsDirectory, agentFile));
+        }
     }
 
     if (completedIndex !== -1) {
@@ -100,8 +108,15 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         if (!workCommit || !mergeCommit) throw new Error(`task ${taskNumber}'s completedTasks.json entry has no commitHashes; can't compute a reset point`);
         const foundBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot }).toString().trim();
         const stagingTip = execSync("git rev-parse staging", { cwd: repoRoot }).toString().trim();
-        if (stagingTip !== mergeCommit) throw new Error(`refusing: staging (${stagingTip}) is not task ${taskNumber}'s merge commit (${mergeCommit}) — something else was merged after it. Reset manually.`);
-        const resetTarget = execSync(`git rev-parse ${workCommit}^`, { cwd: repoRoot }).toString().trim();
+        if (stagingTip !== mergeCommit) {
+            // Merges on staging's first-parent line after this task's merge, newest first: the reset order that unblocks.
+            const mergesAfter = execSync(`git rev-list --first-parent staging ^${mergeCommit}`, { cwd: repoRoot }).toString().trim().split("\n").filter(Boolean);
+            const tasksAfter = mergesAfter
+                .map((hash) => completed.find((t: any) => t.commitHashes?.[t.commitHashes.length - 1] === hash)?.taskNumber)
+                .filter((n) => n !== undefined);
+            throw new Error(`reset of ${taskNumber} blocked. reset ${tasksAfter.join(", ")} first to unblock`);
+        }
+        const resetTarget = execSync(`git rev-parse ${mergeCommit}^1`, { cwd: repoRoot }).toString().trim();
         // The pipeline keeps staging checked out in its own worktree; git refuses a second checkout of it.
         const stagingCheckout = stagingWorktreePath(repoRoot);
         if (existsSync(join(stagingCheckout, ".git"))) {
@@ -192,6 +207,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         const cleared = Object.entries(scope).filter(([, value]) => value === true).map(([key]) => key);
         lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);
     }
+    // Last: steps.json here was read at the top; a block reset keeps it for the resume.
+    if (block === "") rmSync(dirname(stepsConfigPath), { recursive: true, force: true });
     return lines.join("\n");
 }
 

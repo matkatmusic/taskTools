@@ -82,7 +82,7 @@ function conflictedPaths(checkoutPath: string): string[] {
 // Returning \`resolved: false\` is a correct outcome when a conflict genuinely cannot be resolved.
 // It is not a failure, and it is always better than a guess.
 //
-// ${whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
+// ${whatToReturnSection('{ "resolved": <true only when every listed path has no conflict marker left. false otherwise.>, "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", "")}`;
 // }
 
 // The prompt never branches, so there is exactly one combo, "default".
@@ -232,7 +232,7 @@ export function fixConflictsPrompt(checkoutPath: string, taskNumber: number, pro
         absolutePaths: absolutePathsSection(root),
         editablePathsList: absolutePaths.map((path) => `- \`${path}\``).join("\n"),
         resumedRun: resumedRunSection(root),
-        whatToReturn: whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
+        whatToReturn: whatToReturnSection('{ "resolved": <true only when every listed path has no conflict marker left. false otherwise.>, "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
     });
 }
 
@@ -247,7 +247,7 @@ export function fixConflictsCombos(): { name: string; skeleton: string; rendered
         absolutePaths: absolutePathsSection(root),
         editablePathsList: absolutePaths.map((path) => `- \`${path}\``).join("\n"),
         resumedRun: resumedRunSection(root),
-        whatToReturn: whatToReturnSection('{ "resolved": "<true only when every listed path has no conflict marker left. false otherwise.>", "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
+        whatToReturn: whatToReturnSection('{ "resolved": <true only when every listed path has no conflict marker left. false otherwise.>, "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker. Empty array when resolved is true.>"] }', "replacing every `<...>` with a real value", ""),
     };
     return [{ name: "default", skeleton: fixConflictsPromptSkeleton(c), rendered: renderFixConflictsSections(c, vars) }];
 }

@@ -6,7 +6,7 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 import { buildDiscoveryManifest, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
 import {
-    captureSourceTipReceipts, persistRebaseStepResult, persistSourceTipReceipts,
+    captureSourceTipReceipts, persistRebaseStepResult, persistRewrittenCommitHashes, persistSourceTipReceipts,
 } from "./rebaseTaskWorktree.ts";
 import {
     rebaseInProgress, rebaseParentOntoSourceAndTest,
@@ -165,6 +165,7 @@ export function advanceTaskRebase(input: AdvanceTaskRebaseInput): AdvanceTaskReb
         verifyNoRebaseInProgressAnywhere(worktreePath, projectRoot, input.rootSourceBranch);
         const receipts = captureSourceTipReceipts(worktreePath, projectRoot, input.rootSourceBranch);
         persistSourceTipReceipts(input.taskNumber, input.runId, input.stepId, worktreePath, projectRoot, input.rootSourceBranch, receipts);
+        persistRewrittenCommitHashes(input.taskNumber, input.runId, worktreePath, projectRoot, input.rootSourceBranch);
     }
     persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "advanceTaskRebase", worktreePath, projectRoot, input.rootSourceBranch, result);
     return result;

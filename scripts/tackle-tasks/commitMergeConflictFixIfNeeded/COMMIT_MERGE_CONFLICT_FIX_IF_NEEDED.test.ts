@@ -55,27 +55,45 @@ function seedTaskAndMarkActiveAndLock(projectRoot: string, taskNumber: number, t
     assert.equal(lockOutcome.status, "acquired");
 }
 
+const WORK_SUBJECT = "task work commit";
+
+// A rebase onto staging stopped on resolved.txt, then the file rewritten as the fix agent would leave it.
+function stopRebaseOnConflict(rootOrigin: string, worktreePath: string): void {
+    writeFileSync(join(worktreePath, "resolved.txt"), "ours\n");
+    git(worktreePath, "add", "resolved.txt");
+    git(worktreePath, "commit", "-q", "-m", `${WORK_SUBJECT}\n\nTask-Step: implement`);
+    git(rootOrigin, "checkout", "-q", "staging");
+    writeFileSync(join(rootOrigin, "resolved.txt"), "theirs\n");
+    git(rootOrigin, "add", "resolved.txt");
+    git(rootOrigin, "commit", "-q", "-m", "staging change");
+    assert.throws(() => git(worktreePath, "rebase", "staging"));
+    assert.equal(git(worktreePath, "status", "--porcelain"), "AA resolved.txt");
+    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+}
+
 function answer(projectRoot: string, worktree: string, taskNumber: number, runId: string): string {
     const packet: CommitMergeConflictFixIfNeededPacket = {
         box: "FIX_CONFLICTS", scriptSignal: "continue", taskNumber, runId, projectRoot, worktree, branch: `task-${taskNumber}`,
         exitType: "", exitNote: "", message: "resolved the conflict", additionalData: { resolved: true, unresolvedPaths: [] }, stoppedOccurrenceId: "",
-        stoppedCheckoutPath: worktree, conflictedFilePaths: [], conflicted: true, finished: false, failureReason: "",
+        stoppedCheckoutPath: worktree, conflictedFilePaths: ["resolved.txt"], conflicted: true, finished: false, failureReason: "",
     };
     return JSON.stringify(packet);
 }
 
-test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_commitsWhateverTheFixLeftDirty", () => {
+test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_stagesTheFixSoContinueRebaseKeepsTheOriginalMessage", () => {
     const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-1");
-    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    stopRebaseOnConflict(rootOrigin, worktreePath);
 
     const output = main(answer(rootOrigin, worktreePath, taskNumber, "run-1"));
 
     assert.equal(output.box, "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED");
+    assert.equal(git(worktreePath, "status", "--porcelain"), "M  resolved.txt");
+    assert.deepEqual(getCurrentTaskRun(taskNumber, rootOrigin)?.commits, []);
+    execFileSync("git", ["-C", worktreePath, "rebase", "--continue"], { env: { ...process.env, GIT_EDITOR: "true" } });
+    assert.equal(git(worktreePath, "log", "-1", "--format=%s"), WORK_SUBJECT);
     assert.equal(git(worktreePath, "status", "--porcelain"), "");
-    const run = getCurrentTaskRun(taskNumber, rootOrigin);
-    assert.equal(run?.commits.length, 1);
 
     const template = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
@@ -85,7 +103,7 @@ test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_runsTwiceWithTheSameInput", () =>
     const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-3");
-    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    stopRebaseOnConflict(rootOrigin, worktreePath);
     const input = answer(rootOrigin, worktreePath, taskNumber, "run-3");
 
     const first = main(input);
@@ -105,7 +123,7 @@ test("test_COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED_carriesTheStoppedLayerThroughUnch
     const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-2");
-    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    stopRebaseOnConflict(rootOrigin, worktreePath);
 
     const output = main(answer(rootOrigin, worktreePath, taskNumber, "run-2"));
 
@@ -146,19 +164,18 @@ test("test_main_throwsWhenResolvedTrueButAConflictMarkerRemains", () => {
     assert.deepEqual(getCurrentTaskRun(taskNumber, rootOrigin)?.commits, []);
 });
 
-test("test_main_skipsCommitWhenResolvedIsFalse", () => {
+test("test_main_stagesNothingWhenResolvedIsFalse", () => {
     const rootOrigin = makeTempRepoWithCommit("main");
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     seedTaskAndMarkActiveAndLock(rootOrigin, taskNumber, "fix a conflict", "run-Y");
-    writeFileSync(join(worktreePath, "resolved.txt"), "resolved\n");
+    stopRebaseOnConflict(rootOrigin, worktreePath);
     const packet = JSON.parse(answer(rootOrigin, worktreePath, taskNumber, "run-Y"));
     packet.additionalData = { resolved: false, unresolvedPaths: ["resolved.txt"] };
-    packet.conflictedFilePaths = ["resolved.txt"];
 
     const output = main(JSON.stringify(packet));
 
     assert.equal(output.box, "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED");
     assert.equal(output.scriptSignal, "continue");
     assert.deepEqual(getCurrentTaskRun(taskNumber, rootOrigin)?.commits, []);
-    assert.equal(git(worktreePath, "status", "--porcelain"), "?? resolved.txt");
+    assert.equal(git(worktreePath, "status", "--porcelain"), "AA resolved.txt");
 });

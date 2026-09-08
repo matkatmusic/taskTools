@@ -61,7 +61,7 @@ test("test_fixConflictsPrompt_endsWithTheSharedWhatToReturnSectionCarryingTheCon
     assert.equal(prompt.includes("---- DATA ----"), false);
     assert.equal(/\b(CHECKOUT_PATH|CONFLICTED_PATHS)\b/.test(prompt), false);
     assert.match(prompt, /## WHAT YOU, THE SPAWNING AGENT, RETURNS/);
-    assert.match(prompt, /"message": "", "additionalData": \{ "resolved": "<[^"]+>", "unresolvedPaths": \["<[^"]+>"\] \}/);
+    assert.match(prompt, /"message": "", "additionalData": \{ "resolved": <[^">]+>, "unresolvedPaths": \["<[^"]+>"\] \}/);
     assert.equal(/## WHAT YOU PRINT/.test(prompt), false);
 });
 

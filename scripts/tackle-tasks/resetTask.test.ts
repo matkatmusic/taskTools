@@ -202,3 +202,69 @@ test("test_resetTask_regeneratesAMissingPerTaskStepsJsonForAPreTask10Run", async
     assert.match(said, /resumes at pipeline-commitImplementationIfNeeded\.mmd::RUN_TASK_TESTS/);
     assert.ok(existsSync(join(repoRoot, ".taskTools", "workflows", "9", "steps.json")));
 });
+
+test("test_resetTask_fullReset_removesRunFoldersAgentFilesWorkflowFolderAndMergedRef", async () => {
+    // Setup: task 7 is open with a run folder, five agent files, a workflow folder, and a merged-commits ref.
+    const repoRoot = makeTempRepoWithCommit();
+    mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t" }]));
+    writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+    const runFolder = join(repoRoot, ".taskTools", "runs", "0001");
+    mkdirSync(join(runFolder, "packets"), { recursive: true });
+    writeFileSync(join(runFolder, "packets", "PLAN_THE_TASK-0-1.json"), JSON.stringify({ taskNumber: 7, command: "" }));
+    writeFileSync(join(runFolder, "run-log.jsonl"), "");
+    const agentsFolder = join(repoRoot, ".claude", "agents");
+    mkdirSync(agentsFolder, { recursive: true });
+    writeFileSync(join(agentsFolder, "task-7-implement-task.md"), "");
+    writeFileSync(join(agentsFolder, "task-70-implement-task.md"), "");
+    const workflowFolder = join(repoRoot, ".taskTools", "workflows", "7");
+    mkdirSync(workflowFolder, { recursive: true });
+    writeFileSync(join(workflowFolder, "steps.json"), "{}");
+    git(repoRoot, "update-ref", "refs/taskTools/merged-commits/task-7", "HEAD");
+
+    const cwd = process.cwd();
+    process.chdir(repoRoot);
+    try {
+        await resetTask(7, "");
+    } finally {
+        process.chdir(cwd);
+    }
+
+    assert.equal(existsSync(runFolder), false);
+    assert.equal(existsSync(join(agentsFolder, "task-7-implement-task.md")), false);
+    assert.equal(existsSync(join(agentsFolder, "task-70-implement-task.md")), true);
+    assert.equal(existsSync(workflowFolder), false);
+    assert.equal(git(repoRoot, "for-each-ref", "refs/taskTools/merged-commits/"), "");
+});
+
+test("test_resetTask_blocksWhenALaterTaskMergeSitsOnStagingAndNamesIt", async () => {
+    // Setup: staging holds task 3's merge, then task 4's merge on top; both are in completedTasks.json.
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    const mergeHashes: Record<number, string> = {};
+    for (const taskNumber of [3, 4]) {
+        git(repoRoot, "checkout", "-q", "-b", `task-${taskNumber}`, "staging");
+        writeFileSync(join(repoRoot, `task-${taskNumber}.txt`), "work\n");
+        git(repoRoot, "add", `task-${taskNumber}.txt`);
+        git(repoRoot, "commit", "-q", "-m", `task ${taskNumber} work`);
+        git(repoRoot, "checkout", "-q", "staging");
+        git(repoRoot, "merge", "-q", "--no-ff", "-m", `merge task-${taskNumber}`, `task-${taskNumber}`);
+        mergeHashes[taskNumber] = git(repoRoot, "rev-parse", "HEAD").trim();
+        git(repoRoot, "branch", "-D", `task-${taskNumber}`);
+    }
+    mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), "[]");
+    writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), JSON.stringify([
+        { taskNumber: 3, title: "t3", commitHashes: ["aaa", mergeHashes[3]] },
+        { taskNumber: 4, title: "t4", commitHashes: ["bbb", mergeHashes[4]] },
+    ]));
+
+    const cwd = process.cwd();
+    process.chdir(repoRoot);
+    try {
+        await assert.rejects(() => resetTask(3, ""), /reset of 3 blocked\. reset 4 first to unblock/);
+    } finally {
+        process.chdir(cwd);
+    }
+    assert.equal(git(repoRoot, "rev-parse", "staging").trim(), mergeHashes[4]);
+});

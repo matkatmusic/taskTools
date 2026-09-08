@@ -710,6 +710,8 @@ export function reviewAnswerSection(reviewOutputFile: string): string {
     return `## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
 Run \`node ${WRITE_REVIEW_ANSWER_SCRIPT} "<the outcome.payload path>" ${reviewOutputFile}\`.
+Run it even when the codex command failed or ${reviewOutputFile} does not exist; it records that failure for you.
+Never write the answer yourself with writeAgentAnswer.ts.
 Then return the hook output verbatim.
 `;
 }

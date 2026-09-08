@@ -179,6 +179,8 @@ test("test_reviewTestsPrompt_tellsTheAgentToRunTheReviewAnswerScriptNotHandTypeT
     const task = makeTaskFixture();
     const prompt = reviewTestsPrompt(task);
     assert.match(prompt, new RegExp(`node \\S*writeReviewAnswer\\.ts "<the outcome\\.payload path>" ${task.testReviewFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(prompt, /Run it even when the codex command failed/);
+    assert.match(prompt, /Never write the answer yourself with writeAgentAnswer\.ts/);
     assert.match(prompt, /Then return the hook output verbatim/);
     assert.equal(prompt.includes('"codexSucceeded"'), false);
 });

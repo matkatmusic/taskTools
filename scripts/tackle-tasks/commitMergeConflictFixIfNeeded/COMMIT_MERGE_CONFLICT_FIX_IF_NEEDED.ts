@@ -1,11 +1,11 @@
-// COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED, from pipeline-rebase.mmd. Mutating: commits whatever the FIX_CONFLICTS agent left dirty.
+// COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED, from pipeline-rebase.mmd. Mutating: stages the resolved conflict files for CONTINUE_REBASE.
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "../shared/sourceRepoLock.ts";
-import { commitTaskWork } from "../shared/commitTaskWork.ts";
+// import { commitTaskWork } from "../shared/commitTaskWork.ts";
 import type { CommitMergeConflictFixIfNeededPacket } from "./_packet.ts";
 
 function baseBranch(projectRoot: string): string {
@@ -33,14 +33,16 @@ export function main(input: string): CommitMergeConflictFixIfNeededPacket {
         if (stillMarked.length > 0) {
             throw new Error(`COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED: resolved: true but ${stillMarked.length} file(s) still hold a conflict marker: ${stillMarked.join(", ")}`);
         }
-        commitTaskWork({
-            projectRoot: packet.projectRoot,
-            worktreePath: packet.worktree,
-            taskNumber: packet.taskNumber,
-            runId: packet.runId,
-            stepId: "commit-merge-conflict-fix",
-            rootSourceBranch: baseBranch(packet.projectRoot),
-        });
+        // Stage only: `git rebase --continue` in CONTINUE_REBASE commits with the replayed commit's own message.
+        // commitTaskWork({
+        //     projectRoot: packet.projectRoot,
+        //     worktreePath: packet.worktree,
+        //     taskNumber: packet.taskNumber,
+        //     runId: packet.runId,
+        //     stepId: "commit-merge-conflict-fix",
+        //     rootSourceBranch: baseBranch(packet.projectRoot),
+        // });
+        execFileSync("git", ["-C", packet.stoppedCheckoutPath, "add", "--", ...packet.conflictedFilePaths]);
     }
 
     return { ...packet, box: "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED", scriptSignal: SCRIPT_SIGNAL.CONTINUE };
