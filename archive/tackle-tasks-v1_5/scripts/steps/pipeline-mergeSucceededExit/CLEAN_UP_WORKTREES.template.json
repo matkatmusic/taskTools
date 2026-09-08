@@ -1,0 +1,17 @@
+{
+    "input": {
+        "box": "RECORD_MODIFIED_FILES_SUCCESS",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktreePath": "/tmp/example-project/.worktrees/task-42"
+    },
+    "output": {
+        "box": "CLEAN_UP_WORKTREES",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123"
+    }
+}

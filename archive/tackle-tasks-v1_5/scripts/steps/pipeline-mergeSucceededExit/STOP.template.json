@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "REPORT_CLOSURE_NOTE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
+    },
+    "output": {
+        "box": "STOP",
+        "scriptSignal": "stop",
+        "taskNumber": 42,
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
+    }
+}

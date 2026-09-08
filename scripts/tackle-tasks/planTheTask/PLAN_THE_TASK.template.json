@@ -1,0 +1,22 @@
+{
+    "input": {
+        "box": "DOCUMENT_GENERATION",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures/worktree",
+        "branch": "task-35",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "outcome": "PLAN",
+            "planFile": "",
+            "clarifyRequest": ""
+        }
+    }
+}

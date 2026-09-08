@@ -1,0 +1,20 @@
+{
+    "input": {
+        "box": "REVIEW_TESTS_PIPELINE",
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1"
+    },
+    "output": {
+        "box": "GREEN_IMPLEMENTATION_INPUT",
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1"
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "input": {
+        "box": "DRAFT_PLAN_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "scripts/steps/pipeline-reviewPlan/fixtures",
+        "repoRoot": "scripts/steps/pipeline-reviewPlan/fixtures/worktree",
+        "briefFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/brief-42.md",
+        "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "reviewOutputFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json",
+        "ownedFilePaths": ["scripts/steps/pipeline-reviewPlan/fixtures/worktree/src/owned.ts"],
+        "runId": "run-1",
+        "sourceBranch": "main"
+    },
+    "agentAnswer": {
+        "reviewFile": "<the exact REVIEW_FILE path the command wrote>"
+    }
+}

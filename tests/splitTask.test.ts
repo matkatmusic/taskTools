@@ -10,10 +10,12 @@ import {
     parseFileGroups,
     partitionFiles,
     readParentTask,
+    runClose,
+    runInfo,
     validateChildNumbers,
     validateFileGroups,
     verifyChildFiles,
-} from "../scripts/splitTask.ts";
+} from "../scripts/split-task/splitTask.ts";
 
 function writeTaskFiles(root: string, tasks: unknown[], completed: unknown[]): void {
     mkdirSync(join(root, ".taskTools"), { recursive: true });
@@ -27,10 +29,10 @@ function makeProjectRoot(): string {
         taskNumber: 58,
         title: "Big task",
         description: "desc",
-        files: ["a.ts", "b.ts", "c.ts", "d.ts"],
+        modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"],
     };
-    const childTaskA = { taskNumber: 66, title: "Child A", description: "desc", files: ["a.ts", "b.ts"] };
-    const childTaskB = { taskNumber: 67, title: "Child B", description: "desc", files: ["c.ts", "d.ts"] };
+    const childTaskA = { taskNumber: 66, title: "Child A", description: "desc", modifiableFiles: ["a.ts", "b.ts"] };
+    const childTaskB = { taskNumber: 67, title: "Child B", description: "desc", modifiableFiles: ["c.ts", "d.ts"] };
     const closedTask = { taskNumber: 40, title: "Already closed", description: "desc" };
     writeTaskFiles(root, [parentTask, childTaskA, childTaskB], [closedTask]);
     return root;
@@ -48,7 +50,7 @@ test("readParentTask loads the parent by number", () => {
     const root = makeProjectRoot();
     const parent = readParentTask(58, root);
     assert.equal(parent.taskNumber, 58);
-    assert.deepEqual(parent.files, ["a.ts", "b.ts", "c.ts", "d.ts"]);
+    assert.deepEqual(parent.modifiableFiles, ["a.ts", "b.ts", "c.ts", "d.ts"]);
 });
 
 test("readParentTask throws when the task number does not exist", () => {
@@ -177,9 +179,9 @@ test("closeParentTask throws and leaves the parent open when a child omits a fil
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["c.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["c.ts"] },
         ],
         [],
     );
@@ -192,9 +194,9 @@ test("closeParentTask throws and leaves the parent open when a child claims a fi
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "z.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["b.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "z.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["b.ts"] },
         ],
         [],
     );
@@ -207,9 +209,9 @@ test("closeParentTask throws and leaves the parent open when a child's files dri
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts", "d.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "b.ts", "z.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["c.ts", "d.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "b.ts", "z.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["c.ts", "d.ts"] },
         ],
         [],
     );
@@ -222,9 +224,9 @@ test("closeParentTask succeeds with a non-contiguous file grouping that fully pa
     writeTaskFiles(
         root,
         [
-            { taskNumber: 58, title: "Big task", files: ["a.ts", "b.ts", "c.ts", "d.ts"] },
-            { taskNumber: 66, title: "Child A", files: ["a.ts", "c.ts"] },
-            { taskNumber: 67, title: "Child B", files: ["b.ts", "d.ts"] },
+            { taskNumber: 58, title: "Big task", modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] },
+            { taskNumber: 66, title: "Child A", modifiableFiles: ["a.ts", "c.ts"] },
+            { taskNumber: 67, title: "Child B", modifiableFiles: ["b.ts", "d.ts"] },
         ],
         [],
     );
@@ -249,11 +251,11 @@ test("findSplitCandidates lists open tasks qualifying on difficulty or file coun
     writeTaskFiles(
         root,
         [
-            { taskNumber: 91, title: "Hard task", difficulty: 5, files: ["a.ts"] },
-            { taskNumber: 12, title: "Wide task", difficulty: 1, files: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] },
-            { taskNumber: 5, title: "Small task", difficulty: 2, files: ["a.ts", "b.ts"] },
+            { taskNumber: 91, title: "Hard task", difficulty: 5, modifiableFiles: ["a.ts"] },
+            { taskNumber: 12, title: "Wide task", difficulty: 1, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"] },
+            { taskNumber: 5, title: "Small task", difficulty: 2, modifiableFiles: ["a.ts", "b.ts"] },
         ],
-        [{ taskNumber: 999, title: "Closed but would qualify", difficulty: 9, files: ["a.ts", "b.ts", "c.ts", "d.ts"] }],
+        [{ taskNumber: 999, title: "Closed but would qualify", difficulty: 9, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] }],
     );
     const candidates = findSplitCandidates(root);
     assert.deepEqual(
@@ -266,6 +268,65 @@ test("findSplitCandidates lists open tasks qualifying on difficulty or file coun
     const task12 = candidates.find((c) => c.taskNumber === 12)!;
     assert.equal(task12.unsplittable, false);
     assert.equal(task12.fileCount, 5);
+});
+
+test("findSplitCandidates counts modifiableFiles when a task declares it instead of legacy files", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 50, title: "Migrated wide task", difficulty: 1, modifiableFiles: ["a.ts", "b.ts", "c.ts", "d.ts"] }], []);
+    const candidates = findSplitCandidates(root);
+    assert.deepEqual(candidates.map((c) => c.taskNumber), [50]);
+    assert.equal(candidates[0].fileCount, 4);
+});
+
+test("verifyChildFiles passes when the child declares modifiableFiles matching its assigned group", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 70, title: "Modern child", modifiableFiles: ["x.ts", "y.ts"] }], []);
+    assert.doesNotThrow(() => verifyChildFiles(70, ["x.ts", "y.ts"], root));
+});
+
+test("closeParentTask validates against the parent's modifiableFiles when it has no legacy files key", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(
+        root,
+        [
+            { taskNumber: 80, title: "Modern parent", modifiableFiles: ["p.ts", "q.ts"] },
+            { taskNumber: 81, title: "Child A", modifiableFiles: ["p.ts"] },
+            { taskNumber: 82, title: "Child B", modifiableFiles: ["q.ts"] },
+        ],
+        [],
+    );
+    const result = closeParentTask(80, 2, [81, 82], [["p.ts"], ["q.ts"]], root);
+    assert.deepEqual(result.closed, [80]);
+});
+
+test("runInfo partitions the parent's modifiableFiles when it has no legacy files key", () => {
+    const root = mkdtempSync(join(tmpdir(), "split-task-"));
+    writeTaskFiles(root, [{ taskNumber: 90, title: "Modern parent", modifiableFiles: ["r.ts", "s.ts"] }], []);
+    let printed = "";
+    const originalLog = console.log;
+    console.log = (msg: string) => { printed = msg; };
+    try {
+        runInfo("90", "2", root);
+    } finally {
+        console.log = originalLog;
+    }
+    const output = JSON.parse(printed);
+    assert.deepEqual(output.fileGroups, [["r.ts"], ["s.ts"]]);
+});
+
+test("runInfo throws a usage message when numSplits is omitted", () => {
+    assert.throws(
+        () => runInfo("189", undefined as unknown as string),
+        (error: Error) => error.message === "Usage: /split-task <taskNum> <numSplits> [guidance]",
+    );
+});
+
+test("runClose throws a usage message when numSplits is omitted", () => {
+    assert.throws(
+        () => runClose("58", undefined as unknown as string, "66,67", '[["a.ts"],["b.ts"]]'),
+        (error: Error) =>
+            error.message === "Usage: splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson>",
+    );
 });
 
 test("SKILL.md advertises the guidance argument and extracts it via $ARGUMENTS, not the truncating $3", () => {

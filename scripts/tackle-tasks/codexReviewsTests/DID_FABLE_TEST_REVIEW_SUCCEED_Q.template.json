@@ -1,0 +1,34 @@
+{
+    "input": {
+        "box": "CODEX_TEST_REVIEW_FALLBACK_FABLE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree/plans/test-review.json",
+            "fableSucceeded": true
+        }
+    },
+    "output": {
+        "box": "DID_FABLE_TEST_REVIEW_SUCCEED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree/plans/test-review.json"
+        },
+        "next": "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED"
+    }
+}

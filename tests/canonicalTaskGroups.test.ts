@@ -1,13 +1,13 @@
 // Behavioral checks for canonicalTaskGroups.ts: grouping tasks by canonical ownership key overlap.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCanonicalTaskGroups } from "../scripts/canonicalTaskGroups.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { buildCanonicalTaskGroups } from "../scripts/shared/canonicalTaskGroups.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
-function task(taskNumber: number, files?: string[]): TaskRecord {
-    return files === undefined ? { taskNumber } : { taskNumber, files };
+function task(taskNumber: number, modifiableFiles?: string[]): TaskRecord {
+    return modifiableFiles === undefined ? { taskNumber } : { taskNumber, modifiableFiles };
 }
 
 function makeOccurrence(overrides: Partial<RepositoryOccurrence>): RepositoryOccurrence {

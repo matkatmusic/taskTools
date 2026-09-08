@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "WRITE_CLARIFY_REQUEST",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "clarifyRequest": "which database does task 35 target?"
+    },
+    "output": {
+        "box": "DOCUMENT_GENERATION_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "projectRoot": "/tmp/fake-project",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "master",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "which database does task 35 target?"
+    }
+}

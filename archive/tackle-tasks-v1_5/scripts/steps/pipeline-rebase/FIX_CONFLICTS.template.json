@@ -1,0 +1,32 @@
+{
+    "input": {
+        "box": "ARE_2_CONFLICT_FIXES_DONE",
+        "scriptSignal": "continue",
+        "next": "FIX_CONFLICTS",
+        "projectRoot": "scripts/steps/pipeline-rebase/fixtures",
+        "worktreePath": "scripts/steps/pipeline-rebase/fixtures/worktree",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "scripts/steps/pipeline-rebase/fixtures/worktree",
+        "conflictedFilePaths": ["conflict.txt"],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "FIX_CONFLICTS",
+        "scriptSignal": "prompt",
+        "prompt": ""
+    },
+    "agentAnswer": {
+        "resolved": true,
+        "unresolvedPaths": ["<absolute path of a file that still contains a conflict marker; empty array when resolved is true>"]
+    }
+}

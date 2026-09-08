@@ -1,0 +1,31 @@
+{
+    "input": {
+        "box": "CODEX_REVIEWS_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/areTestsFlagged/fixtures/test-review.json"
+        }
+    },
+    "output": {
+        "box": "ARE_TESTS_FLAGGED",
+        "scriptSignal": "continue",
+        "next": "ARE_2_TEST_REVIEWS_DONE_Q",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": "",
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
+    }
+}

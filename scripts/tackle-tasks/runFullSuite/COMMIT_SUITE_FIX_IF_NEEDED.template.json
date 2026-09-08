@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "FIX_THE_CODEBASE_FOR_SUITE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "output": "",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": { "fixSummary": "fixed it" }
+    },
+    "output": {
+        "box": "COMMIT_SUITE_FIX_IF_NEEDED",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1"
+    }
+}

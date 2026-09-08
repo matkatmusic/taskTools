@@ -6,12 +6,16 @@
   "chainGoal": ["<omit this field entirely unless this task is one of a chain; one line per entry: what the whole chain achieves, and which task numbers are in it>"],
   "goal": [
     "<- one observable condition a reviewer can confirm without reading the diff: a command that succeeds, output a user can see, a symptom that no longer reproduces>",
-    "<- one condition per entry, no embedded newlines — the brief and /view-task rejoin them>",
-    "<- at least one entry naming what is explicitly NOT in scope and which sibling task owns it instead>"
+    "<- one condition per entry, no embedded newlines — the brief and /view-task rejoin them>"
+  ],
+  "notInScope": [
+    "<- required: one entry per hand-off, naming what is explicitly NOT in scope and which sibling task owns it instead>"
   ],
   "description": "<only the agent's derived understanding gathered while writing the task: file paths, function names, root-cause findings, constraints, and decisions; must not restate the raw prompt; under ten sentences; no line numbers — they go stale>",
   "files": ["<repo-relative path this task will touch>"],
-  "tests": "<the user's example test as prose or pseudocode, or the literal string skip>",
+  "schemaVersion": "1.0.1",
+  "hasTests": <true when the task needs tests written for it, false when the user skips them>,
+  "tests": "<the user's example test as prose or pseudocode when hasTests is true; the empty string when it is false>",
   "difficulty": <implementation effort and risk, NOT importance: 1 = typo, comment, or constant edit with no behavior change; 2 = one-line or single-file mechanical change; 3 = one file edited alongside an existing test that already covers it; 4 = contained change to one file plus its test; 5 = a few files in one subsystem, mostly mechanical; 6 = several files in one subsystem, design already settled; 7 = one subsystem plus the callers it forces to change; 8 = crosses subsystems or needs design decisions during implementation; 9 = crosses subsystems with the design still unsettled; 10 = wide blast radius, unclear scope, or a previously reverted attempt>,
-  "blockedBy": [{"taskNum": <task number that must be completed first>, "reason": "<required: why this task depends on it>"}] (one object per blocking task; omit the field entirely if none)
+  "blockedBy": [{"taskNumber": <task number that must be completed first>, "reason": "<required: why this task depends on it>"}] (one object per blocking task; omit the field entirely if none)
 }

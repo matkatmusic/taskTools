@@ -1,7 +1,8 @@
 // reflowComments joins wrapped prose, skips commented-out code. Run: node --test "tests/*.test.ts"
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeReflows, needsRewrite, reflowFile, reflowSource } from "../scripts/reflowComments.ts";
+import { describeReflows, needsRewrite, reflowFile, reflowSource } from "../scripts/hooks/reflowComments.ts";
+import { REWRITE_NOT_NEEDED } from "../scripts/shared/resultCodes.ts";
 
 const WRAPPED = [
   "// Nothing to say unless one of those files still has unstaged work. A porcelain",
@@ -179,7 +180,7 @@ test("all-short reflows report the rewrite but carry no instruction", () => {
   assert.deepEqual(payload.rewritten, [{ file: "/tmp/a.ts", lines: [1] }]);
   assert.equal(payload.instruction, undefined);
   assert.equal(payload.files, undefined);
-  assert.equal(needsRewrite([{ path: "/tmp/a.ts", runs }]), false);
+  assert.equal(needsRewrite([{ path: "/tmp/a.ts", runs }]), REWRITE_NOT_NEEDED);
 });
 
 test("markdown files are skipped", () => {

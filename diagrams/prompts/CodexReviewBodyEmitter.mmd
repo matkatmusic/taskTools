@@ -1,0 +1,27 @@
+%% How reviewQuestion and planReviewPrompt pick their sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart TD
+    %% RETIRED (task 48): plan-scrapped is answered upstream by IS_PLAN_APPROVED_BY_DEFAULT_Q; this prompt is never built on that path.
+    %% resumed[/readCheckpoint resumedFrom.exitType/] --> scrapped{plan-scrapped?}
+    attempts[/getAttemptCount planReview/] --> attempted{count >= 1?}
+    difficulty[/isCodexDraftedPlan task difficulty/] --> adversarial{difficulty >= 7?}
+
+    %% scrapped -- yes --> APPROVE
+    %% scrapped -- no --> attempted
+    attempted -- yes --> RECHECK
+    attempted -- no --> adversarial
+
+    %% APPROVE["#60;APPROVE: intro#62;<br>#60;WHAT YOU READ: standard#62;<br>#60;WHAT YOU, THE REVIEWING AGENT, RETURNS: approve#62;<br>#60;WHAT TO OUTPUT: approve#62;"]
+
+    RECHECK["#60;ROLE: recheck#62;<br>#60;STRICT INPUT ALLOWLIST: recheck#62;<br>#60;MISSING-FILE RESPONSE: recheck#62;<br>#60;WHAT YOU READ: recheck#62;<br>#60;HOW TO JUDGE THE PLAN: recheck#62;<br>#60;DOCUMENTING EVIDENCE: recheck#62;<br>#60;WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck#62;<br>#60;WHAT TO OUTPUT: recheck#62;"]
+
+    adversarial -- yes --> ROLE_ADV["#60;ROLE: adversarial#62;"]
+    adversarial -- no --> ROLE_ORD["#60;ROLE: ordinary#62;"]
+    ROLE_ADV --> DEFAULT
+    ROLE_ORD --> DEFAULT
+    DEFAULT["#60;STRICT INPUT ALLOWLIST: reviewByDefault#62;<br>#60;MISSING-FILE RESPONSE: reviewByDefault#62;<br>#60;WHAT YOU READ: standard#62;<br>#60;SIBLING AND BLOCKER SCOPE#62;<br>#60;HOW TO JUDGE THE PLAN: reviewByDefault#62;<br>#60;DO NOT FLAG#62;<br>#60;DOCUMENTING EVIDENCE: reviewByDefault#62;<br>#60;WHAT YOU, THE REVIEWING AGENT, RETURNS: reviewByDefault#62;<br>#60;A REJECTION IS YOUR FAILURE#62;<br>#60;WHAT TO OUTPUT: reviewByDefault#62;"]
+
+    subgraph planReviewPrompt [planReviewPrompt: always the same three sections]
+        HEADER["#60;SPAWN AGENT HEADER (spawnAgentHeader)#62;"] --> SHELL["#60;SHELL INVOCATION (createCodexShellInvocation, embeds reviewQuestion above)#62;"] --> RETURN["#60;WHAT TO RETURN (whatToReturnSection)#62;"]
+    end
+    classDef decision fill:#f6d55c,stroke:#8a6d00,color:#000
+    class adversarial,attempted decision

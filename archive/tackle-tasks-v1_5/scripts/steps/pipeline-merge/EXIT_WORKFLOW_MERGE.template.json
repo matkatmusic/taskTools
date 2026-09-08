@@ -1,0 +1,32 @@
+{
+    "input": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "ARE_2_MERGE_ATTEMPTS_DONE",
+        "scriptSignal": "continue",
+        "state": "NONE LANDED",
+        "landed": [],
+        "notLanded": [
+            "root"
+        ],
+        "commits": [],
+        "next": "EXIT_WORKFLOW_MERGE",
+        "exitType": "merge-failed",
+        "exitNote": "nothing landed after 2 attempts. worktree preserved."
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_MERGE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "worktree": "/abs/path/to/worktree",
+        "sourceBranch": "main",
+        "exitType": "merge-failed",
+        "exitNote": "nothing landed after 2 attempts. worktree preserved."
+    }
+}

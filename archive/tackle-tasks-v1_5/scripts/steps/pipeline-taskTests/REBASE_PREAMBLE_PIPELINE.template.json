@@ -1,0 +1,21 @@
+{
+    "input": {
+        "box": "ARE_TASK_TESTS_SKIPPED",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "next": "REBASE_PREAMBLE_PIPELINE"
+    },
+    "output": {
+        "box": "REBASE_PREAMBLE_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project"
+    }
+}

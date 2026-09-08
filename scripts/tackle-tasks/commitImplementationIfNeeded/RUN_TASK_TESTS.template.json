@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "ARE_TASK_TESTS_SKIPPED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 2,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/runTests/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/runTests/worktree",
+        "branch": "task-2",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "RUN_TASK_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 2,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/runTests/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/runTests/worktree",
+        "branch": "task-2",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

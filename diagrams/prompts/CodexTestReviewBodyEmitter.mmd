@@ -1,0 +1,33 @@
+%% How reviewTestsQuestion and reviewTestsPrompt pick their sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart TD
+    attempt[/getAttemptCount testReviews/] --> isRecheck{attempts > 0?}
+    isRecheck -- no --> HEADER_REVIEW["#60;HEADER: review#62;"]
+    isRecheck -- yes --> HEADER_RECHECK["#60;HEADER: recheck#62;"]
+    HEADER_REVIEW --> ALWAYS1
+    HEADER_RECHECK --> ALWAYS1
+    ALWAYS1["#60;STRICT INPUT ALLOWLIST#62;<br>#60;MISSING-FILE RESPONSE#62;"]
+    ALWAYS1 --> isRecheck2{attempts > 0?}
+    isRecheck2 -- no --> READ_REVIEW["#60;WHAT YOU READ: review#62;"]
+    isRecheck2 -- yes --> READ_RECHECK["#60;WHAT YOU READ: recheck#62;"]
+    preExisting[/preExistingTestFiles/] --> hasPreExisting{length is 0?}
+    READ_REVIEW --> hasPreExisting
+    hasPreExisting -- yes --> NONE["#60;TESTS THIS TASK DID NOT CREATE: none#62;"]
+    hasPreExisting -- no --> LIST["#60;TESTS THIS TASK DID NOT CREATE: list#62;"]
+    NONE --> RANONLY
+    LIST --> RANONLY
+    RANONLY["#60;WHAT ALREADY RAN#62;<br>#60;NEVER RUN THE TESTS#62;"]
+    RANONLY --> HOWREVIEW["#60;HOW TO JUDGE THE TESTS: review#62;"]
+    HOWREVIEW --> DONOTFLAG["#60;DO NOT FLAG#62;"]
+    DONOTFLAG --> DOCREVIEW["#60;DOCUMENTING EVIDENCE: review#62;"]
+    DOCREVIEW --> RETURNREVIEW["#60;WHAT YOU, THE REVIEWING AGENT, RETURNS: review#62;"]
+    RETURNREVIEW --> OUTPUT
+    READ_RECHECK --> HOWRECHECK["#60;HOW TO JUDGE THE TESTS: recheck#62;"]
+    HOWRECHECK --> DOCRECHECK["#60;DOCUMENTING EVIDENCE: recheck#62;"]
+    DOCRECHECK --> RETURNRECHECK["#60;WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck#62;"]
+    RETURNRECHECK --> OUTPUT
+    OUTPUT["#60;WHAT TO OUTPUT#62;"]
+    OUTPUT --> QUESTIONVAR[/reviewTestsQuestion text/]
+    QUESTIONVAR --> SHELL["#60;SPAWN HEADER AND SHELL BLOCK (spawnAgentHeader, codexExecCommand, spawnClaudeFableCli, spawnClaudeOpus48Cli)#62;"]
+    SHELL --> RETURN["#60;WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)#62;"]
+    classDef decision fill:#f6d55c,stroke:#8a6d00,color:#000
+    class hasPreExisting,isRecheck,isRecheck2 decision

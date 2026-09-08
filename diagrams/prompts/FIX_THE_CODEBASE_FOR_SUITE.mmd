@@ -1,0 +1,6 @@
+%% How buildSuiteFixPrompt picks its sections. No choices branch this prompt; every section always renders.
+flowchart TD
+    packet[/packet: Input/] --> ALWAYS
+    ALWAYS["#60;YOUR JOB#62;<br>#60;WHAT TO READ#62;<br>#60;WHAT YOU MAY EDIT (absolutePathsSection, resumedRunSection)#62;<br>#60;HOW TO FIX#62;<br>#60;FORBIDDEN ACTIONS#62;"]
+    ALWAYS --> RETURN["#60;WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)#62;"]
+    RETURN --> OUTPUT["#60;FAILING SUITE OUTPUT (packet.output)#62;"]

@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "FINISHED_IMPLEMENTATION_INPUT",
+        "scriptSignal": "continue",
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    },
+    "output": {
+        "box": "LOCK_SOURCE_REPO",
+        "scriptSignal": "continue",
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
+    }
+}

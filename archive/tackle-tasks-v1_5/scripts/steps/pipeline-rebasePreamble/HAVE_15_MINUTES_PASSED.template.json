@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "WAS_LOCK_ACQUIRED",
+        "scriptSignal": "continue",
+        "next": "HAVE_15_MINUTES_PASSED",
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    },
+    "output": {
+        "box": "HAVE_15_MINUTES_PASSED",
+        "scriptSignal": "continue",
+        "next": "WAIT_FOR_LOCK",
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

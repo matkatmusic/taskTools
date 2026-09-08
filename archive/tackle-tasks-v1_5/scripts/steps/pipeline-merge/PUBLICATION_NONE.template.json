@@ -1,0 +1,35 @@
+{
+    "input": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "WHAT_IS_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "state": "NONE LANDED",
+        "landed": [],
+        "notLanded": [
+            "root"
+        ],
+        "commits": [],
+        "next": "PUBLICATION_NONE"
+    },
+    "output": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "PUBLICATION_NONE",
+        "scriptSignal": "continue",
+        "state": "NONE LANDED",
+        "landed": [],
+        "notLanded": [
+            "root"
+        ],
+        "commits": []
+    }
+}

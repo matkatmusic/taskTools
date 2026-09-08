@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "PLANNER_RETURNED_CLARIFY",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
+        "sourceBranch": "master",
+        "projectRoot": "scripts/steps/pipeline-plan/fixtures",
+        "clarifyRequest": "which database does task 35 target?"
+    },
+    "output": {
+        "box": "ARE_2_CLARIFY_ROUNDS_DONE",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
+        "sourceBranch": "master",
+        "projectRoot": "scripts/steps/pipeline-plan/fixtures",
+        "clarifyRequest": "which database does task 35 target?",
+        "exitType": "",
+        "exitNote": "",
+        "next": "WRITE_CLARIFY_REQUEST"
+    }
+}

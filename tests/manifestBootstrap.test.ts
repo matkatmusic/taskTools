@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();
@@ -48,7 +48,7 @@ function makeRootWithUnresolvableGitlink(): string {
 
 test("test_bootstrapReturnsResolvedGraphForRepoWithNoSubmodules", () => {
     const rootPath = makeTempRepoWithCommit();
-    const result = bootstrapRepositoryManifest(rootPath);
+    const result = bootstrapRepositoryManifest(rootPath, "main");
     assert.equal(result.refused, false);
     if (result.refused) return;
     assert.equal(result.occurrenceGraph.length, 1);
@@ -57,7 +57,7 @@ test("test_bootstrapReturnsResolvedGraphForRepoWithNoSubmodules", () => {
 
 test("test_bootstrapResolvesSubmoduleAtRecordedGitlinkOid", () => {
     const rootPath = makeRootWithSubmoduleAtRecordedOid();
-    const result = bootstrapRepositoryManifest(rootPath);
+    const result = bootstrapRepositoryManifest(rootPath, "main");
     assert.equal(result.refused, false);
     if (result.refused) return;
     assert.equal(result.occurrenceGraph.length, 2);
@@ -67,7 +67,7 @@ test("test_bootstrapResolvesSubmoduleAtRecordedGitlinkOid", () => {
 
 test("test_bootstrapRefusesWithNamedReasonForUnresolvableGitlink", () => {
     const rootPath = makeRootWithUnresolvableGitlink();
-    const result = bootstrapRepositoryManifest(rootPath);
+    const result = bootstrapRepositoryManifest(rootPath, "main");
     assert.equal(result.refused, true);
     if (!result.refused) return;
     assert.equal(result.requests.length, 1);
@@ -86,7 +86,7 @@ test("test_bootstrapPerformsNoGitCheckoutOrBranchCreation", () => {
         const headsBefore = checkoutPaths.map((path) => git(path, "rev-parse", "HEAD"));
         const branchesBefore = checkoutPaths.map((path) => git(path, "branch", "--list"));
 
-        bootstrapRepositoryManifest(rootPath);
+        bootstrapRepositoryManifest(rootPath, "main");
 
         checkoutPaths.forEach((path, index) => {
             assert.equal(git(path, "rev-parse", "HEAD"), headsBefore[index]);

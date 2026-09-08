@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "READ_FAILURES_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "taskNumber": 900001,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900001",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "NONE LANDED"
+    },
+    "output": {
+        "box": "DID_ANY_WORK_LAND_Q",
+        "scriptSignal": "continue",
+        "next": "WRITE_EXIT_TYPE_AND_NOTE",
+        "taskNumber": 900001,
+        "runId": "run-fixture",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/failuresExit/fixtures/worktree",
+        "branch": "task-900001",
+        "exitType": "tests-red",
+        "exitNote": "tests failed after two fix attempts",
+        "publicationState": "NONE LANDED"
+    }
+}

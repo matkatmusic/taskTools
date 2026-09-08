@@ -1,0 +1,36 @@
+{
+    "input": {
+        "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "rebased": false,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [""],
+        "failureReason": "",
+        "returnTo": "",
+        "next": "DOES_FENCE_COVER_WORKTREE_Q"
+    }
+}

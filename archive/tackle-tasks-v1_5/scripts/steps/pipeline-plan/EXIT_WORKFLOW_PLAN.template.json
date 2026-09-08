@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "ARE_2_CLARIFY_ROUNDS_DONE",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "clarifyRequest": "which database does task 35 target?",
+        "exitType": "clarify-stuck",
+        "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+        "next": "EXIT_WORKFLOW_PLAN"
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_PLAN",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "projectRoot": "/tmp/fake-project",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "exitType": "clarify-stuck",
+        "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved."
+    }
+}

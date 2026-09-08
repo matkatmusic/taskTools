@@ -1,0 +1,25 @@
+%% How planPrompt.ts picks its sections. Inputs left, decisions middle, sections right. Not a pipeline diagram.
+flowchart TD
+    codexNotes[/t.codexReviewNotes/] --> hasNotes{trim is empty?}
+    hasNotes -- no --> CODEX["#60;CODEX'S PREVIOUS REVIEW NOTES#62;"]
+    hasNotes -- yes --> dropCodex[section absent]
+    CODEX --> ALWAYS
+    dropCodex --> ALWAYS
+    ALWAYS["#60;YOUR JOB#62;<br>#60;DESIRED OUTPUT#62;<br>#60;WHAT TO READ (absolutePathsSection, resumedRunSection)#62;<br>#60;FORMATTING THE PLAN#62;<br>#60;PLAN REQUIREMENTS#62;<br>#60;ANSWERING A LEFT-BEHIND CLARIFY REQUEST#62;<br>#60;WHEN TO STOP PLANNING#62;<br>#60;FORBIDDEN ACTIONS#62;"]
+    readOnly[/t.readOnlyFiles/] --> hasStar{includes star?}
+    ALWAYS --> hasStar
+    hasStar -- yes --> ANY["#60;ALLOWED ACTIONS: any file#62;"]
+    hasStar -- no --> LIST["#60;ALLOWED ACTIONS: listed files#62;"]
+    tests[/t.hasTests, t.tests/] --> hasTests{hasTests?}
+    ANY --> hasTests
+    LIST --> hasTests
+    hasTests -- no --> SKIP["#60;TESTS_FIELD: skip#62;"]
+    hasTests -- yes --> testsNull{tests is null?}
+    testsNull -- no --> EXAMPLE["#60;TESTS_FIELD: user example#62;"]
+    testsNull -- yes --> NOEXAMPLE["#60;TESTS_FIELD: no example#62;"]
+    SKIP --> RETURN
+    EXAMPLE --> RETURN
+    NOEXAMPLE --> RETURN
+    RETURN["#60;WHAT YOU, THE SPAWNING AGENT, RETURNS (whatToReturnSection)#62;"]
+    classDef decision fill:#f6d55c,stroke:#8a6d00,color:#000
+    class hasNotes,hasStar,hasTests,testsNull decision

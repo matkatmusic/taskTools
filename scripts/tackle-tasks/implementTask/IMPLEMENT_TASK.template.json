@@ -1,0 +1,20 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/implementTask/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/implementTask/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "implemented": true,
+            "notes": ""
+        }
+    }
+}

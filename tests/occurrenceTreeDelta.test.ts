@@ -5,8 +5,8 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeOccurrenceTreeDelta, computeTreeDelta, computeTreeDigest } from "../scripts/occurrenceTreeDelta.ts";
-import type { TreeChange } from "../scripts/occurrenceTreeDelta.ts";
+import { computeOccurrenceTreeDelta, computeTreeDelta, computeTreeDigest } from "../scripts/shared/occurrenceTreeDelta.ts";
+import type { TreeChange } from "../scripts/shared/occurrenceTreeDelta.ts";
 
 function git(repoPath: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoPath, ...args], { encoding: "utf8" }).trim();

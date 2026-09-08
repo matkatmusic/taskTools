@@ -1,0 +1,14 @@
+{
+    "input": {
+        "box": "REPORT_EXIT_TYPE_NO_WRITE",
+        "scriptSignal": "continue",
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
+    },
+    "output": {
+        "box": "STOP",
+        "scriptSignal": "stop",
+        "exitType": "blocked",
+        "exitNote": "an open blocker remains"
+    }
+}

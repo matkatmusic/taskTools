@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "TASK_TESTS_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "typecheckCommand": "npx tsc --noEmit",
+        "maxFixRounds": 3,
+        "message": "implemented the change",
+        "additionalData": { "implemented": true, "notes": "done" },
+        "commits": [
+            { "occurrenceId": "", "hash": "abc123", "kind": "work", "stepId": "implement" }
+        ]
+    },
+    "output": {
+        "box": "COMMITTED_WORK_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project"
+    }
+}

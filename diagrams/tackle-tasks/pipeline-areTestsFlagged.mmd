@@ -1,0 +1,30 @@
+flowchart TB
+%% One agent() call. /run-step starts at ARE_TESTS_FLAGGED. Every path ends at an orange block or a dashed block.
+
+  subgraph areTestsFlagged ["Input: [CODEX_REVIEWS_TESTS]'s result"]
+    direction TB
+    ARE_TESTS_FLAGGED["TESTS_FLAGGED"]
+    ARE_2_TEST_REVIEWS_DONE_Q["2 codex test reviews done?"]
+    AMEND_ENTRY_WITH_CODEX_NOTES["amend the tasks.json entry<br/>with codex's notes and fixes"]
+  end
+  subgraph areTestsFlaggedNext ["next diagram"]
+    direction TB
+    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
+  end
+  areTestsFlagged ~~~ areTestsFlaggedNext
+
+  ARE_TESTS_FLAGGED -- "NO" --> LOCK_SOURCE_REPO
+  ARE_TESTS_FLAGGED -- "YES" --> ARE_2_TEST_REVIEWS_DONE_Q
+  ARE_2_TEST_REVIEWS_DONE_Q -- "NO" --> AMEND_ENTRY_WITH_CODEX_NOTES
+  ARE_2_TEST_REVIEWS_DONE_Q -- "YES<br/>tests-flagged" --> FAILURES_EXIT
+  AMEND_ENTRY_WITH_CODEX_NOTES -- "reimplement against the amended entry" --> IMPLEMENT_TASK
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class ARE_TESTS_FLAGGED,ARE_2_TEST_REVIEWS_DONE_Q,AMEND_ENTRY_WITH_CODEX_NOTES script
+  class LOCK_SOURCE_REPO,FAILURES_EXIT,IMPLEMENT_TASK next_diagram

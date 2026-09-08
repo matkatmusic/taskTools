@@ -1,0 +1,53 @@
+{
+    "input": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "WHAT_IS_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "state": "SOME LANDED",
+        "landed": [
+            "root"
+        ],
+        "notLanded": [
+            "child"
+        ],
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "0000000000000000000000000000000000000000",
+                "kind": "merge"
+            }
+        ],
+        "next": "PUBLICATION_PARTIAL"
+    },
+    "output": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "PUBLICATION_PARTIAL",
+        "scriptSignal": "continue",
+        "state": "SOME LANDED",
+        "landed": [
+            "root"
+        ],
+        "notLanded": [
+            "child"
+        ],
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "0000000000000000000000000000000000000000",
+                "kind": "merge"
+            }
+        ],
+        "exitType": "partially-published",
+        "exitNote": "some layers are on their target branch and some are not. RECOVERY ONLY. worktree preserved."
+    }
+}

@@ -1,0 +1,28 @@
+flowchart TB
+%% One script box, then one orange block per branch. The hook walks in from a dashed IS_DIFFICULTY_7_PLUS_Q block, prints the prompt, and stops.
+
+  subgraph planTheTask ["Input: the task brief"]
+    direction TB
+    IS_DIFFICULTY_7_PLUS_Q["is the task's difficulty 7 or more?"]
+    PLAN_THE_TASK_CODEX["PLAN_THE_TASK_CODEX"]
+    PLAN_THE_TASK["PLAN_THE_TASK"]
+  end
+  subgraph planTheTaskNext ["next diagram"]
+    direction TB
+    WHAT_DID_THE_PLANNER_RETURN["WHAT_DID_THE_PLANNER_RETURN"]
+  end
+  planTheTask ~~~ planTheTaskNext
+
+  IS_DIFFICULTY_7_PLUS_Q -- "YES" --> PLAN_THE_TASK_CODEX
+  IS_DIFFICULTY_7_PLUS_Q -- "NO" --> PLAN_THE_TASK
+  PLAN_THE_TASK_CODEX --> WHAT_DID_THE_PLANNER_RETURN
+  PLAN_THE_TASK --> WHAT_DID_THE_PLANNER_RETURN
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class IS_DIFFICULTY_7_PLUS_Q script
+  class PLAN_THE_TASK,PLAN_THE_TASK_CODEX returns_a_prompt
+  class WHAT_DID_THE_PLANNER_RETURN next_diagram

@@ -1,0 +1,36 @@
+flowchart TB
+%% Codex review plan: task re-run skips the review agent; failed codex falls back to fable then opus.
+
+  subgraph codexReviewsPlan ["Input: [WHAT_DID_THE_PLANNER_RETURN]'s PLAN result"]
+    direction TB
+    IS_PLAN_APPROVED_BY_DEFAULT_Q["task re-run after scrapped-plan exit?"]
+    CODEX_REVIEWS_PLAN["CODEX_REVIEWS_PLAN"]
+    DID_CODEX_REVIEW_SUCCEED_Q["codex reachable?"]
+    CODEX_REVIEW_FALLBACK_FABLE["CODEX_REVIEW_FALLBACK_FABLE"]
+    DID_FABLE_REVIEW_SUCCEED_Q["fable reachable?"]
+    CODEX_REVIEW_FALLBACK_OPUS["CODEX_REVIEW_FALLBACK_OPUS"]
+  end
+  subgraph codexReviewsPlanNext ["next diagram"]
+    direction TB
+    WHAT_IS_REVIEW_VERDICT["WHAT_IS_REVIEW_VERDICT"]
+  end
+  codexReviewsPlan ~~~ codexReviewsPlanNext
+
+  IS_PLAN_APPROVED_BY_DEFAULT_Q -- "NO" --> CODEX_REVIEWS_PLAN
+  IS_PLAN_APPROVED_BY_DEFAULT_Q -- "YES<br/>writes an approved review file" --> WHAT_IS_REVIEW_VERDICT
+  CODEX_REVIEWS_PLAN --> DID_CODEX_REVIEW_SUCCEED_Q
+  DID_CODEX_REVIEW_SUCCEED_Q -- "YES" --> WHAT_IS_REVIEW_VERDICT
+  DID_CODEX_REVIEW_SUCCEED_Q -- "NO" --> CODEX_REVIEW_FALLBACK_FABLE
+  CODEX_REVIEW_FALLBACK_FABLE --> DID_FABLE_REVIEW_SUCCEED_Q
+  DID_FABLE_REVIEW_SUCCEED_Q -- "YES" --> WHAT_IS_REVIEW_VERDICT
+  DID_FABLE_REVIEW_SUCCEED_Q -- "NO" --> CODEX_REVIEW_FALLBACK_OPUS
+  CODEX_REVIEW_FALLBACK_OPUS --> WHAT_IS_REVIEW_VERDICT
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class IS_PLAN_APPROVED_BY_DEFAULT_Q,DID_CODEX_REVIEW_SUCCEED_Q,DID_FABLE_REVIEW_SUCCEED_Q script
+  class CODEX_REVIEWS_PLAN,CODEX_REVIEW_FALLBACK_FABLE,CODEX_REVIEW_FALLBACK_OPUS returns_a_prompt
+  class WHAT_IS_REVIEW_VERDICT next_diagram

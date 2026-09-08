@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "UPDATE_AUTO_GENERATED_DOCS",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "add coverage for the new export",
+        "briefFile": "/repo/worktrees/task-42/plans/brief-42.md"
+    },
+    "output": {
+        "box": "PLAN_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42"
+    }
+}

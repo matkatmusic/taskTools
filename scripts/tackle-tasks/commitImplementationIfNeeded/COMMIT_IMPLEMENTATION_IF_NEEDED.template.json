@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "IMPLEMENT_TASK",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/commit/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/commit/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "message": "implemented the change",
+        "additionalData": { "implemented": true }
+    },
+    "output": {
+        "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/commit/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/commit/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

@@ -1,0 +1,33 @@
+{
+    "input": {
+        "box": "MERGE_WORKTREES",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": true,
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "failureReason": ""
+    },
+    "output": {
+        "box": "READ_MERGE_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/runFullSuite/fixtures/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": true,
+        "failureReason": "",
+        "state": "ALL LANDED",
+        "landed": [""],
+        "notLanded": [""],
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }]
+    }
+}

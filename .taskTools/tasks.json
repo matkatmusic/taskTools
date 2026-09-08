@@ -1,723 +1,178 @@
 [
   {
-    "taskNumber": 35,
-    "title": "Activate the new manifest and workflow version after the cutover suite is green",
-    "description": "Final step of the recursive repository-discovery cutover, after the split into tasks 45 to 51.\n\nEvery call-site migration now lives in its own task: 45 manifest bootstrap, 46 repositoryBranches, 47 taskGroups, 48 prepareTasks, 49 mergeTaskWorktrees finalization, 50 workflow and SKILL approval split, 51 legacy manifest routing. This task is only the version flip that activates the new manifest and workflow version once all of them have landed.\n\nFlip the version only after the complete end-to-end suite passes: a full node --test tests/ run plus npx tsc --noEmit, both green, in the same commit. Isolate the flip as its own commit so it can be reverted without unwinding the migration.\n\nThis task was attempted three times as a single whole-cutover unit and refused each time for a different verified reason: detached-HEAD resolution semantics, discoverRepositoryTree checking out working directories (fixed by task 44), and the absence of any manifest bootstrap (now task 45). Do not re-merge the split steps back into this task.\n\nTests: the version constant advances only with the full suite green, and a guard refuses the flip on any nonzero exit.",
-    "files": [
-      "scripts/repositoryManifest.ts",
-      "tests/repositoryManifest.test.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "difficulty": 6
-  },
-  {
-    "taskNumber": 36,
-    "title": "RevEng-shaped end-to-end fixture and Phase 4 acceptance run",
-    "description": "Phase 4 of the recursive repository-discovery redesign — the final acceptance gate.\n\nBuild a RevEng-shaped end-to-end fixture in tests/fixtures/revengGraph.ts containing tmux_lib at tmux_lib, jfred/external/tmux_lib, and jfred/jfredToolsPlugin/external/tmux_lib; two occurrences each of claude_plugin_lib and scenarios; nested submodules beneath ordinary directories; and distinct parent chains. Drive a full run against it in tests/revengEndToEnd.test.ts.\n\nVerify in that fixture that a change originating from any repeated occurrence converges everywhere; all child and ancestor suites pass; approval precedes every commit, merge, and push; all occurrence histories consolidate into one operation per logical repository; gitlinks propagate through the correct explicit parents to the root; and every intended local base ends at the expected merge commit. Also verify no semantic commit, push, integration merge, base mutation, or archival occurs before approval, and that only successfully published tasks are archived.\n\nPhase 4 acceptance: the recursive workflow is the production path, completes the RevEng-shaped run without data loss, and archives only tasks whose integration was successfully published.",
-    "files": [
-      "tests/revengEndToEnd.test.ts",
-      "tests/fixtures/revengGraph.ts"
-    ],
-    "handoffFilePaths": [
-      "plans/codex-tackle-tasks-repo-discovery-phase-4.md"
-    ],
-    "blockedBy": [
-      {
-        "taskNum": 35,
-        "reason": "reason not recorded (migrated from legacy blockedBy format)"
-      }
-    ],
-    "difficulty": 8
-  },
-  {
-    "taskNumber": 94,
-    "version": "091d78289befe634ccb151ace4f284a4568e46b5",
-    "title": "Introduce the readOnlyFiles read fence in the task template, update-task-files, and the plan/verify workflow prompts",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/create-task/template/taskTemplate.json\", \"skills/update-task-files/SKILL.md\", \"skills/tackle-tasks/plan.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nChild 2 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 2: add 'readOnlyFiles' to the keys of each task to provide the list of files to be read by the agent, with 'readOnlyFiles: [*]' meaning every file in the project is readable by the subagents.\n\nRequired behavior:\n1. skills/create-task/template/taskTemplate.json gains a readOnlyFiles key alongside the existing file fence, documented as the list of paths the subagents may READ, where [\"*\"] means every file in the project.\n2. skills/update-task-files/SKILL.md is updated so backfilling a task's file fence also maintains readOnlyFiles, not just the editable list.\n3. The two read-oriented workflow prompts stop conflating the read fence with the edit fence: skills/tackle-tasks/plan.workflow.js line 28 currently says \"You may also READ these owned files, and nothing else\" — the planner must be told it may read readOnlyFiles (or the whole project when it is [\"*\"]). skills/tackle-tasks/verify.workflow.js line 25 has the same conflation and needs the same widening.\n\nDo NOT edit scripts/prepareTasks.ts (child 93 defines and exports the shared accessor pair — import it, never re-implement it), scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, skills/create-task/SKILL.md, skills/tackle-tasks/implement.workflow.js, skills/tackle-tasks/test.workflow.js, or skills/close-tasks/SKILL.md — those belong to siblings.\n\nMotivation: task 50's planner produced a plan against a file that no longer existed because its read fence was scoped to its own owned files. Widening reads while keeping writes narrow fixes that without loosening ownership. Note that readOnlyFiles must never widen a task group or make two tasks collide — grouping keys off the editable fence only.\n\nFiles: skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, skills/tackle-tasks/plan.workflow.js, skills/tackle-tasks/verify.workflow.js\n\nTests: assert the template carries readOnlyFiles with its [\"*\"] meaning documented, and that the plan and verify workflow prompts state a read fence that is readOnlyFiles (or the whole project when [\"*\"]) rather than \"these owned files, and nothing else\".\n\nDifficulty: 2",
-    "description": "Step 2 of the 6-way split of task 58. Scope is the authoring surfaces that EMIT the read fence plus the two workflow prompts that CONSUME it for reading only. The runtime accessors live in scripts/prepareTasks.ts (child 93) and must be imported, never re-implemented; the edit-fence rename is a sibling child; the close-tasks migration is another.\n\nWhy this exists: the workflow prompts today conflate 'files you own' with 'files you may look at'. skills/tackle-tasks/plan.workflow.js line 28 literally says the agent may READ its owned files 'and nothing else', and skills/tackle-tasks/verify.workflow.js line 25 repeats it. That is what broke task 50 — its planner wrote a plan against a file that had already been deleted, because it could not read the rest of the project to notice. Reading is widened here; writing stays exactly as narrow as it is today.\n\nSurfaces to change:\n- skills/create-task/template/taskTemplate.json: add readOnlyFiles next to the existing file fence, with the ['*'] = whole project meaning stated in the template itself so every task author sees it.\n- skills/update-task-files/SKILL.md: backfilling a task's fence must now maintain readOnlyFiles too, not just the editable list.\n- skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js: state the read fence separately from the edit fence — readOnlyFiles, or the entire project when it is ['*'].\n\nInvariant that must survive this change: readOnlyFiles never affects grouping. Task groups and worktree scope key off the editable fence only, so a wide read fence must not merge two groups or make two tasks collide. Enforcement lives in scripts/taskGroups.ts (a sibling child); this child must not state anything in the prompts or template that contradicts it.",
-    "files": [
-      "skills/create-task/template/taskTemplate.json",
-      "skills/update-task-files/SKILL.md",
-      "skills/tackle-tasks/plan.workflow.js",
-      "skills/tackle-tasks/verify.workflow.js"
-    ],
-    "tests": "Assert skills/create-task/template/taskTemplate.json carries a readOnlyFiles key with its ['*'] = every project file meaning documented in the template. Assert the prompt text emitted by skills/tackle-tasks/plan.workflow.js and skills/tackle-tasks/verify.workflow.js states a read fence of readOnlyFiles (or the whole project when ['*']) and no longer contains the phrase restricting reads to owned files and nothing else.",
-    "difficulty": 4
-  },
-  {
-    "taskNumber": 95,
-    "version": "091d78289befe634ccb151ace4f284a4568e46b5",
-    "title": "Rename the edit fence to modifiableFiles in create-task and state it separately from the read fence in the implement and test workflows",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/implement.workflow.js\", \"skills/tackle-tasks/test.workflow.js\", \"skills/create-task/SKILL.md\"]`.\n\nChild 3 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 3: change 'files' to 'modifiableFiles', meaning 'only these files are editable by the subagents'.\n\nRequired behavior:\n1. skills/create-task/SKILL.md emits and documents 'modifiableFiles' in place of 'files' when authoring a task, stating plainly that it is the edit fence — only these paths may be edited or git-added by the subagents.\n2. The two write-oriented workflow prompts state the edit fence and the read fence separately, where today they conflate them: skills/tackle-tasks/implement.workflow.js lines 38 and 73, and skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Only modifiableFiles may be edited or git-added; readOnlyFiles (or the whole project when it is [\"*\"]) may be read.\n\nDo NOT edit scripts/prepareTasks.ts (child 93 defines and exports the shared accessor pair — import it, never re-implement it), scripts/taskGroups.ts, scripts/approvalGate.ts, scripts/mergePipeline.ts, skills/create-task/template/taskTemplate.json, skills/update-task-files/SKILL.md, skills/tackle-tasks/plan.workflow.js, skills/tackle-tasks/verify.workflow.js, or skills/close-tasks/SKILL.md — those belong to siblings.\n\nNote the compatibility rule owned by a sibling child: readers still accept a legacy task that declares only 'files', so this rename must not make an old task unreadable. Grouping and worktree scope key off modifiableFiles only.\n\nFiles: skills/tackle-tasks/implement.workflow.js, skills/tackle-tasks/test.workflow.js, skills/create-task/SKILL.md\n\nTests: assert the implement and test workflow prompts name modifiableFiles as the only paths that may be edited or git-added, and separately name readOnlyFiles (or the whole project when [\"*\"]) as readable; assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files.\n\nDifficulty: 2",
-    "description": "Step 3 of the 6-way split of task 58. Scope is the write-side surfaces: the authoring instructions in skills/create-task/SKILL.md and the two workflow prompts that actually edit and git-add files. The template JSON, the read-side prompts, the runtime accessors, and the close-tasks migration all belong to siblings.\n\nThe rename is semantic, not cosmetic: `files` currently means both 'what this task owns' and 'what the agent may look at'. Splitting it makes `modifiableFiles` mean exactly one thing — the only paths that may be edited or git-added — so the read fence can be widened independently without loosening ownership.\n\nSites that conflate the two fences today and must state them separately: skills/tackle-tasks/implement.workflow.js lines 38 and 73; skills/tackle-tasks/test.workflow.js lines 49, 86 and 104. Each needs an explicit edit fence (modifiableFiles only) and an explicit read fence (readOnlyFiles, or the entire project when it is ['*']).\n\nCompatibility constraint, enforced by a sibling child in the shared accessors: a legacy task declaring only `files` must keep working, with `files` read as the modifiable fence. So this rename changes what new tasks emit and what the prompts say, and must not be written as though the old key were invalid.\n\nInvariant to preserve: grouping and worktree scope key off the modifiable fence only. readOnlyFiles must never widen a group or make two tasks collide, so nothing in these prompts may imply that a wide read fence grants ownership.",
-    "files": [
-      "skills/tackle-tasks/implement.workflow.js",
-      "skills/tackle-tasks/test.workflow.js",
-      "skills/create-task/SKILL.md"
-    ],
-    "tests": "Assert the prompt text emitted by skills/tackle-tasks/implement.workflow.js and skills/tackle-tasks/test.workflow.js names modifiableFiles as the only paths that may be edited or git-added, and separately names readOnlyFiles (or the whole project when ['*']) as readable — the two fences must appear as distinct statements, not one combined sentence. Assert skills/create-task/SKILL.md instructs authors to emit modifiableFiles rather than files, while still describing legacy `files` as accepted.",
-    "difficulty": 4
-  },
-  {
-    "taskNumber": 96,
-    "version": "091d78289befe634ccb151ace4f284a4568e46b5",
-    "title": "Grouping accepts legacy files as modifiableFiles via the shared accessor, and never groups on readOnlyFiles",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 6 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/taskGroups.ts\", \"tests/taskGroups.test.ts\"]`.\n\nChild 4 of 6 from parent task 58 (\"Split task file ownership into modifiableFiles and readOnlyFiles, and make briefs point at files instead of pasting them\"). This child owns STEP 4: when a task only has 'files' but not 'modifiableFiles', accept 'files'.\n\nRequired behavior:\n1. scripts/taskGroups.ts declaredFiles (line 16) currently reads the raw 'files' key. Route it through the shared accessor pair that child 93 defines and exports from scripts/prepareTasks.ts, so a task declaring only the legacy 'files' key is read exactly as if it had declared 'modifiableFiles'. Import that accessor — never re-implement the fallback here, because grouping and preparation diverging is the specific bug this centralisation prevents.\n2. Grouping and worktree-scope decisions key off modifiableFiles ONLY. readOnlyFiles must never widen a group or make two tasks collide, even when it is [\"*\"].\n\nDo NOT edit scripts/prepareTasks.ts (child 93 owns it), scripts/approvalGate.ts, scripts/mergePipeline.ts, any skills/ file, tests/prepareTasks.test.ts, or tests/prepareTasksIntegration.test.ts — those belong to siblings.\n\nFiles: scripts/taskGroups.ts, tests/taskGroups.test.ts\n\nTests: group a task declaring modifiableFiles alongside a legacy task declaring only files, and assert they group identically to the way the legacy pair grouped before the rename. Assert that two tasks whose readOnlyFiles overlap — including when both are [\"*\"] — do NOT get merged into one group and do not collide, because grouping keys off modifiableFiles only.\n\nDifficulty: 2",
-    "description": "Step 4 of the 6-way split of task 58. Scope is scripts/taskGroups.ts and its test. The accessor itself is defined and exported by child 93 from scripts/prepareTasks.ts; this child is the second consumer of it.\n\nWhy the accessor is shared rather than duplicated: scripts/prepareTasks.ts declaredFiles (line 100) and scripts/taskGroups.ts declaredFiles (line 16) are two independent readers of the same fence. If they resolve the legacy key differently — even by one edge case, such as an empty array or a task carrying both keys — grouping and preparation disagree about which files a group owns, and a worktree gets scoped to a different set than the brief describes. Routing both through one exported accessor makes that divergence impossible by construction.\n\nFallback semantics being consumed here: modifiableFiles when present, otherwise the legacy files key. A legacy task must group exactly as it grouped before the rename — this is a pure compatibility requirement, not a behavior change.\n\nHard invariant this child enforces: grouping and worktree scope key off the modifiable fence ONLY. readOnlyFiles is deliberately allowed to be wide (['*'] means the whole project), so if grouping ever consulted it, every task with a default read fence would collide with every other task and collapse into a single group. The read fence must be invisible to grouping.\n\nSource files are capped at 250 lines — split rather than grow past the cap.",
-    "files": [
-      "scripts/taskGroups.ts",
-      "tests/taskGroups.test.ts"
-    ],
-    "tests": "Group a task declaring modifiableFiles alongside a legacy task declaring only files, and assert they group identically to the way the legacy pair grouped before the rename — same groups, same membership, same order. Assert that two tasks with disjoint modifiable fences but overlapping readOnlyFiles, including the case where both are ['*'], stay in separate groups and do not collide. Assert a task carrying both keys resolves to modifiableFiles, so the legacy key never silently wins.",
-    "difficulty": 4
-  },
-  {
-    "taskNumber": 113,
-    "version": "94a63561408ad7a01729ae4e89e32707263bbde5",
-    "title": "Reorganize scripts/ into skillBodyGenerators/ plus topic subfolders, updating every reference",
-    "userDescription": "organize the scripts folder: scripts that output skill bodies go in skillBodyGenerators/, everything else organized by topic (task/, git/, workflow/, etc).",
-    "description": "**Measured scope.** scripts/ holds 65 .ts files, flat. References that must move with them: 236 relative-import lines across 96 files (scripts/ and tests/ combined), 7 command paths in hooks/hooks.json of the form `node \"${CLAUDE_PLUGIN_ROOT}/scripts/<name>.ts\"`, and 17 skill files whose `!` command lines name a script path.\n\n**The generators folder is nearly empty today, and that is the whole scheduling story.** Only two files match the skill-body-generator shape right now: scripts/reviewPlanBrief.ts and scripts/taskStatsBrief.ts. Eight open tasks — 71, 72, 73, 74, 75, 76, 78, 79 — each add one more, one per skill (close-tasks, create-task, merge-worktree-tasks, pick-a-task, tackle-tasks, tackle-unblocked-tasks, update-task-files, update-tasks); 77 already landed taskStatsBrief.ts. Blocking on all eight means skillBodyGenerators/ is populated in a single move of ten files instead of moving two now and having eight more land in the old root afterwards. Decided with the user.\n\n**Four runtime path computations that a typecheck will NOT catch.** These build script paths as strings, so moving a file silently breaks them while tsc stays green:\n- scripts/prepareTasks.ts:72-74, `join(import.meta.dirname, \"mergeTaskWorktrees.ts\")`\n- scripts/prepareTasks.ts:91-93, `join(import.meta.dirname, \"runMergePhase.ts\")`\n- scripts/taskStatsBrief.ts:5, `fileURLToPath(new URL(\"./taskStats.ts\", import.meta.url))`\n- scripts/reviewPlanBrief.ts:7, `fileURLToPath(new URL(\"./planReviewRuling.ts\", import.meta.url))`\nNote both brief generators are on that list, and both point at a NON-generator sibling. Moving reviewPlanBrief.ts into skillBodyGenerators/ while planReviewRuling.ts goes to a topic folder breaks line 7 unless the relative prefix is fixed in the same edit. This is the single likeliest way to ship a green build that fails at runtime.\n\n**What survives a move untouched.** The 14 CLI entry guards keyed on `process.argv[1]` are safe: the `import.meta.url === \\`file://${process.argv[1]}\\`` form is self-referential and moves with its file, and the `process.argv[1]?.endsWith(\"<name>.ts\")` form matches a basename, not a directory.\n\n**Scope note the files array cannot express.** This task renames essentially every file under scripts/ and rewrites imports throughout tests/ and skills/, plus hooks/hooks.json. Enumerating ~180 paths in `files` is not useful, so the array below lists only the files needing hand-authored edits rather than a mechanical rename. The planner and implementer should treat scripts/, tests/, skills/ and hooks/ as in scope for this task specifically.\n\n**Conflict warning.** 27 of the 34 currently open tasks declare at least one scripts/ path. Whenever this lands, every other in-flight task rebases over moved files. Sequence it against a quiet backlog, not alongside a wide tackle-tasks run.\n\n**Taxonomy is left to the implementer** beyond the two fixed points the user gave: skillBodyGenerators/ for the brief emitters, topic folders for the rest. One grouping worth considering that the request does not name: the hook entry points (viewTaskHook.ts, relatedTests.ts, reflow-comments-post.ts, session-end-cleanup.ts, stage-and-summarize-stop.ts, turn-modified-flag.ts) are a distinct category because hooks/hooks.json hardcodes their paths and they are never imported.",
-    "files": [
-      "hooks/hooks.json",
-      "scripts/prepareTasks.ts",
-      "scripts/taskStatsBrief.ts",
-      "scripts/reviewPlanBrief.ts",
-      "tests/scriptReferences.test.ts"
-    ],
-    "tests": "No-dangling-reference sweep, as a real test rather than a manual check: walk every command string in hooks/hooks.json, every `!` command line in skills/**/SKILL.md, and every relative import specifier in scripts/ and tests/, resolve each to an absolute path, and assert the file exists — so a missed rename fails loudly in CI instead of at hook-fire or skill-invocation time. Extend it to the four runtime path computations specifically: assert resolveMergeScriptPath() and resolveMergePhaseScriptPath() both point at existing files, and that the sibling URLs resolved in the two brief generators exist. The test must be written so it would FAIL against a deliberately broken path, not merely pass vacuously when a glob matches nothing. Alongside it, the full existing suite and the typecheck must stay green.",
-    "difficulty": 8
-  },
-  {
-    "taskNumber": 117,
-    "version": "7c28efbc48e2262b947beeb6a6d71c20837ea14c",
-    "title": "test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails passes under node but fails under bun",
-    "userDescription": "Rewritten 2026-08-07 after the original framing was found wrong. Originally filed as a real pre-existing defect in rebaseGroupOntoSource, based on a bun test run. It is not a defect: the test PASSES under node --test, which is what package.json actually runs (\"test\": \"node --test tests/**/*.test.ts\"), and fails ONLY under bun test, where it reports status \"conflicted\" instead of \"cleanup-failed\". Verified both ways on the same tree. The real issue is a runner discrepancy, not a bug in the code under test. Decide whether that discrepancy is worth anything: either make the test runner-agnostic so bun and node agree, or document that bun is not a supported runner for this suite and move on. Low priority either way, since the repo does not test with bun.",
-    "description": "Verified on the merged tree at 7c28efbc48e2262b947beeb6a6d71c20837ea14c, running the same single file both ways:\\n- node --test tests/mergeTaskWorktrees.test.ts -> test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails PASSES.\\n- bun test tests/mergeTaskWorktrees.test.ts -> the same test FAILS at tests/mergeTaskWorktrees.test.ts:743 with actual \"conflicted\", expected \"cleanup-failed\"; 20 pass / 1 fail.\\nThe full suite under node is 1165 pass / 0 fail, so node sees no problem anywhere.\\n\\nThe test shadows PATH so that the git invocation for `rebase --abort` cannot succeed, calls rebaseGroupOntoSource in scripts/mergeTaskWorktrees.ts, and expects the failed cleanup to outrank the plain conflict in the returned status. Under node that works. Under bun it does not, which points at bun resolving or spawning the git child process without honouring the shadowed PATH the same way node does -- so under bun the abort actually succeeds and \"conflicted\" is the honest answer. That makes this a test-harness portability issue, not a status-precedence bug in rebaseGroupOntoSource.\\n\\nHistory worth keeping: this test was the sole failure that made a tackle-tasks run look red during task 112, and it cost a round of investigation before the runner difference was spotted. package.json defines node --test as the suite command; any future triage should run that before concluding a test is broken.\\n\\nScope decision for whoever picks this up: first confirm the mechanism by instrumenting which git binary each runner resolves. Then either (a) change the test to force the abort failure by a mechanism both runners honour -- for example injecting a failing command runner rather than shadowing PATH -- so the assertion holds under both, or (b) if bun support is not wanted, leave the code alone and record that bun is unsupported. Do not weaken the assertion: whichever route is taken, the abort-failure path must still be exercised under node.",
-    "files": [
-      "scripts/mergeTaskWorktrees.ts",
-      "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "tests": "Under node --test, tests/mergeTaskWorktrees.test.ts test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails continues to pass and still exercises the abort-failure path. If the runner-agnostic route is taken, the same test also passes under bun test, with all 21 tests in the file green under both runners.",
-    "difficulty": 3
-  },
-  {
-    "taskNumber": 121,
-    "version": "85232c8b852be735c746f274756685877bf2fd66",
-    "title": "Drift test pinning the inlined blocker constants to scripts/blockerVerdicts.ts",
-    "userDescription": "the inlined constants in skills/tackle-tasks/blockers.workflow.js  now duplicate scripts/blockerVerdicts.ts. If those two ever drift, the workflow breaks quietly. Create a test to ensure they don't drift.",
-    "description": "Three declarations are copied at skills/tackle-tasks/blockers.workflow.js:8-12 from scripts/blockerVerdicts.ts:5-13: BLOCKER_VERDICTS, BLOCKER_VERDICT_SCHEMA_FRAGMENT, and buildBlockerInvestigationPrompt. The marker comment at :7 states why the copy exists (workflow scripts run in a sandbox that forbids imports), so the duplication stays and the test pins it.\n\nUse the mechanism already proven in tests/tackleTasksRetry.test.ts:14-24: locate the marker comment, slice the source region below it, compile that text with new Function returning the declared bindings, then assert against the real imports. Follow that file's convention of a negative-control test (:84-89, :104-107) proving the gate can fail.\n\nPut the tests in tests/blockerVerdicts.test.ts, which already imports these constants, rather than a new file.\n\nSecond gap found while reading: WORKFLOW_NAMES at tests/tackleTasksRetry.test.ts:7 lists plan, verify, implement, test, merge — blockers.workflow.js is absent, so its retryAgent copy, its agent() wiring, and its sandbox-parse are all unchecked today. Adding \"blockers\" to that array and EXPECTED_AGENT_CALLS at :8 (value 1, one wrapped agent() call) extends three existing gates for two lines. Its retryAgent block already matches the others byte-for-byte, so the identical-helper assertion should pass unchanged.",
-    "files": [
-      "tests/blockerVerdicts.test.ts",
-      "tests/tackleTasksRetry.test.ts",
-      "skills/tackle-tasks/blockers.workflow.js",
-      "scripts/blockerVerdicts.ts"
-    ],
-    "tests": "Follow the approach in tests/tackleTasksRetry.test.ts. Find the marker comment \"// ponytail: workflow scripts cannot import\" in skills/tackle-tasks/blockers.workflow.js, slice the source from there to the line before `const ARGS`, and compile it with `new Function(block + \"; return {BLOCKER_VERDICTS, BLOCKER_VERDICT_SCHEMA_FRAGMENT, buildBlockerInvestigationPrompt}\")()`. Then assert against the real imports from scripts/blockerVerdicts.ts: deepEqual on BLOCKER_VERDICTS, deepEqual on BLOCKER_VERDICT_SCHEMA_FRAGMENT, and equal on buildBlockerInvestigationPrompt(1, 2, \"some reason\") called on both. Assert the marker comment is present, failing with a clear message if the slice comes back empty, so a deleted or renamed marker fails loudly instead of silently passing. Add a negative control proving the gate fails: run the same compile-and-compare against a source string whose verdict value has been altered, and assert it throws. Also add \"blockers\" to WORKFLOW_NAMES and EXPECTED_AGENT_CALLS.blockers = 1 in tests/tackleTasksRetry.test.ts so the identical-retryAgent, wrapped-agent-call, and sandbox-parse gates cover that file too.",
-    "difficulty": 3
-  },
-  {
-    "taskNumber": 131,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: one worktree per task in prepareTasks",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"scripts/prepareTasks.ts\", \"scripts/taskGroups.ts\", \"tests/prepareTasks.test.ts\", \"tests/prepareTasksIntegration.test.ts\", \"tests/taskGroups.test.ts\"]`.\n\nTitle should be about: tackle-tasks: one worktree per task in prepareTasks.\n\nDescription:\n\nSplit of task 123, step 1 of 3. Covers the prepareTasks half of items 1 and 2 of the \"stage plan\" section of plans/task-86-spec.md (inline that spec section into the brief).\n\nReplace file-overlap grouping with one worktree per task. scripts/prepareTasks.ts:134 `createWorktreeForGroup` becomes per-task: worktree path `join(tmpdir(), \"taskTools-wt\", basename(repoRoot), `task-${n}`)`, branch `task-<n>` created in the root and every submodule (`createBranchInEveryRepository` already does this at :153). Drop the `groupTasksByFileOverlap` call at :214, so scripts/taskGroups.ts loses its caller here — scripts/taskStats.ts still uses it for the parallel-commands display and must keep working, so do not delete taskGroups.ts.\n\nFix the combined-files bug at prepareTasks.ts:172, where every task in a group receives `group.filePaths`. Each task's `files` must now be its own list from tasks.json.\n\nUpdate tests/prepareTasks.test.ts, tests/prepareTasksIntegration.test.ts and tests/taskGroups.test.ts to match the new per-task worktree/branch layout and the per-task `files` fix.\n\nOut of scope: skills/tackle-tasks/task.workflow.js and plan.workflow.js — those are steps 2 and 3, which are chained behind this one.\n\ntests: run them (the existing suites above must pass). difficulty: around 6.",
-    "description": "Split of task 123, step 1 of 3. Covers the prepareTasks half of items 1 and 2 of the \"stage plan\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nReplace file-overlap grouping with one worktree per task. scripts/prepareTasks.ts:134 createWorktreeForGroup becomes per-task: worktree path join(tmpdir(), \"taskTools-wt\", basename(repoRoot), `task-${n}`), branch `task-<n>` created in the root and every submodule — createBranchInEveryRepository at :153 already does the every-submodule part, so reuse it rather than writing new branch-creation code.\n\nDrop the groupTasksByFileOverlap call at prepareTasks.ts:214. scripts/taskGroups.ts then loses its caller here, but scripts/taskStats.ts still imports it for the parallel-commands display, so the module must stay and keep working — this task deletes the call, not the file.\n\nFix the combined-files bug at prepareTasks.ts:172, where every task in a group is handed group.filePaths (the union of the group's files). Each task's `files` must now be its own list read from tasks.json. This is the bug that made a task's plan see files it does not own.\n\nUpdate tests/prepareTasks.test.ts, tests/prepareTasksIntegration.test.ts and tests/taskGroups.test.ts for the new per-task worktree/branch layout and the per-task files fix. taskGroups.test.ts stays green because taskGroups.ts itself is unchanged; it is listed here in case its prepareTasks-facing assertions need trimming.\n\nOut of scope: skills/tackle-tasks/task.workflow.js and skills/tackle-tasks/plan.workflow.js — those are steps 2 and 3 of this split, chained behind this task so no two children edit the same file at once.",
-    "files": [
-      "plans/task-86-spec.md",
-      "scripts/prepareTasks.ts",
-      "scripts/taskGroups.ts",
-      "tests/prepareTasks.test.ts",
-      "tests/prepareTasksIntegration.test.ts",
-      "tests/taskGroups.test.ts"
-    ],
-    "tests": "Existing suites must pass: node --test tests/prepareTasks.test.ts tests/prepareTasksIntegration.test.ts tests/taskGroups.test.ts. Add one case in prepareTasks.test.ts that prepares two tasks with disjoint files and asserts each gets its own worktree path ending in task-<n>, its own task-<n> branch, and a `files` array equal to its own tasks.json list — not the union of both.",
-    "difficulty": 6
-  },
-  {
-    "taskNumber": 132,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: create task.workflow.js with the stage dispatcher",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: create task.workflow.js with the stage dispatcher.\n\nDescription:\n\nSplit of task 123, step 2 of 3. Creates skills/tackle-tasks/task.workflow.js: one workflow file per task, with a `stage` launch argument selecting plan / implement / rebase-test / merge, defaulting to plan+implement. This step builds only the dispatcher shell — argument parsing, stage selection, meta.name of `task-<N>`, and phase titles carrying the task number (e.g. `86 Plan`) so six concurrent runs stay distinguishable in /workflows. Stage bodies are stubs; step 3 fills in the plan stage and later tasks fill in the rest.\n\ntests: skip. difficulty: around 5.",
-    "description": "Split of task 123, step 2 of 3. Creates skills/tackle-tasks/task.workflow.js — the single per-task workflow file that replaces the current one-workflow-per-phase layout.\n\nScope is the dispatcher shell only:\n- a `stage` launch argument selecting plan / implement / rebase-test / merge, defaulting to plan+implement when unset;\n- meta.name is `task-<N>`, so each concurrent run is separately identifiable;\n- phase titles carry the task number (`86 Plan`, `86 Implement`, ...) so six concurrent runs stay distinguishable in /workflows;\n- stage bodies are stubs that log and return; nothing calls an agent yet.\n\nThe existing skills/tackle-tasks/plan.workflow.js stays untouched here — step 3 moves its planner code across and deletes it. This task and step 3 both edit task.workflow.js, so they are chained: this one must land first.\n\nRead plans/task-86-spec.md (already in the repo) for the full stage plan before writing the dispatcher, even though it is not in this task's files list.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 131,
-        "reason": "prepareTasks must create the per-task worktree and branch this workflow file runs inside"
-      }
-    ]
-  },
-  {
-    "taskNumber": 133,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: fill in the plan stage and delete plan.workflow.js",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/plan.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: fill in the plan stage and delete plan.workflow.js.\n\nDescription:\n\nSplit of task 123, step 3 of 3. Fills in the plan stage of the dispatcher created by step 2: the brief written programmatically via writeTaskBriefFile, and the planner agent writing plans/task-<N>-plan.md. Move plannerBrief, PLAN_SCHEMA, retryAgent and fileRetryPreamble across from skills/tackle-tasks/plan.workflow.js into task.workflow.js, then delete plan.workflow.js.\n\nThis is only the plan stage's first half; later tasks (124 onward) fill in the remaining stages of the same file and are chained behind this one.\n\ntests: skip. difficulty: around 6.",
-    "description": "Split of task 123, step 3 of 3. Fills in the plan stage inside skills/tackle-tasks/task.workflow.js, the dispatcher shell created by task 132.\n\nWork:\n- write the task brief programmatically via writeTaskBriefFile (already exists in scripts/prepareTasks.ts — reuse it, do not re-implement brief formatting);\n- run the planner agent so it writes plans/task-<N>-plan.md;\n- move plannerBrief, PLAN_SCHEMA, retryAgent and fileRetryPreamble across from skills/tackle-tasks/plan.workflow.js into task.workflow.js unchanged, then delete plan.workflow.js.\n\nScope is the plan stage's first half only. The implement / rebase-test / merge stages stay stubs; tasks 124 onward fill them in and are chained behind this one so no two ever edit task.workflow.js at the same time.\n\nThis task shares skills/tackle-tasks/task.workflow.js with task 132 by design — the blockedBy chain, not file exclusivity, is what keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js",
-      "skills/tackle-tasks/plan.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 132,
-        "reason": "creates the task.workflow.js dispatcher whose plan stage this task fills in; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 134,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: review stage — verify agent and VERIFY_SCHEMA with missingFiles",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: review stage — verify agent and VERIFY_SCHEMA with missingFiles.\n\nDescription:\n\nSplit of task 124, step 1 of 3. Covers the review half of items 3, 4 and 5 of the \"stage plan\" section of plans/task-86-spec.md.\n\nAdd the `verify` agent to the plan stage of skills/tackle-tasks/task.workflow.js: it runs the codex review of the plan and returns structured output. Move the review half of skills/tackle-tasks/verify.workflow.js:33-84 across — today one agent both reviews and applies fixes; this task takes only the reviewing.\n\nAdd `missingFiles: {type: 'array', items: {type: 'string'}}` to VERIFY_SCHEMA and change codexPrompt so a plan that cannot be fixed inside the task's owned files returns repo-relative paths instead of prose (verify.workflow.js:31 currently asks it to \"say so explicitly in FIXES\").\n\nDo not delete verify.workflow.js — step 2 of this split moves the applyFeedback half across and deletes it then.\n\ntests: skip. difficulty: around 5.",
-    "description": "Split of task 124, step 1 of 3. Covers the review half of items 3, 4 and 5 of the \"stage plan\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nAdd a `verify` agent to the plan stage of skills/tackle-tasks/task.workflow.js. It runs the codex review of plans/task-<N>-plan.md and returns structured output against VERIFY_SCHEMA. Source material is skills/tackle-tasks/verify.workflow.js:33-84, where a single agent today both reviews and applies its own FIXES block — this task lifts out only the reviewing half.\n\nAdd `missingFiles: {type: 'array', items: {type: 'string'}}` to VERIFY_SCHEMA, and rewrite codexPrompt so a plan that cannot be fixed inside the task's owned files returns repo-relative paths in that field instead of prose. verify.workflow.js:31 currently asks codex to \"say so explicitly in FIXES\", which is unparseable — the widening step (step 3 of this split) needs machine-readable paths to feed scripts/addTaskFiles.ts.\n\nNothing consumes missingFiles yet; this task only produces it. The three-round loop, the applyFeedback agent, and the widening logic are steps 2 and 3.\n\nDo not delete skills/tackle-tasks/verify.workflow.js here — step 2 moves its remaining half across and deletes it then. This task, step 2 and step 3 all edit task.workflow.js and are chained so no two run at once.",
-    "files": [
-      "plans/task-86-spec.md",
-      "skills/tackle-tasks/task.workflow.js",
-      "skills/tackle-tasks/verify.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 133,
-        "reason": "133 finishes the plan stage of task.workflow.js that this task extends; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 135,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: applyFeedback stage and the three-round review loop",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/verify.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: applyFeedback stage and the three-round review loop.\n\nDescription:\n\nSplit of task 124, step 2 of 3. Adds the separate `applyFeedback` agent that applies the FIXES block produced by the verify agent from step 1, and wraps verify + applyFeedback in a loop of up to three rounds inside the plan stage of skills/tackle-tasks/task.workflow.js.\n\nMove the fix-applying half of skills/tackle-tasks/verify.workflow.js:33-84 across, then delete verify.workflow.js — step 1 already moved the reviewing half.\n\nAfter three rounds, proceed to implement regardless of the verdict. Objections codex still holds are carried forward to the approval gate as proposed tasks; the gate itself is a later task, so just make the surviving objections available.\n\nmissingFiles handling is step 3 of this split — leave a round counter the widening step can decrement.\n\ntests: skip. difficulty: around 6.",
-    "description": "Split of task 124, step 2 of 3. Adds the second half of the review loop to the plan stage of skills/tackle-tasks/task.workflow.js.\n\nWork:\n- add a separate `applyFeedback` agent that applies the FIXES block the verify agent (task 134) produced. Splitting review from apply is the point: today skills/tackle-tasks/verify.workflow.js:33-84 has one agent doing both, which lets it rationalize its own review;\n- wrap verify + applyFeedback in a loop of up to three rounds;\n- after three rounds, proceed to implement regardless of the verdict, and make the objections codex still holds available to the caller so a later task can carry them to the approval gate as proposed tasks;\n- move the fix-applying half of verify.workflow.js across and then delete that file — task 134 already moved the reviewing half, so nothing should still import it.\n\nLeave the round counter reachable by step 3: a programmatic missingFiles widening consumes one of the three rounds, so the counter must be decrementable from outside the verify/applyFeedback pair rather than hidden inside the loop body.\n\nThis task shares task.workflow.js with tasks 134 and 136 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js",
-      "skills/tackle-tasks/verify.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 134,
-        "reason": "134 adds the verify agent and VERIFY_SCHEMA this loop applies feedback from; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 136,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: programmatic missing-file widening and planner re-run",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\", \"scripts/addTaskFiles.ts\"]`.\n\nTitle should be about: tackle-tasks: programmatic missing-file widening and planner re-run.\n\nDescription:\n\nSplit of task 124, step 3 of 3. When the verify agent returns a non-empty missingFiles array, the workflow itself — plain code, not an agent — runs `node scripts/addTaskFiles.ts '[N]' <paths>`, regenerates the brief, and re-runs the planner from scratch using the existing fileRetryPreamble. That counts as one of the three rounds from step 2.\n\nThis is only possible because one workflow per task means one process holding one live files list; today each phase receives a frozen args snapshot, so a widened list never reaches the implementer.\n\ntests: skip. difficulty: around 5.",
-    "description": "Split of task 124, step 3 of 3. Closes the loop on the missingFiles field task 134 added to VERIFY_SCHEMA.\n\nWhen verify returns a non-empty missingFiles array, the workflow itself — plain code in skills/tackle-tasks/task.workflow.js, not an agent — must:\n- run `node scripts/addTaskFiles.ts '[N]' <paths>` to widen the task's files list in tasks.json (addTaskFiles.ts already enforces the repo-relative path boundary, so do not re-validate paths in the workflow);\n- regenerate the task brief from the widened list;\n- re-run the planner from scratch using the existing fileRetryPreamble.\n\nThat widening counts as one of the three rounds the loop from task 135 allows, so it decrements the same counter rather than running outside it.\n\nWhy this works only now: one workflow per task means one process holds one live files list. Today each phase receives a frozen args snapshot at launch, so a list widened mid-run never reaches the implementer — the bug this step exists to remove.\n\nscripts/addTaskFiles.ts is listed because the workflow shells out to it; change it only if the widening call needs an interface it does not already have.\n\nThis task shares task.workflow.js with tasks 134 and 135 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js",
-      "scripts/addTaskFiles.ts"
-    ],
-    "tests": "skip",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 135,
-        "reason": "135 builds the three-round loop and round counter this widening consumes a round from; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 137,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: implement stage — worker agent, own tests, commit",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 2 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/implement.workflow.js\", \"skills/tackle-tasks/test.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: implement stage — worker agent, own tests, commit.\n\nDescription:\n\nSplit of task 125, step 1 of 2. Covers the agent half of the \"stage implement\" section of plans/task-86-spec.md.\n\nAdd the implement stage to skills/tackle-tasks/task.workflow.js: the implement agent runs jot:implement against the approved plan, writes and runs the task's own tests, and commits. Move workerBrief, WORKER_SCHEMA and the partial-requeue handling across from skills/tackle-tasks/implement.workflow.js and delete that file. skills/tackle-tasks/test.workflow.js also goes — its work splits between the implementer's own tests here and the tail's full-suite gate in a later step.\n\nSerial workers within a task are no longer needed — one task per worktree means one worker.\n\nThe programmatic owned-files fence check is step 2 of this split.\n\ntests: skip. difficulty: around 6.",
-    "description": "Split of task 125, step 1 of 2. Covers the agent half of the \"stage implement\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nAdd the implement stage to skills/tackle-tasks/task.workflow.js. The implement agent runs jot:implement against the plan approved by the plan stage, writes and runs the task's own tests, and commits inside the task's worktree.\n\nMove workerBrief, WORKER_SCHEMA and the partial-requeue handling across from skills/tackle-tasks/implement.workflow.js, then delete that file. Also delete skills/tackle-tasks/test.workflow.js: its work splits between the implementer's own tests (here) and the tail's full-suite gate (a later task in the 86 chain). Check nothing else still imports either file before deleting.\n\nDrop the serial-workers-within-a-task machinery. One task per worktree means exactly one worker, so the loop that fed several workers the same worktree has no reason to exist.\n\nOut of scope: the programmatic owned-files fence check after the commit — that is step 2 of this split, which edits the same file and is chained behind this one.",
-    "files": [
-      "plans/task-86-spec.md",
-      "skills/tackle-tasks/task.workflow.js",
-      "skills/tackle-tasks/implement.workflow.js",
-      "skills/tackle-tasks/test.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 136,
-        "reason": "136 finishes the plan stage of task.workflow.js that the implement stage consumes; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 138,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: programmatic owned-files fence check after the implement commit",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 2 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: programmatic owned-files fence check after the implement commit.\n\nDescription:\n\nSplit of task 125, step 2 of 2. After the implementer commits, the workflow runs a real fence check — not a prompt sentence. `git -C <worktree> diff --name-only <base>..HEAD` compared against the task's files list; any path outside it is recorded and surfaced at the approval gate.\n\nToday the fence exists only as prose in the worker brief (implement.workflow.js:84) and nothing verifies it. Step 1 of this split moves that brief into task.workflow.js; this step adds the check that actually enforces it.\n\ntests: skip. difficulty: around 4.",
-    "description": "Split of task 125, step 2 of 2. Adds the enforcement half of the \"stage implement\" section of plans/task-86-spec.md.\n\nAfter the implement agent commits, skills/tackle-tasks/task.workflow.js runs a real fence check in plain code, not a prompt sentence: `git -C <worktree> diff --name-only <base>..HEAD`, compared against the task's live files list. Any path outside that list is recorded and surfaced at the approval gate rather than failing the run outright.\n\nUse the task's files list as it stands at check time, not a snapshot taken at launch — task 136's missing-file widening can grow it mid-run, and a stale copy would report false violations.\n\nWhy this is needed: today the fence exists only as prose in the worker brief (implement.workflow.js:84) telling the agent to stay inside its files, and nothing verifies it afterwards. Task 137 moves that brief into task.workflow.js; this task makes it checkable.\n\nNo test file is in scope (the fence lives inside the workflow file, and adding a tests/ path would widen this task's files beyond its parent's list), so verification is by running a task through the pipeline and confirming an out-of-fence edit is reported.\n\nThis task shares task.workflow.js with 137 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 137,
-        "reason": "137 adds the implement stage and its commit, which this fence check runs against; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 139,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: orchestrator launches one task.workflow.js per task, no phase barriers",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"scripts/tackleTasksBrief.ts\", \"tests/tackleTasksBrief.test.ts\"]`.\n\nTitle should be about: tackle-tasks: orchestrator launches one task.workflow.js per task, no phase barriers.\n\nDescription:\n\nSplit of task 126, step 1 of 3. Covers the \"Parallel phase\" section of plans/task-86-spec.md, launch shape only.\n\nRewrite the pipeline instructions in scripts/tackleTasksBrief.ts. Today they tell the orchestrator to launch four phase workflows in sequence, each waiting for every task before the next begins (four barriers). Replace with: launch one task.workflow.js per task, nothing waiting on anything else.\n\nThe old aggregate shape (stepOutputsFile covering all groups, mergeCommand) goes away here; a later task in the 86 chain writes the replacement orchestration the tail calls after the gate.\n\nConcurrency policy (six in flight) is step 2 of this split; the approval gate is step 3.\n\ntests: update tests/tackleTasksBrief.test.ts. difficulty: around 5.",
-    "description": "Split of task 126, step 1 of 3. Covers the launch shape from the \"Parallel phase\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nRewrite the pipeline instructions emitted by scripts/tackleTasksBrief.ts. Today they tell the orchestrator to run four phase workflows in sequence — plan, implement, test, merge — each one waiting for every task to finish before the next begins, which is four barriers. Replace that with: one task.workflow.js launched per task, nothing waiting on anything else.\n\nDelete the old aggregate shape while you are here: stepOutputsFile covering all groups, and mergeCommand. Both assume the four-barrier layout. A later task in the 86 chain writes the replacement orchestration the tail calls after the gate, so leave a clean hole rather than inventing a stand-in.\n\nOut of scope, and chained behind this task because they edit the same two files: the six-in-flight concurrency policy (step 2) and the single approval gate (step 3).",
-    "files": [
-      "plans/task-86-spec.md",
-      "scripts/tackleTasksBrief.ts",
-      "tests/tackleTasksBrief.test.ts"
-    ],
-    "tests": "Update tests/tackleTasksBrief.test.ts: assert the emitted brief names task.workflow.js once per task and no longer mentions the four phase workflows, stepOutputsFile, or mergeCommand.",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 138,
-        "reason": "138 finishes the implement stage and fence check in task.workflow.js that this orchestrator launches"
-      }
-    ]
-  },
-  {
-    "taskNumber": 140,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: keep six task workflows in flight, start the next as any finishes",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/tackleTasksBrief.ts\", \"tests/tackleTasksBrief.test.ts\"]`.\n\nTitle should be about: tackle-tasks: keep six task workflows in flight, start the next as any finishes.\n\nDescription:\n\nSplit of task 126, step 2 of 3. Adds the concurrency policy to the per-task launch shape from step 1: keep six task.workflow.js runs in flight and start the next as soon as any one finishes. Six matches TASKS_PER_COMMAND in scripts/taskStats.ts — reference that constant rather than hardcoding a second copy of the number.\n\nThe approval gate is step 3 of this split.\n\ntests: update tests/tackleTasksBrief.test.ts. difficulty: around 4.",
-    "description": "Split of task 126, step 2 of 3. Adds the concurrency policy to the per-task launch shape task 139 put in scripts/tackleTasksBrief.ts.\n\nThe orchestrator instructions must say: keep six task.workflow.js runs in flight, and start the next task as soon as any one of them finishes — a sliding window, not batches of six with a barrier between them.\n\nSix is TASKS_PER_COMMAND in scripts/taskStats.ts. Reference that constant rather than writing a second copy of the number into the brief, so the two cannot drift.\n\nOut of scope: the single approval gate, which is step 3 of this split and is chained behind this task because it edits the same two files.",
-    "files": [
-      "scripts/tackleTasksBrief.ts",
-      "tests/tackleTasksBrief.test.ts"
-    ],
-    "tests": "Update tests/tackleTasksBrief.test.ts: assert the emitted brief states a six-in-flight sliding window and that the number comes from TASKS_PER_COMMAND, not a literal.",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 139,
-        "reason": "139 rewrites the launch shape this concurrency policy applies to; both edit the same two files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 141,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: one approval gate after every task finishes plan+implement",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/tackleTasksBrief.ts\", \"tests/tackleTasksBrief.test.ts\"]`.\n\nTitle should be about: tackle-tasks: one approval gate after every task finishes plan+implement.\n\nDescription:\n\nSplit of task 126, step 3 of 3. Covers the \"The gate\" section of plans/task-86-spec.md.\n\nWhen every task has finished plan+implement, present exactly one AskUserQuestion gate showing per-task status, fence violations from the implement stage, and leftover codex objections from the plan stage as proposed tasks — accepted ones go into tasks.json through the create-task skill, the rest are dropped. Nothing merges before this gate.\n\ntests: update tests/tackleTasksBrief.test.ts. difficulty: around 5.",
-    "description": "Split of task 126, step 3 of 3. Covers the \"The gate\" section of plans/task-86-spec.md.\n\nAfter every task workflow has finished plan+implement, scripts/tackleTasksBrief.ts must instruct the orchestrator to present exactly one AskUserQuestion gate — not one per task, not one per batch. It shows:\n- per-task status;\n- fence violations recorded by the implement stage (task 138);\n- codex objections that survived the three-round plan review (task 135), listed as proposed tasks.\n\nAccepted proposed tasks go into tasks.json through the create-task skill, never by direct edit. Rejected ones are dropped, not parked.\n\nNothing merges before this gate — the merge orchestration is a later task in the 86 chain and runs only after the user approves here.\n\nThis task shares scripts/tackleTasksBrief.ts and its test with tasks 139 and 140 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "scripts/tackleTasksBrief.ts",
-      "tests/tackleTasksBrief.test.ts"
-    ],
-    "tests": "Update tests/tackleTasksBrief.test.ts: assert the emitted brief describes exactly one AskUserQuestion gate covering all tasks, listing per-task status, fence violations, and surviving objections, and that it routes accepted proposals through the create-task skill.",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 140,
-        "reason": "140 finishes the parallel launch policy this gate closes; both edit the same two files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 142,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: rebase a task's submodule branches, recursing through every submodule layer",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"scripts/mergeTaskWorktrees.ts\", \"tests/mergeTaskWorktrees.test.ts\"]`.\n\nTitle should be about: tackle-tasks: rebase a task's submodule branches, recursing through every submodule layer.\n\nDescription:\n\nSplit of task 127, step 1 of 3. Covers the submodule-rebase half of items 1 and 2 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nFor one task, rebase the `task-N` branch in every submodule onto that submodule's source tip. This must recurse through all submodule layers, not just the first level — deepest submodule first, so an inner submodule is rebased before the outer submodule that points at it.\n\nReuse the existing primitives rather than reimplementing git: rebaseGroupOntoSource (scripts/mergeTaskWorktrees.ts:135) for the rebase itself, unmergedCommitCount (:54) for the \"am I already on the tip?\" check, and discoverRepositoryTree (scripts/repositoryDiscovery.ts:150) for the recursive layer walk.\n\nOut of scope: the parent rebase (step 2) and the merging (step 3).\n\ntests: assert a nested submodule is rebased before its containing submodule, and that a submodule already on its source tip is a no-op.\n\ndifficulty: around 6.",
-    "description": "Split of task 127, step 1 of 3. Covers the submodule-rebase half of items 1 and 2 of the \"Serial tail\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nFor a single task, rebase the `task-N` branch in every submodule onto that submodule's source tip. This must recurse through all submodule layers, not just the top level: process deepest-first, so an inner submodule is rebased before the outer submodule whose gitlink points at it. A single-level loop is the wrong answer here even though it passes on this repo today.\n\nReuse the existing primitives instead of reimplementing git:\n- rebaseGroupOntoSource, scripts/mergeTaskWorktrees.ts:135 — the rebase itself;\n- unmergedCommitCount, scripts/mergeTaskWorktrees.ts:54 — the \"am I already on the source tip?\" check that makes an up-to-date submodule a no-op;\n- discoverRepositoryTree, scripts/repositoryDiscovery.ts:150 — the recursive walk that yields every layer.\n\nNothing merges in this task, and the parent repository is not touched. Steps 2 and 3 of this split add the parent rebase and the ordered merging; they edit the same file and are chained behind this one.\n\nThis is part of the risky section of task 86. Do not regress task 119's fix, which stopped git update-ref from advancing a checked-out branch while the index and working tree stayed at the pre-merge base.",
-    "files": [
-      "plans/task-86-spec.md",
-      "scripts/mergeTaskWorktrees.ts",
-      "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "tests": "In tests/mergeTaskWorktrees.test.ts, build a fixture with a submodule inside a submodule, each carrying a task-N branch behind its source tip. Assert the inner submodule is rebased before the outer one, that both end up on top of their own source tip, and that a submodule already at its source tip is left untouched (no new commit, no ref move).",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 141,
-        "reason": "141 finishes the approval gate; nothing in the serial tail may run before the user approves"
-      }
-    ]
-  },
-  {
-    "taskNumber": 143,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: rebase the parent task-N branch and resolve gitlinks to the rebased submodules",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/mergeTaskWorktrees.ts\", \"tests/mergeTaskWorktrees.test.ts\"]`.\n\nTitle should be about: tackle-tasks: rebase the parent task-N branch and resolve gitlinks to the rebased submodules.\n\nDescription:\n\nSplit of task 127, step 2 of 3. After step 1 has rebased every submodule layer, rebase the parent's `task-N` branch onto the parent's source tip and resolve the gitlink conflicts so each gitlink points at the corresponding rebased submodule commit.\n\nReuse rebaseGroupOntoSource (scripts/mergeTaskWorktrees.ts:135) and resolveGitlinkConflicts (:192) rather than reimplementing git.\n\nStill nothing merges — step 3 does the ordered merging.\n\ntests: assert the rebased parent's gitlinks match the rebased submodule commits from step 1.\n\ndifficulty: around 6.",
-    "description": "Split of task 127, step 2 of 3. Adds the parent-side rebase to the primitive task 142 started.\n\nOnce every submodule layer has been rebased, rebase the parent repository's `task-N` branch onto the parent's source tip. The rebase will hit gitlink conflicts, because the parent's recorded submodule commits are the pre-rebase ones — resolve each gitlink to the corresponding rebased submodule commit from task 142.\n\nReuse the existing primitives rather than reimplementing git: rebaseGroupOntoSource (scripts/mergeTaskWorktrees.ts:135) and resolveGitlinkConflicts (scripts/mergeTaskWorktrees.ts:192).\n\nStill nothing merges in this task — the rebased branches sit ready and step 3 performs the ordered merging. Keeping the merge out means a failed rebase leaves every source branch untouched.\n\nThis task shares scripts/mergeTaskWorktrees.ts and its test with tasks 142 and 144 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "scripts/mergeTaskWorktrees.ts",
-      "tests/mergeTaskWorktrees.test.ts"
-    ],
-    "tests": "In tests/mergeTaskWorktrees.test.ts, extend the nested-submodule fixture: after the parent rebase, assert every gitlink in the parent's task-N tree resolves to the rebased submodule commit, not the pre-rebase one, and that no source branch has moved yet.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 142,
-        "reason": "142 rebases the submodule branches whose commits this parent rebase resolves gitlinks to; both edit the same two files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 144,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: merge submodules before the parent, untangling basePublication from batch retry",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/mergeTaskWorktrees.ts\", \"scripts/basePublication.ts\", \"tests/mergeTaskWorktrees.test.ts\", \"tests/basePublication.test.ts\"]`.\n\nTitle should be about: tackle-tasks: merge submodules before the parent, untangling basePublication from batch retry.\n\nDescription:\n\nSplit of task 127, step 3 of 3. With every branch rebased by steps 1 and 2, do the ordered merging for one task: merge each submodule's `task-N` branch into that submodule's source branch FIRST, deepest layer first, then merge the parent's `task-N` branch into the parent's source branch. The parent's source branch must never point at a commit that exists only on a task branch.\n\nReuse mergeSubmoduleBranchIntoRepo (scripts/mergeTaskWorktrees.ts:209) and mergeGroupBranchIntoRepo (:173) rather than reimplementing git.\n\nThis is the risky part of task 86. scripts/basePublication.ts (250 lines, fixed by task 119) is tangled into runMergePhase.ts's coordinateMergeRetry. Untangle submodule and multi-repo publication from the batch retry machinery without regressing task 119's fix, which stopped git update-ref from advancing a checked-out branch while index and working tree stayed at the pre-merge base.\n\ntests: the submodule's task-N branch is merged into the submodule's source branch BEFORE the parent's gitlink bump lands. Assert the parent's source branch never references a submodule commit reachable only from a task branch. Also assert that after a successful merge the source branch's index and working tree equal the merged commit (the task 119 staged-revert regression).\n\ndifficulty: around 7.",
-    "description": "Split of task 127, step 3 of 3. Performs the ordered merging on the branches tasks 142 and 143 rebased, completing the per-task merge primitive the retry queue calls.\n\nOrder is the whole point: merge each submodule's `task-N` branch into that submodule's source branch first, deepest layer first, and only then merge the parent's `task-N` branch into the parent's source branch. The parent's source branch must never, at any moment, point at a commit that exists only on a task branch — a reader who fetches between the two merges must still get a resolvable tree.\n\nReuse the existing primitives rather than reimplementing git: mergeSubmoduleBranchIntoRepo (scripts/mergeTaskWorktrees.ts:209) and mergeGroupBranchIntoRepo (scripts/mergeTaskWorktrees.ts:173).\n\nThe untangling work lives here. scripts/basePublication.ts (250 lines, fixed by task 119) is tangled into runMergePhase.ts's coordinateMergeRetry: submodule and multi-repo publication are wired through the batch retry machinery. Separate them so one task can be merged on its own, without dragging in batch retry. Do not regress task 119's fix, which stopped git update-ref from advancing a checked-out branch while the index and working tree stayed at the pre-merge base — that regression is silent and only shows up as a staged revert.\n\nThis task shares scripts/mergeTaskWorktrees.ts and its test with tasks 142 and 143 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "scripts/mergeTaskWorktrees.ts",
-      "scripts/basePublication.ts",
-      "tests/mergeTaskWorktrees.test.ts",
-      "tests/basePublication.test.ts"
-    ],
-    "tests": "The submodule's task-N branch is merged into the submodule's source branch BEFORE the parent's gitlink bump lands. Assert the parent's source branch never references a submodule commit reachable only from a task branch. Also assert that after a successful merge the source branch's index and working tree equal the merged commit (the task 119 staged-revert regression).",
-    "difficulty": 7,
-    "blockedBy": [
-      {
-        "taskNum": 143,
-        "reason": "143 rebases the parent branch and resolves its gitlinks; this merge lands those rebased branches. Both edit the same files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 145,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: rebase-test stage — merge-conflict agent fed from collectConflictedRebasePaths",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 2 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"skills/tackle-tasks/task.workflow.js\", \"skills/tackle-tasks/merge.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: rebase-test stage — merge-conflict agent fed from collectConflictedRebasePaths.\n\nDescription:\n\nSplit of task 128, step 1 of 2. Covers item 3 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nAdd the rebase-test stage to skills/tackle-tasks/task.workflow.js. When the rebase leaves conflicts, hand them to a merge agent fed from collectConflictedRebasePaths (scripts/mergeTaskWorktrees.ts:118) — the agent gets the conflicted paths, not a whole-repo hunt.\n\nskills/tackle-tasks/merge.workflow.js is today's \"unblock\" workflow launched on a blocked merge; fold whatever of its conflict-fixing prompt is still useful into this stage and delete it.\n\nThe full-suite green gate is step 2 of this split.\n\ntests: skip. difficulty: around 5.",
-    "description": "Split of task 128, step 1 of 2. Covers item 3 of the \"Serial tail\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nAdd the rebase-test stage to skills/tackle-tasks/task.workflow.js — the stage the dispatcher already selects for but that is still a stub. When the rebase performed by the merge primitive (tasks 142-144) leaves conflicts, hand them to a merge-conflict agent whose input is collectConflictedRebasePaths (scripts/mergeTaskWorktrees.ts:118). The agent receives the exact conflicted paths; it must not be asked to search the repository for what is broken.\n\nskills/tackle-tasks/merge.workflow.js is today's \"unblock\" workflow, launched separately when a merge came back blocked. Fold whatever of its conflict-fixing prompt still applies into this stage, then delete the file and check nothing else imports it.\n\nOut of scope: the full-suite green gate that runs once conflicts are cleared — that is step 2 of this split, which edits the same file and is chained behind this one.",
-    "files": [
-      "plans/task-86-spec.md",
-      "skills/tackle-tasks/task.workflow.js",
-      "skills/tackle-tasks/merge.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 144,
-        "reason": "144 finishes the per-task rebase and merge primitive whose conflicts this stage resolves"
-      }
-    ]
-  },
-  {
-    "taskNumber": 146,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: full-suite green gate in the rebase-test stage, with a fix loop",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 2 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/tackle-tasks/task.workflow.js\"]`.\n\nTitle should be about: tackle-tasks: full-suite green gate in the rebase-test stage, with a fix loop.\n\nDescription:\n\nSplit of task 128, step 2 of 2. Covers item 4 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nOnce the rebase has succeeded and merge conflicts are resolved by step 1, run the full suite in the worktree — `node --test \"tests/**/*.test.ts\"`, currently 1199 tests in about 17 seconds — with a fix loop until green. This is the tail's gate and is deliberately the full suite, not the related-tests subset the implementer runs.\n\ntests: skip. difficulty: around 4.",
-    "description": "Split of task 128, step 2 of 2. Covers item 4 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nAfter the rebase has succeeded and the conflict agent from task 145 has cleared every conflict, the rebase-test stage in skills/tackle-tasks/task.workflow.js runs the full suite inside the task's worktree: `node --test \"tests/**/*.test.ts\"` — currently 1199 tests in about 17 seconds, so running all of it is cheap enough to be unconditional.\n\nOn failure, loop: hand the failures to a fix agent and re-run, until green. Green is what lets the task proceed to merge; a suite that will not go green is what the retry-queue reporting (a later task in the 86 chain) surfaces.\n\nThis is deliberately the full suite, not the related-tests subset the implement stage runs. The implementer checks its own work; this gate checks that the rebased result did not break anyone else's.\n\nThis task shares skills/tackle-tasks/task.workflow.js with task 145 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 145,
-        "reason": "145 creates the rebase-test stage and clears conflicts before this gate can run; both edit the same file"
-      }
-    ]
-  },
-  {
-    "taskNumber": 147,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: serial merge retry queue replacing runMergePhase's batch machinery",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"scripts/runMergePhase.ts\", \"tests/runMergePhase.test.ts\", \"tests/mergePipeline.test.ts\"]`.\n\nTitle should be about: tackle-tasks: serial merge retry queue replacing runMergePhase's batch machinery.\n\nDescription:\n\nSplit of task 129, step 1 of 3. Covers the queue itself from the \"Serial tail\" section of plans/task-86-spec.md.\n\nWrite the new merge orchestration from scratch, replacing scripts/runMergePhase.ts. Tasks approved at the gate enter a queue. Each lap walks the queue in order, calling the per-task merge primitive from task 144 and the rebase-test stage from tasks 145-146. A task whose rebase, conflict resolution or full-suite run fails goes to the BACK of the queue with nothing landed, and is retried on the next lap — by then the tip has moved, so the same conflict may resolve differently.\n\nDelete buildMergeOutcomes (runMergePhase.ts:28), coordinateMergeRetry (:183), refreshBaseOids (:159) and the aggregated stepOutputsFile plumbing. They exist to recover from base drift in a batch model; rebasing onto the current tip one task at a time makes base drift structurally impossible instead.\n\nThe zero-merge-lap exit condition is step 2 of this split, and failure reporting is step 3 — until step 2 lands, guard the lap loop with a simple hard cap so it cannot spin forever.\n\ntests: a task whose rebase or full-suite run fails is moved to the back of the queue and retried on the next lap, with nothing merged for it.\n\ndifficulty: around 7.",
-    "description": "Split of task 129, step 1 of 3. Covers the queue mechanics from the \"Serial tail\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nWrite the new merge orchestration from scratch, replacing scripts/runMergePhase.ts. Shape:\n- tasks approved at the gate (task 141) enter a queue;\n- each lap walks the queue in order, and for each task calls the per-task merge primitive (task 144) and the rebase-test stage (tasks 145-146);\n- a task whose rebase, conflict resolution or full-suite run fails goes to the BACK of the queue with nothing landed, and is retried on the next lap. By then the tip has moved, so the same conflict may resolve differently — that is the whole reason the queue exists rather than a fail-fast.\n\nDelete buildMergeOutcomes (runMergePhase.ts:28), coordinateMergeRetry (:183), refreshBaseOids (:159) and the aggregated stepOutputsFile plumbing. All of it exists to recover from base drift in a batch model; rebasing onto the current tip one task at a time makes base drift structurally impossible, so the recovery code has nothing left to recover from.\n\nThe real exit condition (a lap that merged zero tasks) is task 148 and failure reporting is task 149. Until 148 lands, guard the lap loop with a plain hard cap so an intermediate state cannot spin forever.\n\ntests/mergePipeline.test.ts is in scope because it exercises the batch machinery being deleted and will not compile otherwise.",
-    "files": [
-      "plans/task-86-spec.md",
-      "scripts/runMergePhase.ts",
-      "tests/runMergePhase.test.ts",
-      "tests/mergePipeline.test.ts"
-    ],
-    "tests": "A task whose rebase or full-suite run fails is moved to the back of the queue and retried on the next lap, with nothing merged for it. Assert queue order after a failure, and that the failed task's source branch is unchanged.",
-    "difficulty": 7,
-    "blockedBy": [
-      {
-        "taskNum": 146,
-        "reason": "146 finishes the rebase-test stage and full-suite gate this queue calls per task"
-      }
-    ]
-  },
-  {
-    "taskNumber": 148,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: end the merge queue on a lap that merged zero tasks",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/runMergePhase.ts\", \"tests/runMergePhase.test.ts\"]`.\n\nTitle should be about: tackle-tasks: end the merge queue on a lap that merged zero tasks.\n\nDescription:\n\nSplit of task 129, step 2 of 3. Replaces the placeholder lap cap from step 1 with the real exit condition: a full lap that merged zero tasks. Nothing changed, so retrying would be byte-identical. This terminates in at most N laps, since every lap that continues drains at least one task.\n\ntests: a lap that merges zero tasks ends the queue instead of looping forever; a lap that merges at least one task starts another lap.\n\ndifficulty: around 4.",
-    "description": "Split of task 129, step 2 of 3. Replaces the placeholder hard cap task 147 left in the lap loop with the real exit condition.\n\nThe queue stops when a full lap merges zero tasks. The reasoning: if a whole lap landed nothing, no tip moved, so the next lap would replay byte-identical work and fail identically. Conversely any lap that continues has drained at least one task, so the loop terminates in at most N laps for N queued tasks — no arbitrary retry limit is needed and none should be left behind.\n\nCount merges, not attempts: a lap where every task failed is zero, and a lap where one of five merged is not.\n\nReporting what is left and why is task 149; this task only decides when to stop.\n\nShares scripts/runMergePhase.ts and its test with tasks 147 and 149 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "scripts/runMergePhase.ts",
-      "tests/runMergePhase.test.ts"
-    ],
-    "tests": "A lap that merges zero tasks ends the queue instead of looping forever. A lap that merges at least one task starts another lap. Assert the placeholder hard cap is gone — with N tasks that all fail, the run ends after exactly one lap, not N.",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 147,
-        "reason": "147 writes the queue and lap loop this exit condition replaces the placeholder cap in; both edit the same two files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 149,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: report every task left unmerged and why",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/runMergePhase.ts\", \"tests/runMergePhase.test.ts\"]`.\n\nTitle should be about: tackle-tasks: report every task left unmerged and why.\n\nDescription:\n\nSplit of task 129, step 3 of 3. When the queue exits on a zero-merge lap, report what is left and why: every task still unmerged, with the reason it failed — rebase conflict, unresolved merge conflict, or full-suite failure — carried from the attempt that produced it.\n\ntests: the run reports every task still unmerged, with the reason it failed.\n\ndifficulty: around 4.",
-    "description": "Split of task 129, step 3 of 3. Adds the failure report the queue emits when task 148's zero-merge-lap exit fires.\n\nEvery task still in the queue at exit must be reported with the reason its last attempt failed — rebase conflict, unresolved merge conflict, or full-suite failure — carried from that attempt rather than re-derived after the fact. A task that merged is not in the report; a task that was never attempted should not silently look the same as one that failed.\n\nThis report is what tells the user which tasks stay open in tasks.json, so it must name the task number and the failing reason in a form the caller can act on, not a prose blob.\n\nShares scripts/runMergePhase.ts and its test with tasks 147 and 148 by design; the blockedBy chain keeps them from colliding.",
-    "files": [
-      "scripts/runMergePhase.ts",
-      "tests/runMergePhase.test.ts"
-    ],
-    "tests": "The run reports every task still unmerged, each with the reason it failed. Assert a task that failed the full suite and a task that failed to rebase are reported with different reasons, and that merged tasks are absent from the report.",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 148,
-        "reason": "148 defines the zero-merge-lap exit this report is emitted at; both edit the same two files"
-      }
-    ]
-  },
-  {
-    "taskNumber": 150,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: programmatic cleanup of a task's plan and brief before merge",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\"]`.\n\nTitle should be about: tackle-tasks: programmatic cleanup of a task's plan and brief before merge.\n\nDescription:\n\nSplit of task 130, step 1 of 4. Covers the cleanup part of items 5 and 6 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nOn success for one task, the merge stage deletes plans/task-<N>-plan.md and plans/brief-<N>.md. Programmatic — plain code in the workflow, not an agent asked to tidy up.\n\nDeletion happens inside the task's worktree commit so it lands with the merge, not as a separate edit to the source branch.\n\nSteps 2, 3 and 4 of this split add the merge, the close, and the nothing-lands-on-failure guarantee.\n\ntests: skip. difficulty: around 3.",
-    "description": "Split of task 130, step 1 of 4. Covers the cleanup part of items 5 and 6 of the \"Serial tail\" section of plans/task-86-spec.md, which is in this task's files so the brief inlines it.\n\nOn success for one task, the merge stage deletes that task's scratch files: plans/task-<N>-plan.md and plans/brief-<N>.md. This is plain code in the workflow, not an agent asked to tidy up — the paths are known from the task number, so there is nothing to search for.\n\nThe deletion must land in the task's worktree commit so it merges together with the work, rather than being applied to the source branch afterwards where a failed merge would leave it orphaned.\n\nSteps 2, 3 and 4 of this split add the ordered merge, the direct closeTasks call, and the nothing-lands-on-failure guarantee.",
-    "files": [
-      "plans/task-86-spec.md",
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 3,
-    "blockedBy": [
-      {
-        "taskNum": 149,
-        "reason": "149 finishes the merge queue and its failure report; this cleanup runs inside that queue's success path"
-      }
-    ]
-  },
-  {
-    "taskNumber": 151,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: merge stage calls the submodule-then-parent primitive across all layers",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\"]`.\n\nTitle should be about: tackle-tasks: merge stage calls the submodule-then-parent primitive across all layers.\n\nDescription:\n\nSplit of task 130, step 2 of 4. Wire the merge stage of the task workflow to the per-task merge primitive built in tasks 142-144: merge every submodule layer's task-N branch into its own source branch first, deepest layer first, then the parent's. Then removeWorktreeAndBranch (scripts/mergeTaskWorktrees.ts:229).\n\nDo not reimplement the ordering here — call the primitive. If the primitive turns out to be missing a layer, fix it in mergeTaskWorktrees.ts rather than adding a second ordering in the workflow.\n\ntests: skip. difficulty: around 4.",
-    "description": "Split of task 130, step 2 of 4. Wires the merge stage to the per-task merge primitive built by tasks 142, 143 and 144.\n\nFor one task, after cleanup (task 150) and after the rebase-test stage is green: merge every submodule layer's `task-N` branch into that submodule's source branch first, deepest layer first, then merge the parent's. Then call removeWorktreeAndBranch (scripts/mergeTaskWorktrees.ts:229) to drop the worktree and branch.\n\nDo not reimplement the submodule-before-parent ordering here. It already lives in the primitive; a second copy in the workflow is exactly how the two drift apart. If the primitive turns out to miss a layer, fix it in scripts/mergeTaskWorktrees.ts.\n\nremoveWorktreeAndBranch runs only after the merge reports success — task 153 makes that unconditional-looking sequence actually conditional.",
-    "files": [
-      "plans/task-86-spec.md",
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 4,
-    "blockedBy": [
-      {
-        "taskNum": 150,
-        "reason": "150 deletes the plan and brief into the same worktree commit this merge lands; both edit the merge stage"
-      }
-    ]
-  },
-  {
-    "taskNumber": 152,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: call closeTasks directly, gated on the verified merged commit hash",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"scripts/closeTasks.ts\"]`.\n\nTitle should be about: tackle-tasks: call closeTasks directly, gated on the verified merged commit hash.\n\nDescription:\n\nSplit of task 130, step 3 of 4. Run scripts/closeTasks.ts DIRECTLY — plain code, no subagent, unlike the close-tasks skill's current path.\n\nClosing must be gated on the merge actually succeeding, verified against the merged commit hash, not on the pipeline reaching this step. This repo has already shipped a blocked merge that archived its tasks anyway.\n\ntests: on success, closeTasks records the actual merged commit hash; a task that was skipped or blocked is still open when the run ends.\n\ndifficulty: around 5.",
-    "description": "Split of task 130, step 3 of 4. Closes a task once its merge has landed.\n\nRun scripts/closeTasks.ts directly as plain code — no subagent. The close-tasks skill currently delegates this to an agent, which is why closure has drifted from what actually merged.\n\nThe gate is the merged commit hash, not control flow: closeTasks may only run after reading back the commit the merge produced and confirming the source branch points at it. \"The pipeline reached this step\" is not evidence — this repo has already shipped a blocked merge that archived its tasks anyway, and that is the exact regression this gate exists to prevent.\n\nRecord that verified hash in the archived record's commitHashes, so a closed task can always be traced to the commit that closed it.",
-    "files": [
-      "scripts/closeTasks.ts",
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "On success, closeTasks records the actual merged commit hash — assert the archived record's commitHashes equals the hash the source branch points at. A task whose merge was skipped or blocked is still present in tasks.json, not completedTasks.json, when the run ends.",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNum": 151,
-        "reason": "151 performs the merge whose commit hash this close is gated on"
-      }
-    ]
-  },
-  {
-    "taskNumber": 153,
-    "version": "f2569508451026710ed33235ffc306289fc28c9a",
-    "title": "tackle-tasks: on any lap-step failure nothing lands — no partial merge, worktree survives, task stays open",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"plans/task-86-spec.md\", \"scripts/closeTasks.ts\"]`.\n\nTitle should be about: tackle-tasks: on any lap-step failure nothing lands — no partial merge, worktree survives, task stays open.\n\nDescription:\n\nSplit of task 130, step 4 of 4. Covers item 6 of the \"Serial tail\" section of plans/task-86-spec.md.\n\n\"Failure of what?\" — failure of ANY step in that task's lap: the rebase, the conflict resolution, the full-suite run, the cleanup, the merge, or the close. Any one of them failing means nothing lands for that task on that lap.\n\nOn such a failure: no partial merge, the worktree and branch survive intact for inspection, and the task is still open in tasks.json. Two regressions this repo has already shipped make this the load-bearing part: a blocked merge that archived its tasks anyway, and a merge that left the source branch's index and working tree at the pre-merge base.\n\ntests: when any step of a lap fails, nothing lands: no partial merge, the worktree and branch still exist, and the task is still present in tasks.json rather than completedTasks.json.\n\ndifficulty: around 6.",
-    "description": "Split of task 130, step 4 of 4. Covers item 6 of the \"Serial tail\" section of plans/task-86-spec.md.\n\nScope of \"failure\": any step in that task's lap — the rebase (tasks 142-143), the conflict resolution (145), the full-suite run (146), the cleanup (150), the merge (151), or the close (152). Any one of them failing means nothing lands for that task on that lap; it goes to the back of the queue with the repository exactly as it was.\n\nThree things must hold after such a failure:\n- no partial merge — no source branch at any submodule layer has moved;\n- the worktree and its task-N branch still exist, untouched, so a human can inspect them (removeWorktreeAndBranch must not have run);\n- the task is still in tasks.json, not completedTasks.json.\n\nThis is the load-bearing part of task 86 because both halves have already regressed in this repository: a blocked merge that archived its tasks anyway, and a merge that advanced a branch ref while the index and working tree stayed at the pre-merge base (task 119's fix). Treat both as regression tests, not hypotheticals.",
-    "files": [
-      "plans/task-86-spec.md",
-      "scripts/closeTasks.ts",
-      "skills/tackle-tasks/task.workflow.js"
-    ],
-    "tests": "When any step of a lap fails, nothing lands: no partial merge at any submodule layer, the worktree and branch still exist, and the task is still present in tasks.json rather than completedTasks.json. Run one case per failing step (rebase, conflict, suite, cleanup, merge, close). Also assert the task 119 regression: after a successful merge the source branch's index and working tree equal the merged commit.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNum": 152,
-        "reason": "152 adds the direct closeTasks call that this failure guarantee must prevent from running"
-      }
-    ]
-  },
-  {
-    "taskNumber": 154,
-    "version": "da88f2fe6d1007b25fc5fabbabe87b4be16e450d",
-    "title": "Export the shared modifiableFiles/readOnlyFiles accessors from prepareTasks and add readOnlyFiles to PreparedTask",
-    "userDescription": "Export the shared modifiableFiles/readOnlyFiles accessor pair from scripts/prepareTasks.ts and add readOnlyFiles to PreparedTask. This is parts 2 and 3 of task 93, which closed with only part 1 (the brief file-pointer change) implemented. Required behavior: (1) Define and EXPORT two accessors from scripts/prepareTasks.ts — one returning a task's modifiable paths, falling back to the legacy `files` key when `modifiableFiles` is absent; the other returning a task's readable paths, defaulting to ['*'] when `readOnlyFiles` is absent. The existing private declaredFiles at scripts/prepareTasks.ts:101 must route through the modifiable accessor. Siblings import this pair and must never re-implement it. (2) Add readOnlyFiles to the PreparedTask type at scripts/prepareTasks.ts:14 (currently number/briefFile/planFile/files) and to its construction site at scripts/prepareTasks.ts:178 (`files: group.filePaths`), so downstream consumers can see the read fence. Wiring scripts/approvalGate.ts and scripts/mergePipeline.ts to actually consume it belongs to a sibling task, not this one. Concrete evidence this is needed now: `declaredFiles` is ALREADY duplicated — scripts/prepareTasks.ts:101 and scripts/taskGroups.ts:15 each define their own copy. Centralising is what stops grouping and preparation from diverging, which is the specific failure mode task 93 named. Grouping and worktree-scope decisions must continue to key off the modifiable fence only — readOnlyFiles must never widen a group or make two tasks collide. Task 96 is now unblocked and is one of the five siblings that expects to import this pair, so it will hit a missing import until this lands. Files: scripts/prepareTasks.ts, tests/prepareTasks.test.ts. Do NOT edit scripts/taskGroups.ts, scripts/approvalGate.ts, or scripts/mergePipeline.ts — those belong to siblings. Tests: assert a task declaring modifiableFiles plus readOnlyFiles and a legacy task declaring only files both resolve identically through the accessors; assert a task omitting readOnlyFiles resolves to ['*']; assert PreparedTask carries readOnlyFiles through buildWorkflowArguments. Difficulty 3.",
-    "description": "Carries the unfinished remainder of task 93. Task 93 shipped only its part 1 — writeTaskBriefFile (scripts/prepareTasks.ts:105-128) now emits a file pointer per declared path instead of pasting file bodies, landed in commit da88f2f. Its parts 2 and 3 were never implemented, so this task owns them.\n\nPart 2, the shared accessors. Today scripts/prepareTasks.ts:101 declares a PRIVATE `declaredFiles(task)` returning `Array.isArray(task.files) ? task.files : []`. It has two callers in that file: selectRequestedTasks at :55, which uses an empty result to reject a task that declares no files, and writeTaskBriefFile at :108, which maps it into the brief's pointer list. Both must keep working unchanged once declaredFiles routes through the new modifiable accessor.\n\nThe duplication task 93 predicted has already happened and is verifiable now: scripts/taskGroups.ts:15 exports its own `declaredFiles` with the same body, and taskGroups.ts calls it at :32 (file-to-task index), :38 (rejecting file-less tasks) and :51 (computing a group's filePaths). Two copies of the fence rule is exactly the grouping-vs-preparation divergence the centralisation exists to prevent. This task defines the canonical pair in prepareTasks.ts and exports it; retargeting taskGroups.ts to import it belongs to task 96, not here.\n\nPart 3, the PreparedTask shape. The type at scripts/prepareTasks.ts:14 currently carries number, briefFile, planFile and files. Add the read fence to it, and populate it at the construction site inside buildWorkflowArguments — scripts/prepareTasks.ts:178, `files: group.filePaths`. PreparedGroup (:21) wraps PreparedTask[] and flows out through WorkflowArguments (:29), which prepareTasks.ts prints as the pipeline args JSON, so the field becomes visible to every downstream stage once added. Making the field available is all this task does; scripts/approvalGate.ts and scripts/mergePipeline.ts actually consuming it is a sibling's work.\n\nSemantics fixed by task 93 and not open for redecision: the modifiable accessor falls back to the legacy `files` key when `modifiableFiles` is absent, so every task already in tasks.json keeps working; the readable accessor defaults to ['*'] when `readOnlyFiles` is absent, deliberately widening reads while leaving writes narrow. That default is the fix for task 50's failure, where a planner wrote a plan against an already-deleted file because its read fence was scoped to its own owned files.\n\nHard constraint carried over from task 93: readOnlyFiles must never influence grouping or worktree scope. Groups collide on the modifiable fence only — a wide read fence must not merge two otherwise-disjoint tasks into one worktree. taskGroups.ts is where that is enforced, and it is out of this task's fence, but the accessor defined here is what makes the distinction expressible at all.\n\nSequencing: task 96 was unblocked by task 93's closure and is one of the five task-58 siblings that expects to import this pair. Until this lands, task 96 has no accessor to import.\n\nSource files are capped at 250 lines; scripts/prepareTasks.ts is already near that, so split it rather than growing it past the cap.",
-    "files": [
-      "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts"
-    ],
-    "tests": "Unit-test the two accessors directly, then one integration assertion for the type change.\n\nassert modifiableFiles({files: [\"a.ts\"]})            -> [\"a.ts\"]     // legacy key still honoured\nassert modifiableFiles({modifiableFiles: [\"a.ts\"]})  -> [\"a.ts\"]     // new key\n\nassert readOnlyFiles({files: [\"a.ts\"]})              -> [\"*\"]        // absent read fence defaults wide\nassert readOnlyFiles({readOnlyFiles: [\"b.ts\"]})      -> [\"b.ts\"]\n\nThen: build a task declaring modifiableFiles plus readOnlyFiles and a legacy task declaring only files, and assert both prepare identically, so the legacy fallback is invisible downstream.\n\nFinally, run buildWorkflowArguments over a prepared group and assert groups[0].tasks[0].readOnlyFiles is present, proving the field survives from the type through the construction site into the printed pipeline args.",
-    "difficulty": 3
-  },
-  {
-    "taskNumber": 155,
-    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Give the codex reviewer sibling-task and blockedBy scope so chain boundaries read as intent",
-    "userDescription": "verify.workflow.js should pass sibling-task scope (tasks owning overlapping files, plus the blockedBy graph) into the reviewer prompt, so codex stops flagging deliberate chain boundaries as omissions.",
+    "taskNumber": 164,
+    "schemaVersion": "1.0.1",
+    "version": "b2d66ef60db6badfdd4de5fc1413156b4bdb53af",
+    "title": "'changes detected' Stop hook prints the real staged diff",
+    "userDescription": "make the 'changes detected' hook print out what changes are actually staged, because the agent's view of staged changes is always stale.  It should use the same code that the commit-message hook uses to provide the list of staged changes.",
     "goal": [
-      "- run-arguments.json carries a blockedBy array for every task that declares one",
-      "- the reviewer prompt names each sibling task sharing the group's files, by number and title",
-      "- the reviewer prompt states which tasks block, and are blocked by, the task under review",
-      "- a plan that leaves work to a named sibling or blocker is approved, not rejected as an omission"
+      "- After a turn that edits and stages a file, the Stop hook's additionalContext contains the actual `git diff --staged` text for that file, not only the generic 'Files were changed' sentence.",
+      "- The staged-diff text comes from the same scripts/stagedDiffs.ts code path the commit-message skill uses; no second copy of the diff logic exists in the repo.",
+      "- The full diff is emitted, not a file-name-only list.",
+      "- Staged changes in a submodule whose pointer moved appear in the hook output, labelled per repo, the same way the commit-message skill labels them.",
+      "- `npm test` passes, including an updated tests/stage-and-summarize-stop.test.ts that asserts the staged-diff text is present in additionalContext."
     ],
-    "description": "The two halves start from different places, verified against a real run-arguments.json in the taskTools-86 worktree.\n\nSibling scope is already in hand: verify.workflow.js builds TASK_BY_NUMBER by flat-mapping every group's tasks, so each task and its files are reachable; codexPrompt simply never mentions them. Note that buildWorkflowArguments in scripts/prepareTasks.ts sets each task's files to the GROUP's union rather than the task's own declared files, so \"tasks owning overlapping files\" is exactly \"tasks in the same group\" — no new grouping logic is needed.\n\nblockedBy is the missing half: buildWorkflowArguments emits only number, briefFile, planFile, and files per task, and the string blockedBy appears nowhere in the produced arguments. It must be carried through from the TaskRecord before verify.workflow.js can cite it.\n\nThen extend codexPrompt to state the sibling list and the blocker relationships, and to say plainly that work assigned to a named sibling or blocker is out of scope for this plan and must not be reported as an omission. Pairs with task 120, which tells the same reviewer what is not grounds for rejection; this one supplies the scope facts that make those judgements possible.",
-    "files": [
-      "skills/tackle-tasks/verify.workflow.js",
-      "scripts/prepareTasks.ts",
-      "tests/prepareTasks.test.ts"
+    "notInScope": [
+      "- NOT in scope: changing the commit-message skill's own output or wording, changing the EXCLUDES list in stagedDiffs.ts, and changing the staging behaviour itself -- the hook still only reports, it never stages."
     ],
-    "tests": "In tests/prepareTasks.test.ts assert buildWorkflowArguments carries blockedBy through. In a verify-workflow test, build fake ARGS with two same-group tasks and assert codexPrompt names the sibling and the blocker.",
-    "difficulty": 5
-  },
-  {
-    "taskNumber": 156,
-    "version": "9a6d69918108e40fac0930a488e375bcf248d98b",
-    "title": "Backfill goal and chainGoal on every open task in tasks.json",
-    "userDescription": "yes, create a task to backfill goals for tasks in tasks.json.  completedTasks.json is excluded.",
-    "goal": [
-      "- every task in .taskTools/tasks.json carries a non-empty goal array; completedTasks.json is untouched",
-      "- each goal entry is one line with no embedded newline, and at least one entry per task names what is NOT in scope",
-      "- tasks that belong to a chain share one identical chainGoal array across that chain",
-      "- a test asserts the every-open-task-has-a-goal invariant and fails when a task lacks one",
-      "- rewriting or shortening existing description text is NOT in scope; that is task 116"
-    ],
-    "description": "Measured against the current file: 41 open tasks, 40 without a goal. 23 of those declare blockedBy — chiefly the 131-153 pipeline chain — so they need a shared chainGoal per chain, authored once and copied identically across that chain's members. 25 have a real tests field that states the acceptance condition and is the best raw material for the goal bullets; the rest carry tests \"skip\" and must be derived from the description alone.\n\nThe user chose per-task authoring: settle each goal through AskUserQuestion before writing it, as createTaskBrief instructs, rather than drafting in bulk and reviewing in batches. Expect roughly 40 rounds.\n\nFormat is fixed by the work already landed this session: goal and chainGoal are arrays of strings, one line per entry, joined by goalText in scripts/taskFiles.ts and rendered by writeTaskBriefFile under \"## Chain goal\" and \"## Goal\". Do not re-emit the \"This task is considered done when all of these are true:\" heading — the brief prints it.\n\nOne caveat the user accepted: the invariant test fails the moment any task is added without a goal. createTaskBrief now always instructs a goal, so the invariant should hold, but a mid-run task written by another path will break the suite.",
-    "files": [
-      ".taskTools/tasks.json",
-      "tests/taskFiles.test.ts"
-    ],
-    "tests": "Add a test that reads tasks.json and asserts every open task has a non-empty goal array.",
-    "difficulty": 6
-  },
-  {
-    "taskNumber": 157,
-    "version": "2f698b27960017e7f4c461d811438ee8a72eea11",
-    "title": "Rename the blockedBy entry key from taskNum to taskNumber everywhere",
-    "userDescription": "change every task's 'blockedBy[i].taskNum' to '.taskNumber'.  update every place that reads the blockedBy entry's taskNum to match the new key name.",
-    "goal": [
-      "- `rg -n '\"taskNum\"' .taskTools/tasks.json .taskTools/completedTasks.json` returns no matches, and every former entry now reads `{\"taskNumber\": N, \"reason\": \"...\"}`.",
-      "- `rg -n 'taskNum\\b' scripts/ tests/ skills/create-task/` returns no blockedBy-related matches; the only surviving hits are the unrelated splitTask.ts CLI argument label and the split-task SKILL.md argument-hint.",
-      "- `npm test` passes with the blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key.",
-      "- `npx tsc --noEmit` passes — the inline `{ taskNum: number }` casts in the reader scripts are updated, not left as stale types.",
-      "- A guard test asserts no `\"taskNum\"` key survives in either task data file, so a future task written from a stale template fails the suite.",
-      "- NOT in scope: any backwards-compatible fallback that still reads the old `taskNum` key. The user explicitly chose a clean one-shot rename; no reader keeps a dual-key path.",
-      "- NOT in scope: the `taskNum` CLI argument label in scripts/splitTask.ts and skills/split-task/SKILL.md, and the stale `taskNum` mentions in plans/*.md — those name a command-line argument or are historical notes, not the blockedBy field."
-    ],
-    "description": "Seven scripts read the blockedBy entry key: checkBlockers.ts, blockerVerdicts.ts, unblockDependents.ts, taskStats.ts, runStartup.ts, prepareTasks.ts, and getTaskDetails.ts. Each declares its own inline cast (`{ taskNum: number }` or `{ taskNum: number; reason: string }`) rather than sharing a type, so the rename touches both the cast and the property read in every one. unblockDependents.ts additionally constructs the object when migrating the legacy plain-number blockedBy format, so its emitted key must change too. checkBlockers.ts JSON.stringifies whole blockedBy entries into its BLOCKED output line, which makes the key user-visible: scripts/tackleTasksBrief.ts contains prompt prose instructing the agent to read that element's `taskNum`, and tests/checkBlockers.test.ts asserts on the literal JSON string. The authoring template at skills/create-task/template/taskTemplate.json still documents the old key and must be updated or every new task reintroduces it. Data lives in .taskTools/tasks.json (23 entries) and .taskTools/completedTasks.json (12 entries); completedTasks entries are historical records but share the same reader path via unblockDependents and should be migrated in the same commit for consistency. No shared TypeScript interface for the entry exists, so there is no single choke point — this is a genuine multi-file mechanical rename.",
-    "files": [
-      ".taskTools/tasks.json",
-      ".taskTools/completedTasks.json",
-      "scripts/checkBlockers.ts",
-      "scripts/blockerVerdicts.ts",
-      "scripts/unblockDependents.ts",
-      "scripts/taskStats.ts",
-      "scripts/runStartup.ts",
-      "scripts/prepareTasks.ts",
-      "scripts/getTaskDetails.ts",
-      "scripts/tackleTasksBrief.ts",
-      "skills/create-task/template/taskTemplate.json",
-      "tests/checkBlockers.test.ts",
-      "tests/blockerVerdicts.test.ts",
-      "tests/unblockDependents.test.ts",
-      "tests/taskStats.test.ts",
-      "tests/runStartup.test.ts",
-      "tests/prepareTasks.test.ts",
-      "tests/getTaskDetails.test.ts",
-      "tests/closeTasks.test.ts",
-      "scripts/tackleTasksHook.ts",
-      "tests/tackleTasksHook.test.ts"
-    ],
-    "tests": "A guard test asserting no \"taskNum\" key remains in .taskTools/tasks.json or .taskTools/completedTasks.json, plus the existing blockedBy tests (checkBlockers, unblockDependents, taskStats, runStartup, prepareTasks, blockerVerdicts, getTaskDetails, closeTasks) updated to the new key and passing.",
-    "difficulty": 5
-  },
-  {
-    "taskNumber": 158,
-    "version": "70500c09ac6e4889764da6ab2bcea6123136c6a2",
-    "title": "Second codex review only rechecks round-one findings instead of hunting for new ones",
-    "userDescription": "the codex review prompt needs to indicate that a 2nd review by codex should only verify that the first round's flagged issues were resolved and not try to find new issues.  the purpose is to prevent a runaway review-reject-fix-review-reject-fix loop that happens often.",
-    "goal": [
-      "- On a REJECTED first round, the reviewer's round-one PROBLEMS and FIXES text is written to a file alongside the plan, and that file survives the run so the recheck has something concrete to confirm against.",
-      "- Reading skills/tackle-tasks/verify.workflow.js shows the second review runs a distinct recheck prompt — the brief no longer instructs the agent to rerun the identical round-one command.",
-      "- The recheck prompt carries the user's proven wording: \"check to see if ONLY the issues you flagged in the audit were resolved. Do not look for new issues in the descriptions\" — so a plan whose round-one items were fixed comes back APPROVED even when the reviewer could find something else.",
-      "- The runaway loop stops reproducing: a task rejected in round one for reasons that were then applied no longer comes back rejected in round two for a brand-new reason.",
-      "- NOT in scope: regenerating the brief between review rounds or writing reviewer feedback back into tasks.json. This was investigated with the user and ruled out for the current pipeline — writeTaskBriefFile runs once per plan launch and the verify loop has no separate planner re-write agent. Tasks #83 and #87 in the taskTools-86 chain own that redesign.",
-      "- NOT in scope: naming which classes of issue are not grounds for rejection, such as nitpicks and code-fence language tags — task #120 in the taskTools-86 chain owns that lever.",
-      "- NOT in scope: the sibling-task and blockedBy scope being added to the same reviewer prompt — task #155 owns that.",
-      "- NOT in scope: any test asserting the prompt wording. The user chose no test here because a prompt's instructions change often and such a test would only pin wording."
-    ],
-    "description": "skills/tackle-tasks/verify.workflow.js builds one prompt, codexPrompt(t, planFile), and uses it for both review rounds; verifierBrief then tells the agent to run that same reviewer's command a second time against the updated plan. That is the root cause — round two is a fresh full review with no memory of round one, so it is free to reject on problems it never raised before, and the same command string is shared verbatim by the codex, fable, and opus fallbacks. The fix needs a second prompt, not just changed prose, because prose alone cannot alter what the already-quoted codex exec command asks for. The user chose to pass round-one findings via a file next to the plan rather than interpolating reviewer output into a shell command; this repo already carries tests for metacharacter-laden reason strings, so quoting arbitrary reviewer text is a known hazard. Prompts are JSON.stringify'd into commands at workflow-build time, which is another reason runtime text belongs in a file the reviewer reads rather than in the command itself. The existing two-review cap and the codex/fable/opus fallback chain stay as they are. Task #155 edits the same reviewer prompt for a different purpose, and groupTasksByFileOverlap will place both in the same worktree group, so no blockedBy is declared. The taskTools-86 chain's task #83 will eventually delete codexPrompt entirely in favour of reviewerBrief and a 4-value Ruling; the user decided to fix today's loop anyway, so expect this wording to be carried over rather than kept verbatim when that chain lands. The recheck wording is not a guess — the user confirmed it working in a real codex session, and it depends on the reviewer having an audit file to point at, which is exactly the round-one findings file this task creates. The alternative delivery the user named, amending codex findings onto the task record in tasks.json so a regenerated brief carries them as the audit, does not apply here because the current pipeline regenerates the brief only once per plan launch; in the taskTools-86 design a regenerated brief is written only on the missingFiles path, and reviewer prose is never persisted to tasks.json on either design.",
-    "files": [
-      "skills/tackle-tasks/verify.workflow.js"
-    ],
-    "tests": "skip",
-    "difficulty": 3
-  },
-  {
-    "taskNumber": 159,
-    "version": "51154e01742c74807a8991676169cfc8ad8e4a0a",
-    "title": "Make declaredFiles and addTaskFiles accept modifiableFiles with a fallback to the legacy files key",
-    "userDescription": "Make the task-file readers accept `modifiableFiles` with a fallback to the legacy `files` key, so the close-tasks migration can be safely re-enabled. This is the missing reader half of task 58's split; task 98 shipped the writer half (the close-tasks migration) but the reader half never landed, so the migration had to be disabled in skills/close-tasks/SKILL.md on 2026-08-08 to stop it blanking every task's file list. Evidence: `declaredFiles(task)` at scripts/taskGroups.ts:15 is the shared accessor and its whole body is `return Array.isArray(task.files) ? (task.files as string[]) : [];` — it reads `files` only. A repo-wide search for `modifiableFiles` across scripts/ returns exactly one hit, a stale comment at scripts/addTaskFiles.ts:6 reading `const FILES_KEY = \"files\" as const; // repoint here if task 58 splits files into modifiableFiles/readOnlyFiles`. Task 58's children 93-98 are closed, so the split was believed done, but no reader was ever repointed. Required behavior: `declaredFiles` returns `task.modifiableFiles` when present, falls back to `task.files` when not, and returns [] when neither exists; it must never merge the two lists. Add a matching `readOnlyFilesOf(task)` accessor that resolves an absent `readOnlyFiles` to [\"*\"], since an absent key is meaningful and must stay implicit. Repoint scripts/addTaskFiles.ts's FILES_KEY so appends land on whichever key the task already carries, defaulting to `files` for unmigrated tasks, and drop the stale comment. Every other reader must route through the accessor rather than touching task.files directly. Files: scripts/taskGroups.ts, scripts/addTaskFiles.ts, tests/taskGroups.test.ts, skills/close-tasks/SKILL.md. The SKILL.md edit is the last step: restore the full migration section verbatim from commit 3be16f7, replacing the DISABLED block, only after the readers pass their tests. Tests: fixture tasks holding only `files`, only `modifiableFiles`, both keys, and neither; assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively; assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise; assert addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one. Difficulty 4. This task must land before any close-tasks run is allowed to rename the key.",
-    "goal": [
-      "- `declaredFiles(task)` returns `modifiableFiles` when the task declares it, `files` when it does not, and [] when it declares neither",
-      "- a task declaring both keys resolves to `modifiableFiles` alone; the two lists are never merged",
-      "- `readOnlyFilesOf(task)` returns [\"*\"] for a task that declares no `readOnlyFiles`, and the declared list otherwise",
-      "- `addTaskFiles` appends to whichever key the task already carries, defaulting to `files` on an unmigrated task",
-      "- the stale FILES_KEY comment in scripts/addTaskFiles.ts naming task 58 is gone",
-      "- as the last step, the close-tasks migration section is restored verbatim from commit 3be16f7, replacing the DISABLED block",
-      "- NOT in scope: renaming any key inside tasks.json. The close-tasks migration step delivered by task 98 owns that, and it stays disabled until this task lands"
-    ],
-    "description": "The reader half of task 58's modifiableFiles/readOnlyFiles split was never built, even though children 93-98 all closed. `declaredFiles` in scripts/taskGroups.ts is the shared accessor every grouping and planning path routes through, and it reads `task.files` only; a repo-wide search finds `modifiableFiles` nowhere in scripts/ except a stale FILES_KEY comment in scripts/addTaskFiles.ts. Task 98 shipped the writer half on 2026-08-08 as a Migration section in skills/close-tasks/SKILL.md, which renames `files` to `modifiableFiles` unconditionally on every close-tasks run. Because no reader accepts the new key, running that migration would make every task's file list resolve to [], silently blinding grouping, planning and split-task. That section was therefore disabled in place the same day, with its full rules preserved in commit 3be16f7 and a pointer left in SKILL.md. This task closes the gap so the migration can be turned back on. The fallback must never merge the two lists — merging would widen an edit fence, which is the exact thing the split exists to keep narrow. An absent `readOnlyFiles` stays absent and resolves to [\"*\"] at read time rather than being materialised onto the record. Restoring the SKILL.md section is strictly the final step, after the reader tests pass.",
-    "files": [
-      "scripts/taskGroups.ts",
-      "scripts/addTaskFiles.ts",
-      "tests/taskGroups.test.ts",
-      "skills/close-tasks/SKILL.md"
-    ],
-    "tests": "In tests/taskGroups.test.ts, build four fixture tasks: one declaring only `files`, one declaring only `modifiableFiles`, one declaring both, and one declaring neither. Assert declaredFiles returns the legacy list, the new list, the modifiableFiles list with no merging, and [] respectively. Also assert readOnlyFilesOf returns [\"*\"] for a task with no readOnlyFiles key and the declared list otherwise, and that addTaskFiles appends to `modifiableFiles` on a migrated task and to `files` on an unmigrated one.",
-    "difficulty": 4
-  },
-  {
-    "taskNumber": 160,
-    "version": "9d691066dfd2322286e8bf0676d6fc7f18aff4c8",
-    "title": "Make the Stop hook auto-stage only this session's hunks before asking for a commit message",
-    "userDescription": "make the hook that produces the 'invoke the commit-message' skill auto-stage only the chunks in this session by keeping a list of files modified during the session, via the hook's payload that provides the transcript path and reading the list of files modified in the transcript path, unless there's an easier way to find out (maybe the hook payload lists files?).",
-    "goal": [
-      "- After the Stop hook runs, `git diff --cached` shows only hunks this session produced; hunks another agent or an earlier session left in the same file stay unstaged.",
-      "- A session that modified no files stages nothing and does not ask the agent to invoke the commit-message skill.",
-      "- A missing or unreadable per-session flag file makes the hook stage nothing and print why, rather than falling back to staging everything.",
-      "- Explicitly NOT in scope: committing. The hook stages and then hands off to the commit-message skill, which the agent still invokes; no task here makes the hook run `git commit`."
-    ],
-    "description": "The Stop/SubagentStop hook `scripts/stage-and-summarize-stop.ts` already reads a per-session file list from `~/.claude/turn-flags/<session_id>`, written by the PostToolUse hook `scripts/turn-modified-flag.ts` from `input.tool_input.file_path`. No transcript parsing is needed — the hook payload already supplies file paths directly, so the user's transcript-reading premise is unnecessary. Today the Stop hook only checks whether those paths are unstaged and emits `additionalContext` telling the agent to stage them itself; it stages nothing. This task makes the hook stage, scoping `git add` per repo or submodule via `dirname(p)` the way the existing porcelain check does. Per-hunk scoping is in scope and is the hard part: `turn-modified-flag.ts` records paths only, not line ranges, so the hook needs either a pre-session content snapshot per file or scripted patch selection to separate this session's hunks from unrelated ones inside the same file. Choosing between those two is the main design decision.",
-    "files": [
+    "description": "The 'changes detected' hook is scripts/stage-and-summarize-stop.ts (Stop/SubagentStop), which currently only checks `git status --porcelain` column two per file to decide if anything is unstaged, then emits a generic additionalContext string 'Files were changed. Stage the changes...' with no diff content. The commit-message skill already has the reusable staged-diff code in scripts/stagedDiffs.ts: it resolves the repo root via `git rev-parse --show-toplevel` from `process.cwd()`, runs `git diff --staged` with an EXCLUDES filter, and recurses into any submodule whose pointer moved. Note stagedDiffs.ts is currently a top-level script that writes to stdout, not an exported function -- confirm its actual shape in the source before assuming an export exists; extracting a reusable function is expected. stage-and-summarize-stop.ts must call that shared code and include the actual staged-diff text in the additionalContext payload instead of the generic reminder, so the agent sees what is really staged rather than trusting its stale in-context view. The user chose the FULL staged diff, not a file-name-only list, and chose reuse of the same code over a new lighter implementation. Complication: stage-and-summarize-stop.ts iterates over `paths` that can span multiple repos/submodules (using `dirname(p)` per path), while stagedDiffs.ts resolves only one repo root from cwd with no repo parameter, so this task must either loop the stagedDiffs logic per distinct repo root among the flagged paths, or add a repo-path parameter. tests/stage-and-summarize-stop.test.ts's `run()` helper currently asserts additionalContext matches /commit-message skill/ and does not exercise diff content, so the tests need updating to assert the emitted diff text appears in additionalContext.\n\n## Audit correction (2026-08-31)\n\nscripts/stagedDiffs.ts already exports stagedDiffs() (line 27) with a CLI guard at line 55 — the extraction this description asks to confirm is done. It takes no repo argument and resolves a single root from cwd; the remaining work is the repo-path parameter. 'The hook still only reports, it never stages' means not in scope for this task; task 160 owns staging behavior.",
+    "modifiableFiles": [
       "scripts/stage-and-summarize-stop.ts",
-      "tests/stage-and-summarize-stop.test.ts",
-      "scripts/turn-modified-flag.ts"
+      "scripts/stagedDiffs.ts",
+      "tests/stage-and-summarize-stop.test.ts"
     ],
-    "tests": "Build a temp repo with 3 dirty files. Write a fake per-session flag file listing only 2 of them. Run the hook. Assert `git diff --cached --name-only` lists exactly those 2. Then extend it: give one of those 2 files both a session hunk and an unrelated pre-existing hunk, and assert only the session hunk appears in `git diff --cached` while the unrelated hunk still shows in `git diff`.",
-    "difficulty": 7
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "Unit test on the hook: create a temp git repo, write and `git add` a file, feed scripts/stage-and-summarize-stop.ts its Stop-hook JSON on stdin (with a turn-flag file listing that path), and assert the printed hookSpecificOutput.additionalContext contains the staged diff text for that file.",
+    "difficulty": 6,
+    "problemSolvedByTask": "The agent doesn't accurately see what is really staged after the end-of-turn stage-and-summarize-stop.ts hook fires.",
+    "blockedBy": [],
+    "hasTests": true
+  },
+  {
+    "taskNumber": 190,
+    "schemaVersion": "1.0.1",
+    "version": "53e3de50ba468819f85f4913e181cad21664c602",
+    "title": "Add a /mermaid skill that diagrams a codebase into a .mmd file",
+    "userDescription": "make a '/mermaid' skill that searches a codebase and builds a .mmd mermaid diagram.  it should follow the same mermaid diagram rules that I used for the diagrams in taskTools-86 (Yes/No boxes at decision points, output boxes -> what gets outputted, etc)",
+    "goal": [
+      "- A /mermaid skill exists at skills/mermaid/SKILL.md and appears in the skill list.",
+      "- Running /mermaid against a codebase writes a .mmd file the user can name and open.",
+      "- The written .mmd follows the diagrams/tackle-tasks grammar: flowchart TB, boxes declared inside subgraphs as BOX_ID[\"label\"], edges written as A -- \"label\" --> B, decision boxes branch with two edges labeled YES and NO (never separate _YES/_NO boxes), a classDef/class block assigns every box a role, and cross-section targets are grouped in a \"next diagram\" subgraph joined by an invisible ~~~ link.",
+      "- The skill contains an explicit written checklist of those diagram rules, and the skill follows that checklist when it draws."
+    ],
+    "notInScope": [
+      "- NOT in scope: changing any existing diagram in diagrams/tackle-tasks/, and changing scripts/generateSteps.ts. The skill only reads generateSteps.ts as the reference parser whose grammar its output must match; the skill's own output documents an arbitrary codebase and need not itself be runnable by generateSteps.ts."
+    ],
+    "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, following the existing skill format seen in skills/view-task/SKILL.md and skills/create-task/SKILL.md) that searches a target codebase and emits a .mmd mermaid flowchart. It must codify the diagramming grammar already used in diagrams/tackle-tasks/*.mmd and parsed by scripts/generateSteps.ts (see getEdgesInDiagram and getPromptBoxesInDiagram, roughly lines 60-120, and the `returns_a_prompt` class-role check at line 111 (`getPromptBoxesInDiagram`)): `flowchart TB`, boxes declared inside a named `subgraph ... end` block as `BOX_ID[\"label\"]` (a decision box is a plain rectangular box whose id ends in `_Q`, not a diamond node), edges written `A -- \"label\" --> B` or `A --> B`, decision boxes branching with two edges whose labels are literally `YES` and `NO` (extra detail can follow on a `<br/>` line) rather than separate `_YES`/`_NO` boxes, a `classDef`/`class` block at the end assigning every box exactly one role among `script`, `returns_a_prompt`, `next_diagram`, `output`, and `fail`, and any box the diagram references but does not itself resolve grouped into a second `subgraph ... [\"next diagram\"]` block joined to the main subgraph by an invisible `~~~` link. Reference examples: diagrams/tackle-tasks/pipeline-planTheTask.mmd, diagrams/tackle-tasks/pipeline-whatIsReviewVerdict.mmd, and diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd. No existing skill in skills/ produces diagrams; this is a new skill directory, not an edit to an existing one. The skill must also carry an explicit written checklist of these diagram rules that it follows while it draws. The /mermaid skill documents codebases generally, not just taskTools pipelines, so its output does not need to be runnable by generateSteps.ts (which is hardcoded to the tackle-tasks box-ownership map) — it only needs to follow the same grammar.",
+    "modifiableFiles": [
+      "skills/mermaid/SKILL.md"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "tests": "skip -- generateSteps.ts is hardcoded to the tackle-tasks pipeline's box-ownership map (BLOCKS_BY_OWNER_FOLDER) and its cross-diagram remapping, so it cannot run as a general-purpose grammar validator against a diagram of an arbitrary codebase. Acceptance is checked against the written checklist inside the skill itself (every box declared in a subgraph, every edge label cosmetic, every box assigned a class, decision boxes branch on YES/NO edge labels) rather than a runnable script.",
+    "difficulty": 6,
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand — no automated way to get a flowchart.",
+    "blockedBy": [],
+    "hasTests": false
+  },
+  {
+    "taskNumber": 196,
+    "version": "da449af75f26834ca7d8b101d21c1b83e1a8b86e",
+    "title": "Run the full suite on the fresh worktree in the preamble and exit staging-suite-red when staging is red",
+    "userDescription": "Run the full suite on the fresh task worktree in the preamble, and stop the run when staging itself is red.\n\nOrder of operations for /tackle-tasks N:\n1. The existing preamble blocks run as today: PREAMBLE_STATUS_CHECK, IS_TASK_BLOCKED_Q, IS_TASK_ACTIVE_Q, PREFLIGHT_OK_Q, MARK_TASK_ACTIVE.\n2. The existing staging code moves staging to the source branch tip: ensureStagingWorktree in scripts/tackle-tasks/shared/stagingWorktree.ts; CREATE_WORKTREE cuts the task worktree from staging; REBASE_RESUMED_WORKTREE_ONTO_STAGING catches a resumed worktree up. Reuse that code; add no new git operations for staging.\n3. NEW: right after the worktree exists and holds the lease and submodules (after INIT_SUBMODULES_RECURSIVELY, before DOCUMENT_GENERATION), a new mutating block RUN_SUITE_ON_FRESH_WORKTREE runs the full suite inside the task worktree, using the same code RUN_FULL_SUITE uses (scripts/tackle-tasks/shared/runFullSuite.ts, with the knownFailingTests.json baseline from the project root).\n4. NEW: a decision block DOES_FRESH_WORKTREE_SUITE_PASS_Q. YES: continue to DOCUMENT_GENERATION and the rest of the pipeline. NO: exit through REPORT_ONLY_EXIT with a new exit type `staging-suite-red` and an exit note that says the suite fails on staging before the task changed anything, lists the new failing tests, and says the suite needs fixing first before the task can run. The worktree is preserved. The task is marked inactive and the lease released, the same way the other report-only exits do it.\n5. On a resumed worktree that already carries task commits, the suite is not run by these new blocks; that case keeps today's path.\n\nWhy: task 36 ran to suite-red after IMPLEMENT_TASK because a test that was already red on staging (tests/stage-and-summarize-stop.test.ts) is outside the task's owned files, so FIX_THE_CODEBASE_FOR_SUITE correctly refused to touch it. The run spent two plan rounds, two reviews, an implementation, and two fix attempts before finding out. The check belongs at the start.\n\nFiles: diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd; new scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.ts, RUN_SUITE_ON_FRESH_WORKTREE.template.json, RUN_SUITE_ON_FRESH_WORKTREE.test.ts, DOES_FRESH_WORKTREE_SUITE_PASS_Q.ts, DOES_FRESH_WORKTREE_SUITE_PASS_Q.template.json, DOES_FRESH_WORKTREE_SUITE_PASS_Q.test.ts; scripts/tackle-tasks/diagram-steps.json (regenerated by generateSteps, mutating flag set on the new run block); scripts/tackle-tasks/shared/runFullSuite.ts only if it needs a parameter to run before any task commit exists; tests/tackleTasksAcceptance.test.ts (drivers must expect the new blocks in `ran`); scripts/tackle-tasks/reportOnlyExit/*.ts if the exit type needs registering there.\n\nGoal:\n- node --test on the two new test files passes\n- tests/tackleTasksAcceptance.test.ts passes with the new blocks in every driver's expected `ran`\n- A fixture whose staging has a red test outside the task's files exits `staging-suite-red` before DOCUMENT_GENERATION, with the worktree preserved and the task inactive\n- A fixture whose staging is green reaches DOCUMENT_GENERATION as today\n\nNot in scope: changing which files FIX_THE_CODEBASE_FOR_SUITE may edit; moving knownFailingTests.json; changing how staging is moved.",
+    "goal": [
+      "- A worktree for task N spawned from staging (where staging is aligned with HEAD and HEAD's test suite fails to pass) is created but the workflow exits before document generation occurs and reports that the test suite is failing.",
+      "- A worktree for task N spawned from staging (where staging is aligned with HEAD and HEAD's test suite is passing) is created and the workflow makes it past the 'run the full suite before generating docs' step.",
+      "- No new code related to moving staging to HEAD is created."
+    ],
+    "notInScope": [
+      "- Changing which files FIX_THE_CODEBASE_FOR_SUITE may edit; that block keeps its owned-files fence.",
+      "- Moving knownFailingTests.json or changing where the baseline is read from.",
+      "- Changing how staging is moved; ensureStagingWorktree, CREATE_WORKTREE, and REBASE_RESUMED_WORKTREE_ONTO_STAGING stay as they are."
+    ],
+    "problemSolvedByTask": "a failing test suite that existing on the branch that 'staging' and the worktree were cut from prevents the workflow from getting past the 'run the test suite' block, blocking the entire run from completing, because the workflow agents can't touch the files causing the failing tests, because those files are not in the task's modifiableFiles list.",
+    "description": "Insert two new blocks into the preamble diagram between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION: RUN_SUITE_ON_FRESH_WORKTREE (mutating, calls scripts/tackle-tasks/shared/runFullSuite.ts, modeled on scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts's structure) and DOES_FRESH_WORKTREE_SUITE_PASS_Q (decision: YES continues to DOCUMENT_GENERATION, NO sets a new `staging-suite-red` exitType/exitNote and routes to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT, same pattern as IS_TASK_BLOCKED_Q.ts's \"blocked\" exit). Only run RUN_SUITE_ON_FRESH_WORKTREE on the CREATE_WORKTREE/RESET_WORKTREE path (fresh or reset worktree with no task commits yet), not on the REBASE_RESUMED_WORKTREE_ONTO_STAGING path (resumed worktree with existing task commits) — the diagram's DOES_FENCE_COVER_WORKTREE_Q branch continues straight to INIT_SUBMODULES_RECURSIVELY/DOCUMENT_GENERATION as today. `staging-suite-red` must be added to the TaskExitType union in scripts/tackle-tasks/shared/taskRunState.ts and the EXIT_TYPES array in scripts/tackle-tasks/shared/writeTaskExitNotes.ts, mirroring how `blocked`/`invalid-number`/existing `suite-red` are registered. RUN_FULL_SUITE's existing pattern (scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts) always targets \"staging\" as the base branch and reads the baseline via runFullSuite's own readKnownFailingTests(projectRoot) call (scripts/tackle-tasks/shared/taskTestsRunner.ts) — the new block reuses this without needing prepared-task fencing data (ownedFilePaths/testFilePaths), since no task changes exist yet. diagram-steps.json is generated output (see scripts/tackle-tasks/generateSteps or similar) and must be regenerated, not hand-edited, with the new block(s) marked mutating. tests/tackleTasksAcceptance.test.ts drives the preamble via runHookOnce and asserts each fixture's `ran` array of visited box names — every driver whose fixture worktree is freshly created (not a resumed-with-commits case) needs the two new box names inserted between INIT_SUBMODULES_RECURSIVELY and DOCUMENT_GENERATION.\n\n## Clarification answer (2026-09-07)\n\nDo not edit `scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts` or its template. Use a new decision block instead.\n\nThe packet already carries `docsMode` when it reaches INIT_SUBMODULES_RECURSIVELY (field declared in `scripts/tackle-tasks/preambleStatusCheck/_packet.ts`). `TAKE_WORKTREE_LEASE.ts` and `RESET_WORKTREE.ts` set it to `AUTOGEN` (fresh or reset worktree). `DOES_FENCE_COVER_WORKTREE_Q.ts` sets it to `UPDATE` (resumed worktree with task commits). That value is the fresh-vs-resumed signal.\n\nRouting:\n- In `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd`, change the edge `INIT_SUBMODULES_RECURSIVELY --> DOCUMENT_GENERATION` to `INIT_SUBMODULES_RECURSIVELY --> IS_WORKTREE_FRESH_Q`.\n- New decision block `IS_WORKTREE_FRESH_Q` (shape of `DOES_WORKTREE_EXIST_Q.ts`: strip `next`, return `{...packet, box, scriptSignal: CONTINUE, next}`). `docsMode === \"AUTOGEN\"` -> `next: \"RUN_SUITE_ON_FRESH_WORKTREE\"`. `docsMode === \"UPDATE\"` -> `next: \"DOCUMENT_GENERATION\"`. Any other value: throw, the same way `DOCUMENT_GENERATION.ts` throws on an unknown docs mode.\n- `RUN_SUITE_ON_FRESH_WORKTREE --> DOES_FRESH_WORKTREE_SUITE_PASS_Q`; YES -> `DOCUMENT_GENERATION`, NO -> report-only exit `staging-suite-red`, as the task already says.\n\nThe three IS_WORKTREE_FRESH_Q files are added to this task's owned files.\n\n## Clarification answer (2026-09-07)\n\nDo not add `scripts/tackle-tasks/generateSteps.ts`. It must not change.\n\nThe mutating flag is hand-written by design. `scripts/tackle-tasks/generateSteps.ts` line 182 says: \"The mutating flag is hand-written, so regenerating from the arrows must not drop it.\" `getMutatingFromPreviousConfig` reads the flag from the existing `scripts/tackle-tasks/diagram-steps.json` and carries it forward; the generator never derives it from a template or script. Every existing mutating block (CREATE_WORKTREE, RESET_WORKTREE, RUN_FULL_SUITE, and the rest) got its flag that way.\n\nProcedure for the new block:\n1. Run the generator so `scripts/tackle-tasks/diagram-steps.json` gains the new entries.\n2. Add `\"mutating\": true` to the `RUN_SUITE_ON_FRESH_WORKTREE` entry in `scripts/tackle-tasks/diagram-steps.json` by hand. The task owns that file. This is the one field in that file that is meant to be hand-edited.\n3. Run the generator again and confirm the flag survives. That confirms step 2 is correct.\n\n`IS_WORKTREE_FRESH_Q` and `DOES_FRESH_WORKTREE_SUITE_PASS_Q` are decisions and get no flag.\n\n## Clarification answer (2026-09-07)\n\nCorrection to the earlier answer: `scripts/tackle-tasks/generateSteps.ts` IS in this task's owned files, for one edit only.\n\nThat file keeps a hand-written owner map, `BLOCKS_BY_OWNER_FOLDER` (line 11). Its `assertNoOrphanBoxScripts` guard throws when a box script exists in a folder but the box is not listed under that folder. Commit af19d91 added its new preamble boxes the same way.\n\nThe only permitted edit to that file: add `\"IS_WORKTREE_FRESH_Q\"`, `\"RUN_SUITE_ON_FRESH_WORKTREE\"`, and `\"DOES_FRESH_WORKTREE_SUITE_PASS_Q\"` to the `preambleStatusCheck` array of `BLOCKS_BY_OWNER_FOLDER`. Change nothing else in it.\n\nThen run the generator (`node scripts/tackle-tasks/generateSteps.ts`) so `scripts/tackle-tasks/diagram-steps.json` is generated, not hand-written. After it runs, add `\"mutating\": true` to the `RUN_SUITE_ON_FRESH_WORKTREE` entry by hand, and run the generator once more to confirm the flag survives.\n\nThe task worktree already holds the nine new block files, the diagram edit, the exit-type registration, and the acceptance tests, all uncommitted. Keep that work. Do not start over.",
+    "modifiableFiles": [
+      "diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd",
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.test.ts",
+      "scripts/tackle-tasks/diagram-steps.json",
+      "scripts/tackle-tasks/shared/runFullSuite.ts",
+      "scripts/tackle-tasks/shared/writeTaskExitNotes.ts",
+      "scripts/tackle-tasks/shared/taskRunState.ts",
+      "tests/tackleTasksAcceptance.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.test.ts",
+      "scripts/tackle-tasks/generateSteps.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/tackleTasksAcceptance.test.ts: a fixture repo whose staging has one failing test outside the task's files. Drive /run-step from PREAMBLE_STATUS_CHECK. Assert the run exits with exitType staging-suite-red before DOCUMENT_GENERATION, the worktree still exists, and the task is inactive. A second fixture with a green staging reaches DOCUMENT_GENERATION.",
+    "difficulty": 7,
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-86-2cb85cb7/task-196",
+      "leaseRunId": "d12230c8-4b01-431b-8fca-0247ba5fe9dd",
+      "history": [
+        {
+          "runId": "fc332635-7227-4d78-91f7-20d66fd8a3c7",
+          "startedAt": "2026-09-07T00:23:27-07:00",
+          "endedAt": "2026-09-07T00:35:07-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        },
+        {
+          "runId": "4333e1a9-a6fd-40cc-9465-6492bbba0695",
+          "startedAt": "2026-09-07T01:28:26-07:00",
+          "endedAt": "2026-09-07T01:38:44-07:00",
+          "exitType": "clarify-stuck",
+          "exitNote": "the planner asked twice for something the docs cannot supply. worktree preserved.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        },
+        {
+          "runId": "d12230c8-4b01-431b-8fca-0247ba5fe9dd",
+          "startedAt": "2026-09-07T01:40:49-07:00",
+          "endedAt": "2026-09-07T02:38:06-07:00",
+          "exitType": "implementation-incomplete",
+          "exitNote": "Created and green (7/7 tests, tsc clean): scripts/tackle-tasks/preambleStatusCheck/{IS_WORKTREE_FRESH_Q,RUN_SUITE_ON_FRESH_WORKTREE,DOES_FRESH_WORKTREE_SUITE_PASS_Q}.{ts,template.json,test.ts}. Wired diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd (labels, edges, class list) exactly as specified. Registered \"staging-suite-red\" in scripts/tackle-tasks/shared/writeTaskExitNotes.ts and taskRunState.ts. Added the two new acceptance tests to tests/tackleTasksAcceptance.test.ts. Hand-edited scripts/tackle-tasks/diagram-steps.json to the plan's literal target JSON (valid, verified) instead of running the generator, because `node scripts/tackle-tasks/generateSteps.ts` throws: assertNoOrphanBoxScripts requires the 3 new boxes to be listed in that file's own BLOCKS_BY_OWNER_FOLDER map, which is not in WHAT YOU MAY EDIT and the plan's own clarification says generateSteps.ts must not change. That throw is not confined to the CLI command the plan names: scripts/tackle-tasks/shared/SkillBodyEmitter.ts's ensureTaskWorkflowPair calls generateSteps() on every skillBody() invocation for any task not already mid-run, so it now breaks essentially the whole acceptance suite, not just this task's new tests -- node --test tests/tackleTasksAcceptance.test.ts fails the same way on tests that predate this task (e.g. test_acceptance_releasesTheSourceLockWhenAFailureHappensWhileItIsHeld, test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt, test_acceptance_resumesAfterAnInterruptedCleanup), plus the two new ones. Left plans/implementation-notes-196.md with the exact reproduction and the fix a precedent commit (af19d91) already established for this same diagram: a 3-name addition to generateSteps.ts's BLOCKS_BY_OWNER_FOLDER.preambleStatusCheck array. Stopped here rather than edit a file outside this task's owned-files fence on my own judgment; needs a human/planner decision to extend the fence or choose another resolution.",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "tailCursor": null
+        }
+      ]
+    },
+    "codexReviewNotes": "[implement-blocks] Route the false branch in DOES_FRESH_WORKTREE_SUITE_PASS_Q, the diagram edge, the decision template, and diagram-steps.json to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT; remove the decision's direct lease release and use the report-only exit's established cleanup path.\n\nDurable because: This preserves the required worktree and uses the same inactive-and-lease-release lifecycle as the other report-only outcomes.\n\n[red-tests] Replace the two commented RUN_SUITE_ON_FRESH_WORKTREE test skeletons with complete literal test code, including imports, fixture repository/worktree creation, task claim, committed green/red baseline files, exact main invocation, and assertions.\n\nDurable because: The tests will directly exercise the new block's real baseline-aware suite behavior instead of requiring the implementer to invent coverage.\n\n[implement-blocks] Replace the template prose with three complete `old: (file absent)` / `new:` JSON diffs that enumerate every input and output field and the exact green and red routing values for each new block.\n\nDurable because: Each template becomes reproducible and remains synchronized with the packet contracts and generated step configuration."
   }
 ]

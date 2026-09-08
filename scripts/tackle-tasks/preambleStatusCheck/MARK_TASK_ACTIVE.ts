@@ -1,0 +1,21 @@
+// MARK_TASK_ACTIVE, from pipeline-preambleStatusCheck.mmd. Mutating: writes tasks.json. "mark the task active in tasks.json"
+import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { claimTask } from "../shared/taskRunState.ts";
+import type { EntryPacket } from "./_packet.ts";
+
+export function main(input: string): EntryPacket {
+    const { next: _next, ...packet } = JSON.parse(input) as EntryPacket & { next?: string };
+    const runId = randomUUID();
+    const active = claimTask(packet.taskNumber, runId, packet.projectRoot);
+    if (active.status !== "claimed") {
+        throw new Error(`task ${packet.taskNumber} could not be marked active: ${active.status}`);
+    }
+    return { ...packet, box: "MARK_TASK_ACTIVE", scriptSignal: SCRIPT_SIGNAL.CONTINUE, runId };
+}
+
+// realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
+if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+    console.log(JSON.stringify(main(process.argv[2] ?? "")));

@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const HOOK = join(import.meta.dirname, "..", "scripts", "viewTaskHook.ts");
+const HOOK = join(import.meta.dirname, "..", "scripts", "hooks", "viewTaskHook.ts");
 
 function runHook(prompt: string, cwd: string): string {
   return execFileSync("node", ["--no-inspect", HOOK], {

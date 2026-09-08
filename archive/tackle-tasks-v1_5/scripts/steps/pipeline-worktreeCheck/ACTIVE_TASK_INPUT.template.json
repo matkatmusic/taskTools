@@ -1,0 +1,21 @@
+{
+    "input": {
+        "box": "WORKTREE_CHECK_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "tasksFile": "",
+        "runId": ""
+    },
+    "output": {
+        "box": "ACTIVE_TASK_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

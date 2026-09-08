@@ -1,0 +1,20 @@
+{
+    "input": {
+        "box": "PLAN_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42"
+    },
+    "output": {
+        "box": "DOCS_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project"
+    }
+}

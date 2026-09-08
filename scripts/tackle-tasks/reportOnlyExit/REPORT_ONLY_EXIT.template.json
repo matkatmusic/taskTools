@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "PREAMBLE_STATUS_CHECK",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "{{PROJECT_ROOT}}",
+        "worktree": "{{PROJECT_ROOT}}/.worktrees/task-169",
+        "branch": "task-169",
+        "exitType": "invalid-number",
+        "exitNote": "not found in `.taskTools/tasks.json`"
+    },
+    "output": {
+        "box": "REPORT_ONLY_EXIT",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "{{PROJECT_ROOT}}",
+        "worktree": "{{PROJECT_ROOT}}/.worktrees/task-169",
+        "branch": "task-169",
+        "exitType": "invalid-number",
+        "exitNote": "not found in `.taskTools/tasks.json`"
+    }
+}

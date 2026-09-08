@@ -1,0 +1,33 @@
+flowchart TB
+%% One agent() call. /run-step starts at COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED. Every path ends at an orange block or a dashed block.
+
+  subgraph commitMergeConflictFixIfNeeded ["Input: [FIX_CONFLICTS]'s result"]
+    direction TB
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED"]
+    CONTINUE_REBASE["continue the rebase"]
+    IS_REBASE_FINISHED_Q["is the rebase finished?"]
+    ARE_2_CONFLICT_FIXES_DONE_Q["2 conflict fixes done?"]
+  end
+  subgraph commitMergeConflictFixIfNeededNext ["next diagram"]
+    direction TB
+    FIX_CONFLICTS["FIX_CONFLICTS"]
+    RUN_FULL_SUITE["RUN_FULL_SUITE"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+  end
+  commitMergeConflictFixIfNeeded ~~~ commitMergeConflictFixIfNeededNext
+
+  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE
+  CONTINUE_REBASE --> IS_REBASE_FINISHED_Q
+  IS_REBASE_FINISHED_Q -- "YES<br/>no returnTo: the merge-time rebase" --> RUN_FULL_SUITE
+  IS_REBASE_FINISHED_Q -- "YES<br/>returnTo set: release the source lock,<br/>back to the preamble" --> DOES_FENCE_COVER_WORKTREE_Q
+  IS_REBASE_FINISHED_Q -- "NO<br/>it stopped on new conflicts" --> ARE_2_CONFLICT_FIXES_DONE_Q
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "YES<br/>rebase-stuck" --> FAILURES_EXIT
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,CONTINUE_REBASE,IS_REBASE_FINISHED_Q,ARE_2_CONFLICT_FIXES_DONE_Q script
+  class FIX_CONFLICTS,RUN_FULL_SUITE,FAILURES_EXIT,DOES_FENCE_COVER_WORKTREE_Q next_diagram

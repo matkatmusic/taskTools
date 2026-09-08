@@ -1,0 +1,21 @@
+{
+    "input": {
+        "box": "DOCS_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "scripts/steps/pipeline-plan/fixtures/worktree",
+        "sourceBranch": "master",
+        "projectRoot": "scripts/steps/pipeline-plan/fixtures"
+    },
+    "output": {
+        "box": "PLAN_THE_TASK",
+        "scriptSignal": "prompt",
+        "prompt": "## YOUR JOB\n\nYou are a read-only agent that is writing an implementation plan for task 35 from `.taskTools/tasks.json`. ... Codex reviews this plan before it is implemented."
+    },
+    "agentAnswer": {
+        "outcome": "<PLAN|CLARIFY>",
+        "planFile": "<the exact absolute path the prompt named for the plan; the plan is written there when outcome is PLAN>",
+        "clarifyRequest": "<string, null when outcome is PLAN>"
+    }
+}

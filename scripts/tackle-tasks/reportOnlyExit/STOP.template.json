@@ -1,0 +1,12 @@
+{
+    "input": {
+        "box": "",
+        "scriptSignal": "continue",
+        "taskNumber": 1
+    },
+    "output": {
+        "box": "STOP",
+        "scriptSignal": "stop",
+        "taskNumber": 1
+    }
+}

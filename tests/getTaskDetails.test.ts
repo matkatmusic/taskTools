@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "getTaskDetails.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "shared", "getTaskDetails.ts");
 
 function runScript(cwd: string, ...args: string[]): string {
   return execFileSync("node", ["--no-inspect", SCRIPT, ...args], { cwd, encoding: "utf8" });
@@ -18,7 +18,7 @@ function makeProjectRoot(): string {
     join(root, "tasks.json"),
     JSON.stringify([
       { taskNumber: 1, title: "unblocked task" },
-      { taskNumber: 2, title: "blocked task", blockedBy: [{ taskNum: 1, reason: "needs task 1" }, { taskNum: 3, reason: "needs task 3" }] },
+      { taskNumber: 2, title: "blocked task", blockedBy: [{ taskNumber: 1, reason: "needs task 1" }, { taskNumber: 3, reason: "needs task 3" }] },
     ]),
   );
   writeFileSync(join(root, "completedTasks.json"), JSON.stringify([{ taskNumber: 3, title: "done task" }]));
@@ -56,14 +56,14 @@ test("full details include the blockedBy field", () => {
   const out = runScript(makeProjectRoot(), "2");
   assert.match(out, /task 2 \(OPEN\)/);
   assert.deepEqual(JSON.parse(out.slice(out.indexOf("{"))).blockedBy, [
-    { taskNum: 1, reason: "needs task 1" },
-    { taskNum: 3, reason: "needs task 3" },
+    { taskNumber: 1, reason: "needs task 1" },
+    { taskNumber: 3, reason: "needs task 3" },
   ]);
 });
 
 test("findTask resolves open first, falls back to completed, and importing runs no CLI", async () => {
   const root = makeProjectRoot();
-  const { findTask } = await import("../scripts/getTaskDetails.ts");
+  const { findTask } = await import("../scripts/shared/getTaskDetails.ts");
   assert.equal(findTask(1, root)?.title, "unblocked task");
   assert.equal(findTask(3, root)?.title, "done task");
   assert.equal(findTask(99, root), undefined);

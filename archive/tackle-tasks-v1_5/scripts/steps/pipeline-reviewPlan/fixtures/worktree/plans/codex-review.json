@@ -1,0 +1,8 @@
+{
+    "outcome": "OK",
+    "missingFiles": [],
+    "message": "",
+    "issues": [],
+    "fixes": [],
+    "sectionsThatHoldUp": ["step-1 — verified against src/owned.ts:1-10"]
+}

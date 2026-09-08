@@ -1,0 +1,127 @@
+{
+  "schemaDocumentation": "audit-loop/codex-audit-schema.md",
+  "verificationPerformed": [
+    "Compared 945eb22650d593bdcab2584460c58ef4bad04a3c through committed HEAD f3bceb6 and separately inspected the substantive unstaged workflow-only-context-injection rewrite; did not inspect the new-usage-graph worktree.",
+    "Read plans/task-86-spec.md, the task 131-153/closing-chain plans and records, and the relevant later fix-task records.",
+    "Checked every finding against .taskTools/tasks.json; exact overlaps are identified per issue, with partial or related overlaps distinguished from exact matches.",
+    "npx tsc --noEmit passed.",
+    "After the rewrite, npx tsc --noEmit and 152 focused preparation, task-state, workflow, queue, and nested-merge tests passed.",
+    "Post-rewrite full npm test ran 1,289 tests: 1,288 passed and the sleep-biased C86-33 widener-wins race failed because the closer acquired the lock first.",
+    "Executed the rewritten tackle-tasks.workflow.js in a VM shaped like the documented production sandbox without a dynamic-import callback; it parsed and ran to the expected unknown-stage guard, confirming that C86-18's original import defect is resolved in the working implementation.",
+    "Audited the staged fixes for C86-31, C86-32, C86-33, and C86-37; 138 focused workflow, task-state race, and worktree-recovery tests passed, and an executed dynamic import in the callback-free VM harness failed with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING.",
+    "At committed HEAD fae83a5, source-audited C86-24, C86-28, C86-29, and C86-30 against the current implementation, regression tests, recent history, and authoritative open-task records; all four causal chains and fix directions remain accurate, with drifted test anchors refreshed for C86-28 and C86-30.",
+    "Reviewed the staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit and 74 focused tests in prepareTasks.test.ts, runMergePhase.test.ts, and taskWorkflowMergeStage.test.ts passed, but the atomic batch was rejected because required scheduler interleavings, production cleanup retry, lease lifecycle/recovery, and source-artifact absence coverage remain incomplete. The eight implementation/test files were left unstaged.",
+    "Reviewed the second staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. npx tsc --noEmit passed; prepareTasks.test.ts passed 27 tests, runMergePhase.test.ts passed 39, taskWorkflowMergeStage.test.ts passed 16, tackle-tasks_SkillBodyEmitter.test.ts passed 19, and the full npm test suite passed all 1,319 tests. The atomic batch was rejected because C86-24 still lacks the required executable event-order regression and C86-28 still reports a static partial retained-artifact list.",
+    "Reviewed the third staged implementation attempt for C86-24, C86-28, C86-29, and C86-30 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 57 focused tests in runMergePhase.test.ts and taskWorkflowMergeStage.test.ts passed. The executable scheduler interleaving harness and occurrence-aware retained-artifact inspection close the two remaining gaps, so the atomic batch is accepted and all four findings were removed.",
+    "Reviewed the staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 80 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,328 tests. Source audit rejected the atomic batch because C86-36 still loses cleanup-incomplete and failed-continue/aborted typed outcomes when agent output is dropped and directly retries the mutating roles.",
+    "Reviewed the second staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 82 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,330 tests. The attempt fixes C86-36's cleanup-incomplete and aborted-rebase status recovery, but source audit rejected the atomic batch because successful advance-conflict result reconstruction still drops active-occurrence touchedPaths and can bypass C86-27's post-approval regate.",
+    "Reviewed the third staged implementation attempt for C86-27, C86-35, and C86-36 on 2026-08-11. npx tsc --noEmit passed; 83 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,331 tests. The attempt preserves active-occurrence touchedPaths and proves the regate path, but source audit rejected the atomic batch because its durable receipt is an untracked file inside the task checkout and a later root conflict will collect, stage, and commit that internal receipt.",
+    "Reviewed only C86-36 against the current cumulative staged batch on 2026-08-11; C86-27 and C86-35 were already approved. The exact dropped-first-result/two-conflict regression passed with two distinct conflict-resolution calls, clean status, preserved touchedPaths/regate behavior, and no receipt path in history. All 34 focused tests in taskWorkflowMergeStage.test.ts and tackleTasksRetry.test.ts passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,333 tests. C86-27, C86-35, and C86-36 are accepted and removed.",
+    "Reviewed the staged implementation attempt for C86-23, C86-25, and C86-26 on 2026-08-11. The 39 focused append/create-task and plan/implement workflow tests passed, npx tsc --noEmit passed, and the full npm test suite passed all 1,343 tests. The atomic batch was rejected because C86-25 checks only whether the notes pathname occurs in the base-to-HEAD diff; deleting a pre-existing tracked notes file therefore satisfies that check while leaving no notes artifact in HEAD. The eight implementation/test paths were left unstaged.",
+    "Reviewed the corrected staged implementation for C86-23, C86-25, and C86-26 on 2026-08-11. The 40 focused append/create-task and plan/implement workflow tests passed, including the tracked-notes deletion regression; npx tsc --noEmit passed; and the full npm test suite passed all 1,344 tests. C86-23 and C86-26 retained their prior approval, C86-25 now verifies both commit-range change and notes presence in finalized HEAD, and all three findings are accepted and removed.",
+    "At committed HEAD 9c209d10ed8e35e15b6d1b10300f6df5c087604a, source-audited C86-19 through C86-22 against current source, tests, and authoritative open tasks. The index was empty; unstaged changes were limited to package.json, package-lock.json, and plans/task-163-plan.md; untracked changes were plans/review/brief/reproduction artifacts with no source or test implementation for these findings. All four findings remain open; current anchors were refreshed and C86-21 was narrowed to the still-uncaught rebase/merge driver paths. No tests were rerun for this metadata-only refresh; the committed implementation had already passed the recorded 40 focused tests, typecheck, and 1,344-test full suite.",
+    "Reviewed the staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11 at committed HEAD 312a5fbf3bbca7e0b95a38eae661ddc0470c6bb6. git diff --cached --check and npx tsc --noEmit passed; 95 focused tests in runMergePhase.test.ts, tackleTasksRetry.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,350 tests. The atomic batch was rejected because nested implementation commits skip untouched intermediate occurrences, workflow schemas omit completedLayers and driver failureReason, outer driver catches discard already-completed layers, and the final-review regression does not prove the widened brief/implementer/fence path. The seven implementation/test files were left unstaged.",
+    "Reviewed the second staged implementation attempt for C86-19, C86-20, C86-21, and C86-22 on 2026-08-11. git diff --cached --check and npx tsc --noEmit passed; 130 focused tests in mergeTaskWorktrees.test.ts, runMergePhase.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,352 tests. C86-19, C86-20, and C86-22 appear fully resolved, and C86-21 now preserves child-layer progress and ordinary driver reasons, but the atomic batch was rejected because a root merge that lands before merge-record persistence fails is still returned as parent-conflicted instead of merged-but-not-closed. The seven implementation/test files were left unstaged.",
+    "Reviewed only C86-21 against the current cumulative staged C86-19 through C86-22 batch on 2026-08-11; C86-19, C86-20, and C86-22 retained their prior approval. git diff --cached --check and npx tsc --noEmit passed; 131 focused tests in mergeTaskWorktrees.test.ts, runMergePhase.test.ts, taskWorkflowMergeStage.test.ts, and taskWorkflowPlanImplementStage.test.ts passed; the full npm test suite passed all 1,353 tests. The production-shaped post-root-landing merge-record failure now returns merged-but-not-closed with the landed source hash and concrete failure, so C86-19, C86-20, C86-21, and C86-22 are accepted and removed.",
+    "Fresh closeout audit on 2026-08-11 compared baseline 945eb22650d593bdcab2584460c58ef4bad04a3c through committed HEAD f1b8f9788386c74321a7decb92830933be379172, including the post-0f4f3ff7 fix history. The index and implementation/test scope were clean; unrelated unstaged package.json, package-lock.json, and plans/task-163-plan.md changes plus untracked planning artifacts were preserved. The new-usage-graph worktree was not inspected.",
+    "Read plans/task-86-spec.md, completed task records and plans for tasks 131-153 plus the renumbered closing task 163 (formerly 157), the follow-up fix records through task 183, and the current open-task list.",
+    "npx tsc --noEmit passed and the full npm test suite passed all 1,353 tests against the audited working state.",
+    "Executed a temporary production-shaped regression in tests/taskWorkflowMergeStage.test.ts in which the root rebase-test typecheck failed until a rebase-fix agent committed outside-fence.txt in the active occurrence. The stage returned green with fenceViolations [], while the corrected assertion expected [{occurrenceId: '', path: 'outside-fence.txt'}]. The temporary test was removed and the test file restored byte-for-byte.",
+    "Executed a temporary production-shaped submodule regression in tests/taskWorkflowMergeStage.test.ts that created a refs/taskTools/merged-commits leaf collision in the source submodule. The submodule source branch moved, but the workflow omitted that layer from completedLayers, queue sourceProgressThisLap stayed false, and the corrected assertion failed. The temporary test was removed and the test file restored byte-for-byte.",
+    "Source-audited the generated launch argument shape and its integration coverage: launch-plan omits pipelineArgs.repositoryManifest, while every submodule plan+implement test manually supplies repositoryManifest and therefore does not exercise the production launch contract.",
+    "Checked every active finding against .taskTools/tasks.json. C86-43 is the semantic defect already tracked by open task 184, whose file fence is stale after the emitter rewrite; C86-40 through C86-42 have no matching open task.",
+    "Reviewed the staged implementation for C86-40, C86-41, C86-42, and C86-43 on 2026-08-12. The audit file was initially unstaged, no staged implementation/test file had overlapping unstaged edits, and the staged task-record path update was scoped to C86-43's stale task-184 fence. The 67 focused tests in tackle-tasks_SkillBodyEmitter.test.ts, taskWorkflowPlanImplementStage.test.ts, and taskWorkflowMergeStage.test.ts passed; npx tsc --noEmit passed; and the full npm test suite passed all 1,364 tests. Generated plan launches now carry the repository manifest and implement-capable missing-manifest launches fail loudly; active-layer rebase-fix commits are normalized against the live approved fence and force re-gating when needed; landed submodule progress survives merge-record failure and resumes without the stale intent dead-end; and series mode emits only per-task discovery/preparation while preserving the parallel pipeline. All four findings are accepted and removed.",
+    "Fresh closeout audit on 2026-08-12 compared baseline 945eb22650d593bdcab2584460c58ef4bad04a3c through committed HEAD 0f0553c6537f831ae618cff060cad00b4140a666 on this worktree's current branch fix-tackle-tasks-workflow-script-imports, including the fix history beginning at 0f4f3ff7e09a77dde08ca9e02b335fce259bc0d4. The implementation/test index was clean; unrelated unstaged package.json, package-lock.json, and plans/task-163-plan.md changes plus untracked planning artifacts were preserved. The new-usage-graph worktree was not inspected.",
+    "Read plans/task-86-spec.md, completed task records for tasks 86 and 131-153 plus renumbered closing task 163 (formerly 157), the current generated skill/workflow/driver implementation, relevant regression tests, and every current open task when checking issue overlap.",
+    "npx tsc --noEmit passed and the full npm test suite passed all 1,364 tests against the audited working state.",
+    "Executed a production-shaped merge-time drift reproduction: rebase-test first passed both the configured typecheck and complete suite, the source branch then advanced with a typecheck-only failure, and mergeTaskDeepestFirst rebased, ran the still-green suite, merged, and left the source tree failing the configured typecheck.",
+    "Executed a production-shaped two-task preparation reproduction: task 1 prepared successfully, task 2 hit an existing exclusive lease, buildWorkflowArguments threw, and task 1's worktree and candidate-run lease both remained. A retry would collide with the orphaned task-1 lease before returning pipelineArgs.",
+    "Executed the explicit stale-lease recovery path with a lease whose worktree had already been removed. recoverStaleTaskWorktreeLease ran git status against the absent path, threw, and left the stale lease in place.",
+    "Source-audited the generated series brief and confirmed it simultaneously says a completed/not-found current task must stop the chain and that completed/not-found tasks may be skipped before continuing; existing series tests do not assert this branch.",
+    "Re-reviewed the staged implementation for C86-44 through C86-47 on 2026-08-12. The staged batch contains only the eight expected production/test paths: mergeTaskWorktrees.ts, prepareTasks.ts, tackle-tasks_AgentPromptEmitter.ts, tackle-tasks_SkillBodyEmitter.ts, tackle-tasks.workflow.js, and their three focused test files; unrelated unstaged package and planning changes were preserved.",
+    "git diff --cached --check passed. The 87 focused tests in prepareTasks.test.ts, tackle-tasks_SkillBodyEmitter.test.ts, and taskWorkflowMergeStage.test.ts passed; npx tsc --noEmit passed; and the full npm test suite passed all 1,371 tests."
+  ],
+  "notes": [
+    {
+      "date": "2026-08-10T10:07:53-07:00",
+      "text": "The green suites do not contradict the findings: several tests inject production-unavailable capabilities or manually perform the integration step under test, and the remaining failures concern interleavings or error paths that have no regression coverage."
+    },
+    {
+      "date": "2026-08-10T12:23:08-07:00",
+      "text": "Rewrite re-audit: C86-18's dynamic-import production defect is resolved by the substantive working-tree rewrite, so it was removed. The committed HEAD does not contain that substantive rewrite; C86-34 records the resulting branch-level blocker. Existing findings that the rewrite merely moved into the emitter/workflow split remain in the issue list with updated locations."
+    },
+    {
+      "date": "2026-08-11T13:15:23-07:00",
+      "text": "C86-24, C86-28, C86-29, and C86-30 were reviewed as one atomic batch and rejected. The attempted implementation remains in the working tree but is not staged or committed; the four findings below describe the work still required on top of that attempt."
+    },
+    {
+      "date": "2026-08-11T15:12:06-07:00",
+      "text": "Second atomic review: C86-24 and C86-28 remain materially incomplete. The unstaged attempt appears to satisfy C86-29 and C86-30, but those findings remain in the audit because an atomically rejected batch cannot accept or hand off only part of its implementation. All ten implementation/test paths are unstaged; only this audit refresh is staged."
+    },
+    {
+      "date": "2026-08-11T16:25:17-07:00",
+      "text": "Third atomic review: C86-24 now has executable approval/completion-order regression coverage with peak shared-concurrency and serial-tail assertions; C86-28 dynamically reports only retained worktree, lease, root/submodule branch, and persistence artifacts and has production-shaped partial-cleanup and retry coverage. With C86-29 and C86-30 already satisfied by the same staged batch, C86-24, C86-28, C86-29, and C86-30 were removed."
+    },
+    {
+      "date": "2026-08-11T17:28:21-07:00",
+      "text": "C86-27, C86-35, and C86-36 were reviewed as one atomic batch and rejected. The attempt appears to satisfy C86-27 and C86-35, and it adds useful successful lost-result coverage for C86-36, but C86-36 remains incomplete for lost cleanup-incomplete and failed-continue/aborted outcomes. All nine implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T18:05:45-07:00",
+      "text": "Second atomic review of C86-27, C86-35, and C86-36: only C86-36 required further implementation. Its merge and aborted-rebase recovery gaps are now addressed, but a lost successful advance-conflict result still reconstructs touchedPaths only for other occurrences and drops extra edits in the active occurrence. All nine implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T18:28:02-07:00",
+      "text": "Third atomic review of C86-27, C86-35, and C86-36: only C86-36 requires further implementation. Active-occurrence recovery is now correct, but the receipt is stored under the root worktree and is visible to git status; a subsequent root conflict can stage and commit it as an apparent touched path. All nine implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T19:05:00-07:00",
+      "text": "C86-36-only review accepted the stable conflict-identity and exact-result receipt implementation. A lost first advance-conflict result is recovered without consuming the second conflict, external receipts remain Git-invisible, and focused, typecheck, and full-suite verification passed. C86-27 and C86-35 were already approved; all three accepted findings were removed from the active audit."
+    },
+    {
+      "date": "2026-08-11T20:43:49-07:00",
+      "text": "C86-23, C86-25, and C86-26 were reviewed as one atomic batch and rejected. The unstaged attempt appears to satisfy C86-23 and C86-26 and fixes C86-25's notes-only and owned-change-without-notes cases, but it still accepts deletion of a pre-existing tracked notes file as if the required artifact were committed. All eight implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T20:54:55-07:00",
+      "text": "Second atomic review of C86-23, C86-25, and C86-26 accepted the cumulative implementation. The finalizer now distinguishes a deleted notes path from a notes blob present in HEAD, and deterministic regression coverage preserves the zero-commit, notes-only, missing-notes, ownership, task-state-lock, and authoritative-root boundaries. All three findings were removed."
+    },
+    {
+      "date": "2026-08-11T21:00:14-07:00",
+      "text": "Post-commit audit refresh at 9c209d1: C86-19, C86-20, C86-21, and C86-22 remain accurate. The accepted C86-23/25/26 commit shifted their source and test anchors but did not close their causal chains. C86-21 now describes only uncaught rebase/merge driver exceptions; close and final-cleanup failures are already normalized boundaries."
+    },
+    {
+      "date": "2026-08-11T21:43:21-07:00",
+      "text": "C86-19, C86-20, C86-21, and C86-22 were reviewed as one atomic batch and rejected. The attempt adds useful one-level submodule fencing, queue source-progress state, exception normalization, and final-review processing, but the remaining nested propagation, structured-result schema, completed-layer preservation, and final-round end-to-end coverage gaps keep all four findings open. All seven implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T22:39:26-07:00",
+      "text": "Second atomic review of C86-19, C86-20, C86-21, and C86-22: C86-19's nested commit/fence contract, C86-20's real envelope-to-queue progress path, and C86-22's final-review downstream widening path now satisfy their criteria. C86-21 still misclassifies a root merge that lands before merge-record persistence throws; its pre-merge ref-collision test does not exercise that boundary. All seven implementation/test paths are unstaged; only this audit update is staged."
+    },
+    {
+      "date": "2026-08-11T22:56:42-07:00",
+      "text": "C86-21-only review accepted the explicit post-landing root state and production-shaped merge-record ref-collision regression. The source branch moves, the task remains open, and the typed workflow result carries merged-but-not-closed, the landed hash, and the concrete ref failure through the declared schema and existing queue boundary. C86-19, C86-20, and C86-22 were already approved; all four findings were removed."
+    },
+    {
+      "date": "2026-08-11T23:33:06-07:00",
+      "text": "Fresh closeout audit found four substantive remaining defects. Green typecheck/full-suite results do not contradict them: the submodule plan+implement integration tests inject an argument omitted by generated production instructions, the rebase-fix fence and submodule post-landing persistence interleavings were absent until temporary proving tests were run, and the series test explicitly preserves the contradictory whole-array bootstrap text."
+    },
+    {
+      "date": "2026-08-12T01:49:01-07:00",
+      "text": "Atomic review accepted C86-40 through C86-43. The staged implementation removes each reported cause, preserves the manifest-aware commit/fence, post-approval re-gate, source-progress, root merged-but-not-closed, exclusive-lease, and parallel scheduling boundaries, and adds deterministic regressions for the generated launch contract, root and nested active-layer fences, approved-path negative control, submodule post-landing record failure/retry, and serial bootstrap lease collision. All four findings were removed."
+    },
+    {
+      "date": "2026-08-12T07:55:03-07:00",
+      "text": "Fresh closeout audit found four substantive remaining defects. The green full suite does not contradict them: merge-stage tests do not advance the source between rebase-test and merge with a typecheck-only failure; preparation tests exercise one successful task or the failing task's own lease release, not rollback of earlier successful leases; stale recovery tests keep the worktree present; and series tests cover unmerged stopping but not completed/not-found continuation."
+    },
+    {
+      "date": "2026-08-12T08:03:14-07:00",
+      "text": "No additional confirmed, non-nitpick finding was withheld from this closeout audit. History explains why these four were absent from the pre-implementation reviews: C86-44's split merge emitter was introduced in ea051e3a; C86-45 and C86-46 became harmful when f5619ddb added persistent exclusive leases and stale recovery around the older task map; and C86-47's contradictory sentence was introduced at current HEAD 0f0553c6 while fixing C86-43. The subsequent Codex rounds were atomic re-reviews of already-enumerated fixes, so following only those causal chains failed to restart an adversarial requirement-boundary pass. The missed dimensions were source movement between rebase-test and merge with divergent typecheck/suite outcomes, rollback of earlier leases in a multi-task prepare or after publication failure, stale recovery after the checkout disappeared, and the completed/not-found branch of the rewritten serial brief. The next re-audit must explicitly cover those dimensions."
+    },
+    {
+      "date": "2026-08-12T08:43:58-07:00",
+      "text": "Scoped re-review accepted C86-44 through C86-47 with no new finding. Merge-time root and submodule revalidation now receive the configured typecheck while preserving injected merge operations; preparation unwinds only same-run leases on later setup or publication failure and retries cleanly; explicit recovery handles an absent checkout without weakening retained-work protection; and series text now skips completed/not-found while retaining the open-but-unmerged stop rule. The implementation matches the exact requested changes, and only the flagged production/test paths changed in the staged batch. All four findings were removed."
+    }
+  ],
+  "issues": []
+}

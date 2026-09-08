@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "ARE_2_TEST_REVIEWS_DONE",
+        "scriptSignal": "continue",
+        "next": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "AMEND_ENTRY_WITH_CODEX_NOTES",
+        "scriptSignal": "continue",
+        "projectRoot": "/abs/project",
+        "taskNumber": 42,
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "runId": "run-1",
+        "amended": true
+    }
+}

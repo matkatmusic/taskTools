@@ -1,13 +1,15 @@
 // Behavioral checks for taskGroups.ts: pure file-overlap grouping, no I/O.  Run with: node --test tests/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { groupTasksByFileOverlap } from "../scripts/taskGroups.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
-import type { RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { declaredFiles, groupTasksByFileOverlap, readOnlyFilesOf } from "../scripts/shared/taskGroups.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import type { RepositoryManifest } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
-function task(taskNumber: number, files?: string[]): TaskRecord {
-    return files === undefined ? { taskNumber } : { taskNumber, files };
+function task(taskNumber: number, modifiableFiles?: string[]): TaskRecord {
+    return modifiableFiles === undefined ? { taskNumber } : { taskNumber, modifiableFiles };
 }
 
 const flatManifest: RepositoryManifest = {
@@ -76,4 +78,30 @@ test("test_groupTasksByFileOverlapStillWorksWithNoManifestArgument", () => {
     const groups = groupTasksByFileOverlap([task(1, ["fileA"]), task(2, ["fileA"])]);
     assert.equal(groups.length, 1);
     assert.deepEqual(groups[0].taskNumbers, [1, 2]);
+});
+
+test("test_declaredFilesReturnsModifiableFilesWhenTheTaskDeclaresIt", () => {
+    assert.deepEqual(declaredFiles({ taskNumber: 1, modifiableFiles: ["a.ts"] } as TaskRecord), ["a.ts"]);
+});
+
+test("test_declaredFilesReturnsEmptyArrayWhenTheTaskDeclaresNeitherKey", () => {
+    assert.deepEqual(declaredFiles({ taskNumber: 1 } as TaskRecord), []);
+});
+
+test("test_readOnlyFilesOfDefaultsToWildcardWhenAbsent", () => {
+    assert.deepEqual(readOnlyFilesOf({ taskNumber: 1, files: ["a.ts"] } as TaskRecord), ["*"]);
+});
+
+test("test_readOnlyFilesOfReturnsTheDeclaredListWhenPresent", () => {
+    assert.deepEqual(readOnlyFilesOf({ taskNumber: 1, readOnlyFiles: ["b.ts"] } as TaskRecord), ["b.ts"]);
+});
+
+test("test_tasksJsonEveryEntryHasReadOnlyFilesAndModifiableFilesAndNoFilesKey", () => {
+    const tasksPath = join(import.meta.dirname, "..", ".taskTools", "tasks.json");
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    for (const task of tasks) {
+        assert.equal(Array.isArray(task.modifiableFiles), true, `task ${task.taskNumber} is missing modifiableFiles`);
+        assert.equal(Array.isArray(task.readOnlyFiles), true, `task ${task.taskNumber} is missing readOnlyFiles`);
+        assert.equal("files" in task, false, `task ${task.taskNumber} still has a files key`);
+    }
 });

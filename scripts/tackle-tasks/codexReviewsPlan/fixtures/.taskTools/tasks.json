@@ -1,0 +1,6 @@
+[
+    {
+        "taskNumber": 42,
+        "modifiableFiles": ["src/owned.ts"]
+    }
+]

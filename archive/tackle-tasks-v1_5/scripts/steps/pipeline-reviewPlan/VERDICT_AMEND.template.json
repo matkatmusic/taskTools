@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "next": "VERDICT_AMEND",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "reviewOutputFile": "/repo/.worktrees/task-42/plans/codex-review.json",
+        "verdict": "AMEND",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file"
+    },
+    "output": {
+        "box": "VERDICT_AMEND",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    }
+}

@@ -1,0 +1,64 @@
+flowchart TB
+%% REBASE PIPELINE.
+%% ---
+%% Input: a finished implementation.
+%% ---
+%% Job: put the task's commits on top of the target branch.
+%% ---
+%% A conflict fix runs fix, then commit, then continue.
+%% ---
+%% Never fix then continue without committing first.
+%% ---
+%% The source lock is already held here.
+%% ---
+%% Every box refreshes the lock's heartbeat.
+%% ---
+%% Walks every repository layer, deepest submodule first.
+%% ---
+%% The receipt names layers already landed by the merge.
+%% ---
+%% A landed layer is public. Rebasing it would rewrite it.
+%% ---
+%% So this pipeline skips any layer the receipt marks landed.
+%% ---
+%% Merge re-enters here only when nothing landed.
+%% ---
+%% So the receipt is normally empty, but check, don't assume.
+%% ---
+%% Exit types: rebase-stuck, run-failed.
+%% ---
+%% Output feeds the full suite pipeline.
+
+  SOURCE_REPO_LOCKED_INPUT["Input: { worktree, target branch,<br/>merge receipt }"] --> REBASE_ONTO_TARGET_BRANCH
+  REBASE_ONTO_TARGET_BRANCH["rebase onto the target branch.<br/>skip every layer the receipt<br/>records as already landed"] --> DID_REBASE_REPORT_CONFLICTS{"did the rebase report conflicts?"}
+  DID_REBASE_REPORT_CONFLICTS -->|YES| ARE_2_CONFLICT_FIXES_DONE{"2 conflict fixes done?"}
+  DID_REBASE_REPORT_CONFLICTS -->|NO| SUITE_PIPELINE
+
+  ARE_2_CONFLICT_FIXES_DONE -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS["fix conflicts"]
+  ARE_2_CONFLICT_FIXES_DONE -- "YES<br/>exit type: rebase-stuck<br/>exit note: the rebase did not advance<br/>after 2 conflict fixes" --> EXIT_WORKFLOW_REBASE
+  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["commit if needed"]
+  COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED --> CONTINUE_REBASE["continue the rebase"]
+  CONTINUE_REBASE --> IS_REBASE_FINISHED{"is the rebase finished?"}
+  IS_REBASE_FINISHED -->|YES| SUITE_PIPELINE["full suite pipeline"]
+  IS_REBASE_FINISHED -- "NO<br/>it stopped on new conflicts" --> DID_REBASE_REPORT_CONFLICTS
+
+  EXIT_WORKFLOW_REBASE["failures exit"]
+
+  %% pass/nopass: green heads to the next pipeline.
+  %% ---
+  %% Red goes back round the conflict cycle.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class EXIT_WORKFLOW_REBASE fail
+  class DID_REBASE_REPORT_CONFLICTS,IS_REBASE_FINISHED,ARE_2_CONFLICT_FIXES_DONE decision
+  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED,REBASE_ONTO_TARGET_BRANCH,CONTINUE_REBASE script
+  class FIX_CONFLICTS agent
+  class FIX_CONFLICTS returns_a_prompt
+  class SUITE_PIPELINE pipeline
+  class SOURCE_REPO_LOCKED_INPUT output

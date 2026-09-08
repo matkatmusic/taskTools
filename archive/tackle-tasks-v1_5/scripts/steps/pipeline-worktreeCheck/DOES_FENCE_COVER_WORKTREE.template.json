@@ -1,0 +1,28 @@
+{
+    "input": {
+        "box": "IS_PREVIOUS_RUN_RESUMABLE",
+        "scriptSignal": "continue",
+        "next": "DOES_FENCE_COVER_WORKTREE",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "DOES_FENCE_COVER_WORKTREE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "exitType": "fence-violation",
+        "exitNote": "the resumed worktree touched files the task does not own: some/path.ts",
+        "next": "FAILURES_EXIT"
+    }
+}

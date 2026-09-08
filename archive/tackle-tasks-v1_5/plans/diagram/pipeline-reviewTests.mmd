@@ -1,0 +1,58 @@
+flowchart TB
+%% REVIEW TASK TESTS PIPELINE. Split from pipeline-implementTest.mmd.
+%% ---
+%% Input: a green implementation from the task tests pipeline.
+%% ---
+%% Job: decide whether the tests are worth trusting.
+%% ---
+%% Input provenance:
+%% ---
+%% The implementation diff and the pre-existing test files are derived here.
+%% ---
+%% Both come from the task branch's merge-base with the target branch.
+%% ---
+%% No earlier pipeline captures them.
+%% ---
+%% The test command and test results come from the task tests pipeline that just ran.
+%% ---
+%% Rules not shown in the graph:
+%% ---
+%% Codex gets 2 reviews; a second flagging exits the pipeline.
+%% ---
+%% Reading tests alone misses wrong-implementation passes.
+%% ---
+%% It also misses pre-existing tests claimed as new coverage.
+%% ---
+%% A script that fails operationally exits as run-failed.
+%% ---
+%% Exit types: tests-flagged, run-failed.
+
+  GREEN_IMPLEMENTATION_INPUT["Input: { plan, tasks.json entry,<br/>task test files, implementation diff,<br/>test command, test results,<br/>pre-existing test files }"] --> CODEX_REVIEWS_TESTS
+  CODEX_REVIEWS_TESTS["codex reviews the tests"] --> ARE_TESTS_FLAGGED{"are the tests flagged?"}
+  ARE_TESTS_FLAGGED -->|NO| REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
+  ARE_TESTS_FLAGGED -->|YES| ARE_2_TEST_REVIEWS_DONE{"2 codex test reviews done?"}
+
+  ARE_2_TEST_REVIEWS_DONE -->|NO| AMEND_ENTRY_WITH_CODEX_NOTES["amend tasks.json entry with<br/>codex's notes and fixes"]
+  ARE_2_TEST_REVIEWS_DONE -- "YES<br/>exit type: tests-flagged<br/>exit note: task tests failed<br/>codex review" --> EXIT_WORKFLOW_REVIEW_TESTS
+  AMEND_ENTRY_WITH_CODEX_NOTES -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
+
+  EXIT_WORKFLOW_REVIEW_TESTS["failures exit"]
+
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red reimplements, or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class ARE_TESTS_FLAGGED,ARE_2_TEST_REVIEWS_DONE decision
+  class AMEND_ENTRY_WITH_CODEX_NOTES script
+  class CODEX_REVIEWS_TESTS agent
+  class CODEX_REVIEWS_TESTS returns_a_prompt
+  class IMPLEMENT_PIPELINE,REBASE_PREAMBLE_PIPELINE pipeline
+  class EXIT_WORKFLOW_REVIEW_TESTS fail
+  class GREEN_IMPLEMENTATION_INPUT output

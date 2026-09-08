@@ -5,8 +5,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkLegacyManifest } from "../scripts/legacyManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
+import { checkLegacyManifest } from "../scripts/shared/legacyManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

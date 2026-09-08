@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "ARE_2_TEST_FIXES_DONE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 3,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/amend/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/amend/worktree",
+        "branch": "task-3",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 3,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/amend/root",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/commitImplementationIfNeeded/fixtures/amend/worktree",
+        "branch": "task-3",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

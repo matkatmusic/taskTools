@@ -1,0 +1,21 @@
+{
+    "input": {
+        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree/plans/plan.json",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "reviewFile": "",
+            "codexSucceeded": false
+        }
+    }
+}

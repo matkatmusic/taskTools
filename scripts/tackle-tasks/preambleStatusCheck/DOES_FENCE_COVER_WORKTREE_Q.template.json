@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "DOES_FENCE_COVER_WORKTREE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/mutating-example-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "INIT_SUBMODULES_RECURSIVELY"
+    }
+}

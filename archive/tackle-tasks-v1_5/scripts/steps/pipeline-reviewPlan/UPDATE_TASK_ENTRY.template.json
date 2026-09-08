@@ -1,0 +1,22 @@
+{
+    "input": {
+        "box": "VERDICT_SCRAP",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    },
+    "output": {
+        "box": "UPDATE_TASK_ENTRY",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "reviewCount": 1,
+        "runId": "run-1",
+        "sourceBranch": "main"
+    }
+}

@@ -4,12 +4,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const WORKFLOW_NAMES = ["plan", "verify", "implement", "test", "merge"];
-const EXPECTED_AGENT_CALLS: Record<string, number> = { plan: 1, verify: 1, implement: 1, test: 2, merge: 1 };
+// Task 157 deleted the five per-stage workflow files; blockers and tackle-tasks are what survive.
+const WORKFLOW_NAMES = ["blockers", "tackle-tasks"];
+// C86-19: removed the standalone git-head call, folded into the occurrence-oids call the implement stage now needs anyway.
+const EXPECTED_AGENT_CALLS: Record<string, number> = { blockers: 1, "tackle-tasks": 17 };
 const HELPER_MARKER = "// ponytail: null/undefined means the harness returned no result";
 
+// The v1.5 rebuild moved tackle-tasks off the blanket retry rule: a mutating box reconciles instead.
+// These gates therefore watch the frozen v1.1 copy, which still retries every agent call.
 const readWorkflow = (name: string) =>
-    readFileSync(join(import.meta.dirname, "..", "skills", "tackle-tasks", `${name}.workflow.js`), "utf8");
+    readFileSync(join(import.meta.dirname, "..", "skills", "tackle-tasks-v1_1", `${name}.workflow.js`), "utf8");
 
 const extractHelper = (source: string) => {
     const start = source.indexOf(HELPER_MARKER);
@@ -21,7 +25,7 @@ const extractHelper = (source: string) => {
 
 // The workflow files cannot be imported, so compile the extracted helper text instead.
 const loadRetryAgent = () =>
-    new Function(`${extractHelper(readWorkflow("plan"))}\nreturn retryAgent`)();
+    new Function(`${extractHelper(readWorkflow("tackle-tasks"))}\nreturn retryAgent`)();
 
 const countingSpawn = (results: unknown[]) => {
     const spawn = () => { spawn.calls++; return Promise.resolve(results[spawn.calls - 1]); };
@@ -104,4 +108,18 @@ test("test_everyWorkflowFileParsesInItsSandboxShape", () => {
 test("test_theParseGateFailsOnBrokenSource", () => {
     // Negative control: proves the parse gate is able to fail.
     assert.throws(() => parseInSandboxShape("export const meta = {\nconst broken ==== 1\n"), SyntaxError);
+});
+
+// The parse gate above only checks syntax; it misses a workflow that regains a forbidden capability.
+const FORBIDDEN_CAPABILITY = /(?:^|\W)(?:import\s*(?:\(|[{'"]|[A-Za-z_$])|require\s*\(|process\.|node:)/m;
+
+test("test_noWorkflowFileUsesAForbiddenRuntimeCapability", () => {
+    for (const name of WORKFLOW_NAMES) {
+        assert.doesNotMatch(readWorkflow(name), FORBIDDEN_CAPABILITY, `${name}.workflow.js uses a forbidden capability`);
+    }
+});
+
+test("test_theForbiddenCapabilityGateFailsOnADynamicImport", () => {
+    // Negative control: proves the gate is able to fail.
+    assert.match("await import('node:fs')", FORBIDDEN_CAPABILITY);
 });

@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome", "missingFiles", "message", "issues", "fixes", "sectionsThatHoldUp"],
+  "properties": {
+    "outcome": { "type": "string", "enum": ["OK", "ERROR"] },
+    "missingFiles": { "type": "array", "items": { "type": "string" } },
+    "message": { "type": "string" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sectionId", "evidence", "planClaims", "actuallyTrue"],
+        "properties": {
+          "sectionId": { "type": "string" },
+          "evidence": { "type": "string" },
+          "planClaims": { "type": "string" },
+          "actuallyTrue": { "type": "string" }
+        }
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sectionId", "fix", "durableBecause"],
+        "properties": {
+          "sectionId": { "type": "string" },
+          "fix": { "type": "string" },
+          "durableBecause": { "type": "string" }
+        }
+      }
+    },
+    "sectionsThatHoldUp": { "type": "array", "items": { "type": "string" } }
+  }
+}

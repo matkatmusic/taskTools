@@ -1,0 +1,28 @@
+{
+    "input": {
+        "box": "REBASED_WORKTREE_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0
+    },
+    "output": {
+        "box": "RUN_FULL_SUITE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "passed": true,
+        "output": ""
+    }
+}

@@ -1,0 +1,37 @@
+{
+    "input": {
+        "box": "READ_MERGE_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": true,
+        "failureReason": "",
+        "state": "ALL LANDED",
+        "landed": [""],
+        "notLanded": [""],
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }]
+    },
+    "output": {
+        "box": "WHAT_IS_PUBLICATION_STATE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "merged": true,
+        "failureReason": "",
+        "state": "ALL LANDED",
+        "landed": [""],
+        "notLanded": [""],
+        "commits": [{ "occurrenceId": "", "hash": "", "kind": "merge" }],
+        "next": "pipeline-mergeSucceededExit.mmd::MERGE_SUCCEEDED_EXIT"
+    }
+}

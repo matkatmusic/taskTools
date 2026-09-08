@@ -1,0 +1,31 @@
+{
+    "input": {
+        "box": "ARE_2_CLARIFY_ROUNDS_DONE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatDidThePlannerReturn/fixtures",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "outcome": "CLARIFY",
+        "clarifyRequest": "which database should task 1 use?"
+    },
+    "output": {
+        "box": "WRITE_CLARIFY_REQUEST",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/whatDidThePlannerReturn/fixtures",
+        "worktree": "/tmp/fake-worktree",
+        "branch": "task-1",
+        "docsMode": "UPDATE",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "outcome": "CLARIFY",
+        "clarifyRequest": "which database should task 1 use?"
+    }
+}

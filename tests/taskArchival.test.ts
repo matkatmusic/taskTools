@@ -8,18 +8,19 @@ import {
     archivePublishedTasks,
     summarizeTaskMergeResults,
     type RawTaskRepoOutcome,
-} from "../scripts/taskArchival.ts";
+} from "../scripts/shared/taskArchival.ts";
+import { writeJsonAtomically } from "../scripts/shared/taskStateLock.ts";
 
 function makeProjectRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "taskTools-archival-"));
     writeFileSync(
         join(root, "tasks.json"),
         JSON.stringify([
-            { taskNumber: 1, title: "partial rollback", files: ["a.ts"] },
-            { taskNumber: 2, title: "fully published", files: ["b.ts"] },
-            { taskNumber: 3, title: "conflicted", files: ["c.ts"] },
-            { taskNumber: 4, title: "skipped", files: ["d.ts"] },
-            { taskNumber: 5, title: "not in explicit list", files: ["e.ts"] },
+            { taskNumber: 1, title: "partial rollback", modifiableFiles: ["a.ts"] },
+            { taskNumber: 2, title: "fully published", modifiableFiles: ["b.ts"] },
+            { taskNumber: 3, title: "conflicted", modifiableFiles: ["c.ts"] },
+            { taskNumber: 4, title: "skipped", modifiableFiles: ["d.ts"] },
+            { taskNumber: 5, title: "not in explicit list", modifiableFiles: ["e.ts"] },
         ]),
     );
     writeFileSync(join(root, "completedTasks.json"), "[]");
@@ -82,7 +83,7 @@ test("a fully-published task not named in the explicit list stays open", () => {
 });
 
 test("does not import or call any approval/confirmation code path", () => {
-    const source = readFileSync(join(import.meta.dirname, "..", "scripts", "taskArchival.ts"), "utf8");
+    const source = readFileSync(join(import.meta.dirname, "..", "scripts", "shared", "taskArchival.ts"), "utf8");
     const importLines = source.split("\n").filter((line) => line.trim().startsWith("import"));
     assert.equal(importLines.some((line) => /approvalGate|approvalReadiness/.test(line)), false);
     assert.equal(/recordApproval\(|issueApprovalAuthorization\(/.test(source), false);
@@ -126,10 +127,27 @@ test("duplicate task numbers in publishedTaskNumbers archive the task once", () 
     assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
 });
 
+test("a fully-published task declaring modifiableFiles instead of legacy files still archives", () => {
+    const root = makeProjectRoot();
+    const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
+    const taskTwo = tasks.find((t: any) => t.taskNumber === 2);
+    delete taskTwo.files;
+    taskTwo.modifiableFiles = ["b.ts"];
+    writeFileSync(join(root, "tasks.json"), JSON.stringify(tasks));
+    const raw: RawTaskRepoOutcome[] = [
+        { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "bbb" } },
+    ];
+    const mergeResults = summarizeTaskMergeResults(raw);
+    const { archived } = archivePublishedTasks([2], mergeResults, root);
+    assert.deepEqual(archived, [2]);
+    const completedTwo = readCompleted(root).find((t: any) => t.taskNumber === 2);
+    assert.deepEqual(completedTwo.modifiableFiles, ["b.ts"]);
+});
+
 test("a fully-published task with no declared files blocks the whole batch, archiving nothing", () => {
     const root = makeProjectRoot();
     const tasks = JSON.parse(readFileSync(join(root, "tasks.json"), "utf8"));
-    tasks.find((t: any) => t.taskNumber === 2).files = [];
+    tasks.find((t: any) => t.taskNumber === 2).modifiableFiles = [];
     writeFileSync(join(root, "tasks.json"), JSON.stringify(tasks));
     const raw: RawTaskRepoOutcome[] = [
         { taskNumber: 1, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
@@ -152,23 +170,27 @@ test("a fully-published task with no usable commit hash throws before archiving 
     assert.equal(readCompleted(root).length, 0);
 });
 
-test("a failing second write is rolled back, leaving both files exactly as they were", () => {
+test("a failing second write leaves an archive-first partial state that a retry resolves idempotently", () => {
     const root = makeProjectRoot();
-    const originalTasksRaw = readFileSync(join(root, "tasks.json"), "utf8");
-    const originalCompletedRaw = readFileSync(join(root, "completedTasks.json"), "utf8");
     const raw: RawTaskRepoOutcome[] = [
         { taskNumber: 2, repo: { repoName: "r1", status: "published", commitHash: "aaa" } },
     ];
     const mergeResults = summarizeTaskMergeResults(raw);
 
     let callCount = 0;
-    const flakyWrite = (path: string, data: string): void => {
+    const flakyWriteJson = (path: string, value: unknown): void => {
         callCount++;
         if (callCount === 2) throw new Error("disk full");
-        writeFileSync(path, data);
+        writeJsonAtomically(path, value);
     };
 
-    assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWrite), /disk full/);
-    assert.equal(readFileSync(join(root, "tasks.json"), "utf8"), originalTasksRaw);
-    assert.equal(readFileSync(join(root, "completedTasks.json"), "utf8"), originalCompletedRaw);
+    assert.throws(() => archivePublishedTasks([2], mergeResults, root, flakyWriteJson), /disk full/);
+    // Archive-first: completedTasks.json already has the record, tasks.json still has the task too.
+    assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
+    assert.equal(readTasks(root).some((t) => t.taskNumber === 2), true);
+
+    const { archived } = archivePublishedTasks([2], mergeResults, root);
+    assert.deepEqual(archived, [2]);
+    assert.equal(readTasks(root).some((t) => t.taskNumber === 2), false);
+    assert.equal(readCompleted(root).filter((t) => t.taskNumber === 2).length, 1);
 });

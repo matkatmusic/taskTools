@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { produceSkillBody } from "../scripts/create-task_SkillBodyEmitter.ts";
+import { produceSkillBody } from "../scripts/create-task/create-task_SkillBodyEmitter.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/create-task_SkillBodyEmitter.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/create-task/create-task_SkillBodyEmitter.ts", import.meta.url));
 
 test("test_produceSkillBodyContainsTheAbsoluteWorkflowScriptPath", () => {
     const body = produceSkillBody("test task");
@@ -14,7 +14,7 @@ test("test_produceSkillBodyContainsTheAbsoluteWorkflowScriptPath", () => {
 
 test("test_produceSkillBodyContainsTheAbsoluteAgentPromptEmitterPath", () => {
     const body = produceSkillBody("test task");
-    assert.match(body, /(?:^|[\s"])\/[^\s"]*scripts\/create-task_AgentPromptEmitter\.ts/);
+    assert.match(body, /(?:^|[\s"])\/[^\s"]*scripts\/create-task\/create-task_AgentPromptEmitter\.ts/);
 });
 
 test("test_produceSkillBodyLeavesNoUnexpandedPlaceholder", () => {
@@ -35,6 +35,14 @@ test("test_produceSkillBodyEscapesQuotesInTheTaskDescription", () => {
 test("test_produceSkillBodyOpensTheGoalStepWithTheAskUserQuestionImperative", () => {
     const body = produceSkillBody("test task");
     assert.match(body, /^4\. Invoke AskUserQuestion to settle `goal` with the user/m);
+});
+
+test("test_produceSkillBodyAsksTheProblemSolvedByTaskQuestionVerbatim", () => {
+    const body = produceSkillBody("test task");
+    assert.match(
+        body,
+        /^5\. Invoke AskUserQuestion to ask the user exactly: "what problem is being solved by this task"\. Store the user's answer verbatim, never reworded or summarized, in a `problemSolvedByTask` field\.$/m,
+    );
 });
 
 test("test_skillBodyEmitterScriptFailsWhenStdinIsEmpty", () => {

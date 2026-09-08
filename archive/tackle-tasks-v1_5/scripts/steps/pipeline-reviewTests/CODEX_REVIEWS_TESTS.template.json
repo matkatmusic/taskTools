@@ -1,0 +1,16 @@
+{
+    "input": {
+        "box": "GREEN_IMPLEMENTATION_INPUT",
+        "scriptSignal": "continue",
+        "projectRoot": "scripts/steps/pipeline-reviewTests/fixtures",
+        "taskNumber": 42,
+        "worktreePath": "scripts/steps/pipeline-reviewTests/fixtures/worktree",
+        "sourceBranch": "HEAD",
+        "runId": "run-1"
+    },
+    "output": {},
+    "agentAnswer": {
+        "flagged": true,
+        "notes": "[tests/thing.test.ts] a test\n\nasserts nothing\n\nFix: assert the return value"
+    }
+}

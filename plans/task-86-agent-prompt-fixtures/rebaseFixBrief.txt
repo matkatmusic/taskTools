@@ -1,0 +1,27 @@
+The test suite for layer "vendor/example-submodule" is RED after a rebase, in /fixture/repo/.taskTools/worktrees/task-999. Fix the cause.
+
+Carry out every step below, in order, from top to bottom.
+A line reading `run(...)` means actually execute that command now.
+A line reading `return {...}` means stop and report exactly those fields.
+
+Failure output from the test run:
+fixture test failure output
+  1 failing
+
+You may READ anything, anywhere in the tree. You may EDIT any file inside /fixture/repo/.taskTools/worktrees/task-999 — the failing test, or the code it covers. Do not edit any file outside /fixture/repo/.taskTools/worktrees/task-999. These paths inside /fixture/repo/.taskTools/worktrees/task-999 are OTHER layers (separate occurrences) and are out of scope even though they sit on disk under /fixture/repo/.taskTools/worktrees/task-999 — do not edit anything inside them: vendor/example-submodule/vendor/nested-submodule
+
+fix the cause of the failure
+
+run(git -C /fixture/repo/.taskTools/worktrees/task-999 add -A)
+run(git -C /fixture/repo/.taskTools/worktrees/task-999 commit -m "task 999: fix rebase-test failure in vendor/example-submodule")
+// rebase needs a clean tree; this commit is never undone — it survives for the next lap
+
+if git -C /fixture/repo/.taskTools/worktrees/task-999 status --porcelain prints nothing (the fix is committed):
+    return {fixed: true, summary: what you changed}
+else:
+    return {fixed: false, summary: why the tree is still dirty}
+
+You are forbidden to weaken, delete, or stub out a test or the code it covers
+to make the failure disappear; to edit any file outside /fixture/repo/.taskTools/worktrees/task-999, or
+inside a layer listed above as out of scope; to force-push or hard-reset
+anything you did not create; or to leave your edit uncommitted.

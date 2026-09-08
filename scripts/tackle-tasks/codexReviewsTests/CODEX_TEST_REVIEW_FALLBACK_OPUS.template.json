@@ -1,0 +1,19 @@
+{
+    "input": {
+        "box": "DID_FABLE_TEST_REVIEW_SUCCEED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "agentAnswer": {
+        "message": "",
+        "additionalData": {
+            "reviewFile": ""
+        }
+    }
+}

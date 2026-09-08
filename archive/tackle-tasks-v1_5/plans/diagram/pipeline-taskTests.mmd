@@ -1,0 +1,60 @@
+flowchart TB
+%% TASK TESTS PIPELINE. Split from pipeline-implementTest.mmd.
+%% ---
+%% Input: committed work from the implement pipeline.
+%% ---
+%% Job: get the task's own tests green.
+%% ---
+%% Rules not shown in the graph:
+%% ---
+%% Every read and write of tasks.json is atomic.
+%% ---
+%% A repair is never tested until committed, so a failure re-enters the implement pipeline, not this one.
+%% ---
+%% Boxes touching the working tree run deepest submodule first, root last. tasks.json-only boxes do not.
+%% ---
+%% amend tasks.json entry also raises the fix counter by one.
+%% ---
+%% A script that fails operationally exits as run-failed.
+%% ---
+%% An entry with hasTests false (tests "skip" on a 1.0.0 entry) runs no task tests and no codex test review: it goes straight to the rebase preamble.
+%% ---
+%% Exit types: tests-red, run-failed.
+%% ---
+%% CODE TASK: the runtime disagrees with this graph.
+%% ---
+%% tackle-tasks.workflow.template.js sets MAX_ATTEMPTS = 2.
+%% ---
+%% It runs only 1 fix before tests-red.
+%% ---
+%% Its exit note still says "after 2 codebase fixes".
+
+  COMMITTED_WORK_INPUT["Input: { worktree, task test files }"] --> ARE_TASK_TESTS_SKIPPED{"is the entry's hasTests false?"}
+  ARE_TASK_TESTS_SKIPPED -->|NO| RUN_TASK_TESTS
+  ARE_TASK_TESTS_SKIPPED -- "YES<br/>no task tests, no codex test review" --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
+  RUN_TASK_TESTS["run task tests"] --> DO_TASK_TESTS_PASS{"do the task tests pass?"}
+  DO_TASK_TESTS_PASS -->|YES| REVIEW_TESTS_PIPELINE["review task tests pipeline"]
+  DO_TASK_TESTS_PASS -->|NO| ARE_2_TEST_FIXES_DONE{"have 2 fixes already<br/>been attempted?"}
+
+  ARE_2_TEST_FIXES_DONE -->|NO| AMEND_ENTRY_WITH_FAILING_TESTS["amend tasks.json entry<br/>with the failing tests"]
+  ARE_2_TEST_FIXES_DONE -- "YES<br/>exit type: tests-red<br/>exit note: task tests still<br/>failing after 2 fix attempts" --> EXIT_WORKFLOW_TASK_TESTS
+  AMEND_ENTRY_WITH_FAILING_TESTS -- "reimplement against the amended entry" --> IMPLEMENT_PIPELINE["implement pipeline"]
+
+
+  EXIT_WORKFLOW_TASK_TESTS["failures exit"]
+
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red reimplements, or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class ARE_TASK_TESTS_SKIPPED,DO_TASK_TESTS_PASS,ARE_2_TEST_FIXES_DONE decision
+  class AMEND_ENTRY_WITH_FAILING_TESTS,RUN_TASK_TESTS script
+  class IMPLEMENT_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE pipeline
+  class EXIT_WORKFLOW_TASK_TESTS fail
+  class COMMITTED_WORK_INPUT output

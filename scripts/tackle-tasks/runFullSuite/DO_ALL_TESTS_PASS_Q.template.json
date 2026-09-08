@@ -1,0 +1,31 @@
+{
+    "input": {
+        "box": "RUN_FULL_SUITE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "readFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": ""
+    },
+    "output": {
+        "box": "DO_ALL_TESTS_PASS_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "",
+        "worktree": "",
+        "branch": "task-1",
+        "ownedFilePaths": [""],
+        "readFilePaths": [""],
+        "testFilePaths": [""],
+        "passed": true,
+        "output": "",
+        "next": "DID_CHANGES_STAY_INSIDE_FENCE_Q"
+    }
+}

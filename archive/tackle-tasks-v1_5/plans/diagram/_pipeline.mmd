@@ -1,0 +1,86 @@
+flowchart TB
+%% OVERVIEW. One diagram file per pipeline, named pipeline-<blockName>.mmd.
+%% ---
+%% REFUSED covers invalid-number, blocked, already-active, and run-failed before the task is active.
+%% ---
+%% A post-merge cleanup failure can still fail the run after merge succeeds.
+%% ---
+%% Master exit-type list, one per path that reaches [stop]:
+%% ---
+%%   completed            - archived to completedTasks.json. FINAL.
+%% ---
+%%   invalid-number       - not in tasks.json, completedTasks.json not consulted
+%% ---
+%%   already-active       - a previous run left the task active
+%% ---
+%%   blocked              - an open blocker remains
+%% ---
+%%   not-resumable        - a safe worktree holds work no run recorded a stopping point for
+%% ---
+%%   plan-scrapped        - codex did not accept the plan in two reviews
+%% ---
+%%   clarify-stuck        - the planner asked twice for what the docs cannot supply
+%% ---
+%%   tests-red            - task tests still failing after 2 fix attempts
+%% ---
+%%   tests-flagged        - codex flagged the tests twice
+%% ---
+%%   rebase-stuck         - the rebase did not advance after 2 conflict fixes
+%% ---
+%%   suite-red            - full suite still red after 2 fix attempts
+%% ---
+%%   fence-violation      - a change edited files the task does not own
+%% ---
+%%   merge-failed         - nothing landed after 2 attempts
+%% ---
+%%   agent-failed         - an agent returned nothing usable
+%% ---
+%%   partially-published  - some layers landed, some did not. RECOVERY ONLY.
+%% ---
+%%   run-failed           - a script failed operationally, can leave ANY green box
+%% ---
+%% cleanup-incomplete is a repair flag, not an exit type; see the failures exit.
+
+  TASK_NUMBER_INPUT["Input: { taskNumber }"] --> PREAMBLE_PIPELINE["preamble status<br/>check pipeline"]
+  PREAMBLE_PIPELINE --> PREAMBLE_SUCCESS["SUCCESS"] --> WORKTREE_CHECK_PIPELINE["worktree check pipeline"]
+  WORKTREE_CHECK_PIPELINE --> WORKTREE_CHECK_SUCCESS["SUCCESS"] --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+  DOCUMENT_GENERATION_PIPELINE --> DOCUMENT_GENERATION_SUCCESS["SUCCESS"] --> PLAN_PIPELINE["plan pipeline"]
+  PLAN_PIPELINE --> PLAN_SUCCESS["SUCCESS"] --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
+  REVIEW_PLAN_PIPELINE --> REVIEW_PLAN_SUCCESS["SUCCESS"] --> IMPLEMENT_PIPELINE["implement pipeline"]
+  IMPLEMENT_PIPELINE --> IMPLEMENT_SUCCESS["SUCCESS"] --> TASK_TESTS_PIPELINE["task tests pipeline"]
+  TASK_TESTS_PIPELINE --> TASK_TESTS_SUCCESS["SUCCESS"] --> REVIEW_TESTS_PIPELINE["review task tests pipeline"]
+  REVIEW_TESTS_PIPELINE --> REVIEW_TESTS_SUCCESS["SUCCESS"] --> REBASE_PREAMBLE_PIPELINE["rebase preamble pipeline"]
+  TASK_TESTS_PIPELINE -- "hasTests: false" --> REBASE_PREAMBLE_PIPELINE
+  REBASE_PREAMBLE_PIPELINE --> REBASE_PREAMBLE_SUCCESS["SUCCESS"] --> REBASE_PIPELINE["rebase pipeline"]
+  REBASE_PIPELINE --> REBASE_SUCCESS["SUCCESS"] --> SUITE_PIPELINE["full suite pipeline"]
+  SUITE_PIPELINE --> SUITE_SUCCESS["SUCCESS"] --> MERGE_PIPELINE["merge pipeline"]
+  MERGE_PIPELINE --> MERGE_SUCCESS["SUCCESS"] --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
+  EXIT_WORKFLOW_SUCCESS --> STOP["stop"]
+
+  PREAMBLE_PIPELINE -.-> PREAMBLE_REFUSED["REFUSED"] --> EXIT_WORKFLOW_REPORT_ONLY["report only exit"]
+  EXIT_WORKFLOW_REPORT_ONLY --> STOP
+  WORKTREE_CHECK_PIPELINE -.-> FAILED
+  DOCUMENT_GENERATION_PIPELINE -.-> FAILED
+  PLAN_PIPELINE -.-> FAILED
+  REVIEW_PLAN_PIPELINE -.-> FAILED
+  IMPLEMENT_PIPELINE -.-> FAILED
+  TASK_TESTS_PIPELINE -.-> FAILED
+  REVIEW_TESTS_PIPELINE -.-> FAILED
+  REBASE_PREAMBLE_PIPELINE -.-> FAILED
+  REBASE_PIPELINE -.-> FAILED
+  SUITE_PIPELINE -.-> FAILED
+  MERGE_PIPELINE -.-> FAILED
+  FAILED["FAILED"] --> EXIT_WORKFLOW_FAILURE["failures exit"]
+  EXIT_WORKFLOW_SUCCESS -.-> CLEANUP_FAIL["FAILED:<br/>post-merge cleanup"] --> EXIT_WORKFLOW_FAILURE
+  EXIT_WORKFLOW_FAILURE --> STOP
+
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  classDef pass fill:#00ff00,stroke:#6d1a12,color:#000000
+  class PREAMBLE_PIPELINE,PLAN_PIPELINE,REVIEW_PLAN_PIPELINE,IMPLEMENT_PIPELINE,TASK_TESTS_PIPELINE,REVIEW_TESTS_PIPELINE,REBASE_PREAMBLE_PIPELINE,REBASE_PIPELINE,SUITE_PIPELINE,MERGE_PIPELINE,WORKTREE_CHECK_PIPELINE,DOCUMENT_GENERATION_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class PREAMBLE_SUCCESS,PLAN_SUCCESS,REVIEW_PLAN_SUCCESS,IMPLEMENT_SUCCESS,TASK_TESTS_SUCCESS,REVIEW_TESTS_SUCCESS,REBASE_PREAMBLE_SUCCESS,REBASE_SUCCESS,SUITE_SUCCESS,MERGE_SUCCESS,WORKTREE_CHECK_SUCCESS,DOCUMENT_GENERATION_SUCCESS pass
+  class FAILED,CLEANUP_FAIL,PREAMBLE_REFUSED nopass
+  class EXIT_WORKFLOW_FAILURE,EXIT_WORKFLOW_REPORT_ONLY fail
+  class TASK_NUMBER_INPUT,STOP output

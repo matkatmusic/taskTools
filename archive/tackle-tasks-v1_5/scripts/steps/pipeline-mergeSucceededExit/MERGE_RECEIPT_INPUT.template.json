@@ -1,0 +1,32 @@
+{
+    "input": {
+        "box": "EXIT_WORKFLOW_SUCCESS",
+        "scriptSignal": "continue",
+        "worktreePath": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
+        "suiteFixAttempts": 0,
+        "state": "ALL LANDED",
+        "landed": ["root"],
+        "notLanded": [],
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ],
+        "next": "PUBLICATION_ALL"
+    },
+    "output": {
+        "box": "MERGE_RECEIPT_INPUT",
+        "scriptSignal": "continue",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktreePath": "{{PROJECT_ROOT}}/scripts/steps/pipeline-mergeSucceededExit/fixtures",
+        "rootSourceBranch": "main",
+        "exitNote": "All layers merged successfully.",
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ]
+    }
+}

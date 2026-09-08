@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "HAVE_15_MINUTES_PASSED",
+        "scriptSignal": "continue",
+        "next": "EXIT_WORKFLOW_REBASE_PREAMBLE",
+        "runId": "run-abc",
+        "taskNumber": 42,
+        "projectRoot": "/abs/project",
+        "worktreePath": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "exitType": "run-failed",
+        "exitNote": "the source repo lock did not come free within 15 minutes"
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_REBASE_PREAMBLE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-abc",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "sourceBranch": "main",
+        "exitType": "run-failed",
+        "exitNote": "the source repo lock did not come free within 15 minutes"
+    }
+}

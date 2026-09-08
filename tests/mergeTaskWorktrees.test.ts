@@ -4,22 +4,34 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
-import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/prepareTasks.ts";
-import type { PreparedGroup, WorkflowArguments } from "../scripts/prepareTasks.ts";
-import { currentBranchName } from "../scripts/repositoryBranches.ts";
-import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest } from "../scripts/repositoryManifest.ts";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
-import type { ArchiveRequest } from "../scripts/taskArchival.ts";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import { createWorktreeForGroup, resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath } from "../scripts/shared/prepareTasks.ts";
+import type { PreparedGroup, WorkflowArguments } from "../scripts/shared/prepareTasks.ts";
+import { currentBranchName } from "../scripts/shared/repositoryBranches.ts";
+import { REPOSITORY_MANIFEST_VERSION, type RepositoryManifest, type RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
+import type { ArchiveRequest } from "../scripts/shared/taskArchival.ts";
+import type { DiscoveryManifest } from "../scripts/shared/repositoryDiscovery.ts";
+import type { ResolutionManifest } from "../scripts/shared/resolutionRequests.ts";
 import {
+    defaultMergeStepOperations,
+    findUnmergedTaskWorktrees,
+    listTaskWorktrees,
     mergeGroupBranchIntoRepo,
     mergeSubmoduleBranchIntoRepo,
+    mergeTaskDeepestFirst,
     rebaseGroupOntoSource,
+    rebaseParentOntoSourceAndTest,
+    rebaseSubmoduleLayersDeepestFirst,
     removeWorktreeAndBranch,
     resolveGitlinkConflicts,
-} from "../scripts/mergeTaskWorktrees.ts";
+} from "../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
+import type { MergeStepOperations } from "../scripts/merge-worktree-tasks/mergeTaskWorktrees.ts";
+import { REASON_NO_TEST_CONFIGURATION } from "../scripts/shared/testPolicy.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
+import { GIT_PATH_PRESENT, GIT_PATH_ABSENT } from "../scripts/shared/resultCodes.ts";
 
-const SCRIPT = join(import.meta.dirname, "..", "scripts", "mergeTaskWorktrees.ts");
+const SCRIPT = join(import.meta.dirname, "..", "scripts", "merge-worktree-tasks", "mergeTaskWorktrees.ts");
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -38,7 +50,7 @@ function makeTempRepoWithCommit(): string {
 
 function makeGroup(repoRoot: string, groupId: number): PreparedGroup {
     const worktree = createWorktreeForGroup(repoRoot, { groupId, taskNumbers: [groupId], filePaths: [], scope: "unknown" });
-    return { groupId, worktree, branch: `task-group-${groupId}`, scope: "unknown", tasks: [] };
+    return { groupId, worktree, branch: `task-${groupId}`, scope: "unknown", tasks: [] };
 }
 
 type SubmoduleManifestSpec = { checkoutPath: string; baseBranch: string; baseOid: string; operationBranch: string };
@@ -78,6 +90,34 @@ function makeManifest(
         testState: "untested" as const,
     }));
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: [root, ...subOccurrences] };
+}
+
+function makeOccurrence(
+    occurrenceId: string,
+    parentOccurrenceId: string | null,
+    baseBranch: string,
+    baseOid: string,
+    operationBranch: string,
+    sourceCheckoutPath: string,
+): RepositoryOccurrence {
+    return {
+        occurrenceId,
+        checkoutPath: sourceCheckoutPath,
+        parentOccurrenceId,
+        pathInParent: null,
+        gitlinkOid: null,
+        depth: 0,
+        originUrl: "",
+        baseBranch,
+        baseOid,
+        operationBranch,
+        childOccurrenceIds: [],
+        testState: "untested" as const,
+    };
+}
+
+function emptyResolutionManifest(): ResolutionManifest {
+    return { resolutionRequests: [], resolutionAnswers: {}, baseReconciliationRequests: [], baseReconciliationAnswers: {} };
 }
 
 function makeTempRepoWithLocalSubmodule(): string {
@@ -198,7 +238,51 @@ test("test_mergeGroupBranchIntoRepoContinuesToLaterGroupsAfterAnEarlierConflict"
     assert.equal(outcome2.merged, true);
 });
 
-test("test_mergeGroupBranchIntoRepoChecksOutTheSourceBranchBeforeMerging", () => {
+test("test_mergeGroupBranchIntoRepoMergesIntoTheNamedBranchWithoutMovingTheCheckout", () => {
+    // repo starts on sourceBranch and stays there
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    // a group worktree branch has a new commit with new.txt
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    // merge the group branch into sourceBranch
+    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []);
+    // the merge succeeds
+    assert.equal(outcome.merged, true);
+    // the checkout never moved off sourceBranch
+    assert.equal(currentBranchName(repoRoot), sourceBranch);
+    // the named branch holds the merge
+    assert.equal(git(repoRoot, "show", `${sourceBranch}:new.txt`).trim(), "brand new");
+});
+
+// Superseded: mergeGroupBranchIntoRepo no longer switches branches, so it never returns to a "found" one.
+/*
+test("test_mergeGroupBranchIntoRepoReturnsToTheBranchItFoundAfterMerging", () => {
+    // repo starts on some-other-branch, with a staging branch present
+    const repoRoot = makeTempRepoWithCommit();
+    git(repoRoot, "branch", "staging");
+    git(repoRoot, "checkout", "-b", "some-other-branch");
+    // a group worktree branch has a new commit with new.txt
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    // merge the group branch into staging
+    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, "staging", []);
+    // the merge succeeds
+    assert.equal(outcome.merged, true);
+    // the checkout returns to the branch it was found on
+    assert.equal(currentBranchName(repoRoot), "some-other-branch");
+    // staging now contains new.txt
+    assert.equal(git(repoRoot, "show", "staging:new.txt").trim(), "brand new");
+});
+*/
+
+test("test_mergeGroupBranchIntoRepoRefusesACheckoutOnAnotherBranch", () => {
     const repoRoot = makeTempRepoWithCommit();
     const sourceBranch = currentBranchName(repoRoot);
     const group = makeGroup(repoRoot, 1);
@@ -208,10 +292,25 @@ test("test_mergeGroupBranchIntoRepoChecksOutTheSourceBranchBeforeMerging", () =>
 
     git(repoRoot, "checkout", "-b", "some-other-branch");
 
-    const outcome = mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []);
-    assert.equal(outcome.merged, true);
-    assert.equal(currentBranchName(repoRoot), sourceBranch);
-    assert.equal(existsSync(join(repoRoot, "new.txt")), true);
+    assert.throws(
+        () => mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, []),
+        (error: Error) => error.message.includes("some-other-branch") && error.message.includes(sourceBranch),
+    );
+});
+
+test("test_mergeSubmoduleBranchIntoRepoRefusesASubmoduleCheckoutOnAnotherBranch", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const sourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+
+    git(mainSubmodulePath, "checkout", "-b", "some-other-branch");
+
+    assert.throws(
+        () => mergeSubmoduleBranchIntoRepo(mainSubmodulePath, worktreeSubmodulePath, sourceBranch),
+        (error: Error) => error.message.includes("some-other-branch") && error.message.includes(sourceBranch),
+    );
 });
 
 test("test_mergeSubmoduleBranchSurvivesEvenWhenTheGroupConflicts", () => {
@@ -500,7 +599,7 @@ test("test_noEvidenceCausesNoFinalizationMutation", () => {
     const refs = git(repoRoot, "for-each-ref", "--format=%(refname)").split("\n");
     assert.equal(refs.some((ref) => ref.startsWith("refs/finalize/")), false);
     assert.equal(refs.some((ref) => ref.startsWith("refs/heads/operations/")), false);
-    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}`), []);
+    assert.deepEqual(refs.filter((ref) => ref.startsWith("refs/heads/") && ref !== `refs/heads/${sourceBranch}` && ref !== `refs/heads/${group.branch}` && ref !== "refs/heads/staging"), []);
 });
 
 test("test_productionShapedNestedFinalizationSucceeds", () => {
@@ -510,7 +609,7 @@ test("test_productionShapedNestedFinalizationSucceeds", () => {
     git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
     git(rootPath, "commit", "-q", "-m", "add submodule");
 
-    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath, currentBranchName(rootPath));
     assert.equal(bootstrapResult.refused, false);
     const occurrenceGraph = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
     const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
@@ -583,7 +682,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     git(rootPath, "submodule", "add", "-q", submoduleSourcePath, "vendor");
     git(rootPath, "commit", "-q", "-m", "add submodule");
 
-    const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+    const bootstrapResult = bootstrapRepositoryManifest(rootPath, currentBranchName(rootPath));
     assert.equal(bootstrapResult.refused, false);
     const manifest: RepositoryManifest = {
         version: REPOSITORY_MANIFEST_VERSION,
@@ -594,7 +693,7 @@ function buildNestedFixtureWithTask(taskNumber: number) {
     const submoduleSourceBranch = currentBranchName(join(rootPath, "vendor"));
     const taskFiles = ["new.txt", "vendor/vendor-new.txt"];
     const group = makeGroup(rootPath, 1);
-    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: taskFiles }];
+    group.tasks = [{ number: taskNumber, briefFile: "", planFile: "", files: taskFiles, readOnlyFiles: ["*"] }];
     writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
     git(group.worktree, "add", "new.txt");
     git(group.worktree, "commit", "-q", "-m", "add new.txt");
@@ -663,10 +762,10 @@ test("test_publicationFailureLeavesTaskOpenAndKeepsRunFilesWhileSuccessEmitsArch
     for (const path of clean.runFiles) assert.equal(existsSync(path), false);
 });
 
-function gitPathExists(worktreePath: string, relativePath: string): boolean {
+function gitPathExists(worktreePath: string, relativePath: string): number {
     const raw = git(worktreePath, "rev-parse", "--git-path", relativePath).trim();
     const full = isAbsolute(raw) ? raw : join(worktreePath, raw);
-    return existsSync(full);
+    return existsSync(full) ? GIT_PATH_PRESENT : GIT_PATH_ABSENT;
 }
 
 test("test_rebaseGroupOntoSourceReportsRebasedCleanForANonConflictingRebase", () => {
@@ -703,8 +802,8 @@ test("test_rebaseGroupOntoSourceReportsConflictedPathsAndLeavesNoRebaseInProgres
 
     const outcome = rebaseGroupOntoSource(group.worktree, sourceBranch);
     assert.deepEqual(outcome, { status: "conflicted", conflictedFilePaths: ["shared.txt"] });
-    assert.equal(gitPathExists(group.worktree, "rebase-merge"), false);
-    assert.equal(gitPathExists(group.worktree, "rebase-apply"), false);
+    assert.equal(gitPathExists(group.worktree, "rebase-merge"), GIT_PATH_ABSENT);
+    assert.equal(gitPathExists(group.worktree, "rebase-apply"), GIT_PATH_ABSENT);
 });
 
 test("test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails", () => {
@@ -752,4 +851,1089 @@ test("test_rebaseGroupOntoSourceReportsCleanupFailedWhenAbortFails", () => {
 
     assert.equal(outcome.status, "cleanup-failed");
     if (outcome.status === "cleanup-failed") assert.match(outcome.failureReason, /abort also failed: fake abort failure/);
+});
+
+test("test_rebaseGroupOntoSourceRebasesABranchInsideASubmodule", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+
+    writeFileSync(join(worktreeSubmodulePath, "vendor-work.txt"), "vendor work\n");
+    git(worktreeSubmodulePath, "add", "vendor-work.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "vendor work");
+
+    writeFileSync(join(mainSubmodulePath, "main-advance.txt"), "main advance\n");
+    git(mainSubmodulePath, "add", "main-advance.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "advance main submodule");
+    git(worktreeSubmodulePath, "fetch", mainSubmodulePath, `${submoduleSourceBranch}:${submoduleSourceBranch}`);
+
+    const outcome = rebaseGroupOntoSource(worktreeSubmodulePath, submoduleSourceBranch);
+    assert.deepEqual(outcome, { status: "rebased-clean" });
+    assert.doesNotThrow(() => git(worktreeSubmodulePath, "merge-base", "--is-ancestor", submoduleSourceBranch, "HEAD"));
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstTreatsASubmoduleAlreadyOnItsSourceTipAsANoOp", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const submoduleBaseOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const group = makeGroup(repoRoot, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const submoduleOperationBranch = currentBranchName(worktreeSubmodulePath);
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", submoduleSourceBranch, submoduleBaseOid, submoduleOperationBranch, mainSubmodulePath)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(group.worktree, manifest);
+
+    assert.deepEqual(report.completedLayers, [{ occurrenceId: "vendor", checkoutPath: worktreeSubmodulePath, status: "no-op" }]);
+    assert.equal(report.stoppedAt, null);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstRebasesTheDeepestSubmoduleBeforeItsContainerAndRecordsItsRebasedGitlink", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const testScriptPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(innerOrigin, "package.json"), testScriptPackageJson);
+    git(innerOrigin, "add", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), testScriptPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+    const innerTaskCommitBeforeRebase = git(innerCheckoutPath, "rev-parse", "HEAD").trim();
+
+    // Reproduce the real starting state: parent's task branch already records child's pre-rebase gitlink.
+    git(vendorCheckoutPath, "add", "inner");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "bump inner to task-1 work");
+
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    // Advance both source branches independently, after the task branches already diverged.
+    writeFileSync(join(innerOrigin, "inner-source-advance.txt"), "inner source advance\n");
+    git(innerOrigin, "add", "inner-source-advance.txt");
+    git(innerOrigin, "commit", "-q", "-m", "advance inner source");
+    const innerSourceTip = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    writeFileSync(join(vendorOrigin, "vendor-source-advance.txt"), "vendor source advance\n");
+    git(vendorOrigin, "add", "vendor-source-advance.txt");
+    git(vendorOrigin, "commit", "-q", "-m", "advance vendor source");
+    const vendorSourceTip = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.stoppedAt, null);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor/inner", "vendor"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested", "rebased-and-tested"]);
+
+    // Both task branches were rebased onto their freshly-fetched (post-advance) source tips.
+    assert.doesNotThrow(() => git(innerCheckoutPath, "merge-base", "--is-ancestor", innerSourceTip, "HEAD"));
+    assert.doesNotThrow(() => git(vendorCheckoutPath, "merge-base", "--is-ancestor", vendorSourceTip, "HEAD"));
+
+    const innerTaskCommitAfterRebase = git(innerCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(innerTaskCommitAfterRebase, innerTaskCommitBeforeRebase);
+
+    // vendor's task-1 branch now records inner's rebased commit, not its pre-rebase one.
+    const vendorRecordedInnerOid = git(vendorCheckoutPath, "rev-parse", "task-1:inner").trim();
+    assert.equal(vendorRecordedInnerOid, innerTaskCommitAfterRebase);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstRecordsAndTestsAContainerWhoseOwnRefsAreIdenticalButWhoseChildGitlinkChanged", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const testScriptPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(innerOrigin, "package.json"), testScriptPackageJson);
+    git(innerOrigin, "add", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), testScriptPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    // vendor's task-1 gets no commit of its own: it stays at vendorSourceBranch's tip, refs trivially identical.
+    const vendorTaskCommitBeforeWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.equal(vendorTaskCommitBeforeWalk, vendorBaseOid);
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+    const innerTaskCommitBeforeRebase = git(innerCheckoutPath, "rev-parse", "HEAD").trim();
+
+    // Only inner's source advances; vendor's own source is left untouched, so vendor's task-1 and source stay identical.
+    writeFileSync(join(innerOrigin, "inner-source-advance.txt"), "inner source advance\n");
+    git(innerOrigin, "add", "inner-source-advance.txt");
+    git(innerOrigin, "commit", "-q", "-m", "advance inner source");
+    const innerSourceTip = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    // Confirm the precondition the fix targets: vendor's own task-1 and source are identical before the walk runs.
+    assert.equal(git(vendorCheckoutPath, "rev-list", "--count", `${vendorSourceBranch}..task-1`).trim(), "0");
+    assert.equal(git(vendorCheckoutPath, "rev-list", "--count", `task-1..${vendorSourceBranch}`).trim(), "0");
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.stoppedAt, null);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor/inner", "vendor"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested", "rebased-and-tested"]);
+
+    const innerTaskCommitAfterRebase = git(innerCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(innerTaskCommitAfterRebase, innerTaskCommitBeforeRebase);
+    assert.doesNotThrow(() => git(innerCheckoutPath, "merge-base", "--is-ancestor", innerSourceTip, "HEAD"));
+
+    // vendor's own refs were identical, yet it still recorded inner's commit and tested, not "no-op".
+    const vendorTaskCommitAfterWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.notEqual(vendorTaskCommitAfterWalk, vendorTaskCommitBeforeWalk);
+    const vendorRecordedInnerOid = git(vendorCheckoutPath, "rev-parse", "task-1:inner").trim();
+    assert.equal(vendorRecordedInnerOid, innerTaskCommitAfterRebase);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstStopsAndReportsBothOutputStreamsWhenALayersTestsFailWithoutProcessingItsContainer", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+    const passingTestPackageJson = JSON.stringify({ scripts: { test: "true" } });
+
+    const innerOrigin = makeTempRepoWithCommit();
+    writeFileSync(
+        join(innerOrigin, "test-fail.js"),
+        "console.log('layer-stdout-marker');\nconsole.error('layer-stderr-marker');\nprocess.exit(1);\n",
+    );
+    writeFileSync(join(innerOrigin, "package.json"), JSON.stringify({ scripts: { test: "node test-fail.js" } }));
+    git(innerOrigin, "add", "test-fail.js", "package.json");
+    git(innerOrigin, "commit", "-q", "-m", "add failing test script");
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(join(vendorOrigin, "package.json"), passingTestPackageJson);
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add test script");
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    const innerCheckoutPath = join(rootPath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", vendorSourceBranch);
+    git(innerCheckoutPath, "checkout", "-q", innerSourceBranch);
+
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+
+    const vendorTaskCommitBeforeWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.deepEqual(report.completedLayers, []);
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.occurrenceId, "vendor/inner");
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
+    if (report.stoppedAt !== null && report.stoppedAt.status === "tests-failed") {
+        assert.equal(report.stoppedAt.failedCheck, "complete-suite");
+        assert.match(report.stoppedAt.testOutput, /layer-stdout-marker/);
+        assert.match(report.stoppedAt.testOutput, /layer-stderr-marker/);
+    }
+
+    // vendor (inner's container) was never rebased: its task-1 branch is exactly as it was.
+    const vendorTaskCommitAfterWalk = git(vendorCheckoutPath, "rev-parse", "task-1").trim();
+    assert.equal(vendorTaskCommitAfterWalk, vendorTaskCommitBeforeWalk);
+});
+
+test("test_rebaseParentOntoSourceAndTestResolvesAnAllowedGitlinkConflictAndReportsRebasedAndTested", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const baseBranch = currentBranchName(repoRoot);
+    const submoduleBaseBranch = currentBranchName(mainSubmodulePath);
+
+    git(mainSubmodulePath, "checkout", "-b", "branch-a");
+    writeFileSync(join(mainSubmodulePath, "a.txt"), "a\n");
+    git(mainSubmodulePath, "add", "a.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "a");
+    const commitA = git(mainSubmodulePath, "rev-parse", "HEAD").trim();
+
+    git(mainSubmodulePath, "checkout", submoduleBaseBranch);
+    git(mainSubmodulePath, "checkout", "-b", "branch-b");
+    writeFileSync(join(mainSubmodulePath, "b.txt"), "b\n");
+    git(mainSubmodulePath, "add", "b.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "b");
+    const commitB = git(mainSubmodulePath, "rev-parse", "HEAD").trim();
+
+    git(mainSubmodulePath, "checkout", commitA);
+    git(repoRoot, "checkout", "-b", "feature");
+    git(repoRoot, "add", "vendor");
+    git(repoRoot, "commit", "-q", "-m", "feature submodule pointer");
+
+    git(repoRoot, "checkout", baseBranch);
+    git(mainSubmodulePath, "checkout", commitB);
+    git(repoRoot, "add", "vendor");
+    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(repoRoot, "add", "package.json");
+    git(repoRoot, "commit", "-q", "-m", "base submodule pointer and test config");
+
+    git(repoRoot, "checkout", "feature");
+    // Intended resolution: keep feature's already-rebased submodule commit.
+    git(mainSubmodulePath, "checkout", commitA);
+
+    const outcome = rebaseParentOntoSourceAndTest("root", repoRoot, baseBranch, ["vendor"], emptyResolutionManifest());
+
+    assert.deepEqual(outcome, { status: "rebased-and-tested" });
+    assert.equal(existsSync(join(repoRoot, ".git", "rebase-merge")), false);
+    assert.equal(existsSync(join(repoRoot, ".git", "rebase-apply")), false);
+    const rootGitlinkOid = git(repoRoot, "ls-tree", "feature", "vendor").trim().split(/\s+/)[2];
+    assert.equal(rootGitlinkOid, commitA);
+});
+
+test("test_rebaseParentOntoSourceAndTestRebasesThenRunsTheParentsOwnTestCommandAndReportsRebasedAndTested", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(repoRoot, "add", "package.json");
+    git(repoRoot, "commit", "-q", "-m", "add test script");
+    const sourceBranch = currentBranchName(repoRoot);
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "group-work.txt"), "group work\n");
+    git(group.worktree, "add", "group-work.txt");
+    git(group.worktree, "commit", "-q", "-m", "group work");
+
+    writeFileSync(join(repoRoot, "main-advance.txt"), "main advance\n");
+    git(repoRoot, "add", "main-advance.txt");
+    git(repoRoot, "commit", "-q", "-m", "advance main");
+
+    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest());
+
+    assert.deepEqual(outcome, { status: "rebased-and-tested" });
+    assert.doesNotThrow(() => git(group.worktree, "merge-base", "--is-ancestor", sourceBranch, "HEAD"));
+});
+
+test("test_rebaseParentOntoSourceAndTestReportsUntestedWhenTheParentHasNoTestConfiguration", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const sourceBranch = currentBranchName(repoRoot);
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const markerPath = join(group.worktree, "typecheck-marker.txt");
+    const typecheckCommand = `node -e "require('fs').writeFileSync('${markerPath}','ran')"`;
+    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest(), false, typecheckCommand);
+
+    assert.equal(outcome.status, "untested");
+    assert.equal(readFileSync(markerPath, "utf8"), "ran");
+});
+
+test("test_rebaseParentOntoSourceAndTestReportsTestsFailedWhenTheTypecheckCommandFails", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const suiteMarkerPath = join(repoRoot, "suite-ran.txt");
+    writeFileSync(join(repoRoot, "package.json"), JSON.stringify({ scripts: { test: `node -e "require('fs').writeFileSync('${suiteMarkerPath}','yes')"` } }));
+    git(repoRoot, "add", "package.json");
+    git(repoRoot, "commit", "-q", "-m", "add test script");
+    const sourceBranch = currentBranchName(repoRoot);
+
+    const group = makeGroup(repoRoot, 1);
+    writeFileSync(join(group.worktree, "group-work.txt"), "group work\n");
+    git(group.worktree, "add", "group-work.txt");
+    git(group.worktree, "commit", "-q", "-m", "group work");
+
+    // "false" is a typecheck command that always fails.
+    const outcome = rebaseParentOntoSourceAndTest("root", group.worktree, sourceBranch, [], emptyResolutionManifest(), false, "false");
+
+    assert.equal(outcome.status, "tests-failed");
+    assert.equal((outcome as { failedCheck: string }).failedCheck, "typecheck");
+    assert.equal(existsSync(suiteMarkerPath), false);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstRunsTheSubmodulesOwnTestCommandNotTheParents", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const rootPath = makeTempRepoWithCommit();
+    writeFileSync(
+        join(rootPath, "package.json"),
+        JSON.stringify({ scripts: { test: "node -e \"require('fs').writeFileSync('test-marker.txt','parent-ran')\"" } }),
+    );
+    git(rootPath, "add", "package.json");
+    git(rootPath, "commit", "-q", "-m", "add parent test script");
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(
+        join(vendorOrigin, "package.json"),
+        JSON.stringify({ scripts: { test: "node -e \"require('fs').writeFileSync('test-marker.txt','submodule-ran')\"" } }),
+    );
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add submodule test script");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.stoppedAt, null);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["rebased-and-tested"]);
+    assert.equal(readFileSync(join(vendorCheckoutPath, "test-marker.txt"), "utf8"), "submodule-ran");
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstReportsTestsFailedWhenTheTypecheckCommandFailsEvenThoughTheSuiteWouldPass", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const rootPath = makeTempRepoWithCommit();
+    const vendorOrigin = makeTempRepoWithCommit();
+    writeFileSync(
+        join(vendorOrigin, "package.json"),
+        JSON.stringify({ scripts: { test: "node -e \"require('fs').writeFileSync('test-marker.txt','submodule-ran')\"" } }),
+    );
+    git(vendorOrigin, "add", "package.json");
+    git(vendorOrigin, "commit", "-q", "-m", "add submodule test script");
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest, false, "false");
+
+    assert.notEqual(report.stoppedAt, null);
+    assert.equal(report.stoppedAt !== null && report.stoppedAt.status, "tests-failed");
+    if (report.stoppedAt !== null && report.stoppedAt.status === "tests-failed") {
+        assert.equal(report.stoppedAt.failedCheck, "typecheck");
+    }
+    assert.equal(existsSync(join(vendorCheckoutPath, "test-marker.txt")), false);
+});
+
+test("test_rebaseSubmoduleLayersDeepestFirstReportsUntestedWhenTheSubmoduleHasNoTestConfigurationEvenThoughTheParentDoes", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const rootPath = makeTempRepoWithCommit();
+    writeFileSync(join(rootPath, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(rootPath, "add", "package.json");
+    git(rootPath, "commit", "-q", "-m", "add parent test script");
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+
+    const vendorCheckoutPath = join(rootPath, "vendor");
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [makeOccurrence("vendor", "", vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin)],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const report = rebaseSubmoduleLayersDeepestFirst(rootPath, manifest);
+
+    assert.equal(report.completedLayers.length, 0);
+    assert.notEqual(report.stoppedAt, null);
+    assert.equal(report.stoppedAt?.status, "untested");
+    const untestedOutcome = report.stoppedAt as { status: "untested"; resolutionRequests: { reason: string }[] };
+    assert.equal(untestedOutcome.resolutionRequests[0].reason, REASON_NO_TEST_CONFIGURATION);
+});
+
+test("test_rebaseGroupOntoSourceAbortsAndReportsCleanupFailedWhenStagingAnAllowedConflictFails", () => {
+    const repoRoot = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(repoRoot, "vendor");
+    const baseBranch = currentBranchName(repoRoot);
+    const submoduleBaseBranch = currentBranchName(mainSubmodulePath);
+
+    git(mainSubmodulePath, "checkout", "-b", "branch-a");
+    writeFileSync(join(mainSubmodulePath, "a.txt"), "a\n");
+    git(mainSubmodulePath, "add", "a.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "a");
+    const commitA = git(mainSubmodulePath, "rev-parse", "HEAD").trim();
+
+    git(mainSubmodulePath, "checkout", submoduleBaseBranch);
+    git(mainSubmodulePath, "checkout", "-b", "branch-b");
+    writeFileSync(join(mainSubmodulePath, "b.txt"), "b\n");
+    git(mainSubmodulePath, "add", "b.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "b");
+    const commitB = git(mainSubmodulePath, "rev-parse", "HEAD").trim();
+
+    git(mainSubmodulePath, "checkout", commitA);
+    git(repoRoot, "checkout", "-b", "feature");
+    git(repoRoot, "add", "vendor");
+    git(repoRoot, "commit", "-q", "-m", "feature submodule pointer");
+
+    git(repoRoot, "checkout", baseBranch);
+    git(mainSubmodulePath, "checkout", commitB);
+    git(repoRoot, "add", "vendor");
+    git(repoRoot, "commit", "-q", "-m", "base submodule pointer");
+
+    git(repoRoot, "checkout", "feature");
+    // Delete the submodule's working directory so `git add vendor` has no path to stage and throws.
+    execFileSync("rm", ["-rf", mainSubmodulePath]);
+
+    const outcome = rebaseGroupOntoSource(repoRoot, baseBranch, ["vendor"]);
+
+    assert.equal(outcome.status, "cleanup-failed");
+    assert.equal(existsSync(join(repoRoot, ".git", "rebase-merge")), false);
+    assert.equal(existsSync(join(repoRoot, ".git", "rebase-apply")), false);
+});
+
+// Root's real occurrenceId is "" (repositoryDiscovery.ts:84), not "root"; reports relabel it for readability.
+const ROOT_OCCURRENCE_ID = "";
+
+// mergeTaskDeepestFirst runs discoverTestPolicy per occurrence; without a "test" script it needs a resolution answer instead.
+function addPassingTestScript(repoPath: string): void {
+    writeFileSync(join(repoPath, "package.json"), JSON.stringify({ scripts: { test: "true" } }));
+    git(repoPath, "add", "package.json");
+    git(repoPath, "commit", "-q", "-m", "add test script");
+}
+
+// A worktree clones from origin, not this checkout, so the commit must land there.
+function addPassingTestScriptToSubmoduleOrigin(mainSubmodulePath: string): void {
+    const originUrl = git(mainSubmodulePath, "remote", "get-url", "origin").trim();
+    const branch = currentBranchName(mainSubmodulePath);
+    addPassingTestScript(originUrl);
+    git(mainSubmodulePath, "fetch", "-q", "origin");
+    git(mainSubmodulePath, "merge", "--ff-only", "-q", `origin/${branch}`);
+}
+
+function buildMergePrimitiveFixture(): {
+    rootPath: string;
+    mainSubmodulePath: string;
+    sourceBranch: string;
+    submoduleSourceBranch: string;
+    group: PreparedGroup;
+    worktreeSubmodulePath: string;
+    discoveryManifest: DiscoveryManifest;
+} {
+    const rootPath = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(rootPath, "vendor");
+    addPassingTestScriptToSubmoduleOrigin(mainSubmodulePath);
+    git(rootPath, "add", "vendor");
+    git(rootPath, "commit", "-q", "-m", "bump vendor gitlink for test script");
+    addPassingTestScript(rootPath);
+    const sourceBranch = currentBranchName(rootPath);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const rootBaseOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const submoduleBaseOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+    const group = makeGroup(rootPath, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const manifest: RepositoryManifest = {
+        version: REPOSITORY_MANIFEST_VERSION,
+        occurrences: [
+            makeOccurrence(ROOT_OCCURRENCE_ID, null, sourceBranch, rootBaseOid, group.branch, rootPath),
+            makeOccurrence("vendor", ROOT_OCCURRENCE_ID, submoduleSourceBranch, submoduleBaseOid, group.branch, mainSubmodulePath),
+        ],
+    };
+    return {
+        rootPath,
+        mainSubmodulePath,
+        sourceBranch,
+        submoduleSourceBranch,
+        group,
+        worktreeSubmodulePath,
+        discoveryManifest: { repositoryManifest: manifest, resolutionManifest: emptyResolutionManifest() },
+    };
+}
+
+// Commits submodule work, then a later separate commit bumps the parent's gitlink so the merge sees it.
+function commitSubmoduleWorkAndBumpParentGitlink(fixture: { group: PreparedGroup; worktreeSubmodulePath: string }): string {
+    writeFileSync(join(fixture.worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(fixture.worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(fixture.worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+    const vendorTaskCommitOid = git(fixture.worktreeSubmodulePath, "rev-parse", "HEAD").trim();
+
+    git(fixture.group.worktree, "add", "vendor");
+    git(fixture.group.worktree, "commit", "-q", "-m", "bump vendor gitlink");
+
+    return vendorTaskCommitOid;
+}
+
+test("test_mergeTaskDeepestFirstMergesTheSubmoduleBeforeTheParentAndProvesReachabilityAtParentEntry", () => {
+    const fixture = buildMergePrimitiveFixture();
+    const vendorTaskCommitOid = commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const invocationOrder: string[] = [];
+    const reachabilityAtParentEntry = { checked: false, reachable: false };
+    const gitlinkAtParentEntry = { recorded: "", childSourceTip: "" };
+    const wrappedMergeSubmodule: MergeStepOperations["mergeSubmodule"] = (mainSubmodulePath, worktreeSubmodulePath, sourceBranch) => {
+        invocationOrder.push("submodule");
+        return mergeSubmoduleBranchIntoRepo(mainSubmodulePath, worktreeSubmodulePath, sourceBranch);
+    };
+    const wrappedMergeGroup: MergeStepOperations["mergeGroup"] = (repoRoot, group, sourceBranch, submodulePaths) => {
+        invocationOrder.push("parent");
+        reachabilityAtParentEntry.checked = true;
+        try {
+            git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", vendorTaskCommitOid, fixture.submoduleSourceBranch);
+            reachabilityAtParentEntry.reachable = true;
+        } catch {
+            reachabilityAtParentEntry.reachable = false;
+        }
+        // Propagation must already have run: the parent task branch records M, not T.
+        gitlinkAtParentEntry.recorded = git(fixture.group.worktree, "rev-parse", "HEAD:vendor").trim();
+        gitlinkAtParentEntry.childSourceTip = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+        return mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, submodulePaths);
+    };
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest, {
+        mergeSubmodule: wrappedMergeSubmodule,
+        mergeGroup: wrappedMergeGroup,
+    });
+
+    assert.equal(report.status, "merged");
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor", "root"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["merged", "merged"]);
+    assert.deepEqual(invocationOrder, ["submodule", "parent"]);
+    assert.equal(reachabilityAtParentEntry.checked, true);
+    assert.equal(reachabilityAtParentEntry.reachable, true);
+    assert.equal(gitlinkAtParentEntry.recorded, gitlinkAtParentEntry.childSourceTip);
+    assert.notEqual(gitlinkAtParentEntry.recorded, vendorTaskCommitOid);
+});
+
+test("test_mergeTaskDeepestFirstMergesGrandchildThenChildThenParentAndProvesReachabilityAtEachContainingEntry", () => {
+    process.env.GIT_ALLOW_PROTOCOL = "file";
+
+    const innerOrigin = makeTempRepoWithCommit();
+    addPassingTestScript(innerOrigin);
+    const innerSourceBranch = currentBranchName(innerOrigin);
+    const innerBaseOid = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+
+    const vendorOrigin = makeTempRepoWithCommit();
+    git(vendorOrigin, "submodule", "add", "-q", innerOrigin, "inner");
+    git(vendorOrigin, "commit", "-q", "-m", "add inner submodule");
+    addPassingTestScript(vendorOrigin);
+    const vendorSourceBranch = currentBranchName(vendorOrigin);
+    const vendorBaseOid = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+
+    const rootPath = makeTempRepoWithCommit();
+    git(rootPath, "submodule", "add", "-q", vendorOrigin, "vendor");
+    git(rootPath, "submodule", "update", "--init", "--recursive", "-q");
+    git(rootPath, "commit", "-q", "-m", "add vendor submodule");
+    addPassingTestScript(rootPath);
+    const rootSourceBranch = currentBranchName(rootPath);
+    const rootBaseOid = git(rootPath, "rev-parse", rootSourceBranch).trim();
+
+    // A separate linked worktree carries the task-1 branch; rootPath itself stays on rootSourceBranch throughout, matching production.
+    const rootWorktreePath = `${rootPath}-task-1`;
+    git(rootPath, "worktree", "add", "-q", "-b", "task-1", rootWorktreePath, rootSourceBranch);
+    git(rootWorktreePath, "submodule", "update", "--init", "--recursive", "-q");
+
+    const vendorCheckoutPath = join(rootWorktreePath, "vendor");
+    const innerCheckoutPath = join(rootWorktreePath, "vendor", "inner");
+    git(vendorCheckoutPath, "checkout", "-q", "-b", "task-1");
+    git(innerCheckoutPath, "checkout", "-q", "-b", "task-1");
+
+    writeFileSync(join(innerCheckoutPath, "inner-work.txt"), "inner work\n");
+    git(innerCheckoutPath, "add", "inner-work.txt");
+    git(innerCheckoutPath, "commit", "-q", "-m", "inner work");
+    const innerTaskCommitOid = git(innerCheckoutPath, "rev-parse", "HEAD").trim();
+
+    // Gitlink bump is its own commit, after the child commit it records (ordering matters, see helper above).
+    git(vendorCheckoutPath, "add", "inner");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "bump inner gitlink");
+    writeFileSync(join(vendorCheckoutPath, "vendor-work.txt"), "vendor work\n");
+    git(vendorCheckoutPath, "add", "vendor-work.txt");
+    git(vendorCheckoutPath, "commit", "-q", "-m", "vendor work");
+    const vendorTaskCommitOid = git(vendorCheckoutPath, "rev-parse", "HEAD").trim();
+
+    git(rootWorktreePath, "add", "vendor");
+    git(rootWorktreePath, "commit", "-q", "-m", "bump vendor gitlink");
+    writeFileSync(join(rootWorktreePath, "root-work.txt"), "root work\n");
+    git(rootWorktreePath, "add", "root-work.txt");
+    git(rootWorktreePath, "commit", "-q", "-m", "root work");
+
+    const manifest: DiscoveryManifest = {
+        repositoryManifest: {
+            version: REPOSITORY_MANIFEST_VERSION,
+            occurrences: [
+                makeOccurrence(ROOT_OCCURRENCE_ID, null, rootSourceBranch, rootBaseOid, "task-1", rootPath),
+                makeOccurrence("vendor", ROOT_OCCURRENCE_ID, vendorSourceBranch, vendorBaseOid, "task-1", vendorOrigin),
+                makeOccurrence("vendor/inner", "vendor", innerSourceBranch, innerBaseOid, "task-1", innerOrigin),
+            ],
+        },
+        resolutionManifest: emptyResolutionManifest(),
+    };
+
+    const invocationOrder: string[] = [];
+    const reachabilityAtVendorEntry = { checked: false, reachable: false };
+    const reachabilityAtRootEntry = { checked: false, reachable: false };
+    const gitlinkAtVendorEntry = { recorded: "", childSourceTip: "" };
+    const gitlinkAtRootEntry = { recorded: "", childSourceTip: "" };
+
+    const wrappedMergeSubmodule: MergeStepOperations["mergeSubmodule"] = (mainSubmodulePath, worktreeSubmodulePath, sourceBranch) => {
+        const isInner = mainSubmodulePath === innerOrigin;
+        invocationOrder.push(isInner ? "inner" : "vendor");
+        if (!isInner) {
+            reachabilityAtVendorEntry.checked = true;
+            try {
+                git(innerOrigin, "merge-base", "--is-ancestor", innerTaskCommitOid, innerSourceBranch);
+                reachabilityAtVendorEntry.reachable = true;
+            } catch {
+                reachabilityAtVendorEntry.reachable = false;
+            }
+            // Vendor's task branch must already record inner's post-merge source tip.
+            gitlinkAtVendorEntry.recorded = git(vendorCheckoutPath, "rev-parse", "HEAD:inner").trim();
+            gitlinkAtVendorEntry.childSourceTip = git(innerOrigin, "rev-parse", innerSourceBranch).trim();
+        }
+        return mergeSubmoduleBranchIntoRepo(mainSubmodulePath, worktreeSubmodulePath, sourceBranch);
+    };
+    const wrappedMergeGroup: MergeStepOperations["mergeGroup"] = (repoRoot, group, sourceBranch, submodulePaths) => {
+        invocationOrder.push("root");
+        reachabilityAtRootEntry.checked = true;
+        try {
+            git(vendorOrigin, "merge-base", "--is-ancestor", vendorTaskCommitOid, vendorSourceBranch);
+            reachabilityAtRootEntry.reachable = true;
+        } catch {
+            reachabilityAtRootEntry.reachable = false;
+        }
+        // Root's task branch must already record vendor's post-merge source tip.
+        gitlinkAtRootEntry.recorded = git(rootWorktreePath, "rev-parse", "HEAD:vendor").trim();
+        gitlinkAtRootEntry.childSourceTip = git(vendorOrigin, "rev-parse", vendorSourceBranch).trim();
+        return mergeGroupBranchIntoRepo(repoRoot, group, sourceBranch, submodulePaths);
+    };
+
+    const report = mergeTaskDeepestFirst(rootWorktreePath, manifest, {
+        mergeSubmodule: wrappedMergeSubmodule,
+        mergeGroup: wrappedMergeGroup,
+    });
+
+    assert.equal(report.status, "merged");
+    assert.deepEqual(report.completedLayers.map((layer) => layer.occurrenceId), ["vendor/inner", "vendor", "root"]);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["merged", "merged", "merged"]);
+    assert.deepEqual(invocationOrder, ["inner", "vendor", "root"]);
+    assert.equal(reachabilityAtVendorEntry.checked, true);
+    assert.equal(reachabilityAtVendorEntry.reachable, true);
+    assert.equal(reachabilityAtRootEntry.checked, true);
+    assert.equal(reachabilityAtRootEntry.reachable, true);
+    assert.equal(gitlinkAtVendorEntry.recorded, gitlinkAtVendorEntry.childSourceTip);
+    assert.notEqual(gitlinkAtVendorEntry.recorded, innerTaskCommitOid);
+    assert.equal(gitlinkAtRootEntry.recorded, gitlinkAtRootEntry.childSourceTip);
+    assert.notEqual(gitlinkAtRootEntry.recorded, vendorTaskCommitOid);
+});
+
+test("test_mergeTaskDeepestFirstLeavesNoDanglingGitlinkAfterEveryTaskBranchIsDeleted", () => {
+    const fixture = buildMergePrimitiveFixture();
+    const submoduleTaskBranch = currentBranchName(fixture.worktreeSubmodulePath);
+    const vendorTaskCommitOid = commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest);
+    assert.equal(report.status, "merged");
+
+    const rootGitlinkOid = git(fixture.rootPath, "ls-tree", fixture.sourceBranch, "vendor").trim().split(/\s+/)[2];
+    const submoduleSourceTip = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+    // Parent must record the post-merge source tip M, not the pre-merge task tip T.
+    assert.equal(rootGitlinkOid, submoduleSourceTip);
+    // T is still reachable from M, so nothing the parent previously pointed at was lost.
+    assert.doesNotThrow(() => git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", vendorTaskCommitOid, fixture.submoduleSourceBranch));
+
+    // Merge alone is not close: the fetched submodule task branch must remain recoverable until close succeeds.
+    const submoduleBranches = git(fixture.mainSubmodulePath, "branch", "--list", submoduleTaskBranch);
+    assert.equal(submoduleBranches.includes(submoduleTaskBranch), true);
+
+    removeWorktreeAndBranch(fixture.rootPath, fixture.group.worktree, fixture.group.branch);
+
+    assert.doesNotThrow(() => git(fixture.rootPath, "rev-parse", fixture.sourceBranch));
+    assert.doesNotThrow(() => git(fixture.mainSubmodulePath, "merge-base", "--is-ancestor", rootGitlinkOid, fixture.submoduleSourceBranch));
+});
+
+test("test_mergeTaskDeepestFirstLeavesTheSourceCheckoutsIndexAndWorkingTreeAtTheMergedCommit", () => {
+    const fixture = buildMergePrimitiveFixture();
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest);
+    assert.equal(report.status, "merged");
+
+    const rootMergedOid = git(fixture.rootPath, "rev-parse", fixture.sourceBranch).trim();
+    const submoduleMergedOid = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+
+    assert.equal(git(fixture.rootPath, "rev-parse", "HEAD").trim(), rootMergedOid);
+    assert.equal(git(fixture.rootPath, "write-tree").trim(), git(fixture.rootPath, "rev-parse", `${rootMergedOid}^{tree}`).trim());
+    assert.equal(git(fixture.rootPath, "status", "--short").trim(), "");
+
+    assert.equal(git(fixture.mainSubmodulePath, "rev-parse", "HEAD").trim(), submoduleMergedOid);
+    assert.equal(git(fixture.mainSubmodulePath, "write-tree").trim(), git(fixture.mainSubmodulePath, "rev-parse", `${submoduleMergedOid}^{tree}`).trim());
+    assert.equal(git(fixture.mainSubmodulePath, "status", "--short").trim(), "");
+});
+
+test("test_mergeTaskDeepestFirstSkipsAnOccurrenceAlreadyMergedIntoItsSourceWithoutInvokingItsRebaseOrMergeStep", () => {
+    const fixture = buildMergePrimitiveFixture();
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    // Simulate a previous lap that already merged the submodule before a later layer failed.
+    const preMergeResult = mergeSubmoduleBranchIntoRepo(fixture.mainSubmodulePath, fixture.worktreeSubmodulePath, fixture.submoduleSourceBranch);
+    assert.equal(preMergeResult.merged, true);
+    const submoduleOidAfterPreMerge = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+
+    let submoduleMergeCalled = false;
+    const refusingMergeSubmodule: MergeStepOperations["mergeSubmodule"] = () => {
+        submoduleMergeCalled = true;
+        return { merged: false, conflictedFilePaths: [], failureReason: "should not be called" };
+    };
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest, {
+        mergeSubmodule: refusingMergeSubmodule,
+        mergeGroup: mergeGroupBranchIntoRepo,
+    });
+
+    assert.equal(submoduleMergeCalled, false);
+    // Propagation checks out the already-merged tip; a rebase attempt would have produced a different commit.
+    assert.equal(git(fixture.worktreeSubmodulePath, "rev-parse", "HEAD").trim(), submoduleOidAfterPreMerge);
+    assert.equal(report.status, "merged");
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["no-op", "merged"]);
+    const skippedLayer = report.completedLayers[0];
+    assert.equal(skippedLayer.status, "no-op");
+    if (skippedLayer.status === "no-op") assert.equal(skippedLayer.oid, submoduleOidAfterPreMerge);
+});
+
+test("test_mergeTaskDeepestFirstLeavesAnAlreadyMergedSubmoduleInPlaceWhenTheParentThenConflicts", () => {
+    const rootPath = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(rootPath, "vendor");
+    addPassingTestScriptToSubmoduleOrigin(mainSubmodulePath);
+    git(rootPath, "add", "vendor");
+    git(rootPath, "commit", "-q", "-m", "bump vendor gitlink for test script");
+    const sourceBranch = currentBranchName(rootPath);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    writeFileSync(join(rootPath, "shared.txt"), "line1\n");
+    git(rootPath, "add", "shared.txt");
+    git(rootPath, "commit", "-q", "-m", "add shared.txt");
+    const rootBaseOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const submoduleBaseOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    const group = makeGroup(rootPath, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const manifest: RepositoryManifest = {
+        version: REPOSITORY_MANIFEST_VERSION,
+        occurrences: [
+            makeOccurrence(ROOT_OCCURRENCE_ID, null, sourceBranch, rootBaseOid, group.branch, rootPath),
+            makeOccurrence("vendor", ROOT_OCCURRENCE_ID, submoduleSourceBranch, submoduleBaseOid, group.branch, mainSubmodulePath),
+        ],
+    };
+    const discoveryManifest: DiscoveryManifest = { repositoryManifest: manifest, resolutionManifest: emptyResolutionManifest() };
+
+    writeFileSync(join(group.worktree, "shared.txt"), "line1-from-worktree\n");
+    git(group.worktree, "add", "shared.txt");
+    git(group.worktree, "commit", "-q", "-m", "worktree edit");
+    writeFileSync(join(worktreeSubmodulePath, "vendor-new.txt"), "vendor new\n");
+    git(worktreeSubmodulePath, "add", "vendor-new.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "add vendor-new.txt");
+    git(group.worktree, "add", "vendor");
+    git(group.worktree, "commit", "-q", "-m", "bump vendor gitlink");
+
+    writeFileSync(join(rootPath, "shared.txt"), "line1-from-main\n");
+    git(rootPath, "add", "shared.txt");
+    git(rootPath, "commit", "-q", "-m", "main edit");
+
+    const report = mergeTaskDeepestFirst(group.worktree, discoveryManifest);
+
+    assert.equal(report.status, "parent-conflicted");
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["merged"]);
+
+    const submoduleLayer = report.completedLayers[0];
+    const submoduleOidAfterMerge = submoduleLayer.status === "merged" ? submoduleLayer.oid : null;
+    assert.equal(git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim(), submoduleOidAfterMerge);
+});
+
+test("retry propagates a later child source tip while retaining the task historical child merge oid", () => {
+    const fixture = buildMergePrimitiveFixture();
+    const branch = fixture.group.branch;
+    // mergeTaskDeepestFirst rewrites occurrence.checkoutPath in place; each call needs its own copy.
+    const originalOccurrences = fixture.discoveryManifest.repositoryManifest.occurrences.map((o) => ({ ...o }));
+    const freshManifest = (): DiscoveryManifest => ({
+        repositoryManifest: { ...fixture.discoveryManifest.repositoryManifest, occurrences: originalOccurrences.map((o) => ({ ...o })) },
+        resolutionManifest: emptyResolutionManifest(),
+    });
+
+    // Task A changes the child and records that gitlink in its parent branch.
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+
+    let failParentOnce = true;
+    const first = mergeTaskDeepestFirst(fixture.group.worktree, freshManifest(), {
+        ...defaultMergeStepOperations,
+        mergeGroup: (repoRoot, group, sourceBranch, submodulePaths) => {
+            if (failParentOnce) {
+                failParentOnce = false;
+                return {
+                    groupId: group.groupId,
+                    merged: false,
+                    conflictedFilePaths: ["parent.txt"],
+                    submoduleConflicts: [],
+                    worktree: group.worktree,
+                    failureReason: "forced parent failure after child merge",
+                };
+            }
+            return defaultMergeStepOperations.mergeGroup(repoRoot, group, sourceBranch, submodulePaths);
+        },
+    });
+
+    assert.equal(first.status, "parent-conflicted");
+    const firstChild = first.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(firstChild.status, "merged");
+    const taskAChildMergeOid = firstChild.status === "merged" ? firstChild.mergedCommitOid : null;
+
+    // Task B advances the canonical child source after A's child already merged.
+    writeFileSync(join(fixture.mainSubmodulePath, "task-b.txt"), "B\n");
+    git(fixture.mainSubmodulePath, "add", "task-b.txt");
+    git(fixture.mainSubmodulePath, "commit", "-q", "-m", "task B advances child");
+    const taskBChildTip = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+    assert.notEqual(taskBChildTip, taskAChildMergeOid);
+
+    const retried = mergeTaskDeepestFirst(fixture.group.worktree, freshManifest());
+    assert.equal(retried.status, "merged");
+    if (retried.status !== "merged") return assert.fail("expected retry to merge");
+
+    const retriedChild = retried.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(retriedChild.status, "no-op");
+    if (retriedChild.status !== "no-op") return assert.fail("expected the child to be a no-op on retry");
+    assert.equal(retriedChild.oid, taskBChildTip);
+    assert.equal(retriedChild.mergedCommitOid, taskAChildMergeOid);
+
+    // Parent records B's current child tip; A's historical merge attribution stays unchanged.
+    assert.equal(git(fixture.rootPath, "rev-parse", `${fixture.sourceBranch}:vendor`).trim(), taskBChildTip);
+    assert.equal(
+        git(fixture.mainSubmodulePath, "rev-parse", `refs/taskTools/merged-commits/${branch}`).trim(),
+        taskAChildMergeOid,
+    );
+});
+
+// C86-21: an unexpected exception during the parent merge must not discard the child's already-completed layer.
+test("an unexpected exception during the parent merge preserves the child's completed layer and a concrete failure reason", () => {
+    const fixture = buildMergePrimitiveFixture();
+    commitSubmoduleWorkAndBumpParentGitlink(fixture);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const throwingMergeGroup: MergeStepOperations["mergeGroup"] = () => {
+        throw new Error("simulated operational failure during parent merge");
+    };
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest, {
+        ...defaultMergeStepOperations,
+        mergeGroup: throwingMergeGroup,
+    });
+
+    assert.equal(report.status, "parent-conflicted");
+    if (report.status !== "parent-conflicted") return assert.fail("expected parent-conflicted");
+    assert.match(report.failureReason ?? "", /simulated operational failure/);
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["merged"]);
+    const childLayer = report.completedLayers.find((layer) => layer.occurrenceId === "vendor")!;
+    assert.equal(childLayer.status, "merged");
+
+    // The child's merge already landed for real, even though the parent step threw.
+    assert.equal(
+        git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim(),
+        childLayer.status === "merged" ? childLayer.oid : null,
+    );
+});
+
+test("test_mergeTaskDeepestFirstStopsAtASubmoduleConflictWithoutAttemptingTheParentMerge", () => {
+    const rootPath = makeTempRepoWithLocalSubmodule();
+    const mainSubmodulePath = join(rootPath, "vendor");
+    const sourceBranch = currentBranchName(rootPath);
+    const submoduleSourceBranch = currentBranchName(mainSubmodulePath);
+    const rootBaseOid = git(rootPath, "rev-parse", sourceBranch).trim();
+    const submoduleBaseOid = git(mainSubmodulePath, "rev-parse", submoduleSourceBranch).trim();
+
+    const group = makeGroup(rootPath, 1);
+    const worktreeSubmodulePath = join(group.worktree, "vendor");
+    const manifest: RepositoryManifest = {
+        version: REPOSITORY_MANIFEST_VERSION,
+        occurrences: [
+            makeOccurrence(ROOT_OCCURRENCE_ID, null, sourceBranch, rootBaseOid, group.branch, rootPath),
+            makeOccurrence("vendor", ROOT_OCCURRENCE_ID, submoduleSourceBranch, submoduleBaseOid, group.branch, mainSubmodulePath),
+        ],
+    };
+    const discoveryManifest: DiscoveryManifest = { repositoryManifest: manifest, resolutionManifest: emptyResolutionManifest() };
+
+    writeFileSync(join(worktreeSubmodulePath, "seed.txt"), "from-worktree\n");
+    git(worktreeSubmodulePath, "add", "seed.txt");
+    git(worktreeSubmodulePath, "commit", "-q", "-m", "worktree edit");
+
+    writeFileSync(join(mainSubmodulePath, "seed.txt"), "from-main\n");
+    git(mainSubmodulePath, "add", "seed.txt");
+    git(mainSubmodulePath, "commit", "-q", "-m", "main edit");
+
+    writeFileSync(join(group.worktree, "new.txt"), "brand new\n");
+    git(group.worktree, "add", "new.txt");
+    git(group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    let parentMergeCalled = false;
+    const refusingMergeGroup: MergeStepOperations["mergeGroup"] = () => {
+        parentMergeCalled = true;
+        return { groupId: 0, merged: false, conflictedFilePaths: [], submoduleConflicts: [], worktree: group.worktree, failureReason: "should not be called" };
+    };
+
+    const report = mergeTaskDeepestFirst(group.worktree, discoveryManifest, {
+        mergeSubmodule: mergeSubmoduleBranchIntoRepo,
+        mergeGroup: refusingMergeGroup,
+    });
+
+    assert.equal(parentMergeCalled, false);
+    assert.equal(report.status, "submodule-conflicted");
+    assert.deepEqual(report.completedLayers, []);
+});
+
+test("test_listTaskWorktreesRecognizesATaskNWorktreeCreatedByThePreparer", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const group = makeGroup(repoRoot, 1);
+
+    const worktrees = listTaskWorktrees(repoRoot);
+
+    assert.equal(worktrees.length, 1);
+    assert.equal(worktrees[0].branch, group.branch);
+    assert.equal(basename(worktrees[0].path), basename(group.worktree));
+});
+
+test("test_findUnmergedTaskWorktreesRecoversATaskNWorktreeWithACommitAndADirtyOwnedFile", () => {
+    const repoRoot = makeTempRepoWithCommit();
+    const group = makeGroup(repoRoot, 1);
+    const sourceBranch = currentBranchName(repoRoot);
+
+    writeFileSync(join(group.worktree, "owned.ts"), "committed\n");
+    git(group.worktree, "add", "owned.ts");
+    git(group.worktree, "commit", "-q", "-m", "add owned.ts");
+    writeFileSync(join(group.worktree, "owned.ts"), "committed\ndirty\n");
+
+    const openTasks: TaskRecord[] = [{ taskNumber: 1, title: "task one", modifiableFiles: ["owned.ts"] }];
+    const [recovery] = findUnmergedTaskWorktrees(repoRoot, sourceBranch, openTasks);
+
+    assert.equal(recovery.branch, group.branch);
+    assert.equal(recovery.unmergedCommitCount, 1);
+    assert.equal(recovery.hasUncommittedChanges, true);
+    assert.deepEqual(recovery.changedFilePaths, ["owned.ts"]);
+    assert.deepEqual(recovery.matchedTaskNumbers, [1]);
 });

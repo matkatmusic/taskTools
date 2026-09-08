@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "next": "VERDICT_SCRAP",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "reviewOutputFile": "/repo/.worktrees/task-42/plans/codex-review.json",
+        "verdict": "SCRAP",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file\n\n[step-2] Rewrite the section.\n\nDurable because: it names the file\n\n[step-3] Rewrite the section.\n\nDurable because: it names the file\n\n[step-4] Rewrite the section.\n\nDurable because: it names the file\n\n[step-5] Rewrite the section.\n\nDurable because: it names the file"
+    },
+    "output": {
+        "box": "VERDICT_SCRAP",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "notes": "[step-1] Rewrite the section.\n\nDurable because: it names the file\n\n[step-2] Rewrite the section.\n\nDurable because: it names the file\n\n[step-3] Rewrite the section.\n\nDurable because: it names the file\n\n[step-4] Rewrite the section.\n\nDurable because: it names the file\n\n[step-5] Rewrite the section.\n\nDurable because: it names the file",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    }
+}

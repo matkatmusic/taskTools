@@ -5,10 +5,11 @@ import {
     assessApprovalReadiness,
     isActionableExerciseMethod,
     reviewGroupExerciseMethod,
-} from "../scripts/approvalReadiness.ts";
-import type { ApprovalReadinessInput } from "../scripts/approvalReadiness.ts";
-import { computeOccurrenceDigests } from "../scripts/approvalGate.ts";
-import type { OccurrenceSnapshot } from "../scripts/approvalGate.ts";
+} from "../scripts/shared/approvalReadiness.ts";
+import type { ApprovalReadinessInput } from "../scripts/shared/approvalReadiness.ts";
+import { computeOccurrenceDigests } from "../scripts/shared/approvalGate.ts";
+import type { OccurrenceSnapshot } from "../scripts/shared/approvalGate.ts";
+import { EXERCISE_METHOD_ACTIONABLE, EXERCISE_METHOD_NOT_ACTIONABLE } from "../scripts/shared/resultCodes.ts";
 
 function baseGreenInput(): ApprovalReadinessInput {
     return {
@@ -114,19 +115,19 @@ test("test_fullyGreenRunWithActionableMethodPerGroupIsReadyForApproval", () => {
 });
 
 test("test_liveServerUrlMethodIsActionable", () => {
-    assert.equal(isActionableExerciseMethod({ kind: "url", url: "http://localhost:3000" }), true);
+    assert.equal(isActionableExerciseMethod({ kind: "url", url: "http://localhost:3000" }), EXERCISE_METHOD_ACTIONABLE);
 });
 
 test("test_commandWithWorkingDirectoryIsActionable", () => {
-    assert.equal(isActionableExerciseMethod({ kind: "command", command: "bun test", workingDirectory: "/repo" }), true);
+    assert.equal(isActionableExerciseMethod({ kind: "command", command: "bun test", workingDirectory: "/repo" }), EXERCISE_METHOD_ACTIONABLE);
 });
 
 test("test_commandWithoutWorkingDirectoryIsNotActionable", () => {
-    assert.equal(isActionableExerciseMethod({ kind: "command", command: "bun test", workingDirectory: "" }), false);
+    assert.equal(isActionableExerciseMethod({ kind: "command", command: "bun test", workingDirectory: "" }), EXERCISE_METHOD_NOT_ACTIONABLE);
 });
 
 test("test_proseOnlyNoteIsNotActionable", () => {
-    assert.equal(isActionableExerciseMethod({ kind: "note", text: "looks fine" }), false);
+    assert.equal(isActionableExerciseMethod({ kind: "note", text: "looks fine" }), EXERCISE_METHOD_NOT_ACTIONABLE);
 });
 
 test("test_reviewerReturnsUrlWhenLiveServerUrlFactProvided", () => {
@@ -135,7 +136,7 @@ test("test_reviewerReturnsUrlWhenLiveServerUrlFactProvided", () => {
         workingDirectory: "/repo",
         liveServerUrl: "http://localhost:4000",
     });
-    assert.ok(result.methods.some((method) => method.kind === "url" && isActionableExerciseMethod(method)));
+    assert.ok(result.methods.some((method) => method.kind === "url" && isActionableExerciseMethod(method) === EXERCISE_METHOD_ACTIONABLE));
 });
 
 test("test_reviewerReturnsCommandWhenVerificationCommandFactProvided", () => {
@@ -145,7 +146,7 @@ test("test_reviewerReturnsCommandWhenVerificationCommandFactProvided", () => {
         verificationCommand: "npx tsc --noEmit",
     });
     const method = result.methods.find((candidate) => candidate.kind === "command");
-    assert.ok(method && isActionableExerciseMethod(method));
+    assert.ok(method && isActionableExerciseMethod(method) === EXERCISE_METHOD_ACTIONABLE);
     assert.equal(method?.kind === "command" ? method.workingDirectory : undefined, "/repo");
 });
 
@@ -153,7 +154,7 @@ test("test_reviewerReturnsNonActionableNoteWhenNoFactsProvided", () => {
     const result = reviewGroupExerciseMethod({ groupId: "group-1", workingDirectory: "/repo" });
     assert.equal(result.methods.length, 1);
     assert.equal(result.methods[0].kind, "note");
-    assert.equal(isActionableExerciseMethod(result.methods[0]), false);
+    assert.equal(isActionableExerciseMethod(result.methods[0]), EXERCISE_METHOD_NOT_ACTIONABLE);
 });
 
 test("test_reviewerPerformsNoWrites", async () => {

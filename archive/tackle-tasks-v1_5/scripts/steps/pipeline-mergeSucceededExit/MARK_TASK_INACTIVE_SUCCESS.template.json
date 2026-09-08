@@ -1,0 +1,18 @@
+{
+    "input": {
+        "box": "BUILD_CLOSURE_NOTE",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
+    },
+    "output": {
+        "box": "MARK_TASK_INACTIVE_SUCCESS",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "closureNote": "Task 42 completed.\n\nCommits:\n  abc1234  (root)   merge\nModified files: none\nTask tests: (not recorded)\nFull suite: (not recorded)"
+    }
+}

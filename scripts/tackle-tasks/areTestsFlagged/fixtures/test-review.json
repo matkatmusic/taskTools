@@ -1,0 +1,15 @@
+{
+    "outcome": "OK",
+    "missingFiles": [],
+    "message": "",
+    "issues": [
+        {
+            "testFile": "tests/thing.test.ts",
+            "testName": "a test",
+            "evidence": "tests/thing.test.ts:1-9",
+            "problem": "asserts nothing",
+            "fix": "assert the return value"
+        }
+    ],
+    "testsThatHoldUp": []
+}

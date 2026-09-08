@@ -1,0 +1,29 @@
+{
+    "input": {
+        "box": "WHAT_IS_DOCS_MODE",
+        "scriptSignal": "continue",
+        "next": "DOCS_MODE_UPDATE",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "add coverage for the new export"
+    },
+    "output": {
+        "box": "DOCS_MODE_UPDATE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/worktrees/task-42",
+        "branch": "task-42",
+        "docsMode": "UPDATE",
+        "exitType": "",
+        "exitNote": "",
+        "clarifyRequest": "add coverage for the new export"
+    }
+}

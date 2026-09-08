@@ -1,0 +1,22 @@
+{
+    "input": {
+        "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "amendFailingTests": true
+    },
+    "output": {
+        "box": "IMPLEMENT_PIPELINE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "maxFixRounds": 3
+    }
+}

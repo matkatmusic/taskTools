@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { bootstrapRepositoryManifest } from "../scripts/manifestBootstrap.ts";
-import { getOwningOccurrence } from "../scripts/repositoryGraph.ts";
-import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/repositoryManifest.ts";
-import { REPOSITORY_MANIFEST_VERSION } from "../scripts/repositoryManifest.ts";
-import { groupTasksByFileOverlap } from "../scripts/taskGroups.ts";
-const prepareTasksModulePath = new URL("../scripts/prepareTasks.ts", import.meta.url).href;
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { join } from "node:path";
+import { bootstrapRepositoryManifest } from "../scripts/shared/manifestBootstrap.ts";
+import { getOwningOccurrence } from "../scripts/shared/repositoryGraph.ts";
+import { resolveTaskWorktreeConventionDirectory } from "../scripts/shared/prepareTasks.ts";
+import type { RepositoryManifest, RepositoryOccurrence } from "../scripts/shared/repositoryManifest.ts";
+import { REPOSITORY_MANIFEST_VERSION } from "../scripts/shared/repositoryManifest.ts";
+const prepareTasksModulePath = new URL("../scripts/shared/prepareTasks.ts", import.meta.url).href;
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
 function git(cwd: string, args: string[]): void {
     execFileSync("git", args, { cwd, stdio: "ignore" });
@@ -46,13 +46,13 @@ git(submoduleSourcePath, ["commit", "-q", "-m", "add bar"]);
 git(rootPath, ["-c", "protocol.file.allow=always", "submodule", "add", "-q", submoduleSourcePath, "external/sub"]);
 git(rootPath, ["commit", "-q", "-m", "add submodule"]);
 
-const bootstrapResult = bootstrapRepositoryManifest(rootPath);
+const bootstrapResult = bootstrapRepositoryManifest(rootPath, "main");
 assert.equal(bootstrapResult.refused, false, "bootstrap must resolve without needing manual input");
 const occurrenceGraph: RepositoryOccurrence[] = bootstrapResult.refused ? [] : bootstrapResult.occurrenceGraph;
 const manifest: RepositoryManifest = { version: REPOSITORY_MANIFEST_VERSION, occurrences: occurrenceGraph };
 
 after(() => {
-    rmSync(join(tmpdir(), "taskTools-wt", basename(rootPath)), { recursive: true, force: true });
+    rmSync(resolveTaskWorktreeConventionDirectory(rootPath), { recursive: true, force: true });
     rmSync(rootPath, { recursive: true, force: true });
     rmSync(submoduleSourcePath, { recursive: true, force: true });
 });
@@ -77,23 +77,21 @@ test("test_everyOccurrenceHasANonEmptyOriginUrl", () => {
     }
 });
 
-test("test_groupTasksByFileOverlapReturnsRealGroupsInsteadOfThrowing", () => {
+test("test_buildWorkflowArgumentsCreatesOneWorktreePerTaskAgainstARealRepo", () => {
     const tasks: TaskRecord[] = [
-        { taskNumber: 1, files: ["scripts/foo.ts"] },
-        { taskNumber: 2, files: ["external/sub/src/bar.ts"] },
+        { taskNumber: 1, modifiableFiles: ["scripts/foo.ts"] },
+        { taskNumber: 2, modifiableFiles: ["external/sub/src/bar.ts"] },
     ];
-    const groups = groupTasksByFileOverlap(tasks);
-    assert.ok(groups.length > 0);
 
     // Bun drops process.env edits for children, so only a spawned process can carry the git override.
     const script = `
         const { buildWorkflowArguments } = await import(${JSON.stringify(prepareTasksModulePath)});
-        const built = buildWorkflowArguments(${JSON.stringify(rootPath)}, "npx tsc --noEmit", ${JSON.stringify(groups)});
+        const built = buildWorkflowArguments(${JSON.stringify(rootPath)}, "npx tsc --noEmit", ${JSON.stringify(tasks)});
         process.stdout.write(String(built.groups.length));
     `;
     const groupCount = execFileSync("bun", ["-e", script], {
         encoding: "utf8",
         env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigPath },
     });
-    assert.ok(Number(groupCount) > 0);
+    assert.equal(Number(groupCount), 2);
 });

@@ -1,0 +1,39 @@
+flowchart TB
+%% IMPLEMENT PIPELINE. Split from pipeline-implementTest.mmd.
+%% ---
+%% Input: an accepted plan from the review plan pipeline.
+%% ---
+%% One job: write the code and commit it.
+%% ---
+%% Never update a test not created in this task's worktree, unless it is broken or asserts nothing.
+%% ---
+%% Every box touching the working tree operates deepest submodule first, root last.
+%% ---
+%% "commit if needed" excludes generated doc artifacts from the commit, via .gitignore plus the skip-worktree bit set by configureGeneratedArtifactIsolation.
+%% ---
+%% `git add -A` is safe because of that, not by accident.
+%% ---
+%% A script that fails operationally exits the run as run-failed.
+%% ---
+%% Exit types this pipeline can produce:
+%% ---
+%% run-failed - a script failed operationally
+
+  ACCEPTED_PLAN_INPUT["Input: { plan, tasks.json entry }"] --> IMPLEMENT_TASK
+  IMPLEMENT_TASK["implement task"] --> COMMIT_IMPLEMENTATION_IF_NEEDED["commit if needed"]
+  COMMIT_IMPLEMENTATION_IF_NEEDED --> TASK_TESTS_PIPELINE["task tests pipeline"]
+
+  EXIT_WORKFLOW_IMPLEMENT["failures exit"]
+
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class COMMIT_IMPLEMENTATION_IF_NEEDED script
+  class TASK_TESTS_PIPELINE pipeline
+  class IMPLEMENT_TASK agent
+  class EXIT_WORKFLOW_IMPLEMENT fail
+  class ACCEPTED_PLAN_INPUT output
+  class IMPLEMENT_TASK returns_a_prompt

@@ -1,0 +1,30 @@
+{
+    "input": {
+        "box": "DRAFT_PLAN_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "briefFile": "/repo/.worktrees/task-42/plans/brief-42.md",
+        "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "reviewOutputFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json",
+        "ownedFilePaths": ["/repo/.worktrees/task-42/src/owned.ts"],
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "reviewFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json"
+    },
+    "output": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "next": "VERDICT_ACCEPT",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "reviewOutputFile": "scripts/steps/pipeline-reviewPlan/fixtures/worktree/plans/codex-review.json",
+        "verdict": "ACCEPT",
+        "notes": ""
+    }
+}

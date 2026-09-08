@@ -1,0 +1,45 @@
+flowchart TB
+%% REBASE PREAMBLE PIPELINE. Split from pipeline-rebaseMerge.mmd.
+%% ---
+%% Input: a finished implementation from the review task tests pipeline.
+%% ---
+%% Job: hold the source repo lock before anything touches the repo.
+%% ---
+%% Rules not shown in the graph:
+%% ---
+%% The lock is owned by "runId:taskNumber", not runId alone, since one invocation's tasks share a runId.
+%% ---
+%% The lock file lives under <projectRoot>/.git, so it survives the process. See sourceRepoLock.ts.
+%% ---
+%% A lock left by a dead run is cleared by hand, with the operator-run recoverSourceRepoLock.ts.
+%% ---
+%% The 15 minute cap is what stops this pipeline waiting on a stuck lock forever.
+%% ---
+%% Exit types: run-failed.
+
+  FINISHED_IMPLEMENTATION_INPUT["Input: { runId, taskNumber }"] --> LOCK_SOURCE_REPO
+  LOCK_SOURCE_REPO["Try: lock the source repo"] --> WAS_LOCK_ACQUIRED{"acquired?"}
+  WAS_LOCK_ACQUIRED -->|YES| REBASE_PIPELINE["rebase pipeline"]
+  WAS_LOCK_ACQUIRED -->|NO| HAVE_15_MINUTES_PASSED{"have 15 minutes passed?"}
+  HAVE_15_MINUTES_PASSED -->|NO| WAIT_FOR_LOCK["wait 5s"]
+  HAVE_15_MINUTES_PASSED -- "YES<br/>exit type: run-failed<br/>exit note: the source repo lock did not<br/>come free within 15 minutes" --> EXIT_WORKFLOW_REBASE_PREAMBLE
+  WAIT_FOR_LOCK --> LOCK_SOURCE_REPO
+
+
+  EXIT_WORKFLOW_REBASE_PREAMBLE["failures exit"]
+
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red goes back round the wait loop.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class WAS_LOCK_ACQUIRED,HAVE_15_MINUTES_PASSED decision
+  class LOCK_SOURCE_REPO,WAIT_FOR_LOCK script
+  class REBASE_PIPELINE pipeline
+  class EXIT_WORKFLOW_REBASE_PREAMBLE fail
+  class FINISHED_IMPLEMENTATION_INPUT output

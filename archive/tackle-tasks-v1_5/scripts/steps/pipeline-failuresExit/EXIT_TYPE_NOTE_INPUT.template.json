@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "EXIT_WORKFLOW_SUITE",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
+    },
+    "output": {
+        "box": "EXIT_TYPE_NOTE_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
+    }
+}

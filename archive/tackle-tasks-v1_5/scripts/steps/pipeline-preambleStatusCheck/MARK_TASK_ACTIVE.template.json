@@ -1,0 +1,18 @@
+{
+    "input": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "next": "MARK_TASK_ACTIVE",
+        "taskNumber": 1,
+        "tasksFile": ".taskTools/tasks.json",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "MARK_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "tasksFile": ".taskTools/tasks.json",
+        "runId": ""
+    }
+}

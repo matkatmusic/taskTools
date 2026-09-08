@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "VERDICT_ERROR",
+        "scriptSignal": "continue",
+        "next": "EXIT_WORKFLOW_REVIEW_PLAN",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "run-failed",
+        "exitNote": "the plan review could not run",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_REVIEW_PLAN",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-42",
+        "sourceBranch": "main",
+        "exitType": "run-failed",
+        "exitNote": "the plan review could not run"
+    }
+}

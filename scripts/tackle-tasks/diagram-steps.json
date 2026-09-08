@@ -1,0 +1,957 @@
+{
+    "pipeline-areTestsFlagged.mmd": [
+        {
+            "box": "ARE_TESTS_FLAGGED",
+            "script": "scripts/tackle-tasks/areTestsFlagged/ARE_TESTS_FLAGGED.ts",
+            "template": "scripts/tackle-tasks/areTestsFlagged/ARE_TESTS_FLAGGED.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
+                "ARE_2_TEST_REVIEWS_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_TEST_REVIEWS_DONE_Q",
+            "script": "scripts/tackle-tasks/areTestsFlagged/ARE_2_TEST_REVIEWS_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/areTestsFlagged/ARE_2_TEST_REVIEWS_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "AMEND_ENTRY_WITH_CODEX_NOTES",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "AMEND_ENTRY_WITH_CODEX_NOTES",
+            "script": "scripts/tackle-tasks/areTestsFlagged/AMEND_ENTRY_WITH_CODEX_NOTES.ts",
+            "template": "scripts/tackle-tasks/areTestsFlagged/AMEND_ENTRY_WITH_CODEX_NOTES.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-implementTask.mmd::IMPLEMENT_TASK"
+            ]
+        }
+    ],
+    "pipeline-codexReviewsPlan.mmd": [
+        {
+            "box": "IS_PLAN_APPROVED_BY_DEFAULT_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/IS_PLAN_APPROVED_BY_DEFAULT_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/IS_PLAN_APPROVED_BY_DEFAULT_Q.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "CODEX_REVIEWS_PLAN",
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT"
+            ]
+        },
+        {
+            "box": "CODEX_REVIEWS_PLAN",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_CODEX_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_CODEX_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT",
+                "CODEX_REVIEW_FALLBACK_FABLE"
+            ]
+        },
+        {
+            "box": "CODEX_REVIEW_FALLBACK_FABLE",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_FABLE_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_FABLE_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT",
+                "CODEX_REVIEW_FALLBACK_OPUS"
+            ]
+        },
+        {
+            "box": "CODEX_REVIEW_FALLBACK_OPUS",
+            "script": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_OPUS.ts",
+            "template": "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_OPUS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT"
+            ]
+        }
+    ],
+    "pipeline-codexReviewsTests.mmd": [
+        {
+            "box": "CODEX_REVIEWS_TESTS",
+            "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_CODEX_TEST_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_CODEX_TEST_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED",
+                "CODEX_TEST_REVIEW_FALLBACK_FABLE"
+            ]
+        },
+        {
+            "box": "CODEX_TEST_REVIEW_FALLBACK_FABLE",
+            "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.template.json",
+            "producesPrompt": true,
+            "next": [
+                "DID_FABLE_TEST_REVIEW_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_FABLE_TEST_REVIEW_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED",
+                "CODEX_TEST_REVIEW_FALLBACK_OPUS"
+            ]
+        },
+        {
+            "box": "CODEX_TEST_REVIEW_FALLBACK_OPUS",
+            "script": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_OPUS.ts",
+            "template": "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_OPUS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-areTestsFlagged.mmd::ARE_TESTS_FLAGGED"
+            ]
+        }
+    ],
+    "pipeline-commitImplementationIfNeeded.mmd": [
+        {
+            "box": "COMMIT_IMPLEMENTATION_IF_NEEDED",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_IMPLEMENTATION_IF_NEEDED.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_IMPLEMENTATION_IF_NEEDED.template.json",
+            "producesPrompt": false,
+            "next": [
+                "ARE_TASK_TESTS_SKIPPED_Q",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "COMMIT_TEST_FIX_IF_NEEDED",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_TEST_FIX_IF_NEEDED.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/COMMIT_TEST_FIX_IF_NEEDED.template.json",
+            "producesPrompt": false,
+            "next": [
+                "ARE_TASK_TESTS_SKIPPED_Q"
+            ]
+        },
+        {
+            "box": "ARE_TASK_TESTS_SKIPPED_Q",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/ARE_TASK_TESTS_SKIPPED_Q.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/ARE_TASK_TESTS_SKIPPED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
+                "RUN_TASK_TESTS"
+            ]
+        },
+        {
+            "box": "RUN_TASK_TESTS",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/RUN_TASK_TESTS.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/RUN_TASK_TESTS.template.json",
+            "producesPrompt": false,
+            "next": [
+                "DO_TASK_TESTS_PASS_Q"
+            ]
+        },
+        {
+            "box": "DO_TASK_TESTS_PASS_Q",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/DO_TASK_TESTS_PASS_Q.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/DO_TASK_TESTS_PASS_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-codexReviewsTests.mmd::CODEX_REVIEWS_TESTS",
+                "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
+                "ARE_2_TEST_FIXES_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_TEST_FIXES_DONE_Q",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/ARE_2_TEST_FIXES_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/ARE_2_TEST_FIXES_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "AMEND_ENTRY_WITH_FAILING_TESTS",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
+            "script": "scripts/tackle-tasks/commitImplementationIfNeeded/AMEND_ENTRY_WITH_FAILING_TESTS.ts",
+            "template": "scripts/tackle-tasks/commitImplementationIfNeeded/AMEND_ENTRY_WITH_FAILING_TESTS.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-fixImplementTaskTests.mmd::FIX_IMPLEMENT_TASK_TESTS"
+            ]
+        }
+    ],
+    "pipeline-commitMergeConflictFixIfNeeded.mmd": [
+        {
+            "box": "COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED",
+            "script": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.ts",
+            "template": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "CONTINUE_REBASE"
+            ]
+        },
+        {
+            "box": "CONTINUE_REBASE",
+            "script": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.ts",
+            "template": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "IS_REBASE_FINISHED_Q"
+            ]
+        },
+        {
+            "box": "IS_REBASE_FINISHED_Q",
+            "script": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/IS_REBASE_FINISHED_Q.ts",
+            "template": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/IS_REBASE_FINISHED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
+                "pipeline-preambleStatusCheck.mmd::DOES_FENCE_COVER_WORKTREE_Q",
+                "ARE_2_CONFLICT_FIXES_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_CONFLICT_FIXES_DONE_Q",
+            "script": "scripts/tackle-tasks/rebase/ARE_2_CONFLICT_FIXES_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/rebase/ARE_2_CONFLICT_FIXES_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-fixConflicts.mmd::FIX_CONFLICTS",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        }
+    ],
+    "pipeline-failuresExit.mmd": [
+        {
+            "box": "FAILURES_EXIT",
+            "script": "scripts/tackle-tasks/failuresExit/FAILURES_EXIT.ts",
+            "template": "scripts/tackle-tasks/failuresExit/FAILURES_EXIT.template.json",
+            "producesPrompt": false,
+            "next": [
+                "READ_FAILURES_PUBLICATION_STATE"
+            ]
+        },
+        {
+            "box": "READ_FAILURES_PUBLICATION_STATE",
+            "script": "scripts/tackle-tasks/failuresExit/READ_FAILURES_PUBLICATION_STATE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/READ_FAILURES_PUBLICATION_STATE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "DID_ANY_WORK_LAND_Q"
+            ]
+        },
+        {
+            "box": "DID_ANY_WORK_LAND_Q",
+            "script": "scripts/tackle-tasks/failuresExit/DID_ANY_WORK_LAND_Q.ts",
+            "template": "scripts/tackle-tasks/failuresExit/DID_ANY_WORK_LAND_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "WRITE_PUBLICATION_OUTCOME",
+                "WRITE_EXIT_TYPE_AND_NOTE"
+            ]
+        },
+        {
+            "box": "WRITE_PUBLICATION_OUTCOME",
+            "script": "scripts/tackle-tasks/failuresExit/WRITE_PUBLICATION_OUTCOME.ts",
+            "template": "scripts/tackle-tasks/failuresExit/WRITE_PUBLICATION_OUTCOME.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RECORD_MODIFIED_FILES_FAILURE"
+            ]
+        },
+        {
+            "box": "WRITE_EXIT_TYPE_AND_NOTE",
+            "script": "scripts/tackle-tasks/failuresExit/WRITE_EXIT_TYPE_AND_NOTE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/WRITE_EXIT_TYPE_AND_NOTE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RECORD_MODIFIED_FILES_FAILURE"
+            ]
+        },
+        {
+            "box": "RECORD_MODIFIED_FILES_FAILURE",
+            "script": "scripts/tackle-tasks/failuresExit/RECORD_MODIFIED_FILES_FAILURE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/RECORD_MODIFIED_FILES_FAILURE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "MARK_TASK_INACTIVE_FAILURE"
+            ]
+        },
+        {
+            "box": "MARK_TASK_INACTIVE_FAILURE",
+            "script": "scripts/tackle-tasks/failuresExit/MARK_TASK_INACTIVE_FAILURE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/MARK_TASK_INACTIVE_FAILURE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "DOES_RUN_HOLD_LEASE_Q"
+            ]
+        },
+        {
+            "box": "DOES_RUN_HOLD_LEASE_Q",
+            "script": "scripts/tackle-tasks/failuresExit/DOES_RUN_HOLD_LEASE_Q.ts",
+            "template": "scripts/tackle-tasks/failuresExit/DOES_RUN_HOLD_LEASE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RELEASE_WORKTREE_LEASE",
+                "DOES_RUN_HOLD_SOURCE_LOCK_Q"
+            ]
+        },
+        {
+            "box": "RELEASE_WORKTREE_LEASE",
+            "script": "scripts/tackle-tasks/failuresExit/RELEASE_WORKTREE_LEASE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/RELEASE_WORKTREE_LEASE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "DOES_RUN_HOLD_SOURCE_LOCK_Q"
+            ]
+        },
+        {
+            "box": "DOES_RUN_HOLD_SOURCE_LOCK_Q",
+            "script": "scripts/tackle-tasks/failuresExit/DOES_RUN_HOLD_SOURCE_LOCK_Q.ts",
+            "template": "scripts/tackle-tasks/failuresExit/DOES_RUN_HOLD_SOURCE_LOCK_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RELEASE_SOURCE_LOCK",
+                "REPORT_EXIT_TYPE_AND_NOTE"
+            ]
+        },
+        {
+            "box": "RELEASE_SOURCE_LOCK",
+            "script": "scripts/tackle-tasks/failuresExit/RELEASE_SOURCE_LOCK.ts",
+            "template": "scripts/tackle-tasks/failuresExit/RELEASE_SOURCE_LOCK.template.json",
+            "producesPrompt": false,
+            "next": [
+                "REPORT_EXIT_TYPE_AND_NOTE"
+            ]
+        },
+        {
+            "box": "REPORT_EXIT_TYPE_AND_NOTE",
+            "script": "scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.ts",
+            "template": "scripts/tackle-tasks/failuresExit/REPORT_EXIT_TYPE_AND_NOTE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "STOP"
+            ]
+        },
+        {
+            "box": "STOP",
+            "script": "scripts/tackle-tasks/reportOnlyExit/STOP.ts",
+            "template": "scripts/tackle-tasks/reportOnlyExit/STOP.template.json",
+            "producesPrompt": false,
+            "next": []
+        }
+    ],
+    "pipeline-fixConflicts.mmd": [
+        {
+            "box": "FIX_CONFLICTS",
+            "script": "scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.ts",
+            "template": "scripts/tackle-tasks/fixConflicts/FIX_CONFLICTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-commitMergeConflictFixIfNeeded.mmd::COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED"
+            ]
+        }
+    ],
+    "pipeline-fixImplementTaskTests.mmd": [
+        {
+            "box": "FIX_IMPLEMENT_TASK_TESTS",
+            "script": "scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.ts",
+            "template": "scripts/tackle-tasks/fixImplementTaskTests/FIX_IMPLEMENT_TASK_TESTS.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-commitImplementationIfNeeded.mmd::COMMIT_TEST_FIX_IF_NEEDED"
+            ]
+        }
+    ],
+    "pipeline-fixTheCodebaseForSuite.mmd": [
+        {
+            "box": "FIX_THE_CODEBASE_FOR_SUITE",
+            "script": "scripts/tackle-tasks/fixTheCodebaseForSuite/FIX_THE_CODEBASE_FOR_SUITE.ts",
+            "template": "scripts/tackle-tasks/fixTheCodebaseForSuite/FIX_THE_CODEBASE_FOR_SUITE.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-runFullSuite.mmd::COMMIT_SUITE_FIX_IF_NEEDED"
+            ]
+        }
+    ],
+    "pipeline-implementTask.mmd": [
+        {
+            "box": "IMPLEMENT_TASK",
+            "script": "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts",
+            "template": "scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-commitImplementationIfNeeded.mmd::COMMIT_IMPLEMENTATION_IF_NEEDED"
+            ]
+        }
+    ],
+    "pipeline-lockSourceRepo.mmd": [
+        {
+            "box": "LOCK_SOURCE_REPO",
+            "script": "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.ts",
+            "template": "scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.template.json",
+            "producesPrompt": false,
+            "next": [
+                "WAS_LOCK_ACQUIRED_Q"
+            ]
+        },
+        {
+            "box": "WAS_LOCK_ACQUIRED_Q",
+            "script": "scripts/tackle-tasks/lockSourceRepo/WAS_LOCK_ACQUIRED_Q.ts",
+            "template": "scripts/tackle-tasks/lockSourceRepo/WAS_LOCK_ACQUIRED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH",
+                "HAS_LOCK_WAIT_DEADLINE_PASSED_Q"
+            ]
+        },
+        {
+            "box": "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
+            "script": "scripts/tackle-tasks/lockSourceRepo/HAS_LOCK_WAIT_DEADLINE_PASSED_Q.ts",
+            "template": "scripts/tackle-tasks/lockSourceRepo/HAS_LOCK_WAIT_DEADLINE_PASSED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "WAIT_FOR_LOCK",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "WAIT_FOR_LOCK",
+            "script": "scripts/tackle-tasks/lockSourceRepo/WAIT_FOR_LOCK.ts",
+            "template": "scripts/tackle-tasks/lockSourceRepo/WAIT_FOR_LOCK.template.json",
+            "producesPrompt": false,
+            "next": [
+                "LOCK_SOURCE_REPO"
+            ]
+        }
+    ],
+    "pipeline-mergeSucceededExit.mmd": [
+        {
+            "box": "MERGE_SUCCEEDED_EXIT",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/MERGE_SUCCEEDED_EXIT.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/MERGE_SUCCEEDED_EXIT.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RECORD_MERGE_COMMIT_HASHES"
+            ]
+        },
+        {
+            "box": "RECORD_MERGE_COMMIT_HASHES",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MERGE_COMMIT_HASHES.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "WRITE_EXIT_TYPE_COMPLETED"
+            ]
+        },
+        {
+            "box": "WRITE_EXIT_TYPE_COMPLETED",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/WRITE_EXIT_TYPE_COMPLETED.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "RECORD_MODIFIED_FILES_SUCCESS"
+            ]
+        },
+        {
+            "box": "RECORD_MODIFIED_FILES_SUCCESS",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/RECORD_MODIFIED_FILES_SUCCESS.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "CLEAN_UP_WORKTREES"
+            ]
+        },
+        {
+            "box": "CLEAN_UP_WORKTREES",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "BUILD_CLOSURE_NOTE"
+            ]
+        },
+        {
+            "box": "BUILD_CLOSURE_NOTE",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/BUILD_CLOSURE_NOTE.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/BUILD_CLOSURE_NOTE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "MARK_TASK_INACTIVE_SUCCESS"
+            ]
+        },
+        {
+            "box": "MARK_TASK_INACTIVE_SUCCESS",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/MARK_TASK_INACTIVE_SUCCESS.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "ARCHIVE_TASK"
+            ]
+        },
+        {
+            "box": "ARCHIVE_TASK",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/ARCHIVE_TASK.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "REPORT_CLOSURE_NOTE"
+            ]
+        },
+        {
+            "box": "REPORT_CLOSURE_NOTE",
+            "script": "scripts/tackle-tasks/mergeSucceededExit/REPORT_CLOSURE_NOTE.ts",
+            "template": "scripts/tackle-tasks/mergeSucceededExit/REPORT_CLOSURE_NOTE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "STOP"
+            ]
+        },
+        {
+            "box": "STOP",
+            "script": "scripts/tackle-tasks/reportOnlyExit/STOP.ts",
+            "template": "scripts/tackle-tasks/reportOnlyExit/STOP.template.json",
+            "producesPrompt": false,
+            "next": []
+        }
+    ],
+    "pipeline-planTheTask.mmd": [
+        {
+            "box": "IS_DIFFICULTY_7_PLUS_Q",
+            "script": "scripts/tackle-tasks/planTheTask/IS_DIFFICULTY_7_PLUS_Q.ts",
+            "template": "scripts/tackle-tasks/planTheTask/IS_DIFFICULTY_7_PLUS_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "PLAN_THE_TASK_CODEX",
+                "PLAN_THE_TASK"
+            ]
+        },
+        {
+            "box": "PLAN_THE_TASK_CODEX",
+            "script": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.ts",
+            "template": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
+            ]
+        },
+        {
+            "box": "PLAN_THE_TASK",
+            "script": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK.ts",
+            "template": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK.template.json",
+            "producesPrompt": true,
+            "next": [
+                "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
+            ]
+        }
+    ],
+    "pipeline-preambleStatusCheck.mmd": [
+        {
+            "box": "PREAMBLE_STATUS_CHECK",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "IS_TASK_BLOCKED_Q"
+            ]
+        },
+        {
+            "box": "IS_TASK_BLOCKED_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_BLOCKED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "IS_TASK_ACTIVE_Q"
+            ]
+        },
+        {
+            "box": "IS_TASK_ACTIVE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_TASK_ACTIVE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "PREFLIGHT_OK_Q"
+            ]
+        },
+        {
+            "box": "PREFLIGHT_OK_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
+                "MARK_TASK_ACTIVE"
+            ]
+        },
+        {
+            "box": "MARK_TASK_ACTIVE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/MARK_TASK_ACTIVE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "DOES_WORKTREE_EXIST_Q"
+            ]
+        },
+        {
+            "box": "DOES_WORKTREE_EXIST_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_WORKTREE_EXIST_Q.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "CREATE_WORKTREE",
+                "IS_WORKTREE_SAFE_TO_USE_Q"
+            ]
+        },
+        {
+            "box": "CREATE_WORKTREE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "TAKE_WORKTREE_LEASE"
+            ]
+        },
+        {
+            "box": "TAKE_WORKTREE_LEASE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "IS_WORKTREE_SAFE_TO_USE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_SAFE_TO_USE_Q.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+                "IS_PREVIOUS_RUN_RESUMABLE_Q"
+            ]
+        },
+        {
+            "box": "TAKE_WORKTREE_LEASE_BEFORE_RESET",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/TAKE_WORKTREE_LEASE_BEFORE_RESET.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RESET_WORKTREE"
+            ]
+        },
+        {
+            "box": "RESET_WORKTREE",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/RESET_WORKTREE.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "IS_PREVIOUS_RUN_RESUMABLE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/IS_PREVIOUS_RUN_RESUMABLE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
+                "REBASE_RESUMED_WORKTREE_ONTO_STAGING"
+            ]
+        },
+        {
+            "box": "REBASE_RESUMED_WORKTREE_ONTO_STAGING",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/REBASE_RESUMED_WORKTREE_ONTO_STAGING.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "DOES_FENCE_COVER_WORKTREE_Q",
+                "pipeline-commitMergeConflictFixIfNeeded.mmd::ARE_2_CONFLICT_FIXES_DONE_Q"
+            ]
+        },
+        {
+            "box": "DOES_FENCE_COVER_WORKTREE_Q",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
+                "INIT_SUBMODULES_RECURSIVELY"
+            ]
+        },
+        {
+            "box": "INIT_SUBMODULES_RECURSIVELY",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/INIT_SUBMODULES_RECURSIVELY.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
+                "DOCUMENT_GENERATION"
+            ]
+        },
+        {
+            "box": "DOCUMENT_GENERATION",
+            "script": "scripts/tackle-tasks/preambleStatusCheck/DOCUMENT_GENERATION.ts",
+            "template": "scripts/tackle-tasks/preambleStatusCheck/DOCUMENT_GENERATION.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q"
+            ]
+        }
+    ],
+    "pipeline-rebase.mmd": [
+        {
+            "box": "REBASE_ONTO_TARGET_BRANCH",
+            "script": "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.ts",
+            "template": "scripts/tackle-tasks/rebase/REBASE_ONTO_TARGET_BRANCH.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "DID_REBASE_REPORT_CONFLICTS_Q"
+            ]
+        },
+        {
+            "box": "DID_REBASE_REPORT_CONFLICTS_Q",
+            "script": "scripts/tackle-tasks/rebase/DID_REBASE_REPORT_CONFLICTS_Q.ts",
+            "template": "scripts/tackle-tasks/rebase/DID_REBASE_REPORT_CONFLICTS_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-runFullSuite.mmd::RUN_FULL_SUITE",
+                "ARE_2_CONFLICT_FIXES_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_CONFLICT_FIXES_DONE_Q",
+            "script": "scripts/tackle-tasks/rebase/ARE_2_CONFLICT_FIXES_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/rebase/ARE_2_CONFLICT_FIXES_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-fixConflicts.mmd::FIX_CONFLICTS",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        }
+    ],
+    "pipeline-reportOnlyExit.mmd": [
+        {
+            "box": "REPORT_ONLY_EXIT",
+            "script": "scripts/tackle-tasks/reportOnlyExit/REPORT_ONLY_EXIT.ts",
+            "template": "scripts/tackle-tasks/reportOnlyExit/REPORT_ONLY_EXIT.template.json",
+            "producesPrompt": false,
+            "next": [
+                "STOP"
+            ]
+        },
+        {
+            "box": "STOP",
+            "script": "scripts/tackle-tasks/reportOnlyExit/STOP.ts",
+            "template": "scripts/tackle-tasks/reportOnlyExit/STOP.template.json",
+            "producesPrompt": false,
+            "next": []
+        }
+    ],
+    "pipeline-runFullSuite.mmd": [
+        {
+            "box": "COMMIT_SUITE_FIX_IF_NEEDED",
+            "script": "scripts/tackle-tasks/runFullSuite/COMMIT_SUITE_FIX_IF_NEEDED.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/COMMIT_SUITE_FIX_IF_NEEDED.template.json",
+            "producesPrompt": false,
+            "next": [
+                "RUN_FULL_SUITE"
+            ]
+        },
+        {
+            "box": "RUN_FULL_SUITE",
+            "script": "scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/RUN_FULL_SUITE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "DO_ALL_TESTS_PASS_Q"
+            ]
+        },
+        {
+            "box": "DO_ALL_TESTS_PASS_Q",
+            "script": "scripts/tackle-tasks/runFullSuite/DO_ALL_TESTS_PASS_Q.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/DO_ALL_TESTS_PASS_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "ARE_2_SUITE_FIXES_DONE_Q",
+                "DID_CHANGES_STAY_INSIDE_FENCE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_SUITE_FIXES_DONE_Q",
+            "script": "scripts/tackle-tasks/runFullSuite/ARE_2_SUITE_FIXES_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/ARE_2_SUITE_FIXES_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-fixTheCodebaseForSuite.mmd::FIX_THE_CODEBASE_FOR_SUITE",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "DID_CHANGES_STAY_INSIDE_FENCE_Q",
+            "script": "scripts/tackle-tasks/runFullSuite/DID_CHANGES_STAY_INSIDE_FENCE_Q.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/DID_CHANGES_STAY_INSIDE_FENCE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
+                "MERGE_WORKTREES"
+            ]
+        },
+        {
+            "box": "MERGE_WORKTREES",
+            "script": "scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/MERGE_WORKTREES.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "READ_MERGE_PUBLICATION_STATE"
+            ]
+        },
+        {
+            "box": "READ_MERGE_PUBLICATION_STATE",
+            "script": "scripts/tackle-tasks/runFullSuite/READ_MERGE_PUBLICATION_STATE.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/READ_MERGE_PUBLICATION_STATE.template.json",
+            "producesPrompt": false,
+            "next": [
+                "WHAT_IS_PUBLICATION_STATE_Q"
+            ]
+        },
+        {
+            "box": "WHAT_IS_PUBLICATION_STATE_Q",
+            "script": "scripts/tackle-tasks/runFullSuite/WHAT_IS_PUBLICATION_STATE_Q.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/WHAT_IS_PUBLICATION_STATE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-mergeSucceededExit.mmd::MERGE_SUCCEEDED_EXIT",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT",
+                "ARE_2_MERGE_ATTEMPTS_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_MERGE_ATTEMPTS_DONE_Q",
+            "script": "scripts/tackle-tasks/runFullSuite/ARE_2_MERGE_ATTEMPTS_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/runFullSuite/ARE_2_MERGE_ATTEMPTS_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        }
+    ],
+    "pipeline-whatDidThePlannerReturn.mmd": [
+        {
+            "box": "WHAT_DID_THE_PLANNER_RETURN",
+            "script": "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts",
+            "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q",
+                "pipeline-implementTask.mmd::IMPLEMENT_TASK",
+                "ARE_2_CLARIFY_ROUNDS_DONE_Q"
+            ]
+        },
+        {
+            "box": "ARE_2_CLARIFY_ROUNDS_DONE_Q",
+            "script": "scripts/tackle-tasks/whatDidThePlannerReturn/ARE_2_CLARIFY_ROUNDS_DONE_Q.ts",
+            "template": "scripts/tackle-tasks/whatDidThePlannerReturn/ARE_2_CLARIFY_ROUNDS_DONE_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "WRITE_CLARIFY_REQUEST",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "WRITE_CLARIFY_REQUEST",
+            "script": "scripts/tackle-tasks/whatDidThePlannerReturn/WRITE_CLARIFY_REQUEST.ts",
+            "template": "scripts/tackle-tasks/whatDidThePlannerReturn/WRITE_CLARIFY_REQUEST.template.json",
+            "producesPrompt": false,
+            "mutating": true,
+            "next": [
+                "pipeline-preambleStatusCheck.mmd::DOCUMENT_GENERATION"
+            ]
+        }
+    ],
+    "pipeline-whatIsReviewVerdict.mmd": [
+        {
+            "box": "WHAT_IS_REVIEW_VERDICT",
+            "script": "scripts/tackle-tasks/whatIsReviewVerdict/WHAT_IS_REVIEW_VERDICT.ts",
+            "template": "scripts/tackle-tasks/whatIsReviewVerdict/WHAT_IS_REVIEW_VERDICT.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-implementTask.mmd::IMPLEMENT_TASK",
+                "UPDATE_TASKS_JSON",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        },
+        {
+            "box": "UPDATE_TASKS_JSON",
+            "script": "scripts/tackle-tasks/whatIsReviewVerdict/UPDATE_TASKS_JSON.ts",
+            "template": "scripts/tackle-tasks/whatIsReviewVerdict/UPDATE_TASKS_JSON.template.json",
+            "producesPrompt": false,
+            "next": [
+                "TWO_CODEX_REVIEWS_COMPLETED_Q"
+            ]
+        },
+        {
+            "box": "TWO_CODEX_REVIEWS_COMPLETED_Q",
+            "script": "scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.ts",
+            "template": "scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-planTheTask.mmd::IS_DIFFICULTY_7_PLUS_Q",
+                "pipeline-failuresExit.mmd::FAILURES_EXIT"
+            ]
+        }
+    ]
+}

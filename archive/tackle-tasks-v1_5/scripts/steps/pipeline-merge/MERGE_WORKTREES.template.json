@@ -1,0 +1,31 @@
+{
+    "input": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "GREEN_WORKTREE_INPUT",
+        "scriptSignal": "continue"
+    },
+    "output": {
+        "worktreePath": "/abs/path/to/worktree",
+        "rootSourceBranch": "main",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "/abs/path/to/project",
+        "suiteFixAttempts": 0,
+        "box": "MERGE_WORKTREES",
+        "scriptSignal": "continue",
+        "merged": true,
+        "commits": [
+            {
+                "occurrenceId": "",
+                "hash": "0000000000000000000000000000000000000000",
+                "kind": "merge"
+            }
+        ],
+        "failureReason": ""
+    }
+}

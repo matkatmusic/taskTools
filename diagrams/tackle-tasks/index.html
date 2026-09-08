@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="cache-control" content="no-store">
+<title>_pipeline.mmd</title>
+<style>
+  body { margin: 0; min-height: 100vh; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { background: #16181b; } }
+  #d { padding: 2rem; overflow: auto; }
+  #err { position: fixed; top: 0; left: 0; right: 0; background: #a52a1e; color: #fff;
+         font: 13px/1.5 ui-monospace, monospace; padding: .5rem 1rem; white-space: pre-wrap; }
+  #err:empty { display: none; }
+  #nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: .5rem 1rem;
+         font: 13px/1.6 system-ui, sans-serif; border-bottom: 1px solid #8884;
+         position: sticky; top: 0; z-index: 1; background: #fff; }
+  @media (prefers-color-scheme: dark) { #nav { background: #16181b; } }
+  #nav a { color: inherit; text-decoration: none; opacity: .6; }
+  #nav a:hover { opacity: 1; text-decoration: underline; }
+  #nav a[aria-current] { opacity: 1; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { body { color: #e6e6e6; } }
+</style>
+<div id="err"></div>
+<nav id="nav"></nav>
+<div id="d"></div>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+  // dagre, not elk: elk reflows the ranks around the back edges and the diagram stops reading top to bottom
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: dark ? 'dark' : 'default',
+    fontFamily: 'system-ui, sans-serif',
+    // htmlLabels:false sizes shapes to their labels; spacing stops dagre overlap.
+    flowchart: { htmlLabels: false, useMaxWidth: false, padding: 12, wrappingWidth: 220,
+                 nodeSpacing: 60, rankSpacing: 80 },
+  })
+  const file = decodeURIComponent(location.search.slice(1)) || '_pipeline-monolith.mmd'
+  document.title = file
+  // ponytail: hardcoded, python http.server gives no listing when index.html exists.  Add a line here when a diagram is added.
+  nav.innerHTML = [
+    ['_pipeline-monolith.mmd', 'monolith, unrolled'],
+    ['pipeline-preambleStatusCheck.mmd', 'PREAMBLE_STATUS_CHECK'],
+    ['pipeline-planTheTask.mmd', 'IS_DIFFICULTY_7_PLUS_Q'],
+    ['pipeline-whatDidThePlannerReturn.mmd', 'WHAT_DID_THE_PLANNER_RETURN'],
+    ['pipeline-codexReviewsPlan.mmd', 'IS_PLAN_APPROVED_BY_DEFAULT_Q'],
+    ['pipeline-whatIsReviewVerdict.mmd', 'WHAT_IS_REVIEW_VERDICT'],
+    ['pipeline-implementTask.mmd', 'IMPLEMENT_TASK'],
+    ['pipeline-commitImplementationIfNeeded.mmd', 'COMMIT_IMPLEMENTATION_IF_NEEDED'],
+    ['pipeline-fixImplementTaskTests.mmd', 'FIX_IMPLEMENT_TASK_TESTS'],
+    ['pipeline-codexReviewsTests.mmd', 'CODEX_REVIEWS_TESTS'],
+    ['pipeline-areTestsFlagged.mmd', 'ARE_TESTS_FLAGGED'],
+    ['pipeline-fixConflicts.mmd', 'FIX_CONFLICTS'],
+    ['pipeline-commitMergeConflictFixIfNeeded.mmd', 'COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED'],
+    ['pipeline-fixTheCodebaseForSuite.mmd', 'FIX_THE_CODEBASE_FOR_SUITE'],
+    ['pipeline-runFullSuite.mmd', 'COMMIT_SUITE_FIX_IF_NEEDED'],
+    ['pipeline-lockSourceRepo.mmd', 'LOCK_SOURCE_REPO'],
+    ['pipeline-rebase.mmd', 'REBASE_ONTO_TARGET_BRANCH'],
+    ['pipeline-reportOnlyExit.mmd', 'REPORT_ONLY_EXIT'],
+    ['pipeline-failuresExit.mmd', 'FAILURES_EXIT'],
+    ['pipeline-mergeSucceededExit.mmd', 'MERGE_SUCCEEDED_EXIT'],
+    ['prompts/planPrompt.mmd', 'prompt: planPrompt'],
+    ['prompts/FixConflictsBodyEmitter.mmd', 'prompt: fixConflicts'],
+    ['prompts/CodexTestReviewBodyEmitter.mmd', 'prompt: reviewTests'],
+    ['prompts/CodexReviewBodyEmitter.mmd', 'prompt: reviewPlan'],
+    ['prompts/IMPLEMENT_TASK.mmd', 'prompt: implementTask'],
+    ['prompts/FIX_IMPLEMENT_TASK_TESTS.mmd', 'prompt: fixTaskTests'],
+    ['prompts/FIX_THE_CODEBASE_FOR_SUITE.mmd', 'prompt: suiteFix'],
+  ].map(([href, label]) =>
+    `<a href="?${href}"${href === file ? ' aria-current="page"' : ''}>${label}</a>`).join('')
+  let last = null
+  setInterval(async () => {
+    const src = await (await fetch(file + '?t=' + Date.now())).text()
+    if (src === last) return
+    last = src
+    try {
+      const { svg } = await mermaid.render('g' + Date.now(), src)
+      d.innerHTML = svg
+      err.textContent = ''
+    } catch (e) { err.textContent = e.message }
+  }, 400)
+</script>

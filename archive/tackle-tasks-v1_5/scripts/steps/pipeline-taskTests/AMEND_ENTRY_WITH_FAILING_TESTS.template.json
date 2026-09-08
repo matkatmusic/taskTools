@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "ARE_2_TEST_FIXES_DONE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "exitType": "",
+        "exitNote": "",
+        "next": "AMEND_ENTRY_WITH_FAILING_TESTS"
+    },
+    "output": {
+        "box": "AMEND_ENTRY_WITH_FAILING_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "amendFailingTests": true
+    }
+}

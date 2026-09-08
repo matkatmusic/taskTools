@@ -1,0 +1,20 @@
+{
+    "input": {
+        "taskNumber": 1,
+        "tasksFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures/.taskTools/tasks.json"
+    },
+    "output": {
+        "box": "PREAMBLE_STATUS_CHECK",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "IS_TASK_BLOCKED_Q"
+    }
+}

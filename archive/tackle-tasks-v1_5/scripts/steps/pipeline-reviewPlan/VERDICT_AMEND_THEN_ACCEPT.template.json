@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "WHAT_IS_REVIEW_VERDICT",
+        "scriptSignal": "continue",
+        "next": "VERDICT_AMEND_THEN_ACCEPT",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "reviewOutputFile": "/repo/.worktrees/task-42/plans/codex-review.json",
+        "verdict": "AMEND_THEN_ACCEPT",
+        "notes": "[step-1] Add the missing export.\n\nDurable because: the plan now matches the source"
+    },
+    "output": {
+        "box": "VERDICT_AMEND_THEN_ACCEPT",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "planFile": "/repo/.worktrees/task-42/plans/plan.json",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    }
+}

@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatReport, rateAndPersist } from "../scripts/rateTask.ts";
-import type { TaskRecord } from "../scripts/taskFiles.ts";
+import { formatReport, rateAndPersist } from "../scripts/rate-task/rateTask.ts";
+import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
 
 const sprawlingTask: TaskRecord = {
     taskNumber: 1,
@@ -16,14 +16,14 @@ const sprawlingTask: TaskRecord = {
         "- update the docs",
         "- update the CLI scripts",
     ].join("\n"),
-    files: ["src/foo.ts", "tests/foo.test.ts", "docs/foo.md", "scripts/bar.ts"],
+    modifiableFiles: ["src/foo.ts", "tests/foo.test.ts", "docs/foo.md", "scripts/bar.ts"],
 };
 
 const mechanicalTask: TaskRecord = {
     taskNumber: 2,
     title: "One-line mechanical task",
     description: "Rename variable x to y.",
-    files: ["src/foo.ts"],
+    modifiableFiles: ["src/foo.ts"],
 };
 
 const hardAtomicTask: TaskRecord = {
@@ -35,14 +35,14 @@ const hardAtomicTask: TaskRecord = {
         "- handle the concurrent-cancel edge case",
         "- handle the partial-write edge case",
     ].join("\n"),
-    files: ["src/stateMachine.ts"],
+    modifiableFiles: ["src/stateMachine.ts"],
 };
 
 const thresholdTask: TaskRecord = {
     taskNumber: 4,
     title: "Two related tweaks to one module",
     description: ["Update the module in two ways.", "- adjust the parser", "- adjust the formatter"].join("\n"),
-    files: ["src/foo.ts", "src/bar.ts"],
+    modifiableFiles: ["src/foo.ts", "src/bar.ts"],
 };
 
 function writeFixture(tasks: TaskRecord[]): string {

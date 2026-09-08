@@ -1,0 +1,26 @@
+{
+    "input": {
+        "box": "WHAT_IS_PUBLICATION_STATE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "branch": "main",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "MERGE_SUCCEEDED_EXIT",
+        "scriptSignal": "continue",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/mergeSucceededExit/fixtures",
+        "branch": "main",
+        "exitNote": "All layers merged successfully.",
+        "commits": [
+            { "occurrenceId": "", "hash": "abc1234", "kind": "merge" }
+        ]
+    }
+}

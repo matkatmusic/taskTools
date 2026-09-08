@@ -1,8 +1,8 @@
 // baseReconciliation.ts: base/recorded-OID reconciliation gate for repeated repositories.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createEmptyResolutionManifest, applyBaseReconciliationAnswers, createBaseReconciliationRequest, recordBaseReconciliationRequest } from "../scripts/resolutionRequests.ts";
-import { checkBaseReconciliation, assertBaseReconciled } from "../scripts/baseReconciliation.ts";
+import { createEmptyResolutionManifest, applyBaseReconciliationAnswers, createBaseReconciliationRequest, recordBaseReconciliationRequest } from "../scripts/shared/resolutionRequests.ts";
+import { checkBaseReconciliation, assertBaseReconciled } from "../scripts/shared/baseReconciliation.ts";
 
 // Zero occurrences is a caller bug, not a reconciliation question — fail loudly.
 test("checkBaseReconciliation throws when given zero occurrences", () => {

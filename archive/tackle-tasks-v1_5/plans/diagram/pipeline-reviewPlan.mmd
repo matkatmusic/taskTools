@@ -1,0 +1,68 @@
+flowchart TB
+%% REVIEW PLAN PIPELINE. Split from pipeline-planning.mmd.
+%% ---
+%% Input: a draft plan from the plan pipeline.
+%% ---
+%% One job: decide whether the plan is good enough to implement.
+%% ---
+%% Codex gets two reviews. On the second one the pipeline aborts.
+%% ---
+%% AMEND_THEN_ACCEPT: the script already wrote codex's fixes into the plan, so implement reads them.
+%% ---
+%% ERROR means the reviewer never read the plan, so no ruling was possible.
+%% ---
+%% "update tasks.json entry" writes codex's notes into the entry.
+%% ---
+%% It also raises the review counter by one.
+%% ---
+%% The planner reads that entry, so the replan is not a bare retry.
+%% ---
+%% A script that fails operationally exits the run as run-failed.
+%% ---
+%% Exit types this pipeline can produce:
+%% ---
+%% plan-scrapped - codex did not accept the plan in two reviews
+%% ---
+%% run-failed - a script failed operationally
+
+  DRAFT_PLAN_INPUT["Input: { tasks.json entry, plan }"] --> CODEX_REVIEWS_PLAN
+  CODEX_REVIEWS_PLAN["codex reviews the plan"] --> WHAT_IS_REVIEW_VERDICT{"what is the review verdict?"}
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_ACCEPT["ACCEPT"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_AMEND_THEN_ACCEPT["AMEND_THEN_ACCEPT"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_AMEND["AMEND"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_SCRAP["SCRAP"]
+  WHAT_IS_REVIEW_VERDICT --> VERDICT_ERROR["ERROR"]
+
+  VERDICT_ACCEPT --> IMPLEMENT_PIPELINE["implement pipeline"]
+  VERDICT_AMEND_THEN_ACCEPT --> IMPLEMENT_PIPELINE
+
+  VERDICT_ERROR -- "exit type: run-failed<br/>exit note: the plan review<br/>could not run" --> EXIT_WORKFLOW_REVIEW_PLAN
+
+  VERDICT_AMEND --> UPDATE_TASK_ENTRY
+  VERDICT_SCRAP --> UPDATE_TASK_ENTRY
+  UPDATE_TASK_ENTRY["update tasks.json entry"] --> ARE_2_REVIEWS_DONE{"2 codex reviews done?"}
+  ARE_2_REVIEWS_DONE -- "NO<br/>replan against the amended entry" --> PLAN_PIPELINE["plan pipeline"]
+  ARE_2_REVIEWS_DONE -- "YES<br/>exit type: plan-scrapped<br/>exit note: codex did not accept<br/>the plan in two reviews" --> EXIT_WORKFLOW_REVIEW_PLAN
+
+  EXIT_WORKFLOW_REVIEW_PLAN["failures exit"]
+
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red replans, or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class WHAT_IS_REVIEW_VERDICT,ARE_2_REVIEWS_DONE decision
+  class UPDATE_TASK_ENTRY script
+  class CODEX_REVIEWS_PLAN agent
+  class CODEX_REVIEWS_PLAN returns_a_prompt
+  class PLAN_PIPELINE,IMPLEMENT_PIPELINE pipeline
+  class VERDICT_ACCEPT,VERDICT_AMEND_THEN_ACCEPT pass
+  class VERDICT_AMEND,VERDICT_SCRAP,VERDICT_ERROR nopass
+  class EXIT_WORKFLOW_REVIEW_PLAN fail
+  class DRAFT_PLAN_INPUT output

@@ -1,0 +1,31 @@
+flowchart TB
+%% One agent() call. /run-step starts at WHAT_IS_REVIEW_VERDICT. Every path ends at an orange block or a dashed block.
+
+  subgraph whatIsReviewVerdict ["Input: [CODEX_REVIEWS_PLAN]'s result, or [IS_PLAN_APPROVED_BY_DEFAULT_Q]'s approved review"]
+    direction TB
+    WHAT_IS_REVIEW_VERDICT["WHAT_IS_REVIEW_VERDICT"]
+    UPDATE_TASKS_JSON["update tasks.json entry"]
+    TWO_CODEX_REVIEWS_COMPLETED_Q["2 codex reviews completed?"]
+  end
+  subgraph whatIsReviewVerdictNext ["next diagram"]
+    direction TB
+    IS_DIFFICULTY_7_PLUS_Q["IS_DIFFICULTY_7_PLUS_Q"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
+  end
+  whatIsReviewVerdict ~~~ whatIsReviewVerdictNext
+
+  WHAT_IS_REVIEW_VERDICT -- "ACCEPT<br/>AMEND_THEN_ACCEPT" --> IMPLEMENT_TASK
+  WHAT_IS_REVIEW_VERDICT -- "AMEND<br/>SCRAP" --> UPDATE_TASKS_JSON
+  UPDATE_TASKS_JSON --> TWO_CODEX_REVIEWS_COMPLETED_Q
+  TWO_CODEX_REVIEWS_COMPLETED_Q -- "NO<br/>replan with codex's notes" --> IS_DIFFICULTY_7_PLUS_Q
+  TWO_CODEX_REVIEWS_COMPLETED_Q -- "YES<br/>plan-scrapped" --> FAILURES_EXIT
+  WHAT_IS_REVIEW_VERDICT -- "ERROR<br/>run-failed" --> FAILURES_EXIT
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class WHAT_IS_REVIEW_VERDICT,UPDATE_TASKS_JSON,TWO_CODEX_REVIEWS_COMPLETED_Q script
+  class IS_DIFFICULTY_7_PLUS_Q,FAILURES_EXIT,IMPLEMENT_TASK next_diagram

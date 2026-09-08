@@ -6,9 +6,9 @@ import {
     produceFileHunterPrompt,
     produceBlockerHunterPrompt,
     getOpenTaskLines,
-} from "../scripts/create-task_AgentPromptEmitter.ts";
+} from "../scripts/create-task/create-task_AgentPromptEmitter.ts";
 
-const scriptPath = fileURLToPath(new URL("../scripts/create-task_AgentPromptEmitter.ts", import.meta.url));
+const scriptPath = fileURLToPath(new URL("../scripts/create-task/create-task_AgentPromptEmitter.ts", import.meta.url));
 
 test("test_produceFileHunterPromptEndsWithTheTaskTemplate", () => {
     const taskTemplate = '{"taskNumber": 1}';
@@ -27,10 +27,9 @@ test("test_produceBlockerHunterPromptEndsWithTheOpenTaskLines", () => {
     assert.ok(prompt.trimEnd().endsWith(openTaskLines.trimEnd()));
 });
 
-test("test_produceBlockerHunterPromptAsksForTaskNumNotTaskNumber", () => {
+test("test_produceBlockerHunterPromptAsksForTaskNumber", () => {
     const prompt = produceBlockerHunterPrompt("test task", "OPEN 1: do a thing");
-    assert.ok(prompt.includes("taskNum"));
-    assert.ok(!prompt.includes("taskNumber"));
+    assert.ok(prompt.includes("taskNumber"));
 });
 
 test("test_produceFileHunterPromptEmbedsTheTaskDescription", () => {

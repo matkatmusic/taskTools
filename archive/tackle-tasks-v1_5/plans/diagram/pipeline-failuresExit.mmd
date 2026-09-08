@@ -1,0 +1,85 @@
+flowchart TB
+%% FAILURES EXIT.
+%% ---
+%% Input: an exit type and exit note, task already active.
+%% ---
+%% The lease and the source lock are two independent holdings.
+%% ---
+%% Neither's release gates the other's; each checks its own owner.
+%% ---
+%% See releaseTaskRunHolds.ts.
+%% ---
+%% "mark task inactive" runs before the lease and lock release chain.
+%% ---
+%% Marking inactive is what reopens the task to another run.
+%% ---
+%% Every mutating box here is reconciled, not retried.
+%% ---
+%% Only an ambiguous read is run-failed, reported to the operator.
+%% ---
+%% See reconcileStep.ts.
+%% ---
+%% The worktree is NEVER removed here; only the merge succeeded exit removes one.
+%% ---
+%% This tail asks GIT what landed, not whether exit type is completed.
+%% ---
+%% completed is written long after the merge, so a gap failure must not reopen it.
+%% ---
+%% Did ANY work land? YES: keep completed if present, else write partially-published.
+%% ---
+%% Either way the incoming exit type is discarded, run-failed included.
+%% ---
+%% cleanup-incomplete and partially-published both mean RECOVERY ONLY.
+%% ---
+%% Exit types reaching this tail:
+%% ---
+%% plan-scrapped
+%% ---
+%% clarify-stuck
+%% ---
+%% fence-violation
+%% ---
+%% partially-published
+%% ---
+%% tests-red
+%% ---
+%% tests-flagged
+%% ---
+%% rebase-stuck
+%% ---
+%% suite-red
+%% ---
+%% merge-failed
+%% ---
+%% agent-failed
+%% ---
+%% run-failed
+
+  EXIT_TYPE_NOTE_INPUT["Input: { exit type, exit note }"] --> READ_FAILURES_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+  READ_FAILURES_PUBLICATION_STATE --> DID_ANY_WORK_LAND{"did ANY of this task's work land?"}
+  DID_ANY_WORK_LAND -->|YES| WRITE_PUBLICATION_OUTCOME["write the publication outcome:<br/>keep completed if it is there, else write<br/>partially-published. NEVER run-failed.<br/>add cleanup-incomplete and the note"]
+  DID_ANY_WORK_LAND -->|NO| WRITE_EXIT_TYPE_AND_NOTE["write exit type and exit notes to tasks.json"]
+
+  WRITE_PUBLICATION_OUTCOME --> RECORD_MODIFIED_FILES_FAILURE
+
+  WRITE_EXIT_TYPE_AND_NOTE --> RECORD_MODIFIED_FILES_FAILURE
+
+  RECORD_MODIFIED_FILES_FAILURE["record modified files to tasks.json"] --> MARK_TASK_INACTIVE_FAILURE["mark task inactive in tasks.json"]
+  MARK_TASK_INACTIVE_FAILURE --> DOES_RUN_HOLD_LEASE{"does this run still hold<br/>the worktree lease?"}
+  DOES_RUN_HOLD_LEASE -->|YES| RELEASE_WORKTREE_LEASE["release the worktree lease,<br/>keep the worktree"]
+  DOES_RUN_HOLD_LEASE -->|NO| DOES_RUN_HOLD_SOURCE_LOCK
+  RELEASE_WORKTREE_LEASE --> DOES_RUN_HOLD_SOURCE_LOCK
+
+  DOES_RUN_HOLD_SOURCE_LOCK{"does this run still hold<br/>the source repo lock?"} -->|YES| RELEASE_SOURCE_LOCK["release the source repo lock"]
+  DOES_RUN_HOLD_SOURCE_LOCK -->|NO| REPORT_EXIT_TYPE_AND_NOTE["report the run's exit type and note"]
+  RELEASE_SOURCE_LOCK --> REPORT_EXIT_TYPE_AND_NOTE
+  REPORT_EXIT_TYPE_AND_NOTE --> STOP["stop"]
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class DOES_RUN_HOLD_LEASE,DOES_RUN_HOLD_SOURCE_LOCK,DID_ANY_WORK_LAND decision
+  class READ_FAILURES_PUBLICATION_STATE,WRITE_EXIT_TYPE_AND_NOTE,RECORD_MODIFIED_FILES_FAILURE,MARK_TASK_INACTIVE_FAILURE,RELEASE_WORKTREE_LEASE,RELEASE_SOURCE_LOCK,REPORT_EXIT_TYPE_AND_NOTE,WRITE_PUBLICATION_OUTCOME,STOP script
+  class EXIT_TYPE_NOTE_INPUT output

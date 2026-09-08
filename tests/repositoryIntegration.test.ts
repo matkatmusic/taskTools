@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareNoFfMerge, substituteGitlink, substituteGitlinksRecursively } from "../scripts/repositoryIntegration.ts";
+import { prepareNoFfMerge, substituteGitlink, substituteGitlinksRecursively } from "../scripts/shared/repositoryIntegration.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });

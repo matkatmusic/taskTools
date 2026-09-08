@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "WAS_LOCK_ACQUIRED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    },
+    "output": {
+        "box": "HAS_LOCK_WAIT_DEADLINE_PASSED_Q",
+        "scriptSignal": "continue",
+        "next": "WAIT_FOR_LOCK",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z"
+    }
+}

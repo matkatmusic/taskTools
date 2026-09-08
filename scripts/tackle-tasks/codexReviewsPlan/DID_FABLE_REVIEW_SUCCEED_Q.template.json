@@ -1,0 +1,36 @@
+{
+    "input": {
+        "box": "CODEX_REVIEW_FALLBACK_FABLE",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree/plans/plan.json",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree/plans/codex-review.json",
+            "fableSucceeded": true
+        }
+    },
+    "output": {
+        "box": "DID_FABLE_REVIEW_SUCCEED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree",
+        "branch": "main",
+        "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree/plans/plan.json",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsPlan/fixtures/worktree/plans/codex-review.json"
+        },
+        "next": "pipeline-whatIsReviewVerdict.mmd::WHAT_IS_REVIEW_VERDICT"
+    }
+}

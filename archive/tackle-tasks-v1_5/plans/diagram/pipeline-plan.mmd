@@ -1,0 +1,52 @@
+flowchart TB
+%% PLAN PIPELINE. Split from pipeline-planning.mmd.
+%% ---
+%% Input: a task entry and the auto generated docs.
+%% ---
+%% One job: turn the tasks.json entry into a plan file.
+%% ---
+%% CLARIFY is capped at 2 rounds, counted within this run only.
+%% ---
+%% The clarify request is written into the tasks.json entry first.
+%% ---
+%% Without it, document generation cannot know what to rebuild.
+%% ---
+%% A script that fails operationally exits the run as run-failed.
+%% ---
+%% Exit types this pipeline can produce:
+%% ---
+%% clarify-stuck - the planner asked twice for what the docs cannot supply
+
+  DOCS_INPUT["Input: { brief, docs, codexNotes? }"] --> PLAN_THE_TASK
+  PLAN_THE_TASK["plan the task"] --> WHAT_DID_THE_PLANNER_RETURN{"what did the planner return?"}
+  WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_PLAN["PLAN"]
+  WHAT_DID_THE_PLANNER_RETURN --> PLANNER_RETURNED_CLARIFY["CLARIFY"]
+
+  PLANNER_RETURNED_PLAN --> REVIEW_PLAN_PIPELINE["review plan pipeline"]
+
+  PLANNER_RETURNED_CLARIFY --> ARE_2_CLARIFY_ROUNDS_DONE{"2 clarify rounds done?"}
+  ARE_2_CLARIFY_ROUNDS_DONE -->|NO| WRITE_CLARIFY_REQUEST["write the clarify request<br/>into the tasks.json entry"]
+  ARE_2_CLARIFY_ROUNDS_DONE -- "YES<br/>exit type: clarify-stuck<br/>exit note: the planner asked twice for<br/>something the docs cannot supply.<br/>worktree preserved." --> EXIT_WORKFLOW_PLAN
+  WRITE_CLARIFY_REQUEST -- "docs mode: UPDATE<br/>clarify request" --> DOCUMENT_GENERATION_PIPELINE["document generation pipeline"]
+
+  EXIT_WORKFLOW_PLAN["failures exit"]
+
+  %% Green heads for the next pipeline.
+  %% ---
+  %% Red ends in an exit.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef agent fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  class WHAT_DID_THE_PLANNER_RETURN,ARE_2_CLARIFY_ROUNDS_DONE decision
+  class PLAN_THE_TASK returns_a_prompt
+  class WRITE_CLARIFY_REQUEST script
+  class REVIEW_PLAN_PIPELINE,DOCUMENT_GENERATION_PIPELINE pipeline
+  class PLANNER_RETURNED_PLAN,PLANNER_RETURNED_CLARIFY pass
+  class EXIT_WORKFLOW_PLAN fail
+  class DOCS_INPUT output

@@ -1,0 +1,39 @@
+flowchart TB
+%% MERGE SUCCEEDED EXIT.
+%% ---
+%% Input: the merge receipt.
+%% ---
+%% "Write exit type completed" runs right after the merge hashes are recorded, before any release.
+%% ---
+%% Every box after it is cleanup of work that already landed.
+%% ---
+%% The task stays active until "mark task inactive", near the end.
+%% ---
+%% A run dying before then leaves the task active.
+%% ---
+%% That is not what makes a dead run safe.
+%% ---
+%% The merge's layer refs make it safe.
+%% ---
+%% The failures exit reads them, sees landed work, finishes the job.
+%% ---
+%% See pipeline-preambleStatusCheck.mmd for the one gap this leaves.
+%% ---
+%% "Clean up" is the only box that releases the source lock and lease.
+%% ---
+%% Exit type: completed.
+
+  MERGE_RECEIPT_INPUT["Input: { merge commit hashes,<br/>modified files }"] --> RECORD_MERGE_COMMIT_HASHES["record merge commit hashes to tasks.json"]
+  RECORD_MERGE_COMMIT_HASHES --> WRITE_EXIT_TYPE_COMPLETED["write exit type completed to tasks.json"]
+  WRITE_EXIT_TYPE_COMPLETED --> RECORD_MODIFIED_FILES_SUCCESS["record modified files to tasks.json"]
+  RECORD_MODIFIED_FILES_SUCCESS --> CLEAN_UP_WORKTREES["clean up worktrees, leases,<br/>persistence refs and source lock"]
+  CLEAN_UP_WORKTREES --> BUILD_CLOSURE_NOTE["build the closure note from the recorded run"]
+  BUILD_CLOSURE_NOTE --> MARK_TASK_INACTIVE_SUCCESS["mark task inactive in tasks.json"]
+  MARK_TASK_INACTIVE_SUCCESS --> ARCHIVE_TASK["move task to completedTasks.json<br/>and update tasks blocked by it"]
+  ARCHIVE_TASK --> REPORT_CLOSURE_NOTE["report the closure note"]
+  REPORT_CLOSURE_NOTE --> STOP["stop"]
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  class RECORD_MERGE_COMMIT_HASHES,WRITE_EXIT_TYPE_COMPLETED,RECORD_MODIFIED_FILES_SUCCESS,CLEAN_UP_WORKTREES,BUILD_CLOSURE_NOTE,MARK_TASK_INACTIVE_SUCCESS,ARCHIVE_TASK,REPORT_CLOSURE_NOTE,STOP script
+  class MERGE_RECEIPT_INPUT output

@@ -1,0 +1,12 @@
+{
+    "input": {
+        "taskNumber": 0,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json"
+    },
+    "output": {
+        "box": "PREAMBLE_TASK_NUMBER_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "tasksFile": ""
+    }
+}

@@ -1,0 +1,43 @@
+{
+    "input": {
+        "box": "CONTINUE_REBASE",
+        "scriptSignal": "continue",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": true,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "IS_REBASE_FINISHED",
+        "scriptSignal": "continue",
+        "next": "SUITE_PIPELINE",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": true,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

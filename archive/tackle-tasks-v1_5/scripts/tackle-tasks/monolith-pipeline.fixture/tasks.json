@@ -1,0 +1,335 @@
+[
+    {
+        "taskNumber": 1,
+        "title": "no worktree yet: create it, AUTOGEN docs",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 2,
+        "title": "blocked by task 1, which is still open",
+        "files": [
+            "src/b.ts"
+        ],
+        "blockedBy": [
+            {
+                "taskNum": 1
+            }
+        ],
+        "hasTests": true
+    },
+    {
+        "taskNumber": 3,
+        "title": "a previous run left it active",
+        "files": [
+            "src/c.ts"
+        ],
+        "run": {
+            "active": true
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 4,
+        "title": "worktree exists but is broken: reset it, AUTOGEN docs",
+        "files": [
+            "src/d.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-4",
+            "worktreeSafe": false
+        },
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 5,
+        "title": "safe worktree, but no run recorded a stopping point",
+        "files": [
+            "src/e.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-5",
+            "worktreeSafe": true,
+            "history": []
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 6,
+        "title": "safe and resumable, but it touched a file outside the fence",
+        "files": [
+            "src/f.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-6",
+            "worktreeSafe": true,
+            "history": [
+                {
+                    "endedAt": "2026-08-24T00:00:00Z",
+                    "implementationNotesFile": ".taskTools/worktrees/task-6/plans/notes.md"
+                }
+            ],
+            "touchedFiles": [
+                "src/f.ts",
+                "src/not-mine.ts"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 7,
+        "title": "safe, resumable, inside the fence: UPDATE docs",
+        "files": [
+            "src/g.ts"
+        ],
+        "run": {
+            "active": false,
+            "worktree": ".taskTools/worktrees/task-7",
+            "worktreeSafe": true,
+            "history": [
+                {
+                    "endedAt": "2026-08-24T00:00:00Z",
+                    "implementationNotesFile": ".taskTools/worktrees/task-7/plans/notes.md"
+                }
+            ],
+            "touchedFiles": [
+                "src/g.ts"
+            ]
+        },
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 8,
+        "title": "50-section plan: 2 fixes is AMEND_THEN_ACCEPT by percentage, not AMEND by fix count",
+        "files": [
+            "src/h.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "AMEND"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "50"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 9,
+        "title": "task tests fail once: IMPLEMENT_TASK runs twice",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "DO_TASK_TESTS_PASS": [
+                "NO",
+                "YES"
+            ],
+            "CODEX_REVIEWS_TESTS": [
+                "NO"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "hasTests": true
+    },
+    {
+        "taskNumber": 10,
+        "title": "tests field skip: no task tests, no codex test review",
+        "files": [
+            "src/a.ts"
+        ],
+        "sim": {
+            "PLAN_THE_TASK": [
+                "PLAN"
+            ],
+            "CODEX_REVIEWS_PLAN": [
+                "ACCEPT"
+            ],
+            "IMPLEMENT_TASK": [
+                "done"
+            ],
+            "WAS_LOCK_ACQUIRED": [
+                "YES"
+            ],
+            "DID_REBASE_REPORT_CONFLICTS": [
+                "NO"
+            ],
+            "DO_ALL_TESTS_PASS": [
+                "YES"
+            ],
+            "DID_CHANGES_STAY_INSIDE_FENCE": [
+                "YES"
+            ],
+            "WHAT_IS_PUBLICATION_STATE": [
+                "ALL LANDED"
+            ],
+            "HOW_MANY_PLAN_SECTIONS": [
+                "3"
+            ]
+        },
+        "hasTests": false
+    }
+]

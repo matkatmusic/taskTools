@@ -1,0 +1,22 @@
+flowchart TB
+%% One orange block. The hook walks in from a dashed FIX_IMPLEMENT_TASK_TESTS block, prints the prompt, and stops.
+
+  subgraph fixImplementTaskTests ["Input: the amended entry's failing tests"]
+    direction TB
+    FIX_IMPLEMENT_TASK_TESTS["FIX_IMPLEMENT_TASK_TESTS"]
+  end
+  subgraph fixImplementTaskTestsNext ["next diagram"]
+    direction TB
+    COMMIT_TEST_FIX_IF_NEEDED["COMMIT_TEST_FIX_IF_NEEDED"]
+  end
+  fixImplementTaskTests ~~~ fixImplementTaskTestsNext
+
+  FIX_IMPLEMENT_TASK_TESTS --> COMMIT_TEST_FIX_IF_NEEDED
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class FIX_IMPLEMENT_TASK_TESTS returns_a_prompt
+  class COMMIT_TEST_FIX_IF_NEEDED next_diagram

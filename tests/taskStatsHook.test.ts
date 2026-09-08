@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { computeTaskStats, formatTaskStats } from "../scripts/taskStats.ts";
-import { readTaskFile, resolveTaskFiles } from "../scripts/taskFiles.ts";
+import { computeTaskStats, formatTaskStats } from "../scripts/hooks/taskStats.ts";
+import { readTaskFile, resolveTaskFiles } from "../scripts/shared/taskFiles.ts";
 
-const hookPath = fileURLToPath(new URL("../scripts/taskStatsHook.ts", import.meta.url));
+const hookPath = fileURLToPath(new URL("../scripts/hooks/taskStatsHook.ts", import.meta.url));
 const repoRoot = process.cwd();
 
 test("resolves task files from payload.cwd, not the process cwd", () => {

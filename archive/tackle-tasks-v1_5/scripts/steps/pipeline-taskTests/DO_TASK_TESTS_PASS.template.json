@@ -1,0 +1,22 @@
+{
+    "input": {
+        "box": "RUN_TASK_TESTS",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "passed": true
+    },
+    "output": {
+        "box": "DO_TASK_TESTS_PASS",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "worktreePath": "/abs/worktree",
+        "sourceBranch": "main",
+        "projectRoot": "/abs/project",
+        "next": "REVIEW_TESTS_PIPELINE"
+    }
+}

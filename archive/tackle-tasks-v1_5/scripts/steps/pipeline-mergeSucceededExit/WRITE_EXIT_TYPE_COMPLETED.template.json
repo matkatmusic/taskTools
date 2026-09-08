@@ -1,0 +1,21 @@
+{
+    "input": {
+        "box": "RECORD_MERGE_COMMIT_HASHES",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "rootSourceBranch": "main",
+        "exitNote": "All layers merged successfully."
+    },
+    "output": {
+        "box": "WRITE_EXIT_TYPE_COMPLETED",
+        "scriptSignal": "continue",
+        "projectRoot": "/tmp/example-project",
+        "taskNumber": 42,
+        "runId": "run-abc123",
+        "worktreePath": "/tmp/example-project/.worktrees/task-42",
+        "rootSourceBranch": "main"
+    }
+}

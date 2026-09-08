@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug monolith-pipeline",
+            "program": "${workspaceFolder}/scripts/tackle-tasks/monolith-pipeline.ts",
+            "args": ["${input:taskNumber}", "scripts/tackle-tasks/monolith-pipeline.fixture/tasks.json"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**"]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "taskNumber",
+            "type": "promptString",
+            "description": "task number from monolith-pipeline.fixture/tasks.json (1 to 7, or 99 for a missing one)",
+            "default": "7"
+        }
+    ]
+}

@@ -1,0 +1,17 @@
+{
+    "input": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "next": "REPORT_ONLY_EXIT",
+        "taskNumber": 0,
+        "tasksFile": "",
+        "exitType": "already-active",
+        "exitNote": "a previous run left the task active"
+    },
+    "output": {
+        "box": "REPORT_ONLY_EXIT",
+        "scriptSignal": "continue",
+        "exitType": "already-active",
+        "exitNote": "a previous run left the task active"
+    }
+}

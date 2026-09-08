@@ -1,0 +1,24 @@
+{
+    "input": {
+        "box": "UPDATE_TASK_ENTRY",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "reviewCount": 1,
+        "runId": "run-1",
+        "sourceBranch": "main"
+    },
+    "output": {
+        "box": "ARE_2_REVIEWS_DONE",
+        "scriptSignal": "continue",
+        "next": "PLAN_PIPELINE",
+        "taskNumber": 42,
+        "taskStateRoot": "/repo",
+        "repoRoot": "/repo/.worktrees/task-42",
+        "exitType": "",
+        "exitNote": "",
+        "runId": "run-1",
+        "sourceBranch": "main"
+    }
+}

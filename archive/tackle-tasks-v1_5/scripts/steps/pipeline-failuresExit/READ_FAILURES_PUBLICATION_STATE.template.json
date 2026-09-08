@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "EXIT_TYPE_NOTE_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": ".",
+        "worktree": ".",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally"
+    },
+    "output": {
+        "box": "READ_FAILURES_PUBLICATION_STATE",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": ".",
+        "worktree": ".",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "NONE LANDED"
+    }
+}

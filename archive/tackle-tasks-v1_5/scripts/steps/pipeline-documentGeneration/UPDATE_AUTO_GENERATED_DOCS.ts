@@ -1,0 +1,18 @@
+// UPDATE_AUTO_GENERATED_DOCS, from pipeline-documentGeneration.mmd — ported from tackle-tasks/updateTaskDocs.ts.
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { SCRIPT_SIGNAL } from "../../contracts.ts";
+import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "../../tackle-tasks/writeTaskBrief.ts";
+import type { DocsPacket } from "./WORKTREE_DOCS_MODE_INPUT.ts";
+
+export function main(input: string): Record<string, unknown> {
+    // The incoming packet may carry a decision predecessor's `next`; this box has one successor.
+    const { next: _next, ...packet } = JSON.parse(input) as DocsPacket & { next?: string };
+    configureGeneratedArtifactIsolation(packet.taskNumber, packet.worktree);
+    const briefFile = writeTaskBriefToDisk(packet.taskNumber, packet.worktree, packet.projectRoot);
+    return { ...packet, box: "UPDATE_AUTO_GENERATED_DOCS", scriptSignal: SCRIPT_SIGNAL.CONTINUE, briefFile };
+}
+
+// realpathSync on both sides: a symlinked folder makes argv[1] and import.meta.url disagree.
+if (realpathSync(process.argv[1]!) === realpathSync(fileURLToPath(import.meta.url)))
+    console.log(JSON.stringify(main(process.argv[2] ?? "")));

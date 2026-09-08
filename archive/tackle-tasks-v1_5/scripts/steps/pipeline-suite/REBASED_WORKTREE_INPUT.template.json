@@ -1,0 +1,34 @@
+{
+    "input": {
+        "box": "SUITE_PIPELINE",
+        "scriptSignal": "continue",
+        "projectRoot": "scripts/steps/pipeline-suite/fixtures",
+        "worktreePath": "scripts/steps/pipeline-suite/fixtures/worktree",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": false,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "",
+        "conflictedFilePaths": [],
+        "finished": true,
+        "failureReason": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "REBASED_WORKTREE_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "rootSourceBranch": "main",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0
+    }
+}

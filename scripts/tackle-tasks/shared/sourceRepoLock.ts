@@ -1,0 +1,283 @@
+// Durable heartbeat lock on the source repo, held through a task workflow run's rebase tail. See plans/diagram/pipeline.mmd rule 9.
+import {
+    closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync,
+    renameSync, statSync, unlinkSync, writeFileSync,
+} from "node:fs";
+import { randomBytes } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
+
+export type LockOwner = string; // `${runId}:${taskNumber}`
+export type LockFile = { owner: LockOwner; acquiredAt: string; heartbeatAt: string };
+
+export type AcquireOutcome =
+    | { status: "acquired" }
+    | { status: "already-held-by-me" }
+    | { status: "held"; owner: LockOwner; heartbeatAt: string }
+    | { status: "recoverable"; owner: LockOwner; heartbeatAt: string };
+
+// Comfortably longer than the slowest single box, far shorter than a whole run tail.
+export const STALE_HEARTBEAT_MS = 15 * 60 * 1000;
+
+const MUTATION_GUARD_TIMEOUT_MS = 10_000;
+const WAIT = new Int32Array(new SharedArrayBuffer(4));
+
+export function buildLockOwner(runId: string, taskNumber: number): LockOwner {
+    return `${runId}:${taskNumber}`;
+}
+
+// A linked worktree's .git is a file holding "gitdir: <path>"; the lock lives in that path.
+function sourceRepoGitDir(projectRoot: string): string {
+    const dotGit = join(projectRoot, ".git");
+    if (statSync(dotGit).isDirectory()) return dotGit;
+    return resolve(projectRoot, readFileSync(dotGit, "utf8").replace(/^gitdir:\s*/, "").trim());
+}
+
+// Under <projectRoot>/.git, resolved via a linked worktree's .git file, so it keys to the one real source repo.
+function sourceRepoLockPath(projectRoot: string): string {
+    return join(sourceRepoGitDir(projectRoot), "taskTools-source.lock");
+}
+
+// Own path, distinct from the durable lock and from taskStateLockPath: this guard only makes one read/validate/write transition indivisible, it never spans boxes.
+function sourceRepoLockMutationGuardPath(projectRoot: string): string {
+    return join(sourceRepoGitDir(projectRoot), "taskTools-source.lock.mutation-guard");
+}
+
+export function readSourceRepoLock(projectRoot: string): LockFile | null {
+    const lockPath = sourceRepoLockPath(projectRoot);
+    if (!existsSync(lockPath)) return null;
+    return JSON.parse(readFileSync(lockPath, "utf8")) as LockFile;
+}
+
+// Test-only pause seam: busy-wait until `signalPath` exists. Lets a test hold this process inside the guard while a concurrent process observes or queues behind it.
+function waitForTestSignal(signalPath: string | undefined): void {
+    if (signalPath === undefined) return;
+    writeFileSync(`${signalPath}.arrived.${process.pid}`, "");
+    while (!existsSync(signalPath)) {
+        Atomics.wait(WAIT, 0, 0, 5);
+    }
+}
+
+export type SourceRepoLockTestHooks = {
+    pauseBeforePublishUntilExists?: string;
+    pauseAfterValidateUntilExists?: string;
+    pauseAfterDeadGuardCheckUntilExists?: string;
+    failTempWriteBeforeFsync?: boolean;
+};
+
+function isPidAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== "ESRCH";
+    }
+}
+
+// A guard whose ownership data cannot be read (bad JSON, or JSON with no numeric pid) is corrupt, not evidence of anything — it throws, naming the guard path and its raw bytes, rather than being silently folded into "not reclaimable".
+function parseMutationGuardPid(guardPath: string, raw: string): number {
+    let parsed: { pid?: unknown };
+    try {
+        parsed = JSON.parse(raw);
+    } catch (error) {
+        throw new Error(`source-lock mutation guard at "${guardPath}" is not valid JSON: ${raw}`, { cause: error });
+    }
+    if (typeof parsed.pid !== "number") {
+        throw new Error(`source-lock mutation guard at "${guardPath}" has no numeric pid: ${raw}`);
+    }
+    return parsed.pid;
+}
+
+// Recovers a guard stranded by a process that died holding it. Binds authorization to the exact guard object, not just its pathname: renaming a path off to a private, unique name is atomic, so at most one concurrent reclaimer's rename against the same guardPath can ever succeed — a second reclaimer's rename throws ENOENT because the first already moved it. Only the rename's winner ever inspects, verifies, or deletes the guard it claimed.
+function reclaimDeadMutationGuard(guardPath: string, testHooks?: SourceRepoLockTestHooks): boolean {
+    let raw: string;
+    try {
+        raw = readFileSync(guardPath, "utf8");
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+        throw error;
+    }
+    if (isPidAlive(parseMutationGuardPid(guardPath, raw))) return false;
+
+    waitForTestSignal(testHooks?.pauseAfterDeadGuardCheckUntilExists);
+
+    const claimedPath = `${guardPath}.${process.pid}.${randomBytes(8).toString("hex")}.reclaimed`;
+    try {
+        renameSync(guardPath, claimedPath);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+        throw error;
+    }
+
+    // A different file here is a fresh acquirer's live guard; give it back and lose the race.
+    if (readFileSync(claimedPath, "utf8") !== raw) {
+        renameSync(claimedPath, guardPath);
+        return false;
+    }
+    // if (isPidAlive(parseMutationGuardPid(claimedPath, readFileSync(claimedPath, "utf8")))) {
+    //     throw new Error(`source-lock mutation guard reclaim at "${guardPath}" raced a live acquirer; retry`);
+    // }
+    unlinkSync(claimedPath);
+    return true;
+}
+
+// Same wx/wait/finally shape as withTaskStateLock, but uses its own path, held by one short-lived process.
+export function withSourceRepoLockMutationGuard<T>(
+    projectRoot: string,
+    owner: LockOwner,
+    action: () => T,
+    { timeoutMs = MUTATION_GUARD_TIMEOUT_MS, testHooks }: { timeoutMs?: number; testHooks?: SourceRepoLockTestHooks } = {},
+): T {
+    const guardPath = sourceRepoLockMutationGuardPath(projectRoot);
+    mkdirSync(dirname(guardPath), { recursive: true });
+    const deadline = Date.now() + timeoutMs;
+    let fd: number | null = null;
+    let reclaimedOnce = false;
+
+    while (fd === null) {
+        try {
+            fd = openSync(guardPath, "wx", 0o600); // atomic exclusion point
+            writeFileSync(fd, JSON.stringify({ pid: process.pid, owner, createdAt: new Date().toISOString() }));
+            fsyncSync(fd);
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+            if (Date.now() >= deadline) {
+                if (!reclaimedOnce) {
+                    reclaimedOnce = true;
+                    if (reclaimDeadMutationGuard(guardPath, testHooks)) continue;
+                }
+                const stranded = existsSync(guardPath) ? readFileSync(guardPath, "utf8") : "(already gone)";
+                throw new Error(
+                    `source-lock mutation guard timed out at ${guardPath}, held by ${stranded}. `
+                    + "Elapsed time alone never authorizes removing a stranded guard; inspect the PID by hand.",
+                );
+            }
+            Atomics.wait(WAIT, 0, 0, 10);
+        }
+    }
+
+    try {
+        return action();
+    } finally {
+        closeSync(fd);
+        unlinkSync(guardPath);
+    }
+}
+
+// Never creates the final lock path before its complete contents exist: builds the complete file in a unique same-directory temp file, fsyncs, then renames onto the final path. Removes the temp file on every failure path.
+function writeSourceRepoLockAtomically(
+    projectRoot: string,
+    lock: LockFile,
+    testHooks?: SourceRepoLockTestHooks,
+): void {
+    const lockPath = sourceRepoLockPath(projectRoot);
+    const tmp = `${lockPath}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+    let fd: number | null = null;
+    try {
+        fd = openSync(tmp, "wx", 0o600);
+        writeFileSync(fd, JSON.stringify(lock));
+        if (testHooks?.failTempWriteBeforeFsync) {
+            throw new Error("injected temp-file write failure (test-only)");
+        }
+        fsyncSync(fd);
+        closeSync(fd);
+        fd = null;
+    } catch (error) {
+        if (fd !== null) closeSync(fd);
+        try {
+            unlinkSync(tmp);
+        } catch (unlinkError) {
+            if ((unlinkError as NodeJS.ErrnoException).code !== "ENOENT") throw unlinkError;
+        }
+        throw error;
+    }
+    waitForTestSignal(testHooks?.pauseBeforePublishUntilExists);
+    renameSync(tmp, lockPath);
+}
+
+export function acquireSourceRepoLock(
+    projectRoot: string,
+    owner: LockOwner,
+    options: {
+        nowMs?: number;
+        staleMs?: number;
+        timeoutMs?: number;
+        testHooks?: SourceRepoLockTestHooks;
+    } = {},
+): AcquireOutcome {
+    return withSourceRepoLockMutationGuard(projectRoot, owner, (): AcquireOutcome => {
+        const nowMs = options.nowMs ?? Date.now();
+        const staleMs = options.staleMs ?? STALE_HEARTBEAT_MS;
+        const existing = readSourceRepoLock(projectRoot);
+        if (existing !== null) {
+            if (existing.owner === owner) return { status: "already-held-by-me" };
+            const heartbeatAgeMs = nowMs - Date.parse(existing.heartbeatAt);
+            if (heartbeatAgeMs > staleMs) {
+                return { status: "recoverable", owner: existing.owner, heartbeatAt: existing.heartbeatAt };
+            }
+            return { status: "held", owner: existing.owner, heartbeatAt: existing.heartbeatAt };
+        }
+        const nowIso = new Date(nowMs).toISOString();
+        writeSourceRepoLockAtomically(projectRoot, { owner, acquiredAt: nowIso, heartbeatAt: nowIso }, options.testHooks);
+        return { status: "acquired" };
+    }, { timeoutMs: options.timeoutMs, testHooks: options.testHooks });
+}
+
+export function refreshSourceRepoLock(
+    projectRoot: string,
+    owner: LockOwner,
+    options: { nowMs?: number; timeoutMs?: number; testHooks?: SourceRepoLockTestHooks } = {},
+): { refreshed: boolean } {
+    return withSourceRepoLockMutationGuard(projectRoot, owner, () => {
+        const existing = readSourceRepoLock(projectRoot);
+        if (existing === null || existing.owner !== owner) return { refreshed: false };
+        waitForTestSignal(options.testHooks?.pauseAfterValidateUntilExists);
+        const nowIso = new Date(options.nowMs ?? Date.now()).toISOString();
+        writeSourceRepoLockAtomically(projectRoot, { ...existing, heartbeatAt: nowIso }, options.testHooks);
+        return { refreshed: true };
+    }, { timeoutMs: options.timeoutMs, testHooks: options.testHooks });
+}
+
+// F2: the one guard every tail-script box calls before doing any work. A discarded {refreshed:false} is exactly the bug — this makes ignoring it impossible.
+export function refreshOwnedSourceRepoLockOrThrow(projectRoot: string, owner: LockOwner): void {
+    const { refreshed } = refreshSourceRepoLock(projectRoot, owner);
+    if (!refreshed) throw new Error(`source repository lock is no longer owned by "${owner}"`);
+}
+
+export function releaseSourceRepoLock(
+    projectRoot: string,
+    owner: LockOwner,
+    options: { timeoutMs?: number; testHooks?: SourceRepoLockTestHooks } = {},
+): { released: boolean } {
+    return withSourceRepoLockMutationGuard(projectRoot, owner, () => {
+        const existing = readSourceRepoLock(projectRoot);
+        if (existing === null || existing.owner !== owner) return { released: false };
+        waitForTestSignal(options.testHooks?.pauseAfterValidateUntilExists);
+        unlinkSync(sourceRepoLockPath(projectRoot));
+        return { released: true };
+    }, { timeoutMs: options.timeoutMs, testHooks: options.testHooks });
+}
+
+// Recovery is never automatic: acquireSourceRepoLock only ever reports "recoverable".  This is the sole path that removes a cold lock, gated on an exact confirmation string, and now shares the common mutation guard with acquire/refresh/release so no mutator ever decides from a snapshot taken outside that guard.
+export function recoverSourceRepoLock(
+    projectRoot: string,
+    expectedStaleOwner: LockOwner,
+    confirmation: string,
+    options: { nowMs?: number; staleMs?: number; timeoutMs?: number; testHooks?: SourceRepoLockTestHooks } = {},
+): { recovered: boolean; reason: string | null } {
+    if (confirmation !== `abandon ${expectedStaleOwner}`) {
+        return { recovered: false, reason: "confirmation does not match the expected stale owner" };
+    }
+
+    return withSourceRepoLockMutationGuard(projectRoot, expectedStaleOwner, () => {
+        const existing = readSourceRepoLock(projectRoot);
+        if (existing === null) return { recovered: false, reason: "no lock is held" };
+        if (existing.owner !== expectedStaleOwner) return { recovered: false, reason: "owner changed since the report" };
+        const nowMs = options.nowMs ?? Date.now();
+        const staleMs = options.staleMs ?? STALE_HEARTBEAT_MS;
+        const heartbeatAgeMs = nowMs - Date.parse(existing.heartbeatAt);
+        if (heartbeatAgeMs <= staleMs) return { recovered: false, reason: "the lock's heartbeat is still warm" };
+        waitForTestSignal(options.testHooks?.pauseAfterValidateUntilExists);
+        unlinkSync(sourceRepoLockPath(projectRoot));
+        return { recovered: true, reason: null };
+    }, { timeoutMs: options.timeoutMs, testHooks: options.testHooks });
+}

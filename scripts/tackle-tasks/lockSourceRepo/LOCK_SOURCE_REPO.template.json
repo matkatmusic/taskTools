@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "ARE_TASK_TESTS_SKIPPED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/lockSourceRepo/fixtures",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "LOCK_SOURCE_REPO",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/abs/project",
+        "worktree": "/abs/project/worktree",
+        "branch": "task-1",
+        "exitType": "",
+        "exitNote": "",
+        "lockWaitStartedAt": "2024-01-01T00:00:00.000Z",
+        "acquired": true,
+        "heldByOwner": ""
+    }
+}

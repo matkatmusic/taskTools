@@ -1,0 +1,29 @@
+{
+    "input": {
+        "box": "DID_CHANGES_STAY_INSIDE_FENCE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "output": "",
+        "next": "EXIT_WORKFLOW_SUITE",
+        "exitType": "fence-violation",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_SUITE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktree": "",
+        "sourceBranch": "",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

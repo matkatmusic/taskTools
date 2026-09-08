@@ -1,0 +1,524 @@
+<title>Tackle-Tasks Pipeline Map</title>
+
+<style>
+  :root {
+    --ground: #f4f6f7;
+    --panel: #ffffff;
+    --ink: #14181c;
+    --ink-soft: #4d5860;
+    --ink-faint: #78848c;
+    --rule: #d8dee1;
+    --accent: #0d6d76;
+    --accent-soft: #e2eff0;
+    --bad: #a52a1e;
+    --bad-soft: #f8e7e4;
+    --warn: #7d5300;
+    --warn-soft: #f7eeda;
+    --good: #2c6440;
+    --good-soft: #e3efe7;
+    --display: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+    --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #12161a;
+      --panel: #191e23;
+      --ink: #e7ecef;
+      --ink-soft: #a5b1b8;
+      --ink-faint: #7d8b93;
+      --rule: #2b333a;
+      --accent: #5cc4cd;
+      --accent-soft: #163235;
+      --bad: #ef8578;
+      --bad-soft: #37201d;
+      --warn: #d8ab52;
+      --warn-soft: #33291490;
+      --good: #7fc294;
+      --good-soft: #1a2c21;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #12161a;
+    --panel: #191e23;
+    --ink: #e7ecef;
+    --ink-soft: #a5b1b8;
+    --ink-faint: #7d8b93;
+    --rule: #2b333a;
+    --accent: #5cc4cd;
+    --accent-soft: #163235;
+    --bad: #ef8578;
+    --bad-soft: #37201d;
+    --warn: #d8ab52;
+    --warn-soft: #33291490;
+    --good: #7fc294;
+    --good-soft: #1a2c21;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 3rem 1.25rem 6rem;
+  }
+  .wrap {
+    max-width: 62rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+  .prose { max-width: 40rem; }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1.1;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0 0 0.75rem;
+    letter-spacing: -0.015em;
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 0.95rem;
+    font-weight: 650;
+    margin: 0 0 0.4rem;
+  }
+  p { margin: 0 0 0.9rem; color: var(--ink-soft); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--ink); font-weight: 620; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--accent-soft);
+    color: var(--ink);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.6rem;
+  }
+  .lede { font-size: 1.1rem; color: var(--ink-soft); }
+
+  header { border-bottom: 1px solid var(--rule); padding-bottom: 2rem; }
+
+  .level { display: flex; flex-direction: column; gap: 1rem; }
+  .level-head { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; }
+  .level-num {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--panel);
+    background: var(--accent);
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .level-note { font-size: 0.95rem; color: var(--ink-soft); max-width: 46rem; margin: 0; }
+
+  .figure {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1.5rem 1rem;
+    overflow-x: auto;
+  }
+  pre.mermaid { margin: 0; text-align: center; min-width: fit-content; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    padding: 0.9rem 1.1rem;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+  }
+  .swatch {
+    display: inline-block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 2px;
+    margin-right: 0.45rem;
+    vertical-align: -1px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { white-space: nowrap; font-family: var(--mono); font-size: 0.8rem; }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.16rem 0.42rem;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .pill.broken { background: var(--bad-soft); color: var(--bad); }
+  .pill.waste { background: var(--warn-soft); color: var(--warn); }
+  .pill.ok { background: var(--good-soft); color: var(--good); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.1rem;
+  }
+  .card.broken { border-left-color: var(--bad); }
+  .card.waste { border-left-color: var(--warn); }
+  .card p { font-size: 0.88rem; margin: 0; }
+
+  .stat-row { display: flex; flex-wrap: wrap; gap: 2rem; }
+  .stat { display: flex; flex-direction: column; }
+  .stat-value {
+    font-family: var(--display);
+    font-size: 1.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: 0.3rem;
+  }
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.5rem;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="prose">
+    <p class="eyebrow">taskTools-86 · run B teardown</p>
+    <h1>Tackle-Tasks Pipeline Map</h1>
+    <p class="lede">The same pipeline drawn five times, each one adding a layer. Every phase that burned tokens without moving the task forward is marked in place.</p>
+    <div class="stat-row" style="margin-top:1.5rem">
+      <div class="stat"><span class="stat-value">$9.07</span><span class="stat-label">run cost</span></div>
+      <div class="stat"><span class="stat-value">186</span><span class="stat-label">api requests</span></div>
+      <div class="stat"><span class="stat-value">3 / 5</span><span class="stat-label">phases reached</span></div>
+      <div class="stat"><span class="stat-value">0</span><span class="stat-label">tasks closed</span></div>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:#a52a1e"></span>Broken — produced a wrong answer</span>
+    <span><span class="swatch" style="background:#b8860b"></span>Wasteful — ran but bought nothing</span>
+    <span><span class="swatch" style="background:#0d6d76"></span>Working as designed</span>
+    <span><span class="swatch" style="background:#8a949a"></span>Never reached in run B</span>
+  </div>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Level 1</span>
+      <h2>The whole thing in three boxes</h2>
+    </div>
+    <p class="level-note">This is the promise. Everything below is the machinery that is supposed to deliver it.</p>
+    <div class="figure">
+<pre class="mermaid">
+flowchart LR
+  P[Plan] --> I[Implement] --> M[Merge]
+  classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
+  class P,I,M ok
+</pre>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Level 2</span>
+      <h2>Plan is a review loop</h2>
+    </div>
+    <p class="level-note">The planner writes, a reviewer (codex or claude) judges, feedback is applied, repeat. The cap is <code>MAX_REVIEW_ROUNDS = 3</code>. <strong>The loop has no terminal branch:</strong> when the cap runs out on a rejected verdict, the code falls out of the <code>while</code> and returns <code>status: "planned"</code> anyway. Run B spent about 268K tokens on three rejected plans, then implemented the third one.</p>
+    <div class="figure">
+<pre class="mermaid">
+flowchart TB
+  TI["task-info (reads brief + owned files)"] --> PL["plan agent writes plans/task-N-plan.md"]
+  PL --> PFS{"plan file on disk?"}
+  PFS -- no --> NC["needs-clarification stop"]
+  PFS -- yes --> V["verify agent codex reviews plan"]
+  V -- approved --> DONE["plan accepted"]
+  V -- "rejected + missingFiles" --> W["widen-files then re-plan"]
+  W --> V
+  V -- "rejected, no missingFiles" --> AF["applyFeedback rewrite the plan"]
+  AF --> RC{"rounds left?"}
+  RC -- yes --> V
+  RC -- "no (cap hit)" --> LEAK["falls through returns planned WITH a rejected verdict"]
+  LEAK --> IMP[Implement]
+  DONE --> IMP
+
+  classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
+  classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
+  classDef waste fill:#8a6100,stroke:#8a6100,color:#fff
+  class TI,PL,PFS,V,DONE,IMP,NC ok
+  class LEAK bad
+  class AF,W,RC waste
+</pre>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Level 3</span>
+      <h2>Bootstrap and the per-task worktree</h2>
+    </div>
+    <p class="level-note">Worktrees are not created per task after planning — they are created inside <strong>prepare</strong>, before any task workflow launches. <code>prepareTasks.ts</code> makes one worktree per task group under <code>/tmp/taskTools-wt/&lt;repo&gt;/task-N</code>, takes a lease on it, and materializes one copy of the workflow script per task. Run B called prepare <strong>twice</strong>; the skill body only tells the orchestrator to call it once, and nothing consumed the first result.</p>
+    <div class="figure">
+<pre class="mermaid">
+flowchart TB
+  START([tackle-tasks invoked]) --> DISC["bootstrap: discover blocker pairs, unblocked numbers"]
+  DISC --> BLK{"blockers found?"}
+  BLK -- yes --> BW["blockers.workflow.js disprove or stop"]
+  BW --> PREP
+  BLK -- no --> PREP["bootstrap: prepare briefs + worktree per task + lease + workflow copy"]
+  PREP --> DUP["prepare ran a 2nd time 4x slower, result discarded"]
+  DUP --> LAUNCH["launch task-N workflow one per task, background"]
+  LAUNCH --> L2["Level 2: plan -> verify loop"]
+  L2 --> IMPL["implement agent edits inside the worktree"]
+  IMPL --> FIN["implement-finalize (commit + compare OIDs)"]
+  FIN --> OWN{"a committed path in the owned list?"}
+  OWN -- no --> BLOCKED["blocked: no task-owned path (fired on a commit that HAD one)"]
+  OWN -- yes --> M[Merge]
+
+  classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
+  classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
+  classDef waste fill:#8a6100,stroke:#8a6100,color:#fff
+  class START,DISC,BLK,BW,PREP,LAUNCH,L2,IMPL,FIN,OWN,M ok
+  class BLOCKED bad
+  class DUP waste
+</pre>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Level 4</span>
+      <h2>Merge is a queue, and rebase-test guards it</h2>
+    </div>
+    <p class="level-note">Between implement and merge sit two things the level-1 sketch hides: a <strong>human approval gate</strong> in the main conversation, and a <strong>rebase-test stage</strong> that rebases every layer onto the source branch and runs the full suite. The orchestrator never decides a launch itself — it asks <code>nextSchedulerAction</code> every time. Run B died inside rebase-test and never reached the gate's merge side.</p>
+    <div class="figure">
+<pre class="mermaid">
+flowchart TB
+  subgraph SCHED["merge queue loop (main conversation)"]
+    direction TB
+    NSA{"nextSchedulerAction"}
+    NSA -- launch-plan --> LP["launch task-N plan+implement"]
+    NSA -- launch-tail --> LT["launch rebase-test or merge"]
+    NSA -- wait --> WT["wait for notification"]
+    NSA -- begin-next-lap --> LAP["beginNextLap"]
+    NSA -- report --> RPT["buildMergeReport"]
+    LP --> NSA
+    LT --> NSA
+    WT --> NSA
+    LAP --> NSA
+  end
+
+  PI["plan+implement finishes"] --> GATE["AskUserQuestion gate approve / do not approve + file each objection as a task"]
+  GATE -- approved --> ENQ["enqueueApprovedTask"] --> NSA
+
+  LT --> RT["rebase-test stage"]
+  RT --> RW["rebase-walk (submodule layers first)"]
+  RW --> PR["parent-rebase (root layer + full suite)"]
+  PR -- conflicted --> CONF["conflict-identity merge-conflict advance-conflict"]
+  CONF --> RW
+  PR -- tests-failed --> TC["typecheck default npx tsc --noEmit in a repo with no tsconfig"]
+  TC --> RFIX["rebase-fix agent invented tsconfig.json and tools/index.ts"]
+  RFIX --> RFV["rebase-fix-verify fence violations found"]
+  RFV --> STUCK["blocked: untested layer merge + cleanup never run"]
+  PR -- green --> MG["merge stage: merge, closeTasks, unblock"]
+
+  classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
+  classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
+  classDef waste fill:#8a6100,stroke:#8a6100,color:#fff
+  classDef cold fill:#8a949a,stroke:#8a949a,color:#fff
+  class NSA,LP,LT,WT,LAP,RPT,PI,GATE,ENQ,RT,RW,PR,CONF ok
+  class TC,RFIX bad
+  class RFV,STUCK bad
+  class MG cold
+</pre>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Level 5</span>
+      <h2>Full sequence with cleanup</h2>
+    </div>
+    <p class="level-note">Merge returns one of three success shapes. Only <code>cleanup-incomplete</code> leaves work behind, and that work is a separate <code>cleanup-only</code> stage launch — it never re-merges or re-closes. In run B, nothing past rebase-test executed, so the worktree, its branch, and its lease were all left standing.</p>
+    <div class="figure">
+<pre class="mermaid">
+flowchart TB
+  A["discover"] --> B["prepare worktree + lease per task"]
+  B --> C["plan -> verify loop"]
+  C --> D["implement + finalize"]
+  D --> E["approval gate (human)"]
+  E --> F["rebase-test (all layers + full suite)"]
+  F --> G{"regate needed? fence violations"}
+  G -- yes --> E
+  G -- no --> H["merge queue (serial, one tip at a time)"]
+  H --> I["merge stage + closeTasks.ts"]
+  I --> J{"merge status"}
+  J -- merged --> K["worktree removed branch deleted lease released"]
+  J -- merged-but-not-closed --> L["report: mergedNotClosed"]
+  J -- cleanup-incomplete --> M["cleanup-only stage (retry cleanup)"]
+  M --> K
+  K --> N["buildMergeReport + commit-message skill"]
+  L --> N
+  F -- blocked --> X["run B stopped here worktree, branch, lease retained"]
+
+  classDef ok fill:#0d6d76,stroke:#0d6d76,color:#fff
+  classDef bad fill:#a52a1e,stroke:#a52a1e,color:#fff
+  classDef cold fill:#8a949a,stroke:#8a949a,color:#fff
+  class A,B,C,D,E,F,G ok
+  class H,I,J,K,L,M,N cold
+  class X bad
+</pre>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Findings</span>
+      <h2>Where the money went</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Phase</th><th>Verdict</th><th>What happens</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>prepare</td>
+            <td><span class="pill waste">redundant</span></td>
+            <td>Ran twice. The second took 4x longer and nothing read its result.</td>
+            <td>orchestrator drift from the skill body</td>
+          </tr>
+          <tr>
+            <td>task-info</td>
+            <td><span class="pill waste">redundant</span></td>
+            <td>Fetched once by <code>runPlan</code>, then again by <code>runImplement</code> in the same <code>plan+implement</code> run. Same answer both times.</td>
+            <td><code>tackle-tasks.workflow.js:345, 424</code></td>
+          </tr>
+          <tr>
+            <td>verify loop</td>
+            <td><span class="pill broken">broken</span></td>
+            <td>Cap exhaustion is not a terminal state. The loop exits and the plan is returned as <code>planned</code> carrying a <code>rejected</code> verdict.</td>
+            <td><code>tackle-tasks.workflow.js:391-404</code></td>
+          </tr>
+          <tr>
+            <td>applyFeedback</td>
+            <td><span class="pill waste">wasteful</span></td>
+            <td>Three rounds, same objection each time (nested triple-backtick fences), never fixed. No detection of a repeated objection.</td>
+            <td><code>tackle-tasks.workflow.js:401</code></td>
+          </tr>
+          <tr>
+            <td>ownership check</td>
+            <td><span class="pill broken">broken</span></td>
+            <td>Exact string match of committed paths against the owned-file list. Said "no task-owned path" about a commit that changed an owned file.</td>
+            <td><code>tackle-tasks.workflow.js:462</code></td>
+          </tr>
+          <tr>
+            <td>typecheck</td>
+            <td><span class="pill broken">broken</span></td>
+            <td>The run passed <code>npx tsc --noEmit</code> into a repo with no TypeScript. It failed because there was nothing to check.</td>
+            <td>pipelineArgs, not detected per-repo</td>
+          </tr>
+          <tr>
+            <td>rebase-fix</td>
+            <td><span class="pill broken">broken</span></td>
+            <td>Allowed to create build config. It wrote <code>tsconfig.json</code> and <code>tools/index.ts</code> to satisfy a check, which instantly violated the file fence.</td>
+            <td><code>rebase-fix</code> role, no forbidden-kind list</td>
+          </tr>
+          <tr>
+            <td>rebase-walk</td>
+            <td><span class="pill waste">wasteful</span></td>
+            <td>Every failed fix re-runs the entire layer walk from the start rather than resuming at the stopped layer.</td>
+            <td><code>tackle-tasks.workflow.js:596, 630</code></td>
+          </tr>
+          <tr>
+            <td>merge + cleanup</td>
+            <td><span class="pill broken">never ran</span></td>
+            <td>2 of the 5 declared phases never fired, so nothing closed the task and the worktree was left leased.</td>
+            <td>blocked upstream in rebase-test</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="level">
+    <div class="level-head">
+      <span class="level-num">Note</span>
+      <h2>Two corrections to the level plan</h2>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h3>Worktree setup is not level 3</h3>
+        <p>It belongs to bootstrap's <strong>prepare</strong> mode and happens once, for all tasks, before any plan runs. It is not a per-task step wrapped around the plan loop.</p>
+      </div>
+      <div class="card">
+        <h3>Two phases are missing entirely</h3>
+        <p>The human <strong>approval gate</strong> and the <strong>rebase-test</strong> stage both sit between implement and merge. Rebase-test is where run B actually died, so the map is not useful without it.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="prose">
+    <p>Traced from <code>skills/tackle-tasks/tackle-tasks.workflow.js</code>, <code>bootstrap.workflow.js</code>, <code>scripts/tackle-tasks_SkillBodyEmitter.ts</code>, and <code>scripts/prepareTasks.ts</code> on branch <code>fix-tackle-tasks-workflow-script-imports</code>. Run data from session <code>441b8806</code>.</p>
+  </footer>
+
+</div>

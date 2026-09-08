@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { occurrenceBranchNames } from "../scripts/occurrenceBranchNames.ts";
+import { occurrenceBranchNames } from "../scripts/shared/occurrenceBranchNames.ts";
 
 function assertValidBranchName(name: string): void {
     assert.doesNotThrow(() => execFileSync("git", ["check-ref-format", "--branch", name]));

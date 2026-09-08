@@ -1,0 +1,28 @@
+{
+    "input": {
+        "box": "DOES_WORKTREE_EXIST",
+        "scriptSignal": "continue",
+        "next": "IS_WORKTREE_SAFE_TO_USE",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "worktree": "scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "IS_WORKTREE_SAFE_TO_USE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "worktree": "scripts/steps/pipeline-preambleStatusCheck/fixtures",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "IS_PREVIOUS_RUN_RESUMABLE"
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "ACTIVE_TASK_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "DOES_WORKTREE_EXIST",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/tmp/example-project",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "CREATE_WORKTREE"
+    }
+}

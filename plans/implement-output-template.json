@@ -1,0 +1,4 @@
+{
+  "implemented": "<true only when every plan step is done, the typecheck is clean and every test passed. false otherwise.>",
+  "notes": "<what you implemented. When implemented is false, name what is left and why it stopped.>"
+}

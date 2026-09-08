@@ -1,0 +1,25 @@
+{
+    "input": {
+        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
+        "clarifyRequest": "",
+        "next": "PLANNER_RETURNED_PLAN"
+    },
+    "output": {
+        "box": "PLANNER_RETURNED_PLAN",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "worktree": "/tmp/fake-worktree",
+        "sourceBranch": "master",
+        "projectRoot": "/tmp/fake-project",
+        "planFile": "scripts/steps/pipeline-plan/fixtures/worktree/plans/plan.json",
+        "clarifyRequest": ""
+    }
+}

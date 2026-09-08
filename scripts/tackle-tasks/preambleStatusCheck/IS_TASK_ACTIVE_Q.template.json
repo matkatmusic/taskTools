@@ -1,0 +1,29 @@
+{
+    "input": {
+        "box": "IS_TASK_BLOCKED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "IS_TASK_ACTIVE_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/preambleStatusCheck/fixtures",
+        "worktree": "",
+        "branch": "task-1",
+        "docsMode": "",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "next": "PREFLIGHT_OK_Q"
+    }
+}

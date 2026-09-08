@@ -6,7 +6,7 @@ allowed-tools: Bash(node *)
 ---
 
 ```!
-node "${CLAUDE_PLUGIN_ROOT}/scripts/create-task_SkillBodyEmitter.ts" <<'CREATETASKEOF'
+node "${CLAUDE_PLUGIN_ROOT}/scripts/create-task/create-task_SkillBodyEmitter.ts" <<'CREATETASKEOF'
 $ARGUMENTS
 CREATETASKEOF
 ```

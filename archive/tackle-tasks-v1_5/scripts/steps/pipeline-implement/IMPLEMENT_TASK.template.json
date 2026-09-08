@@ -1,0 +1,20 @@
+{
+    "input": {
+        "box": "ACCEPTED_PLAN_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 42,
+        "projectRoot": "scripts/steps/pipeline-implement/fixtures",
+        "worktreePath": "scripts/steps/pipeline-implement/fixtures/worktree",
+        "runId": "run-1",
+        "sourceBranch": "main",
+        "typecheckCommand": "npx tsc --noEmit",
+        "maxFixRounds": 3
+    },
+    "agentAnswer": {
+        "message": "<one-line summary of what you did>",
+        "additionalData": {
+            "implemented": true,
+            "notes": "<what you implemented; when implemented is false, name what is left and why it stopped>"
+        }
+    }
+}

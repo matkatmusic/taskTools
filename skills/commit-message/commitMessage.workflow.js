@@ -26,15 +26,15 @@ const SUMMARY_SCHEMA = {
 
 const prompt = `Run \`node ${ARGS.commitDiffBriefPath}\` with Bash and follow the instructions it prints.`
 
-// ponytail: one fallback attempt (Sonnet then Opus), not plan.workflow.js's 3x retry-on-null loop
+// ponytail: one fallback attempt (Sonnet then Opus), not the retired plan workflow's 3x retry-on-null loop
 const runAgent = (model) => agent(prompt, { label: 'commit-message', phase: 'Commit message', schema: SUMMARY_SCHEMA, model })
 
 let result
 try {
-  result = await runAgent('Sonnet 5')
+  result = await runAgent('claude-sonnet-5[1m]')
 } catch {
   result = undefined
 }
-if (result == null) result = await runAgent('Opus 5')
+if (result == null) result = await runAgent('claude-opus-5[1m]')
 
 return result ?? { summaries: [] }

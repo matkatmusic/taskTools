@@ -4,7 +4,7 @@ description: Break an oversized open task into N smaller child tasks at reasonab
 argument-hint: "[<taskNum> <numSplits> [guidance]]"
 ---
 
-- parent task and file groups, or split candidates when no arguments were given: !`if [ -z "$ARGUMENTS" ]; then node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" candidates; else node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" info $ARGUMENTS[0] $ARGUMENTS[1]; fi`
+- parent task and file groups, or split candidates when no arguments were given: !`if [ -z "$ARGUMENTS" ]; then node "${CLAUDE_PLUGIN_ROOT}/scripts/split-task/splitTask.ts" candidates; else node "${CLAUDE_PLUGIN_ROOT}/scripts/split-task/splitTask.ts" info $ARGUMENTS[0] $ARGUMENTS[1]; fi`
 
 If no arguments were given ($ARGUMENTS is empty), the command above ran in `candidates` mode and printed a JSON array of open tasks that qualify for splitting (difficulty >= 3 or more than 3 files), sorted ascending by task number; a qualifying task with fewer than 2 files carries `unsplittable: true` and its real `fileCount`. Report that list to the user — each task's number, title, and whether it is splittable or marked unsplittable with its file count — and stop here: do not create any child tasks, do not run the `close` command, and skip the rest of this skill for this invocation. If the array is empty, tell the user no open tasks currently qualify for splitting.
 
@@ -23,7 +23,7 @@ If any `/create-task` invocation fails partway through this loop, stop immediate
 Once all $ARGUMENTS[1] children exist, run this command, replacing `<childNumbers>` with the collected child task numbers joined by commas (IN THE SAME ORDER as the file lists you decided above), and replacing `<shellQuotedFileGroupsJson>` as follows: first build the JSON text — a JSON array of arrays, one array of file paths per child in that same order, containing exactly the final file list you assigned to that child. Then, because that JSON text is about to sit on a shell command line where a `'` character inside a file path would otherwise break the command, make it shell-safe: replace every `'` character in the JSON text with the four characters `'"'"'`, then wrap the whole result in one leading and one trailing `'` character. That wrapped, escaped result — not the raw JSON — is what you substitute for `<shellQuotedFileGroupsJson>`; do not add another pair of quotes around it.
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/splitTask.ts" close $ARGUMENTS[0] $ARGUMENTS[1] <childNumbers> <shellQuotedFileGroupsJson>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/split-task/splitTask.ts" close $ARGUMENTS[0] $ARGUMENTS[1] <childNumbers> <shellQuotedFileGroupsJson>
 ```
 
 This re-validates the child numbers, checks that the file groups decoded from `<shellQuotedFileGroupsJson>` cover the parent's current `files` array (no file outside the parent's list, no parent file missing from every group; a file may appear in more than one group), then loads each created child and checks that its actual `files` field exactly matches the group assigned to it — only if every child matches does it close the parent, moving it into `completedTasks.json` with `closureNote` set to `Split into <childNumbers>`. If this command fails — including because the decoded file groups don't cover the parent's files, or because a child's real `files` field doesn't match its assigned group — report the error to the user and name which child or file mismatched; the parent was NOT closed and remains open, rather than telling the user the split succeeded.

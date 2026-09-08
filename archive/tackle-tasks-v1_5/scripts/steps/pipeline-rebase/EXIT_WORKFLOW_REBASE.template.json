@@ -1,0 +1,34 @@
+{
+    "input": {
+        "box": "ARE_2_CONFLICT_FIXES_DONE",
+        "scriptSignal": "continue",
+        "next": "EXIT_WORKFLOW_REBASE",
+        "projectRoot": "/repo",
+        "worktreePath": "/repo/.worktrees/task-1",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "stepId": "step-1",
+        "rootSourceBranch": "main",
+        "landedOccurrenceIds": [],
+        "suiteFixAttempts": 0,
+        "conflicted": true,
+        "stoppedOccurrenceId": "",
+        "stoppedCheckoutPath": "/repo/.worktrees/task-1",
+        "conflictedFilePaths": ["package.json"],
+        "finished": false,
+        "failureReason": "",
+        "exitType": "rebase-stuck",
+        "exitNote": "the rebase did not advance after 2 conflict fixes"
+    },
+    "output": {
+        "box": "EXIT_WORKFLOW_REBASE",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "runId": "run-1",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-1",
+        "sourceBranch": "main",
+        "exitType": "rebase-stuck",
+        "exitNote": "the rebase did not advance after 2 conflict fixes"
+    }
+}

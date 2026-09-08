@@ -1,0 +1,91 @@
+flowchart TB
+%% MERGE PIPELINE.
+%% ---
+%% Input: a green, rebased worktree.
+%% ---
+%% Never fast-forward. Every task branch lands as a merge commit.
+%% ---
+%% Walks every repository layer, deepest submodule first, root last.
+%% ---
+%% A multi-repo merge is not one event; a submodule can land while root fails.
+%% ---
+%% Each layer writes its own merge ref the moment it lands.
+%% ---
+%% See recordMergedCommit in mergeTaskWorktrees.ts.
+%% ---
+%% That ref is the publication marker, so no crash can lose it.
+%% ---
+%% "Read the publication state" reconciles those refs, read-only.
+%% ---
+%% See findRecordedMergedCommit and reconcileStep.ts.
+%% ---
+%% STATUS TO VERDICT:
+%% ---
+%% merged = LANDED
+%% ---
+%% no-op = LANDED
+%% ---
+%% root-merged-but-not-closed = LANDED
+%% ---
+%% submodule-conflicted = NOT landed
+%% ---
+%% parent-conflicted = NOT landed
+%% ---
+%% merge-record-missing = UNKNOWN, re-read the refs, else run-failed
+%% ---
+%% ALL LANDED means every layer landed.
+%% ---
+%% NONE LANDED means no layer landed.
+%% ---
+%% Anything else is SOME LANDED.
+%% ---
+%% SOME LANDED never retries; the run stops for a human.
+%% ---
+%% NONE LANDED is the only retryable case; its receipt feeds the rebase pipeline.
+%% ---
+%% A no-op layer, no commits to land, still counts as LANDED.
+%% ---
+%% See commitTaskWork.ts and skippedOccurrenceIds in mergeTaskWorktrees.ts.
+%% ---
+%% Exit types:
+%% ---
+%% merge-failed
+%% ---
+%% partially-published, recovery only
+%% ---
+%% run-failed
+
+  GREEN_WORKTREE_INPUT["Input: { worktree, target branch,<br/>merge receipt so far }"] --> MERGE_WORKTREES
+  MERGE_WORKTREES["Try: merge worktrees and submodules,<br/>no fast-forward. Each layer that lands<br/>writes its merge ref AS it lands"] --> READ_MERGE_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+  READ_MERGE_PUBLICATION_STATE --> WHAT_IS_PUBLICATION_STATE{"what is the publication state?"}
+  WHAT_IS_PUBLICATION_STATE --> PUBLICATION_ALL["ALL LANDED"]
+  WHAT_IS_PUBLICATION_STATE --> PUBLICATION_NONE["NONE LANDED"]
+  WHAT_IS_PUBLICATION_STATE --> PUBLICATION_PARTIAL["SOME LANDED"]
+
+  PUBLICATION_ALL --> EXIT_WORKFLOW_SUCCESS["merge succeeded exit"]
+
+  PUBLICATION_NONE --> ARE_2_MERGE_ATTEMPTS_DONE{"2 merge attempts done?"}
+  ARE_2_MERGE_ATTEMPTS_DONE -- "NO<br/>the target branch tip moved.<br/>the receipt travels with the run" --> REBASE_PIPELINE["rebase pipeline"]
+  ARE_2_MERGE_ATTEMPTS_DONE -- "YES<br/>exit type: merge-failed<br/>exit note: nothing landed after<br/>2 attempts. worktree preserved." --> EXIT_WORKFLOW_MERGE
+
+  PUBLICATION_PARTIAL -- "exit type: partially-published<br/>exit note: some layers are on their<br/>target branch and some are not.<br/>RECOVERY ONLY. worktree preserved." --> EXIT_WORKFLOW_MERGE
+
+  EXIT_WORKFLOW_MERGE["failures exit"]
+
+  %% pass/nopass: green heads to the next pipeline.
+  %% ---
+  %% Red retries or ends in the exit workflow.
+  classDef pipeline fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef decision fill:#e0b400,stroke:#a88600,color:#1a1a1a
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef pass fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef nopass fill:#a52a1e,stroke:#6d1a12,color:#ffffff
+  class WHAT_IS_PUBLICATION_STATE,ARE_2_MERGE_ATTEMPTS_DONE decision
+  class MERGE_WORKTREES,READ_MERGE_PUBLICATION_STATE script
+  class REBASE_PIPELINE,EXIT_WORKFLOW_SUCCESS pipeline
+  class PUBLICATION_ALL pass
+  class PUBLICATION_NONE,PUBLICATION_PARTIAL nopass
+  class EXIT_WORKFLOW_MERGE fail
+  class GREEN_WORKTREE_INPUT output

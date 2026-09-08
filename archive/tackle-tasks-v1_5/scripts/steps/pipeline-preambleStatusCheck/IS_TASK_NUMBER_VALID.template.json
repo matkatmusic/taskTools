@@ -1,0 +1,17 @@
+{
+    "input": {
+        "box": "PREAMBLE_TASK_NUMBER_INPUT",
+        "scriptSignal": "continue",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json"
+    },
+    "output": {
+        "box": "IS_TASK_NUMBER_VALID",
+        "scriptSignal": "continue",
+        "next": "IS_TASK_BLOCKED",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

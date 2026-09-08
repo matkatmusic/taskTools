@@ -1,0 +1,42 @@
+flowchart TB
+%% One agent() call. /run-step starts at COMMIT_IMPLEMENTATION_IF_NEEDED. Every path ends at an orange block or a dashed block.
+
+  subgraph commitImplementationIfNeeded ["Input: [IMPLEMENT_TASK]'s result"]
+    direction TB
+    COMMIT_IMPLEMENTATION_IF_NEEDED["COMMIT_IMPLEMENTATION_IF_NEEDED"]
+    COMMIT_TEST_FIX_IF_NEEDED["COMMIT_TEST_FIX_IF_NEEDED"]
+    ARE_TASK_TESTS_SKIPPED_Q["is the entry's hasTests false?"]
+    RUN_TASK_TESTS["run the task tests"]
+    DO_TASK_TESTS_PASS_Q["do the task tests pass?"]
+    ARE_2_TEST_FIXES_DONE_Q["2 test fixes done?"]
+    AMEND_ENTRY_WITH_FAILING_TESTS["amend the tasks.json entry<br/>with the failing tests"]
+  end
+  subgraph commitImplementationIfNeededNext ["next diagram"]
+    direction TB
+    CODEX_REVIEWS_TESTS["CODEX_REVIEWS_TESTS"]
+    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    FIX_IMPLEMENT_TASK_TESTS["FIX_IMPLEMENT_TASK_TESTS"]
+  end
+  commitImplementationIfNeeded ~~~ commitImplementationIfNeededNext
+
+  COMMIT_IMPLEMENTATION_IF_NEEDED --> ARE_TASK_TESTS_SKIPPED_Q
+  COMMIT_IMPLEMENTATION_IF_NEEDED -- "NO<br/>implementation incomplete" --> FAILURES_EXIT
+  COMMIT_TEST_FIX_IF_NEEDED --> ARE_TASK_TESTS_SKIPPED_Q
+  ARE_TASK_TESTS_SKIPPED_Q -- "YES<br/>no task tests, no codex test review" --> LOCK_SOURCE_REPO
+  ARE_TASK_TESTS_SKIPPED_Q -- "NO" --> RUN_TASK_TESTS
+  RUN_TASK_TESTS --> DO_TASK_TESTS_PASS_Q
+  DO_TASK_TESTS_PASS_Q -- "YES" --> CODEX_REVIEWS_TESTS
+  DO_TASK_TESTS_PASS_Q -- "YES<br/>difficulty 3 or less" --> LOCK_SOURCE_REPO
+  DO_TASK_TESTS_PASS_Q -- "NO" --> ARE_2_TEST_FIXES_DONE_Q
+  ARE_2_TEST_FIXES_DONE_Q -- "NO" --> AMEND_ENTRY_WITH_FAILING_TESTS
+  ARE_2_TEST_FIXES_DONE_Q -- "YES<br/>tests-red" --> FAILURES_EXIT
+  AMEND_ENTRY_WITH_FAILING_TESTS -- "pass the failing tests to the agent" --> FIX_IMPLEMENT_TASK_TESTS
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class COMMIT_IMPLEMENTATION_IF_NEEDED,COMMIT_TEST_FIX_IF_NEEDED,ARE_TASK_TESTS_SKIPPED_Q,RUN_TASK_TESTS,DO_TASK_TESTS_PASS_Q,ARE_2_TEST_FIXES_DONE_Q,AMEND_ENTRY_WITH_FAILING_TESTS script
+  class CODEX_REVIEWS_TESTS,LOCK_SOURCE_REPO,FAILURES_EXIT,FIX_IMPLEMENT_TASK_TESTS next_diagram

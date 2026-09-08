@@ -1,0 +1,31 @@
+{
+    "input": {
+        "box": "ARE_2_SUITE_FIXES_DONE",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0,
+        "output": "",
+        "next": "FIX_THE_CODEBASE_FOR_SUITE",
+        "exitType": "",
+        "exitNote": "",
+        "fixSummary": ""
+    },
+    "output": {
+        "box": "COMMIT_SUITE_FIX_IF_NEEDED",
+        "scriptSignal": "continue",
+        "taskNumber": 0,
+        "runId": "",
+        "projectRoot": "",
+        "worktreePath": "",
+        "rootSourceBranch": "",
+        "ownedFilePaths": [""],
+        "testFilePaths": [""],
+        "suiteFixAttempts": 0
+    }
+}

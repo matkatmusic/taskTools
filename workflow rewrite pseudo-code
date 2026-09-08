@@ -1,0 +1,87 @@
+Don't build yet.  Do you understand the flow of code in terms of the SKILL.md?
+
+SKILL.md: !` SkillBodyEmitter.ts << $ARGUMENTS` -> the main agent's skill body. 
+
+SkillBodyEmitter.ts: split arguments into task numbers -> preambleForSingleTask per task -> generate skill body using per-task JSON receipts to spawn each workflow phase. 
+
+SkillBodyEmitter.skill body: 
+
+taskNums = getTaskNumsFromArguments($ARGUMENTS)
+//get receipts for tasks to be run
+planningReceipts = [{taskNum = N, receipt = {...}}]
+for taskNum in taskNums:
+  receipt = preambleForSingleTask.ts(taskNum)
+  plannerPrompt = PlannerBodyEmitter.ts:skillBody(receipt)
+  planningResult = spawn subagent(plannerPrompt)
+  codexPrompt = createCodexPlanReviewPrompt(planningResult.taskNum)
+  codexReview = spawn subagent(codexPrompt, plan)
+  if( codexReview.isNotAccepted ) {
+    planningResult.plan = amendPlan(codexReview.feedback, planningResult.plan)
+    revisePlanPrompt = createRevisePlanPrompt(planningResult)
+    planningResult = spawn subagent(revisePlanPrompt)
+    codex2ndPrompt = createCodex2ndReviewPrompt(planningResult.taskNum)
+    codex2ndReview = spawn subagent(codex2ndPrompt)
+    planningResult.plan = amendPlan(codex2ndReview.feedback, planningResult.plan)
+  }
+
+  implementerPrompt = createImplementPrompt(planningResult)
+  implementResult = spawn subagent(implementerPrompt)
+  recordImplementationNotes(taskNum, implementResult)
+  flaggedTests = 0
+  allTestsPassCount = 0
+LABEL: TEST_SEQUENCE
+  commitIfNeeded(taskNum, implementResults)
+  testResults = runTests(taskNum)
+  testAttempts = 0
+  flaggedTests
+  if( testResults.fail && testAttempts < 2 ) {
+    testAttempts++;
+    if( testAttempts > 1 ) {
+      return { exitType=tests-red, exitNote="task tests failed after 2 codebase fixes" };
+    }
+    fixCodebasePrompt = createFixCodebasePrompt(taskNum, testResults)
+    fixCodebaseResults = spawn subagent(fixCodebasePrompt)
+    commitIfNeeded(taskNum, fixCodebaseResults)
+    testResults = runTests(taskNum)
+  }
+  codexTaskTestReviewPrompt = createCodexReviewTestsAgainstTaskPrompt(taskNum, planningResult.plan)
+  codexTaskTestReviewResult = spawn subagent(codexTaskTestReviewPrompt)
+  while( codexTaskTestReviewResult.fail && flaggedTests < 2 ) {
+    flaggedTests++;
+    if( flaggedTests > 1 ) {
+      return { exitType=tests-flagged, exitNote="codex flagged the tests twice" };
+    }
+    //amend the tests 
+    amendTestsPrompt = createAmendTestsPrompt(codexTaskTestReviewResult)
+    amendTestResults = spawn subagent(amendTestsPrompt)
+    addAmendedTestResultsToImplementResults(implementResults, amendTestResults)
+    //GOTO LABEL:TEST_SEQUENCE
+  }
+  lockSourceRepo(taskNum)
+LABEL: REBASE_SEQUENCE //starts at 'advance the rebase'
+  rebaseConflicts = 0
+  while( rebaseConflicts < 2 ) {
+    rebaseResult = rebase(taskNum)
+    if( rebaseResult.fail ) {
+      rebaseConflicts++;
+      if( rebaseConflicts > 1 ) {
+        return { exitType=rebase-stuck, exitNote="the rebase did not advance after 2 attempts" };
+      }
+      fixConflictPrompt = createFixConflictPrompt(rebaseResult)
+      fixConflictResult = spawn subagent(fixConflictPrompt)
+      commitIfNeeded(taskNum, fixConflictResult)
+    }
+    if( rebaseResult.success )
+      break;
+  }
+  fullSuiteResults = runFullSuite(taskNum);
+  if( fullSuiteResults.fail && allTestsPassCount < 2 ) {
+    allTestsPassCount++;
+    fixCodebasePrompt = createFixCodebasePrompt(taskNum, fullSuiteResults)
+    fixCodebaseResults = spawn subagent(fixCodebasePrompt)
+    commitIfNeeded(taskNum, fixCodebaseResults)
+    GOTO: REBASE_SEQUENCE
+  }
+
+
+

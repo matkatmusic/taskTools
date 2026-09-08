@@ -1,0 +1,161 @@
+// Behavioral checks for scripts/tackle-tasks/CodexReviewBodyEmitter.ts. Run: node --test tests/CodexReviewBodyEmitter.test.ts
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { planReviewPrompt, reviewQuestion, reviewQuestionSkeleton } from "./CodexReviewBodyEmitter.ts";
+import { writeCheckpoint } from "./checkpoint.ts";
+import type { PreparedTask } from "./preparedTask.ts";
+
+process.env.RUN_STEP_LOG = join(tmpdir(), "codex-review-body-run-log.json");
+
+const baseTaskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-body-taskstate-"));
+mkdirSync(join(baseTaskStateRoot, ".taskTools"), { recursive: true });
+writeFileSync(join(baseTaskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99 }]));
+
+const task: PreparedTask = {
+    number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
+    reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
+    testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
+    files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], readFilePaths: ["/wt/src/thing.ts"], createsFiles: [], difficulty: 1, clarifyRequest: "", testFilePaths: [],
+    hasTests: false, tests: null, codexReviewNotes: "", siblingTasks: [], blockedBy: [], blocks: [], repoRoot: "/wt", taskStateRoot: baseTaskStateRoot,
+};
+
+test("test_planReviewPrompt_closesStdinOnEveryReviewerCommand", () => {
+    // codex exec reads stdin even with a prompt argument, and hangs forever in a subagent without this.
+    const prompt = planReviewPrompt(task).replace(/\\\n\s*/g, "");
+    for (const line of prompt.split("\n").filter((l) => /^(perl .*codex exec|\s*\|\| claude -p)/.test(l))) {
+        assert.match(line, /<\/dev\/null/, `reviewer command does not close stdin: ${line}`);
+    }
+});
+
+test("test_planReviewPrompt_capsCodexExecWithAPerlAlarm", () => {
+    // codex hangs on a broken models cache; the alarm lets the claude -p fallbacks run instead.
+    const codexLine = planReviewPrompt(task).replace(/\\\n\s*/g, "").split("\n").find((line) => line.includes("codex exec"));
+    assert.match(codexLine ?? "", /^perl -e 'alarm shift; exec @ARGV' 300 codex exec /);
+});
+
+test("test_planReviewPrompt_namesTheBriefPlanAndOwnedPathsForTheReviewer", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-owned-"));
+    mkdirSync(join(repoRoot, "src"));
+    writeFileSync(join(repoRoot, "src/thing.ts"), "");
+    const onDiskTask: PreparedTask = { ...task, repoRoot, ownedFilePaths: [join(repoRoot, "src/thing.ts")] };
+    const prompt = planReviewPrompt(onDiskTask);
+    for (const path of [onDiskTask.briefFile, onDiskTask.planFile, ...onDiskTask.ownedFilePaths]) {
+        assert.ok(prompt.includes(path), `prompt is missing ${path}`);
+    }
+});
+
+test("test_planReviewPrompt_excludesAnOwnedPathMissingFromDiskEvenWhenCreatesFilesIsEmpty", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-missing-"));
+    const missing = join(repoRoot, ".taskTools/settings.json");
+    const prompt = planReviewPrompt({ ...task, repoRoot, ownedFilePaths: [missing] });
+    assert.equal(prompt.includes(missing), false);
+});
+
+test("test_planReviewPrompt_asksExactlyOneQuestionOnce", () => {
+    // One question, one copy: a spliced body that renders twice doubles the reviewer's cost.
+    const prompt = planReviewPrompt(task);
+    assert.equal(prompt.split("Print the JSON as your final message").length, 2);
+});
+
+// WHAT_IS_REVIEW_VERDICT rules on the review file now, so the command no longer runs recordPlanReview.ts.
+// test("test_planReviewPrompt_leavesTheVerdictToTheRulingScript", () => {
+//     // review-plan has recordPlanReview.ts, so the spawning agent never derives the verdict in prose.
+//     const prompt = planReviewPrompt(task);
+//     assert.match(prompt, /recordPlanReview\.ts/);
+// });
+
+test("test_planReviewPrompt_leavesNoUnresolvedInterpolation", () => {
+    assert.equal(planReviewPrompt(task).includes("${"), false);
+});
+
+test("test_planReviewPrompt_excludesAnOwnedPathThePlanDeclaresItWillCreate", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-createsfiles-"));
+    mkdirSync(join(repoRoot, "plans"));
+    const planFile = join(repoRoot, "plans", "plan.json");
+    writeFileSync(planFile, JSON.stringify({
+        task: 99,
+        revision: 1,
+        createsFiles: ["src/thing.ts"],
+        sections: [{ id: "step-1", title: "Step", body: "b" }],
+    }));
+    const createsTask: PreparedTask = {
+        ...task,
+        planFile,
+        repoRoot,
+        ownedFilePaths: [join(repoRoot, "src/thing.ts")],
+    };
+    const prompt = planReviewPrompt(createsTask);
+    assert.equal(prompt.includes(join(repoRoot, "src/thing.ts")), false);
+});
+
+test("test_reviewByDefaultPrompt_usesAdversarialLanguageWhenTheDifficultyIsAtLeast7", () => {
+    const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-difficulty-"));
+    mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, difficulty: 7 }]));
+    const codexDraftedTask: PreparedTask = { ...task, taskStateRoot };
+
+    const prompt = planReviewPrompt(codexDraftedTask);
+
+    assert.match(prompt, /second, independent codex instance auditing/);
+    assert.match(prompt, /Do not extend the plan the benefit of the doubt/);
+    assert.match(prompt, /A REJECTION IS YOUR FAILURE/);
+});
+
+test("test_reviewByDefaultPrompt_keepsTheOrdinaryWordingBelowDifficulty7", () => {
+    const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-difficulty-"));
+    mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, difficulty: 6 }]));
+    const humanDraftedTask: PreparedTask = { ...task, taskStateRoot };
+
+    const prompt = planReviewPrompt(humanDraftedTask);
+
+    assert.match(prompt, /read-only review agent/);
+    assert.equal(prompt.includes("second, independent codex instance"), false);
+});
+
+test("test_reviewQuestion_approvesOnTheRelaunchAfterAScrap", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "codex-review-resumed-"));
+    const resumedTask: PreparedTask = { ...task, repoRoot };
+    assert.match(reviewQuestion(resumedTask), /read-only review agent/);
+    writeCheckpoint(repoRoot, {
+        taskNumber: 42, passId: "p", runId: "run-1", projectRoot: repoRoot,
+        block: "pipeline-codexReviewsPlan.mmd::CODEX_REVIEWS_PLAN", input: "", state: "running",
+        sourceLockHeld: false, exitType: "", exitNote: "",
+        resumedFrom: { block: "pipeline-whatIsReviewVerdict.mmd::TWO_CODEX_REVIEWS_COMPLETED_Q", exitType: "plan-scrapped", exitNote: "n" },
+    });
+    assert.match(reviewQuestion(resumedTask), /^Approve the plan\./);
+});
+
+test("test_planReviewPrompt_namesSiblingTasksAndBlockersAsOutOfScope", () => {
+    const scopedTask: PreparedTask = {
+        ...task,
+        siblingTasks: [{ number: 12, title: "Sibling task title" }],
+        blockedBy: [{ taskNumber: 34, reason: "Waits on the sibling's shared type" }],
+        blocks: [{ number: 56, title: "Blocked task title", reason: "Blocked task needs this task's new field" }],
+    };
+    const prompt = planReviewPrompt(scopedTask);
+    assert.match(prompt, /task 12: Sibling task title/);
+    assert.match(prompt, /task 34 blocks task 99: Waits on the sibling's shared type/);
+    assert.match(prompt, /task 99 blocks task 56: Blocked task needs this task's new field/);
+    assert.match(prompt, /out of scope/);
+});
+
+test("test_planReviewPrompt_statesNoSiblingsOrBlockersWhenNoneExist", () => {
+    const prompt = planReviewPrompt(task);
+    assert.match(prompt, /No other open task shares files with task 99\./);
+    assert.match(prompt, /No open task blocks task 99\./);
+    assert.match(prompt, /Task 99 blocks no open task\./);
+});
+
+test("test_reviewQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
+    const skeleton = reviewQuestionSkeleton({ variant: "recheck", adversarial: false });
+    for (const header of ["## STRICT INPUT ALLOWLIST", "## MISSING-FILE RESPONSE", "## WHAT YOU READ", "## HOW TO JUDGE THE PLAN", "## DOCUMENTING EVIDENCE", "## WHAT YOU, THE REVIEWING AGENT, RETURNS", "## WHAT TO OUTPUT"]) {
+        assert.ok(skeleton.includes(header), `missing "${header}"`);
+    }
+    for (const excluded of ["## SIBLING AND BLOCKER SCOPE", "## DO NOT FLAG", "## A REJECTION IS YOUR FAILURE", "Approve the plan."]) {
+        assert.equal(skeleton.includes(excluded), false, `unexpected "${excluded}"`);
+    }
+});

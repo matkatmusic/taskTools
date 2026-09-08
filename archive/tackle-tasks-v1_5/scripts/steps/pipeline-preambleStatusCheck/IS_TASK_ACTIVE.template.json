@@ -1,0 +1,20 @@
+{
+    "input": {
+        "box": "IS_TASK_BLOCKED",
+        "scriptSignal": "continue",
+        "next": "IS_TASK_ACTIVE",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "exitNote": ""
+    },
+    "output": {
+        "box": "IS_TASK_ACTIVE",
+        "scriptSignal": "continue",
+        "next": "MARK_TASK_ACTIVE",
+        "taskNumber": 1,
+        "tasksFile": "scripts/steps/pipeline-preambleStatusCheck/fixtures/.taskTools/tasks.json",
+        "exitType": "",
+        "exitNote": ""
+    }
+}

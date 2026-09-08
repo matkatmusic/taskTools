@@ -1,0 +1,27 @@
+{
+    "input": {
+        "box": "DID_ANY_WORK_LAND",
+        "scriptSignal": "continue",
+        "next": "WRITE_PUBLICATION_OUTCOME",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "run-failed",
+        "exitNote": "a script failed operationally",
+        "publicationState": "SOME LANDED"
+    },
+    "output": {
+        "box": "WRITE_PUBLICATION_OUTCOME",
+        "scriptSignal": "continue",
+        "taskNumber": 169,
+        "runId": "run-a",
+        "projectRoot": "/repo",
+        "worktree": "/repo/.worktrees/task-169",
+        "sourceBranch": "master",
+        "exitType": "partially-published",
+        "exitNote": "a script failed operationally",
+        "publicationState": "SOME LANDED"
+    }
+}
