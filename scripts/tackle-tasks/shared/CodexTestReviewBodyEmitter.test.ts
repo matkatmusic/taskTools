@@ -89,9 +89,11 @@ test("test_reviewTestsErrorTemplateKeysMatchTheSchemaRequiredFields", () => {
     assert.deepEqual(Object.keys(errorTemplate).sort(), [...schema.required].sort());
 });
 
-test("test_reviewTestsQuestion_inlinesTheErrorTemplateVerbatim", () => {
+test("test_reviewTestsQuestion_pointsToTheMissingFileReviewScriptInsteadOfInliningJson", () => {
     const errorTemplate = readFileSync(templatePath("review-tests-error-template.json"), "utf8").trim();
-    assert.ok(reviewTestsPrompt(fakeTask).includes(errorTemplate));
+    const prompt = reviewTestsPrompt(fakeTask);
+    assert.equal(prompt.includes(errorTemplate), false);
+    assert.match(prompt, /node .*missingTestFilesReview\.ts/);
 });
 
 test("test_reviewTestsPrompt_namesTheBriefPlanAndTestFilesForTheReviewer", () => {

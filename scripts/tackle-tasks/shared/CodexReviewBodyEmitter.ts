@@ -31,6 +31,7 @@ const REVIEW_PLAN_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-pla
 const REVIEW_PLAN_ERROR_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-error-template.json", import.meta.url));
 const REVIEW_PLAN_OUTPUT_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-plan-output-template.json", import.meta.url));
 const RECORD_REVIEW_SCRIPT = fileURLToPath(new URL("./recordPlanReview.ts", import.meta.url));
+const WRITE_REVIEW_ANSWER_SCRIPT = fileURLToPath(new URL("./writeReviewAnswer.ts", import.meta.url));
 
 // Serves codex and claude fallbacks alike; drops any owned path not on disk yet.
 const reviewedPaths = (t: PreparedTask) => {
@@ -677,6 +678,15 @@ export function createCodexShellInvocation(t: PreparedTask) : string {
 // `;
 // }
 
+// Replaces whatToReturnSection here: the review file path is already known, so one script writes the packet answer.
+function reviewAnswerSection(reviewOutputFile: string): string {
+    return `## WHAT YOU, THE SPAWNING AGENT, RETURNS
+
+Run \`node ${WRITE_REVIEW_ANSWER_SCRIPT} "<the outcome.payload path>" ${reviewOutputFile}\`.
+Then return the hook output verbatim.
+`;
+}
+
 // planReviewPrompt has no branching of its own; kept for skeleton/combos parity with the other builder.
 export type PlanReviewChoices = Record<string, never>;
 
@@ -717,7 +727,7 @@ export function planReviewChoices(): PlanReviewChoices {
 export const PLAN_REVIEW_SKELETON_VARS: PlanReviewVars = {
     spawnAgentHeader: '`${spawnAgentHeader("review", true)}`',
     shellInvocation: "`${createCodexShellInvocation(t)}`",
-    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}`',
+    whatToReturn: "`${reviewAnswerSection(t.reviewOutputFile)}`",
 };
 
 export function renderPlanReviewSections(choices: PlanReviewChoices, vars: PlanReviewVars): string {
@@ -732,7 +742,7 @@ export function planReviewPrompt(t: PreparedTask): string {
     return renderPlanReviewSections(planReviewChoices(), {
         spawnAgentHeader: spawnAgentHeader("review", true),
         shellInvocation: createCodexShellInvocation(t),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable."),
+        whatToReturn: reviewAnswerSection(t.reviewOutputFile),
     });
 }
 

@@ -68,9 +68,9 @@ test("test_main_neverInvokesASkill", () => {
     assert.equal(/invoke the skill/i.test(output.prompt as string), false);
 });
 
-test("test_main_tellsTheAgentToReturnThePathEvenWhenTheCommandFails", () => {
+test("test_main_tellsTheAgentToRunTheWriteReviewAnswerScript", () => {
     const output = main(JSON.stringify(packetFrom(makeFixture())));
-    assert.match(output.prompt as string, /"reviewFile"/);
+    assert.match(output.prompt as string, /node .*writeReviewAnswer\.ts "<the outcome\.payload path>"/);
 });
 
 test("test_main_leavesNoUnresolvedInterpolation", () => {

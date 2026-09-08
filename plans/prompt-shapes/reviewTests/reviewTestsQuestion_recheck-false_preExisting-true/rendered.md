@@ -15,19 +15,12 @@ If any file is missing or unreadable, stop immediately without reviewing any oth
 
 ## MISSING-FILE RESPONSE
 
-If any required file is missing or unreadable, return only the following JSON:
+If any required file is missing or unreadable, run:
 ```
-{
-  "outcome": "ERROR",
-  "missingFiles": ["<exact requested path>"],
-  "message": "Review not performed because one or more required input files were unavailable.",
-  "issues": [],
-  "testsThatHoldUp": []
-}
+node /Users/matkatmusicllc/Programming/taskTools-86/scripts/tackle-tasks/shared/missingTestFilesReview.ts <exact path you could not read> [<exact path you could not read> ...]
 ```
+and return that command's output exactly as your final message.
 This error response overrides the normal review-tests JSON template.
-Set `"issues"` to `[]` in that JSON.
-Set `"testsThatHoldUp"` to `[]` in that JSON.
 
 ## WHAT YOU READ
 
