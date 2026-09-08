@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "WHAT_DID_THE_PLANNER_RETURN",
+        "box": "DID_FABLE_REVIEW_SUCCEED_Q",
         "scriptSignal": "continue",
         "taskNumber": 42,
         "runId": "run-1",
@@ -14,8 +14,7 @@
     "agentAnswer": {
         "message": "",
         "additionalData": {
-            "reviewFile": "",
-            "codexSucceeded": false
+            "reviewFile": ""
         }
     }
 }

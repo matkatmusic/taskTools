@@ -631,6 +631,7 @@ node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE
     `;
 }
 
+// A workflow agent can't spawn claude on the CLI; fable and opus fallbacks run as separate blocks.
 function createCodexShellInvocationLive(t: PreparedTask): string {
     return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
@@ -639,11 +640,37 @@ REVIEWEOF
 REVIEW_FILE=${t.reviewOutputFile}
 CODEX_LOG=${codexLogFile()}
 
-${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)} \\
-  || ${spawnClaudeFableCli("medium")} \\
-  || ${spawnClaudeOpus48Cli("high")}
+${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)}
     `;
 // WHAT_IS_REVIEW_VERDICT already records the review; this line would apply fixes twice.  node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE_TASK_ENTRY <"$REVIEW_FILE"
+}
+
+// The fable and opus fallbacks: the block's own agent() answers the codex reviewQuestion itself.
+export function codexReviewFallbackFablePrompt(t: PreparedTask): string {
+    return `${reviewQuestion(t)}
+
+${fallbackReviewerSection(t.reviewOutputFile)}
+
+${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}", "fableSucceeded": true }`, "the path you wrote the review to, never its contents", "The next block reads fableSucceeded to decide whether to rule on the review or fall back to the last reviewer.")}
+`;
+}
+
+export function codexReviewFallbackOpusPrompt(t: PreparedTask): string {
+    return `${reviewQuestion(t)}
+
+${fallbackReviewerSection(t.reviewOutputFile)}
+
+${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path you wrote the review to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}
+`;
+}
+
+// Overrides the codex-only output lines above: no command captures this agent's message.
+export function fallbackReviewerSection(reviewFile: string): string {
+    return `## YOU ARE THE FALLBACK REVIEWER
+
+Codex was not available, so you do the review above yourself.
+Ignore the lines above that say a command captures your message and that you write no file.
+Write the JSON to \`${reviewFile}\` with the Write tool, then return.`;
 }
 
 function createCodexShellInvocationOriginal(t: PreparedTask): string {
@@ -717,7 +744,7 @@ export function planReviewChoices(): PlanReviewChoices {
 export const PLAN_REVIEW_SKELETON_VARS: PlanReviewVars = {
     spawnAgentHeader: '`${spawnAgentHeader("review", true)}`',
     shellInvocation: "`${createCodexShellInvocation(t)}`",
-    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}`',
+    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer.")}`',
 };
 
 export function renderPlanReviewSections(choices: PlanReviewChoices, vars: PlanReviewVars): string {
@@ -732,7 +759,7 @@ export function planReviewPrompt(t: PreparedTask): string {
     return renderPlanReviewSections(planReviewChoices(), {
         spawnAgentHeader: spawnAgentHeader("review", true),
         shellInvocation: createCodexShellInvocation(t),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable."),
+        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer."),
     });
 }
 

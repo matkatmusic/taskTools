@@ -1,9 +1,13 @@
 flowchart TB
-%% One orange block. The hook walks in from a dashed CODEX_REVIEWS_TESTS block, prints the prompt, and stops.
+%% Codex review tests: failed codex falls back to fable then opus, each as its own block.
 
   subgraph codexReviewsTests ["Input: green task tests"]
     direction TB
     CODEX_REVIEWS_TESTS["CODEX_REVIEWS_TESTS"]
+    DID_CODEX_TEST_REVIEW_SUCCEED_Q["codex reachable?"]
+    CODEX_TEST_REVIEW_FALLBACK_FABLE["CODEX_TEST_REVIEW_FALLBACK_FABLE"]
+    DID_FABLE_TEST_REVIEW_SUCCEED_Q["fable reachable?"]
+    CODEX_TEST_REVIEW_FALLBACK_OPUS["CODEX_TEST_REVIEW_FALLBACK_OPUS"]
   end
   subgraph codexReviewsTestsNext ["next diagram"]
     direction TB
@@ -11,12 +15,19 @@ flowchart TB
   end
   codexReviewsTests ~~~ codexReviewsTestsNext
 
-  CODEX_REVIEWS_TESTS --> ARE_TESTS_FLAGGED
+  CODEX_REVIEWS_TESTS --> DID_CODEX_TEST_REVIEW_SUCCEED_Q
+  DID_CODEX_TEST_REVIEW_SUCCEED_Q -- "YES" --> ARE_TESTS_FLAGGED
+  DID_CODEX_TEST_REVIEW_SUCCEED_Q -- "NO" --> CODEX_TEST_REVIEW_FALLBACK_FABLE
+  CODEX_TEST_REVIEW_FALLBACK_FABLE --> DID_FABLE_TEST_REVIEW_SUCCEED_Q
+  DID_FABLE_TEST_REVIEW_SUCCEED_Q -- "YES" --> ARE_TESTS_FLAGGED
+  DID_FABLE_TEST_REVIEW_SUCCEED_Q -- "NO" --> CODEX_TEST_REVIEW_FALLBACK_OPUS
+  CODEX_TEST_REVIEW_FALLBACK_OPUS --> ARE_TESTS_FLAGGED
 
   classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
   classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
   classDef fail fill:red,stroke:#254a70,color:#ffffff
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
-  class CODEX_REVIEWS_TESTS returns_a_prompt
+  class DID_CODEX_TEST_REVIEW_SUCCEED_Q,DID_FABLE_TEST_REVIEW_SUCCEED_Q script
+  class CODEX_REVIEWS_TESTS,CODEX_TEST_REVIEW_FALLBACK_FABLE,CODEX_TEST_REVIEW_FALLBACK_OPUS returns_a_prompt
   class ARE_TESTS_FLAGGED next_diagram

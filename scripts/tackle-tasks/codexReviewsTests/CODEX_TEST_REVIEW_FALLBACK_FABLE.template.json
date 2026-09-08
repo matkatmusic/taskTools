@@ -1,6 +1,6 @@
 {
     "input": {
-        "box": "DO_TASK_TESTS_PASS_Q",
+        "box": "DID_CODEX_TEST_REVIEW_SUCCEED_Q",
         "scriptSignal": "continue",
         "taskNumber": 1,
         "runId": "run-1",
@@ -13,8 +13,8 @@
     "agentAnswer": {
         "message": "",
         "additionalData": {
-            "reviewFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/codexReviewsTests/fixtures/worktree/plans/test-review.json",
-            "codexSucceeded": false
+            "reviewFile": "",
+            "fableSucceeded": false
         }
     }
 }

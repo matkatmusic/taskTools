@@ -138,7 +138,7 @@ test("test_driveRun_stopsBeforeEveryPromptBlockWithItsAgentOptions", async () =>
         CODEX_REVIEWS_PLAN: () => {
             const reviewFile = join(worktreePath, "plans", "review.json");
             writeFileSync(reviewFile, JSON.stringify({ outcome: "OK", missingFiles: [], message: "", fixes: [] }));
-            return { message: "reviewed", additionalData: { reviewFile } };
+            return { message: "reviewed", additionalData: { reviewFile, codexSucceeded: true } };
         },
     };
     skillBody("[10]", root);

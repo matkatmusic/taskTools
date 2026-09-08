@@ -8,6 +8,7 @@ import type { PreparedTask } from "./preparedTask.ts";
 import { getAttemptCount, getCurrentTaskRun } from "./taskRunState.ts";
 import { whatToReturnSection } from "./whatToReturn.ts";
 import { codexExecCommand, spawnAgentHeader, spawnClaudeFableCli, spawnClaudeOpus48Cli } from "./spawnAgentCli.ts";
+import { fallbackReviewerSection } from "./CodexReviewBodyEmitter.ts";
 
 const REVIEW_TESTS_TEMPLATE_PATH = fileURLToPath(new URL("../../../plans/review-tests-template.json", import.meta.url));
 const REVIEW_TESTS_SCHEMA_PATH = fileURLToPath(new URL("../../../plans/review-tests-schema.json", import.meta.url));
@@ -539,6 +540,26 @@ export const REVIEW_TESTS_PROMPT_SECTIONS: ReviewTestsPromptSection[] = [
     {
         name: "SPAWN HEADER AND SHELL BLOCK",
         when: () => true,
+        // Retired (task 49): the `||` chain tried claude -p inline; a workflow agent cannot spawn claude on the
+        // CLI, so codex failing now ends this block and CODEX_TEST_REVIEW_FALLBACK_FABLE/_OPUS run as their own blocks.
+        // render: (v) => `${v.spawnHeader}
+        //
+        // \`\`\`\`sh
+        // REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+        // ${v.reviewQuestion}
+        // REVIEWEOF
+        // )
+        // REVIEW_FILE=${v.testReviewFile}
+        // CODEX_LOG=${v.codexLogFile}
+        // ${v.codexExecCommand} \\
+        //   || ${v.spawnClaudeFableCli} \\
+        //   || ${v.spawnClaudeOpus48Cli}
+        // \`\`\`\`
+        //
+        // The \`||\` chain is the fallback.
+        // A non-zero exit means that reviewer was unavailable, not that the tests are bad, so the next one runs.
+        //
+        // `,
         render: (v) => `${v.spawnHeader}
 
 \`\`\`\`sh
@@ -548,13 +569,8 @@ REVIEWEOF
 )
 REVIEW_FILE=${v.testReviewFile}
 CODEX_LOG=${v.codexLogFile}
-${v.codexExecCommand} \\
-  || ${v.spawnClaudeFableCli} \\
-  || ${v.spawnClaudeOpus48Cli}
+${v.codexExecCommand}
 \`\`\`\`
-
-The \`||\` chain is the fallback.
-A non-zero exit means that reviewer was unavailable, not that the tests are bad, so the next one runs.
 
 `,
     },
@@ -578,7 +594,7 @@ export const REVIEW_TESTS_PROMPT_SKELETON_VARS: ReviewTestsPromptVars = {
     codexExecCommand: "`${codexExecCommand(REVIEW_TESTS_SCHEMA_PATH)}`",
     spawnClaudeFableCli: '`${spawnClaudeFableCli("medium")}`',
     spawnClaudeOpus48Cli: '`${spawnClaudeOpus48Cli("high")}`',
-    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}`',
+    whatToReturn: '`${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer.")}`',
 };
 
 export function renderReviewTestsPromptSections(choices: ReviewTestsPromptChoices, vars: ReviewTestsPromptVars): string {
@@ -603,8 +619,35 @@ export function reviewTestsPrompt(t: PreparedTask): string {
         codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),
         spawnClaudeFableCli: spawnClaudeFableCli("medium"),
         spawnClaudeOpus48Cli: spawnClaudeOpus48Cli("high"),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable."),
+        whatToReturn: whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer."),
     });
+}
+
+// The fable and opus fallbacks: the block's own agent() answers the codex reviewTestsQuestion itself.
+export function codexTestReviewFallbackFablePrompt(t: PreparedTask): string {
+    const root = t.repoRoot.replace(/\/+$/, "");
+    const taskTests = taskTestRun(t);
+    const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
+    const diffPath = writeImplementationDiff(t, root);
+    return `${reviewTestsQuestion(t, diffPath, preExistingTestFiles, "npm test", taskTests.output)}
+
+${fallbackReviewerSection(t.testReviewFile)}
+
+${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}", "fableSucceeded": true }`, "the path you wrote the review to, never its contents", "The next block reads fableSucceeded to decide whether to rule on the review or fall back to the last reviewer.")}
+`;
+}
+
+export function codexTestReviewFallbackOpusPrompt(t: PreparedTask): string {
+    const root = t.repoRoot.replace(/\/+$/, "");
+    const taskTests = taskTestRun(t);
+    const preExistingTestFiles = taskTests.testFiles.filter((file) => !taskTests.createdTestFiles.includes(file));
+    const diffPath = writeImplementationDiff(t, root);
+    return `${reviewTestsQuestion(t, diffPath, preExistingTestFiles, "npm test", taskTests.output)}
+
+${fallbackReviewerSection(t.testReviewFile)}
+
+${whatToReturnSection(`{ "reviewFile": "${t.testReviewFile}" }`, "the path you wrote the review to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable.")}
+`;
 }
 
 type Combo = { name: string; skeleton: string; rendered: string };
@@ -674,7 +717,7 @@ export function reviewTestsCombos(): Combo[] {
         codexExecCommand: codexExecCommand(REVIEW_TESTS_SCHEMA_PATH),
         spawnClaudeFableCli: spawnClaudeFableCli("medium"),
         spawnClaudeOpus48Cli: spawnClaudeOpus48Cli("high"),
-        whatToReturn: whatToReturnSection(`{ "reviewFile": "${fakeTask.testReviewFile}" }`, "the path \\`$REVIEW_FILE\\` was set to, never its contents", "The next block reads the file and fails loudly when it is missing or unusable."),
+        whatToReturn: whatToReturnSection(`{ "reviewFile": "${fakeTask.testReviewFile}", "codexSucceeded": <true if the codex command above exited zero, else false> }`, "the path \\`$REVIEW_FILE\\` was set to (never its contents) and whether the codex command exited zero", "The next block reads codexSucceeded to decide whether to rule on the review or fall back to another reviewer."),
     };
     combos.push({ name: "reviewTestsPrompt_skeleton-only", skeleton: reviewTestsPromptSkeleton(reviewTestsPromptChoices()), rendered: renderReviewTestsPromptSections(reviewTestsPromptChoices(), promptRenderVars) });
     return combos;
