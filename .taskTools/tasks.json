@@ -56,7 +56,10 @@
     "difficulty": 6,
     "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand — no automated way to get a flowchart.",
     "blockedBy": [],
-    "hasTests": false
+    "hasTests": false,
+    "createsFiles": [
+      "skills/mermaid/SKILL.md"
+    ]
   },
   {
     "taskNumber": 196,
@@ -173,6 +176,17 @@
         }
       ]
     },
-    "codexReviewNotes": "[implement-blocks] Route the false branch in DOES_FRESH_WORKTREE_SUITE_PASS_Q, the diagram edge, the decision template, and diagram-steps.json to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT; remove the decision's direct lease release and use the report-only exit's established cleanup path.\n\nDurable because: This preserves the required worktree and uses the same inactive-and-lease-release lifecycle as the other report-only outcomes.\n\n[red-tests] Replace the two commented RUN_SUITE_ON_FRESH_WORKTREE test skeletons with complete literal test code, including imports, fixture repository/worktree creation, task claim, committed green/red baseline files, exact main invocation, and assertions.\n\nDurable because: The tests will directly exercise the new block's real baseline-aware suite behavior instead of requiring the implementer to invent coverage.\n\n[implement-blocks] Replace the template prose with three complete `old: (file absent)` / `new:` JSON diffs that enumerate every input and output field and the exact green and red routing values for each new block.\n\nDurable because: Each template becomes reproducible and remains synchronized with the packet contracts and generated step configuration."
+    "codexReviewNotes": "[implement-blocks] Route the false branch in DOES_FRESH_WORKTREE_SUITE_PASS_Q, the diagram edge, the decision template, and diagram-steps.json to pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT; remove the decision's direct lease release and use the report-only exit's established cleanup path.\n\nDurable because: This preserves the required worktree and uses the same inactive-and-lease-release lifecycle as the other report-only outcomes.\n\n[red-tests] Replace the two commented RUN_SUITE_ON_FRESH_WORKTREE test skeletons with complete literal test code, including imports, fixture repository/worktree creation, task claim, committed green/red baseline files, exact main invocation, and assertions.\n\nDurable because: The tests will directly exercise the new block's real baseline-aware suite behavior instead of requiring the implementer to invent coverage.\n\n[implement-blocks] Replace the template prose with three complete `old: (file absent)` / `new:` JSON diffs that enumerate every input and output field and the exact green and red routing values for each new block.\n\nDurable because: Each template becomes reproducible and remains synchronized with the packet contracts and generated step configuration.",
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/RUN_SUITE_ON_FRESH_WORKTREE.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FRESH_WORKTREE_SUITE_PASS_Q.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.test.ts"
+    ]
   }
 ]

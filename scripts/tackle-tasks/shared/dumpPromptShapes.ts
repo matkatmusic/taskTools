@@ -82,6 +82,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== un
     mkdirSync(dir, { recursive: true });
     renameSync(briefFile, `${dir}/brief.md`);
     writeFileSync(`${dir}/planPrompt.md`, planPrompt(task));
+    process.env.RUN_STEP_LOG ??= `${dir}/run-log.json`;
     writeFileSync(`${dir}/planReviewPrompt.md`, planReviewPrompt(task));
     writeFileSync(`${dir}/implementPrompt.md`, buildImplementPrompt(task, "npx tsc --noEmit", 3));
     writeFileSync(`${dir}/fixTaskTestsPrompt.md`, buildFixTaskTestsPrompt(task));
