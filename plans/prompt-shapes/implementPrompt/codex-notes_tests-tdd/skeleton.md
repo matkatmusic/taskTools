@@ -42,8 +42,6 @@ Do not ignore, and instead follow, any non-empty `codexNotes` field in each sect
 - the implementation log at ``${t.notesFile}``
 - the test file paired with each owned file, at ``${t.repoRoot}`/tests/<owned file's base name>.test.ts`
 
-You are forbidden from editing any other file not listed above.
-
 `${resumedRunSection(t.repoRoot)}`
 
 ## TESTS
@@ -62,22 +60,11 @@ Per `~/.claude/guides/tdd.md`, write the failing test before the code that satis
 3. While any test fails, fix the cause, then repeat step 2.
 Stop after `${maxFixRounds}` rounds.
 
-Never run the full suite.
-That gate belongs to a separate phase, not to you.
-
-## NEVER COMMIT
-
-Never stage, commit, or run any git command.
-A later step commits your work for you.
-
 ## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
-- edit anything outside the paths listed under WHAT YOU MAY EDIT;
 - add scope or a refactor the plan does not call for;
 - redecide anything the plan already decided;
-- run the full suite;
-- stage or commit anything, or run any git command;
 - attempt more than `${maxFixRounds}` fix rounds;
 - return `implemented: true` while a test fails or the typecheck reports an error.
 A test listed in `.taskTools/knownFailingTests.json` (the `npm run test:baseline` baseline) does not count as failing.

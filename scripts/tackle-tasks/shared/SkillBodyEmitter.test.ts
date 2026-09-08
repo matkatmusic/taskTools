@@ -99,7 +99,7 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     const defaultRoot = makeTargetRepository([9]);
     const customRoot = makeTargetRepository([9]);
     const customDiagramFolder = join(customRoot, "diagrams");
-    // buildWorkflowScript's START_STEP is fixed to pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK, so any custom diagram folder must still supply it — the same shape tests/generateSteps.test.ts's own custom-diagram fixture uses (read in full at lines 293-330): a folder named after the diagram (minus "pipeline-" and ".mmd") holds PREAMBLE_STATUS_CHECK.ts, and a folder named after the diagram (minus ".mmd") holds SECOND_BOX.ts.
+    // Custom diagram folders must still supply PREAMBLE_STATUS_CHECK and SECOND_BOX, like generateSteps.test.ts's fixture.
     mkdirSync(customDiagramFolder, { recursive: true });
     writeFileSync(join(customDiagramFolder, "pipeline-preambleStatusCheck.mmd"), "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n");
     const preambleFolder = join(customDiagramFolder, "preambleStatusCheck");
@@ -118,7 +118,7 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     skillBody("[9]", defaultRoot);
     skillBody("[9]", customRoot);
 
-    // Verification: each project's own task-9 steps.json holds only its own diagram set, and neither project's file leaked into the other.
+    // Each project's steps.json holds only its own diagram set, with no leaking between them.
     const defaultConfig = JSON.parse(readFileSync(join(defaultRoot, ".taskTools/workflows/9/steps.json"), "utf8"));
     const customConfig = JSON.parse(readFileSync(join(customRoot, ".taskTools/workflows/9/steps.json"), "utf8"));
     assert.deepEqual(Object.keys(customConfig), ["pipeline-preambleStatusCheck.mmd"]);
@@ -173,7 +173,7 @@ test("test_ensureTaskWorkflowPair_writesResolvedAgentOptionsIntoTheTaskStepsJson
         }
         throw new Error(`box ${box} not found`);
     };
-    assert.deepEqual(findEntry("IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high" });
+    assert.deepEqual(findEntry("IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-9-implement-task" });
     assert.deepEqual(findEntry("IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "low" });
 });
 

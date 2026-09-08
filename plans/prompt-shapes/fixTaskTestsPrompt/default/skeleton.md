@@ -42,18 +42,13 @@ Name the single defect behind each failure.
 2. Fix that defect in the paths listed above.
 3. Re-run only the individual test that failed, with `node --test <absolute test path>`, run inside ``${root}``.
 4. Repeat until every listed failure is addressed.
-5. Never run the full suite.
 
 ## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
 - weaken, delete, skip, or stub out a test to make a failure disappear;
 - edit a test file, except to comment out one the guide rules obsolete;
-- edit any path not listed under WHAT YOU MAY EDIT;
-- add scope or a refactor no listed failure calls for;
-- run the full suite;
-- stage or commit anything by hand;
-- force-push or hard-reset anything you did not create.
+- add scope or a refactor no listed failure calls for.
 
 Leaving a failure unaddressed and saying so is a correct outcome when the cause sits outside the paths you own.
 It is not a failure.

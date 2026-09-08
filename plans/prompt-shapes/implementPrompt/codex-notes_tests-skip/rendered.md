@@ -46,8 +46,6 @@ Every shell command must run inside `/tmp/fake-worktree`.
 - `src/thing.ts` => `/tmp/fake-worktree/src/thing.ts`
 - the implementation log at `/tmp/fake-worktree/plans/implementation-notes-99.md`
 
-You are forbidden from editing any other file not listed above.
-
 ## DO NOT CREATE TESTS
 
 This task does not require any tests to be created.
@@ -57,22 +55,11 @@ This task does not require any tests to be created.
 1. Implement every section of the plan, in the order the `sections` array gives them, editing only the paths listed above.
 2. Run the verification command each plan section names.
 
-Never run the full suite.
-That gate belongs to a separate phase, not to you.
-
-## NEVER COMMIT
-
-Never stage, commit, or run any git command.
-A later step commits your work for you.
-
 ## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
-- edit anything outside the paths listed under WHAT YOU MAY EDIT;
 - add scope or a refactor the plan does not call for;
 - redecide anything the plan already decided;
-- run the full suite;
-- stage or commit anything, or run any git command;
 - return `implemented: true` while a plan section's verification command fails.
 
 Returning `implemented: false` is a correct outcome when the plan is impossible as written.
