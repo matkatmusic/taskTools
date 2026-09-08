@@ -173,8 +173,8 @@ test("test_ensureTaskWorkflowPair_writesResolvedAgentOptionsIntoTheTaskStepsJson
         }
         throw new Error(`box ${box} not found`);
     };
-    assert.deepEqual(findEntry("IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
-    assert.deepEqual(findEntry("IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "high" });
+    assert.deepEqual(findEntry("IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high" });
+    assert.deepEqual(findEntry("IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "low" });
 });
 
 test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {

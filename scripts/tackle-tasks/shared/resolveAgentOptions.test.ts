@@ -57,10 +57,10 @@ test("test_resolveAgentOptions_picksTheBandWithTheLargestMinDifficultyNotAboveTh
     assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 2);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 3);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "xhigh" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 4);
     assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium" });
@@ -84,8 +84,8 @@ test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet",
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
     const config = readConfig(stepsConfigPath);
-    assert.deepEqual(findEntry(config, "IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "high" });
-    assert.deepEqual(findEntry(config, "CODEX_REVIEWS_PLAN").agent, { model: "sonnet", effort: "high" });
+    assert.deepEqual(findEntry(config, "IS_DIFFICULTY_7_PLUS_Q").agent, { model: "sonnet", effort: "low" });
+    assert.deepEqual(findEntry(config, "CODEX_REVIEWS_PLAN").agent, { model: "sonnet", effort: "low" });
 });
 
 test("test_resolveAgentOptions_throwsWhenTheTaskHasNoDifficulty", () => {
