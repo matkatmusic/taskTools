@@ -196,10 +196,10 @@ export function emitReflows(hookEventName: string, files: FileReflow[], sessionI
     if (!joined) return false;
   }
   const reason = describeReflows(reflowed, overCap);
-  process.stdout.write(`${JSON.stringify(
-    overCap.length > 0
-      ? { decision: "block", reason }
-      : { hookSpecificOutput: { hookEventName, additionalContext: reason } },
-  )}\n`);
+  // process.stdout.write(`${JSON.stringify(
+  //   overCap.length > 0
+  //     ? { decision: "block", reason }
+  //     : { hookSpecificOutput: { hookEventName, additionalContext: reason } },
+  // )}\n`);
   return true;
 }

@@ -1,3 +1,36 @@
+# Task 92: Report the base-drift abort reason from mergePipeline instead of printing an empty conflicts array
+
+## User request
+
+[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `["scripts/mergePipeline.ts"]`.
+
+Child 4 of 4 from parent task 88 ("Auto-rebase onto the moved source branch, re-test, and retry the merge once when a run drifts past its pinned baseOid"). This child owns STEP 4 ONLY: report what actually happened, so the base-drift abort says why it aborted instead of surfacing as an empty, silent result. The rebase is child 89, the end-to-end tests are child 90, and the retry coordinator is child 91.
+
+Required behavior in scripts/mergePipeline.ts:
+1. Declare `abortReason` immediately BEFORE the `runFinalization` call, outside its callback, keeping only assignments inside the callback. Declared inside, it is out of scope for the later `if (aborted)` check and the file does not compile. This is finding 1 of the codex review of the parent's draft plan and is a hard requirement.
+2. Surface that reason through the result the pipeline prints (printResult, near line 158 as of version 00365e92; the aborted/printResult path is near line 248, the base-drift abort check near line 221), so a drifted run reports "the source branch moved past the pinned baseOid" rather than printing a pre-approval conflicts array that is empty (drift is not a textual conflict) alongside an empty publicationTargets.
+3. Root cause context: runState.status is set to approved the moment readyForApproval is true (near line 10) and is never downgraded, which is why the abort path looks like a clean, successful, empty run to callers.
+4. scripts/mergePipeline.ts is near the 250-line source cap, so split the file rather than growing it past the cap.
+
+Files: scripts/mergePipeline.ts
+
+Tests: prove the file compiles with abortReason in scope at the `if (aborted)` check, and that a run whose source branch moved past its pinned baseOid produces a printed result carrying a non-empty, drift-specific reason rather than an empty conflicts array with empty publicationTargets.
+
+Difficulty: 2
+
+Step 4 of the 4-way split of task 88 (rebase → test → retry merge → report). Scope is scripts/mergePipeline.ts only; scripts/mergeTaskWorktrees.ts is task 89, tests/runMergePhase.test.ts is task 90, and scripts/runMergePhase.ts is task 91.
+
+The reporting defect: runState.status is set to approved the moment readyForApproval becomes true (near line 10 as of version 00365e92) and is never downgraded. runFinalization then aborts when the live source-branch tip no longer matches the pinned baseOid (abort check near line 221), and the abort path (near line 248) hands printResult (near line 158) the pre-approval conflicts array — which is empty, because base drift is not a textual conflict — together with an empty publicationTargets. To every caller that reads like a clean, successful run that simply had nothing to publish. Task 63 already added the judgeMergeRun guard in scripts/runMergePhase.ts (lines 35-49) that refuses to archive that shape as merged, but the operator still gets no reason.
+
+Deliverable: the drift abort carries an explicit, drift-specific reason all the way out through printResult, so the printed result names the cause (source branch moved past the pinned baseOid, with the pinned and live OIDs) instead of an empty conflicts array.
+
+Hard constraint from finding 1 of the codex review that rejected the parent's draft plan: abortReason must be declared immediately before the runFinalization call, OUTSIDE its callback, with only assignments inside the callback. Declared inside the callback it is out of scope at the later `if (aborted)` check and the file does not compile — this exact mistake is what the review caught.
+
+scripts/mergePipeline.ts sits near the 250-line source cap, so extract into a new module rather than letting the file grow past the cap. Related helper already extracted during earlier drift work: scripts/baseDrift.ts (computeDriftByGroup, probeMergeTreeConflicts, BaseDriftResult), which is where drift facts naturally live.
+
+### scripts/mergePipeline.ts
+
+```
 // Translates the CLI's flat merge input into the finalize/consolidate/push/publish/archive pipeline.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -7,15 +40,14 @@ import { resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath
 import { appendRunMetricsRecord, computeArgumentsHash, runDurationMs } from "./tackleMetrics.ts";
 import { computeOccurrenceDigests, recordApproval, issueApprovalAuthorization, finalizeApprovedRun, computeApprovalDigest, type OccurrenceSnapshot, type RunState, type ApprovalDigestInput } from "./approvalGate.ts";
 import type { TestReceipt } from "./approvalReadiness.ts";
-import { validateRepositoryManifest, type RepositoryManifest } from "./repositoryManifest.ts";
-import { buildOperationPushOccurrences, identityKey, sanitizeSegment } from "./operationBranches.ts";
+import { validateRepositoryManifest, type RepositoryManifest, type RepositoryOccurrence } from "./repositoryManifest.ts";
 import { normalizeRepositoryIdentity, type RepositoryIdentity } from "./submoduleUrlIdentity.ts";
 import type { LogicalRepository } from "./logicalRepository.ts";
 import { prepareNoFfMerge } from "./repositoryIntegration.ts";
 import { consolidateRun, type GroupOccurrenceBranch, type LogicalRepositoryConsolidationInput } from "./runConsolidation.ts";
-import { pushOperationBranches } from "./operationPush.ts";
+import { pushOperationBranches, type OperationPushInput } from "./operationPush.ts";
 import { publishBases, readCurrentRefOid, type PublicationTarget } from "./basePublication.ts";
-import { summarizeTaskMergeResults, type RawTaskRepoOutcome, type ArchiveRequest } from "./taskArchival.ts";
+import { summarizeTaskMergeResults, archivePublishedTasks, type RawTaskRepoOutcome } from "./taskArchival.ts";
 import { runFinalization } from "./runAuthorization.ts";
 export type CliInput = WorkflowArguments & {
     runId?: string; startTimestamp?: string; doneCount?: number; partialCount?: number; blockedCount?: number;
@@ -25,11 +57,15 @@ export type CliInput = WorkflowArguments & {
 export type SubmoduleConflict = { path: string; conflictedFilePaths: string[]; failureReason: string | null };
 export type MergeOutcome = { groupId: number; merged: boolean; conflictedFilePaths: string[]; submoduleConflicts: SubmoduleConflict[]; worktree: string; failureReason: string | null };
 export type PublicationTargetSummary = { repositoryPath: string; recordedBaseOid: string; targetOid: string };
-export type Coordinate = { repoRoot: string; relativePath: string };
-export type LogicalGroup = { logicalId: string; occurrenceIds: string[]; canonicalOccurrenceId: string };
-export type ConsolidationOutcome = { preparedIntegrationOid: string; canonicalRepoRoot: string; canonicalRefName: string; recordedBaseOid: string; integrationRef: string };
+type Coordinate = { repoRoot: string; relativePath: string };
+type LogicalGroup = { logicalId: string; occurrenceIds: string[]; canonicalOccurrenceId: string };
+type ConsolidationOutcome = { preparedIntegrationOid: string; canonicalRepoRoot: string; canonicalRefName: string; recordedBaseOid: string; integrationRef: string };
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+function sanitizeSegment(segment: string): string {
+    const cleaned = segment.replace(/[^A-Za-z0-9_-]/g, "-") || "seg";
+    return `${cleaned}-${createHash("sha256").update(segment).digest("hex").slice(0, 8)}`;
 }
 function digestIds(ids: string[]): string { return createHash("sha256").update([...ids].sort().join("\n")).digest("hex"); }
 function parseMergeTreeConflicts(stdout: string): string[] {
@@ -37,7 +73,7 @@ function parseMergeTreeConflicts(stdout: string): string[] {
     return [...new Set(lines.filter(Boolean).map((line) => line.split("\t")[1]))];
 }
 function occurrenceToLogicalId(groups: LogicalGroup[], occurrenceId: string): string { return groups.find((g) => g.occurrenceIds.includes(occurrenceId))!.logicalId; }
-export function buildCoordinates(repo: string, manifest: RepositoryManifest): Map<string, Coordinate> {
+function buildCoordinates(repo: string, manifest: RepositoryManifest): Map<string, Coordinate> {
     const repoResolved = resolve(repo);
     const coordinates = new Map<string, Coordinate>();
     for (const occurrence of manifest.occurrences) {
@@ -48,65 +84,12 @@ export function buildCoordinates(repo: string, manifest: RepositoryManifest): Ma
     }
     return coordinates;
 }
-// Deepest checkout that's a strict prefix of `path` owns it; an exact checkout match belongs to the parent.
-function ownerLogicalIdForPath(path: string, manifest: RepositoryManifest, coordinates: Map<string, Coordinate>, logicalGroups: LogicalGroup[]): { logicalId: string; repoRelativePath: string } {
-    let best: { occurrenceId: string; relativePath: string } | null = null;
-    for (const occurrence of manifest.occurrences) {
-        const relativePath = coordinates.get(occurrence.occurrenceId)!.relativePath;
-        if (relativePath !== "" && !path.startsWith(`${relativePath}/`)) continue;
-        if (!best || relativePath.length > best.relativePath.length) best = { occurrenceId: occurrence.occurrenceId, relativePath };
-    }
-    const repoRelativePath = best!.relativePath === "" ? path : path.slice(best!.relativePath.length + 1);
-    return { logicalId: occurrenceToLogicalId(logicalGroups, best!.occurrenceId), repoRelativePath };
+function identityKey(occurrence: RepositoryOccurrence): string {
+    if (occurrence.originUrl === "") return `blank:${occurrence.occurrenceId}`;
+    const parsed = normalizeRepositoryIdentity(occurrence.originUrl);
+    return parsed ? `parsed:${parsed.host}/${parsed.owner}/${parsed.repository}` : `opaque:${occurrence.originUrl}`;
 }
-export function taskFilesByLogicalId(files: string[], manifest: RepositoryManifest, coordinates: Map<string, Coordinate>, logicalGroups: LogicalGroup[]): Set<string> {
-    return new Set(files.map((path) => ownerLogicalIdForPath(path, manifest, coordinates, logicalGroups).logicalId));
-}
-function pathExistsInTree(repoRoot: string, commitHash: string, path: string): boolean {
-    try {
-        execFileSync("git", ["-C", repoRoot, "cat-file", "-e", `${commitHash}:${path}`], { stdio: ["ignore", "ignore", "ignore"] });
-        return true;
-    } catch {
-        return false;
-    }
-}
-function consolidationChangedFromBase(repoRoot: string, recordedBaseOid: string, preparedIntegrationOid: string): boolean {
-    return git(repoRoot, "rev-parse", `${recordedBaseOid}^{tree}`).trim() !== git(repoRoot, "rev-parse", `${preparedIntegrationOid}^{tree}`).trim();
-}
-// Returns an abortReason for the first failing task/repository pair, or null if every declared file is verified.
-export function findTaskArchivalValidationFailure(
-    tasks: { number: number; files: string[] }[],
-    manifest: RepositoryManifest,
-    coordinates: Map<string, Coordinate>,
-    logicalGroups: LogicalGroup[],
-    consolidations: Map<string, ConsolidationOutcome>,
-): string | null {
-    for (const task of tasks) {
-        if (task.files.length === 0) return `task ${task.number} declares no files; refusing to archive without a way to verify its code landed`;
-        const pathsByLogicalId = new Map<string, string[]>();
-        for (const path of task.files) {
-            const owned = ownerLogicalIdForPath(path, manifest, coordinates, logicalGroups);
-            const paths = pathsByLogicalId.get(owned.logicalId) ?? [];
-            paths.push(owned.repoRelativePath);
-            pathsByLogicalId.set(owned.logicalId, paths);
-        }
-        for (const [logicalId, repoRelativePaths] of pathsByLogicalId) {
-            const consolidation = consolidations.get(logicalId);
-            if (!consolidation || !consolidation.preparedIntegrationOid) return `task ${task.number}: no integration commit recorded for repository "${logicalId}"`;
-            if (!consolidationChangedFromBase(consolidation.canonicalRepoRoot, consolidation.recordedBaseOid, consolidation.preparedIntegrationOid)) {
-                return `task ${task.number}: consolidation for repository "${logicalId}" produced no changes from its recorded base (empty commit ${consolidation.preparedIntegrationOid})`;
-            }
-            for (const repoRelativePath of repoRelativePaths) {
-                if (pathExistsInTree(consolidation.canonicalRepoRoot, consolidation.preparedIntegrationOid, repoRelativePath)) continue;
-                // Absent now but present at the recorded base: the task deleted a file it declared owning.
-                if (pathExistsInTree(consolidation.canonicalRepoRoot, consolidation.recordedBaseOid, repoRelativePath)) continue;
-                return `task ${task.number}: declared file "${repoRelativePath}" is missing from commit ${consolidation.preparedIntegrationOid} in repository "${logicalId}"`;
-            }
-        }
-    }
-    return null;
-}
-export function buildLogicalGroups(manifest: RepositoryManifest): LogicalGroup[] {
+function buildLogicalGroups(manifest: RepositoryManifest): LogicalGroup[] {
     const byKey = new Map<string, string[]>();
     for (const occurrence of manifest.occurrences) {
         const key = identityKey(occurrence);
@@ -116,7 +99,7 @@ export function buildLogicalGroups(manifest: RepositoryManifest): LogicalGroup[]
     return [...byKey.entries()].map(([key, occurrenceIds]) => ({ logicalId: sanitizeSegment(key), occurrenceIds, canonicalOccurrenceId: occurrenceIds[0] }));
 }
 // Post-order DFS over occurrence childOccurrenceIds mapped through their owning logical group: children before parents.
-export function topoOrderLogicalGroups(groups: LogicalGroup[], manifest: RepositoryManifest): LogicalGroup[] {
+function topoOrderLogicalGroups(groups: LogicalGroup[], manifest: RepositoryManifest): LogicalGroup[] {
     const occurrenceToLogical = new Map<string, string>();
     for (const group of groups) for (const id of group.occurrenceIds) occurrenceToLogical.set(id, group.logicalId);
     const occurrenceById = new Map(manifest.occurrences.map((o) => [o.occurrenceId, o]));
@@ -205,11 +188,11 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             conflictCount, argumentsHash: computeArgumentsHash(workflowArguments),
         });
     };
-    const printResult = (publicationTargets: PublicationTargetSummary[], abortReason: string | null = null, archiveRequest: ArchiveRequest | null = null): void => { process.stdout.write(JSON.stringify({ merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, publicationTargets, abortReason, archiveRequest })); };
+    const printResult = (publicationTargets: PublicationTargetSummary[]): void => { process.stdout.write(JSON.stringify({ merged, conflicts, testReceipts, reviewHandoffs, occurrenceDigests, runState, publicationTargets })); };
     if (!readyForApproval) { endMetrics(conflicts.length); printResult([]); return; }
     recordApproval(runState);
     const token = issueApprovalAuthorization(runState);
-    const digest = computeApprovalDigest(runState.digestInput); let abortReason: string | null = null;
+    const digest = computeApprovalDigest(runState.digestInput);
     const aborted = await runFinalization(token, digest, async (): Promise<boolean> => {
         const consolidations = new Map<string, ConsolidationOutcome>();
         for (const logicalGroup of logicalGroups) {
@@ -257,7 +240,10 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             git(canonicalRepoRoot, "update-ref", integrationRef, result.preparedIntegrationOid);
             consolidations.set(logicalGroup.logicalId, { preparedIntegrationOid: result.preparedIntegrationOid, canonicalRepoRoot, canonicalRefName: `refs/heads/${canonicalOccurrence.baseBranch}`, recordedBaseOid: canonicalOccurrence.baseOid, integrationRef });
         }
-        const operationPushOccurrences = buildOperationPushOccurrences(manifest.occurrences, runId);
+        const operationPushOccurrences = manifest.occurrences.map((occurrence) => {
+            const logicalGroup = logicalGroups.find((g) => g.occurrenceIds.includes(occurrence.occurrenceId))!;
+            return { ...occurrence, operationBranch: `operations/${runId}/${sanitizeSegment(logicalGroup.logicalId)}` };
+        });
         const operationPushLogicalRepositories: LogicalRepository[] = logicalGroups.map((group) => ({
             normalizedIdentity: normalizeRepositoryIdentity(occurrenceById.get(group.canonicalOccurrenceId)!.originUrl) ?? ({ host: "opaque", owner: "opaque", repository: group.logicalId } as RepositoryIdentity),
             occurrenceIds: group.occurrenceIds, selectedBaseOccurrenceId: group.canonicalOccurrenceId, canonicalOccurrenceId: group.canonicalOccurrenceId,
@@ -265,10 +251,7 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
             consolidationState: group.occurrenceIds.length === 1 ? "single" : "grouped",
         }));
         await pushOperationBranches({ logicalRepositories: operationPushLogicalRepositories, occurrences: operationPushOccurrences }, token, digest);
-        for (const occurrence of manifest.occurrences) { const liveOid = readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`); if (liveOid !== occurrence.baseOid) { abortReason = `the source branch moved past the pinned baseOid (pinned ${occurrence.baseOid}, now ${liveOid})`; return true; } }
-        const tasksForValidation = sortedGroups.flatMap((group) => group.tasks.map((task) => ({ number: task.number, files: task.files })));
-        const validationFailure = findTaskArchivalValidationFailure(tasksForValidation, manifest, coordinates, logicalGroups, consolidations);
-        if (validationFailure !== null) { abortReason = validationFailure; return true; }
+        for (const occurrence of manifest.occurrences) if (readCurrentRefOid(coordinates.get(occurrence.occurrenceId)!.repoRoot, `refs/heads/${occurrence.baseBranch}`) !== occurrence.baseOid) return true;
         const publicationTargets: PublicationTarget[] = logicalGroups.map((group) => {
             const consolidation = consolidations.get(group.logicalId)!;
             return {
@@ -280,23 +263,22 @@ export async function runMergePipeline(input: CliInput): Promise<void> {
         const rootConsolidation = consolidations.get(logicalGroups.find((g) => g.occurrenceIds.includes(rootOccurrence.occurrenceId))!.logicalId)!;
         const publicationResult = publishBases(publicationTargets, runState, { repoPath: rootConsolidation.canonicalRepoRoot, refName: rootConsolidation.integrationRef });
         if (!publicationResult.published) return true;
-        const rawOutcomes: RawTaskRepoOutcome[] = sortedGroups.flatMap((group) => group.tasks.flatMap((task) => {
-            const owningLogicalIds = taskFilesByLogicalId(task.files, manifest, coordinates, logicalGroups);
-            return [...owningLogicalIds].map((logicalId) => ({
-                taskNumber: task.number, repo: { repoName: logicalId, status: "published" as const, commitHash: consolidations.get(logicalId)!.preparedIntegrationOid },
-            }));
-        }));
+        const rawOutcomes: RawTaskRepoOutcome[] = sortedGroups.flatMap((group) => group.tasks.flatMap((task) => logicalGroups.map((logicalGroup) => ({
+            taskNumber: task.number, repo: { repoName: logicalGroup.logicalId, status: "published" as const, commitHash: consolidations.get(logicalGroup.logicalId)!.preparedIntegrationOid },
+        }))));
         const mergeResults = summarizeTaskMergeResults(rawOutcomes);
+        archivePublishedTasks(sortedGroups.flatMap((group) => group.tasks.map((task) => task.number)), mergeResults, input.repo);
         for (const resolvePath of [resolveRunArgumentsPath, resolveRunOutcomesPath, resolveStepOutputsPath]) rmSync(resolvePath(input.repo), { force: true });
         const summaryTargets: PublicationTargetSummary[] = manifest.occurrences.map((occurrence) => {
             const group = logicalGroups.find((g) => g.occurrenceIds.includes(occurrence.occurrenceId))!;
             const consolidation = consolidations.get(group.logicalId)!;
             return { repositoryPath: coordinates.get(occurrence.occurrenceId)!.relativePath, recordedBaseOid: occurrence.baseOid, targetOid: consolidation.preparedIntegrationOid };
         });
-        const archiveRequest: ArchiveRequest = { publishedTaskNumbers: sortedGroups.flatMap((group) => group.tasks.map((task) => task.number)), mergeResults };
         endMetrics(0);
-        printResult(summaryTargets, null, archiveRequest);
+        printResult(summaryTargets);
         return false;
     });
-    if (aborted) { endMetrics(conflicts.length + 1); printResult([], abortReason); }
+    if (aborted) { endMetrics(conflicts.length + 1); printResult([]); }
 }
+
+```

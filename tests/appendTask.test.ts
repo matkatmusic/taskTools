@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { appendTaskToTasksJson, buildTaskEntry, type NewTaskPayload } from "../scripts/appendTask.ts";
+import { appendTaskToTasksJson, buildTaskEntry, validateNewTaskPayload, type NewTaskPayload } from "../scripts/appendTask.ts";
 import type { TaskRecord } from "../scripts/taskFiles.ts";
 
 const scriptPath = fileURLToPath(new URL("../scripts/appendTask.ts", import.meta.url));
@@ -29,6 +29,9 @@ function minimalPayload(overrides: Partial<NewTaskPayload> = {}): NewTaskPayload
         userDescription: "user asked for the thing",
         goal: ["- the thing works"],
         tests: "skip",
+        description: "touches scripts/thing.ts; the root cause is a missing guard",
+        files: ["scripts/thing.ts"],
+        difficulty: 3,
         ...overrides,
     };
 }
@@ -72,13 +75,42 @@ test("test_appendTaskWritesTwoSpaceIndentedJsonWithTrailingNewline", () => {
 test("test_appendTaskOmitsOptionalFieldsThatAreEmpty", () => {
     const projectRoot = makeTemporaryTaskRepo([]);
     const entry = appendTaskToTasksJson(
-        minimalPayload({ chainGoal: [], files: [], blockedBy: [] }),
+        minimalPayload({ chainGoal: [], blockedBy: [] }),
         projectRoot,
     );
     assert.equal("chainGoal" in entry, false);
-    assert.equal("files" in entry, false);
     assert.equal("blockedBy" in entry, false);
     assert.equal("handoffFilePaths" in entry, false);
+});
+
+// A workflow agent holds only research, so an incomplete payload must be refused at the door.
+test("test_appendTaskRefusesAPayloadMissingARequiredTemplateField", () => {
+    for (const missing of ["title", "userDescription", "description", "tests", "files", "goal", "difficulty"]) {
+        const payload = minimalPayload();
+        delete (payload as Record<string, unknown>)[missing];
+        assert.throws(() => validateNewTaskPayload(payload), new RegExp(missing), `${missing} was accepted`);
+    }
+});
+
+test("test_appendTaskRefusesBlankStringsAndEmptyArrays", () => {
+    assert.throws(() => validateNewTaskPayload(minimalPayload({ title: "   " })), /title/);
+    assert.throws(() => validateNewTaskPayload(minimalPayload({ goal: [] })), /goal/);
+    assert.throws(() => validateNewTaskPayload(minimalPayload({ files: [""] })), /files/);
+    assert.throws(() => validateNewTaskPayload(minimalPayload({ difficulty: 0 })), /difficulty/);
+});
+
+test("test_appendTaskScriptFailsLoudlyOnAnIncompletePayload", () => {
+    const projectRoot = makeTemporaryTaskRepo([]);
+    const payload = minimalPayload();
+    delete (payload as Record<string, unknown>).difficulty;
+    assert.throws(() =>
+        execFileSync("node", [scriptPath], {
+            cwd: projectRoot,
+            input: JSON.stringify(payload),
+            encoding: "utf8",
+            stdio: "pipe",
+        }),
+    );
 });
 
 test("test_appendTaskOmitsVersionWhenCommitHashIsNotFortyHexCharacters", () => {

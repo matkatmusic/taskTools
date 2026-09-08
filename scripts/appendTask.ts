@@ -11,13 +11,49 @@ export type NewTaskPayload = {
     userDescription: string;
     goal: string[];
     tests: string;
+    description: string;
+    files: string[];
+    difficulty: number;
     chainGoal?: string[];
-    files?: string[];
-    description?: string;
-    difficulty?: number;
     blockedBy?: { taskNum: number; reason: string }[];
     handoffFilePaths?: string[];
 };
+
+const requiredTextFields = ["title", "userDescription", "description", "tests"] as const;
+const requiredListFields = ["goal", "files"] as const;
+
+function isBlank(value: unknown): boolean {
+    return typeof value !== "string" || value.trim() === "";
+}
+
+// Every template field a caller can supply must arrive filled, so no caller can append a half-written task.
+export function validateNewTaskPayload(payload: NewTaskPayload): void {
+    const problems: string[] = [];
+    for (const field of requiredTextFields) {
+        if (isBlank(payload[field])) problems.push(`${field} must be a non-blank string`);
+    }
+    for (const field of requiredListFields) {
+        const list = payload[field];
+        if (!Array.isArray(list) || list.length === 0 || list.some(isBlank)) {
+            problems.push(`${field} must be a non-empty array of non-blank strings`);
+        }
+    }
+    if (typeof payload.difficulty !== "number" || !Number.isInteger(payload.difficulty) || payload.difficulty < 1 || payload.difficulty > 10) {
+        problems.push("difficulty must be a whole number from 1 to 10");
+    }
+    if (payload.chainGoal !== undefined && (!Array.isArray(payload.chainGoal) || payload.chainGoal.some(isBlank))) {
+        problems.push("chainGoal, when present, must hold only non-blank strings");
+    }
+    if (payload.blockedBy !== undefined) {
+        const blockersAreWellFormed =
+            Array.isArray(payload.blockedBy) &&
+            payload.blockedBy.every(b => typeof b?.taskNum === "number" && !isBlank(b?.reason));
+        if (!blockersAreWellFormed) problems.push("each blockedBy entry needs a numeric taskNum and a non-blank reason");
+    }
+    if (problems.length > 0) {
+        throw new Error(`refusing to append an incomplete task:\n- ${problems.join("\n- ")}`);
+    }
+}
 
 export function getHeadCommitHash(projectRoot: string): string {
     try {
@@ -67,6 +103,7 @@ export function commitTasksJson(projectRoot: string, taskNumber: number): void {
 }
 
 export function appendTaskToTasksJson(payload: NewTaskPayload, projectRoot: string): TaskRecord {
+    validateNewTaskPayload(payload);
     const pair = resolveTaskFiles(projectRoot);
     seedTaskFilesIfAbsent(pair);
     const tasks = readTaskFile(pair.tasksPath);
@@ -103,6 +140,10 @@ if (process.argv[1]?.endsWith("appendTask.ts")) {
         fail("no payload on stdin");
     }
     const payload = JSON.parse(payloadText) as NewTaskPayload;
-    const entry = appendTaskToTasksJson(payload, process.cwd());
-    process.stdout.write(`${entry.taskNumber}\n`);
+    try {
+        const entry = appendTaskToTasksJson(payload, process.cwd());
+        process.stdout.write(`${entry.taskNumber}\n`);
+    } catch (problem) {
+        fail(problem instanceof Error ? problem.message : String(problem));
+    }
 }

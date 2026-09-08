@@ -58,6 +58,19 @@
   left its unrelated file merely dirty, never staged, so it could not catch this; the test
   now stages that file first.
 
+- **2026-08-09T15:40 — `appendTask.ts` now refuses an incomplete payload, and both workflow
+  agent prompts forbid creating the task.** Another agent observed a workflow agent
+  appending the task itself instead of returning research. The file-hunter prompt was the
+  bait: it ends with the whole `taskTemplate.json`, which reads as a form to fill in. Two
+  changes, per the user's instruction. First, each prompt now opens with "Return your
+  findings and nothing else. Never create the task: do not run appendTask.ts, do not edit
+  tasks.json, do not commit." Second, `validateNewTaskPayload` requires every template
+  field a caller supplies — `title`, `userDescription`, `description`, `tests`, `goal`,
+  `files`, `difficulty` — to be present and non-blank, so a workflow agent holding only
+  research cannot append at all. `description`, `files` and `difficulty` changed from
+  optional to required as a result, and the file-hunter prompt's "omit `files` rather than
+  guessing" line became "return at least one path".
+
 ## Tradeoffs
 
 - **2026-08-09T14:40 — No unit test for `createTask.workflow.js`.** The workflow sandbox

@@ -134,6 +134,7 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     const content = [
         `# Task ${task.taskNumber}: ${task.title ?? ""}`,
         "",
+        ...(task.userDescription ? [`## User request\n\n${task.userDescription}`, ""] : []),
         task.description ?? "",
         "",
         ...fileSections,
@@ -204,6 +205,15 @@ function loadRepositoryManifest(repoRoot: string): RepositoryManifest {
     return { version: REPOSITORY_MANIFEST_VERSION, occurrences: result.occurrenceGraph };
 }
 
+function hasOriginRemote(repoRoot: string): boolean {
+    try {
+        execFileSync("git", ["-C", repoRoot, "remote", "get-url", "origin"], { stdio: "ignore" });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function runAsCli(): void {
     const repoRoot = process.cwd();
     const pair = resolveTaskFiles(repoRoot);
@@ -211,6 +221,9 @@ function runAsCli(): void {
     const requestedNumbers = leadingTaskNumbers(process.argv.slice(2));
     let tasks: TaskRecord[];
     try {
+        if (!hasOriginRemote(repoRoot)) {
+            throw new Error("this repository does not have an origin remote. set one to continue to use 'tackle-tasks'");
+        }
         tasks = selectRequestedTasks(openTasks, requestedNumbers);
     } catch (error) {
         process.stderr.write(`prepareTasks: ${(error as Error).message}\n`);
@@ -735,10 +748,19 @@ whose exact target you did not read.`
 const TASKS = GROUPS.flatMap((g) => g.tasks)
 log(`planning ${TASKS.length} task(s)`)
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const runPlanner = (t) => {
   const options = { label: `plan:${t.number}`, phase: 'Plan', schema: PLAN_SCHEMA }
   if (PLAN_MODEL) options.model = PLAN_MODEL
-  return agent(plannerBrief(t), options)
+  return retryAgent(() => agent(plannerBrief(t), options))
 }
 
 const results = await parallel(TASKS.map((t) => () => runPlanner(t)))
@@ -746,7 +768,7 @@ const plans = TASKS.map((t, i) => results[i] ?? {
   task: t.number,
   status: 'needs-clarification',
   planFile: '',
-  question: 'planner returned no result',
+  question: 'planner returned no result after 3 attempts',
 })
 
 return {
@@ -852,10 +874,19 @@ status "done" with a failing test.`
 
 const planFileFor = (task) => APPROVED.find((a) => a.task === task)?.planFile ?? ''
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const runWorker = (t, group, note) => {
   const options = { label: `task:${t.number}`, phase: 'Implement', schema: WORKER_SCHEMA }
   if (WORKER_MODEL) options.model = WORKER_MODEL
-  return agent(workerBrief(t, group, planFileFor(t.number), note), options)
+  return retryAgent(() => agent(workerBrief(t, group, planFileFor(t.number), note), options))
 }
 
 let requeueCount = 0
@@ -868,7 +899,7 @@ async function implementGroup(group) {
     results.push(result ?? {
       task: t.number,
       status: 'blocked',
-      summary: 'worker agent returned no result (killed, errored, or blocked)',
+      summary: 'worker agent returned no result after 3 attempts (killed, errored, or blocked)',
       remaining: [],
     })
   }
@@ -1015,6 +1046,15 @@ delete a test to make it pass; to assert the current wrong output as the
 expected value; to run \`git add -A\` or \`git add .\`; to commit while anything
 fails; or to redecide the plan yourself.`
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 async function testGroup(group) {
   const tasks = group.tasks.filter((t) => DONE.some((d) => d.task === t.number))
   if (!tasks.length) return { groupId: group.groupId, passed: true, rounds: 0, failures: [], notes: 'no implemented tasks to test' }
@@ -1023,13 +1063,13 @@ async function testGroup(group) {
   let outcome = null
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-    const result = await agent(testerBrief(group, tasks), {
+    const result = await retryAgent(() => agent(testerBrief(group, tasks), {
       label: `test:${group.groupId}:r${round}`,
       phase: 'Test',
       effort: 'low',
       schema: TEST_SCHEMA,
-    })
-    outcome = result ?? { passed: false, failures: tasks.map((t) => ({ task: t.number, detail: 'test agent returned no result' })) }
+    }))
+    outcome = result ?? { passed: false, failures: tasks.map((t) => ({ task: t.number, detail: 'test agent returned no result after 3 attempts' })) }
 
     if (outcome.passed) return { groupId: group.groupId, passed: true, rounds: round, failures: [], notes: '' }
     if (round === MAX_ROUNDS) break
@@ -1039,11 +1079,11 @@ async function testGroup(group) {
 
     log(`group ${group.groupId} round ${round}: fixing ${fixable.length} failing task(s)`)
     await parallel(fixable.map((f) => () =>
-      agent(fixerBrief(taskByNumber.get(f.task), group, f.detail), {
+      retryAgent(() => agent(fixerBrief(taskByNumber.get(f.task), group, f.detail), {
         label: `fix:${f.task}:r${round}`,
         phase: 'Fix',
         schema: FIX_SCHEMA,
-      })))
+      }))))
   }
 
   return {
@@ -1154,18 +1194,27 @@ Return {task: ${t.number}, verdict, revised, notes, reviewer}.`
 
 log(`verifying ${PLANNED.length} plan(s) with codex, up to one repair round each`)
 
+// ponytail: null/undefined means the harness returned no result; re-spawn. Duplicated per file.
+const retryAgent = async (spawn, attempts = 3) => {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await spawn()
+    if (result !== null && result !== undefined) return result
+  }
+  return null
+}
+
 const results = await parallel(PLANNED.map((p) => () =>
-  agent(verifierBrief(TASK_BY_NUMBER.get(p.task), p.planFile), {
+  retryAgent(() => agent(verifierBrief(TASK_BY_NUMBER.get(p.task), p.planFile), {
     label: `verify:${p.task}`,
     phase: 'Verify',
     schema: VERIFY_SCHEMA,
-  })))
+  }))))
 
 const verified = PLANNED.map((p, i) => results[i] ?? {
   task: p.task,
   verdict: 'rejected',
   revised: false,
-  notes: 'verifier agent returned no result (killed, errored, or blocked)',
+  notes: 'verifier agent returned no result after 3 attempts (killed, errored, or blocked)',
   reviewer: 'none',
 })
 
@@ -1206,6 +1255,8 @@ Append ONE object to the `tasks.json` array as its LAST element — at the very 
 !`cat "${CLAUDE_PLUGIN_ROOT}/skills/create-task/template/taskTemplate.json"`
 ```
 
+Populate `userDescription` with $ARGUMENTS verbatim, exactly as typed — never edit, summarize, or reword it. Populate `description` with only the agent's derived understanding gathered while writing the task: file paths, line numbers, root-cause findings, constraints, and decisions; it must not restate the raw prompt.
+
 Populate `files` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
 
 If the request names the source note/handoff file(s) the task came from (e.g. an `update-tasks` harvest), also include `"handoffFilePaths": [<those repo-relative paths>]` in the object; otherwise omit the field.
@@ -1224,7 +1275,8 @@ Finally, confirm to the user: the task number and title that were added.
 {
   "taskNumber": <the injected number above>,
   "title": "<short summary of the task>",
-  "description": "<the task in the user's own wording, plus any refinements gathered; include file paths and repro URLs if given>",
+  "userDescription": "<$ARGUMENTS verbatim, exactly as typed — never edited, summarized, or reworded>",
+  "description": "<only the agent's derived, fleshed-out understanding: file paths, line numbers, root-cause findings, constraints, and decisions gathered while writing the task; must not restate the raw prompt>",
   "files": ["<repo-relative path this task will touch>"],
   "tests": "<the user's example test as prose or pseudocode, or the literal string skip>",
   "difficulty": <implementation effort and risk, NOT importance: 1 = one-line or single-file mechanical change; 2 = contained change to one file plus its test; 3 = several files in one subsystem, design already settled; 4 = crosses subsystems or needs design decisions during implementation; 5 = wide blast radius, unclear scope, or a previously reverted attempt>,

@@ -12,9 +12,11 @@ export function getOpenTaskLines(): string {
 export function produceFileHunterPrompt(taskDescription: string, taskTemplate: string): string {
     return `Find the files this task will touch, and write its description and difficulty.
 
+Return your findings and nothing else. Never create the task: do not run appendTask.ts, do not edit tasks.json, do not commit. The template at the end documents what each field means; it is not a form for you to fill in and submit. The main agent holds the title, goal and tests that you do not have, and it appends the task itself.
+
 Populate \`description\` with only the agent's derived understanding gathered while researching this task: file paths, function names, root-cause findings, constraints, and decisions; it must not restate the raw prompt. Keep it under ten sentences — cite code rather than restating it. Do not include line numbers; line numbers grow stale as tasks are completed and the codebase evolves.
 
-Populate \`files\` with the repo-relative paths the task will touch, including test files. If they genuinely cannot be determined, omit the field entirely rather than guessing.
+Populate \`files\` with the repo-relative paths the task will touch, including test files. Return at least one path; the task cannot be appended without it, so keep searching rather than returning an empty list.
 
 Populate \`difficulty\` on a 1-10 scale measuring implementation effort and risk, not importance: 1 = typo, comment, or constant edit with no behavior change; 10 = wide blast radius, unclear scope, or a previously reverted attempt. The full scale is documented in the template below.
 
@@ -26,6 +28,8 @@ ${taskTemplate}`;
 
 export function produceBlockerHunterPrompt(taskDescription: string, openTaskLines: string): string {
     return `Find which open tasks block this task.
+
+Return your findings and nothing else. Never create the task: do not run appendTask.ts, do not edit tasks.json, do not commit. The main agent appends the task itself.
 
 Read the code each open task touches, not only its title — a blocker can be "the function this task needs does not exist yet", which no title match would catch.
 

@@ -10,6 +10,14 @@ import {
 
 const scriptPath = fileURLToPath(new URL("../scripts/create-task_AgentPromptEmitter.ts", import.meta.url));
 
+// A workflow agent that appends the task invents the title, goal and tests it never asked the user for.
+test("test_bothPromptsForbidTheWorkflowAgentFromCreatingTheTask", () => {
+    for (const prompt of [produceFileHunterPrompt("t", "{}"), produceBlockerHunterPrompt("t", "OPEN 1: x")]) {
+        assert.match(prompt, /do not run appendTask\.ts/);
+        assert.match(prompt, /do not edit tasks\.json/);
+    }
+});
+
 test("test_produceFileHunterPromptEndsWithTheTaskTemplate", () => {
     const taskTemplate = '{"taskNumber": 1}';
     const prompt = produceFileHunterPrompt("test task", taskTemplate);

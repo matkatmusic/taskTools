@@ -96,6 +96,20 @@ test("a changed commit missing the declared path is rejected", () => {
     assert.match(failure ?? "", /missing from commit/);
 });
 
+test("a declared file deleted since the recorded base passes validation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "taskTools-mergepipeline-"));
+    const { manifest, coordinates, logicalGroups, rootRepo, rootBaseOid } = makeManifestAndCoordinates(join(dir, "repo"));
+    git(rootRepo, "rm", "-q", "base.txt");
+    git(rootRepo, "commit", "-q", "-m", "delete base.txt");
+    const integrationOid = git(rootRepo, "rev-parse", "HEAD").trim();
+    const rootLogicalId = logicalGroups.find((g) => g.occurrenceIds.includes("root"))!.logicalId;
+    const consolidations = new Map<string, ConsolidationOutcome>([
+        [rootLogicalId, { preparedIntegrationOid: integrationOid, canonicalRepoRoot: rootRepo, canonicalRefName: "refs/heads/main", recordedBaseOid: rootBaseOid, integrationRef: "refs/x" }],
+    ]);
+    const failure = findTaskArchivalValidationFailure([{ number: 1, files: ["base.txt"] }], manifest, coordinates, logicalGroups, consolidations);
+    assert.equal(failure, null);
+});
+
 test("an empty commit inheriting a pre-existing declared file is rejected", () => {
     const dir = mkdtempSync(join(tmpdir(), "taskTools-mergepipeline-"));
     const { manifest, coordinates, logicalGroups, subRepo, subBaseOid } = makeManifestAndCoordinates(join(dir, "repo"));

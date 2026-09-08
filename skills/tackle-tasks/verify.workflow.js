@@ -30,31 +30,49 @@ If APPROVED, follow it with one short paragraph saying why.
 
 If REJECTED, follow it with two sections. First "PROBLEMS:" — what is wrong and why. Then "FIXES:" — the concrete edits that would make this plan correct, specific enough that someone could apply them to the plan file without making any further decisions of their own. If the plan cannot be fixed within the task's owned files, say so explicitly in FIXES instead of inventing a fix.`
 
-const verifierBrief = (t, planFile) => {
-  const prompt = JSON.stringify(codexPrompt(t, planFile))
-  const command = `codex exec -s read-only ${prompt}`
-  // ponytail: opus/high, not fable/medium — the fallback replaces the strictest gate in the pipeline
-  const opusFallbackCommand = `claude -p ${prompt} --tools "Read" --model claude-opus-4-8 --effort high`
-  const fableFallbackCommand = `claude -p ${prompt} --tools "Read" --model fable --effort medium`
-  return `Review the plan for task #${t.number} by running exactly this command:
+const RECHECK_SUFFIX = `
 
-${command}
+The plan you are reading has already been revised in answer to your previous review. Check one more time to see if ONLY the issues you flagged in the previous review were resolved. Do not look for new issues.`
 
-If that command exits with an error code, codex is unavailable — not a
-verdict. Unavailability looks like a non-zero exit with no APPROVED or
-REJECTED first line and no PROBLEMS or FIXES block: overloaded api, usage
-exceeded, not logged in, rate limited, or no codex binary on PATH. In that
-case run this command instead, and treat its output exactly as you would
-codex's:
+// already shell-quoted — the agent pastes it verbatim, quotes included
+const quotedPrompt = (t, planFile, suffix = '') => JSON.stringify(codexPrompt(t, planFile) + suffix)
 
-${fableFallbackCommand}
-if that command also exits with an error code, run this command instead, and treat its output exactly as you would codex's:
+// ponytail: last fallback is opus/high, not fable/medium — it replaces the strictest gate in the pipeline
+const verifierBrief = (t, planFile) => `Review the plan for task #${t.number}.
 
-${opusFallbackCommand}
+## PROMPT-A (first round)
+
+\`\`\`text
+${quotedPrompt(t, planFile)}
+\`\`\`
+
+## PROMPT-B (re-check, second round only)
+
+\`\`\`text
+${quotedPrompt(t, planFile, RECHECK_SUFFIX)}
+\`\`\`
+
+Each prompt above is already shell-quoted. Paste it verbatim, surrounding
+double quotes included, wherever a command below says PROMPT-A or PROMPT-B.
+Never retype, reflow, or re-escape it.
+
+## Reviewers
+
+  codex:  codex exec -s read-only PROMPT
+  fable:  claude --tools "Read" --model fable --effort medium -p PROMPT
+  opus:   claude --tools "Read" --model claude-opus-4-8 --effort high -p PROMPT
+
+Run the codex command with PROMPT-A first. If it exits with an error code,
+codex is unavailable — not a verdict. Unavailability looks like a non-zero
+exit with no APPROVED or REJECTED first line and no PROBLEMS or FIXES block:
+overloaded api, usage exceeded, not logged in, rate limited, or no codex
+binary on PATH. In that case run the fable command with PROMPT-A, and treat
+its output exactly as you would codex's. If that also exits with an error
+code, run the opus command with PROMPT-A the same way.
 
 Whichever reviewer answers prints its verdict on the first line. The only
 file you may ever edit is the plan file ${planFile} — never touch a source
-file, and never run any command other than the two above.
+file, and never run any command other than the ones above.
 
 Report which reviewer actually produced the verdict you return: reviewer
 "codex" if the codex command answered, reviewer "claude" if you had to fall
@@ -65,8 +83,8 @@ If the first run prints APPROVED:
 
 If the first run prints REJECTED:
   it also prints a FIXES section. Apply those fixes to ${planFile} so the plan
-  says what the reviewer asked for — edit only that file. Then run that same
-  reviewer's command a second time against the now-updated plan.
+  says what the reviewer asked for — edit only that file. Then run the same
+  reviewer that answered a second time, using PROMPT-B — never PROMPT-A.
 
   If the second run prints APPROVED: return verdict "approved", revised true,
   and describe in notes what you changed in the plan.
@@ -81,7 +99,6 @@ If the first run prints REJECTED:
 
 Never review more than twice in total, counting codex and the fallback together.
 Return {task: ${t.number}, verdict, revised, notes, reviewer}.`
-}
 
 log(`verifying ${PLANNED.length} plan(s) with codex, up to one repair round each`)
 

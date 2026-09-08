@@ -10,6 +10,8 @@ import {
     parseFileGroups,
     partitionFiles,
     readParentTask,
+    runClose,
+    runInfo,
     validateChildNumbers,
     validateFileGroups,
     verifyChildFiles,
@@ -266,6 +268,21 @@ test("findSplitCandidates lists open tasks qualifying on difficulty or file coun
     const task12 = candidates.find((c) => c.taskNumber === 12)!;
     assert.equal(task12.unsplittable, false);
     assert.equal(task12.fileCount, 5);
+});
+
+test("runInfo throws a usage message when numSplits is omitted", () => {
+    assert.throws(
+        () => runInfo("189", undefined as unknown as string),
+        (error: Error) => error.message === "Usage: /split-task <taskNum> <numSplits> [guidance]",
+    );
+});
+
+test("runClose throws a usage message when numSplits is omitted", () => {
+    assert.throws(
+        () => runClose("58", undefined as unknown as string, "66,67", '[["a.ts"],["b.ts"]]'),
+        (error: Error) =>
+            error.message === "Usage: splitTask.ts close <parentNum> <numSplits> <childNum1,childNum2,...> <fileGroupsJson>",
+    );
 });
 
 test("SKILL.md advertises the guidance argument and extracts it via $ARGUMENTS, not the truncating $3", () => {
