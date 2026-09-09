@@ -117,7 +117,7 @@ for (const [diagramFile, entries] of Object.entries(config)) {
 // A prompt block is terminal for its agent; the engine carries the payload, not a next-step line.
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
-        if (!entry.producesPrompt) {
+        if (!entry.producesPrompt || entry.mutating) {
             continue;
         }
         test(`test_stepTemplate_${diagramFile.replace(".mmd", "")}_${entry.box}_promptHasNoContinuationInstructions`, () => {

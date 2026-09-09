@@ -66,7 +66,7 @@ test("test_getOccurrencesDeepestFirst_putsTheRootLast", () => {
 });
 
 test("test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceManifest", () => {
-    // Setup: a source repo with an unchanged submodule, checked out into a linked worktree where both layers sit on task-N, not on their own source branches.
+    // Setup: an unchanged submodule in a linked worktree, both layers on task-N, not their own source branches.
     const { rootOrigin } = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);
 
@@ -75,9 +75,9 @@ test("test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceMa
     const root = occurrences.find((occurrence) => occurrence.occurrenceId === "");
     const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
 
-    // Verification: the root uses the supplied root source branch. The submodule resolves its own base branch from the source repository, never "" and never the shared task branch.
+    // Verification: root uses the supplied branch; submodule resolves its own base branch, never empty, never the shared task branch.
     assert.equal(root?.baseRef, "main");
-    assert.equal(child?.baseRef, "child-main");
+    assert.equal(child?.baseRef, "staging");
     assert.notEqual(child?.baseRef, "");
     assert.ok(!child?.baseRef.startsWith("task-"));
     assert.notEqual(root?.baseRef, child?.baseRef);
@@ -98,7 +98,7 @@ test("test_getOccurrencesDeepestFirst_keepsChildBaseRefStableAfterASubmoduleChan
     const child = occurrences.find((occurrence) => occurrence.occurrenceId === "child");
 
     // Verification: the child's base ref is still its unchanged source branch, and diffing against it (not against task-N) actually reports the submodule change.
-    assert.equal(child?.baseRef, "child-main");
+    assert.equal(child?.baseRef, "staging");
     const diff = git(join(worktreePath, "child"), "diff", `${child?.baseRef}...HEAD`, "--stat");
     assert.match(diff, /newfile\.txt/);
 });

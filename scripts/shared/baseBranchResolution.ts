@@ -26,7 +26,12 @@ function listLocalBranchTips(repoPath: string): { branchName: string; tipOid: st
 
 export function resolveBaseBranchCandidates(repoPath: string, recordedOid: string): BaseBranchResolution {
     const branchTips = listLocalBranchTips(repoPath);
+    if (branchTips.some((branch) => branch.branchName === "staging")) {
+        return { kind: "single", baseBranch: "staging" };
+    }
     const matchingBranchNames = branchTips
+        // task-N is a taskTools-managed branch, never a base branch.
+        .filter((branch) => !/^task-\d+$/.test(branch.branchName)) // && branch.branchName !== "staging" now dead, staging returns above
         .filter((branch) => branch.tipOid === recordedOid)
         .map((branch) => branch.branchName);
 

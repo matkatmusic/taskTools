@@ -38,6 +38,7 @@ function makeTempRepoFromFixture(branchName: string): string {
 }
 
 function makeSourceRepoWithSubmodule(): string {
+    // Not "staging": baseBranchResolution deliberately never resolves "staging" as a base branch.
     const childOrigin = makeTempRepoFromFixture("child-main");
     const rootOrigin = makeTempRepoFromFixture("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");

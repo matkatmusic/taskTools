@@ -76,3 +76,27 @@ test("a branch that merely contains the recorded OID is never reported as a matc
         assert.deepEqual(result, { kind: "single", baseBranch: "base" });
     });
 });
+
+test("a task-N branch at the same tip as the base branch is ignored, leaving a single match", () => {
+    withTempGitRepo((repoPath) => {
+        const recordedOid = commitNewFile(repoPath, "first.txt");
+        runGitCommand(repoPath, ["branch", "-m", "main", "develop"]);
+        createBranchAtCurrentHead(repoPath, "task-376");
+        const result = resolveBaseBranchCandidates(repoPath, recordedOid);
+        assert.deepEqual(result, { kind: "single", baseBranch: "develop" });
+    });
+});
+
+test("when staging exists it is the base branch even if the recorded OID matches neither main nor staging", () => {
+    withTempGitRepo((repoPath) => {
+        const recordedOid = commitNewFile(repoPath, "first.txt");
+        createBranchAtCurrentHead(repoPath, "staging");
+        runGitCommand(repoPath, ["checkout", "staging"]);
+        commitNewFile(repoPath, "second.txt");
+        runGitCommand(repoPath, ["checkout", "main"]);
+        commitNewFile(repoPath, "third.txt");
+        createBranchAtCurrentHead(repoPath, "task-42");
+        const result = resolveBaseBranchCandidates(repoPath, recordedOid);
+        assert.deepEqual(result, { kind: "single", baseBranch: "staging" });
+    });
+});

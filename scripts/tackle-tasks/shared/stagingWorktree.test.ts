@@ -62,8 +62,7 @@ test("test_ensureStagingWorktree_addsANestedLinkedWorktreePerSubmodule", () => {
         git(join(repo, "child"), "worktree", "list", "--porcelain").includes(realpathSync(join(path, "child"))),
         true,
     );
-    const childOccurrence = loadRepositoryManifest(repo, "staging").occurrences.find((occurrence) => occurrence.occurrenceId === "child")!;
-    assert.equal(git(join(path, "child"), "branch", "--show-current"), childOccurrence.baseBranch);
+    assert.equal(git(join(path, "child"), "branch", "--show-current"), "staging");
 });
 
 test("test_ensureStagingWorktree_doesNothingWhenTheWorktreeExists", () => {

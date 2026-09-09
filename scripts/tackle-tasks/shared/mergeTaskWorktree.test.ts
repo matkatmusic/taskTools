@@ -36,6 +36,7 @@ function makeTempRepoWithTestScript(branchName: string): string {
 }
 
 function makeSourceRepoWithSubmodule(): string {
+    // Branch name must match rootSourceBranch; submodule add only checks out that branch locally, and fetches need that ref.
     const childOrigin = makeTempRepoWithTestScript("child-main");
     const rootOrigin = makeTempRepoWithTestScript("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
@@ -74,7 +75,7 @@ function commitTaskWorkInWorktree(worktreePath: string): void {
 async function claimCommitAndRebase(rootOrigin: string, taskNumber: number, worktreePath: string, runId: string): Promise<string> {
     seedTaskAndClaim(rootOrigin, taskNumber, runId);
     commitTaskWorkInWorktree(worktreePath);
-    const sourceBranch = currentBranchName(rootOrigin);
+    const sourceBranch = "staging"; // production always merges/rebases against staging
     const rebaseResult = await rebaseTaskWorktree({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId, stepId: `rebase-${runId}`, rootSourceBranch: sourceBranch,
     });

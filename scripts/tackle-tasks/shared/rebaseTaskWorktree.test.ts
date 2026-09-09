@@ -35,7 +35,8 @@ function makeTempRepoWithCommit(branchName: string): string {
 }
 
 function makeSourceRepoWithSubmodule(): string {
-    const childOrigin = makeTempRepoWithCommit("child-main");
+    // Branch name must match rootSourceBranch: submodule add only checks out this branch locally, and later fetches need that ref.
+    const childOrigin = makeTempRepoWithCommit("main");
     const rootOrigin = makeTempRepoWithCommit("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
     git(rootOrigin, "commit", "-q", "-m", "add submodule child");
@@ -43,7 +44,7 @@ function makeSourceRepoWithSubmodule(): string {
 }
 
 let nextGroupId = 1;
-// operationBranch is attached as "task-<taskNumber>" by the script under test, so taskNumber must equal the worktree's real groupId - matching production's one-task-per-group.
+// The script names the branch task-<taskNumber>, so taskNumber must match the worktree's real groupId, like production.
 function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskNumber: number } {
     const groupId = nextGroupId++;
     const worktreePath = createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
@@ -178,8 +179,7 @@ test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", asy
 });
 
 test("test_rebaseTaskWorktree_releasesTheSourceLockWhenAnOperationalFailureThrows", async () => {
-    // Setup: a claimed task with a linked worktree; the source branch diverges so the parent
-    // rebase has real work to do.
+    // Setup: a claimed task with a linked worktree; the source branch diverges so the parent rebase has real work to do.
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     const runId = "run-throw";
@@ -188,11 +188,7 @@ test("test_rebaseTaskWorktree_releasesTheSourceLockWhenAnOperationalFailureThrow
     git(rootOrigin, "add", "root-work.txt");
     git(rootOrigin, "commit", "-q", "-m", "root work");
 
-    // rebaseTaskWorktree always calls the parent rebase with leaveConflictLive=true, so a real
-    // conflict returns "conflicted" (a normal return), never "cleanup-failed". An uncommitted
-    // change in the worktree makes `git rebase` itself refuse to start (no rebase-merge directory
-    // is ever created), which rebaseGroupOntoSource maps straight to "cleanup-failed" with no
-    // abort attempt at all.
+    // A real conflict returns "conflicted"; an uncommitted change blocks rebase, mapped to "cleanup-failed" with no abort.
     writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ x: "dirty" }));
 
     // Test action: rebaseTaskWorktree throws (cleanup-failed is an operational failure, mapped to a throw).

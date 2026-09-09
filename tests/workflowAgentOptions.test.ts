@@ -15,6 +15,7 @@ const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HOOK = join(REPO_ROOT, "scripts/hooks/runStepHook.ts");
 const START_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const IMPLEMENT_KEY = "pipeline-implementTask.mmd::IMPLEMENT_TASK";
+const PLAN_KEY = "pipeline-implementTask.mmd::PLAN_THE_TASK";
 const TASK_NUMBER = 7;
 
 function writeStep(folder: string, box: string, result: Record<string, unknown>): string {
@@ -30,7 +31,7 @@ function writeTemplate(folder: string, box: string, output: Record<string, unkno
     return templatePath;
 }
 
-function buildFixture(agentOverride?: Record<string, AgentOptions>): { tasksFile: string; stepsConfigPath: string } {
+function buildFixture(agentOverride?: Record<string, AgentOptions>, secondBox: string = "IMPLEMENT_TASK"): { tasksFile: string; stepsConfigPath: string } {
     const folder = mkdtempSync(join(tmpdir(), "workflow-agent-options-"));
 
     const task: Record<string, unknown> = { taskNumber: TASK_NUMBER, difficulty: 3 };
@@ -44,12 +45,12 @@ function buildFixture(agentOverride?: Record<string, AgentOptions>): { tasksFile
             script: writeStep(folder, "PREAMBLE_STATUS_CHECK", { scriptSignal: "continue" }),
             template: writeTemplate(folder, "PREAMBLE_STATUS_CHECK", { box: "PREAMBLE_STATUS_CHECK", scriptSignal: "continue", input: "" }, false),
             producesPrompt: false,
-            next: [IMPLEMENT_KEY],
+            next: [`pipeline-implementTask.mmd::${secondBox}`],
         }],
         "pipeline-implementTask.mmd": [{
-            box: "IMPLEMENT_TASK",
-            script: writeStep(folder, "IMPLEMENT_TASK", { scriptSignal: "prompt", prompt: "" }),
-            template: writeTemplate(folder, "IMPLEMENT_TASK", { box: "IMPLEMENT_TASK", scriptSignal: "prompt", prompt: "", input: "" }, true),
+            box: secondBox,
+            script: writeStep(folder, secondBox, { scriptSignal: "prompt", prompt: "" }),
+            template: writeTemplate(folder, secondBox, { box: secondBox, scriptSignal: "prompt", prompt: "", input: "" }, true),
             producesPrompt: true,
             next: [],
         }],
@@ -80,7 +81,7 @@ function parseInputAfterCommand(prompt: string, marker: string): Record<string, 
 }
 
 test("test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride", async () => {
-    const { tasksFile, stepsConfigPath } = buildFixture();
+    const { tasksFile, stepsConfigPath } = buildFixture(undefined, "PLAN_THE_TASK");
     resolveAgentOptions(stepsConfigPath, tasksFile, TASK_NUMBER);
     const script = buildWorkflowScript(TASK_NUMBER, stepsConfigPath);
     const preambleResult = runPreamblePass(stepsConfigPath, tasksFile);
@@ -98,12 +99,12 @@ test("test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride
     assert.equal(calls[0]!.options.effort, "low");
     assert.equal(calls[1]!.options.model, "claude-opus-4-8[1m]");
     assert.equal(calls[1]!.options.effort, "high");
-    const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${IMPLEMENT_KEY} `);
-    assert.deepEqual(input.agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-7-implement-task" });
+    const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${PLAN_KEY} `);
+    assert.deepEqual(input.agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-7-plan-the-task" });
 });
 
 test("test_workflow_inputAndAgentCallCarryTheTaskOverride", async () => {
-    const { tasksFile, stepsConfigPath } = buildFixture({ IMPLEMENT_TASK: { model: "claude-sonnet-5[1m]", effort: "medium" } });
+    const { tasksFile, stepsConfigPath } = buildFixture({ PLAN_THE_TASK: { model: "claude-sonnet-5[1m]", effort: "medium" } }, "PLAN_THE_TASK");
     resolveAgentOptions(stepsConfigPath, tasksFile, TASK_NUMBER);
     const script = buildWorkflowScript(TASK_NUMBER, stepsConfigPath);
     const preambleResult = runPreamblePass(stepsConfigPath, tasksFile);
@@ -119,8 +120,8 @@ test("test_workflow_inputAndAgentCallCarryTheTaskOverride", async () => {
 
     assert.equal(calls[1]!.options.model, "claude-sonnet-5[1m]");
     assert.equal(calls[1]!.options.effort, "medium");
-    const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${IMPLEMENT_KEY} `);
-    assert.deepEqual(input.agent, { model: "claude-sonnet-5[1m]", effort: "medium", agentType: "task-7-implement-task" });
+    const input = parseInputAfterCommand(calls[1]!.prompt, `/taskTools:run-step ${PLAN_KEY} `);
+    assert.deepEqual(input.agent, { model: "claude-sonnet-5[1m]", effort: "medium", agentType: "task-7-plan-the-task" });
 });
 
 test("test_workflow_labelsTheWorkerCallWithThePromptBlock", async () => {
@@ -155,6 +156,6 @@ test("test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions", async () => {
     await runWorkflowScript(script, { task: TASK_NUMBER, tasksFile, startingBlock: "IMPLEMENT_TASK" }, agentResults);
 
     assert.equal(calls[0]!.options.model, "claude-sonnet-5[1m]");
-    assert.equal(calls[0]!.options.effort, "medium");
+    assert.equal(calls[0]!.options.effort, "high");
     assert.match(calls[0]!.prompt, new RegExp(`/taskTools:run-step ${IMPLEMENT_KEY}`));
 });

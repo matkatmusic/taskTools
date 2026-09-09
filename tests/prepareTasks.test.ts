@@ -27,6 +27,7 @@ import {
     writeTaskBriefFile,
 } from "../scripts/shared/prepareTasks.ts";
 import { loadPreparedTask } from "../scripts/tackle-tasks/shared/preparedTask.ts";
+import { ensureStagingWorktree } from "../scripts/tackle-tasks/shared/stagingWorktree.ts";
 import { skillBody as v1_1SkillBody } from "../scripts/tackle-tasks-v1_1/tackle-tasks-v1_1_SkillBodyEmitter.ts";
 import type { TaskGroup } from "../scripts/shared/taskGroups.ts";
 import type { TaskRecord } from "../scripts/shared/taskFiles.ts";
@@ -140,7 +141,7 @@ test("test_createWorktreeForGroupCreatesStagingFromHeadWhenItIsMissing", () => {
     assert.equal(git(repoRoot, "rev-parse", "staging").trim(), headTip);
 });
 
-test("test_createWorktreeForGroupKeepsAMergedStagingAtItsExistingTip", () => {
+test("test_createWorktreeForGroupAdvancesAMergedStagingToHead", () => {
     // Setup: staging sits at B; current branch moved on to O, so staging is fully merged into HEAD.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
@@ -153,12 +154,12 @@ test("test_createWorktreeForGroupKeepsAMergedStagingAtItsExistingTip", () => {
     // Test action: cut a worktree.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
-    // Verification: staging never moved, and the new worktree still sits at the old staging tip.
-    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), oldStagingTip);
-    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), oldStagingTip);
+    // Verification: staging advances to HEAD, and the new worktree sits at HEAD, not the old staging tip.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), headTip);
 });
 
-test("test_createWorktreeForGroupDoesNotMoveAStagingBranchCheckedOutInAnotherWorktree", () => {
+test("test_createWorktreeForGroupFastForwardsAStagingBranchCheckedOutInAnotherWorktree", () => {
     // Setup: staging is merged into HEAD, but a second worktree has it checked out.
     const repoRoot = makeTempRepoWithCommit();
     git(repoRoot, "branch", "staging");
@@ -168,13 +169,15 @@ test("test_createWorktreeForGroupDoesNotMoveAStagingBranchCheckedOutInAnotherWor
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
+    assert.notEqual(oldStagingTip, headTip);
     // Test action: cut a worktree.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group);
-    // Verification: staging and the other worktree's HEAD never moved; the new worktree sits at the old staging tip.
-    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), oldStagingTip);
-    assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), oldStagingTip);
-    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), oldStagingTip);
+    // Verification: `branch -f` refuses since a worktree has staging checked out, so it fast-forwards there instead.
+    assert.equal(git(repoRoot, "rev-parse", "refs/heads/staging").trim(), headTip);
+    assert.equal(git(stagingWorktree, "rev-parse", "HEAD").trim(), headTip);
+    assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), headTip);
 });
 
 test("test_createWorktreeForGroupReusesAnExistingWorktreeAtTheSamePath", () => {
@@ -215,15 +218,17 @@ test("test_createWorktreeForGroupDoesNotCallTheStagingTipRetainedWhenTheLauncher
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
-    // Setup: a first run cut the folder at S and released its lease.
+    // Setup: the pipeline's staging worktree, where a diverged staging is merged with HEAD.
+    ensureStagingWorktree(repoRoot, "staging");
+    // Setup: a first run cut the folder at the merge of S and O, and released its lease.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const firstWorktreePath = createWorktreeForGroup(repoRoot, group, "run-1");
     releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
-    // Test action and verification: a clean folder at the staging tip is not retained work.
+    // Test action and verification: a clean folder at the (now stable) staging tip is not retained work.
     assert.doesNotThrow(() => createWorktreeForGroup(repoRoot, group, "run-2"));
 });
 
-test("test_createWorktreeForGroupResetsAReusableWorktreeToTheStagingTip", () => {
+test("test_createWorktreeForGroupMergesADivergedStagingWithHeadWhenReusingAWorktree", () => {
     // Setup: a first run cut the folder at the common base B and released its lease.
     const repoRoot = makeTempRepoWithCommit();
     const originalBranch = git(repoRoot, "branch", "--show-current").trim();
@@ -242,10 +247,10 @@ test("test_createWorktreeForGroupResetsAReusableWorktreeToTheStagingTip", () => 
     git(repoRoot, "commit", "-q", "-m", "O");
     // Test action: a second run reuses the folder.
     const secondWorktreePath = createWorktreeForGroup(repoRoot, group, "run-2");
-    // Verification: the folder sits at S, holds the staging-only file, and lacks the original-only file.
-    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), stagingTip);
+    // Verification: the folder sits at a merge of S and O, holding both branches' files.
+    assert.notEqual(git(secondWorktreePath, "rev-parse", "HEAD").trim(), stagingTip);
     assert.equal(existsSync(join(secondWorktreePath, "staging-only.txt")), true);
-    assert.equal(existsSync(join(secondWorktreePath, "original-only.txt")), false);
+    assert.equal(existsSync(join(secondWorktreePath, "original-only.txt")), true);
 });
 
 test("test_createWorktreeForGroupSelectsTheStagingBranchOverAStagingTag", () => {
@@ -256,11 +261,11 @@ test("test_createWorktreeForGroupSelectsTheStagingBranchOverAStagingTag", () => 
     writeFileSync(join(repoRoot, "staging-only.txt"), "staging work\n");
     git(repoRoot, "add", "staging-only.txt");
     git(repoRoot, "commit", "-q", "-m", "B");
-    const branchTip = git(repoRoot, "rev-parse", "refs/heads/staging").trim();
     git(repoRoot, "checkout", "-q", originalBranch);
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
+    const headTip = git(repoRoot, "rev-parse", "HEAD").trim();
     git(repoRoot, "tag", "staging");
     // Test action: a fresh cut, then a reuse.
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
@@ -268,9 +273,11 @@ test("test_createWorktreeForGroupSelectsTheStagingBranchOverAStagingTag", () => 
     const firstHead = git(firstWorktreePath, "rev-parse", "HEAD").trim();
     releaseTaskWorktreeLease({ worktreePath: firstWorktreePath, runId: "run-1" });
     const secondWorktreePath = createWorktreeForGroup(repoRoot, group, "run-2");
-    // Verification: both cuts sit at the branch commit, never the tag commit.
-    assert.equal(firstHead, branchTip);
-    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), branchTip);
+    // Verification: both cuts sit at a merge of the branch and HEAD, never bare at the tag commit,
+    // and carry the branch's file - proof the branch, not the tag, was resolved as staging.
+    assert.notEqual(firstHead, headTip);
+    assert.equal(existsSync(join(firstWorktreePath, "staging-only.txt")), true);
+    assert.equal(git(secondWorktreePath, "rev-parse", "HEAD").trim(), firstHead);
 });
 
 test("test_createWorktreeForGroupRefusesWhenTheHiddenTaskBranchHoldsRetainedWork", () => {
@@ -348,6 +355,8 @@ test("test_recoverStaleTaskWorktreeLeaseJudgesRetainedWorkAgainstStaging", () =>
     writeFileSync(join(repoRoot, "original-only.txt"), "original work\n");
     git(repoRoot, "add", "original-only.txt");
     git(repoRoot, "commit", "-q", "-m", "O");
+    // Setup: the pipeline's staging worktree, where a diverged staging is merged with HEAD.
+    ensureStagingWorktree(repoRoot, "staging");
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     const worktreePath = createWorktreeForGroup(repoRoot, group, "stale-run");
     // Test action and verification: recovery releases the lease instead of calling S retained.

@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { loadRepositoryManifest, resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
+import { loadRepositoryManifest, resolveOrCreateStagingTipEverywhere, resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 
 function git(cwd: string, ...args: string[]): string {
     return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
@@ -36,10 +36,11 @@ function addOrVerifyLinkedWorktree(sourceCheckoutPath: string, worktreePath: str
 export function ensureStagingWorktree(projectRoot: string, rootSourceBranch: string): void {
     const rootPath = stagingWorktreePath(projectRoot);
     addOrVerifyLinkedWorktree(projectRoot, rootPath, rootSourceBranch);
+    resolveOrCreateStagingTipEverywhere(projectRoot);
     const occurrences = loadRepositoryManifest(projectRoot, rootSourceBranch).occurrences
         .filter((occurrence) => occurrence.occurrenceId !== "")
         .sort((a, b) => a.depth - b.depth);
     for (const occurrence of occurrences) {
-        addOrVerifyLinkedWorktree(join(projectRoot, occurrence.occurrenceId), join(rootPath, occurrence.occurrenceId), occurrence.baseBranch);
+        addOrVerifyLinkedWorktree(join(projectRoot, occurrence.occurrenceId), join(rootPath, occurrence.occurrenceId), "staging");
     }
 }

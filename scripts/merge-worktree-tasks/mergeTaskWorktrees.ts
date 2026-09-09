@@ -243,9 +243,9 @@ function testFailureOutput(error: unknown): string {
     return [failure.stdout, failure.stderr].filter(Boolean).join("\n").trim() || failure.message || "test command failed";
 }
 
-// Fetches baseBranch fresh from the real source checkout, without touching whatever branch is checked out.
+// Force-fetches baseBranch; the local ref only mirrors source's tip, so a backward retry must not fail non-fast-forward.
 function fetchBaseBranchFromSource(checkoutPath: string, sourceCheckoutPath: string, baseBranch: string): void {
-    git(checkoutPath, "fetch", sourceCheckoutPath, `${baseBranch}:${baseBranch}`);
+    git(checkoutPath, "fetch", sourceCheckoutPath, `+${baseBranch}:${baseBranch}`);
 }
 
 // Which of occurrence's direct children have a gitlink in occurrence's tree that no longer matches their checked-out commit.
@@ -694,9 +694,9 @@ function propagateChildGitlinks(
         if (childSourceTip === undefined || child.pathInParent === null || childSourceCheckoutPath === undefined) continue;
         const recordedOid = git(occurrence.checkoutPath, "rev-parse", `HEAD:${child.pathInParent}`).trim();
         if (recordedOid === childSourceTip) continue;
-        // Fetch to FETCH_HEAD, not straight into refs/heads/<branch>: a retry's branch may already be checked out here.
+        // Use reset --hard, not checkout -B, so the submodule stays on task-N for the later git add.
         git(child.checkoutPath, "fetch", childSourceCheckoutPath, child.baseBranch);
-        git(child.checkoutPath, "checkout", "-B", child.baseBranch, "FETCH_HEAD");
+        git(child.checkoutPath, "reset", "--hard", "FETCH_HEAD");
         git(occurrence.checkoutPath, "add", child.pathInParent);
         stagedAnyChange = true;
     }
@@ -769,6 +769,11 @@ export function mergeTaskDeepestFirst(
 
             // Propagate the current child source tip, not this task's older merge commit.
             sourceTipByOccurrenceId.set(occurrence.occurrenceId, currentSourceOid);
+            // Untouched submodule (task tip equals source tip): record it so readPublicationState counts this layer as landed.
+            const operationTipOid = git(sourceCheckoutPath, "rev-parse", occurrence.operationBranch).trim();
+            if (mergedCommitOid === null && operationTipOid === currentSourceOid) {
+                recordMergedCommit(sourceCheckoutPath, occurrence.operationBranch, currentSourceOid);
+            }
             completedLayers.push({ occurrenceId: displayId, checkoutPath: occurrence.checkoutPath, status: "no-op", oid: currentSourceOid, mergedCommitOid });
             // C86-10: retain the fetched source-submodule task ref until the whole task closes.
             continue;

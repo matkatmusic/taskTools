@@ -239,7 +239,7 @@ test("test_acceptance_runsTwoConcurrentTargetRepositoriesWithoutCrossingWires", 
     const second = makeFixtureRepository({ taskNumber: 4, files: ["b.txt"], difficulty: 1 });
     const startFile = join(tmpdir(), `tackle-tasks-concurrency-start-${process.pid}`);
 
-    // One process per project; each waits for the same start file, then drives its own task 4 through the same fileName/content pair a real driveRun would, without depending on anything defined in this test's own process.
+    // One process per project; drives task 4 independently, waiting on a shared start file first.
     const skillBodyEmitterUrl = pathToFileURL(fileURLToPath(new URL("../scripts/tackle-tasks/shared/SkillBodyEmitter.ts", import.meta.url))).href;
     const childSource = (fileName: string, content: string, projectRoot: string, worktreePath: string) => `
         import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -329,7 +329,7 @@ test("test_acceptance_reportsAFailureWhenWorktreeCreationCannotWrite", async () 
 
 test("test_acceptance_releasesTheSourceLockWhenAFailureHappensWhileItIsHeld", async () => {
     const { root, tasksFile } = makeFixtureRepository({ taskNumber: 6, files: ["a.txt"], difficulty: 1 });
-    // Setup: staging now names an all-zero SHA, an invalid object. Every git command resolving "staging" fails the same way — deterministic, and confined to this one fixture repo's own .git.
+    // Setup: staging points at an invalid all-zero SHA, so every git command using it fails deterministically.
     writeFileSync(join(root, ".git/refs/heads/staging"), `${"0".repeat(40)}\n`);
     const result = driveRun(6, tasksFile, root, standardHappyPathAnswers(root, 6, "a.txt", "x\n"));
     // Verification: the run failed, and the lock file this task's run held is gone, not orphaned.
@@ -353,7 +353,7 @@ test("test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt", async ()
         execFileSync("git", ["-C", root, "commit", "-m", "conflicting staging change"]);
         return answer;
     };
-    // FIX_CONFLICTS.template.json (task 22): additionalData is {resolved, unresolvedPaths}, checked against live `git diff --name-only --diff-filter=U` by COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED. The resolution itself is a real side effect: pick the task's own change and stage it, the way a real conflict resolution would.
+    // FIX_CONFLICTS answer: {resolved, unresolvedPaths}; here it stages the task's own change as the real resolution.
     answers.FIX_CONFLICTS = () => {
         writeFileSync(join(worktreePath, "a.txt"), "task change\n");
         execFileSync("git", ["-C", worktreePath, "add", "a.txt"]);
@@ -401,7 +401,7 @@ test("test_acceptance_resumesAfterAnInterruptedCleanup", async () => {
     // Verification before resume: a checkpoint survives the kill.
     assert.equal(readCheckpoint(worktreePath)?.block, "pipeline-mergeSucceededExit.mmd::CLEAN_UP_WORKTREES");
 
-    // Test action: relaunch from scratch input; PREAMBLE_STATUS_CHECK's own findResumeEntry (runStepHook.ts lines 296-300) finds the checkpoint and continues from CLEAN_UP_WORKTREES, not from PLAN_THE_TASK again.
+    // Test action: relaunch from scratch; findResumeEntry finds the checkpoint and resumes at CLEAN_UP_WORKTREES, not PLAN_THE_TASK.
     const result = driveRun(8, tasksFile, root, answers);
     assert.equal(result.ok, true);
     assert.equal(readCheckpoint(worktreePath), null); // gone once the run finishes cleanly.

@@ -1,13 +1,17 @@
 // Behavioral checks for resetTask.ts, against a temp git repo and a real linked worktree.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resetTask } from "./resetTask.ts";
 import { getAttemptCount, raiseAttemptCount } from "./shared/taskRunState.ts";
+import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
+import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
+import { readCheckpoint } from "./shared/checkpoint.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -74,6 +78,137 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     assert.ok(existsSync(join(worktreePath, "plans", "plan.json")));
     assert.ok(existsSync(join(worktreePath, "plans", "brief-9.md")));
     assert.match(said, /cleared: counters/);
+});
+
+test("test_resetTask_atBlock_checksOutTaskBranchInEveryWorktreeSubmodule", async () => {
+    // Task 9 is open; its worktree submodule has a task-9 branch that is not checked out.
+    const repoRoot = makeTempRepoWithCommit();
+    const submoduleSource = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        git(repoRoot, "-c", "protocol.file.allow=always", "submodule", "add", submoduleSource, "vendor");
+        git(repoRoot, "commit", "-q", "-m", "add vendor submodule");
+
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        git(worktreePath, "-c", "protocol.file.allow=always", "submodule", "update", "--init");
+        git(join(worktreePath, "vendor"), "checkout", "-b", "task-9");
+        const rewindOid = git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim();
+        git(join(worktreePath, "vendor"), "checkout", "-b", "other");
+        // Discovery needs one base branch at the gitlink; move `other` off it so only the default branch matches.
+        git(join(worktreePath, "vendor"), "commit", "-q", "--allow-empty", "-m", "other");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": git(worktreePath, "rev-parse", "HEAD").trim(), vendor: rewindOid },
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the submodule is back on task-9, at its recorded rewind point.
+        assert.equal(git(join(worktreePath, "vendor"), "branch", "--show-current").trim(), "task-9");
+        assert.equal(git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim(), rewindOid);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+        rmSync(submoduleSource, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_restoresRootAndSubmoduleToTheChosenPacketsRewindPoints", async () => {
+    // Task 9 is open; its worktree has one submodule. Two packets, for two different blocks, carry different rewindPoints.
+    const repoRoot = makeTempRepoWithCommit();
+    const submoduleSource = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        git(repoRoot, "-c", "protocol.file.allow=always", "submodule", "add", submoduleSource, "vendor");
+        git(repoRoot, "commit", "-q", "-m", "add vendor submodule");
+
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        git(worktreePath, "-c", "protocol.file.allow=always", "submodule", "update", "--init");
+        git(join(worktreePath, "vendor"), "checkout", "-b", "task-9");
+
+        // The first block's rewind point: root and submodule HEAD before either gets a new commit.
+        const rootOidBefore = git(worktreePath, "rev-parse", "HEAD").trim();
+        const submoduleOidBefore = git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim();
+
+        // A commit lands in root, then one in the submodule, between the two blocks.
+        writeFileSync(join(worktreePath, "root-change.txt"), "root\n");
+        git(worktreePath, "add", "root-change.txt");
+        git(worktreePath, "commit", "-q", "-m", "root change");
+        writeFileSync(join(worktreePath, "vendor", "vendor-change.txt"), "vendor\n");
+        git(join(worktreePath, "vendor"), "add", "vendor-change.txt");
+        git(join(worktreePath, "vendor"), "commit", "-q", "-m", "vendor change");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rootOidBefore, vendor: submoduleOidBefore },
+        }));
+        writeFileSync(join(packetsFolder, "02-RUN_FULL_SUITE-0-2.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": git(worktreePath, "rev-parse", "HEAD").trim(), vendor: git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim() },
+        }));
+
+        // Action: reset task 9 to the first block, RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: root and submodule are back at the first packet's oids, and the submodule is on task-9.
+        assert.equal(git(worktreePath, "rev-parse", "HEAD").trim(), rootOidBefore);
+        assert.equal(git(join(worktreePath, "vendor"), "rev-parse", "HEAD").trim(), submoduleOidBefore);
+        assert.equal(git(join(worktreePath, "vendor"), "branch", "--show-current").trim(), "task-9");
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+        rmSync(submoduleSource, { recursive: true, force: true });
+    }
 });
 
 test("test_resetTask_atRunFullSuite_clearsTheSuiteFixCounterWithTasksJsonAtTheRepoRoot", async () => {
@@ -314,4 +449,87 @@ test("test_resetTask_blocksWhenALaterTaskMergeSitsOnStagingAndNamesIt", async ()
         process.chdir(cwd);
     }
     assert.equal(git(repoRoot, "rev-parse", "staging").trim(), mergeHashes[4]);
+});
+
+test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
+    // Setup: task 9 is open with a run and a worktree; the real pipeline's steps.json names every block.
+    const repoRoot = makeTempRepoWithCommit();
+    const runId = "r1";
+    mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+        taskNumber: 9,
+        title: "t",
+        run: {
+            active: false, worktree: null, leaseRunId: null,
+            history: [{
+                runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    git(repoRoot, "branch", "task-9");
+    git(repoRoot, "worktree", "add", worktreePath, "task-9");
+    const stubFolder = mkdtempSync(join(tmpdir(), "resetTask-stubs-"));
+    const cwd = process.cwd();
+    try {
+        const stepsConfigPath = join(taskWorkflowDirectory(join(repoRoot, ".taskTools", "tasks.json"), 9), "steps.json");
+        mkdirSync(dirname(stepsConfigPath), { recursive: true });
+        const setting = resolveDiagramFolderSetting(repoRoot);
+        const stepsByDiagram = generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
+        const boxCounts = new Map<string, number>();
+        for (const entry of Object.values(stepsByDiagram).flat()) boxCounts.set(entry.box, (boxCounts.get(entry.box) ?? 0) + 1);
+        // resetTask rejects a block named by more than one diagram, so those stay out of the sweep.
+        const blocks = [...boxCounts].filter(([, count]) => count === 1).map(([box]) => box);
+        assert.ok(blocks.length > 10);
+
+        // A stub config with matching block names, each a stop, so the hook runs and writes its packet.
+        const stubConfig: Record<string, unknown[]> = { "stub.mmd": [] };
+        for (const box of blocks) {
+            const script = join(stubFolder, `${box}.ts`);
+            writeFileSync(script, `console.log(JSON.stringify({ box: ${JSON.stringify(box)}, scriptSignal: "stop" }));\n`);
+            const template = join(stubFolder, `${box}.template.json`);
+            writeFileSync(template, JSON.stringify({ input: {}, output: { box, scriptSignal: "stop" } }));
+            stubConfig["stub.mmd"].push({ box, script, template, producesPrompt: false, next: [] });
+        }
+        const stubConfigPath = join(stubFolder, "steps.json");
+        writeFileSync(stubConfigPath, JSON.stringify(stubConfig));
+
+        const hook = fileURLToPath(new URL("../hooks/runStepHook.ts", import.meta.url));
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, projectRoot: repoRoot });
+        const runLog = join(repoRoot, ".taskTools", "runs", "0000", "task-9-run-log.json");
+        for (const box of blocks) {
+            const spawned = spawnSync("node", ["--no-inspect", hook], {
+                input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt: `/run-step ${box} ${packetInput}` }),
+                encoding: "utf8",
+                env: { ...process.env, RUN_STEP_LOG: runLog, RUN_STEP_CONFIG: stubConfigPath },
+            });
+            assert.equal(spawned.status, 0, `${box}: ${spawned.stderr}`);
+            assert.match(spawned.stdout, /\\"ok\\":true/, `${box}: ${spawned.stdout}`);
+        }
+        const packetNames = readdirSync(join(repoRoot, ".taskTools", "runs", "0000", "packets"));
+
+        // Action and verification: a reset at every block finds the packet the hook wrote for it.
+        process.chdir(repoRoot);
+        const boxesWithSourceLockHeld = new Set<string>();
+        for (const box of blocks) {
+            assert.ok(packetNames.some((name) => name.includes(`-${box}-`)), `no packet named ${box} among ${packetNames.join(", ")}`);
+            const said = await resetTask(9, box);
+            assert.match(said, new RegExp(`resumes at [^:]+::${box} on the next`), `${box}: ${said}`);
+            // The checkpoint records whether this block sits inside the source lock's reach.
+            if (readCheckpoint(worktreePath)?.sourceLockHeld === true) boxesWithSourceLockHeld.add(box);
+        }
+        assert.ok(boxesWithSourceLockHeld.has("RUN_FULL_SUITE"));
+        assert.ok(boxesWithSourceLockHeld.has("DID_CHANGES_STAY_INSIDE_FENCE_Q"));
+        assert.ok(!boxesWithSourceLockHeld.has("CREATE_WORKTREE"));
+        assert.ok(!boxesWithSourceLockHeld.has("MARK_TASK_ACTIVE"));
+    } finally {
+        process.chdir(cwd);
+        git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(stubFolder, { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
 });

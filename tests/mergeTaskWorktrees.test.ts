@@ -1719,6 +1719,22 @@ test("test_mergeTaskDeepestFirstSkipsAnOccurrenceAlreadyMergedIntoItsSourceWitho
     if (skippedLayer.status === "no-op") assert.equal(skippedLayer.oid, submoduleOidAfterPreMerge);
 });
 
+test("test_mergeTaskDeepestFirstRecordsTheMergedCommitRefForAnUntouchedSubmoduleAtItsSourceTip", () => {
+    const fixture = buildMergePrimitiveFixture();
+    const submoduleTaskBranch = currentBranchName(fixture.worktreeSubmodulePath);
+    writeFileSync(join(fixture.group.worktree, "new.txt"), "brand new\n");
+    git(fixture.group.worktree, "add", "new.txt");
+    git(fixture.group.worktree, "commit", "-q", "-m", "add new.txt");
+
+    const report = mergeTaskDeepestFirst(fixture.group.worktree, fixture.discoveryManifest);
+    assert.equal(report.status, "merged");
+    assert.deepEqual(report.completedLayers.map((layer) => layer.status), ["no-op", "merged"]);
+
+    const submoduleSourceTip = git(fixture.mainSubmodulePath, "rev-parse", fixture.submoduleSourceBranch).trim();
+    assert.equal(git(fixture.mainSubmodulePath, "rev-parse", submoduleTaskBranch).trim(), submoduleSourceTip);
+    assert.equal(git(fixture.mainSubmodulePath, "rev-parse", `refs/taskTools/merged-commits/${submoduleTaskBranch}`).trim(), submoduleSourceTip);
+});
+
 test("test_mergeTaskDeepestFirstLeavesAnAlreadyMergedSubmoduleInPlaceWhenTheParentThenConflicts", () => {
     const rootPath = makeTempRepoWithLocalSubmodule();
     const mainSubmodulePath = join(rootPath, "vendor");

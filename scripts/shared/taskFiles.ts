@@ -22,7 +22,7 @@ export function taskFilesProjectRoot(pair: TaskFilePair): string {
     : taskDirectory
 }
 
-// Duplicates taskFilesProjectRoot's project-root logic on purpose: this call site only ever has a bare tasksPath string, never a full TaskFilePair.
+// Duplicates taskFilesProjectRoot's project-root logic on purpose; this call site only has a bare tasksPath string, not a TaskFilePair.
 export function taskWorkflowDirectory(tasksPath: string, taskNumber: number): string {
   const taskDirectory = dirname(tasksPath);
   const projectRoot = basename(taskDirectory) === '.taskTools' ? dirname(taskDirectory) : taskDirectory;
@@ -33,7 +33,7 @@ function pairIn(folder: string): TaskFilePair {
   return { tasksPath: join(folder, "tasks.json"), completedTasksPath: join(folder, "completedTasks.json") };
 }
 
-// Walks up from `root` so a shell cwd left in a subdirectory still finds the project's task files (mid-session `cd`s were silently breaking every skill).
+// Walks up from `root` so a mid-session cd into a subdirectory still finds the task files, avoiding skill failures.
 export function resolveTaskFiles(root: string): TaskFilePair {
   for (let dir = root; ; dir = dirname(dir)) {
     const housed = pairIn(join(dir, ".taskTools"));
@@ -69,7 +69,7 @@ function seedGitignore(projectRoot: string): void {
   appendFileSync(path, `${separator}${missing.join("\n")}\n`);
 }
 
-// Task numbers lead a skill invocation; free text (closureNote, flags) may follow.  Stop at the first non-numeric token so digits inside prose — dates, "task 162", durations — aren't mistaken for task numbers.  Brackets and stray quotes are tolerated so a single no-space JSON array token — [268,270,281], the shell-safe form skills pass as "$1" — parses like bare numbers.
+// Parses leading task numbers, stopping at non-numeric text; tolerates brackets/quotes so JSON array input like [268,270,281] parses too.
 export function leadingTaskNumbers(args: string[]): number[] {
   const tokens = args.join(" ").trim().split(/\s+/);
   const numeric: number[] = [];

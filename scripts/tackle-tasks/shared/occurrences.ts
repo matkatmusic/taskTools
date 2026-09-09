@@ -141,11 +141,17 @@ export function parseOccurrencePath(occurrencePath: string): { occurrenceId: str
 }
 
 // Builds the SOURCE-checkoutPath manifest mergeTaskWorktrees.ts's walkers require; unlike buildDiscoveryManifest, this must never be worktree-remapped.
-function buildSourceDiscoveryManifest(sourceManifest: ReturnType<typeof loadRepositoryManifest>, taskNumber: number): DiscoveryManifest {
+function buildSourceDiscoveryManifest(
+    sourceManifest: ReturnType<typeof loadRepositoryManifest>,
+    taskNumber: number,
+    rootSourceBranch: string,
+): DiscoveryManifest {
     return {
         repositoryManifest: {
             ...sourceManifest,
-            occurrences: attachOperationBranch(sourceManifest.occurrences, `task-${taskNumber}`),
+            // Every repo (root and every nested submodule) always merges/rebases against rootSourceBranch ("staging"), never each occurrence's manifest-recorded baseBranch (e.g. "Layer3-9").
+            occurrences: attachOperationBranch(sourceManifest.occurrences, `task-${taskNumber}`)
+                .map((occurrence) => ({ ...occurrence, baseBranch: rootSourceBranch })),
         },
         resolutionManifest: createEmptyResolutionManifest(),
     };
@@ -163,7 +169,7 @@ export function rebaseWorktreeSubmoduleLayersDeepestFirst(
 ): SubmoduleLayerWalkReport {
     const sourceManifest = loadSourceManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
-    const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber);
+    const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber, rootSourceBranch);
     return rebaseSubmoduleLayersDeepestFirst(worktreePath, manifest, leaveConflictLive, typecheckCommand, runTests);
 }
 
@@ -179,10 +185,11 @@ export function mergeWorktreeTaskDeepestFirst(
 ): MergeTaskWalkReport {
     const sourceManifest = loadSourceManifest(projectRoot, rootSourceBranch);
     fetchWorktreeBaseBranchesFromSource(mapSourceOccurrencesToWorktree(worktreePath, sourceManifest.occurrences));
-    const occurrencesWithRootSourceBranch = sourceManifest.occurrences.map((occurrence) =>
-        occurrence.occurrenceId === "" ? { ...occurrence, baseBranch: rootSourceBranch } : occurrence,
-    );
-    const manifest = buildSourceDiscoveryManifest({ ...sourceManifest, occurrences: occurrencesWithRootSourceBranch }, taskNumber);
+    // (retired: root-only baseBranch remap; buildSourceDiscoveryManifest now forces every occurrence uniformly)
+    // const occurrencesWithRootSourceBranch = sourceManifest.occurrences.map((occurrence) =>
+    //     occurrence.occurrenceId === "" ? { ...occurrence, baseBranch: rootSourceBranch } : occurrence,
+    // );
+    const manifest = buildSourceDiscoveryManifest(sourceManifest, taskNumber, rootSourceBranch);
     return mergeTaskDeepestFirst(worktreePath, manifest, mergeStepOperations, typecheckCommand, runTests);
 }
 

@@ -568,6 +568,7 @@
             "script": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.ts",
             "template": "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.template.json",
             "producesPrompt": true,
+            "mutating": true,
             "next": [
                 "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
             ]

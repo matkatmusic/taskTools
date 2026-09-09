@@ -1,7 +1,7 @@
 // Writes task briefs, creates one worktree per task, prints WorkflowArguments. CLI entry point at bottom.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -182,6 +182,11 @@ function cloneSubmodulesFromLocalCheckout(checkoutPath: string, sourcePath: stri
         );
         const remoteUrl = execFileSync("git", ["-C", localSource, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
         execFileSync("git", ["-C", join(checkoutPath, submodulePath), "remote", "set-url", "origin", remoteUrl], { stdio: ["ignore", "ignore", "inherit"] });
+        // A clone carries no local "staging"; branch resolution needs one before the manifest can be loaded.
+        const sourceStagingTip = readStagingTip(localSource);
+        if (sourceStagingTip !== null) {
+            execFileSync("git", ["-C", join(checkoutPath, submodulePath), "branch", "-f", "staging", sourceStagingTip], { stdio: "ignore" });
+        }
         cloneSubmodulesFromLocalCheckout(join(checkoutPath, submodulePath), localSource);
     }
 }
@@ -208,35 +213,59 @@ export function readStagingTip(repoRoot: string): string | null {
     throw new Error(`git rev-parse ${STAGING_REF} failed in "${repoRoot}": ${result.stderr}`);
 }
 
-// Creates from HEAD, which may be detached. A racing creator's failure is fine if the ref exists after.
+// Moves local "staging" to target; if a worktree has it checked out, fast-forward there instead.
+function moveStagingBranchTo(repoRoot: string, target: string): void {
+    const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", target], { encoding: "utf8" });
+    if (moved.status !== 0) {
+        const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
+        if (stagingCheckout === undefined) {
+            throw new Error(`${STAGING_REF} could not be moved to "${target}" in "${repoRoot}": ${moved.stderr.trim()}`);
+        }
+        execFileSync("git", ["-C", stagingCheckout, "merge", "--ff-only", target], { stdio: ["ignore", "ignore", "inherit"] });
+    }
+}
+
+// RETIRED (task 8, reversed 2026-09-08): staging = HEAD + task merges; creates from HEAD, race-safe if ref exists.
 export function resolveOrCreateStagingTip(repoRoot: string): string {
     const found = readStagingTip(repoRoot);
-    if (found !== null) {
-        // RETIRED (task 8): staging holds work that passed the pipeline for review, so moving it to an
-        // arbitrary session HEAD put unreviewed commits into staging. An existing tip is now used as-is;
-        // pipeline merge code is the only writer to an existing staging branch.
-        // const headTip = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
-        // if (found === headTip) return found;
-        // const stagingIsMergedIntoHead = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", found, "HEAD"], { stdio: "ignore" });
-        // if (stagingIsMergedIntoHead.status !== 0) return found;
-        // const moved = spawnSync("git", ["-C", repoRoot, "branch", "-f", "staging", "HEAD"], { encoding: "utf8" });
-        // if (moved.status !== 0) {
-        //     // git refuses to move a branch a worktree has checked out, so fast-forward it inside that worktree.
-        //     const stagingCheckout = moved.stderr.match(/used by worktree at '([^']+)'/)?.[1];
-        //     if (stagingCheckout === undefined) {
-        //         throw new Error(`${STAGING_REF} is merged into HEAD but could not be moved in "${repoRoot}": ${moved.stderr.trim()}`);
-        //     }
-        //     execFileSync("git", ["-C", stagingCheckout, "merge", "--ff-only", headTip], { stdio: ["ignore", "ignore", "inherit"] });
-        // }
-        // return readStagingTip(repoRoot)!;
-        return found;
+    if (found === null) {
+        const created = spawnSync("git", ["-C", repoRoot, "branch", "staging"], { encoding: "utf8" });
+        const foundAfterCreate = readStagingTip(repoRoot);
+        if (foundAfterCreate === null) {
+            throw new Error(`could not create ${STAGING_REF} in "${repoRoot}": ${created.stderr}`);
+        }
+        return foundAfterCreate;
     }
-    const created = spawnSync("git", ["-C", repoRoot, "branch", "staging"], { encoding: "utf8" });
-    const foundAfterCreate = readStagingTip(repoRoot);
-    if (foundAfterCreate === null) {
-        throw new Error(`could not create ${STAGING_REF} in "${repoRoot}": ${created.stderr}`);
+    const headTip = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+    if (found === headTip) return found;
+    const stagingIsMergedIntoHead = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", found, "HEAD"], { stdio: "ignore" });
+    if (stagingIsMergedIntoHead.status === 0) {
+        moveStagingBranchTo(repoRoot, headTip);
+        return readStagingTip(repoRoot)!;
     }
-    return foundAfterCreate;
+    const headIsAncestorOfStaging = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", headTip, found], { stdio: "ignore" });
+    if (headIsAncestorOfStaging.status === 0) return found;
+    // Diverged: neither is an ancestor of the other; merge HEAD into staging in a throwaway detached worktree.
+    const tmp = mkdtempSync(join(tmpdir(), "staging-merge-"));
+    execFileSync("git", ["-C", repoRoot, "worktree", "add", "--detach", tmp, STAGING_REF], { stdio: ["ignore", "ignore", "inherit"] });
+    execFileSync("git", ["-C", tmp, "merge", "--no-edit", headTip], { stdio: ["ignore", "ignore", "inherit"] });
+    const mergedTip = execFileSync("git", ["-C", tmp, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    execFileSync("git", ["-C", repoRoot, "worktree", "remove", "--force", tmp], { stdio: ["ignore", "ignore", "inherit"] });
+    moveStagingBranchTo(repoRoot, mergedTip);
+    return readStagingTip(repoRoot)!;
+}
+
+// Advances/creates staging in every repository, submodules deepest first, root last.
+export function resolveOrCreateStagingTipEverywhere(repoRoot: string): Map<string, string> {
+    const occurrences = loadRepositoryManifest(repoRoot, currentBranchName(repoRoot)).occurrences
+        .filter((occurrence) => occurrence.occurrenceId !== "")
+        .sort((a, b) => b.depth - a.depth);
+    const tips = new Map<string, string>();
+    for (const occurrence of occurrences) {
+        tips.set(occurrence.occurrenceId, resolveOrCreateStagingTip(join(repoRoot, occurrence.occurrenceId)));
+    }
+    tips.set("", resolveOrCreateStagingTip(repoRoot));
+    return tips;
 }
 
 function commitHoldsRetainedWork(repoPath: string, commit: string, baseTip: string): number {
@@ -356,6 +385,9 @@ export function acquireTaskWorktreeLease(worktreePath: string, runId: string): T
             fd = openSync(leasePath, "wx", 0o600);
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+                // The same run re-preparing an already-leased worktree is a no-op, not a conflict.
+                const current = readTaskWorktreeLeaseOwner(leasePath);
+                if (current !== null && current.runId === runId) return { worktreePath, runId };
                 throw new Error(
                     `worktree at "${worktreePath}" is already owned by a live run (lease at "${leasePath}"); `
                     + `if that run crashed, call recoverStaleTaskWorktreeLease() after confirming no work is retained`,
@@ -430,6 +462,8 @@ function recoverLeaseIfOwnerIsDead(repoRoot: string, worktreePath: string): void
 export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId: string = generateRunId()): string {
     const worktreePath = join(resolveTaskWorktreeConventionDirectory(repoRoot), `task-${group.groupId}`);
     const branchName = branchNameForGroup(group.groupId);
+    const isFreshCut = !existsSync(worktreePath);
+    let stagingTips: Map<string, string> | undefined;
     // let lease: TaskWorktreeLease;
     // if (existsSync(worktreePath)) {
     //     if (worktreeHoldsRetainedWork(worktreePath, repoRoot) === WORKTREE_HOLDS_RETAINED_WORK) {
@@ -514,7 +548,8 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
         lease = acquireTaskWorktreeLease(worktreePath, runId);
         killSelfForTest("lease");
         try {
-            const stagingTip = resolveOrCreateStagingTip(repoRoot);
+            stagingTips = resolveOrCreateStagingTipEverywhere(repoRoot);
+            const stagingTip = stagingTips.get("")!;
             if (branchRefHoldsRetainedWork(repoRoot, branchName, stagingTip) === WORKTREE_HOLDS_RETAINED_WORK) {
                 throw new Error(
                     `branch "${branchName}" holds retained work from a previous run; `
@@ -541,7 +576,22 @@ export function createWorktreeForGroup(repoRoot: string, group: TaskGroup, runId
                 + `resolve or remove it before re-preparing task-${group.groupId}`,
             );
         }
-        createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath, currentBranchName(worktreePath))], branchName);
+        if (isFreshCut) {
+            // Fresh cut only: submodule task-N comes from that submodule's own staging tip, not the gitlink.
+            for (const [occurrenceId, tip] of stagingTips!) {
+                if (occurrenceId === "") continue;
+                const submoduleWorktreePath = join(worktreePath, occurrenceId);
+                const sourceSubmodulePath = join(repoRoot, occurrenceId);
+                execFileSync("git", ["-C", submoduleWorktreePath, "fetch", sourceSubmodulePath, tip], { stdio: ["ignore", "ignore", "inherit"] });
+                execFileSync("git", ["-C", submoduleWorktreePath, "checkout", "-B", branchName, "FETCH_HEAD"], { stdio: ["ignore", "ignore", "inherit"] });
+                execFileSync("git", ["-C", sourceSubmodulePath, "update-ref", `refs/taskTools/reset-point/${branchName}`, tip], { stdio: ["ignore", "ignore", "inherit"] });
+                execFileSync("git", ["-C", sourceSubmodulePath, "branch", "-f", branchName, tip], { stdio: ["ignore", "ignore", "inherit"] });
+            }
+            execFileSync("git", ["-C", repoRoot, "update-ref", `refs/taskTools/reset-point/${branchName}`, stagingTips!.get("")!], { stdio: ["ignore", "ignore", "inherit"] });
+            createBranchInEveryRepository(worktreePath, [""], branchName);
+        } else {
+            createBranchInEveryRepository(worktreePath, ["", ...submodulePaths(worktreePath, currentBranchName(worktreePath))], branchName);
+        }
     } catch (error) {
         releaseTaskWorktreeLease(lease);
         throw error;
@@ -597,7 +647,7 @@ export function buildWorkflowArguments(
     // if (stagingVerify.status !== 0) {
     //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
     // }
-    resolveOrCreateStagingTip(repoRoot);
+    resolveOrCreateStagingTipEverywhere(repoRoot);
     const repositorySources = collectRepositorySources(repoRoot, "staging");
     const preparedGroups: PreparedGroup[] = [];
     try {
@@ -694,7 +744,7 @@ function runAsCli(): void {
         // if (stagingVerify.status !== 0) {
         //     execFileSync("git", ["-C", repoRoot, "branch", "staging"], { stdio: "ignore" });
         // }
-        resolveOrCreateStagingTip(repoRoot);
+        resolveOrCreateStagingTipEverywhere(repoRoot);
         const manifest = loadRepositoryManifest(repoRoot, "staging");
         workflowArguments = buildWorkflowArguments(repoRoot, DEFAULT_TYPECHECK_COMMAND, tasks, runId);
         // startTimestamp is stamped here because workflow scripts cannot call Date.now().

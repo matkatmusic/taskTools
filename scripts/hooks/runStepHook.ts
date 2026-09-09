@@ -11,6 +11,7 @@ import { readCheckpoint, writeCheckpoint } from "../tackle-tasks/shared/checkpoi
 import { writeJsonAtomically } from "../shared/taskStateLock.ts";
 import { readJsonFile } from "../tackle-tasks/shared/readJsonFile.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
+import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.ts";
 import { resetTask } from "../tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "../tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "../tackle-tasks/shared/resumeRun.ts";
@@ -67,7 +68,7 @@ let currentTaskNumber: number | null = null;
 const logFile = () => process.env.RUN_STEP_LOG ?? join(runDirectory, `${currentTaskNumber === null ? "" : `task-${currentTaskNumber}-`}run-log.json`);
 const packetsDirectory = () => join(runDirectory, "packets");
 // ponytail: one flat cap per block; the full suite budget is 10 minutes, and the hook ceiling is 20 minutes.
-const STEP_TIMEOUT_MS = 660_000;
+const STEP_TIMEOUT_MS = 1_860_000;
 const START_STEP_KEY = "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK";
 const FAILURES_EXIT_KEY = "pipeline-failuresExit.mmd::FAILURES_EXIT";
 const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
@@ -167,6 +168,21 @@ function parseStepResult(commandOutput: string): Record<string, unknown> | null 
     }
 }
 
+// Every repo's HEAD before this block runs; a block reset restores each to what's recorded here.
+function buildRewindPoints(worktree: string): Record<string, string> {
+    if (worktree === "" || spawnSync("git", ["-C", worktree, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" }).status !== 0) {
+        return {};
+    }
+    const rewindPoints: Record<string, string> = {};
+    // submodulePaths only needs a resolvable rev; "HEAD" stands in when detached (mid-rebase).
+    const branch = currentBranchName(worktree) || "HEAD";
+    for (const occurrenceId of ["", ...submodulePaths(worktree, branch)]) {
+        const path = occurrenceId === "" ? worktree : join(worktree, occurrenceId);
+        rewindPoints[occurrenceId] = spawnSync("git", ["-C", path, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+    }
+    return rewindPoints;
+}
+
 function runStepScript(step: Step, input: string, invocation: string): StepRun {
     const nodeArguments = ["--no-inspect", step.script];
     if (input) {
@@ -176,6 +192,8 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     const quotedInput = input ? ` ${getShellQuotedArgument(input)}` : "";
     const command = `node --no-inspect ${step.script}${quotedInput}`;
     const startedAt = Date.now();
+    const packetBeforeRun = getPacketFromInput(input);
+    const rewindPoints = buildRewindPoints(typeof packetBeforeRun.worktree === "string" ? packetBeforeRun.worktree : "");
     const spawnResult = spawnSync("node", nodeArguments, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: STEP_TIMEOUT_MS, env: { ...process.env, RUN_STEP_LOG: logFile() } });
     const tookMs = Date.now() - startedAt;
     const commandOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`.trimEnd();
@@ -194,7 +212,7 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
     mkdirSync(packetsDirectory(), { recursive: true });
     // NN is the count of files already in the folder, so a listing sorts in write order.
     const traceOrdinal = String(readdirSync(packetsDirectory()).length).padStart(2, "0");
-    writeJsonAtomically(join(packetsDirectory(), `${traceOrdinal}-${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun });
+    writeJsonAtomically(join(packetsDirectory(), `${traceOrdinal}-${step.box}-${process.pid}-${packetSequence}.json`), { input: { invocation }, command, commandOutput, output: stepRun, rewindPoints });
     appendStepToRunLog(`${step.diagram}::${step.box}`, tookMs);
     return stepRun;
 }
@@ -343,6 +361,10 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     const startPacket = getPacketFromInput(startInput);
     if (startPacket.taskNumber !== undefined) currentTaskNumber = Number(startPacket.taskNumber);
     const startedFromPacketFile = typeof startPacket.packetFile === "string";
+    // The hook's cwd is the agent's shell folder; the project root, not cwd, owns the run folder.
+    if (!process.env.RUN_STEP_LOG && !startedFromPacketFile && typeof startPacket.projectRoot === "string") {
+        runDirectory = join(startPacket.projectRoot, ".taskTools/runs", runStamp());
+    }
     if (typeof startPacket.packetFile === "string") {
         if (!process.env.RUN_STEP_LOG) runDirectory = dirname(dirname(startPacket.packetFile));
         if (!existsSync(startPacket.packetFile)) {

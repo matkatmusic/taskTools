@@ -1072,6 +1072,8 @@ const makeQueueFixtureRepoWithSubmoduleV2 = (taskNumber: number, ownedFiles: str
     git(root, "add", ".taskTools");
     git(root, "commit", "-q", "-m", "seed task state");
     git(root, "checkout", "-q", "-b", "staging");
+    // Every repo, root and submodule, has a staging branch under the current design.
+    git(join(root, "vendor"), "checkout", "-q", "-b", "staging");
 
     const origin = addBareOrigin(root);
     const prepared = prepareThroughCli(root, taskNumber);
@@ -1144,8 +1146,8 @@ test("test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndRe
         trace.push("close");
 
         // Assert close/cleanup before teardown, not silently in finally.
-        assert.equal(git(join(root, "vendor"), "show", "main:vendor-new.txt"), "vendor new");
-        assert.equal(git(root, "rev-parse", "staging:vendor"), git(join(root, "vendor"), "rev-parse", "main"));
+        assert.equal(git(join(root, "vendor"), "show", "staging:vendor-new.txt"), "vendor new");
+        assert.equal(git(root, "rev-parse", "staging:vendor"), git(join(root, "vendor"), "rev-parse", "staging"));
         assert.equal(existsSync(worktreePath), false);
         for (const repo of [root, join(root, "vendor")]) {
             assert.throws(() => git(repo, "show-ref", "--verify", `refs/heads/task-${taskNumber}`));

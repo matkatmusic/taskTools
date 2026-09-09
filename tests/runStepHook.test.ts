@@ -12,7 +12,7 @@ import { START_STEP } from "../scripts/tackle-tasks/generateWorkflow.ts";
 import { acquireSourceRepoLock, buildLockOwner, readSourceRepoLock } from "../scripts/tackle-tasks/shared/sourceRepoLock.ts";
 import { writeAgentAnswer } from "../scripts/tackle-tasks/shared/writeAgentAnswer.ts";
 import { readTaskRunState } from "../scripts/tackle-tasks/shared/taskRunState.ts";
-import { git, makeCommittedRepo, makeLinkedWorktree } from "./support/gitFixtures.ts";
+import { addSubmodule, git, makeCommittedRepo, makeLinkedWorktree } from "./support/gitFixtures.ts";
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HOOK = join(REPO_ROOT, "scripts/hooks/runStepHook.ts");
@@ -474,9 +474,16 @@ test("test_runStepHook_runsTheResetForATackleTasksResetPrompt", () => {
     // Setup: a repository whose tasks.json holds open task 7 with run state from an earlier run.
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-reset-")));
     spawnSync("git", ["-C", cwd, "init", "-q"]);
+    spawnSync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);
+    spawnSync("git", ["-C", cwd, "config", "user.name", "Test"]);
     mkdirSync(join(cwd, ".taskTools"), { recursive: true });
     writeFileSync(join(cwd, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t", run: { active: false, history: [] }, codexReviewNotes: [] }]));
     writeFileSync(join(cwd, ".taskTools", "completedTasks.json"), "[]");
+    spawnSync("git", ["-C", cwd, "add", "-A"]);
+    spawnSync("git", ["-C", cwd, "commit", "-q", "-m", "seed"]);
+    spawnSync("git", ["-C", cwd, "branch", "staging"]);
+    const stagingTip = spawnSync("git", ["-C", cwd, "rev-parse", "staging"], { encoding: "utf8" }).stdout.trim();
+    spawnSync("git", ["-C", cwd, "update-ref", "refs/taskTools/reset-point/task-7", stagingTip]);
     // Action: the user types the reset line.
     const { RUN_STEP_LOG: _unset, ...env } = process.env;
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
@@ -493,9 +500,16 @@ test("test_runStepHook_runsTheResetForATackleTasksResetPrompt", () => {
 test("test_runStepHook_runsTheResetForATackleTasksSkillCall", () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-reset-skill-")));
     spawnSync("git", ["-C", cwd, "init", "-q"]);
+    spawnSync("git", ["-C", cwd, "config", "user.email", "test@example.com"]);
+    spawnSync("git", ["-C", cwd, "config", "user.name", "Test"]);
     mkdirSync(join(cwd, ".taskTools"), { recursive: true });
     writeFileSync(join(cwd, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 7, title: "t", run: { active: false, history: [] }, codexReviewNotes: [] }]));
     writeFileSync(join(cwd, ".taskTools", "completedTasks.json"), "[]");
+    spawnSync("git", ["-C", cwd, "add", "-A"]);
+    spawnSync("git", ["-C", cwd, "commit", "-q", "-m", "seed"]);
+    spawnSync("git", ["-C", cwd, "branch", "staging"]);
+    const stagingTip = spawnSync("git", ["-C", cwd, "rev-parse", "staging"], { encoding: "utf8" }).stdout.trim();
+    spawnSync("git", ["-C", cwd, "update-ref", "refs/taskTools/reset-point/task-7", stagingTip]);
     const { RUN_STEP_LOG: _unset, ...env } = process.env;
     const spawned = spawnSync("node", ["--no-inspect", HOOK], {
         cwd, input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { skill: "taskTools:tackle-tasks", args: "reset 7" } }), encoding: "utf8", env,
@@ -957,10 +971,76 @@ test("test_runStepHook_writesOnePacketForEveryBlockItRan", () => {
     assert.ok(bPacketName);
     for (const packetName of [aPacketName, bPacketName]) {
         const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
-        // Each packet holds exactly the four values the log used to print.
-        assert.deepEqual(Object.keys(packet).sort(), ["command", "commandOutput", "input", "output"]);
+        // Each packet holds exactly the four values the log used to print, plus its rewind points.
+        assert.deepEqual(Object.keys(packet).sort(), ["command", "commandOutput", "input", "output", "rewindPoints"]);
         assert.equal(packet.input.invocation, "/run-step A");
         assert.match(packet.command, /^node --no-inspect/);
+    }
+});
+
+test("test_runStepHook_writesRewindPointsForRootAndSubmoduleInThePacket", () => {
+    // A real worktree with one submodule, so the packet's rewindPoints record both HEADs before the block runs.
+    const rootOrigin = makeCommittedRepo("run-step-rewind-root-");
+    const submoduleOrigin = makeCommittedRepo("run-step-rewind-sub-");
+    addSubmodule(rootOrigin, submoduleOrigin, "vendor");
+    const worktree = makeLinkedWorktree(rootOrigin);
+    const rootOid = git(worktree, "rev-parse", "HEAD");
+    const submoduleOid = git(join(worktree, "vendor"), "rev-parse", "HEAD");
+
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { runsFolder, runsEntries } = runHookIn(cwd, `/run-step A ${JSON.stringify({ worktree })}`, configFile);
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
+    const packetsFolder = join(runsFolder, stampFolder, "packets");
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
+    const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+    assert.deepEqual(packet.rewindPoints, { "": rootOid, vendor: submoduleOid });
+});
+
+test("test_runStepHook_writesRewindPointsForASubmoduleEvenWithADetachedWorktreeHead", () => {
+    // A detached root HEAD (mid-rebase) must still record the submodule's rewind point.
+    const rootOrigin = makeCommittedRepo("run-step-rewind-root-");
+    const submoduleOrigin = makeCommittedRepo("run-step-rewind-sub-");
+    addSubmodule(rootOrigin, submoduleOrigin, "vendor");
+    const worktree = makeLinkedWorktree(rootOrigin);
+    git(worktree, "checkout", "-q", "--detach", "HEAD");
+    const rootOid = git(worktree, "rev-parse", "HEAD");
+    const submoduleOid = git(join(worktree, "vendor"), "rev-parse", "HEAD");
+
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), "run-step-repo-")));
+    const { runsFolder, runsEntries } = runHookIn(cwd, `/run-step A ${JSON.stringify({ worktree })}`, configFile);
+    const stampFolder = runsEntries().find(name => !name.endsWith("run-log.json"))!;
+    const packetsFolder = join(runsFolder, stampFolder, "packets");
+    const packetName = readdirSync(packetsFolder).find(name => /^\d+-A-\d+-1\.json$/.test(name))!;
+    const packet = JSON.parse(readFileSync(join(packetsFolder, packetName), "utf8"));
+    assert.deepEqual(packet.rewindPoints, { "": rootOid, vendor: submoduleOid });
+});
+
+// The hook's cwd is the agent's shell folder; the input's projectRoot owns the run folder instead.
+test("test_runStepHook_putsTheRunFolderUnderTheInputsProjectRootNotCwd", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "run-step-cwd-"));
+    const projectRoot = mkdtempSync(join(tmpdir(), "run-step-project-"));
+    try {
+        const configFile = configWith(writeStep => ({
+            "one.mmd": [{ box: "A", script: writeStep("A", { scriptSignal: "stop" }), next: [] }],
+        }));
+        const { result } = runHookIn(cwd, `/run-step A {"projectRoot":${JSON.stringify(projectRoot)}}`, configFile);
+        assert.equal(result.ok, true);
+        const runsFolder = join(projectRoot, ".taskTools", "runs");
+        const stamps = readdirSync(runsFolder);
+        assert.equal(stamps.length, 1);
+        assert.match(stamps[0], STAMP);
+        const packetNames = readdirSync(join(runsFolder, stamps[0], "packets"));
+        assert.ok(packetNames.find(name => /^\d+-A-\d+-1\.json$/.test(name)));
+        assert.equal(existsSync(join(cwd, ".taskTools")), false);
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+        rmSync(projectRoot, { recursive: true, force: true });
     }
 });
 

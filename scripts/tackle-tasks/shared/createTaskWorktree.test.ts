@@ -521,3 +521,39 @@ test("test_createTaskWorktree_recoversAfterBeingKilledRightAfterConfiguringIsola
     assert.ok(!existsSync(taskWorktreeCreateJournalPath(output.worktree)));
     assert.equal(isSkipWorktree(output.worktree, "plans/brief-1.md"), true);
 });
+
+test("test_createTaskWorktree_cutsSubmoduleTaskNFromSubmoduleStagingAndWritesResetPointRefsEverywhere", () => {
+    // Setup: a real repo with a real submodule, an active claimed run for task 1.
+    const { root } = makeProjectRootWithLocalSubmodule();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
+    claimTask(1, "run-a", root);
+
+    // Test action: create the task worktree (a fresh cut).
+    const output = createTaskWorktree(1, "run-a", root);
+
+    // Verification: submodule task-1 matches its source staging tip; every source repo's reset-point ref names that same tip.
+    const vendorStagingTip = git(join(root, "vendor"), "rev-parse", "staging").trim();
+    const rootStagingTip = git(root, "rev-parse", "staging").trim();
+    assert.equal(git(join(output.worktree, "vendor"), "rev-parse", "task-1").trim(), vendorStagingTip);
+    assert.equal(git(join(root, "vendor"), "rev-parse", "refs/taskTools/reset-point/task-1").trim(), vendorStagingTip);
+    assert.equal(git(root, "rev-parse", "refs/taskTools/reset-point/task-1").trim(), rootStagingTip);
+    assert.equal(git(join(root, "vendor"), "rev-parse", "task-1").trim(), vendorStagingTip);
+});
+
+test("test_createTaskWorktree_advancesRootStagingToHeadWhenStagingStartsBehind", () => {
+    // Setup: staging is created early, then HEAD advances past it before the task worktree is cut.
+    const root = makeProjectRootWithCommit();
+    git(root, "branch", "staging");
+    writeFileSync(join(root, "fileB.txt"), "more\n");
+    git(root, "add", "fileB.txt");
+    git(root, "commit", "-q", "-m", "advance head");
+    const headTip = git(root, "rev-parse", "HEAD").trim();
+    seedTasksFile(root, [{ taskNumber: 1, title: "t1", description: "do it", modifiableFiles: [] }]);
+    claimTask(1, "run-a", root);
+
+    // Test action: create the task worktree.
+    createTaskWorktree(1, "run-a", root);
+
+    // Verification: staging was fast-forwarded to HEAD, not left at its old tip.
+    assert.equal(git(root, "rev-parse", "staging").trim(), headTip);
+});

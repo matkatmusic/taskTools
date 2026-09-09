@@ -56,28 +56,29 @@ test("test_resolveAgentOptions_picksTheBandWithTheLargestMinDifficultyNotAboveTh
     ]);
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-1-implement-task" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "PLAN_THE_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-1-plan-the-task" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-1-implement-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 2);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-2-implement-task" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "PLAN_THE_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-2-plan-the-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 3);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium", agentType: "task-3-implement-task" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "PLAN_THE_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium", agentType: "task-3-plan-the-task" });
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 4);
-    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "IMPLEMENT_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium", agentType: "task-4-implement-task" });
+    assert.deepEqual(findEntry(readConfig(stepsConfigPath), "PLAN_THE_TASK").agent, { model: "claude-fable-5-1[1m]", effort: "medium", agentType: "task-4-plan-the-task" });
 });
 
 test("test_resolveAgentOptions_usesTheTaskOverrideForThatBlockOnly", () => {
     const stepsConfigPath = makeStepsConfig();
     const tasksFile = makeTasksFile([
-        { taskNumber: 1, difficulty: 4, agent: { IMPLEMENT_TASK: { model: "custom-model", effort: "custom-effort" } } },
+        { taskNumber: 1, difficulty: 4, agent: { PLAN_THE_TASK: { model: "custom-model", effort: "custom-effort" } } },
     ]);
 
     resolveAgentOptions(stepsConfigPath, tasksFile, 1);
     const config = readConfig(stepsConfigPath);
-    assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "custom-model", effort: "custom-effort", agentType: "task-1-implement-task" });
-    assert.deepEqual(findEntry(config, "PLAN_THE_TASK").agent, { model: "claude-opus-4-8[1m]", effort: "high", agentType: "task-1-plan-the-task" });
+    assert.deepEqual(findEntry(config, "PLAN_THE_TASK").agent, { model: "custom-model", effort: "custom-effort", agentType: "task-1-plan-the-task" });
+    assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-1-implement-task" });
 });
 
 test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet", () => {

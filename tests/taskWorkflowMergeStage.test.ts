@@ -1384,7 +1384,7 @@ test('merge stage: after a submodule layer merges, an untested parent layer bloc
 })
 
 // C86-42: a submodule merge that lands but whose record write fails must still count as progress and be resumable.
-test('merge stage: a submodule record-write failure after the submodule lands still counts as progress and resumes cleanly', async () => {
+test('merge stage: a submodule record-write failure after the submodule lands is retried and saved after a crash', async () => {
   const taskNumber = 9047
   process.env.GIT_ALLOW_PROTOCOL = 'file'
 
@@ -1462,7 +1462,9 @@ test('merge stage: a submodule record-write failure after the submodule lands st
     assert.equal(consumed.queue.sourceProgressThisLap, true)
     assert.equal(shouldEndQueue(consumed.queue, false), 'continue')
 
-    // A retry lap must recognize the already-landed submodule and resume, not report merge-record-missing.
+    // The crash is over: clear the planted collision so the retry's ref write can finally land.
+    git(submoduleCheckoutPath, 'update-ref', '-d', 'refs/taskTools/merged-commits')
+
     const retryResult = await runMergeStage(worktreePath, { task: taskNumber, stage: 'merge', repositoryManifest, sourceRoot: root })
     const retryOutcome = retryResult.results[0] as { status: string, completedLayers: Array<{ occurrenceId: string, status: string }> }
     assert.notEqual(retryOutcome.status, 'merge-record-missing')
@@ -1470,6 +1472,7 @@ test('merge stage: a submodule record-write failure after the submodule lands st
       retryOutcome.completedLayers.map((layer) => ({ occurrenceId: layer.occurrenceId, status: layer.status })),
       [{ occurrenceId: 'vendor', status: 'no-op' }],
     )
+    assert.equal(git(submoduleCheckoutPath, 'rev-parse', `refs/taskTools/merged-commits/${operationBranch}`), git(submoduleCheckoutPath, 'rev-parse', sourceBranch))
   } finally {
     removeFixture(root, worktreePath)
     rmSync(submoduleSource, { recursive: true, force: true })

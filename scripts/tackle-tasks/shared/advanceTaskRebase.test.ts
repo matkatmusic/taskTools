@@ -45,6 +45,9 @@ function makeSourceRepoWithSubmodule(): { rootOrigin: string; childOrigin: strin
     const rootOrigin = makeTempRepoWithTestScript("main");
     git(rootOrigin, "submodule", "add", "-q", childOrigin, "child");
     git(rootOrigin, "commit", "-q", "-m", "add submodule child");
+    // Every repo, root and submodule, has a staging branch under the current design.
+    git(rootOrigin, "branch", "staging");
+    git(join(rootOrigin, "child"), "branch", "staging");
     return { rootOrigin, childOrigin, rootOriginChildPath: join(rootOrigin, "child") };
 }
 
@@ -95,7 +98,7 @@ test("test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflic
     git(rootOrigin, "add", "shared.txt");
     git(rootOrigin, "commit", "-q", "-m", "root source edit");
 
-    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-10", stepId: "rebase-10", rootSourceBranch: "main" };
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-10", stepId: "rebase-10", rootSourceBranch: "staging" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");
@@ -127,7 +130,7 @@ test("test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
 
     advanceSourceChildBranch(rootOrigin, rootOriginChildPath, "child-source\n");
 
-    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", stepId: "rebase-11", rootSourceBranch: "main" };
+    const rebaseInput = { projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-11", stepId: "rebase-11", rootSourceBranch: "staging" };
     const first = await rebaseTaskWorktree(rebaseInput);
     assert.equal(first.conflicted, true);
     assert.equal(first.stoppedAt?.occurrenceId, "child");
