@@ -479,9 +479,10 @@ test("test_createWorktreeForGroupPopulatesSubmoduleWorkingTrees", () => {
 });
 
 test("test_createWorktreeForGroupThrowsWhenSubmoduleInitFails", () => {
-    // Setup: a repo with a submodule whose origin no longer exists on disk.
+    // Setup: a repo whose submodule has no source left: origin is gone and the local checkout is unpopulated.
     const { repoRoot, submoduleOrigin } = makeTempRepoWithLocalSubmodule();
     rmSync(submoduleOrigin, { recursive: true, force: true });
+    rmSync(join(repoRoot, "vendor", ".git"), { force: true });
     const group: TaskGroup = { groupId: 1, taskNumbers: [1], filePaths: [], scope: "unknown" };
     // Verification: the run stops rather than handing a worker a half-populated worktree.
     assert.throws(() => createWorktreeForGroup(repoRoot, group));
