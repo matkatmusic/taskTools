@@ -1,34 +1,30 @@
 [
   {
-    "file": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.test.ts",
-    "name": "test_CLEAN_UP_WORKTREES_leavesEverySourceCheckoutClean"
+    "file": "scripts/tackle-tasks/shared/advanceTaskRebase.test.ts",
+    "name": "test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflictPath"
   },
   {
-    "file": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.test.ts",
-    "name": "test_CLEAN_UP_WORKTREES_runsTwiceWithTheSameInput"
+    "file": "scripts/tackle-tasks/shared/advanceTaskRebase.test.ts",
+    "name": "test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
   },
   {
-    "file": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.test.ts",
-    "name": "test_CLEAN_UP_WORKTREES_clearsTheTailCursorOnceFullyClean"
+    "file": "scripts/tackle-tasks/shared/occurrences.test.ts",
+    "name": "test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceManifest"
   },
   {
-    "file": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.test.ts",
-    "name": "test_CLEAN_UP_WORKTREES_leavesTheTailCursorOnAThrowAndTheRetrySucceeds"
+    "file": "scripts/tackle-tasks/shared/occurrences.test.ts",
+    "name": "test_getOccurrencesDeepestFirst_keepsChildBaseRefStableAfterASubmoduleChangeAndDiffsCorrectly"
   },
   {
-    "file": "scripts/tackle-tasks/mergeSucceededExit/CLEAN_UP_WORKTREES.test.ts",
-    "name": "test_CLEAN_UP_WORKTREES_resumeReplaysAfterTheWrapperDiesBetweenCleanupSucceedingAndClearingTheCursor"
+    "file": "tests/runMergePhase.test.ts",
+    "name": "test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndReportsItMerged"
   },
   {
-    "file": "tests/tackle-tasks-v1_1_SkillBodyEmitter.test.ts",
-    "name": "real lease mechanism: a whole-array prepare followed by a per-task re-prepare collides, but a lone per-task prepare (what the series brief now emits) does not"
-  },
-  {
-    "file": "tests/tackle-tasks-v1_1_SkillBodyEmitter.test.ts",
-    "name": "generated brief's plan+implement handling matches a real, non-synthetic workflow envelope through consumeTaskWorkflowResult, and the brief text never indexes results[]"
+    "file": "tests/runMergePhase.test.ts",
+    "name": "test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict"
   },
   {
     "file": "tests/tackleTasksAcceptance.test.ts",
-    "name": "test_acceptance_resumesAfterAnInterruptedCleanup"
+    "name": "test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt"
   }
 ]

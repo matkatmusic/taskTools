@@ -61,7 +61,9 @@ npm test 2>&1 \\
 | tee ${LOG_PATH} \\
 | awk '
     /^✖ / { print }
+    /^FAIL / { print }
     /^ℹ fail / { saw_summary = 1; failures = $3 + 0 }
+    /^Tests:/ { saw_summary = 1; failures = ($0 ~ /failed/) ? $2 + 0 : 0 }
     END {
         if (saw_summary && failures == 0) {
         print "all passing"
@@ -81,6 +83,7 @@ export async function runSuite(
     if (!existsSync(join(cwd, "package.json"))) throw new Error(`task-tests: no package.json in ${cwd}`);
     // ponytail: strip NODE_TEST_CONTEXT and RUN_STEP_LOG so the child suite inherits neither the parent test context nor the live run log
     const { NODE_TEST_CONTEXT: _parentTestContext, RUN_STEP_LOG: _parentRunStepLog, ...env } = process.env;
+    env.FORCE_COLOR = "0"; // Jest colors its output unless told otherwise; awk needs plain text.
     const run = await runCommandInProcessGroup(INITIAL_PASS, cwd, env, timeoutMs);
     const output = run.timedOut ? `the suite timed out after ${timeoutMs}ms and was killed` : `${run.output}`.trim();
     const log = output === "all passing" ? "" : existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf8") : "";
@@ -88,7 +91,7 @@ export async function runSuite(
 }
 
 // The node reporter ends with "✖ failing tests:" then pairs of "test at FILE:LINE:COL" / "✖ NAME (ms)".
-export function parseFailingTests(log: string): FailingTest[] {
+function parseNodeFailingTests(log: string): FailingTest[] {
     const summary = log.slice(log.indexOf("✖ failing tests:"));
     const failing: FailingTest[] = [];
     const lines = summary.split("\n");
@@ -99,6 +102,25 @@ export function parseFailingTests(log: string): FailingTest[] {
         failing.push({ file: location[1], name });
     }
     return failing;
+}
+
+// Jest prints "FAIL path" then "  ● Suite › test" lines, per file and again in the summary.
+function parseJestFailingTests(log: string): FailingTest[] {
+    const failing: FailingTest[] = [];
+    let currentFile = "";
+    for (const line of log.split("\n")) {
+        const failMatch = line.match(/^FAIL (\S+)/);
+        if (failMatch) { currentFile = failMatch[1]; continue; }
+        const testMatch = line.match(/^\s*● (.+)$/);
+        if (!testMatch || !currentFile) continue;
+        const name = testMatch[1];
+        if (!failing.some((f) => f.file === currentFile && f.name === name)) failing.push({ file: currentFile, name });
+    }
+    return failing;
+}
+
+export function parseFailingTests(log: string): FailingTest[] {
+    return log.includes("✖ failing tests:") ? parseNodeFailingTests(log) : parseJestFailingTests(log);
 }
 
 export const knownFailingTestsPath = (projectRoot: string) => join(projectRoot, ".taskTools", "knownFailingTests.json");

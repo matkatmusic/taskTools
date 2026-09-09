@@ -7,9 +7,13 @@ import { produceSkillBody } from "../scripts/create-task/create-task_SkillBodyEm
 
 const scriptPath = fileURLToPath(new URL("../scripts/create-task/create-task_SkillBodyEmitter.ts", import.meta.url));
 
-test("test_produceSkillBodyContainsTheAbsoluteWorkflowScriptPath", () => {
+// scriptPath is refused when the skill runs from another project, so the script text goes inline.
+test("test_produceSkillBodyInlinesTheWorkflowScript", () => {
     const body = produceSkillBody("test task");
-    assert.match(body, /(?:^|[\s"])\/[^\s"]*skills\/create-task\/createTask\.workflow\.js/);
+    const workflowLine = body.split("\n").find((line) => line.startsWith("WORKFLOW: "));
+    const payload = JSON.parse(workflowLine!.slice("WORKFLOW: ".length));
+    assert.equal(payload.scriptPath, undefined);
+    assert.match(payload.script, /^export const meta = \{/);
 });
 
 test("test_produceSkillBodyContainsTheAbsoluteAgentPromptEmitterPath", () => {

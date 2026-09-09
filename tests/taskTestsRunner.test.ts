@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFailingTests, newFailingTests, judgeSuite, runCommandInProcessGroup, isProcessGroupKillSupported } from "../scripts/shared/taskTestsRunner.ts";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseFailingTests, newFailingTests, judgeSuite, runCommandInProcessGroup, isProcessGroupKillSupported, INITIAL_PASS } from "../scripts/shared/taskTestsRunner.ts";
 
 test("parseFailingTests reads file/name pairs off a reporter tail", () => {
   const log = [
@@ -16,6 +19,31 @@ test("parseFailingTests reads file/name pairs off a reporter tail", () => {
   assert.deepEqual(parseFailingTests(log), [
     { file: "tests/a.test.ts", name: "boom" },
     { file: "tests/b.test.ts", name: "also boom" },
+  ]);
+});
+
+test("parseFailingTests reads a Jest log, deduping the per-file block against the summary block", () => {
+  const log = [
+    "FAIL tests/a.test.ts",
+    "  ● suite a › test one",
+    "",
+    "    expect(received).toBe(expected)",
+    "",
+    "FAIL tests/b.test.ts",
+    "  ● suite b › test two",
+    "",
+    "Summary of all failing tests",
+    "FAIL tests/a.test.ts",
+    "  ● suite a › test one",
+    "",
+    "FAIL tests/b.test.ts",
+    "  ● suite b › test two",
+    "",
+    "Tests:       2 failed, 40 passed, 42 total",
+  ].join("\n");
+  assert.deepEqual(parseFailingTests(log), [
+    { file: "tests/a.test.ts", name: "suite a › test one" },
+    { file: "tests/b.test.ts", name: "suite b › test two" },
   ]);
 });
 
@@ -47,7 +75,7 @@ test("judgeSuite fails when a parsed failure is new", () => {
 });
 
 test("test_runCommandInProcessGroup_killsTheWholeProcessGroupOnTimeout", async () => {
-    // Setup: a command that backgrounds a grandchild and waits on it, so the bug (killing only the direct child) would leave it alive.
+    // Setup: backgrounds a grandchild, so killing only the direct child would leave it alive.
     const result = await runCommandInProcessGroup(`sleep 999 & echo "child pid: $!"; wait`, process.cwd(), process.env, 200);
     // Verification: the runner reports a timeout, not a normal exit.
     assert.equal(result.timedOut, true);
@@ -68,6 +96,24 @@ test("test_runCommandInProcessGroup_boundsBufferedOutputForANoisyHangingChild", 
     );
     assert.equal(result.timedOut, true);
     assert.ok(result.output.length <= 8_100, `output length was ${result.output.length}`);
+});
+
+test("INITIAL_PASS awk recognizes Jest's passing summary", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tasktools-jest-log-"));
+    const sample = join(dir, "pass.log");
+    writeFileSync(sample, ["PASS tests/a.test.ts", "", "Tests:       42 passed, 42 total"].join("\n"));
+    const command = INITIAL_PASS.replace("npm test", `cat ${sample}`);
+    const result = await runCommandInProcessGroup(command, process.cwd(), process.env, 5000);
+    assert.equal(result.output, "all passing");
+});
+
+test("INITIAL_PASS awk does not report a missing summary for a failing Jest run", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tasktools-jest-log-"));
+    const sample = join(dir, "fail.log");
+    writeFileSync(sample, ["FAIL tests/a.test.ts", "  ● suite a › test one", "", "Tests:       2 failed, 40 passed, 42 total"].join("\n"));
+    const command = INITIAL_PASS.replace("npm test", `cat ${sample}`);
+    const result = await runCommandInProcessGroup(command, process.cwd(), process.env, 5000);
+    assert.ok(!result.output.includes("stopped before producing a summary"), result.output);
 });
 
 test("test_isProcessGroupKillSupported_isFalseOnlyOnWin32", () => {

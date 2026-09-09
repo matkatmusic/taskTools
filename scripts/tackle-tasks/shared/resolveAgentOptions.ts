@@ -16,6 +16,8 @@ export const DEFAULT_AGENT_BANDS: AgentBand[] = [
 // The blocks where the agent does the work itself. Every other block, decision or codex relay, runs on RELAY_AGENT.
 export const BAND_BLOCKS = new Set(["PLAN_THE_TASK", "IMPLEMENT_TASK", "FIX_IMPLEMENT_TASK_TESTS", "FIX_CONFLICTS", "FIX_THE_CODEBASE_FOR_SUITE"]);
 export const RELAY_AGENT: AgentOptions = { model: "sonnet", effort: "low" };
+// IMPLEMENT_TASK always runs on sonnet 5, over the band and over a task override.
+export const IMPLEMENT_AGENT: AgentOptions = { model: "claude-sonnet-5[1m]", effort: "high" };
 // The fallback reviewers answer the codex question themselves, on the model their block names.
 export const FALLBACK_REVIEWER_AGENTS: Record<string, AgentOptions> = {
     CODEX_REVIEW_FALLBACK_FABLE: { model: "claude-fable-5-1[1m]", effort: "medium" },
@@ -75,7 +77,7 @@ export function resolveAgentOptions(stepsConfigPath: string, tasksFile: string, 
     const bandAgent: AgentOptions = { model: band.model, effort: band.effort };
     for (const entries of Object.values(config)) {
         for (const step of entries) {
-            const agent = overrides[step.box] ?? FALLBACK_REVIEWER_AGENTS[step.box] ?? (BAND_BLOCKS.has(step.box) ? bandAgent : RELAY_AGENT);
+            const agent = step.box === "IMPLEMENT_TASK" ? IMPLEMENT_AGENT : overrides[step.box] ?? FALLBACK_REVIEWER_AGENTS[step.box] ?? (BAND_BLOCKS.has(step.box) ? bandAgent : RELAY_AGENT);
             step.agent = BAND_BLOCKS.has(step.box)
                 ? { ...agent, agentType: writeFencedAgentFile(tasksFile, taskNumber, step.box) }
                 : agent;

@@ -260,7 +260,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         // }
 
         // The block's input is the quoted argument of its newest packet this run, like resumeRun.ts findStartAtBlockEntry.
-        const packetNamePattern = new RegExp(`^${block}-\\d+-\\d+\\.json$`);
+        const packetNamePattern = new RegExp(`^\\d+-${block}-\\d+-\\d+\\.json$`);
         let newestMtimeMs = -Infinity;
         let input: string | null = null;
         let rewindPoints: Record<string, string> = {};

@@ -7,7 +7,9 @@ const appendTaskPath = fileURLToPath(new URL("../shared/appendTask.ts", import.m
 
 export function produceSkillBody(taskDescription: string): string {
     const workflowArgs = JSON.stringify({
-        scriptPath: workflowScriptPath,
+        // scriptPath is refused when the skill runs from another project; the script text goes inline.
+        // scriptPath: workflowScriptPath,
+        script: readFileSync(workflowScriptPath, "utf8"),
         args: { agentPromptEmitterPath, taskDescription },
     });
     const body = `Task described by the user: ${taskDescription}
