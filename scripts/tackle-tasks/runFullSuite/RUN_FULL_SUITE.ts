@@ -2,10 +2,12 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
+import { SCRIPT_SIGNAL, type ResetScope } from "../../shared/contracts.ts";
 import { runFullSuite } from "../shared/runFullSuite.ts";
 import { loadPreparedTask } from "../shared/preparedTask.ts";
 import { getAttemptCount } from "../shared/taskRunState.ts";
+
+export const resetScope: ResetScope = { counters: true };
 
 type Input = {
     taskNumber: number;

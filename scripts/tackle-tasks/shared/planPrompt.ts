@@ -300,9 +300,6 @@ Write the plan in exactly that shape.
 Replace every \`<...>\` with a real value.
 Set \`task\` to ${v.number}.
 The file must be strict JSON.
-Inside every string, escape each double quote as \`\\"\`.
-Inside every string, escape each backslash as \`\\\\\`.
-Inside every string, escape each newline as \`\\n\`.
 Before you return, run this command:
 \`\`\`
 node -e 'JSON.parse(require("fs").readFileSync("${v.planFile}","utf8"))'
@@ -316,8 +313,7 @@ Fix the file until that command prints nothing.
         when: () => true,
         render: (v) => `## PLAN REQUIREMENTS
 
-The plan must be exact enough that the implementer makes no discovery of its own.
-The plan must be comprehensive enough that the implementer makes no discovery of its own.
+The plan must be exact enough and comprehensive enough that the implementer makes no discovery of its own.
 - Name every edit by file path and line number.
 - - Show each edit as a \`diff\`.
 - - Mark each edit as \`old\` and \`new\`.
@@ -326,7 +322,6 @@ The plan must be comprehensive enough that the implementer makes no discovery of
 - - That order keeps an edit from shifting the lines of a later edit.
 - - Never say "insert at the end".
 - - Never say "replace the whole file".
-- - Show the exact text to remove and insert, and where.
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
 - Set \`createsFiles\` to exactly \`${v.createsFiles}\`, copied from the task record.
 - Never add a file to \`createsFiles\`; a missing file the task does not create is a CLARIFY.

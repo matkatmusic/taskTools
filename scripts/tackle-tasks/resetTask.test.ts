@@ -76,6 +76,54 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     assert.match(said, /cleared: counters/);
 });
 
+test("test_resetTask_atRunFullSuite_clearsTheSuiteFixCounterWithTasksJsonAtTheRepoRoot", async () => {
+    // Setup: tasks.json sits at the repo root, not under .taskTools, and the suiteFix counter is already at 2.
+    const repoRoot = makeTempRepoWithCommit();
+    const runId = "r1";
+    writeFileSync(join(repoRoot, "tasks.json"), JSON.stringify([{
+        taskNumber: 9,
+        title: "t",
+        run: {
+            active: false, worktree: null, leaseRunId: null,
+            history: [{
+                runId, startedAt: "t", endedAt: "t2", exitType: "suite-red", exitNote: "n",
+                modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+            }],
+        },
+    }]));
+    writeFileSync(join(repoRoot, "completedTasks.json"), "[]");
+    raiseAttemptCount(9, runId, "suiteFix", "pass-1", repoRoot);
+    raiseAttemptCount(9, runId, "suiteFix", "pass-1", repoRoot);
+
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    git(repoRoot, "branch", "task-9");
+    git(repoRoot, "worktree", "add", worktreePath, "task-9");
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "plans", "brief-9.md"), "brief");
+
+    const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+    mkdirSync(packetsFolder, { recursive: true });
+    const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+    writeFileSync(join(packetsFolder, "RUN_FULL_SUITE-0-1.json"), JSON.stringify({
+        command: `node --no-inspect script.ts '${packetInput}'`,
+    }));
+
+    // Action: reset task 9 at RUN_FULL_SUITE.
+    const cwd = process.cwd();
+    process.chdir(repoRoot);
+    let said: string;
+    try {
+        said = await resetTask(9, "RUN_FULL_SUITE");
+    } finally {
+        process.chdir(cwd);
+    }
+
+    // Verification: the suiteFix counter is cleared and the report says so.
+    assert.equal(getAttemptCount(9, "suiteFix", repoRoot), 0);
+    assert.match(said, /cleared: counters/);
+});
+
 test("test_resetTask_throwsNamingThePathWhenAPacketFileIsEmpty", async () => {
     // Setup: task 42 is open, and one packet from an earlier run is a zero-byte file.
     const repoRoot = makeTempRepoWithCommit();
@@ -98,8 +146,7 @@ test("test_resetTask_throwsNamingThePathWhenAPacketFileIsEmpty", async () => {
 });
 
 test("test_resetTask_readsThePerTaskStepsJson", async () => {
-    // Scenario: task 9 has its own per-task steps.json under .taskTools/workflows/9/, naming RUN_TASK_TESTS
-    // under a diagram key ("onlyInPerTaskConfig.mmd") that exists only there, never in the plugin's own scripts/steps.json.
+    // Scenario: task 9 has its own per-task steps.json under .taskTools/workflows/9/, naming RUN_TASK_TESTS under a diagram key ("onlyInPerTaskConfig.mmd") that exists only there, never in the plugin's own scripts/steps.json.
     const repoRoot = makeTempRepoWithCommit();
     const runId = "r2";
     mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });

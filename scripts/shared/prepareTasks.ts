@@ -166,7 +166,7 @@ export function writeTaskBriefFile(task: TaskRecord, repoRoot: string): string {
     return briefFile;
 }
 
-// The remote may lack a gitlink commit; the source checkout's submodule has it, so clone from there, at every depth.
+// The remote may lack a gitlink commit; the source checkout's submodule has it, so clone from there.
 function cloneSubmodulesFromLocalCheckout(checkoutPath: string, sourcePath: string): void {
     if (!existsSync(join(checkoutPath, ".gitmodules"))) return;
     const pathEntries = execFileSync("git", ["-C", checkoutPath, "config", "-f", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"], { encoding: "utf8" }).trim().split("\n");
@@ -177,7 +177,7 @@ function cloneSubmodulesFromLocalCheckout(checkoutPath: string, sourcePath: stri
         if (!existsSync(join(localSource, ".git"))) continue;
         execFileSync(
             "git",
-            ["-C", checkoutPath, "-c", `submodule.${name}.url=${localSource}`, "submodule", "update", "--init", "--", submodulePath],
+            ["-C", checkoutPath, "-c", `submodule.${name}.url=${localSource}`, "-c", "protocol.file.allow=always", "submodule", "update", "--init", "--", submodulePath],
             { stdio: ["ignore", "ignore", "inherit"] },
         );
         const remoteUrl = execFileSync("git", ["-C", sourcePath, "config", `submodule.${name}.url`], { encoding: "utf8" }).trim();

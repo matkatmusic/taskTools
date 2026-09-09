@@ -49,8 +49,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     }
 
     // repoRoot moved above, before stepsByDiagram is read (task 10).
-    const tasksFile = join(repoRoot, ".taskTools", "tasks.json");
-    const completedFile = join(repoRoot, ".taskTools", "completedTasks.json");
+    const { tasksPath: tasksFile, completedTasksPath: completedFile } = resolveTaskFiles(repoRoot);
 
     const tasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
     const completed = JSON.parse(readFileSync(completedFile, "utf-8"));
