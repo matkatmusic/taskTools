@@ -180,7 +180,7 @@ function cloneSubmodulesFromLocalCheckout(checkoutPath: string, sourcePath: stri
             ["-C", checkoutPath, "-c", `submodule.${name}.url=${localSource}`, "-c", "protocol.file.allow=always", "submodule", "update", "--init", "--", submodulePath],
             { stdio: ["ignore", "ignore", "inherit"] },
         );
-        const remoteUrl = execFileSync("git", ["-C", sourcePath, "config", `submodule.${name}.url`], { encoding: "utf8" }).trim();
+        const remoteUrl = execFileSync("git", ["-C", localSource, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
         execFileSync("git", ["-C", join(checkoutPath, submodulePath), "remote", "set-url", "origin", remoteUrl], { stdio: ["ignore", "ignore", "inherit"] });
         cloneSubmodulesFromLocalCheckout(join(checkoutPath, submodulePath), localSource);
     }

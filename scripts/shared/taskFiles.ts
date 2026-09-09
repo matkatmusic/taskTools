@@ -49,6 +49,8 @@ const DEFAULT_IGNORE_PATTERNS = ["__pycache__/", "node_modules/", ".DS_Store", "
 export function seedTaskFilesIfAbsent(pair: TaskFilePair): void {
   const taskFolder = dirname(pair.tasksPath);
   mkdirSync(taskFolder, { recursive: true });
+  // The harness watches .claude/agents only if it exists at session start; the fenced agent files land there later.
+  mkdirSync(join(taskFilesProjectRoot(pair), ".claude", "agents"), { recursive: true });
   withTaskStateLock(pair.tasksPath, () => {
     seedGitignore(taskFilesProjectRoot(pair));
     for (const path of [pair.tasksPath, pair.completedTasksPath]) {

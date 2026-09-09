@@ -146,7 +146,7 @@ test("test_resetTask_throwsNamingThePathWhenAPacketFileIsEmpty", async () => {
 });
 
 test("test_resetTask_readsThePerTaskStepsJson", async () => {
-    // Scenario: task 9 has its own per-task steps.json under .taskTools/workflows/9/, naming RUN_TASK_TESTS under a diagram key ("onlyInPerTaskConfig.mmd") that exists only there, never in the plugin's own scripts/steps.json.
+    // Scenario: task 9's per-task steps.json names RUN_TASK_TESTS under a diagram key found only there, not in the plugin's steps.json.
     const repoRoot = makeTempRepoWithCommit();
     const runId = "r2";
     mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
@@ -199,7 +199,7 @@ test("test_resetTask_readsThePerTaskStepsJson", async () => {
         process.chdir(cwd);
     }
 
-    // Verification: the resume line names task 9's own per-task diagram — proof the per-task steps.json was read, not the plugin's shared one.
+    // Verification: the resume line names task 9's per-task diagram, proving its steps.json was read, not the plugin's shared one.
     assert.match(said, /resumes at onlyInPerTaskConfig\.mmd::RUN_TASK_TESTS/);
 });
 
@@ -245,7 +245,7 @@ test("test_resetTask_regeneratesAMissingPerTaskStepsJsonForAPreTask10Run", async
         process.chdir(cwd);
     }
 
-    // Verification: reset still worked, against the real default pipeline, and it generated the missing per-task config as a side effect.
+    // Verification: reset worked against the real default pipeline, and generated the missing per-task config as a side effect.
     assert.match(said, /resumes at pipeline-commitImplementationIfNeeded\.mmd::RUN_TASK_TESTS/);
     assert.ok(existsSync(join(repoRoot, ".taskTools", "workflows", "9", "steps.json")));
 });
