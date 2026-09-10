@@ -53,7 +53,7 @@ export type PreparedTask = {
 // ---------------------------------------------------------------------------
 
 // A source file is paired with tests/<its base name>.test.ts; the related-tests hook uses the same convention.
-const pairedTestPath = (root: string, file: string) => `${root}/tests/${basename(file).replace(/\.tsx?$/, "")}.test.ts`;
+export const pairedTestPath = (root: string, file: string) => `${root}/tests/${basename(file).replace(/\.tsx?$/, "")}.test.ts`;
 
 export function loadPreparedTask(taskNumber: number, worktree: string, projectRoot: string): PreparedTask {
     const pair = resolveTaskFiles(projectRoot);

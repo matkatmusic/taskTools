@@ -14,6 +14,8 @@ import { stagingWorktreePath } from "./shared/stagingWorktree.ts";
 import { resolveTaskFiles, taskWorkflowDirectory } from "../shared/taskFiles.ts";
 import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.ts";
 import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
+import { generateWorkflow } from "./generateWorkflow.ts";
+import { resolveAgentOptions } from "./shared/resolveAgentOptions.ts";
 import { loadRepositoryManifest, initializeSubmodulesInWorktree } from "../shared/prepareTasks.ts";
 import { deleteTaskMergePersistence, removeTaskWorktreeAndBranches, findRecordedMergedCommit } from "../merge-worktree-tasks/mergeTaskWorktrees.ts";
 
@@ -300,7 +302,18 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         for (const [occurrenceId, oid] of Object.entries(rewindPoints).sort(([a], [b]) => b.length - a.length)) {
             const path = occurrenceId === "" ? worktreePath : join(worktreePath, occurrenceId);
             if (occurrenceId === "") {
+                // A skip-worktree entry (a generated file the brief isolates) fails a hard reset; lift the flag, reset, restore.
+                const skipWorktreePaths = execSync("git ls-files -v", { cwd: path, encoding: "utf8" })
+                    .split("\n").filter((line) => line.startsWith("S ")).map((line) => line.slice(2));
+                const skipWorktreeContents = new Map<string, Buffer>();
+                for (const skipWorktreePath of skipWorktreePaths) {
+                    const fullPath = join(path, skipWorktreePath);
+                    if (existsSync(fullPath)) skipWorktreeContents.set(skipWorktreePath, readFileSync(fullPath));
+                }
+                execSync(`git update-index --no-skip-worktree -- ${skipWorktreePaths.map((p) => `"${p}"`).join(" ")}`, { cwd: path, stdio: "pipe" });
                 execSync(`git reset --hard ${oid}`, { cwd: path, stdio: "pipe" });
+                for (const [skipWorktreePath, content] of skipWorktreeContents) writeFileSync(join(path, skipWorktreePath), content);
+                configureGeneratedArtifactIsolation(taskNumber, path);
             } else {
                 execSync(`git checkout -B ${branchName} ${oid}`, { cwd: path, stdio: "pipe" });
             }
@@ -324,8 +337,16 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         lines.push(`task ${taskNumber} resumes at ${stepKey} on the next /tackle-tasks [${taskNumber}]`);
         const cleared = Object.entries(scope).filter(([, value]) => value === true).map(([key]) => key);
         lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);
+
+        // Same three calls as SkillBodyEmitter.ts ensureTaskWorkflowPair, so a resume walks the current diagrams.
+        const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
+        const workflowFile = join(dirname(stepsConfigPath), "workflow.js");
+        generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+        resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
+        generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
+        lines.push(`task ${taskNumber} steps.json and workflow.js regenerated`);
     }
-    // Last: steps.json here was read at the top; a block reset keeps it for the resume.
+    // Last: steps.json here was read at the top; the block path above regenerates it from the current diagrams.
     if (block === "") rmSync(dirname(stepsConfigPath), { recursive: true, force: true });
     return lines.join("\n");
 }

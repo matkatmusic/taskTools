@@ -60,6 +60,7 @@ test("test_skillBodyEmitter_runsNoSubprocessAndImportsOnlyTheArgumentParser", ()
 // The preamble's first box reads the task number and the tasks file.
 test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () => {
     const root = makeTargetRepository([74]);
+    skillBody("[74]", root);
     const brief = skillBody("[74]", root);
 
     const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
@@ -71,6 +72,7 @@ test("test_skillBody_launchesTheWorkflowWithTheTaskNumberAndTheTasksFile", () =>
 // The skill body makes the workflow file fresh, so a stale copy on disk never reaches the agent.
 test("test_skillBody_writesTheWorkflowFileFromTheGenerator", () => {
     const root = makeTargetRepository([74]);
+    skillBody("[74]", root);
     const brief = skillBody("[74]", root);
     const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
     const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
@@ -81,6 +83,7 @@ test("test_skillBody_writesTheWorkflowFileFromTheGenerator", () => {
 test("test_skillBody_givesEachTaskNumberItsOwnStepsJsonAndWorkflowFile", () => {
     // Setup: one invocation naming two task numbers.
     const root = makeTargetRepository([3, 5]);
+    skillBody("[3,5]", root);
     const brief = skillBody("[3,5]", root);
     // Test action: pull both WORKFLOW calls' scriptPaths.
     const scriptPaths = brief.split("\n")
@@ -180,6 +183,7 @@ test("test_ensureTaskWorkflowPair_writesResolvedAgentOptionsIntoTheTaskStepsJson
 test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {
     // Step: run the emitter with a starting block named after the task list.
     const root = makeTargetRepository([74]);
+    skillBody("[74] IMPLEMENT_TASK", root);
     const brief = skillBody("[74] IMPLEMENT_TASK", root);
 
     // Step: pull the WORKFLOW JSON out of the returned text.
@@ -191,6 +195,7 @@ test("test_skillBody_passesTheStartingBlockToTheWorkflowArgs", () => {
 test("test_skillBody_omitsStartingBlockWhenNoneIsGiven", () => {
     // Step: run the emitter with no starting block named.
     const root = makeTargetRepository([74]);
+    skillBody("[74]", root);
     const brief = skillBody("[74]", root);
 
     // Step: the starting block key must not be present at all.
@@ -203,6 +208,7 @@ test("test_skillBody_launchesOneWorkflowPerTaskNumberInTheOrderGiven", () => {
     // Setup: three task numbers, in order.
     const root = makeTargetRepository([3, 5, 8]);
     // Action: run the emitter with all three task numbers.
+    skillBody("[3,5,8]", root);
     const brief = skillBody("[3,5,8]", root);
 
     // Step: one WORKFLOW line per task number.
@@ -265,4 +271,18 @@ test("test_skillBody_resetTellsTheAgentToRunNothingBecauseTheHookRanIt", () => {
     // Verification: the body names no command to run and no workflow; the hook already ran the reset.
     assert.doesNotMatch(brief, /node |WORKFLOW/);
     assert.match(brief, /Run nothing/);
+});
+
+// The harness loads .claude/agents only on a real user turn, so the first invocation asks for a second one.
+test("test_skillBody_firstInvocationWritesAgentFilesAndAsksForASecondInvocation", () => {
+    const root = makeTargetRepository([74]);
+    const first = skillBody("[74]", root);
+    assert.ok(existsSync(join(root, ".claude", "agents", "task-74-implement-task.md")));
+    assert.match(first, /Run \/tackle-tasks \[74\] again to launch/);
+    assert.doesNotMatch(first, /^WORKFLOW 1: /m);
+    assert.doesNotMatch(first, /waitForAgentRegistry/);
+
+    const second = skillBody("[74]", root);
+    assert.match(second, /^WORKFLOW 1: /m);
+    assert.doesNotMatch(second, /waitForAgentRegistry|end your turn/);
 });

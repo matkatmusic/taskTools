@@ -196,6 +196,7 @@
             "producesPrompt": false,
             "next": [
                 "AMEND_ENTRY_WITH_FAILING_TESTS",
+                "pipeline-implementTask.mmd::IMPLEMENT_TASK",
                 "pipeline-failuresExit.mmd::FAILURES_EXIT"
             ]
         },
@@ -899,6 +900,7 @@
             "next": [
                 "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q",
                 "pipeline-implementTask.mmd::IMPLEMENT_TASK",
+                "pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON",
                 "ARE_2_CLARIFY_ROUNDS_DONE_Q"
             ]
         },

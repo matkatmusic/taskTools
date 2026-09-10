@@ -17,6 +17,7 @@ flowchart TB
     LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
     FAILURES_EXIT["FAILURES_EXIT"]
     FIX_IMPLEMENT_TASK_TESTS["FIX_IMPLEMENT_TASK_TESTS"]
+    IMPLEMENT_TASK["IMPLEMENT_TASK"]
   end
   commitImplementationIfNeeded ~~~ commitImplementationIfNeededNext
 
@@ -30,6 +31,7 @@ flowchart TB
   DO_TASK_TESTS_PASS_Q -- "YES<br/>difficulty 3 or less" --> LOCK_SOURCE_REPO
   DO_TASK_TESTS_PASS_Q -- "NO" --> ARE_2_TEST_FIXES_DONE_Q
   ARE_2_TEST_FIXES_DONE_Q -- "NO" --> AMEND_ENTRY_WITH_FAILING_TESTS
+  ARE_2_TEST_FIXES_DONE_Q -- "NO<br/>declared tests missing" --> IMPLEMENT_TASK
   ARE_2_TEST_FIXES_DONE_Q -- "YES<br/>tests-red" --> FAILURES_EXIT
   AMEND_ENTRY_WITH_FAILING_TESTS -- "pass the failing tests to the agent" --> FIX_IMPLEMENT_TASK_TESTS
 
@@ -39,4 +41,4 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
   class COMMIT_IMPLEMENTATION_IF_NEEDED,COMMIT_TEST_FIX_IF_NEEDED,ARE_TASK_TESTS_SKIPPED_Q,RUN_TASK_TESTS,DO_TASK_TESTS_PASS_Q,ARE_2_TEST_FIXES_DONE_Q,AMEND_ENTRY_WITH_FAILING_TESTS script
-  class CODEX_REVIEWS_TESTS,LOCK_SOURCE_REPO,FAILURES_EXIT,FIX_IMPLEMENT_TASK_TESTS next_diagram
+  class CODEX_REVIEWS_TESTS,LOCK_SOURCE_REPO,FAILURES_EXIT,FIX_IMPLEMENT_TASK_TESTS,IMPLEMENT_TASK next_diagram

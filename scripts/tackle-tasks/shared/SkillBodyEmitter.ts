@@ -1,5 +1,5 @@
 // The tackle-tasks skill body: one workflow launch, with the task number and the tasks file the preamble reads.
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
@@ -77,6 +77,10 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
     const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
     const startingBlock = parseStartingBlockArgument(argsValue);
+    // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.
+    const agentsDirectory = join(projectRoot, ".claude", "agents");
+    const agentFilesMissing = taskNumbers.filter((taskNumber) =>
+        !existsSync(agentsDirectory) || !readdirSync(agentsDirectory).some((name) => name.startsWith(`task-${taskNumber}-`)));
     const workflowLines = taskNumbers.map((taskNumber, index) => {
         const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
         const workflowArgs: Record<string, unknown> = {
@@ -94,10 +98,14 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     });
     const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
 
-    return `Run this first, with Bash and run_in_background set to true: \`node ${WAIT_FOR_AGENT_REGISTRY_PATH}\`
-Then end your turn. Launch nothing until the notification that this command finished arrives.
+    if (agentFilesMissing.length > 0) {
+        return `Agent files for task ${agentFilesMissing.join(", ")} were just written. The harness loads them on your next message.
+Say exactly: "Agent files written. Run /tackle-tasks ${argsValue.trim()} again to launch." Run nothing else.
+`;
+    }
 
-When that notification arrives, launch every one of the following as a background workflow, in the same message, so they run concurrently:
+    // Retired: the wait-script step (WAIT_FOR_AGENT_REGISTRY_PATH); only a real user turn reloads agents.
+    return `Launch every one of the following as a background workflow, in the same message, so they run concurrently:
 
 ${workflowLines.join("\n\n")}
 

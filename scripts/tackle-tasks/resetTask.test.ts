@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,7 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
         writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -82,6 +83,69 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     }
 });
 
+test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () => {
+    // Setup: task 9's per-task steps.json is stale, missing a box the current diagrams draw.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        const stepsConfigPath = join(taskWorkflowDirectory(join(repoRoot, ".taskTools", "tasks.json"), 9), "steps.json");
+        mkdirSync(dirname(stepsConfigPath), { recursive: true });
+        const setting = resolveDiagramFolderSetting(repoRoot);
+        generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
+        const staleConfig = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
+        // Drop one box, simulating a diagram change made since this config went stale.
+        for (const entries of Object.values(staleConfig) as { box: string }[][]) {
+            const droppedIndex = entries.findIndex((entry) => entry.box === "MARK_TASK_ACTIVE");
+            if (droppedIndex !== -1) entries.splice(droppedIndex, 1);
+        }
+        writeFileSync(stepsConfigPath, JSON.stringify(staleConfig));
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        const said = await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the dropped box is back, and the report says so.
+        const regeneratedConfig = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
+        const regeneratedBoxes = Object.values(regeneratedConfig).flat().map((entry: any) => entry.box);
+        assert.ok(regeneratedBoxes.includes("MARK_TASK_ACTIVE"));
+        assert.match(said, /task 9 steps\.json and workflow\.js regenerated/);
+        assert.ok(existsSync(join(dirname(stepsConfigPath), "workflow.js")));
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("test_resetTask_atBlock_checksOutTaskBranchInEveryWorktreeSubmodule", async () => {
     // Task 9 is open; its worktree submodule has a task-9 branch that is not checked out.
     const repoRoot = makeTempRepoWithCommit();
@@ -98,6 +162,7 @@ test("test_resetTask_atBlock_checksOutTaskBranchInEveryWorktreeSubmodule", async
         writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -157,6 +222,7 @@ test("test_resetTask_atBlock_restoresRootAndSubmoduleToTheChosenPacketsRewindPoi
         writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -224,6 +290,7 @@ test("test_resetTask_atRunFullSuite_clearsTheSuiteFixCounterWithTasksJsonAtTheRe
         writeFileSync(join(repoRoot, "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -299,6 +366,7 @@ test("test_resetTask_readsThePerTaskStepsJson", async () => {
         writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -359,6 +427,7 @@ test("test_resetTask_regeneratesAMissingPerTaskStepsJsonForAPreTask10Run", async
         writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
             taskNumber: 9,
             title: "t",
+            difficulty: 4,
             run: {
                 active: false, worktree: null, leaseRunId: null,
                 history: [{
@@ -491,6 +560,66 @@ test("test_resetTask_fullReset_throwsWhenAResetPointRefIsMissing", async () => {
     }
 });
 
+test("test_resetTask_atBlock_restoresSkipWorktreePlanJsonAroundTheHardReset", async () => {
+    // Setup: plans/plan.json is tracked; the task worktree marks it skip-worktree with edited content.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        mkdirSync(join(repoRoot, "plans"), { recursive: true });
+        writeFileSync(join(repoRoot, "plans", "plan.json"), "base\n");
+        git(repoRoot, "add", "plans/plan.json");
+        git(repoRoot, "commit", "-q", "-m", "base plan");
+        const rewindOid = git(repoRoot, "rev-parse", "HEAD").trim();
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        writeFileSync(join(worktreePath, "plans", "plan.json"), "committed change\n");
+        git(worktreePath, "add", "plans/plan.json");
+        git(worktreePath, "commit", "-q", "-m", "task plan change");
+        git(worktreePath, "update-index", "--skip-worktree", "--", "plans/plan.json");
+        writeFileSync(join(worktreePath, "plans", "plan.json"), "task plan");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rewindOid },
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS; the root rewind target predates the skip-worktree file's committed blob.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the reset succeeded, the skip-worktree content survived, and the flag is still set.
+        assert.equal(readFileSync(join(worktreePath, "plans", "plan.json"), "utf-8"), "task plan");
+        assert.match(git(worktreePath, "ls-files", "-v", "plans/plan.json"), /^S /);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
     // Setup: task 9 is open with a run and a worktree; the real pipeline's steps.json names every block.
     const repoRoot = makeTempRepoWithCommit();
@@ -499,6 +628,7 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
     writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 9,
         title: "t",
+        difficulty: 4,
         run: {
             active: false, worktree: null, leaseRunId: null,
             history: [{

@@ -202,7 +202,24 @@ test("test_runTaskTests_reportsMissingTestsWhenTheTaskDeclaresTestsAndTheBranchA
     // Verification: the empty set is a red result, not an automatic pass.
     assert.equal(result.missingTests, true);
     assert.equal(result.passed, false);
-    assert.equal(result.output, "the task declares tests but the branch added none");
+    assert.equal(result.output, "the task declares tests but the branch lacks: ");
+});
+
+// A test file exists, but not the one paired with the owned file: still missing.
+test("test_runTaskTests_reportsMissingTestsWhenAnOwnedFilesPairedTestIsAbsent", async () => {
+    const rootOrigin = makeTempRepoWithCommit("main");
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    seedOpenTaskAndClaim(rootOrigin, 1, { tests: "add a test for the widget", modifiableFiles: ["index.html"] });
+    mkdirSync(join(worktreePath, "tests"), { recursive: true });
+    writeFileSync(join(worktreePath, "tests", "index.test.ts"), "");
+    git(worktreePath, "add", "tests/index.test.ts");
+    git(worktreePath, "commit", "-m", "wrong test name");
+
+    const result = await runTaskTests(1, RUN_ID, worktreePath, "step-1", rootOrigin);
+
+    assert.equal(result.missingTests, true);
+    assert.equal(result.passed, false);
+    assert.equal(result.output, `the task declares tests but the branch lacks: ${join(worktreePath, "tests", "index.html.test.ts")}`);
 });
 
 test("test_runTaskTests_recordsItsWholeDecisionBeforePrinting", async () => {

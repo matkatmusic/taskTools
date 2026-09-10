@@ -21,7 +21,7 @@ test("test_resetTask_atEveryBlock_twoSubmodulesNested_restoresRootAndEverySubmod
     let worktreePath = "";
     try {
         mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
-        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t" }]));
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: TASK_NUMBER, title: "t", difficulty: 4 }]));
         writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
 
         const runId = "r1";

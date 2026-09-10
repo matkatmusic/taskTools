@@ -4,6 +4,9 @@ import { getOccurrencesDeepestFirst, buildOccurrencePath } from "./occurrences.t
 import { getLocalIsoTimestamp, updateCurrentTaskRun } from "./taskRunState.ts";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
 import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
+import { existsSync } from "node:fs";
+import { modifiableFiles } from "../../shared/prepareTasks.ts";
+import { pairedTestPath } from "./preparedTask.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { runSuite, parseFailingTests, readKnownFailingTests, newFailingTests, judgeSuite, SUITE_TIMEOUT_MS, type FailingTest } from "../../shared/taskTestsRunner.ts";
 
@@ -120,16 +123,20 @@ export async function runTaskTests(
     const { tasksPath } = resolveTaskFiles(projectRoot);
     const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
     const taskDeclaresTests = task !== undefined && taskHasTests(task) === TASK_HAS_TESTS;
+    // Every owned file must have its paired tests/<file name>.test.ts on disk, not just any test file.
+    const absentPairedTests = taskDeclaresTests
+        ? modifiableFiles(task!).map((file) => pairedTestPath(worktreePath, file)).filter((path) => !existsSync(path))
+        : [];
 
     let passed: boolean;
     let missingTests: boolean;
     let taskNewFailingTests: FailingTest[] = [];
     let taskKnownFailingTests: FailingTest[] = [];
     const outputParts: string[] = [];
-    if (testFiles.length === 0) {
+    if (testFiles.length === 0 || absentPairedTests.length > 0) {
         missingTests = taskDeclaresTests;
         passed = !missingTests;
-        if (missingTests) outputParts.push("the task declares tests but the branch added none");
+        if (missingTests) outputParts.push(`the task declares tests but the branch lacks: ${absentPairedTests.join(", ")}`);
     } else {
         missingTests = false;
         // ponytail: runs the top-level worktree's suite only; submodule suites are not run here.

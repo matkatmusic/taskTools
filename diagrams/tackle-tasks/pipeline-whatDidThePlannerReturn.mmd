@@ -13,11 +13,13 @@ flowchart TB
     IMPLEMENT_TASK["IMPLEMENT_TASK"]
     DOCUMENT_GENERATION["write the task brief"]
     FAILURES_EXIT["FAILURES_EXIT"]
+    UPDATE_TASKS_JSON["UPDATE_TASKS_JSON"]
   end
   whatDidThePlannerReturn ~~~ whatDidThePlannerReturnNext
 
   WHAT_DID_THE_PLANNER_RETURN -- "PLAN" --> IS_PLAN_APPROVED_BY_DEFAULT_Q
   WHAT_DID_THE_PLANNER_RETURN -- "PLAN<br/>difficulty 3 or less" --> IMPLEMENT_TASK
+  WHAT_DID_THE_PLANNER_RETURN -- "PLAN<br/>names no declared test file" --> UPDATE_TASKS_JSON
   WHAT_DID_THE_PLANNER_RETURN -- "CLARIFY" --> ARE_2_CLARIFY_ROUNDS_DONE_Q
   ARE_2_CLARIFY_ROUNDS_DONE_Q -- "NO" --> WRITE_CLARIFY_REQUEST
   ARE_2_CLARIFY_ROUNDS_DONE_Q -- "YES<br/>clarify-stuck" --> FAILURES_EXIT
@@ -29,4 +31,4 @@ flowchart TB
   classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
   classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
   class WHAT_DID_THE_PLANNER_RETURN,ARE_2_CLARIFY_ROUNDS_DONE_Q,WRITE_CLARIFY_REQUEST script
-  class IS_PLAN_APPROVED_BY_DEFAULT_Q,IMPLEMENT_TASK,DOCUMENT_GENERATION,FAILURES_EXIT next_diagram
+  class IS_PLAN_APPROVED_BY_DEFAULT_Q,IMPLEMENT_TASK,DOCUMENT_GENERATION,FAILURES_EXIT,UPDATE_TASKS_JSON next_diagram

@@ -30,6 +30,9 @@
         "exitNote": "",
         "outcome": "PLAN",
         "clarifyRequest": "",
+        "reviewOutputFile": "",
+        "verdict": "",
+        "notes": "",
         "next": "pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q"
     }
 }

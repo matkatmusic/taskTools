@@ -179,7 +179,7 @@ function standardHappyPathAnswers(root: string, taskNumber: number, fileName: st
         PLAN_THE_TASK: () => {
             const planFile = join(worktreePath, "plans", "plan.json");
             mkdirSync(dirname(planFile), { recursive: true });
-            writeFileSync(planFile, JSON.stringify({ sections: [], revision: 0 }));
+            writeFileSync(planFile, JSON.stringify({ sections: [], revision: 0, plannerNotes: `touches tests/${fileName}.test.ts` }));
             return { message: "planned", additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } };
         },
         IMPLEMENT_TASK: () => {
