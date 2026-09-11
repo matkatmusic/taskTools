@@ -23,7 +23,7 @@ export function repoNode(fixture: ShapeFixture, occurrenceId: OccurrenceId): Rep
     return node;
 }
 
-function worktreeCheckoutPath(worktree: string, occurrenceId: OccurrenceId): string {
+function worktreeCheckoutPath(worktree: string, occurrenceId: string): string {
     return occurrenceId === "root" ? worktree : join(worktree, occurrenceId);
 }
 
@@ -31,14 +31,19 @@ export function buildFixture(): ShapeFixture {
     return makeShapeFixture("two-submodules", "ahead-head", TASK_NUMBER);
 }
 
-// Commits content onto repoPath's own "staging" branch, then returns to whatever branch was checked out.
+// Commits onto "staging", then restores the original checkout, using --detach for a detached HEAD since --abbrev-ref reads back "HEAD".
 export function commitOnStaging(repoPath: string, relFile: string, content: string): void {
-    const checkedOutBranch = git(repoPath, "rev-parse", "--abbrev-ref", "HEAD");
+    const checkedOutBranch = git(repoPath, "branch", "--show-current");
+    const checkedOutCommit = checkedOutBranch === "" ? git(repoPath, "rev-parse", "HEAD") : "";
     git(repoPath, "checkout", "-q", "staging");
     writeFileSync(join(repoPath, relFile), content);
     git(repoPath, "add", relFile);
     git(repoPath, "commit", "-q", "-m", `staging: ${relFile}`);
-    git(repoPath, "checkout", "-q", checkedOutBranch);
+    if (checkedOutBranch === "") {
+        git(repoPath, "checkout", "-q", "--detach", checkedOutCommit);
+    } else {
+        git(repoPath, "checkout", "-q", checkedOutBranch);
+    }
 }
 
 // Which worktree of repoPath's repo (if any) currently has branch checked out; null if none does.
@@ -76,15 +81,21 @@ export function spawnWorktree(fixture: ShapeFixture): Spawned {
     return { fixture, worktree, projectRoot };
 }
 
-// Commits task work for occurrenceId; a submodule edit also bumps root's gitlink.
-export function commitTaskWork(worktree: string, occurrenceId: OccurrenceId, relFile: string, content: string): void {
+// Commits task work for occurrenceId; a submodule edit walks up every ancestor (deepest parent first, root last), bumping each ancestor's gitlink for its direct child so the change is visible all the way to root, not just its immediate parent.
+export function commitTaskWork(worktree: string, occurrenceId: string, relFile: string, content: string): void {
     const dir = worktreeCheckoutPath(worktree, occurrenceId);
     writeFileSync(join(dir, relFile), content);
     git(dir, "add", relFile);
     git(dir, "commit", "-q", "-m", `task work: ${relFile}`);
     if (occurrenceId !== "root") {
-        git(worktree, "add", occurrenceId);
-        git(worktree, "commit", "-q", "-m", `bump ${occurrenceId} gitlink`);
+        const segments = occurrenceId.split("/");
+        for (let i = segments.length - 1; i >= 0; i--) {
+            const ancestorOccurrenceId = i === 0 ? "root" : segments.slice(0, i).join("/");
+            const childSegment = segments[i];
+            const ancestorDir = worktreeCheckoutPath(worktree, ancestorOccurrenceId);
+            git(ancestorDir, "add", childSegment);
+            git(ancestorDir, "commit", "-q", "-m", `bump ${childSegment} gitlink`);
+        }
     }
 }
 

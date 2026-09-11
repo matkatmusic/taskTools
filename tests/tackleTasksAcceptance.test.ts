@@ -206,7 +206,7 @@ function standardHappyPathAnswers(root: string, taskNumber: number, fileName: st
 
 test("test_acceptance_runsAMinimalTaskFromWorktreeCreationThroughStagingMergeAndArchive", async () => {
     // Scenario: a fresh target repository elsewhere on disk, distinct from this plugin checkout.
-    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt"], difficulty: 1, hasTests: true });
+    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt", "tests/greeting.txt.test.ts"], difficulty: 1, hasTests: true });
     // Test action: drive the whole run, answering every prompt box with the minimum valid change.
     const result = driveRun(1, tasksFile, root, standardHappyPathAnswers(root, 1, "greeting.txt", "hello\n", true));
     // Verification: the run reported success and the task moved from open to completed.

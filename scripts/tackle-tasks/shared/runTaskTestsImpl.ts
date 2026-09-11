@@ -125,7 +125,7 @@ export async function runTaskTests(
     const taskDeclaresTests = task !== undefined && taskHasTests(task) === TASK_HAS_TESTS;
     // Every owned file must have its paired tests/<file name>.test.ts on disk, not just any test file.
     const absentPairedTests = taskDeclaresTests
-        ? modifiableFiles(task!).map((file) => pairedTestPath(worktreePath, file)).filter((path) => !existsSync(path))
+        ? modifiableFiles(task!).filter((file) => !file.endsWith(".test.ts")).map((file) => pairedTestPath(worktreePath, file)).filter((path) => !existsSync(path))
         : [];
 
     let passed: boolean;

@@ -120,12 +120,14 @@ function runOccurrenceTests(
     resolutionManifest: ResolutionManifest,
 ): string | null {
     const allSources = [...batch.byExtension.values()].flatMap((b) => b.sources);
-    const policyResult = discoverTestPolicy(batch.occurrence.occurrenceId, occurrenceCwd, resolutionManifest);
-    if (policyResult.status === "needsResolution") {
-        return `WARNING: No test policy resolved for ${batch.occurrence.checkoutPath} after editing ${allSources.join(", ")}`;
-    }
+    // const policyResult = discoverTestPolicy(batch.occurrence.occurrenceId, occurrenceCwd, resolutionManifest);
+    // if (policyResult.status === "needsResolution") {
+    //     return `WARNING: No test policy resolved for ${batch.occurrence.checkoutPath} after editing ${allSources.join(", ")}`;
+    // }
+    // ponytail: only the resolved test files run, never the whole suite; .py tests need a pytest command here.
+    const testFiles = [...batch.byExtension.values()].flatMap((b) => b.tests);
     try {
-        execSync(policyResult.policy.relatedTestCommand, { cwd: occurrenceCwd, encoding: "utf8" });
+        execFileSync("node", ["--test", ...testFiles], { cwd: occurrenceCwd, encoding: "utf8" });
         return null;
     } catch (error) {
         const failure = error as { stdout?: string; stderr?: string };

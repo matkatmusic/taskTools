@@ -23,7 +23,8 @@ export function main(input: string): Record<string, unknown> {
         const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
         if (entry === undefined) throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
         if (taskHasTests(entry) === TASK_HAS_TESTS) {
-            const declaredTestBasenames = modifiableFiles(entry).map((file) => basename(pairedTestPath(packet.worktree, file)));
+            // An owned file that is itself a test (tests/x.test.ts) pairs with nothing.
+            const declaredTestBasenames = modifiableFiles(entry).filter((file) => !file.endsWith(".test.ts")).map((file) => basename(pairedTestPath(packet.worktree, file)));
             const planText = readFileSync(planFile, "utf8");
             const unnamedTestBasenames = declaredTestBasenames.filter((name) => !planText.includes(name));
             if (unnamedTestBasenames.length > 0) {

@@ -58,22 +58,28 @@ function worktreeCheckoutPath(worktree: string, occurrenceId: string): string {
     return occurrenceId === "" ? worktree : join(worktree, occurrenceId);
 }
 
-// Like commitTaskWork in mergeStaging/support.ts, generalized: a submodule edit bumps only its immediate parent's gitlink, never a grandparent's.
-function commitTaskWork(worktree: string, occurrenceId: string, relFile: string, content: string): string {
-    const dir = worktreeCheckoutPath(worktree, occurrenceId);
-    writeFileSync(join(dir, relFile), content);
-    git(dir, "add", relFile);
-    git(dir, "commit", "-q", "-m", `task work: ${relFile}`);
-    const workCommit = git(dir, "rev-parse", "HEAD");
-    if (occurrenceId !== "") {
-        const lastSlash = occurrenceId.lastIndexOf("/");
-        const parentOccurrenceId = lastSlash === -1 ? "" : occurrenceId.slice(0, lastSlash);
-        const pathInParent = lastSlash === -1 ? occurrenceId : occurrenceId.slice(lastSlash + 1);
-        const parentDir = worktreeCheckoutPath(worktree, parentOccurrenceId);
-        git(parentDir, "add", pathInParent);
-        git(parentDir, "commit", "-q", "-m", `bump ${pathInParent} gitlink`);
-    }
-    return workCommit;
+// Superseded by the shared, depth-generalized commitTaskWork in mergeStaging/support.ts (used below).
+// function commitTaskWork(worktree: string, occurrenceId: string, relFile: string, content: string): string {
+//     const dir = worktreeCheckoutPath(worktree, occurrenceId);
+//     writeFileSync(join(dir, relFile), content);
+//     git(dir, "add", relFile);
+//     git(dir, "commit", "-q", "-m", `task work: ${relFile}`);
+//     const workCommit = git(dir, "rev-parse", "HEAD");
+//     if (occurrenceId !== "") {
+//         const lastSlash = occurrenceId.lastIndexOf("/");
+//         const parentOccurrenceId = lastSlash === -1 ? "" : occurrenceId.slice(0, lastSlash);
+//         const pathInParent = lastSlash === -1 ? occurrenceId : occurrenceId.slice(lastSlash + 1);
+//         const parentDir = worktreeCheckoutPath(worktree, parentOccurrenceId);
+//         git(parentDir, "add", pathInParent);
+//         git(parentDir, "commit", "-q", "-m", `bump ${pathInParent} gitlink`);
+//     }
+//     return workCommit;
+// }
+
+// Bridges the two "root" sentinels: shared commitTaskWork uses "root", this file's fixture uses "".
+function commitTaskWorkAt(worktree: string, occurrenceId: string, relFile: string, content: string): string {
+    sharedCommitTaskWork(worktree, occurrenceId === "" ? "root" : occurrenceId, relFile, content);
+    return git(worktreeCheckoutPath(worktree, occurrenceId), "rev-parse", "HEAD");
 }
 
 test("test_pipeline_worktreeCommitRebaseMerge_expectationsPerRepo", async () => {
@@ -115,23 +121,21 @@ test("test_pipeline_worktreeCommitRebaseMerge_expectationsPerRepo", async () => 
             "jfred/jfredToolsPlugin": "plugin-work.txt",
         };
         const workCommit = new Map<string, string>();
-        workCommit.set("", commitTaskWork(worktree, "", workFile[""], "root work\n"));
-        workCommit.set("jfred", commitTaskWork(worktree, "jfred", workFile.jfred, "jfred work\n"));
+        workCommit.set("", commitTaskWorkAt(worktree, "", workFile[""], "root work\n"));
+        workCommit.set("jfred", commitTaskWorkAt(worktree, "jfred", workFile.jfred, "jfred work\n"));
         workCommit.set(
             "jfred/jfredToolsPlugin",
-            commitTaskWork(worktree, "jfred/jfredToolsPlugin", workFile["jfred/jfredToolsPlugin"], "plugin work\n"),
+            commitTaskWorkAt(worktree, "jfred/jfredToolsPlugin", workFile["jfred/jfredToolsPlugin"], "plugin work\n"),
         );
 
-        // commitTaskWork only bumps the immediate parent's gitlink: root gets its own work commit plus a bump for jfred (2); jfred gets its own work commit plus a bump for jfredToolsPlugin (2); jfredToolsPlugin gets only its own work commit (1). Everything else is untouched.
+        // commitTaskWork walks every ancestor, so root and jfred pick up bump commits from each descendant's call.
+        const expectedCommitsAhead: Record<string, number> = { "": 3, jfred: 2, "jfred/jfredToolsPlugin": 1 };
         for (const occurrenceId of REVENG_OCCURRENCE_IDS) {
             const worktreeRepoPath = worktreeCheckoutPath(worktree, occurrenceId);
             const tipAfterCommits = git(worktreeRepoPath, "rev-parse", "HEAD");
-            if (occurrenceId === "" || occurrenceId === "jfred") {
+            if (occurrenceId in expectedCommitsAhead) {
                 const distance = git(worktreeRepoPath, "rev-list", "--count", `${baselineTip.get(occurrenceId)}..HEAD`);
-                assert.equal(distance, "2", `${occurrenceId || "root"}: expected own work commit + immediate child's gitlink bump`);
-            } else if (occurrenceId === "jfred/jfredToolsPlugin") {
-                const distance = git(worktreeRepoPath, "rev-list", "--count", `${baselineTip.get(occurrenceId)}..HEAD`);
-                assert.equal(distance, "1", `${occurrenceId}: expected only its own work commit`);
+                assert.equal(distance, String(expectedCommitsAhead[occurrenceId]), `${occurrenceId || "root"}: unexpected commit count ahead of baseline`);
             } else {
                 assert.equal(tipAfterCommits, baselineTip.get(occurrenceId), `${occurrenceId}: should be untouched by commitTaskWork`);
             }
