@@ -1,7 +1,7 @@
 // Behavioral checks for resetTask.ts, against a temp git repo and a real linked worktree.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +12,7 @@ import { getAttemptCount, raiseAttemptCount } from "./shared/taskRunState.ts";
 import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
 import { readCheckpoint } from "./shared/checkpoint.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../shared/taskStateLock.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -808,6 +809,73 @@ test("test_resetTask_atBlock_clearsTheTailCursorSoTheRelaunchStartsAtTheBlock", 
         assert.equal(said[0].run.history.at(-1).tailCursor, null);
     } finally {
         process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", async () => {
+    // Task 9 has the block-reset fixture; task 10 is open with no run. resetTask runs in a child process so its unlocked tasks.json read/write races a locked write to task 10's run field.
+    const repoRoot = makeTempRepoWithCommit();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        const rewindOid = git(worktreePath, "rev-parse", "HEAD").trim();
+
+        const tasksFile = join(repoRoot, ".taskTools", "tasks.json");
+        writeFileSync(tasksFile, JSON.stringify([
+            {
+                taskNumber: 9,
+                title: "t",
+                difficulty: 4,
+                run: {
+                    active: false, worktree: null, leaseRunId: null,
+                    history: [{
+                        runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                        modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                    }],
+                },
+            },
+            { taskNumber: 10, title: "t10", difficulty: 3 },
+        ]));
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rewindOid },
+        }));
+        // None name taskNumber 9, so the `.some` scan reads every one, widening the read-to-write gap to several seconds.
+        for (let i = 0; i < 60000; i++) writeFileSync(join(packetsFolder, `dummy-${i}.json`), "{}");
+
+        // Action: reset task 9 at RUN_TASK_TESTS in a child process, racing a locked write to task 10's run field.
+        const resetTaskScript = fileURLToPath(new URL("./resetTask.ts", import.meta.url));
+        const child = spawn("node", ["--no-inspect", resetTaskScript, "9", "RUN_TASK_TESTS"], { cwd: repoRoot, stdio: "ignore" });
+        const childExit = new Promise<void>((resolve) => child.on("exit", () => resolve()));
+
+        // The read finishes fast; the write is seconds away (packet scan). Wait, then write once, inside that gap.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const task10Run = { active: true, worktree: null, leaseRunId: null, history: [] };
+        withTaskStateLock(tasksFile, () => {
+            const midFlight = JSON.parse(readFileSync(tasksFile, "utf-8"));
+            midFlight.find((t: any) => t.taskNumber === 10).run = task10Run;
+            writeJsonAtomically(tasksFile, midFlight);
+        });
+        await childExit;
+
+        // Verification: task 10's concurrent run-state write survives, and task 9's reset happened.
+        const finalTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
+        assert.deepEqual(finalTasks.find((t: any) => t.taskNumber === 10).run, task10Run);
+        assert.equal(finalTasks.find((t: any) => t.taskNumber === 9).run.history.length, 1);
+    } finally {
         if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
         rmSync(dirname(worktreePath), { recursive: true, force: true });
         rmSync(repoRoot, { recursive: true, force: true });

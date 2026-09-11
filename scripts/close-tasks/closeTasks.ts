@@ -1,6 +1,7 @@
 // Moves task numbers from tasks.json to completedTasks.json with a closure note and commit hashes.
-import { readFileSync } from "node:fs";
-import { leadingTaskNumbers, resolveTaskFiles } from "../shared/taskFiles.ts";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { leadingTaskNumbers, resolveTaskFiles, taskFilesProjectRoot, taskWorkflowDirectory } from "../shared/taskFiles.ts";
 import type { TaskFilePair, TaskRecord } from "../shared/taskFiles.ts";
 import { unblockDependents } from "../shared/unblockDependents.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../shared/taskStateLock.ts";
@@ -274,6 +275,15 @@ export function closeTasksLocked(
   // Archive first: a removal failure leaves the task in both files, safely retryable.
   writeJsonAtomically(completedTasksPath, nextCompleted);
   writeJsonAtomically(tasksPath, remaining);
+
+  // Same shape as resetTask.ts's full-reset branch: generated files don't outlive the task.
+  const agentsDirectory = join(taskFilesProjectRoot(pair), ".claude", "agents");
+  for (const taskNumber of willClose) {
+    rmSync(taskWorkflowDirectory(tasksPath, taskNumber), { recursive: true, force: true });
+    for (const agentFile of existsSync(agentsDirectory) ? readdirSync(agentsDirectory) : []) {
+      if (agentFile.startsWith(`task-${taskNumber}-`) && agentFile.endsWith(".md")) rmSync(join(agentsDirectory, agentFile));
+    }
+  }
 
   return { closed: willClose, skipped, unblocked };
 }

@@ -1,12 +1,12 @@
 // Behavioral checks for ARCHIVE_TASK.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { main } from "./ARCHIVE_TASK.ts";
-import { resolveTaskFiles } from "../../shared/taskFiles.ts";
+import { resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 import type { TaskRunRecord, TaskRunState } from "../shared/taskRunState.ts";
 import { getTemplateShapeMismatches } from "../../shared/templateShape.ts";
 
@@ -100,6 +100,28 @@ test("test_ARCHIVE_TASK_runsTwiceWithTheSameInput", () => {
     assert.deepEqual(second, first);
     assert.deepEqual(tasksAfterSecond, tasksAfterFirst);
     assert.deepEqual(completedAfterSecond, completedAfterFirst);
+});
+
+test("test_ARCHIVE_TASK_removesGeneratedWorkflowAndAgentFiles", () => {
+    const root = makeProjectRoot([
+        { taskNumber: 1, title: "finished", run: completedRunState() },
+    ]);
+    const { tasksPath } = resolveTaskFiles(root);
+    const workflowDirectory = taskWorkflowDirectory(tasksPath, 1);
+    mkdirSync(workflowDirectory, { recursive: true });
+    writeFileSync(join(workflowDirectory, "steps.json"), "{}");
+    writeFileSync(join(workflowDirectory, "workflow.js"), "");
+    const agentsDirectory = join(root, ".claude", "agents");
+    mkdirSync(agentsDirectory, { recursive: true });
+    writeFileSync(join(agentsDirectory, "task-1-implement-task.md"), "");
+    writeFileSync(join(agentsDirectory, "task-2-implement-task.md"), "");
+
+    main(JSON.stringify(samplePacket(root, 1, "run-a", "Task 1 completed.")));
+
+    assert.deepEqual(readCompletedJson(root).map((t: any) => t.taskNumber), [1]);
+    assert.equal(existsSync(workflowDirectory), false);
+    assert.equal(existsSync(join(agentsDirectory, "task-1-implement-task.md")), false);
+    assert.equal(existsSync(join(agentsDirectory, "task-2-implement-task.md")), true);
 });
 
 // The box throws rather than reporting skipped/ambiguous silently: a failed archive must never reach REPORT_CLOSURE_NOTE.

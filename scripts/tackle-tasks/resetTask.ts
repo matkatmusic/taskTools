@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ResetScope } from "../shared/contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./shared/writeTaskBrief.ts";
 import { resetAttemptCounts, writeTailCursor } from "./shared/taskRunState.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../shared/taskStateLock.ts";
 import { readJsonFile } from "./shared/readJsonFile.ts";
 import { writeCheckpoint } from "./shared/checkpoint.ts";
 import { stagingWorktreePath } from "./shared/stagingWorktree.ts";
@@ -217,8 +218,15 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
 
         const { completionDate, commitHashes, closureNote, run, ...restored } = entry;
         completed.splice(completedIndex, 1);
-        tasks.unshift(block === "" ? restored : { ...restored, run });
-        writeFileSync(tasksFile, JSON.stringify(tasks, null, 2));
+        const restoredEntry = block === "" ? restored : { ...restored, run };
+        // tasks.json is shared with running tasks; mutate it only under the state lock, like every other writer.
+        withTaskStateLock(tasksFile, () => {
+            const freshTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
+            freshTasks.unshift(restoredEntry);
+            writeJsonAtomically(tasksFile, freshTasks);
+            tasks.length = 0;
+            tasks.push(...freshTasks);
+        });
         writeFileSync(completedFile, JSON.stringify(completed, null, 2));
         lines.push(block === "" ? `task ${taskNumber} restored to tasks.json; staging reset to ${rootResetPoint}` : `task ${taskNumber} restored to tasks.json`);
         if (block !== "") {
@@ -245,9 +253,16 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
             }
         }
     } else {
-        const { run, codexReviewNotes, planReviewCount, clarifyRequest, ...restored } = tasks[openIndex];
-        if (block === "") tasks[openIndex] = restored;
-        writeFileSync(tasksFile, JSON.stringify(tasks, null, 2));
+        // tasks.json is shared with running tasks; mutate it only under the state lock, like every other writer.
+        withTaskStateLock(tasksFile, () => {
+            const freshTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
+            const freshIndex = freshTasks.findIndex((t: any) => t.taskNumber === taskNumber);
+            const { run, codexReviewNotes, planReviewCount, clarifyRequest, ...restored } = freshTasks[freshIndex];
+            if (block === "") freshTasks[freshIndex] = restored;
+            writeJsonAtomically(tasksFile, freshTasks);
+            tasks.length = 0;
+            tasks.push(...freshTasks);
+        });
         lines.push(block === "" ? `task ${taskNumber} run state cleared` : `task ${taskNumber} run state kept`);
     }
 
@@ -320,13 +335,18 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
         }
 
         // A rewound commit is gone from the branch; drop its record so the next commit block commits again.
-        const rewoundTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
-        const rewoundRun = rewoundTasks.find((t: any) => t.taskNumber === taskNumber).run.history.at(-1);
-        rewoundRun.commits = rewoundRun.commits.filter((commit: { occurrenceId: string; hash: string }) => {
+        const priorCommits = JSON.parse(readFileSync(tasksFile, "utf-8")).find((t: any) => t.taskNumber === taskNumber).run.history.at(-1).commits;
+        const survivingHashes = new Set(priorCommits.filter((commit: { occurrenceId: string; hash: string }) => {
             const path = commit.occurrenceId === "" ? worktreePath : join(worktreePath, commit.occurrenceId);
             return spawnSync("git", ["-C", path, "merge-base", "--is-ancestor", commit.hash, "HEAD"]).status === 0;
+        }).map((commit: { hash: string }) => commit.hash));
+        // tasks.json is shared with running tasks; mutate it only under the state lock, like every other writer.
+        withTaskStateLock(tasksFile, () => {
+            const freshTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
+            const freshRun = freshTasks.find((t: any) => t.taskNumber === taskNumber).run.history.at(-1);
+            freshRun.commits = freshRun.commits.filter((commit: { hash: string }) => survivingHashes.has(commit.hash));
+            writeJsonAtomically(tasksFile, freshTasks);
         });
-        writeFileSync(tasksFile, JSON.stringify(rewoundTasks, null, 2));
 
         if (scope.generatedFiles === true) {
             const plansFolder = join(worktreePath, "plans");
