@@ -186,15 +186,16 @@ function standardHappyPathAnswers(root: string, taskNumber: number, fileName: st
             writeFileSync(join(worktreePath, fileName), newContent);
             const filesToCommit = [fileName];
             if (hasTests) {
-                writeFileSync(join(worktreePath, "greeting.test.ts"), [
+                mkdirSync(join(worktreePath, "tests"), { recursive: true });
+                writeFileSync(join(worktreePath, "tests", `${fileName}.test.ts`), [
                     `const { test } = require("node:test");`,
                     `const assert = require("node:assert");`,
                     `const { readFileSync } = require("node:fs");`,
                     `test("greeting file has the expected content", () => {`,
-                    `    assert.equal(readFileSync(__dirname + "/${fileName}", "utf8"), ${JSON.stringify(newContent)});`,
+                    `    assert.equal(readFileSync(__dirname + "/../${fileName}", "utf8"), ${JSON.stringify(newContent)});`,
                     `});`,
                 ].join("\n"));
-                filesToCommit.push("greeting.test.ts");
+                filesToCommit.push(`tests/${fileName}.test.ts`);
             }
             execFileSync("git", ["-C", worktreePath, "add", ...filesToCommit]);
             execFileSync("git", ["-C", worktreePath, "commit", "-m", "implement"]);
@@ -205,7 +206,7 @@ function standardHappyPathAnswers(root: string, taskNumber: number, fileName: st
 
 test("test_acceptance_runsAMinimalTaskFromWorktreeCreationThroughStagingMergeAndArchive", async () => {
     // Scenario: a fresh target repository elsewhere on disk, distinct from this plugin checkout.
-    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt", "greeting.test.ts"], difficulty: 1, hasTests: true });
+    const { root, tasksFile } = makeFixtureRepository({ taskNumber: 1, files: ["greeting.txt"], difficulty: 1, hasTests: true });
     // Test action: drive the whole run, answering every prompt box with the minimum valid change.
     const result = driveRun(1, tasksFile, root, standardHappyPathAnswers(root, 1, "greeting.txt", "hello\n", true));
     // Verification: the run reported success and the task moved from open to completed.

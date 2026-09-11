@@ -27,8 +27,16 @@ function addOrVerifyLinkedWorktree(sourceCheckoutPath: string, worktreePath: str
         return;
     }
     const found = git(worktreePath, "branch", "--show-current");
-    if (found !== branch) {
-        throw new Error(`staging worktree at "${worktreePath}" is on "${found}", expected "${branch}"`);
+    // "" is a submodule layer left detached at its parent's recorded gitlink; that's the expected steady state.
+    if (found !== branch && found !== "") {
+        const status = git(worktreePath, "status", "--porcelain");
+        if (status !== "") {
+            throw new Error(`staging worktree at "${worktreePath}" is on "${found}", expected "${branch}"\n${status}`);
+        }
+        // A stale worktree from before staging existed sits on the old base branch; rebuild it when clean.
+        rmSync(worktreePath, { recursive: true, force: true });
+        git(sourceCheckoutPath, "worktree", "add", "--quiet", "--force", worktreePath, branch);
+        return;
     }
 }
 
@@ -41,6 +49,11 @@ export function ensureStagingWorktree(projectRoot: string, rootSourceBranch: str
         .filter((occurrence) => occurrence.occurrenceId !== "")
         .sort((a, b) => a.depth - b.depth);
     for (const occurrence of occurrences) {
-        addOrVerifyLinkedWorktree(join(projectRoot, occurrence.occurrenceId), join(rootPath, occurrence.occurrenceId), "staging");
+        const submoduleWorktreePath = join(rootPath, occurrence.occurrenceId);
+        addOrVerifyLinkedWorktree(join(projectRoot, occurrence.occurrenceId), submoduleWorktreePath, "staging");
+        // Plain git rules: the checkout sits at the gitlink the parent's checked-out tree records, not at "staging"'s own tip.
+        const parentWorktreePath = join(rootPath, occurrence.parentOccurrenceId ?? "");
+        const gitlink = git(parentWorktreePath, "rev-parse", `HEAD:${occurrence.pathInParent}`);
+        git(submoduleWorktreePath, "checkout", "--quiet", "--detach", gitlink);
     }
 }

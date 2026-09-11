@@ -6,8 +6,10 @@ import {
 } from "./sourceRepoLock.ts";
 import { formatSourceRepoLockRecoveryCommand } from "./recoverSourceRepoLock.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
-import { buildDiscoveryManifest, buildWorktreeOccurrences, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
+import { buildDiscoveryManifest, buildOwnedOccurrencePaths, buildWorktreeOccurrences, getOccurrencesDeepestFirst, parseOccurrencePath, rebaseWorktreeSubmoduleLayersDeepestFirst } from "./occurrences.ts";
 import { createEmptyResolutionManifest } from "../../shared/resolutionRequests.ts";
+import { modifiableFiles } from "../../shared/prepareTasks.ts";
+import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import {
     appendStepResult, getCurrentTaskRun, updateCurrentTaskRun, type RebaseStepReceipt, type SourceTipReceipt,
 } from "./taskRunState.ts";
@@ -156,6 +158,33 @@ export function persistRewrittenCommitHashes(
     updateCurrentTaskRun(taskNumber, runId, { commits }, projectRoot);
 }
 
+// Dirty tracked files at rebase time are never task work; name them before the engine walk starts.
+function refuseIfWorktreeHasDirtyTrackedFiles(worktreePath: string, projectRoot: string, taskNumber: number, rootSourceBranch: string): void {
+    const { tasksPath } = resolveTaskFiles(projectRoot);
+    const task = readTaskFile(tasksPath).find((candidate) => candidate.taskNumber === taskNumber);
+    if (task === undefined) throw new Error(`task ${taskNumber} not found`);
+    const occurrences = getOccurrencesDeepestFirst(worktreePath, projectRoot, rootSourceBranch);
+    const ownedOccurrencePaths = buildOwnedOccurrencePaths(modifiableFiles(task), occurrences);
+    for (const occurrence of occurrences) {
+        const ownedHere = ownedOccurrencePaths
+            .map(parseOccurrencePath)
+            .filter((owned) => owned.occurrenceId === occurrence.occurrenceId)
+            .map((owned) => owned.relativePath);
+        const entries = execFileSync(
+            "git", ["-C", occurrence.checkoutPath, "status", "--porcelain", "-z", "--no-renames", "--untracked-files=no"], { encoding: "utf8" },
+        ).split("\0").filter(Boolean);
+        const dirtyPaths = entries.map((entry) => entry.slice(3));
+        if (dirtyPaths.length === 0) continue;
+        const owned = dirtyPaths.filter((path) => ownedHere.includes(path));
+        const unowned = dirtyPaths.filter((path) => !ownedHere.includes(path));
+        const reasons: string[] = [];
+        if (unowned.length > 0) reasons.push(`not in the task's modifiableFiles: ${unowned.join(", ")}`);
+        if (owned.length > 0) reasons.push(`should have been committed by COMMIT_IMPLEMENTATION_IF_NEEDED: ${owned.join(", ")}`);
+        const label = occurrence.occurrenceId === "" ? "root" : occurrence.occurrenceId;
+        throw new Error(`rebase of occurrence "${label}" refused: dirty tracked files in "${occurrence.checkoutPath}" are not task work — ${reasons.join("; ")}`);
+    }
+}
+
 function mapSubmoduleStop(stoppedAt: SubmoduleLayerOutcome): Omit<RebaseTaskWorktreeOutput, "lock" | "heldByOwner" | "recoveryCommand"> {
     const stoppedAtField = { occurrenceId: stoppedAt.occurrenceId, checkoutPath: stoppedAt.checkoutPath };
     if (stoppedAt.status === "conflicted") {
@@ -210,6 +239,8 @@ export async function rebaseTaskWorktree(
     try {
         refreshOwnedSourceRepoLockOrThrow(projectRoot, owner);
 
+        refuseIfWorktreeHasDirtyTrackedFiles(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch);
+
         // Rebase only: pipeline-rebase.mmd runs no tests; pipeline-suite.mmd runs the suite afterwards.
         const submoduleReport = rebaseWorktreeSubmoduleLayersDeepestFirst(worktreePath, projectRoot, input.taskNumber, input.rootSourceBranch, true, null, false);
         if (submoduleReport.stoppedAt !== null) {
@@ -241,12 +272,7 @@ export async function rebaseTaskWorktree(
         persistRebaseStepResult(input.taskNumber, input.runId, input.stepId, "rebaseTaskWorktree", worktreePath, projectRoot, input.rootSourceBranch, result);
         return result;
     } catch (error) {
-        // Every operational throw here (mapSubmoduleStop/mapParentOutcome's default branches, or
-        // any git call above) leaves the lock held unless released here. The deliberate
-        // "conflicted" status returns normally above and never reaches this catch, so
-        // FIX_CONFLICTS still finds the lock held, as intended. releaseSourceRepoLock reproves
-        // ownership itself, so calling it unconditionally is always safe (matches
-        // cleanupTaskWorktree.ts's existing catch-then-release precedent).
+        // A throw here leaves the lock held; release it, since "Conflicted" skips this catch, so FIX_CONFLICTS finds it held.
         releaseSourceRepoLock(projectRoot, owner);
         throw error;
     }

@@ -7,7 +7,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ResetScope } from "../shared/contracts.ts";
 import { configureGeneratedArtifactIsolation, writeTaskBriefToDisk } from "./shared/writeTaskBrief.ts";
-import { resetAttemptCounts } from "./shared/taskRunState.ts";
+import { resetAttemptCounts, writeTailCursor } from "./shared/taskRunState.ts";
 import { readJsonFile } from "./shared/readJsonFile.ts";
 import { writeCheckpoint } from "./shared/checkpoint.ts";
 import { stagingWorktreePath } from "./shared/stagingWorktree.ts";
@@ -319,6 +319,15 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
             }
         }
 
+        // A rewound commit is gone from the branch; drop its record so the next commit block commits again.
+        const rewoundTasks = JSON.parse(readFileSync(tasksFile, "utf-8"));
+        const rewoundRun = rewoundTasks.find((t: any) => t.taskNumber === taskNumber).run.history.at(-1);
+        rewoundRun.commits = rewoundRun.commits.filter((commit: { occurrenceId: string; hash: string }) => {
+            const path = commit.occurrenceId === "" ? worktreePath : join(worktreePath, commit.occurrenceId);
+            return spawnSync("git", ["-C", path, "merge-base", "--is-ancestor", commit.hash, "HEAD"]).status === 0;
+        });
+        writeFileSync(tasksFile, JSON.stringify(rewoundTasks, null, 2));
+
         if (scope.generatedFiles === true) {
             const plansFolder = join(worktreePath, "plans");
             for (const file of existsSync(plansFolder) ? readdirSync(plansFolder) : []) {
@@ -334,6 +343,8 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
             taskNumber, passId: randomUUID(), runId, projectRoot: repoRoot,
             block: stepKey, input, state: "running", sourceLockHeld, exitType: "", exitNote: "", resumedFrom: null,
         });
+        // A stale exit-tail cursor outranks the checkpoint on relaunch; clear it so the reset block runs.
+        writeTailCursor(taskNumber, runId, null, repoRoot);
         lines.push(`task ${taskNumber} resumes at ${stepKey} on the next /tackle-tasks [${taskNumber}]`);
         const cleared = Object.entries(scope).filter(([, value]) => value === true).map(([key]) => key);
         lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);

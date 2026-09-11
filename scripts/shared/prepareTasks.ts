@@ -257,12 +257,21 @@ export function resolveOrCreateStagingTip(repoRoot: string): string {
 
 // Advances/creates staging in every repository, submodules deepest first, root last.
 export function resolveOrCreateStagingTipEverywhere(repoRoot: string): Map<string, string> {
-    const occurrences = loadRepositoryManifest(repoRoot, currentBranchName(repoRoot)).occurrences
-        .filter((occurrence) => occurrence.occurrenceId !== "")
-        .sort((a, b) => b.depth - a.depth);
+    // const occurrences = loadRepositoryManifest(repoRoot, currentBranchName(repoRoot)).occurrences
+    //     .filter((occurrence) => occurrence.occurrenceId !== "")
+    //     .sort((a, b) => b.depth - a.depth);
+    // ponytail: plain git lists submodules; discovery refuses a repo that has no staging yet.
+    const occurrenceIds = execFileSync(
+        "git",
+        ["-C", repoRoot, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""],
+        { encoding: "utf8" },
+    )
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .sort((a, b) => b.split("/").length - a.split("/").length);
     const tips = new Map<string, string>();
-    for (const occurrence of occurrences) {
-        tips.set(occurrence.occurrenceId, resolveOrCreateStagingTip(join(repoRoot, occurrence.occurrenceId)));
+    for (const occurrenceId of occurrenceIds) {
+        tips.set(occurrenceId, resolveOrCreateStagingTip(join(repoRoot, occurrenceId)));
     }
     tips.set("", resolveOrCreateStagingTip(repoRoot));
     return tips;

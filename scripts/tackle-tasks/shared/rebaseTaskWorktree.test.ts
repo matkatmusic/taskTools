@@ -54,7 +54,7 @@ function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskN
 function seedTaskAndClaim(projectRoot: string, taskNumber: number, runId: string): void {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: [] }]);
     const outcome = claimTask(taskNumber, runId, projectRoot);
     assert.equal(outcome.status, "claimed");
 }
@@ -179,7 +179,7 @@ test("test_rebaseTaskWorktree_reportsConflictedFilePathsForTheStoppedLayer", asy
 });
 
 test("test_rebaseTaskWorktree_releasesTheSourceLockWhenAnOperationalFailureThrows", async () => {
-    // Setup: a claimed task with a linked worktree; the source branch diverges so the parent rebase has real work to do.
+    // Setup: an active task with a linked worktree; the diverged source branch gives parent rebase real work to do.
     const rootOrigin = makeSourceRepoWithSubmodule();
     const { worktreePath, taskNumber } = createLinkedWorktree(rootOrigin);
     const runId = "run-throw";

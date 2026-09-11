@@ -11,7 +11,7 @@ import { readCheckpoint, writeCheckpoint } from "../tackle-tasks/shared/checkpoi
 import { writeJsonAtomically } from "../shared/taskStateLock.ts";
 import { readJsonFile } from "../tackle-tasks/shared/readJsonFile.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
-import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.ts";
+// import { currentBranchName, submodulePaths } from "../shared/repositoryBranches.ts";
 import { resetTask } from "../tackle-tasks/resetTask.ts";
 import { buildLockOwner, readSourceRepoLock } from "../tackle-tasks/shared/sourceRepoLock.ts";
 import { findResumeEntry, findStartAtBlockEntry, prepareResume } from "../tackle-tasks/shared/resumeRun.ts";
@@ -174,9 +174,9 @@ function buildRewindPoints(worktree: string): Record<string, string> {
         return {};
     }
     const rewindPoints: Record<string, string> = {};
-    // submodulePaths only needs a resolvable rev; "HEAD" stands in when detached (mid-rebase).
-    const branch = currentBranchName(worktree) || "HEAD";
-    for (const occurrenceId of ["", ...submodulePaths(worktree, branch)]) {
+    // ponytail: plain git lists the submodules; branch discovery refuses a gitlink that only a task-N branch holds.
+    const submodulePaths = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
+    for (const occurrenceId of ["", ...submodulePaths]) {
         const path = occurrenceId === "" ? worktree : join(worktree, occurrenceId);
         rewindPoints[occurrenceId] = spawnSync("git", ["-C", path, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
     }

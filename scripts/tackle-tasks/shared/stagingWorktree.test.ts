@@ -50,20 +50,21 @@ test("test_ensureStagingWorktree_addsALinkedWorktreeOnTheSourceBranch", () => {
     assert.equal(git(repo, "worktree", "list", "--porcelain").includes(realpathSync(path)), true);
 });
 
-test("test_ensureStagingWorktree_addsANestedLinkedWorktreePerSubmodule", () => {
-    const repo = makeSourceRepoWithSubmodule();
-    git(repo, "branch", "staging");
-
-    ensureStagingWorktree(repo, "staging");
-
-    const path = stagingWorktreePath(repo);
-    assert.equal(statSync(join(path, "child", ".git")).isFile(), true);
-    assert.equal(
-        git(join(repo, "child"), "worktree", "list", "--porcelain").includes(realpathSync(join(path, "child"))),
-        true,
-    );
-    assert.equal(git(join(path, "child"), "branch", "--show-current"), "staging");
-});
+// Retired: superseded by tests/stagingWorktreeStale.test.ts (submodule sits detached at the gitlink; clean wrong branch rebuilds).
+// test("test_ensureStagingWorktree_addsANestedLinkedWorktreePerSubmodule", () => {
+//     const repo = makeSourceRepoWithSubmodule();
+//     git(repo, "branch", "staging");
+//
+//     ensureStagingWorktree(repo, "staging");
+//
+//     const path = stagingWorktreePath(repo);
+//     assert.equal(statSync(join(path, "child", ".git")).isFile(), true);
+//     assert.equal(
+//         git(join(repo, "child"), "worktree", "list", "--porcelain").includes(realpathSync(join(path, "child"))),
+//         true,
+//     );
+//     assert.equal(git(join(path, "child"), "branch", "--show-current"), "staging");
+// });
 
 test("test_ensureStagingWorktree_doesNothingWhenTheWorktreeExists", () => {
     const repo = makeTempRepoWithTestScript("main");
@@ -77,15 +78,16 @@ test("test_ensureStagingWorktree_doesNothingWhenTheWorktreeExists", () => {
     assert.equal(worktreeBlocks.length, 1);
 });
 
-test("test_ensureStagingWorktree_refusesWhenTheWorktreeIsOnAnotherBranch", () => {
-    const repo = makeTempRepoWithTestScript("main");
-    git(repo, "branch", "staging");
-    ensureStagingWorktree(repo, "staging");
-    const path = stagingWorktreePath(repo);
-    git(path, "checkout", "-b", "wrong");
-
-    assert.throws(
-        () => ensureStagingWorktree(repo, "staging"),
-        (error: Error) => error.message.includes("wrong") && error.message.includes("staging"),
-    );
-});
+// Retired: superseded by tests/stagingWorktreeStale.test.ts (submodule sits detached at the gitlink; clean wrong branch rebuilds).
+// test("test_ensureStagingWorktree_refusesWhenTheWorktreeIsOnAnotherBranch", () => {
+//     const repo = makeTempRepoWithTestScript("main");
+//     git(repo, "branch", "staging");
+//     ensureStagingWorktree(repo, "staging");
+//     const path = stagingWorktreePath(repo);
+//     git(path, "checkout", "-b", "wrong");
+//
+//     assert.throws(
+//         () => ensureStagingWorktree(repo, "staging"),
+//         (error: Error) => error.message.includes("wrong") && error.message.includes("staging"),
+//     );
+// });

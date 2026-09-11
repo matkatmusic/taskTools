@@ -703,3 +703,113 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
         rmSync(repoRoot, { recursive: true, force: true });
     }
 });
+
+test("test_resetTask_atBlock_dropsRecordedCommitsTheRewindRemoved", async () => {
+    // Task 9 is open; its worktree has one commit past the packet's rewind point, already recorded in tasks.json.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        const rewindOid = git(worktreePath, "rev-parse", "HEAD").trim();
+
+        // One extra commit lands on the task branch after the rewind point.
+        writeFileSync(join(worktreePath, "work.txt"), "work\n");
+        git(worktreePath, "add", "work.txt");
+        git(worktreePath, "commit", "-q", "-m", "work");
+        const workOid = git(worktreePath, "rev-parse", "HEAD").trim();
+
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [{ occurrenceId: "", hash: workOid, kind: "work", stepId: "implement" }],
+                    implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rewindOid },
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS, which rewinds the branch past the recorded commit.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the rewound commit is gone from the branch, so its record is dropped too.
+        const said = JSON.parse(readFileSync(join(repoRoot, ".taskTools", "tasks.json"), "utf-8"));
+        assert.deepEqual(said[0].run.history.at(-1).commits, []);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_clearsTheTailCursorSoTheRelaunchStartsAtTheBlock", async () => {
+    // Task 9 is open; its run.history has a stale tailCursor left over from a failures-exit block.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        const rewindOid = git(worktreePath, "rev-parse", "HEAD").trim();
+
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                    tailCursor: { block: "pipeline-failuresExit.mmd::READ_FAILURES_PUBLICATION_STATE", input: "{}" },
+                }],
+            },
+        }]));
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+            rewindPoints: { "": rewindOid },
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the stale tailCursor is cleared, so a relaunch resumes from the checkpoint's block, not the old exit tail.
+        const said = JSON.parse(readFileSync(join(repoRoot, ".taskTools", "tasks.json"), "utf-8"));
+        assert.equal(said[0].run.history.at(-1).tailCursor, null);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});

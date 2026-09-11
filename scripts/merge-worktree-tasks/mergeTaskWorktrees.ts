@@ -802,6 +802,8 @@ export function mergeTaskDeepestFirst(
                 const operationOid = git(occurrence.checkoutPath, "rev-parse", occurrence.operationBranch).trim();
                 recordMergeIntent(sourceCheckoutPath, occurrence.operationBranch, operationOid);
 
+                // Staging worktree rules: this layer sits detached at its parent's gitlink until merge time.
+                git(sourceCheckoutPath, "checkout", "--quiet", occurrence.baseBranch);
                 const result = mergeStepOperations.mergeSubmodule(sourceCheckoutPath, occurrence.checkoutPath, occurrence.baseBranch);
                 if (!result.merged) {
                     clearMergeIntent(sourceCheckoutPath, occurrence.operationBranch);
