@@ -79,6 +79,12 @@ test("script leaves tasks with an active run out of the open-task list", () => {
   assert.doesNotMatch(output, /OPEN 1: being worked/);
 });
 
-test("script fails loudly rather than emitting a brief that points nowhere", () => {
-  assert.throws(() => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }));
+test("script fails loudly with the skill usage when stdin is empty", () => {
+  assert.throws(
+    () => execFileSync("node", [scriptPath], { input: "", encoding: "utf8", stdio: "pipe" }),
+    (error: { stderr?: string }) => {
+      assert.match(error.stderr ?? "", /usage: \/pick-a-task <N>/);
+      return true;
+    },
+  );
 });

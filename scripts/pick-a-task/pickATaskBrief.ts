@@ -55,18 +55,18 @@ function openTasksReport(): string {
 //   }
 // }
 
-// Arguments arrive on stdin; an empty read prints the usage as the skill's output instead of a brief.
+// Arguments arrive on stdin; an empty read fails loudly with the skill's usage.
 function fail(problem: string): never {
-  process.stdout.write(
-    `pickATaskBrief: ${problem}\n` +
-      `usage: node pickATaskBrief.ts <<'PICKATASKEOF'\n[N]\nPICKATASKEOF\n`,
+  process.stderr.write(
+    `pick-a-task: ${problem}\n` +
+      `usage: /pick-a-task <N>   (N = how many of the easiest unblocked open tasks to pick, a whole number, e.g. /pick-a-task 3)\n`,
   );
-  process.exit(0);
+  process.exit(1);
 }
 
 if (process.argv[1]?.endsWith("pickATaskBrief.ts")) {
   const argsValue = readStdin().replace(/\n$/, "");
-  if (argsValue === "") fail("no arguments on stdin");
+  if (argsValue === "") fail("no arguments given");
   const openTasks = openTasksReport();
   const blockedStatus = execFileSync("node", [checkBlockersPath], { encoding: "utf8" }).trimEnd();
   process.stdout.write(pickATaskBrief(argsValue, openTasks, blockedStatus));

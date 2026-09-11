@@ -1,58 +1,10 @@
 [
   {
-    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
-    "name": "test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
-  },
-  {
-    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
-    "name": "test_CONTINUE_REBASE_runsTwiceWithTheSameInput"
-  },
-  {
-    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
-    "name": "test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_mergesEveryLayerAndReturnsMergeCommits"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_createsAMergeCommitWithTwoParents"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_refusesWhenAnUnrelatedCleanRootCommitLandedAfterRebase"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_refusesWhenACommittedSourceSubmoduleChangeLandedAfterRebase"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheCheckedOutBranch"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_mergesWhileTheProjectRootHasUncommittedEdits"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
-    "name": "test_mergeTaskWorktree_mergesARootWithNoTestSuite"
-  },
-  {
-    "file": "scripts/tackle-tasks/shared/sourceRepoLock.test.ts",
-    "name": "test_refreshSourceRepoLock_pausedRefreshBlocksRecoveryAndAcquisition_ownerAIsNeverOverwrittenByB"
+    "file": "tests/pickATaskBrief.test.ts",
+    "name": "script fails loudly rather than emitting a brief that points nowhere"
   },
   {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
-  },
-  {
-    "file": "tests/stepTemplates.test.ts",
-    "name": "test_stepTemplate_pipeline-commitImplementationIfNeeded_RUN_TASK_TESTS_producesItsOutputContract"
   }
 ]
