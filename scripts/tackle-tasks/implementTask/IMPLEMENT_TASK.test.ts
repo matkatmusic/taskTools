@@ -1,7 +1,7 @@
 // Behavioral checks for scripts/tackle-tasks/implementTask/IMPLEMENT_TASK.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -139,6 +139,30 @@ test("test_IMPLEMENT_TASK_runsTwiceWithTheSameInput", () => {
 
     assert.deepEqual(secondOutput, firstOutput);
     assert.equal(secondPrompt, firstPrompt);
+});
+
+test("test_main_npmCiInstallsDependenciesWhenLockfilePresentAndNodeModulesAbsent", () => {
+    const parentDir = tmpMkdir("implement-task-npmci-");
+    const depDir = join(parentDir, "dep");
+    const worktreePath = join(parentDir, "worktree");
+    mkdirSync(depDir, { recursive: true });
+    writeFileSync(join(depDir, "package.json"), JSON.stringify({ name: "dep", version: "1.0.0", main: "index.js" }));
+    writeFileSync(join(depDir, "index.js"), "module.exports = 1;\n");
+
+    mkdirSync(join(worktreePath, "plans"), { recursive: true });
+    writeFileSync(join(worktreePath, "package.json"), JSON.stringify({ name: "x", version: "1.0.0", dependencies: { dep: "file:../dep" } }));
+    execFileSync("npm", ["install", "--package-lock-only", "--no-audit", "--no-fund", "--ignore-scripts"], { cwd: worktreePath });
+    writeFileSync(join(worktreePath, "plans", "brief-21.md"), "brief\n");
+    writeFileSync(join(worktreePath, "tasks.json"), JSON.stringify([{ taskNumber: 21, title: "widget", modifiableFiles: ["a.ts"], createsFiles: ["a.ts"] }]));
+    assert.equal(existsSync(join(worktreePath, "node_modules")), false);
+
+    const input = JSON.stringify({
+        taskNumber: 21, projectRoot: worktreePath, worktree: worktreePath,
+        typecheckCommand: "npx tsc --noEmit", maxFixRounds: 3,
+    });
+    main(input);
+
+    assert.equal(existsSync(join(worktreePath, "node_modules", "dep")), true);
 });
 
 test("test_main_defaultsMaxFixRoundsWhenTheSenderOmitsIt", () => {

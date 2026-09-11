@@ -62,7 +62,7 @@ function createLinkedWorktree(rootOrigin: string): { worktreePath: string; taskN
 function seedTaskAndMarkActive(projectRoot: string, taskNumber: number, runId: string): void {
     const { tasksPath } = resolveTaskFiles(projectRoot);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", files: [] }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: [] }]);
     const outcome = claimTask(taskNumber, runId, projectRoot);
     assert.equal(outcome.status, "claimed");
 }

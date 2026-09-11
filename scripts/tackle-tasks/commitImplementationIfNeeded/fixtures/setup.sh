@@ -60,7 +60,7 @@ cat > runTests/root/.taskTools/tasks.json <<'JSON'
     "title": "fixture task 2",
     "schemaVersion": "1.0.1",
     "hasTests": true,
-    "files": ["tests/sentinel.test.ts"],
+    "modifiableFiles": ["tests/sentinel.test.ts"],
     "run": {
       "active": true,
       "worktree": "runTests/worktree",

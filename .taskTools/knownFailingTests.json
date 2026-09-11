@@ -1,30 +1,58 @@
 [
   {
-    "file": "scripts/tackle-tasks/shared/advanceTaskRebase.test.ts",
-    "name": "test_advanceTaskRebase_distinguishesTheRootAndASubmoduleWithTheSameConflictPath"
+    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
+    "name": "test_CONTINUE_REBASE_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
   },
   {
-    "file": "scripts/tackle-tasks/shared/advanceTaskRebase.test.ts",
-    "name": "test_advanceTaskRebase_reportsFinishedOnlyWhenNoLayerHasARebaseInProgress"
+    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
+    "name": "test_CONTINUE_REBASE_runsTwiceWithTheSameInput"
   },
   {
-    "file": "scripts/tackle-tasks/shared/occurrences.test.ts",
-    "name": "test_getOccurrencesDeepestFirst_givesEachLayerItsOwnBaseRefFromTheSourceManifest"
+    "file": "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.test.ts",
+    "name": "test_CONTINUE_REBASE_reportsAFreshConflictWithoutFinishing"
   },
   {
-    "file": "scripts/tackle-tasks/shared/occurrences.test.ts",
-    "name": "test_getOccurrencesDeepestFirst_keepsChildBaseRefStableAfterASubmoduleChangeAndDiffsCorrectly"
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_mergesEveryLayerAndReturnsMergeCommits"
   },
   {
-    "file": "tests/runMergePhase.test.ts",
-    "name": "test_endToEndQueueDrivesARealTaskThroughASubmoduleRebaseTestThenMergeAndReportsItMerged"
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_createsAMergeCommitWithTwoParents"
   },
   {
-    "file": "tests/runMergePhase.test.ts",
-    "name": "test_endToEndQueueRetainsRootAndSourceSubmoduleRefsAfterARealMergeConflict"
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_refusesWhenAnUnrelatedCleanRootCommitLandedAfterRebase"
   },
   {
-    "file": "tests/tackleTasksAcceptance.test.ts",
-    "name": "test_acceptance_resolvesOneConflictThroughTheFixConflictsPrompt"
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_refusesWhenACommittedSourceSubmoduleChangeLandedAfterRebase"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_refusesAndMutatesNothingWhenTheLockIsHeldByAnotherRun"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_mergesTheRootLayerIntoRootSourceBranchNotTheCheckedOutBranch"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_mergesWhileTheProjectRootHasUncommittedEdits"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/mergeTaskWorktree.test.ts",
+    "name": "test_mergeTaskWorktree_mergesARootWithNoTestSuite"
+  },
+  {
+    "file": "scripts/tackle-tasks/shared/sourceRepoLock.test.ts",
+    "name": "test_refreshSourceRepoLock_pausedRefreshBlocksRecoveryAndAcquisition_ownerAIsNeverOverwrittenByB"
+  },
+  {
+    "file": "tests/relatedTests.test.ts",
+    "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
+  },
+  {
+    "file": "tests/stepTemplates.test.ts",
+    "name": "test_stepTemplate_pipeline-commitImplementationIfNeeded_RUN_TASK_TESTS_producesItsOutputContract"
   }
 ]

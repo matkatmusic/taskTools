@@ -55,13 +55,13 @@ function openTasksReport(): string {
 //   }
 // }
 
-// Arguments arrive on stdin, so an empty read must stop here rather than emit a brief pointing nowhere.
+// Arguments arrive on stdin; an empty read prints the usage as the skill's output instead of a brief.
 function fail(problem: string): never {
-  process.stderr.write(
+  process.stdout.write(
     `pickATaskBrief: ${problem}\n` +
       `usage: node pickATaskBrief.ts <<'PICKATASKEOF'\n[N]\nPICKATASKEOF\n`,
   );
-  process.exit(1);
+  process.exit(0);
 }
 
 if (process.argv[1]?.endsWith("pickATaskBrief.ts")) {

@@ -1,7 +1,8 @@
 // IMPLEMENT_TASK, from pipeline-implement.mmd. COMMIT_IMPLEMENTATION_IF_NEEDED owns committing, not this box.
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { loadPreparedTask, type PreparedTask } from "../shared/preparedTask.ts";
@@ -318,7 +319,7 @@ Stop after ${v.maxFixRounds} rounds.
     {
         name: "FORBIDDEN ACTIONS: skip",
         when: (c) => c.testsField === "skip",
-        // Retired (task 51): "edit anything outside..." (the fenced hook denies it), "run the full suite" and "stage or commit anything, or run any git command" (the fenced disallowedTools deny both).
+        // Task 51: a fenced hook and disallowedTools now block these actions, not this prose.
         render: () => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
@@ -333,7 +334,7 @@ Returning \`implemented: false\` is a correct outcome when the plan is impossibl
     {
         name: "FORBIDDEN ACTIONS: tdd",
         when: (c) => c.testsField === "tdd",
-        // Retired (task 51): "edit anything outside..." (the fenced hook denies it), "run the full suite" and "stage or commit anything, or run any git command" (the fenced disallowedTools deny both).
+        // Task 51: a fenced hook and disallowedTools now block these actions, not this prose.
         render: (v) => `## FORBIDDEN ACTIONS
 
 You are forbidden from doing any of the following actions:
@@ -442,8 +443,21 @@ export function implementPromptCombos(): { name: string; skeleton: string; rende
 
 // const agentLogFile = () => process.env.RUN_STEP_LOG!.replace(/-run-log\.md$/, "-agents.log");
 
+// Same submodule listing as runStepHook.ts buildRewindPoints.
+function ensureDependenciesInstalled(worktree: string): void {
+    const submodulePaths = spawnSync("git", ["-C", worktree, "submodule", "foreach", "--recursive", "--quiet", "echo \"$displaypath\""], { encoding: "utf8" }).stdout.split("\n").filter(Boolean);
+    for (const relativePath of ["", ...submodulePaths]) {
+        const checkoutPath = relativePath === "" ? worktree : join(worktree, relativePath);
+        if (existsSync(join(checkoutPath, "package-lock.json")) && !existsSync(join(checkoutPath, "node_modules"))) {
+            execFileSync("npm", ["ci", "--no-audit", "--no-fund"], { cwd: checkoutPath, stdio: ["ignore", "pipe", "pipe"] });
+        }
+    }
+}
+
 export function main(input: string): Record<string, unknown> {
     const packet = JSON.parse(input) as ImplementTaskInput;
+    // Step 1: a fresh worktree has no node_modules; npm ci installs from each lockfile without rewriting it.
+    ensureDependenciesInstalled(packet.worktree);
     const t = loadPreparedTask(packet.taskNumber, packet.worktree, packet.projectRoot);
     const promptFile = `${packet.worktree.replace(/\/+$/, "")}/plans/IMPLEMENT_TASK.prompt.md`;
     mkdirSync(dirname(promptFile), { recursive: true });
