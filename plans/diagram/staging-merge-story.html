@@ -1,0 +1,756 @@
+<title>Two Tasks At Once</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F2F4F7; --panel:#FFFFFF; --ink:#1B2430; --muted:#5B6672; --line:#CBD2DA;
+  --root:#3557C7; --root-soft:#E3E9FA; --sub:#1F8A70; --sub-soft:#DDF3EC;
+  --deep:#6B5CA5; --deep-soft:#ECE8F7;
+  --task:#7B8794; --task-soft:#EDF0F3; --bad:#C7361F; --bad-soft:#FBE4DF; --ghost:#A9B2BC;
+  --user:#9A5B00; --user-soft:#FBEBD0;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#12161C; --panel:#1A2029; --ink:#E6EAF0; --muted:#8B96A3; --line:#33404D;
+  --root:#7A9BFF; --root-soft:#1F2A4A; --sub:#4FC9A8; --sub-soft:#173A32;
+  --deep:#A99BE0; --deep-soft:#2A2440;
+  --task:#8F9BA8; --task-soft:#242C36; --bad:#FF7A5C; --bad-soft:#4A241C; --ghost:#5B6672;
+  --user:#E0A23A; --user-soft:#3D2E12;
+}}
+:root[data-theme="dark"]{
+  --bg:#12161C; --panel:#1A2029; --ink:#E6EAF0; --muted:#8B96A3; --line:#33404D;
+  --root:#7A9BFF; --root-soft:#1F2A4A; --sub:#4FC9A8; --sub-soft:#173A32;
+  --deep:#A99BE0; --deep-soft:#2A2440;
+  --task:#8F9BA8; --task-soft:#242C36; --bad:#FF7A5C; --bad-soft:#4A241C; --ghost:#5B6672;
+  --user:#E0A23A; --user-soft:#3D2E12;
+}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding-inline:clamp(16px,4vw,48px);padding-block:32px 64px;margin:0}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+header{max-width:72ch;margin-bottom:20px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.01em;margin:0 0 8px;text-wrap:balance}
+header p{margin:0 0 8px;color:var(--muted)}
+.picker{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 6px}
+.picker button{font:inherit;font-size:13px;padding:6px 14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:4px;cursor:pointer}
+.picker button[aria-pressed="true"]{background:var(--root);border-color:var(--root);color:var(--panel)}
+.picker button:focus-visible{outline:2px solid var(--root);outline-offset:2px}
+.todo{border:2px dashed var(--line);border-radius:6px;padding:24px;color:var(--muted);margin:6px 18px 18px}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;font-size:13px;color:var(--muted);margin:14px 0 22px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;border:2px solid currentColor}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.controls{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+.controls button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:4px;cursor:pointer}
+.controls button:focus-visible,#slider:focus-visible{outline:2px solid var(--root);outline-offset:2px}
+#slider{width:100%;accent-color:var(--root);margin:0}
+.ticks{position:relative;height:16px;margin:0 8px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);grid-column:2}
+.ticks span{position:absolute;top:0;transform:translateX(-50%)}
+.frame-head{display:flex;gap:14px;align-items:baseline;padding:14px 18px 0;flex-wrap:wrap}
+.frame-head .n{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.frame-head h2{font-size:18px;font-weight:600;margin:0;text-wrap:balance}
+.frame-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:0 18px;padding:6px 18px 16px}
+@media (max-width:960px){.frame-body{grid-template-columns:1fr}}
+.fig{overflow-x:auto}
+svg{display:block;width:100%;height:auto;min-width:700px;font-family:"IBM Plex Mono",monospace}
+.notes{font-size:13.5px;color:var(--ink)}
+.notes p{margin:8px 0}
+.notes ol{margin:6px 0 0;padding-left:20px}
+.notes li{margin:4px 0}
+.events{list-style:none;padding:0;margin:0 0 8px;max-height:220px;overflow-y:auto;font-size:12.5px;border:1px solid var(--line);border-radius:4px}
+.events li{padding:3px 8px;border-bottom:1px solid var(--line);color:var(--muted)}
+.events li:last-child{border-bottom:0}
+.events li.now{color:var(--ink);font-weight:600;background:var(--task-soft)}
+.events li.now::before{content:"> "}
+.events li.now::after{content:" <"}
+.events{font-family:"IBM Plex Mono",monospace;font-size:12px;max-height:420px}
+.events li .t{font-family:"IBM Plex Mono",monospace;font-size:11px;margin-right:6px;color:var(--muted)}
+.notes code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;background:var(--task-soft);padding:1px 5px;border-radius:3px}
+.ledger{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px;font-variant-numeric:tabular-nums}
+.ledger th,.ledger td{text-align:left;padding:3px 8px 3px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.ledger th{color:var(--muted);font-weight:500}
+.ledger td.mono{font-size:12px}
+.bad{color:var(--bad)}
+.ok{color:var(--sub)}
+.fill{border:2px dashed var(--line);border-radius:6px;padding:14px;color:var(--muted);margin-top:10px}
+.fill .blank{display:inline-block;min-width:9ch;border-bottom:1.5px dashed var(--ink);margin:0 4px}
+.foot{font-size:12.5px;color:var(--muted);padding:0 18px 14px}
+.foot:empty{display:none}
+</style>
+
+<header>
+  <h1>Two Tasks At Once</h1>
+  <div class="picker" id="scenario" role="group" aria-label="Repository shape">
+    <button type="button" data-key="single" aria-pressed="true">no submodules</button>
+    <button type="button" data-key="one" aria-pressed="false">one submodule</button>
+    <button type="button" data-key="nested" aria-pressed="false">nested submodules</button>
+    <button type="button" data-key="reveng" aria-pressed="false">RevEng</button>
+  </div>
+  <div id="intro"></div>
+</header>
+
+<div class="legend" id="legend"></div>
+
+<section class="stage">
+  <div class="controls">
+    <button id="prev" type="button" aria-label="Previous frame">◀</button>
+    <input id="slider" type="range" min="1" max="8" value="1" step="1" aria-label="Frame">
+    <button id="next" type="button" aria-label="Next frame">▶</button>
+    <div class="ticks" id="ticks"></div>
+  </div>
+  <div class="frame-head"><span class="n" id="fnum"></span><h2 id="ftitle"></h2></div>
+  <div class="frame-body">
+    <div class="fig" id="fig"></div>
+    <aside class="notes" id="notes"></aside>
+  </div>
+  <p class="foot" id="foot"></p>
+</section>
+
+<script>
+// ponytail: each scenario owns its data and its render(i); the viewer only swaps them.
+const COL = (c) => 78 + c * 108;
+
+function pill(x, y, r, k, strongColor) {
+  const w = r.length * 6.6 + 12; const ry = y - 20 - k * 17;
+  const strong = r.startsWith("staging"); const usr = r === "Layer3-9" || r === "main" || r === "HEAD" || r === "checkout";
+  const fill = strong ? strongColor : usr ? "var(--user-soft)" : "var(--task-soft)";
+  const tc = strong ? "var(--panel)" : usr ? "var(--user)" : "var(--ink)";
+  return `<rect x="${x - w / 2}" y="${ry - 10}" width="${w}" height="14" rx="3" fill="${fill}" stroke="${strong ? strongColor : usr ? 'var(--user)' : 'var(--line)'}" stroke-width="1"/><text x="${x}" y="${ry + 1}" font-size="10.5" text-anchor="middle" fill="${tc}" font-weight="500">${r}</text>`;
+}
+function edgePath(A, B) {
+  return A.y === B.y ? `M${A.x},${A.y} L${B.x},${B.y}` : `M${A.x},${A.y} C${A.x + 50},${A.y} ${B.x - 50},${B.y} ${B.x},${B.y}`;
+}
+function linkLine(A, B, stroke, extra) {
+  return `<line x1="${A.x}" y1="${A.y + 12}" x2="${B.x}" y2="${B.y - 13}" stroke="${stroke}" stroke-width="1.3" stroke-dasharray="4 4" marker-end="url(#arr)" style="color:${stroke}" ${extra || ""}/>`;
+}
+const ARROW = `<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>`;
+
+// ---------------------------------------------------------------- event engine
+// ponytail: a scenario is a sorted event list; each event is one slider step; commits take columns in order.
+const REPO = { P: "Parent", S: "Submodule", SS: "Deep submodule" };
+function phrase(e) {
+  return ({
+    init: "Initial start",
+    create: `Create '${e.arg}'`,
+    code: "Commit code change",
+    upSub: `Commit submodule pointer → ${e.arg}`,
+    mrg: `Merge '${e.arg}' into '${e.branch}'`,
+    rebase: `Rebase onto '${e.arg}'`,
+    noop: `Rebase onto '${e.arg}', nothing to do`,
+    move: `Move to ${e.arg}`,
+    skip: "Merge skipped, nothing new",
+    delete: `Delete '${e.arg}'`,
+    fail: `Merge '${e.arg}' into '${e.branch}' FAILS`,
+  })[e.what];
+}
+const HEADROOM = 100; // room above the first row for up to five stacked ref pills
+function branchPath(A, B, down) {
+  if (A.y === B.y) return `M${A.x},${A.y} L${B.x},${B.y}`;
+  if (down) return `M${A.x},${A.y} C${A.x + 40},${A.y} ${A.x + 40},${B.y} ${A.x + 80},${B.y} L${B.x},${B.y}`;
+  return `M${A.x},${A.y} L${B.x - 80},${A.y} C${B.x - 40},${A.y} ${B.x - 40},${B.y} ${B.x},${B.y}`;
+}
+function eventsScenario(cfg) {
+  const { lanes, events, intro, legend, foot, colStep } = cfg;
+  const commits = events.filter(e => e.type === "commit");
+  const colOf = new Map(commits.map((e, k) => [e.id, k]));
+  const W = 78 + colStep * Math.max(0, commits.length - 1) + 90;
+  let top = 8;
+  const HEADROOM = 100; // room for up to five stacked ref pills above the first row
+  for (const L of lanes) { L.top = top; L.h = 30 + HEADROOM + 58 * L.rows.length; top += L.h + 14; }
+  const H = top;
+  const laneOf = Object.fromEntries(lanes.map(L => [L.key, L]));
+  const rowIdx = (n) => laneOf[n.lane].rows.indexOf(n.branch);
+  const pos = (n) => ({ x: 78 + colStep * colOf.get(n.id), y: laneOf[n.lane].top + 28 + HEADROOM + 58 * rowIdx(n) });
+  const color = (n) => ({ user: "var(--user)", fail: "var(--bad)", task: "var(--task)", upSub: "var(--task)" })[n.kind] || laneOf[n.lane].color;
+
+  function state(i) {
+    const nodes = []; const refs = {}; let bad = [];
+    for (const L of lanes) refs[L.key] = {};
+    for (const e of events.slice(0, i)) {
+      if (e.type === "commit") { nodes.push(e); for (const r of (e.refs || [])) refs[e.lane][r] = e.id; }
+      if (e.set) for (const [lane, m] of Object.entries(e.set)) Object.assign(refs[lane], m);
+      if (e.del) for (const [lane, names] of Object.entries(e.del)) for (const r of names) delete refs[lane][r];
+      if (e.bad) bad = e.bad;
+    }
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    const reached = new Set();
+    for (const L of lanes) {
+      const stack = Object.values(refs[L.key]);
+      while (stack.length) { const id = stack.pop(); if (reached.has(id)) continue; reached.add(id); for (const p of (byId.get(id)?.parents || [])) stack.push(p); }
+    }
+    return { nodes, refs, bad, byId, isGhost: (n) => n.kind !== "fail" && !reached.has(n.id) };
+  }
+
+  function render(i) {
+    const { nodes, refs, bad, byId, isGhost } = state(i);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${events[i - 1].text}">${ARROW}`;
+    for (const L of lanes) {
+      s += `<rect x="0" y="${L.top}" width="${W}" height="${L.h}" rx="4" fill="${L.soft}" opacity=".45"/>
+            <text x="12" y="${L.top + 18}" font-size="12" fill="${L.color}" font-weight="500">${L.label}</text>`;
+      L.rows.forEach((r, k) => { s += `<text x="12" y="${L.top + 28 + HEADROOM + 58 * k + 4}" font-size="10.5" fill="var(--muted)">${r}</text>`; });
+    }
+    for (const n of nodes) for (const p of (n.parents || [])) {
+      const np = byId.get(p); if (!np) continue;
+      s += `<path d="${branchPath(pos(np), pos(n), rowIdx(n) > rowIdx(np))}" fill="none" stroke="${isGhost(n) ? "var(--ghost)" : color(n)}" stroke-width="2" opacity="${isGhost(n) ? .35 : .9}"/>`;
+    }
+    for (const n of nodes) {
+      if (!n.link) continue; const t = byId.get(n.link); if (!t) continue;
+      s += linkLine(pos(n), pos(t), isGhost(n) ? "var(--ghost)" : "var(--muted)", 'opacity=".8"');
+    }
+    for (const [a, b, lbl] of bad) {
+      const A = pos(byId.get(a)), B = pos(byId.get(b));
+      s += linkLine(A, B, "var(--bad)", 'stroke-width="1.6" stroke-dasharray="3 5"');
+      s += `<text x="${(A.x + B.x) / 2 + 6}" y="${(A.y + B.y) / 2}" font-size="11" fill="var(--bad)">${lbl}</text>`;
+    }
+    const ev = events[i - 1];
+    const ringId = ev.type === "commit" ? ev.id : (refs[ev.lane][ev.branch] ?? state(i - 1).refs[ev.lane][ev.branch]);
+    for (const n of nodes) {
+      const { x, y } = pos(n); const c = isGhost(n) ? "var(--ghost)" : color(n);
+      if (n.id === ringId) s += `<circle cx="${x}" cy="${y}" r="15" fill="none" stroke="${c}" stroke-width="1.5" opacity=".5"/>`;
+      if (n.kind === "mrg") s += `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" transform="rotate(45 ${x} ${y})" fill="var(--panel)" stroke="${c}" stroke-width="2.5"/>`;
+      else if (n.kind === "upSub") s += `<circle cx="${x}" cy="${y}" r="8" fill="var(--panel)" stroke="${c}" stroke-width="2.5"/>`;
+      else if (n.kind === "fail") s += `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" transform="rotate(45 ${x} ${y})" fill="var(--bad-soft)" stroke="${c}" stroke-width="2.5" stroke-dasharray="3 2"/><path d="M${x - 5},${y - 5} L${x + 5},${y + 5} M${x + 5},${y - 5} L${x - 5},${y + 5}" stroke="${c}" stroke-width="2.5"/>`;
+      else s += `<circle cx="${x}" cy="${y}" r="8" fill="${n.kind === "task" || isGhost(n) ? "var(--panel)" : c}" stroke="${c}" stroke-width="2.5" ${n.kind === "task" ? 'stroke-dasharray="3 2"' : ""} ${isGhost(n) ? 'stroke-dasharray="2 3"' : ""}/>`;
+      s += `<text x="${x}" y="${y + 24}" font-size="11" text-anchor="middle" fill="${isGhost(n) ? "var(--ghost)" : "var(--ink)"}" font-weight="500">${n.id}</text>`;
+      if (n.note) s += `<text x="${x}" y="${y + 37}" font-size="10" text-anchor="middle" fill="${n.kind === "fail" ? "var(--bad)" : "var(--muted)"}">${n.note}</text>`;
+      const pills = Object.entries(refs[n.lane]).filter(([, id]) => id === n.id).map(([r]) => r);
+      pills.forEach((r, k) => { s += pill(x, y, r, k, laneOf[n.lane].color); });
+    }
+    return s + `</svg>`;
+  }
+
+  function notes(i) {
+    const list = events.map((e, k) => `<li class="${k === i - 1 ? "now" : ""}">${String(k + 1).padStart(2, "0")} ${REPO[e.lane]}, ${e.branch}, ${phrase(e)}</li>`).join("");
+    return `<ol class="events">${list}</ol>${events[i - 1].detail || ""}`;
+  }
+  return {
+    intro, legend, foot, count: events.length,
+    num: (i) => `Event ${i} of ${events.length}`,
+    title: (i) => events[i - 1].text,
+    notes, ledger: () => ({}), render,
+  };
+}
+
+// ---------------------------------------------------------------- single repo
+const single = eventsScenario({
+  colStep: 104,
+  lanes: [{ key: "P", label: "PARENT REPO", color: "var(--root)", soft: "var(--root-soft)", rows: ["main", "staging", "task-A", "task-B"] }],
+  events: [
+    { type: "commit", id: "init:P:code", lane: "P", branch: "main", what: "init", row: "A", kind: "commit", parents: [], refs: ["main", "HEAD"], note: "start", text: "Start. main is at init:P:code. No staging yet." },
+    { type: "ref", lane: "P", branch: "main", what: "create", arg: "staging", set: { P: { staging: "init:P:code" } }, text: "T_A spawn: git branch staging. Cut from HEAD." },
+    { type: "ref", lane: "P", branch: "main", what: "create", arg: "task-A", set: { P: { "task-A": "init:P:code" } }, text: "T_A spawn: git worktree add -B task-A wt-A staging. Reset-point ref written." },
+    { type: "ref", lane: "P", branch: "main", what: "create", arg: "task-B", set: { P: { "task-B": "init:P:code" } }, text: "T_B spawn: git worktree add -B task-B wt-B staging. Reset-point ref written." },
+    { type: "commit", id: "T_A:P:code", lane: "P", branch: "task-A", what: "code", row: "B", kind: "task", parents: ["init:P:code"], refs: ["task-A"], text: "T_A commits its code change in wt-A." },
+    { type: "commit", id: "T_B:P:code", lane: "P", branch: "task-B", what: "code", row: "C", kind: "task", parents: ["init:P:code"], refs: ["task-B"], text: "T_B commits its code change in wt-B." },
+    { type: "ref", lane: "P", branch: "task-A", what: "noop", arg: "staging", text: "T_A merge step 1: git rebase staging in wt-A. staging is still the start, nothing to do." },
+    { type: "commit", id: "T_A:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:P:code", "T_A:P:code"], refs: ["staging"], text: "T_A merge step 2: git merge --no-ff task-A on staging." },
+    { type: "ref", lane: "P", branch: "task-A", what: "delete", arg: "task-A", del: { P: ["task-A"] }, text: "T_A cleanup: worktree wt-A removed, branch task-A deleted." },
+    { type: "commit", id: "T_B:P:code′", lane: "P", branch: "task-B", what: "rebase", arg: "staging", row: "C", kind: "task", parents: ["T_A:P:mrg"], refs: ["task-B"], note: "replayed", text: "T_B merge step 1: git rebase staging in wt-B. T_B:P:code is replayed on top of T_A:P:mrg. The old commit is unreachable now." },
+    { type: "commit", id: "T_B:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-B", row: "A", kind: "mrg", parents: ["T_A:P:mrg", "T_B:P:code′"], refs: ["staging"], text: "T_B merge step 2: git merge --no-ff task-B on staging." },
+    { type: "ref", lane: "P", branch: "task-B", what: "delete", arg: "task-B", del: { P: ["task-B"] }, text: "T_B cleanup: worktree wt-B removed, branch task-B deleted." },
+    { type: "commit", id: "user:P:code", lane: "P", branch: "main", what: "code", row: "L", kind: "user", parents: ["init:P:code"], refs: ["main", "HEAD"], text: "You commit on main. main and staging have diverged now." },
+    { type: "commit", id: "T_C:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "main", row: "A", kind: "mrg", parents: ["T_B:P:mrg", "user:P:code"], refs: ["staging"], note: "staging ← main", text: "T_C spawn: staging and HEAD diverged. Temp worktree at staging, git merge --no-edit HEAD, then git branch -f staging. Works: no submodules." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-C", set: { P: { "task-C": "T_C:P:mrg" } }, text: "T_C spawn: git worktree add -B task-C wt-C staging." },
+  ],
+  intro: `<p>One git repository. Your branch is <span class="mono">main</span>. Two tasks, A and B, run at the same time. Task A merges first. Drag the slider, or press ← →, to step through the git events one by one.</p>
+  <p>Commit names are <span class="mono">&lt;Task&gt;:&lt;Where&gt;:&lt;What&gt;</span>. Task is T_A, T_B, T_C, init, or user. Where is P for the parent repo. What is code, upSub, or mrg. A faded circle is a commit that no branch reaches any more.</p>`,
+  legend: `<span><i class="dot" style="color:var(--root)"></i> commit on staging</span>
+  <span><i class="dot" style="color:var(--task);border-style:dashed"></i> commit on a task branch</span>
+  <span><i class="dot" style="color:var(--user)"></i> your own commit on main</span>
+  <span><i class="dot" style="color:var(--ghost);border-style:dotted"></i> unreachable, after a rebase</span>
+  <span class="mono" style="font-size:12px">◆ mrg &nbsp; ● code &nbsp; ring = where this event happens</span>`,
+  foot: ``,
+});
+
+// Old frame renderer, replaced by the event-list RevEng below.
+// ---------------------------------------------------------------- RevEng + jfred, nested
+// const reveng = (() => {
+//   const LANES = {
+//     root: { rows: { L: 34, A: 92, B: 150, C: 208 }, top: 8, h: 232, color: "var(--root)", soft: "var(--root-soft)", label: "ROOT · RevEng" },
+//     sub:  { rows: { L: 290, A: 348, B: 406, C: 464 }, top: 266, h: 226, color: "var(--sub)", soft: "var(--sub-soft)", label: "SUBMODULE · jfred" },
+//     plug: { rows: { A: 560 }, top: 514, h: 76, color: "var(--deep)", soft: "var(--deep-soft)", label: "SUBMODULE · jfred/jfredToolsPlugin" },
+//     tmux: { rows: { A: 658 }, top: 612, h: 76, color: "var(--deep)", soft: "var(--deep-soft)", label: "SUBMODULE · jfred/jfredToolsPlugin/external/tmux_lib" },
+//   };
+//   const W = 1140, H = 700;
+//   const STATIC = {
+//     plug: [{ id: "f2905e6", row: "A", col: 4, refs: ["staging", "checkout"], kind: "commit", note: "never moves" }],
+//     tmux: [{ id: "46fcbc7", row: "A", col: 4, refs: ["staging", "checkout"], kind: "commit", note: "never moves" }],
+//   };
+//   const frames = [
+//   { n: "Frame 1", title: "Start. staging is one task ahead of your branch",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, refs: ["Layer3-9"], kind: "commit" },
+//       { id: "68ab4a4", row: "A", col: 1, refs: ["staging"], kind: "merge", note: "merge task-376" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, refs: ["staging", "checkout"], kind: "merge", note: "merge task-376" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["da15f3d", "e5807b2"]],
+//     links: [["62c1e52", "da15f3d"], ["68ab4a4", "e5807b2"]],
+//     deepFrom: "e5807b2",
+//     notes: `<p>Task 376 merged earlier. Root <code>staging</code> is one merge ahead of <code>Layer3-9</code>. The jfred folder in your checkout sits at e5807b2, which is also jfred's <code>staging</code>.</p><p>Every jfred commit in this story records jfredToolsPlugin f2905e6, and that records tmux_lib 46fcbc7. Those never change.</p>`,
+//     ledger: { "root staging": "68ab4a4", "root Layer3-9": "62c1e52", "jfred staging": "e5807b2", "jfred checkout": "e5807b2", "jfredToolsPlugin": "f2905e6", "tmux_lib": "46fcbc7" } },
+//   { n: "Frame 2", title: "Spawn tasks 363 and 364 at the same time",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, refs: ["Layer3-9"], kind: "commit" },
+//       { id: "68ab4a4", row: "A", col: 1, refs: ["staging", "task-363", "task-364"], kind: "merge" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, refs: ["staging", "task-363", "task-364"], kind: "merge" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["da15f3d", "e5807b2"]],
+//     links: [["62c1e52", "da15f3d"], ["68ab4a4", "e5807b2"]],
+//     deepFrom: "e5807b2",
+//     notes: `<p>Each task gets its own worktree. Both branches start at the staging tip, in the root, in jfred, and in every deeper submodule too.</p>
+//     <ol><li><code>git worktree add -B task-N &lt;wt&gt; 68ab4a4</code></li>
+//     <li><code>git -C &lt;wt&gt;/jfred checkout -B task-N e5807b2</code></li>
+//     <li>Same for jfredToolsPlugin and tmux_lib, at their own staging tips.</li>
+//     <li>A reset-point ref is written in every repo.</li></ol>`,
+//     ledger: { "root staging": "68ab4a4", "root task-363": "68ab4a4", "root task-364": "68ab4a4", "jfred staging": "e5807b2", "jfred task-363": "e5807b2", "jfred task-364": "e5807b2", "deeper task-363/364": "f2905e6 / 46fcbc7" } },
+//   { n: "Frame 3", title: "Both tasks commit in their own worktrees",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, refs: ["Layer3-9"], kind: "commit" },
+//       { id: "68ab4a4", row: "A", col: 1, refs: ["staging"], kind: "merge" },
+//       { id: "acaff97", row: "B", col: 2, refs: ["task-363"], kind: "task" },
+//       { id: "30963e3′", row: "C", col: 2, refs: ["task-364"], kind: "task" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, refs: ["staging"], kind: "merge" },
+//       { id: "27df06e", row: "B", col: 2, refs: ["task-363"], kind: "task" },
+//       { id: "989b5d8′", row: "C", col: 2, refs: ["task-364"], kind: "task" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["68ab4a4", "acaff97"], ["68ab4a4", "30963e3′"], ["da15f3d", "e5807b2"], ["e5807b2", "27df06e"], ["e5807b2", "989b5d8′"]],
+//     links: [["62c1e52", "da15f3d"], ["68ab4a4", "e5807b2"], ["acaff97", "27df06e"], ["30963e3′", "989b5d8′"]],
+//     deepFrom: "e5807b2",
+//     notes: `<p>Each task edits jfred and commits there. Then it commits in the root, so the root commit records its own jfred commit. Neither task touches the deeper submodules.</p>
+//     <p>The ′ mark means "before rebase". Task 364 gets rewritten later, so these two hashes no longer exist.</p>`,
+//     ledger: { "root task-363": "acaff97 → 27df06e", "root task-364": "30963e3′ → 989b5d8′", "root staging": "68ab4a4 → e5807b2", "jfred staging": "e5807b2" } },
+//   { n: "Frame 4", title: "Task 363 merges first. Deepest repo first, root last",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, refs: ["Layer3-9"], kind: "commit" },
+//       { id: "68ab4a4", row: "A", col: 1, kind: "merge" },
+//       { id: "acaff97", row: "B", col: 2, kind: "task" },
+//       { id: "e84d000", row: "B", col: 3, refs: ["task-363"], kind: "bump", note: "gitlink → 2a78ad3" },
+//       { id: "aa4be66", row: "A", col: 4, refs: ["staging"], kind: "merge", note: "merge task-363" },
+//       { id: "30963e3′", row: "C", col: 2, refs: ["task-364"], kind: "task" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, kind: "merge" },
+//       { id: "27df06e", row: "B", col: 2, refs: ["task-363"], kind: "task" },
+//       { id: "2a78ad3", row: "A", col: 4, refs: ["staging"], kind: "merge", note: "merge task-363" },
+//       { id: "989b5d8′", row: "C", col: 2, refs: ["task-364"], kind: "task" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["68ab4a4", "acaff97"], ["acaff97", "e84d000"], ["68ab4a4", "aa4be66"], ["e84d000", "aa4be66"], ["68ab4a4", "30963e3′"],
+//             ["da15f3d", "e5807b2"], ["e5807b2", "27df06e"], ["e5807b2", "2a78ad3"], ["27df06e", "2a78ad3"], ["e5807b2", "989b5d8′"]],
+//     links: [["62c1e52", "da15f3d"], ["68ab4a4", "e5807b2"], ["acaff97", "27df06e"], ["e84d000", "2a78ad3"], ["aa4be66", "2a78ad3"], ["30963e3′", "989b5d8′"]],
+//     deepFrom: "2a78ad3",
+//     notes: `<ol><li>tmux_lib, then jfredToolsPlugin: task-363 has no new commits. Skipped.</li>
+//     <li>In jfred: <code>git merge --no-ff task-363</code> on <code>staging</code> → 2a78ad3.</li>
+//     <li>In the task worktree, the jfred folder is moved to 2a78ad3. Root commits the gitlink bump e84d000.</li>
+//     <li>Root rebases task-363 on staging. Nothing to do yet.</li>
+//     <li>In root: <code>git merge --no-ff task-363</code> on <code>staging</code> → aa4be66.</li></ol>
+//     <p>Task 364 has not moved. Its root commit still records 989b5d8′, which is not under jfred staging.</p>`,
+//     ledger: { "root staging": "aa4be66 → 2a78ad3", "jfred staging": "2a78ad3", "root task-364": "30963e3′ → 989b5d8′", "root Layer3-9": "62c1e52 → da15f3d" } },
+//   { n: "Frame 5", title: "Task 364 rebases onto staging, then merges",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, refs: ["Layer3-9"], kind: "commit" },
+//       { id: "68ab4a4", row: "A", col: 1, kind: "merge" },
+//       { id: "aa4be66", row: "A", col: 4, kind: "merge", note: "merge task-363" },
+//       { id: "30963e3′", row: "C", col: 2, kind: "ghost" },
+//       { id: "30963e3", row: "C", col: 5, kind: "task", note: "rebased" },
+//       { id: "c243cd1", row: "C", col: 6, refs: ["task-364"], kind: "bump", note: "gitlink → 03295bc" },
+//       { id: "5aa5bd9", row: "A", col: 7, refs: ["staging"], kind: "merge", note: "merge task-364" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, kind: "merge" },
+//       { id: "2a78ad3", row: "A", col: 4, kind: "merge", note: "merge task-363" },
+//       { id: "989b5d8′", row: "C", col: 2, kind: "ghost" },
+//       { id: "989b5d8", row: "C", col: 5, refs: ["task-364"], kind: "task", note: "rebased" },
+//       { id: "03295bc", row: "A", col: 7, refs: ["staging"], kind: "merge", note: "merge task-364" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["68ab4a4", "aa4be66"], ["aa4be66", "30963e3"], ["30963e3", "c243cd1"], ["68ab4a4", "5aa5bd9"], ["c243cd1", "5aa5bd9"],
+//             ["da15f3d", "e5807b2"], ["e5807b2", "2a78ad3"], ["2a78ad3", "989b5d8"], ["2a78ad3", "03295bc"], ["989b5d8", "03295bc"]],
+//     links: [["62c1e52", "da15f3d"], ["68ab4a4", "e5807b2"], ["aa4be66", "2a78ad3"], ["30963e3", "989b5d8"], ["c243cd1", "03295bc"], ["5aa5bd9", "03295bc"]],
+//     deepFrom: "03295bc",
+//     notes: `<ol><li>In jfred: <code>git rebase staging</code> replays task-364 onto 2a78ad3 → 989b5d8.</li>
+//     <li>In root: <code>git rebase staging</code>. The jfred gitlink conflicts. The pipeline runs <code>git add jfred</code>, which records the jfred folder as it is now, then continues → 30963e3.</li>
+//     <li>In jfred: <code>merge --no-ff task-364</code> → 03295bc.</li>
+//     <li>Root gitlink bump c243cd1, then <code>merge --no-ff task-364</code> → 5aa5bd9.</li></ol>
+//     <p>Faded circles are the old pre-rebase commits. They are gone.</p>`,
+//     ledger: { "root staging": "5aa5bd9 → 03295bc", "jfred staging": "03295bc", "root Layer3-9": "62c1e52 → da15f3d", "jfred checkout": "e5807b2" } },
+//   { n: "Frame 6", title: "Meanwhile you commit on Layer3-9 and move jfred yourself",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, kind: "commit" },
+//       { id: "9b96faf", row: "L", col: 2, refs: ["Layer3-9", "HEAD"], kind: "user" },
+//       { id: "68ab4a4", row: "A", col: 1, kind: "merge" },
+//       { id: "aa4be66", row: "A", col: 4, kind: "merge" },
+//       { id: "5aa5bd9", row: "A", col: 7, refs: ["staging"], kind: "merge", note: "merge task-364" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, kind: "merge" },
+//       { id: "63f4fc2", row: "L", col: 2, refs: ["Layer3-9", "checkout"], kind: "user" },
+//       { id: "2a78ad3", row: "A", col: 4, kind: "merge" },
+//       { id: "03295bc", row: "A", col: 7, refs: ["staging"], kind: "merge", note: "merge task-364" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["62c1e52", "9b96faf"], ["68ab4a4", "aa4be66"], ["aa4be66", "5aa5bd9"],
+//             ["da15f3d", "e5807b2"], ["e5807b2", "63f4fc2"], ["e5807b2", "2a78ad3"], ["2a78ad3", "03295bc"]],
+//     links: [["62c1e52", "da15f3d"], ["9b96faf", "63f4fc2"], ["68ab4a4", "e5807b2"], ["aa4be66", "2a78ad3"], ["5aa5bd9", "03295bc"]],
+//     deepFrom: "63f4fc2",
+//     notes: `<p>You commit 63f4fc2 in jfred on top of e5807b2. Then you commit 9b96faf on Layer3-9. It records jfred = 63f4fc2. Your jfred commit still records the same jfredToolsPlugin f2905e6.</p>
+//     <p>Now root and jfred have both <b>diverged</b>. Neither <code>staging</code> nor <code>HEAD</code> contains the other.</p>`,
+//     ledger: { "root HEAD (Layer3-9)": "9b96faf → 63f4fc2", "root staging": "5aa5bd9 → 03295bc", "jfred HEAD (checkout)": "63f4fc2", "jfred staging": "03295bc" } },
+//   { n: "Frame 7", title: "New task 344. CREATE_WORKTREE. This is where it ended",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, kind: "commit" },
+//       { id: "9b96faf", row: "L", col: 2, refs: ["Layer3-9", "HEAD"], kind: "user" },
+//       { id: "68ab4a4", row: "A", col: 1, kind: "merge" },
+//       { id: "aa4be66", row: "A", col: 4, kind: "merge" },
+//       { id: "5aa5bd9", row: "A", col: 7, refs: ["staging"], kind: "merge" },
+//       { id: "staging-merge-S6DOCo", row: "A", col: 8, kind: "fail", note: "temp worktree, jfred folder EMPTY" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, kind: "merge" },
+//       { id: "63f4fc2", row: "L", col: 2, refs: ["Layer3-9", "checkout"], kind: "user" },
+//       { id: "2a78ad3", row: "A", col: 4, kind: "merge" },
+//       { id: "03295bc", row: "A", col: 7, kind: "merge" },
+//       { id: "f7ba7b1", row: "A", col: 8, refs: ["staging"], kind: "merge", note: "merged fine" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["62c1e52", "9b96faf"], ["68ab4a4", "aa4be66"], ["aa4be66", "5aa5bd9"], ["5aa5bd9", "staging-merge-S6DOCo"], ["9b96faf", "staging-merge-S6DOCo"],
+//             ["da15f3d", "e5807b2"], ["e5807b2", "63f4fc2"], ["e5807b2", "2a78ad3"], ["2a78ad3", "03295bc"], ["03295bc", "f7ba7b1"], ["63f4fc2", "f7ba7b1"]],
+//     links: [["62c1e52", "da15f3d"], ["9b96faf", "63f4fc2"], ["68ab4a4", "e5807b2"], ["aa4be66", "2a78ad3"], ["5aa5bd9", "03295bc"]],
+//     badLinks: [["staging-merge-S6DOCo", "03295bc", "ours"], ["staging-merge-S6DOCo", "63f4fc2", "theirs"]],
+//     deepFrom: "f7ba7b1",
+//     notes: `<p>Spawn runs <code>resolveOrCreateStagingTipEverywhere</code>. Deepest repo first, root last.</p>
+//     <ol><li><span class="ok">tmux_lib, jfredToolsPlugin:</span> staging equals HEAD. Nothing to do.</li>
+//     <li><span class="ok">jfred:</span> diverged. Temp worktree at 03295bc, <code>merge 63f4fc2</code> → f7ba7b1. jfred <code>staging</code> = f7ba7b1. Works: both sides record the same f2905e6, so the gitlink is not even a conflict.</li>
+//     <li><span class="bad">root:</span> diverged. Temp worktree at 5aa5bd9. Its jfred folder is empty. <code>merge 9b96faf</code> hits the gitlink: ours 03295bc, theirs 63f4fc2. Git says <code>Failed to merge submodule jfred (not checked out)</code> and <code>CONFLICT (submodule)</code>. The command throws.</li></ol>
+//     <p><b>End state.</b> Root staging still 5aa5bd9 → 03295bc. jfred staging is f7ba7b1, but no root commit points at it. The temp worktree is left on disk. Six of them now. The run is dead at CREATE_WORKTREE. Four runs, same death.</p>
+//     <p>Later, by hand, the peer session committed 166f0a5 on root staging with jfred = f7ba7b1. The next run still fails the same way, because the root temp merge always redoes this step.</p>`,
+//     ledger: { "root staging": "5aa5bd9 → 03295bc", "root HEAD (Layer3-9)": "9b96faf → 63f4fc2", "jfred staging": "f7ba7b1 (orphan, nothing points here)", "jfred checkout": "63f4fc2", "temp worktrees left": "6", "task-344 worktree": "never created" } },
+//   { n: "Frame 8", title: "The state it should end in. You fill this in",
+//     root: [
+//       { id: "62c1e52", row: "A", col: 0, kind: "commit" },
+//       { id: "9b96faf", row: "L", col: 2, refs: ["Layer3-9"], kind: "user" },
+//       { id: "68ab4a4", row: "A", col: 1, kind: "merge" },
+//       { id: "aa4be66", row: "A", col: 4, kind: "merge" },
+//       { id: "5aa5bd9", row: "A", col: 7, kind: "merge" },
+//       { id: "root ?", row: "A", col: 9, refs: ["staging ?"], kind: "ghost", note: "you decide" },
+//     ],
+//     sub: [
+//       { id: "da15f3d", row: "A", col: 0, kind: "commit" },
+//       { id: "e5807b2", row: "A", col: 1, kind: "merge" },
+//       { id: "63f4fc2", row: "L", col: 2, refs: ["Layer3-9"], kind: "user" },
+//       { id: "2a78ad3", row: "A", col: 4, kind: "merge" },
+//       { id: "03295bc", row: "A", col: 7, kind: "merge" },
+//       { id: "f7ba7b1", row: "A", col: 8, kind: "merge" },
+//       { id: "jfred ?", row: "A", col: 9, refs: ["staging ?"], kind: "ghost", note: "you decide" },
+//     ],
+//     edges: [["62c1e52", "68ab4a4"], ["62c1e52", "9b96faf"], ["68ab4a4", "aa4be66"], ["aa4be66", "5aa5bd9"], ["5aa5bd9", "root ?"], ["9b96faf", "root ?"],
+//             ["da15f3d", "e5807b2"], ["e5807b2", "63f4fc2"], ["e5807b2", "2a78ad3"], ["2a78ad3", "03295bc"], ["03295bc", "f7ba7b1"], ["63f4fc2", "f7ba7b1"], ["f7ba7b1", "jfred ?"]],
+//     links: [["62c1e52", "da15f3d"], ["9b96faf", "63f4fc2"], ["68ab4a4", "e5807b2"], ["aa4be66", "2a78ad3"], ["5aa5bd9", "03295bc"], ["root ?", "jfred ?"]],
+//     deepFrom: "jfred ?",
+//     notes: `<div class="fill">
+//       <p style="margin-top:0">After task 344 spawns, tell me where each ref must point:</p>
+//       <p class="mono">root staging → <span class="blank"></span><br>its jfred gitlink → <span class="blank"></span></p>
+//       <p class="mono">jfred staging → <span class="blank"></span><br>root Layer3-9 → <span class="blank"></span><br>jfred checkout → <span class="blank"></span></p>
+//       <p style="margin-bottom:0">Candidates on disk today. Root: 5aa5bd9, 9b96faf, 166f0a5 (hand-made, jfred = f7ba7b1). jfred: 03295bc, 63f4fc2, f7ba7b1 (= merge of those two).</p>
+//     </div>`,
+//     ledger: { "root staging": "?", "root Layer3-9": "9b96faf (unchanged?)", "jfred staging": "?", "jfredToolsPlugin": "f2905e6", "tmux_lib": "46fcbc7" } },
+//   ];
+//   function allNodes(f) {
+//     return [
+//       ...f.root.map(n => ({ ...n, lane: "root" })),
+//       ...f.sub.map(n => ({ ...n, lane: "sub" })),
+//       ...STATIC.plug.map(n => ({ ...n, lane: "plug" })),
+//       ...STATIC.tmux.map(n => ({ ...n, lane: "tmux" })),
+//     ];
+//   }
+//   const pos = (n) => ({ x: COL(n.col), y: LANES[n.lane].rows[n.row] });
+//   const color = (n) => ({ user: "var(--user)", fail: "var(--bad)", ghost: "var(--ghost)", task: "var(--task)", bump: "var(--task)" })[n.kind] || LANES[n.lane].color;
+//   function render(i) {
+//     const f = frames[i - 1];
+//     const all = allNodes(f);
+//     const byId = (id) => all.find(n => n.id === id);
+//     let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${f.title}">${ARROW}`;
+//     for (const L of Object.values(LANES)) {
+//       s += `<rect x="0" y="${L.top}" width="${W}" height="${L.h}" rx="4" fill="${L.soft}" opacity=".45"/>
+//             <text x="12" y="${L.top + 18}" font-size="12" fill="${L.color}" font-weight="500">${L.label}</text>`;
+//     }
+//     for (const [a, b] of f.edges) {
+//       const nb = byId(b);
+//       s += `<path d="${edgePath(pos(byId(a)), pos(nb))}" fill="none" stroke="${color(nb)}" stroke-width="2" opacity="${nb.kind === "ghost" ? .35 : .9}"/>`;
+//     }
+//     for (const [a, b] of f.links) s += linkLine(pos(byId(a)), pos(byId(b)), "var(--muted)", 'opacity=".8"');
+//     const deepTop = byId(f.deepFrom), plug = byId("f2905e6"), tmux = byId("46fcbc7");
+//     s += linkLine(pos(deepTop), pos(plug), "var(--deep)", 'opacity=".8"') + linkLine(pos(plug), pos(tmux), "var(--deep)", 'opacity=".8"');
+//     s += `<text x="${(pos(deepTop).x + pos(plug).x) / 2 + 8}" y="${(pos(deepTop).y + pos(plug).y) / 2}" font-size="10.5" fill="var(--deep)">every jfred commit → f2905e6</text>`;
+//     for (const [a, b, lbl] of (f.badLinks || [])) {
+//       const A = pos(byId(a)), B = pos(byId(b));
+//       s += linkLine(A, B, "var(--bad)", 'stroke-width="1.6" stroke-dasharray="3 5"');
+//       s += `<text x="${(A.x + B.x) / 2 + 6}" y="${(A.y + B.y) / 2}" font-size="11" fill="var(--bad)">${lbl}</text>`;
+//     }
+//     for (const n of all) {
+//       const { x, y } = pos(n); const c = color(n);
+//       if (n.kind === "merge") s += `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" transform="rotate(45 ${x} ${y})" fill="var(--panel)" stroke="${c}" stroke-width="2.5"/>`;
+//       else if (n.kind === "bump") s += `<circle cx="${x}" cy="${y}" r="8" fill="var(--panel)" stroke="${c}" stroke-width="2.5"/>`;
+//       else if (n.kind === "fail") s += `<rect x="${x - 8}" y="${y - 8}" width="16" height="16" transform="rotate(45 ${x} ${y})" fill="var(--bad-soft)" stroke="${c}" stroke-width="2.5" stroke-dasharray="3 2"/><path d="M${x - 5},${y - 5} L${x + 5},${y + 5} M${x + 5},${y - 5} L${x - 5},${y + 5}" stroke="${c}" stroke-width="2.5"/>`;
+//       else s += `<circle cx="${x}" cy="${y}" r="8" fill="${n.kind === "ghost" ? "var(--panel)" : c}" stroke="${c}" stroke-width="2.5" ${n.kind === "task" ? 'stroke-dasharray="3 2" fill="var(--panel)"' : ""} ${n.kind === "ghost" ? 'stroke-dasharray="2 3"' : ""} opacity="${n.kind === "ghost" ? .6 : 1}"/>`;
+//       s += `<text x="${x}" y="${y + 24}" font-size="11.5" text-anchor="middle" fill="${n.kind === "ghost" ? "var(--ghost)" : "var(--ink)"}" font-weight="500">${n.id.length > 9 ? n.id.slice(0, 13) + "…" : n.id}</text>`;
+//       if (n.note) s += `<text x="${x}" y="${y + 37}" font-size="10" text-anchor="middle" fill="${n.kind === "fail" ? "var(--bad)" : "var(--muted)"}">${n.note}</text>`;
+//       (n.refs || []).forEach((r, k) => { s += pill(x, y, r, k, c); });
+//     }
+//     return s + `</svg>`;
+//   }
+//   return {
+//     intro: `<p>Real commits from RevEng on branch <span class="mono">Layer3-9</span>. Tasks 363 and 364 run at the same time. Task 363 merges first. Then a new run dies at CREATE_WORKTREE. Drag the slider, or press ← →, to move through time. Frame 8 is blank for the state you want.</p>
+//     <p>Each lane is one git repository. A dashed arrow from a commit down to the next lane is the gitlink: the exact submodule commit that commit records. Only the root and jfred change in this story. The two deeper lanes never move.</p>
+//     <p><b>Known gaps in this view, to fix after the two simpler shapes are agreed:</b> the deep lanes are not aligned under the jfred checkout; the deep lanes do not show their task-N labels; frames are not cumulative.</p>`,
+//     legend: `<span><i class="dot" style="color:var(--root)"></i> root commit</span>
+//     <span><i class="dot" style="color:var(--sub)"></i> jfred commit</span>
+//     <span><i class="dot" style="color:var(--deep)"></i> deeper submodule commit</span>
+//     <span><i class="dot" style="color:var(--task);border-style:dashed"></i> task-branch commit</span>
+//     <span><i class="dot" style="color:var(--user)"></i> your own commit on Layer3-9</span>
+//     <span><i class="dot" style="color:var(--bad)"></i> merge that failed</span>
+//     <span class="mono" style="font-size:12px">◆ merge commit &nbsp; ○ gitlink bump commit &nbsp; ⋯ gitlink arrow</span>`,
+//     foot: `Also present, also never moving: <span class="mono">tmux_lib 46fcbc7</span>, <span class="mono">scenarios d45a7df</span>, <span class="mono">jfred/scenarios d45a7df</span>, <span class="mono">jfred/external/tmux_lib 708aeb8</span>, <span class="mono">jfred/external/claude_plugin_lib 17e5991</span>, <span class="mono">jfred/jfredToolsPlugin/external/claude_plugin_lib 17e5991</span>.`,
+//     count: frames.length,
+//     num: (i) => frames[i - 1].n,
+//     title: (i) => frames[i - 1].title,
+//     notes: (i) => frames[i - 1].notes,
+//     ledger: (i) => frames[i - 1].ledger,
+//     render,
+//   };
+// })();
+
+// ---------------------------------------------------------------- one submodule
+const one = eventsScenario({
+  colStep: 104,
+  lanes: [
+    { key: "P", label: "PARENT REPO", color: "var(--root)", soft: "var(--root-soft)", rows: ["main", "staging", "task-A", "task-B"] },
+    { key: "S", label: "SUBMODULE · sub", color: "var(--sub)", soft: "var(--sub-soft)", rows: ["checkout", "staging", "task-A", "task-B"] },
+  ],
+  events: [
+    { type: "commit", id: "init:S:code", lane: "S", branch: "checkout", what: "init", row: "A", kind: "commit", parents: [], refs: ["checkout"], note: "start", text: "Start. The sub folder is checked out at init:S:code." },
+    { type: "commit", id: "init:P:code", lane: "P", branch: "main", what: "init", row: "A", kind: "commit", parents: [], refs: ["main", "HEAD"], link: "init:S:code", note: "start", text: "Start. main is at init:P:code, which records sub = init:S:code. No staging in either repo." },
+    { type: "ref", lane: "S", branch: "checkout", what: "create", arg: "staging", set: { S: { staging: "init:S:code" } }, text: "T_A spawn, deepest repo first: in sub, git branch staging." },
+    { type: "ref", lane: "P", branch: "main", what: "create", arg: "staging", set: { P: { staging: "init:P:code" } }, text: "T_A spawn: in parent, git branch staging." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-A", set: { P: { "task-A": "init:P:code" } }, text: "T_A spawn: git worktree add -B task-A wt-A staging. Sub folder cloned from your checkout." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-A", set: { S: { "task-A": "init:S:code" } }, text: "T_A spawn: git -C wt-A/sub checkout -B task-A staging. Reset-point refs written in both repos." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-B", set: { P: { "task-B": "init:P:code" } }, text: "T_B spawn: git worktree add -B task-B wt-B staging." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-B", set: { S: { "task-B": "init:S:code" } }, text: "T_B spawn: git -C wt-B/sub checkout -B task-B staging. T_B gets a sub branch even though it will never commit there." },
+    { type: "commit", id: "T_A:S:code", lane: "S", branch: "task-A", what: "code", row: "B", kind: "task", parents: ["init:S:code"], refs: ["task-A"], text: "T_A commits its code change inside wt-A/sub." },
+    { type: "commit", id: "T_A:P:upSub", lane: "P", branch: "task-A", what: "upSub", arg: "T_A:S:code", row: "B", kind: "upSub", parents: ["init:P:code"], refs: ["task-A"], link: "T_A:S:code", text: "T_A commits in wt-A parent. It records sub = T_A:S:code. The sub commit had to exist first." },
+    { type: "commit", id: "T_B:P:code", lane: "P", branch: "task-B", what: "code", row: "C", kind: "task", parents: ["init:P:code"], refs: ["task-B"], link: "init:S:code", text: "T_B commits a parent-only code change in wt-B. It still records sub = init:S:code." },
+    { type: "commit", id: "T_A:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:S:code", "T_A:S:code"], refs: ["staging"], text: "T_A merge, sub layer: git merge --no-ff task-A on sub staging." },
+    { type: "commit", id: "T_A:P:upSub2", lane: "P", branch: "task-A", what: "upSub", arg: "T_A:S:mrg", row: "B", kind: "upSub", parents: ["T_A:P:upSub"], refs: ["task-A"], link: "T_A:S:mrg", text: "T_A merge, parent layer: wt-A/sub is moved to T_A:S:mrg, then git add sub, git commit. The gitlink bump." },
+    { type: "ref", lane: "P", branch: "task-A", what: "noop", arg: "staging", text: "T_A merge, parent layer: git rebase staging in wt-A. Parent staging is still the start, nothing to do." },
+    { type: "commit", id: "T_A:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:P:code", "T_A:P:upSub2"], refs: ["staging"], link: "T_A:S:mrg", text: "T_A merge, parent layer: git merge --no-ff task-A on parent staging. It records sub = T_A:S:mrg." },
+    { type: "ref", lane: "S", branch: "task-A", what: "delete", arg: "task-A", del: { S: ["task-A"] }, text: "T_A cleanup: task-A deleted in sub." },
+    { type: "ref", lane: "P", branch: "task-A", what: "delete", arg: "task-A", del: { P: ["task-A"] }, text: "T_A cleanup: wt-A removed, task-A deleted in parent." },
+    { type: "ref", lane: "S", branch: "task-B", what: "move", arg: "T_A:S:mrg", set: { S: { "task-B": "T_A:S:mrg" } }, text: "T_B rebase, sub layer: git rebase staging in wt-B/sub. task-B has no commits of its own, so it just moves to T_A:S:mrg." },
+    { type: "commit", id: "T_B:P:code′", lane: "P", branch: "task-B", what: "rebase", arg: "staging", row: "C", kind: "task", parents: ["T_A:P:mrg"], refs: ["task-B"], link: "T_A:S:mrg", note: "replayed", text: "T_B rebase, parent layer: git rebase staging in wt-B. T_B:P:code never changed the gitlink, so no conflict. The replayed commit inherits sub = T_A:S:mrg." },
+    { type: "ref", lane: "S", branch: "staging", what: "skip", text: "T_B merge, sub layer: task-B is at sub staging already. Nothing to merge. Skipped. No upSub commit needed." },
+    { type: "commit", id: "T_B:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-B", row: "A", kind: "mrg", parents: ["T_A:P:mrg", "T_B:P:code′"], refs: ["staging"], link: "T_A:S:mrg", text: "T_B merge, parent layer: git merge --no-ff task-B on parent staging." },
+    { type: "ref", lane: "S", branch: "task-B", what: "delete", arg: "task-B", del: { S: ["task-B"] }, text: "T_B cleanup: task-B deleted in sub." },
+    { type: "ref", lane: "P", branch: "task-B", what: "delete", arg: "task-B", del: { P: ["task-B"] }, text: "T_B cleanup: wt-B removed, task-B deleted in parent." },
+    { type: "commit", id: "user:S:code", lane: "S", branch: "checkout", what: "code", row: "L", kind: "user", parents: ["init:S:code"], refs: ["checkout"], text: "You commit inside the sub folder of your own checkout." },
+    { type: "commit", id: "user:P:code", lane: "P", branch: "main", what: "upSub", arg: "user:S:code", row: "L", kind: "user", parents: ["init:P:code"], refs: ["main", "HEAD"], link: "user:S:code", text: "You commit on main. It records sub = user:S:code. Both repos have diverged from staging now." },
+    { type: "commit", id: "T_C:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "checkout", row: "A", kind: "mrg", parents: ["T_A:S:mrg", "user:S:code"], refs: ["staging"], text: "T_C spawn, sub first: sub staging and sub HEAD diverged. Temp worktree merge works. sub staging = T_C:S:mrg." },
+    // { type: "commit", id: "T_C:P:FAIL", lane: "P", branch: "staging", what: "fail", arg: "main", row: "A", kind: "fail", parents: ["T_B:P:mrg", "user:P:code"], note: "temp worktree, sub folder EMPTY", bad: [["T_C:P:FAIL", "T_A:S:mrg", "ours"], ["T_C:P:FAIL", "user:S:code", "theirs"]], text: "T_C spawn, parent: staging and HEAD diverged. Temp worktree at staging, sub folder empty. git merge HEAD hits the gitlink: ours T_A:S:mrg, theirs user:S:code. Git cannot look inside sub. CONFLICT (submodule). The command throws. Parent staging does not move. Sub staging is T_C:S:mrg and nothing records it.",
+    //   detail: `<div class="fill"><p style="margin-top:0">This is where it ends today. Tell me where each ref must point after T_C spawns:</p>
+    //   <p class="mono">P staging → <span class="blank"></span><br>its sub gitlink → <span class="blank"></span><br>S staging → <span class="blank"></span></p></div>` },
+    { type: "ref", lane: "P", branch: "staging", what: "fail", arg: "main", text: "T_C spawn, parent: staging and HEAD diverged. Temp worktree at staging, sub folder empty. git merge HEAD stops at the sub pointer: ours T_A:S:mrg, theirs user:S:code. Git cannot look inside the empty folder, so it cannot pick." },
+    { type: "commit", id: "T_C:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "main", row: "A", kind: "mrg", parents: ["T_B:P:mrg", "user:P:code"], refs: ["staging"], link: "T_C:S:mrg", note: "sub → T_C:S:mrg", text: "The fix: the code writes sub = T_C:S:mrg, the sub staging tip from step 26, then finishes the commit. Parent staging moves. It records the commit that holds both sides." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-C", set: { P: { "task-C": "T_C:P:mrg" } }, text: "T_C spawn: git worktree add -B task-C wt-C staging." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-C", set: { S: { "task-C": "T_C:S:mrg" } }, text: "T_C spawn: git -C wt-C/sub checkout -B task-C staging. Both repos line up: parent staging records sub staging." },
+  ],
+  intro: `<p>One git repository with one submodule, <span class="mono">sub</span>. Your branch is <span class="mono">main</span>. Task A edits the submodule. Task B edits parent files only. Task A merges first. Drag the slider, or press ← →, to step through the git events one by one.</p>
+  <p>Commit names are <span class="mono">&lt;Task&gt;:&lt;Where&gt;:&lt;What&gt;</span>. Where is P for parent or S for submodule. What is code, upSub (a parent commit whose job is to record a new sub commit), or mrg. A dashed arrow from a parent commit down to a sub commit is the gitlink it records. Columns are time order, so a sub commit always sits left of the parent commit that records it.</p>`,
+  legend: `<span><i class="dot" style="color:var(--root)"></i> parent commit</span>
+  <span><i class="dot" style="color:var(--sub)"></i> sub commit</span>
+  <span><i class="dot" style="color:var(--task);border-style:dashed"></i> task-branch commit</span>
+  <span><i class="dot" style="color:var(--user)"></i> your own commit</span>
+  <span><i class="dot" style="color:var(--ghost);border-style:dotted"></i> unreachable, after a rebase</span>
+  <span><i class="dot" style="color:var(--bad)"></i> merge that failed</span>
+  <span class="mono" style="font-size:12px">◆ mrg &nbsp; ○ upSub &nbsp; ● code &nbsp; ⋯ gitlink &nbsp; ring = this event's commit</span>`,
+  foot: ``,
+});
+// ---------------------------------------------------------------- nested submodules
+const nested = eventsScenario({
+  colStep: 104,
+  lanes: [
+    { key: "P", label: "PARENT REPO", color: "var(--root)", soft: "var(--root-soft)", rows: ["main", "staging", "task-A", "task-B"] },
+    { key: "S", label: "SUBMODULE · sub", color: "var(--sub)", soft: "var(--sub-soft)", rows: ["checkout", "staging", "task-A", "task-B"] },
+    { key: "SS", label: "DEEP SUBMODULE · sub/deep", color: "var(--deep)", soft: "var(--deep-soft)", rows: ["checkout", "staging", "task-A", "task-B"] },
+  ],
+  events: [
+    { type: "commit", id: "init:SS:code", lane: "SS", branch: "checkout", what: "init", row: "A", kind: "commit", parents: [], refs: ["checkout"], note: "start", text: "Start. The deep folder is checked out at init:SS:code." },
+    { type: "commit", id: "init:S:code", lane: "S", branch: "checkout", what: "init", row: "A", kind: "commit", parents: [], refs: ["checkout"], link: "init:SS:code", note: "start", text: "Start. The sub folder is checked out at init:S:code, which records deep = init:SS:code." },
+    { type: "commit", id: "init:P:code", lane: "P", branch: "main", what: "init", row: "A", kind: "commit", parents: [], refs: ["main", "HEAD"], link: "init:S:code", note: "start", text: "Start. main is at init:P:code, which records sub = init:S:code. No staging anywhere yet." },
+    { type: "ref", lane: "SS", branch: "checkout", what: "create", arg: "staging", set: { SS: { staging: "init:SS:code" } }, text: "T_A spawn, deepest repo first: in the deep repo, git branch staging." },
+    { type: "ref", lane: "S", branch: "checkout", what: "create", arg: "staging", set: { S: { staging: "init:S:code" } }, text: "T_A spawn: in sub, git branch staging." },
+    { type: "ref", lane: "P", branch: "main", what: "create", arg: "staging", set: { P: { staging: "init:P:code" } }, text: "T_A spawn: in parent, git branch staging." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-A", set: { P: { "task-A": "init:P:code" } }, text: "git worktree add -B task-A wt-A staging; sub and deep folders cloned from your checkout." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-A", set: { S: { "task-A": "init:S:code" } }, text: "T_A spawn: git -C wt-A/sub checkout -B task-A staging." },
+    { type: "ref", lane: "SS", branch: "staging", what: "create", arg: "task-A", set: { SS: { "task-A": "init:SS:code" } }, text: "T_A spawn: git -C wt-A/sub/deep checkout -B task-A staging. Reset-point refs written in all three repos." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-B", set: { P: { "task-B": "init:P:code" } }, text: "T_B spawn: git worktree add -B task-B wt-B staging." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-B", set: { S: { "task-B": "init:S:code" } }, text: "T_B spawn: git -C wt-B/sub checkout -B task-B staging." },
+    { type: "ref", lane: "SS", branch: "staging", what: "create", arg: "task-B", set: { SS: { "task-B": "init:SS:code" } }, text: "T_B spawn: git -C wt-B/sub/deep checkout -B task-B staging. T_B gets a branch in every repo even though it only commits in the parent." },
+    { type: "commit", id: "T_A:SS:code", lane: "SS", branch: "task-A", what: "code", row: "B", kind: "task", parents: ["init:SS:code"], refs: ["task-A"], text: "T_A commits its code change inside wt-A/sub/deep." },
+    { type: "commit", id: "T_A:S:upSub", lane: "S", branch: "task-A", what: "upSub", arg: "T_A:SS:code", row: "B", kind: "upSub", parents: ["init:S:code"], refs: ["task-A"], link: "T_A:SS:code", text: "T_A commits in wt-A/sub. It records deep = T_A:SS:code. The deep commit had to exist first." },
+    { type: "commit", id: "T_A:P:upSub", lane: "P", branch: "task-A", what: "upSub", arg: "T_A:S:upSub", row: "B", kind: "upSub", parents: ["init:P:code"], refs: ["task-A"], link: "T_A:S:upSub", text: "T_A commits in wt-A parent. It records sub = T_A:S:upSub. Two pointer commits for one code change." },
+    { type: "commit", id: "T_B:P:code", lane: "P", branch: "task-B", what: "code", row: "C", kind: "task", parents: ["init:P:code"], refs: ["task-B"], link: "init:S:code", text: "T_B commits a parent-only code change. It still records sub = init:S:code." },
+    { type: "commit", id: "T_A:SS:mrg", lane: "SS", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:SS:code", "T_A:SS:code"], refs: ["staging"], text: "T_A merge, deep layer first: git merge --no-ff task-A on deep staging." },
+    { type: "commit", id: "T_A:S:upSub2", lane: "S", branch: "task-A", what: "upSub", arg: "T_A:SS:mrg", row: "B", kind: "upSub", parents: ["T_A:S:upSub"], refs: ["task-A"], link: "T_A:SS:mrg", text: "T_A merge, sub layer: wt-A/sub/deep moved to T_A:SS:mrg, git add deep, git commit. The gitlink bump." },
+    { type: "ref", lane: "S", branch: "task-A", what: "noop", arg: "staging", text: "T_A merge, sub layer: git rebase staging in wt-A/sub. Sub staging is still the start, nothing to do." },
+    { type: "commit", id: "T_A:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:S:code", "T_A:S:upSub2"], refs: ["staging"], link: "T_A:SS:mrg", text: "T_A merge, sub layer: git merge --no-ff task-A on sub staging." },
+    { type: "commit", id: "T_A:P:upSub2", lane: "P", branch: "task-A", what: "upSub", arg: "T_A:S:mrg", row: "B", kind: "upSub", parents: ["T_A:P:upSub"], refs: ["task-A"], link: "T_A:S:mrg", text: "T_A merge, parent layer: wt-A/sub moved to T_A:S:mrg, git add sub, git commit." },
+    { type: "ref", lane: "P", branch: "task-A", what: "noop", arg: "staging", text: "T_A merge, parent layer: git rebase staging in wt-A. Parent staging is still the start, nothing to do." },
+    { type: "commit", id: "T_A:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-A", row: "A", kind: "mrg", parents: ["init:P:code", "T_A:P:upSub2"], refs: ["staging"], link: "T_A:S:mrg", text: "T_A merge, parent layer: git merge --no-ff task-A on parent staging. It records sub = T_A:S:mrg." },
+    { type: "ref", lane: "SS", branch: "task-A", what: "delete", arg: "task-A", del: { SS: ["task-A"] }, text: "T_A cleanup: task-A deleted in the deep repo." },
+    { type: "ref", lane: "S", branch: "task-A", what: "delete", arg: "task-A", del: { S: ["task-A"] }, text: "T_A cleanup: task-A deleted in sub." },
+    { type: "ref", lane: "P", branch: "task-A", what: "delete", arg: "task-A", del: { P: ["task-A"] }, text: "T_A cleanup: wt-A removed, task-A deleted in parent." },
+    { type: "ref", lane: "SS", branch: "task-B", what: "move", arg: "T_A:SS:mrg", set: { SS: { "task-B": "T_A:SS:mrg" } }, text: "T_B rebase, deep layer: no own commits, so task-B just moves." },
+    { type: "ref", lane: "S", branch: "task-B", what: "move", arg: "T_A:S:mrg", set: { S: { "task-B": "T_A:S:mrg" } }, text: "T_B rebase, sub layer: git rebase staging in wt-B/sub. task-B has no commits of its own, so it just moves to T_A:S:mrg." },
+    { type: "commit", id: "T_B:P:code′", lane: "P", branch: "task-B", what: "rebase", arg: "staging", row: "C", kind: "task", parents: ["T_A:P:mrg"], refs: ["task-B"], link: "T_A:S:mrg", note: "replayed", text: "T_B rebase, parent layer. T_B:P:code never changed the gitlink, so no conflict. The old commit is unreachable now." },
+    { type: "ref", lane: "SS", branch: "staging", what: "skip", text: "T_B merge, deep layer: task-B is at deep staging already. Skipped. No upSub needed." },
+    { type: "ref", lane: "S", branch: "staging", what: "skip", text: "T_B merge, sub layer: task-B is at sub staging already. Nothing to merge. Skipped." },
+    { type: "commit", id: "T_B:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-B", row: "A", kind: "mrg", parents: ["T_A:P:mrg", "T_B:P:code′"], refs: ["staging"], link: "T_A:S:mrg", text: "T_B merge, parent layer: git merge --no-ff task-B on parent staging." },
+    { type: "ref", lane: "SS", branch: "task-B", what: "delete", arg: "task-B", del: { SS: ["task-B"] }, text: "T_B cleanup: task-B deleted in the deep repo." },
+    { type: "ref", lane: "S", branch: "task-B", what: "delete", arg: "task-B", del: { S: ["task-B"] }, text: "T_B cleanup: task-B deleted in sub." },
+    { type: "ref", lane: "P", branch: "task-B", what: "delete", arg: "task-B", del: { P: ["task-B"] }, text: "T_B cleanup: wt-B removed, task-B deleted in parent." },
+    { type: "commit", id: "user:SS:code", lane: "SS", branch: "checkout", what: "code", row: "L", kind: "user", parents: ["init:SS:code"], refs: ["checkout"], text: "You commit inside the deep folder of your own checkout." },
+    { type: "commit", id: "user:S:code", lane: "S", branch: "checkout", what: "upSub", arg: "user:SS:code", row: "L", kind: "user", parents: ["init:S:code"], refs: ["checkout"], link: "user:SS:code", text: "You commit in the sub folder. It records deep = user:SS:code." },
+    { type: "commit", id: "user:P:code", lane: "P", branch: "main", what: "upSub", arg: "user:S:code", row: "L", kind: "user", parents: ["init:P:code"], refs: ["main", "HEAD"], link: "user:S:code", text: "You commit on main. It records sub = user:S:code. All three repos have diverged from staging now." },
+    { type: "commit", id: "T_C:SS:mrg", lane: "SS", branch: "staging", what: "mrg", arg: "checkout", row: "A", kind: "mrg", parents: ["T_A:SS:mrg", "user:SS:code"], refs: ["staging"], text: "T_C spawn, deep first: deep staging and deep HEAD diverged. Temp worktree merge works. No submodule inside deep." },
+    { type: "commit", id: "T_C:S:FAIL", lane: "S", branch: "staging", what: "fail", arg: "checkout", row: "A", kind: "fail", parents: ["T_A:S:mrg", "user:S:code"], note: "temp worktree, deep folder EMPTY", bad: [["T_C:S:FAIL", "T_A:SS:mrg", "ours"], ["T_C:S:FAIL", "user:SS:code", "theirs"]], text: "T_C spawn, sub layer: sub staging and sub HEAD diverged. Temp worktree at sub staging, deep folder empty. git merge HEAD hits the deep gitlink: ours T_A:SS:mrg, theirs user:SS:code. CONFLICT (submodule). The command throws. Sub staging does not move. The parent layer never runs. Deep staging is T_C:SS:mrg and nothing records it.",
+      detail: `<div class="fill"><p style="margin-top:0">This is where it ends today. Tell me where each ref must point after T_C spawns:</p>
+      <p class="mono">SS staging → <span class="blank"></span><br>S staging → <span class="blank"></span><br>its deep gitlink → <span class="blank"></span></p>
+      <p class="mono">P staging → <span class="blank"></span><br>its sub gitlink → <span class="blank"></span></p></div>` },
+  ],
+  intro: `<p>One repository, one submodule <span class="mono">sub</span>, and inside it one deeper submodule <span class="mono">sub/deep</span>. Task A edits only the deep repo. Task B edits parent files only. Task A merges first. Drag the slider, or press ← →, to step through the git events one by one.</p>
+  <p>Commit names are <span class="mono">&lt;Task&gt;:&lt;Where&gt;:&lt;What&gt;</span>. Where is P for parent, S for submodule, or SS for the submodule inside the submodule. One code change deep down needs one upSub commit in each layer above it. Spawn, merge, rebase, and cleanup always go deepest first.</p>`,
+  legend: `<span><i class="dot" style="color:var(--root)"></i> parent commit</span>
+  <span><i class="dot" style="color:var(--sub)"></i> sub commit</span>
+  <span><i class="dot" style="color:var(--deep)"></i> deep sub commit</span>
+  <span><i class="dot" style="color:var(--task);border-style:dashed"></i> task-branch commit</span>
+  <span><i class="dot" style="color:var(--user)"></i> your own commit</span>
+  <span><i class="dot" style="color:var(--ghost);border-style:dotted"></i> unreachable, after a rebase</span>
+  <span><i class="dot" style="color:var(--bad)"></i> merge that failed</span>
+  <span class="mono" style="font-size:12px">◆ mrg &nbsp; ○ upSub &nbsp; ● code &nbsp; ⋯ gitlink &nbsp; ring = this event's commit</span>`,
+  foot: ``,
+});
+
+// ---------------------------------------------------------------- RevEng
+const reveng = eventsScenario({
+  colStep: 104,
+  lanes: [
+    { key: "P", label: "ROOT · RevEng", color: "var(--root)", soft: "var(--root-soft)", rows: ["Layer3-9", "staging", "task-363", "task-364"] },
+    { key: "S", label: "SUBMODULE · jfred", color: "var(--sub)", soft: "var(--sub-soft)", rows: ["checkout", "staging", "task-363", "task-364"] },
+    { key: "SS", label: "DEEP SUBMODULE · jfred/jfredToolsPlugin", color: "var(--deep)", soft: "var(--deep-soft)", rows: ["checkout"] },
+  ],
+  events: [
+    { type: "commit", id: "init:SS:code", lane: "SS", branch: "checkout", what: "init", row: "A", kind: "commit", parents: [], refs: ["checkout", "staging"], note: "f2905e6", text: "Start. jfredToolsPlugin is at f2905e6. It never moves in this story. Its staging is already here." },
+    { type: "commit", id: "init:S:code", lane: "S", branch: "checkout", what: "init", row: "A", kind: "commit", parents: [], refs: ["checkout"], link: "init:SS:code", note: "da15f3d", text: "Start. The jfred folder is checked out at da15f3d, which records jfredToolsPlugin = f2905e6." },
+    { type: "commit", id: "init:P:code", lane: "P", branch: "Layer3-9", what: "init", row: "A", kind: "commit", parents: [], refs: ["Layer3-9", "HEAD"], link: "init:S:code", note: "62c1e52", text: "Your branch Layer3-9 is at 62c1e52. It records jfred = da15f3d." },
+    { type: "commit", id: "T_376:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "task-376", row: "A", kind: "mrg", parents: ["init:S:code"], refs: ["staging", "checkout"], link: "init:SS:code", note: "e5807b2", text: "Task 376 merged earlier. jfred staging is e5807b2. Your jfred folder also sits here." },
+    { type: "commit", id: "T_376:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-376", row: "A", kind: "mrg", parents: ["init:P:code"], refs: ["staging"], link: "T_376:S:mrg", note: "68ab4a4", text: "Root staging is 68ab4a4, one merge ahead of Layer3-9." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-363", set: { P: { "task-363": "T_376:P:mrg" } }, text: "git worktree add -B task-363 <wt> staging." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-363", set: { S: { "task-363": "T_376:S:mrg" } }, text: "T_363 spawn: git -C <wt>/jfred checkout -B task-363 e5807b2." },
+    { type: "ref", lane: "SS", branch: "staging", what: "create", arg: "task-363", set: { SS: { "task-363": "init:SS:code" } }, text: "Same in jfredToolsPlugin and every deeper repo. Reset-point refs written everywhere." },
+    { type: "ref", lane: "P", branch: "staging", what: "create", arg: "task-364", set: { P: { "task-364": "T_376:P:mrg" } }, text: "T_364 spawn: git worktree add -B task-364 <wt> staging." },
+    { type: "ref", lane: "S", branch: "staging", what: "create", arg: "task-364", set: { S: { "task-364": "T_376:S:mrg" } }, text: "T_364 spawn: git -C <wt>/jfred checkout -B task-364 e5807b2." },
+    { type: "ref", lane: "SS", branch: "staging", what: "create", arg: "task-364", set: { SS: { "task-364": "init:SS:code" } }, text: "T_364 spawn: same reset-point ref written in jfredToolsPlugin." },
+    { type: "commit", id: "T_363:S:code", lane: "S", branch: "task-363", what: "code", row: "B", kind: "task", parents: ["T_376:S:mrg"], refs: ["task-363"], link: "init:SS:code", note: "27df06e", text: "T_363 commits its code change in jfred." },
+    { type: "commit", id: "T_363:P:upSub", lane: "P", branch: "task-363", what: "upSub", arg: "T_363:S:code", row: "B", kind: "upSub", parents: ["T_376:P:mrg"], refs: ["task-363"], link: "T_363:S:code", note: "acaff97", text: "T_363 commits in root. It records jfred = 27df06e." },
+    { type: "commit", id: "T_364:S:code", lane: "S", branch: "task-364", what: "code", row: "C", kind: "task", parents: ["T_376:S:mrg"], refs: ["task-364"], link: "init:SS:code", note: "hash gone", text: "Task 364 commits in jfred. This commit gets replayed later, so its hash is gone." },
+    { type: "commit", id: "T_364:P:upSub", lane: "P", branch: "task-364", what: "upSub", arg: "T_364:S:code", row: "C", kind: "upSub", parents: ["T_376:P:mrg"], refs: ["task-364"], link: "T_364:S:code", note: "hash gone", text: "T_364 commits in root. It records its own jfred commit. This hash is also gone after the rebase." },
+    { type: "ref", lane: "SS", branch: "staging", what: "skip", text: "Task 363 merge, deepest first: jfredToolsPlugin has nothing new. Skipped." },
+    { type: "commit", id: "T_363:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "task-363", row: "A", kind: "mrg", parents: ["T_376:S:mrg", "T_363:S:code"], refs: ["staging"], link: "init:SS:code", note: "2a78ad3", text: "T_363 merge, jfred layer: git merge --no-ff task-363 on jfred staging → 2a78ad3." },
+    { type: "commit", id: "T_363:P:upSub2", lane: "P", branch: "task-363", what: "upSub", arg: "T_363:S:mrg", row: "B", kind: "upSub", parents: ["T_363:P:upSub"], refs: ["task-363"], link: "T_363:S:mrg", note: "e84d000", text: "jfred folder moved to 2a78ad3, git add jfred, commit. The gitlink bump." },
+    { type: "ref", lane: "P", branch: "task-363", what: "noop", arg: "staging", text: "T_363 merge, root layer: git rebase staging in the task worktree. Nothing to do yet." },
+    { type: "commit", id: "T_363:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-363", row: "A", kind: "mrg", parents: ["T_376:P:mrg", "T_363:P:upSub2"], refs: ["staging"], link: "T_363:S:mrg", note: "aa4be66", text: "T_363 merge, root layer: git merge --no-ff task-363 on root staging → aa4be66." },
+    { type: "ref", lane: "SS", branch: "task-363", what: "delete", arg: "task-363", del: { SS: ["task-363"] }, text: "T_363 cleanup: task-363 deleted in jfredToolsPlugin." },
+    { type: "ref", lane: "S", branch: "task-363", what: "delete", arg: "task-363", del: { S: ["task-363"] }, text: "T_363 cleanup: task-363 deleted in jfred." },
+    { type: "ref", lane: "P", branch: "task-363", what: "delete", arg: "task-363", del: { P: ["task-363"] }, text: "T_363 cleanup: worktree removed, task-363 deleted in root." },
+    { type: "ref", lane: "SS", branch: "task-364", what: "noop", arg: "staging", text: "Task 364 rebase, deepest first: jfredToolsPlugin task-364 is at staging already. Nothing to do." },
+    { type: "commit", id: "T_364:S:code′", lane: "S", branch: "task-364", what: "rebase", arg: "staging", row: "C", kind: "task", parents: ["T_363:S:mrg"], refs: ["task-364"], link: "init:SS:code", note: "989b5d8 replayed", text: "T_364 rebase, jfred layer: git rebase staging replays the jfred commit onto 2a78ad3 → 989b5d8." },
+    { type: "commit", id: "T_364:P:upSub′", lane: "P", branch: "task-364", what: "rebase", arg: "staging", row: "C", kind: "upSub", parents: ["T_363:P:mrg"], refs: ["task-364"], link: "T_364:S:code′", note: "30963e3 replayed", text: "Root rebase. The jfred gitlink conflicts. The pipeline runs git add jfred, which records the folder as it is now, then continues." },
+    { type: "ref", lane: "SS", branch: "staging", what: "skip", text: "T_364 merge, deepest first: jfredToolsPlugin has nothing new. Skipped." },
+    { type: "commit", id: "T_364:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "task-364", row: "A", kind: "mrg", parents: ["T_363:S:mrg", "T_364:S:code′"], refs: ["staging"], link: "init:SS:code", note: "03295bc", text: "T_364 merge, jfred layer: git merge --no-ff task-364 on jfred staging → 03295bc." },
+    { type: "commit", id: "T_364:P:upSub2", lane: "P", branch: "task-364", what: "upSub", arg: "T_364:S:mrg", row: "C", kind: "upSub", parents: ["T_364:P:upSub′"], refs: ["task-364"], link: "T_364:S:mrg", note: "c243cd1", text: "jfred folder moved to 03295bc, git add jfred, commit. The gitlink bump." },
+    { type: "ref", lane: "P", branch: "task-364", what: "noop", arg: "staging", text: "T_364 merge, root layer: git rebase staging in the task worktree. Nothing to do." },
+    { type: "commit", id: "T_364:P:mrg", lane: "P", branch: "staging", what: "mrg", arg: "task-364", row: "A", kind: "mrg", parents: ["T_363:P:mrg", "T_364:P:upSub2"], refs: ["staging"], link: "T_364:S:mrg", note: "5aa5bd9", text: "T_364 merge, root layer: git merge --no-ff task-364 on root staging → 5aa5bd9." },
+    { type: "ref", lane: "SS", branch: "task-364", what: "delete", arg: "task-364", del: { SS: ["task-364"] }, text: "T_364 cleanup: task-364 deleted in jfredToolsPlugin." },
+    { type: "ref", lane: "S", branch: "task-364", what: "delete", arg: "task-364", del: { S: ["task-364"] }, text: "T_364 cleanup: task-364 deleted in jfred." },
+    { type: "ref", lane: "P", branch: "task-364", what: "delete", arg: "task-364", del: { P: ["task-364"] }, text: "T_364 cleanup: worktree removed, task-364 deleted in root." },
+    { type: "commit", id: "user:S:code", lane: "S", branch: "checkout", what: "code", row: "L", kind: "user", parents: ["T_376:S:mrg"], refs: ["checkout"], link: "init:SS:code", note: "63f4fc2", text: "You commit in jfred on top of e5807b2. It still records jfredToolsPlugin f2905e6." },
+    { type: "commit", id: "user:P:code", lane: "P", branch: "Layer3-9", what: "upSub", arg: "user:S:code", row: "L", kind: "user", parents: ["init:P:code"], refs: ["Layer3-9", "HEAD"], link: "user:S:code", note: "9b96faf", text: "You commit on Layer3-9. It records jfred = 63f4fc2. Root and jfred have both diverged from staging." },
+    { type: "ref", lane: "SS", branch: "staging", what: "skip", text: "Task 344 spawn, deepest first: jfredToolsPlugin staging equals HEAD. Nothing to do." },
+    { type: "commit", id: "T_344:S:mrg", lane: "S", branch: "staging", what: "mrg", arg: "checkout", row: "A", kind: "mrg", parents: ["T_364:S:mrg", "user:S:code"], refs: ["staging"], link: "init:SS:code", note: "f7ba7b1", text: "jfred diverged. Temp worktree at 03295bc, merge 63f4fc2. Works: both sides record the same f2905e6, so the deep gitlink is not a conflict." },
+    { type: "commit", id: "T_344:P:FAIL", lane: "P", branch: "staging", what: "fail", arg: "Layer3-9", row: "A", kind: "fail", parents: ["T_364:P:mrg", "user:P:code"], note: "temp worktree, jfred folder EMPTY", bad: [["T_344:P:FAIL", "T_364:S:mrg", "ours"], ["T_344:P:FAIL", "user:S:code", "theirs"]], text: "Root diverged. Temp worktree at 5aa5bd9. Its jfred folder is empty. merge 9b96faf hits the jfred gitlink: ours 03295bc, theirs 63f4fc2. Git says Failed to merge submodule jfred (not checked out) and CONFLICT (submodule). The command throws. Root staging stays 5aa5bd9. jfred staging is f7ba7b1 and nothing records it. Six temp worktrees are left on disk. Four runs died this way.",
+      detail: `<div class="fill"><p style="margin-top:0">After task 344 spawns, tell me where each ref must point:</p>
+      <p class="mono">root staging → <span class="blank"></span><br>its jfred gitlink → <span class="blank"></span><br>jfred staging → <span class="blank"></span><br>root Layer3-9 → <span class="blank"></span><br>jfred checkout → <span class="blank"></span></p>
+      <p style="margin-bottom:0">Candidates on disk today. Root: 5aa5bd9, 9b96faf, 166f0a5 (hand-made later, jfred = f7ba7b1). jfred: 03295bc, 63f4fc2, f7ba7b1 (= merge of those two).</p></div>` },
+  ],
+  intro: `<p>Real commits from RevEng on branch <span class="mono">Layer3-9</span>. Tasks 363 and 364 run at the same time. Task 363 merges first. Then task 344 spawns and dies at CREATE_WORKTREE. Names are <span class="mono">&lt;Task&gt;:&lt;Where&gt;:&lt;What&gt;</span>; the real hash sits under each name. Where is P (root), S (jfred), SS (jfred/jfredToolsPlugin). Only root and jfred change in this story.</p>`,
+  legend: `<span><i class="dot" style="color:var(--root)"></i> root commit</span>
+  <span><i class="dot" style="color:var(--sub)"></i> jfred commit</span>
+  <span><i class="dot" style="color:var(--deep)"></i> jfredToolsPlugin commit</span>
+  <span><i class="dot" style="color:var(--task);border-style:dashed"></i> task-branch commit</span>
+  <span><i class="dot" style="color:var(--user)"></i> your own commit on Layer3-9</span>
+  <span><i class="dot" style="color:var(--ghost);border-style:dotted"></i> unreachable, after a rebase</span>
+  <span><i class="dot" style="color:var(--bad)"></i> merge that failed</span>
+  <span class="mono" style="font-size:12px">◆ mrg &nbsp; ○ upSub &nbsp; ● code &nbsp; ⋯ gitlink &nbsp; ring = this event's commit</span>`,
+  foot: `Also present, also never moving: <span class="mono">jfred/jfredToolsPlugin/external/tmux_lib 46fcbc7</span>, <span class="mono">tmux_lib 46fcbc7</span>, <span class="mono">scenarios d45a7df</span>, <span class="mono">jfred/scenarios d45a7df</span>, <span class="mono">jfred/external/tmux_lib 708aeb8</span>, <span class="mono">jfred/external/claude_plugin_lib 17e5991</span>, <span class="mono">jfred/jfredToolsPlugin/external/claude_plugin_lib 17e5991</span>.`,
+});
+
+// ---------------------------------------------------------------- viewer
+// // ponytail: "one" and "nested" are drawn after the no-submodule sequence is agreed.
+// function todo(label) {
+//   return {
+//     intro: `<p>${label}. Not drawn yet. We agree on the no-submodule sequence first, then this one.</p>`,
+//     legend: ``, foot: ``, count: 1,
+//     num: () => "", title: () => "Not drawn yet",
+//     notes: () => ``, ledger: () => ({}),
+//     render: () => `<div class="todo">${label}: frames come after the simpler shape is agreed.</div>`,
+//   };
+// }
+const SCENARIOS = { single, one, nested, reveng };
+const slider = document.getElementById("slider");
+const picker = document.getElementById("scenario");
+let current = "single";
+let S = SCENARIOS[current];
+
+function show(i) {
+  document.getElementById("fnum").textContent = S.num(i);
+  document.getElementById("ftitle").textContent = S.title(i);
+  document.getElementById("fig").innerHTML = S.render(i);
+  const led = Object.entries(S.ledger(i)).map(([k, v]) => `<tr><th>${k}</th><td class="mono">${v}</td></tr>`).join("");
+  document.getElementById("notes").innerHTML = led ? `${S.notes(i)}<table class="ledger"><tbody>${led}</tbody></table>` : S.notes(i);
+  slider.value = i;
+}
+function load() {
+  S = SCENARIOS[current];
+  for (const b of picker.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.key === current));
+  document.getElementById("intro").innerHTML = S.intro;
+  document.getElementById("legend").innerHTML = S.legend;
+  document.getElementById("foot").innerHTML = S.foot;
+  slider.max = S.count;
+  document.getElementById("ticks").innerHTML = Array.from({ length: S.count }, (_, k) => `<span style="left:${(100 * k) / (S.count - 1)}%">${k + 1}</span>`).join("");
+  show(1);
+}
+picker.addEventListener("click", (e) => { const b = e.target.closest("button[data-key]"); if (!b) return; current = b.dataset.key; load(); });
+slider.addEventListener("input", () => show(Number(slider.value)));
+document.getElementById("prev").addEventListener("click", () => show(Math.max(1, Number(slider.value) - 1)));
+document.getElementById("next").addEventListener("click", () => show(Math.min(S.count, Number(slider.value) + 1)));
+document.addEventListener("keydown", (e) => {
+  if (e.target === slider || picker.contains(e.target)) return;
+  if (e.key === "ArrowLeft") show(Math.max(1, Number(slider.value) - 1));
+  if (e.key === "ArrowRight") show(Math.min(S.count, Number(slider.value) + 1));
+});
+load();
+</script>

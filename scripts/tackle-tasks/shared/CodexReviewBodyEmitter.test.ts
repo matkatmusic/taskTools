@@ -159,3 +159,17 @@ test("test_reviewQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
         assert.equal(skeleton.includes(excluded), false, `unexpected "${excluded}"`);
     }
 });
+
+test("test_reviewQuestion_fallsBackToReviewByDefaultWhenTheRoundOneAuditIsMissing", () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), "codex-review-body-recheck-"));
+    mkdirSync(join(stateRoot, ".taskTools"), { recursive: true });
+    const run = { runId: "r1", startedAt: "", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null, attempts: { planReview: 1 } };
+    writeFileSync(join(stateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, run: { active: true, worktree: "/wt", leaseRunId: "r1", history: [run] } }]));
+    const worktree = mkdtempSync(join(tmpdir(), "codex-review-body-wt-"));
+    mkdirSync(join(worktree, "plans"));
+    const reviewOutputFile = join(worktree, "plans/codex-review.json");
+    const countedTask = { ...task, taskStateRoot: stateRoot, repoRoot: worktree, reviewFile: reviewOutputFile, reviewOutputFile };
+    assert.equal(reviewQuestion(countedTask).includes("rechecking"), false);
+    writeFileSync(reviewOutputFile, "{}");
+    assert.equal(reviewQuestion(countedTask).includes("rechecking"), true);
+});

@@ -59,15 +59,13 @@ function createPromptForAgent(blockToRun, input) {
     // The block output belongs to the hook. Saying so stops the agent authoring one of its own.
     const command = \`/taskTools:run-step \${blockToRun} \${JSON.stringify(input)}\`
     return [
-        \`COMMAND: \\\`\${command}\\\`\`,
-        'Your first tool call is the Skill tool: skill "taskTools:run-step", args = the text after "/taskTools:run-step " in COMMAND, copied byte for byte.',
-        'The first word of args is the block key. The rest is one JSON object. Do not reorder, rewrap, rename, or add keys.',
+        \`COMMAND: \${command}\`,
+        'Invoke Skill(COMMAND) verbatim.',
+        'Do not reorder, rewrap, rename, or add keys.',
         'Then follow the instructions the hook injects.',
-        'Every line in those instructions that says "invoke this skill exactly:" is one more Skill tool call.',
-        'Make each of those Skill tool calls in the order the instructions give them.',
-        'In the fenced line under it, the word after the slash is the skill name and the rest of the line is the args.',
+        'Every line that says "invoke this skill exactly:" is one more Skill tool call, in the order given.',
         'Never replace a Skill tool call with cat, head, sed, Read, or any other tool.',
-        'Return the object that the hook returns, verbatim. Do not modify or mutate that object.',
+        'Return the object that the hook returns, verbatim.',
     ].join('\\n')
 }
 

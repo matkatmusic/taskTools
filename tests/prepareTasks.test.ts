@@ -822,6 +822,24 @@ test("test_loadPreparedTaskThrowsWhenAnOwnedFileIsMissingOnDiskAndNotListedInCre
     );
 });
 
+test("test_loadPreparedTaskDoesNotThrowWhenAnOwnedFileIsGoneFromDiskButStillOnStaging", () => {
+    // Setup: a task owns a file that is committed on staging but has been renamed away on disk.
+    const repoRoot = makeTempRepoWithCommit();
+    writeFileSync(join(repoRoot, "old.ts"), "old\n");
+    git(repoRoot, "add", "old.ts");
+    git(repoRoot, "commit", "-q", "-m", "add old.ts");
+    git(repoRoot, "branch", "staging");
+    rmSync(join(repoRoot, "old.ts"));
+    const taskDirectory = join(repoRoot, ".taskTools");
+    mkdirSync(taskDirectory, { recursive: true });
+    const task = { taskNumber: 1, title: "t1", description: "desc", modifiableFiles: ["old.ts"], readOnlyFiles: ["*"] };
+    writeFileSync(join(taskDirectory, "tasks.json"), JSON.stringify([task]));
+    writeFileSync(join(taskDirectory, "completedTasks.json"), "[]\n");
+    writeTaskBriefFile(task, repoRoot);
+    // Verification: staging still has the file, so a rename-in-progress does not throw.
+    assert.doesNotThrow(() => loadPreparedTask(1, repoRoot, repoRoot));
+});
+
 test("test_loadPreparedTaskReadFilePathsExcludesAnAbsentOwnedFileAndIncludesAnExistingOne", () => {
     // Setup: task owns two files; only one exists (the other is a file the task will create).
     const repoRoot = makeTempRepoWithCommit();

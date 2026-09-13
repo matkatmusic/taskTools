@@ -74,10 +74,10 @@ function runPreamblePass(stepsConfigPath: string, tasksFile: string): Record<str
     return JSON.parse(resultLine);
 }
 
-// The IMPLEMENT_TASK prompt line reads `COMMAND: `/taskTools:run-step KEY {...json...}``; the json sits between the marker and the closing backtick.
+// Prompt line: `COMMAND: /taskTools:run-step KEY {...json...}`; JSON runs from marker to line end.
 function parseInputAfterCommand(prompt: string, marker: string): Record<string, unknown> {
     const afterMarker = prompt.slice(prompt.indexOf(marker) + marker.length);
-    return JSON.parse(afterMarker.slice(0, afterMarker.indexOf("`")));
+    return JSON.parse(afterMarker.slice(0, afterMarker.indexOf("\n")));
 }
 
 test("test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride", async () => {

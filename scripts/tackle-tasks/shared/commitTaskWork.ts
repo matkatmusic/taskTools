@@ -27,8 +27,7 @@ function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
 }
 
-// Only the task's own files get staged, so a stray __pycache__ or node_modules never reaches the fence.
-// Returns every changed owned path, staged or not, so the caller knows whether a commit is due.
+// Stages only owned files, never strays like __pycache__; returns every changed owned path, staged or not.
 function stageOwnedChanges(occurrence: Occurrence, occurrences: Occurrence[], ownedOccurrencePaths: string[]): string[] {
     const ownedHere = ownedOccurrencePaths
         .map(parseOccurrencePath)
@@ -101,7 +100,8 @@ export function commitTaskWork(input: CommitTaskWorkInput): CommitTaskWorkOutput
 
         const changed = stageOwnedChanges(occurrence, occurrences, ownedOccurrencePaths);
         if (changed.length > 0) {
-            git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId));
+            // Pathspec commit: staged files outside the fence stay out of the task commit.
+            git(occurrence.checkoutPath, "commit", "-q", "-m", commitMessageWithStepTrailer(message, stepId), "--", ...changed);
             const hash = git(occurrence.checkoutPath, "rev-parse", "HEAD").trim();
             commits.push({ occurrenceId: occurrence.occurrenceId, hash, kind, stepId });
             continue;

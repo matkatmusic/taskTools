@@ -127,6 +127,25 @@ test("test_commitTaskWork_usesTheWorkKindForTheFirstCommitAndRepairForEveryLater
     assert.deepEqual(run?.commits.map((commit) => commit.kind), ["work", "repair"]);
 });
 
+test("test_commitTaskWork_leavesAPreStagedOutOfFenceFileUncommitted", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const taskNumber = 9007;
+    seedTaskAndClaim(rootOrigin, taskNumber, "fence task", "run-1", ["owned.txt"]);
+
+    mkdirSync(join(worktreePath, "plans"));
+    writeFileSync(join(worktreePath, "plans", "extra.json"), "{}\n");
+    git(worktreePath, "add", "plans/extra.json");
+    writeFileSync(join(worktreePath, "owned.txt"), "owned\n");
+
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
+
+    assert.equal(result.commits.length, 1);
+    const names = git(worktreePath, "show", "--name-only", "--format=", result.commits[0].hash);
+    assert.match(names, /owned\.txt/);
+    assert.doesNotMatch(names, /plans\/extra\.json/);
+});
+
 test("test_commitTaskWork_commitsARenamedOwnedFileNextToAStagedDeletion", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = createLinkedWorktree(rootOrigin);

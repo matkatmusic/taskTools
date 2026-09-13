@@ -1,6 +1,7 @@
 // The task record every agent prompt is built from; its own module avoids prompt files importing the dispatch hub.
 import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
+import { spawnSync } from "node:child_process";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
 import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
 import { modifiableFiles, readOnlyFiles } from "../../shared/prepareTasks.ts";
@@ -79,7 +80,14 @@ export function loadPreparedTask(taskNumber: number, worktree: string, projectRo
     const createsFiles: string[] = Array.isArray((task as any).createsFiles) ? (task as any).createsFiles : [];
     for (const file of files) {
         if (createsFiles.includes(file)) continue;
-        if (!existsSync(`${root}/${file}`)) throw new Error(`task ${taskNumber}: modifiableFiles names ${root}/${file} but the file does not exist; list it in "createsFiles" if this task creates it, or run the task that creates it first`);
+        const path = `${root}/${file}`;
+        if (existsSync(path)) continue;
+        // A file the task renames or deletes is gone from disk but still on staging.
+        const top = spawnSync("git", ["-C", dirname(path), "rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
+        const prefix = spawnSync("git", ["-C", dirname(path), "rev-parse", "--show-prefix"], { encoding: "utf8" }).stdout.trim();
+        const onStaging = spawnSync("git", ["-C", top, "cat-file", "-e", `staging:${prefix}${basename(path)}`]).status === 0;
+        if (onStaging) continue;
+        throw new Error(`task ${taskNumber}: modifiableFiles names ${root}/${file} but the file does not exist; list it in "createsFiles" if this task creates it, or run the task that creates it first`);
     }
     const group = groupTasksByFileOverlap(allTasks).find((g) => g.taskNumbers.includes(taskNumber));
     const siblingTasks = (group ? group.taskNumbers.filter((n) => n !== taskNumber) : [])

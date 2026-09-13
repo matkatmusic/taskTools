@@ -13,8 +13,8 @@ import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 
 // Same difficulty>=7 rule PLAN_THE_TASK.ts uses to route to codex drafting; no field records this separately.
 const isCodexDraftedPlan = (t: PreparedTask): boolean => {
-    const entry = readTaskFile(resolveTaskFiles(t.taskStateRoot).tasksPath).find((task) => task.taskNumber === t.number);
-    return entry !== undefined && Number(entry.difficulty) >= 7;
+  const entry = readTaskFile(resolveTaskFiles(t.taskStateRoot).tasksPath).find((task) => task.taskNumber === t.number);
+  return entry !== undefined && Number(entry.difficulty) >= 7;
 };
 
 export type CodexReviewReceipt = CodexReview;
@@ -35,12 +35,12 @@ const WRITE_REVIEW_ANSWER_SCRIPT = fileURLToPath(new URL("./writeReviewAnswer.ts
 
 // Serves codex and claude fallbacks alike; drops any owned path not on disk yet.
 const reviewedPaths = (t: PreparedTask) => {
-    // const plan = readAndValidatePlan(t.planFile, t.number);
-    // const root = t.repoRoot.replace(/\/+$/, "");
-    // const createdPaths = new Set(isPlanProblem(plan) ? [] : plan.createsFiles.map((file) => `${root}/${file}`));
-    // const owned = t.ownedFilePaths.filter((path) => !createdPaths.has(path));
-    const owned = t.ownedFilePaths.filter((path) => existsSync(path));
-    return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
+  // const plan = readAndValidatePlan(t.planFile, t.number);
+  // const root = t.repoRoot.replace(/\/+$/, "");
+  // const createdPaths = new Set(isPlanProblem(plan) ? [] : plan.createsFiles.map((file) => `${root}/${file}`));
+  // const owned = t.ownedFilePaths.filter((path) => !createdPaths.has(path));
+  const owned = t.ownedFilePaths.filter((path) => existsSync(path));
+  return [t.briefFile, t.planFile, ...owned, REVIEW_PLAN_TEMPLATE_PATH];
 };
 
 // Retired (prompt shapes): three template literals became REVIEW_SECTIONS below, so the skeleton view cannot drift.
@@ -239,53 +239,53 @@ export type ReviewChoices = { variant: "approve" | "recheck" | "reviewByDefault"
 
 // Every value spliced into the prompt; the skeleton view passes each one as its expression text instead.
 export type ReviewVars = {
-    number: string;
-    reviewOutputFile: string;
-    reviewPlanTemplatePath: string;
-    reviewedPaths: string;
-    reviewedPathsWithOutput: string;
-    errorTemplate: string;
-    siblingsText: string;
-    blockedByText: string;
-    blocksText: string;
+  number: string;
+  reviewOutputFile: string;
+  reviewPlanTemplatePath: string;
+  reviewedPaths: string;
+  reviewedPathsWithOutput: string;
+  errorTemplate: string;
+  siblingsText: string;
+  blockedByText: string;
+  blocksText: string;
 };
 
 export type ReviewSection = { name: string; when: (c: ReviewChoices) => boolean; render: (v: ReviewVars) => string };
 
 export const REVIEW_SECTIONS: ReviewSection[] = [
-    {
-        name: "ROLE: adversarial (reviewByDefault)",
-        when: (c) => c.variant === "reviewByDefault" && c.adversarial,
-        render: (v) => `You are a second, independent codex instance auditing the implementation plan for task ${v.number}, drafted by another codex instance.
+  {
+    name: "ROLE: adversarial (reviewByDefault)",
+    when: (c) => c.variant === "reviewByDefault" && c.adversarial,
+    render: (v) => `You are a second, independent codex instance auditing the implementation plan for task ${v.number}, drafted by another codex instance.
 Actively hunt for flaws in the plan.
 Do not extend the plan the benefit of the doubt.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
 `,
-    },
-    {
-        name: "ROLE: ordinary (reviewByDefault)",
-        when: (c) => c.variant === "reviewByDefault" && !c.adversarial,
-        render: (v) => `You are a read-only review agent tasked with reviewing the implementation plan for task ${v.number}.
+  },
+  {
+    name: "ROLE: ordinary (reviewByDefault)",
+    when: (c) => c.variant === "reviewByDefault" && !c.adversarial,
+    render: (v) => `You are a read-only review agent tasked with reviewing the implementation plan for task ${v.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
 `,
-    },
-    {
-        name: "ROLE: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `You are a read-only review agent rechecking the implementation plan for task ${v.number}.
+  },
+  {
+    name: "ROLE: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `You are a read-only review agent rechecking the implementation plan for task ${v.number}.
 You write no file.
 Your sandbox is read-only, so any attempt to write one fails.
 
 `,
-    },
-    {
-        name: "APPROVE: intro",
-        when: (c) => c.variant === "approve",
-        render: (v) => `Approve the plan.
+  },
+  {
+    name: "APPROVE: intro",
+    when: (c) => c.variant === "approve",
+    render: (v) => `Approve the plan.
 Do not judge the plan.
 Do not hunt for problems in the plan.
 Do not flag anything in the plan.
@@ -299,11 +299,11 @@ Leave \`fixes\` empty.
 List every section \`id\` the plan uses in \`sectionsThatHoldUp\`.
 
 `,
-    },
-    {
-        name: "STRICT INPUT ALLOWLIST: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## STRICT INPUT ALLOWLIST
+  },
+  {
+    name: "STRICT INPUT ALLOWLIST: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: () => `## STRICT INPUT ALLOWLIST
 
 Read only the exact files listed under WHAT YOU READ. 
 Do not search for, list discover, infer, or open alternative files, even if an alternative has a similar name or appears to contain the requested material. 
@@ -314,11 +314,11 @@ Before reviewing, verify every listed file.
 If any file is missing or unreadable, stop immediately without reviewing any other content.
 
 `,
-    },
-    {
-        name: "STRICT INPUT ALLOWLIST: recheck",
-        when: (c) => c.variant === "recheck",
-        render: () => `## STRICT INPUT ALLOWLIST
+  },
+  {
+    name: "STRICT INPUT ALLOWLIST: recheck",
+    when: (c) => c.variant === "recheck",
+    render: () => `## STRICT INPUT ALLOWLIST
 
 Read only the exact files listed under WHAT YOU READ.
 Do not search for, list, discover, infer, or open alternative files, even if an alternative has a similar name or appears to contain the requested material.
@@ -329,11 +329,11 @@ Before reviewing, verify every listed file.
 If any file is missing or unreadable, stop immediately without reviewing any other content.
 
 `,
-    },
-    {
-        name: "MISSING-FILE RESPONSE: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## MISSING-FILE RESPONSE
+  },
+  {
+    name: "MISSING-FILE RESPONSE: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: (v) => `## MISSING-FILE RESPONSE
 
 If any required file is missing or unreadable, return only the following JSON:
 \`\`\`
@@ -343,11 +343,11 @@ This error response overrides the normal review-plan JSON template.
 Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
 
 `,
-    },
-    {
-        name: "MISSING-FILE RESPONSE: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `## MISSING-FILE RESPONSE
+  },
+  {
+    name: "MISSING-FILE RESPONSE: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `## MISSING-FILE RESPONSE
 
 If any required file is missing or unreadable, return only the following JSON:
 \`\`\`
@@ -357,30 +357,30 @@ This error response overrides the normal review-plan JSON template.
 Leave \`"issues"\`, \`"fixes"\` and \`"sectionsThatHoldUp"\` empty.
 
 `,
-    },
-    {
-        name: "WHAT YOU READ: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## WHAT YOU READ
+  },
+  {
+    name: "WHAT YOU READ: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: (v) => `## WHAT YOU READ
 
 ${v.reviewedPaths}
 
 `,
-    },
-    // Retired for approve: unnecessary, the plan is approved by default.
-    {
-        name: "WHAT YOU READ: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `## WHAT YOU READ
+  },
+  // Retired for approve: unnecessary, the plan is approved by default.
+  {
+    name: "WHAT YOU READ: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `## WHAT YOU READ
 
 ${v.reviewedPathsWithOutput}
 
 `,
-    },
-    {
-        name: "SIBLING AND BLOCKER SCOPE",
-        when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## SIBLING AND BLOCKER SCOPE
+  },
+  {
+    name: "SIBLING AND BLOCKER SCOPE",
+    when: (c) => c.variant === "reviewByDefault",
+    render: (v) => `## SIBLING AND BLOCKER SCOPE
 
 ${v.siblingsText}
 
@@ -391,11 +391,11 @@ ${v.blocksText}
 Work assigned to a named sibling or blocker above is out of scope for task ${v.number} and must not be reported as an omission.
 
 `,
-    },
-    {
-        name: "HOW TO JUDGE THE PLAN: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## HOW TO JUDGE THE PLAN
+  },
+  {
+    name: "HOW TO JUDGE THE PLAN: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: () => `## HOW TO JUDGE THE PLAN
 
 Check the plan for gotchas, failures, bugs, incorrect assumptions, errors, false statements, or anything that could cause the implementer to fail, waste time, or misunderstand the task.
 Verify every assertion against the source file it is about, never against what the plan says about it.
@@ -414,22 +414,22 @@ The plan is good enough when an implementer could follow the plan without decidi
 - the verification is an exact command with its expected result.
 
 `,
-    },
-    {
-        name: "HOW TO JUDGE THE PLAN: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `## HOW TO JUDGE THE PLAN
+  },
+  {
+    name: "HOW TO JUDGE THE PLAN: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `## HOW TO JUDGE THE PLAN
 
 \`${v.reviewOutputFile}\` is the audit you wrote in round one.
 Check to see if ONLY the issues you flagged in the audit were resolved.
 Do not look for new issues in the descriptions.
 
 `,
-    },
-    {
-        name: "DO NOT FLAG",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## DO NOT FLAG 
+  },
+  {
+    name: "DO NOT FLAG",
+    when: (c) => c.variant === "reviewByDefault",
+    render: () => `## DO NOT FLAG 
 - file-size or line-count assertions, 
 - spelling, 
 - grammar, 
@@ -441,11 +441,11 @@ Do not look for new issues in the descriptions.
 Flag a small issue **only** when the issue alters the intent of the plan, or when it is a factual error that could mislead an implementer.
 
 `,
-    },
-    {
-        name: "DOCUMENTING EVIDENCE: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## DOCUMENTING EVIDENCE
+  },
+  {
+    name: "DOCUMENTING EVIDENCE: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: () => `## DOCUMENTING EVIDENCE
 
 Every issue flagged must carry evidence: 
 - include the repo-relative path and the exact line numbers you read, as \`path/to/file.ts:12-40\`, when proving an issue exists.
@@ -456,11 +456,11 @@ If a section holds up, say so and move on.
 - "no issues found" is a valid and useful answer, so never manufacture issues to fill the report.
 
 `,
-    },
-    {
-        name: "DOCUMENTING EVIDENCE: recheck",
-        when: (c) => c.variant === "recheck",
-        render: () => `## DOCUMENTING EVIDENCE
+  },
+  {
+    name: "DOCUMENTING EVIDENCE: recheck",
+    when: (c) => c.variant === "recheck",
+    render: () => `## DOCUMENTING EVIDENCE
 
 Every issue flagged must carry evidence:
 - include the repo-relative path and the exact line numbers you read, as \`path/to/file.ts:12-40\`, when proving an issue exists.
@@ -468,11 +468,11 @@ Every issue flagged must carry evidence:
 - An issue you cannot evidence does not go in the review.
 
 `,
-    },
-    {
-        name: "A REJECTION IS YOUR FAILURE",
-        when: (c) => c.variant === "reviewByDefault",
-        render: () => `## A REJECTION IS YOUR FAILURE
+  },
+  {
+    name: "A REJECTION IS YOUR FAILURE",
+    when: (c) => c.variant === "reviewByDefault",
+    render: () => `## A REJECTION IS YOUR FAILURE
 
 You have no reject verdict.
 Your fix count is the verdict.
@@ -483,20 +483,20 @@ When you believe the whole approach is wrong, say so as ONE fix stating the appr
 The approach you provide should be clear, easy to follow, and solve the problem the task is meant to solve.
 
 `,
-    },
-    {
-        name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: approve",
-        when: (c) => c.variant === "approve",
-        render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
+  },
+  {
+    name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: approve",
+    when: (c) => c.variant === "approve",
+    render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
 Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, replacing every <...> with a real value.
 
 `,
-    },
-    {
-        name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
+  },
+  {
+    name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
 Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above, replacing every <...> with a real value.
 
@@ -508,11 +508,11 @@ Tell the planner exactly what to change so the plan proves the implementation so
 Return empty arrays when you found nothing.
 
 `,
-    },
-    {
-        name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
+  },
+  {
+    name: "WHAT YOU, THE REVIEWING AGENT, RETURNS: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `## WHAT YOU, THE REVIEWING AGENT, RETURNS
 
 Return only JSON in the shape given by \`${v.reviewPlanTemplatePath}\`, which you read above, replacing every <...> with a real value.
 
@@ -522,83 +522,86 @@ Write each fix as an instruction to whoever repairs the plan, not as commentary 
 Return empty arrays when every audited issue is resolved.
 
 `,
-    },
-    {
-        name: "WHAT TO OUTPUT: approve",
-        when: (c) => c.variant === "approve",
-        render: (v) => `## WHAT TO OUTPUT
+  },
+  {
+    name: "WHAT TO OUTPUT: approve",
+    when: (c) => c.variant === "approve",
+    render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${v.reviewOutputFile}\`.
 Do not try to write the file yourself.
 `,
-    },
-    {
-        name: "WHAT TO OUTPUT: reviewByDefault",
-        when: (c) => c.variant === "reviewByDefault",
-        render: (v) => `## WHAT TO OUTPUT
+  },
+  {
+    name: "WHAT TO OUTPUT: reviewByDefault",
+    when: (c) => c.variant === "reviewByDefault",
+    render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${v.reviewOutputFile}\`.
 Do not try to write the file yourself.
 `,
-    },
-    {
-        name: "WHAT TO OUTPUT: recheck",
-        when: (c) => c.variant === "recheck",
-        render: (v) => `## WHAT TO OUTPUT
+  },
+  {
+    name: "WHAT TO OUTPUT: recheck",
+    when: (c) => c.variant === "recheck",
+    render: (v) => `## WHAT TO OUTPUT
 
 Print the JSON as your final message and nothing else.
 The command that runs you captures that message to \`${v.reviewOutputFile}\`.
 Do not try to write the file yourself.
 `,
-    },
+  },
 ];
 
 export function reviewChoices(t: PreparedTask): ReviewChoices {
-    if (readCheckpoint(t.repoRoot)?.resumedFrom?.exitType === "plan-scrapped") return { variant: "approve", adversarial: false };
-    if (getAttemptCount(t.number, "planReview", t.taskStateRoot) >= 1) return { variant: "recheck", adversarial: false };
-    return { variant: "reviewByDefault", adversarial: isCodexDraftedPlan(t) };
+  if (readCheckpoint(t.repoRoot)?.resumedFrom?.exitType === "plan-scrapped")
+    return { variant: "approve", adversarial: false };
+  // A planner-side AMEND raises the counter with no round-one audit on disk; recheck needs that file.
+  if (getAttemptCount(t.number, "planReview", t.taskStateRoot) >= 1 && existsSync(t.reviewOutputFile))
+    return { variant: "recheck", adversarial: false };
+  return { variant: "reviewByDefault", adversarial: isCodexDraftedPlan(t) };
 }
 
 // Each value is the source expression, so the skeleton view names what the rendered view splices in.
 export const REVIEW_SKELETON_VARS: ReviewVars = {
-    number: "`${t.number}`",
-    reviewOutputFile: "`${t.reviewOutputFile}`",
-    reviewPlanTemplatePath: "`${REVIEW_PLAN_TEMPLATE_PATH}`",
-    reviewedPaths: '`${reviewedPaths(t).map((path) => `- ${path}`).join("\\n")}`',
-    reviewedPathsWithOutput: '`${[...reviewedPaths(t), t.reviewOutputFile].map((path) => `- ${path}`).join("\\n")}`',
-    errorTemplate: '`${readFileSync(REVIEW_PLAN_ERROR_TEMPLATE_PATH, "utf8").trim()}`',
-    siblingsText: '`${t.siblingTasks.length > 0 ? "These tasks share files..." : "No other open task shares files with task " + t.number + "."}`',
-    blockedByText: '`${t.blockedBy.length > 0 ? "These tasks block task..." : "No open task blocks task " + t.number + "."}`',
-    blocksText: '`${t.blocks.length > 0 ? "Task ... blocks these tasks..." : "Task " + t.number + " blocks no open task."}`',
+  number: "`${t.number}`",
+  reviewOutputFile: "`${t.reviewOutputFile}`",
+  reviewPlanTemplatePath: "`${REVIEW_PLAN_TEMPLATE_PATH}`",
+  reviewedPaths: '`${reviewedPaths(t).map((path) => `- ${path}`).join("\\n")}`',
+  reviewedPathsWithOutput: '`${[...reviewedPaths(t), t.reviewOutputFile].map((path) => `- ${path}`).join("\\n")}`',
+  errorTemplate: '`${readFileSync(REVIEW_PLAN_ERROR_TEMPLATE_PATH, "utf8").trim()}`',
+  siblingsText: '`${t.siblingTasks.length > 0 ? "These tasks share files..." : "No other open task shares files with task " + t.number + "."}`',
+  blockedByText: '`${t.blockedBy.length > 0 ? "These tasks block task..." : "No open task blocks task " + t.number + "."}`',
+  blocksText: '`${t.blocks.length > 0 ? "Task ... blocks these tasks..." : "Task " + t.number + " blocks no open task."}`',
 };
 
 export function renderReviewSections(choices: ReviewChoices, vars: ReviewVars): string {
-    return REVIEW_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
+  return REVIEW_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
 }
 
 export function reviewQuestionSkeleton(choices: ReviewChoices): string {
-    return renderReviewSections(choices, REVIEW_SKELETON_VARS);
+  return renderReviewSections(choices, REVIEW_SKELETON_VARS);
 }
 
 function reviewVars(t: PreparedTask): ReviewVars {
-    return {
-        number: String(t.number),
-        reviewOutputFile: t.reviewOutputFile,
-        reviewPlanTemplatePath: REVIEW_PLAN_TEMPLATE_PATH,
-        reviewedPaths: reviewedPaths(t).map((path) => `- ${path}`).join("\n"),
-        reviewedPathsWithOutput: [...reviewedPaths(t), t.reviewOutputFile].map((path) => `- ${path}`).join("\n"),
-        errorTemplate: readFileSync(REVIEW_PLAN_ERROR_TEMPLATE_PATH, "utf8").trim(),
-        siblingsText: t.siblingTasks.length > 0 ? `These tasks share files with task ${t.number} and may own related work:\n${t.siblingTasks.map((s) => `- task ${s.number}: ${s.title}`).join("\n")}` : `No other open task shares files with task ${t.number}.`,
-        blockedByText: t.blockedBy.length > 0 ? `These tasks block task ${t.number}:\n${t.blockedBy.map((b) => `- task ${b.taskNumber} blocks task ${t.number}: ${b.reason}`).join("\n")}` : `No open task blocks task ${t.number}.`,
-        blocksText: t.blocks.length > 0 ? `Task ${t.number} blocks these tasks:\n${t.blocks.map((b) => `- task ${t.number} blocks task ${b.number}: ${b.reason}`).join("\n")}` : `Task ${t.number} blocks no open task.`,
-    };
+  return {
+    number: String(t.number),
+    reviewOutputFile: t.reviewOutputFile,
+    reviewPlanTemplatePath: REVIEW_PLAN_TEMPLATE_PATH,
+    reviewedPaths: reviewedPaths(t).map((path) => `- ${path}`).join("\n"),
+    reviewedPathsWithOutput: [...reviewedPaths(t), t.reviewOutputFile].map((path) => `- ${path}`).join("\n"),
+    errorTemplate: readFileSync(REVIEW_PLAN_ERROR_TEMPLATE_PATH, "utf8").trim(),
+    siblingsText: t.siblingTasks.length > 0 ? `These tasks share files with task ${t.number} and may own related work:\n${t.siblingTasks.map((s) => `- task ${s.number}: ${s.title}`).join("\n")}` : `No other open task shares files with task ${t.number}.`,
+    blockedByText: t.blockedBy.length > 0 ? `These tasks block task ${t.number}:\n${t.blockedBy.map((b) => `- task ${b.taskNumber} blocks task ${t.number}: ${b.reason}`).join("\n")}` : `No open task blocks task ${t.number}.`,
+    blocksText: t.blocks.length > 0 ? `Task ${t.number} blocks these tasks:\n${t.blocks.map((b) => `- task ${t.number} blocks task ${b.number}: ${b.reason}`).join("\n")}` : `Task ${t.number} blocks no open task.`,
+  };
 }
 
 // The relaunch after a plan-scrapped exit gets the approve prompt, so codex's review stops blocking the task.
 export function reviewQuestion(t: PreparedTask): string {
-    return renderReviewSections(reviewChoices(t), reviewVars(t));
+  return renderReviewSections(reviewChoices(t), reviewVars(t));
 }
 
 // Logs beside the run-log so `tail -f` shows codex working; the hook sets RUN_STEP_LOG.
@@ -606,7 +609,7 @@ const codexLogFile = () => process.env.RUN_STEP_LOG!.replace(/run-log\.json$/, "
 
 // Failed experiment: a spawned shell has no controlling terminal, so /dev/tty tricks fail codex before it starts.
 function createCodexShellInvocationTTY(t: PreparedTask): string {
-    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+  return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
 REVIEWEOF
 )
@@ -634,7 +637,7 @@ node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE
 
 // A workflow agent can't spawn claude on the CLI; fable and opus fallbacks run as separate blocks.
 function createCodexShellInvocationLive(t: PreparedTask): string {
-    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+  return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
 REVIEWEOF
 )
@@ -648,7 +651,7 @@ ${codexExecCommand(REVIEW_PLAN_SCHEMA_PATH)}
 
 // The fable and opus fallbacks: the block's own agent() answers the codex reviewQuestion itself.
 export function codexReviewFallbackFablePrompt(t: PreparedTask): string {
-    return `${reviewQuestion(t)}
+  return `${reviewQuestion(t)}
 
 ${fallbackReviewerSection(t.reviewOutputFile)}
 
@@ -657,7 +660,7 @@ ${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}", "fableSucceeded"
 }
 
 export function codexReviewFallbackOpusPrompt(t: PreparedTask): string {
-    return `${reviewQuestion(t)}
+  return `${reviewQuestion(t)}
 
 ${fallbackReviewerSection(t.reviewOutputFile)}
 
@@ -667,7 +670,7 @@ ${whatToReturnSection(`{ "reviewFile": "${t.reviewOutputFile}" }`, "the path you
 
 // Overrides the codex-only output lines above: no command captures this agent's message.
 export function fallbackReviewerSection(reviewFile: string): string {
-    return `## YOU ARE THE FALLBACK REVIEWER
+  return `## YOU ARE THE FALLBACK REVIEWER
 
 Codex was not available, so you do the review above yourself.
 Ignore the lines above that say a command captures your message and that you write no file.
@@ -675,7 +678,7 @@ Write the JSON to \`${reviewFile}\` with the Write tool, then return.`;
 }
 
 function createCodexShellInvocationOriginal(t: PreparedTask): string {
-    return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
+  return `REVIEW_PROMPT=$(cat <<'REVIEWEOF'
 ${reviewQuestion(t)}
 REVIEWEOF
 )
@@ -688,9 +691,9 @@ node ${RECORD_REVIEW_SCRIPT} ${t.taskStateRoot} ${t.planFile} ${t.number} UPDATE
 }
 
 export function createCodexShellInvocation(t: PreparedTask) : string {
-    // return createCodexShellInvocationOriginal(t);
-    // return createCodexShellInvocationTTY(t);
-    return createCodexShellInvocationLive(t);
+  // return createCodexShellInvocationOriginal(t);
+  // return createCodexShellInvocationTTY(t);
+  return createCodexShellInvocationLive(t);
 }
 
 // Retired (prompt shapes): one template literal became PLAN_REVIEW_SECTIONS below, so the skeleton view cannot drift.
@@ -707,7 +710,7 @@ export function createCodexShellInvocation(t: PreparedTask) : string {
 
 // Replaces whatToReturnSection here: the review file path is already known, so one script writes the packet answer.
 export function reviewAnswerSection(reviewOutputFile: string): string {
-    return `## WHAT YOU, THE SPAWNING AGENT, RETURNS
+  return `## WHAT YOU, THE SPAWNING AGENT, RETURNS
 
 Run \`node ${WRITE_REVIEW_ANSWER_SCRIPT} "<the outcome.payload path>" ${reviewOutputFile}\`.
 Run it even when the codex command failed or ${reviewOutputFile} does not exist; it records that failure for you.
@@ -724,107 +727,107 @@ export type PlanReviewVars = { spawnAgentHeader: string; shellInvocation: string
 export type PlanReviewSection = { name: string; when: (c: PlanReviewChoices) => boolean; render: (v: PlanReviewVars) => string };
 
 export const PLAN_REVIEW_SECTIONS: PlanReviewSection[] = [
-    {
-        name: "SPAWN AGENT HEADER",
-        when: () => true,
-        render: (v) => `${v.spawnAgentHeader}
+  {
+    name: "SPAWN AGENT HEADER",
+    when: () => true,
+    render: (v) => `${v.spawnAgentHeader}
 
 \`\`\`\`sh
 `,
-    },
-    {
-        name: "SHELL INVOCATION",
-        when: () => true,
-        render: (v) => `${v.shellInvocation}
+  },
+  {
+    name: "SHELL INVOCATION",
+    when: () => true,
+    render: (v) => `${v.shellInvocation}
 \`\`\`\`
 
 `,
-    },
-    {
-        name: "WHAT TO RETURN",
-        when: () => true,
-        render: (v) => `${v.whatToReturn}
+  },
+  {
+    name: "WHAT TO RETURN",
+    when: () => true,
+    render: (v) => `${v.whatToReturn}
 `,
-    },
+  },
 ];
 
 export function planReviewChoices(): PlanReviewChoices {
-    return {};
+  return {};
 }
 
 // Each value is the source expression, so the skeleton view names what the rendered view splices in.
 export const PLAN_REVIEW_SKELETON_VARS: PlanReviewVars = {
-    spawnAgentHeader: '`${spawnAgentHeader("review", true)}`',
-    shellInvocation: "`${createCodexShellInvocation(t)}`",
-    whatToReturn: "`${reviewAnswerSection(t.reviewOutputFile)}`",
+  spawnAgentHeader: '`${spawnAgentHeader("review", true)}`',
+  shellInvocation: "`${createCodexShellInvocation(t)}`",
+  whatToReturn: "`${reviewAnswerSection(t.reviewOutputFile)}`",
 };
 
 export function renderPlanReviewSections(choices: PlanReviewChoices, vars: PlanReviewVars): string {
-    return PLAN_REVIEW_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
+  return PLAN_REVIEW_SECTIONS.filter((s) => s.when(choices)).map((s) => s.render(vars)).join("");
 }
 
 export function planReviewPromptSkeleton(choices: PlanReviewChoices): string {
-    return renderPlanReviewSections(choices, PLAN_REVIEW_SKELETON_VARS);
+  return renderPlanReviewSections(choices, PLAN_REVIEW_SKELETON_VARS);
 }
 
 export function planReviewPrompt(t: PreparedTask): string {
-    return renderPlanReviewSections(planReviewChoices(), {
-        spawnAgentHeader: spawnAgentHeader("review", true),
-        shellInvocation: createCodexShellInvocation(t),
-        whatToReturn: reviewAnswerSection(t.reviewOutputFile),
-    });
+  return renderPlanReviewSections(planReviewChoices(), {
+    spawnAgentHeader: spawnAgentHeader("review", true),
+    shellInvocation: createCodexShellInvocation(t),
+    whatToReturn: reviewAnswerSection(t.reviewOutputFile),
+  });
 }
 
 // The same hand-built task planPrompt.test.ts uses; repoRoot never exists, so it renders with no live worktree.
 const fakeTask: PreparedTask = {
-    number: 99,
-    briefFile: "/tmp/fake-worktree/plans/brief-99.md",
-    planFile: "/tmp/fake-worktree/plans/plan.json",
-    reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
-    reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
-    testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
-    notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
-    files: ["src/thing.ts"],
-    readOnlyFiles: ["*"],
-    ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
-    readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
-    createsFiles: [],
-    difficulty: 1,
-    clarifyRequest: "",
-    testFilePaths: [],
-    hasTests: true,
-    tests: "node --test tests/thing.test.ts",
-    codexReviewNotes: "",
-    siblingTasks: [],
-    blockedBy: [],
-    blocks: [],
-    repoRoot: "/tmp/fake-worktree",
-    taskStateRoot: "/tmp/fake-worktree",
+  number: 99,
+  briefFile: "/tmp/fake-worktree/plans/brief-99.md",
+  planFile: "/tmp/fake-worktree/plans/plan.json",
+  reviewFile: "/tmp/fake-worktree/plans/codex-review.json",
+  reviewOutputFile: "/tmp/fake-worktree/plans/codex-review.json",
+  testReviewFile: "/tmp/fake-worktree/plans/test-review.json",
+  notesFile: "/tmp/fake-worktree/plans/implementation-notes-99.md",
+  files: ["src/thing.ts"],
+  readOnlyFiles: ["*"],
+  ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+  readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+  createsFiles: [],
+  difficulty: 1,
+  clarifyRequest: "",
+  testFilePaths: [],
+  hasTests: true,
+  tests: "node --test tests/thing.test.ts",
+  codexReviewNotes: "",
+  siblingTasks: [],
+  blockedBy: [],
+  blocks: [],
+  repoRoot: "/tmp/fake-worktree",
+  taskStateRoot: "/tmp/fake-worktree",
 };
 
 type Combo = { name: string; skeleton: string; rendered: string };
 
 // reviewChoices(t) reads a live checkpoint/attempt count; combos build ReviewChoices directly instead.
 export function reviewQuestionCombos(): Combo[] {
-    const vars = reviewVars(fakeTask);
-    const combos: Combo[] = [];
-    for (const variant of ["approve", "recheck", "reviewByDefault"] as const) {
-        for (const adversarial of [false, true]) {
-            const choices: ReviewChoices = { variant, adversarial };
-            const name = `variant-${variant}_adversarial-${adversarial}`;
-            combos.push({ name, skeleton: reviewQuestionSkeleton(choices), rendered: renderReviewSections(choices, vars) });
-        }
+  const vars = reviewVars(fakeTask);
+  const combos: Combo[] = [];
+  for (const variant of ["approve", "recheck", "reviewByDefault"] as const) {
+    for (const adversarial of [false, true]) {
+      const choices: ReviewChoices = { variant, adversarial };
+      const name = `variant-${variant}_adversarial-${adversarial}`;
+      combos.push({ name, skeleton: reviewQuestionSkeleton(choices), rendered: renderReviewSections(choices, vars) });
     }
-    return combos;
+  }
+  return combos;
 }
 
 // Combos stub RUN_STEP_LOG and taskStateRoot, since planReviewPrompt needs both but not a real worktree.
 export function planReviewPromptCombos(): Combo[] {
-    process.env.RUN_STEP_LOG ??= join(tmpdir(), "codex-review-prompt-combos-run-log.json");
-    const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-prompt-combos-taskstate-"));
-    mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
-    writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: fakeTask.number }]));
-    const task = { ...fakeTask, repoRoot: mkdtempSync(join(tmpdir(), "codex-review-prompt-combos-repo-")), taskStateRoot };
-    const choices = planReviewChoices();
-    return [{ name: "default", skeleton: planReviewPromptSkeleton(choices), rendered: planReviewPrompt(task) }];
+  process.env.RUN_STEP_LOG ??= join(tmpdir(), "codex-review-prompt-combos-run-log.json");
+  const taskStateRoot = mkdtempSync(join(tmpdir(), "codex-review-prompt-combos-taskstate-"));
+  mkdirSync(join(taskStateRoot, ".taskTools"), { recursive: true });
+  writeFileSync(join(taskStateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: fakeTask.number }]));
+  const task = { ...fakeTask, repoRoot: mkdtempSync(join(tmpdir(), "codex-review-prompt-combos-repo-")), taskStateRoot };
+  const choices = planReviewChoices();
+  return [{ name: "default", skeleton: planReviewPromptSkeleton(choices), rendered: planReviewPrompt(task) }];
 }

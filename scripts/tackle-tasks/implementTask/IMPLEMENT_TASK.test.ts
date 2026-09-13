@@ -37,6 +37,10 @@ const fakeTask: PreparedTask = {
     taskStateRoot: "/tmp/fake-worktree",
 };
 
+// failedTestGateSection reads tasks.json for fakeTask's taskStateRoot; task 99 with no run is treated as never failed.
+mkdirSync(join(fakeTask.taskStateRoot, ".taskTools"), { recursive: true });
+writeFileSync(join(fakeTask.taskStateRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: fakeTask.number }]));
+
 test("test_buildImplementPrompt_citesNoCommitInvocationAndNoDataBlock", () => {
     // The old prompt told the agent to run commitTaskWork.ts itself; COMMIT_IMPLEMENTATION_IF_NEEDED now owns that.
     const prompt = buildImplementPrompt(fakeTask, "npx tsc --noEmit", 3);
@@ -69,6 +73,33 @@ test("test_buildImplementPrompt_tellsTheAgentToReturnMessageAndAdditionalData", 
     const prompt = buildImplementPrompt(fakeTask, "npx tsc --noEmit", 3);
     assert.match(prompt, /"message": "", "additionalData": \{ "implemented": </);
     assert.match(prompt, /"implemented"/);
+});
+
+test("test_buildImplementPrompt_carriesTheFailedTestGateReport", () => {
+    const taskStateRoot = tmpMkdir("implement-task-failedgate-");
+    const taskToolsDir = join(taskStateRoot, ".taskTools");
+    mkdirSync(taskToolsDir, { recursive: true });
+    const runRecord = {
+        runId: "r1", startedAt: "", endedAt: null, exitType: null, exitNote: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null, fullSuite: null,
+        taskTests: {
+            stepId: "RUN_TASK_TESTS", testFiles: [], createdTestFiles: [], deletedTestFiles: [],
+            missingTests: true, passed: false, output: "SENTINEL_GATE_OUTPUT_x9k",
+            newFailingTests: [], knownFailingTests: [], checkedAt: "",
+        },
+    };
+    writeFileSync(join(taskToolsDir, "tasks.json"), JSON.stringify([
+        { taskNumber: 99, run: { active: true, worktree: "/wt", leaseRunId: "r1", history: [runRecord] } },
+    ]));
+
+    const prompt = buildImplementPrompt({ ...fakeTask, taskStateRoot }, "npx tsc --noEmit", 3);
+    assert.match(prompt, /## FAILED TEST GATE\n[\s\S]*SENTINEL_GATE_OUTPUT_x9k/);
+
+    writeFileSync(join(taskToolsDir, "tasks.json"), JSON.stringify([
+        { taskNumber: 99, run: { active: true, worktree: "/wt", leaseRunId: "r1", history: [{ ...runRecord, taskTests: { ...runRecord.taskTests, passed: true } }] } },
+    ]));
+    const promptAfterFix = buildImplementPrompt({ ...fakeTask, taskStateRoot }, "npx tsc --noEmit", 3);
+    assert.equal(promptAfterFix.includes("FAILED TEST GATE"), false);
 });
 
 test("test_buildImplementPromptSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", () => {
