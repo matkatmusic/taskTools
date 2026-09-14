@@ -48,7 +48,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_amendsWhenThePlanNamesNoDeclaredTestFile"
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
     assert.equal(output.next, "pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON");
     assert.equal(output.verdict, "AMEND");
-    assert.equal(output.notes, "the task declares tests but the plan does not name: tests/thing.test.ts");
+    assert.equal(output.notes, "the task declares tests but the plan does not name: tests/test-thing.ts or tests/thing.test.ts or src/thing.test.ts");
 });
 
 test("test_WHAT_DID_THE_PLANNER_RETURN_routesClarifyOutcomeToTheRoundsCheck", () => {
@@ -63,16 +63,40 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_throwsOnAnUnknownOutcome", () => {
     assert.throws(() => main(JSON.stringify({ ...base(root), additionalData: { outcome: "MAYBE", planFile: "", clarifyRequest: "" } })), /unknown planner outcome/);
 });
 
-// Only .ts/.tsx is stripped: index.html pairs with tests/index.html.test.ts, so tests/index.test.ts is rejected.
-test("test_WHAT_DID_THE_PLANNER_RETURN_requiresTheFullFileNameForANonTypeScriptOwnedFile", () => {
+// An owned file whose extension has no test rule (html has no LanguageConfig) needs no named test.
+test("test_WHAT_DID_THE_PLANNER_RETURN_skipsAnOwnedFileWithNoTestRule", () => {
     const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-html-"));
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["index.html"],
     }]));
     const planFile = join(root, "plan.json");
-    writeFileSync(planFile, "write tests/index.test.ts");
+    writeFileSync(planFile, "no test files mentioned here");
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
-    assert.equal(output.verdict, "AMEND");
-    assert.equal(output.notes, "the task declares tests but the plan does not name: tests/index.html.test.ts");
+    assert.notEqual(output.verdict, "AMEND");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesStraightOnWhenTheTaskSkipsTests", () => {
+    const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-skip-"));
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
+        taskNumber: 35, title: "t", difficulty: 3, schemaVersion: "1.0.1", hasTests: true, tests: "skip", modifiableFiles: ["src/thing.ts"],
+    }]));
+    const planFile = join(root, "plan.json");
+    writeFileSync(planFile, "no test files mentioned here");
+    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
+    assert.notEqual(output.verdict, "AMEND");
+    assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_passesWhenThePlanNamesTheCoLocatedCandidate", () => {
+    const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-colocated-"));
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
+        taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["scripts/x/y.ts"],
+    }]));
+    const planFile = join(root, "plan.json");
+    writeFileSync(planFile, "write scripts/x/y.test.ts alongside the source file");
+    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
+    assert.notEqual(output.verdict, "AMEND");
 });

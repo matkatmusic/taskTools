@@ -14,32 +14,37 @@ function snapshotPath(flagDir: string, sid: string, filePath: string): string {
 }
 
 function stageSessionHunk(flagDir: string, sid: string, filePath: string): boolean {
-  if (!existsSync(filePath)) return false;
+  if (!existsSync(filePath))
+    return false;
   let repo: string;
   try {
     repo = execFileSync("git", ["-C", dirname(filePath), "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
+  }
+  catch {
     return false;
   }
   const repoPath = relative(repo, realpathSync(filePath));
   let snapshot: Snapshot;
   try {
     snapshot = JSON.parse(readFileSync(snapshotPath(flagDir, sid, filePath), "utf8")) as Snapshot;
-  } catch {
+  }
+  catch {
     return false;
   }
   if (!snapshot.exists) {
     try {
       execFileSync("git", ["-C", repo, "add", "--", repoPath], { stdio: "ignore" });
       return true;
-    } catch {
+    }
+    catch {
       return false;
     }
   }
   let indexed: Buffer;
   try {
     indexed = execFileSync("git", ["-C", repo, "show", `:${repoPath}`]);
-  } catch {
+  }
+  catch {
     return false;
   }
   const scratch = mkdtempSync(join(tmpdir(), "stage-session-hunk-"));
@@ -55,17 +60,21 @@ function stageSessionHunk(flagDir: string, sid: string, filePath: string): boole
     const mode = (snapshot.mode ?? (statSync(filePath).mode & 0o777)) === 0o755 ? "100755" : "100644";
     execFileSync("git", ["-C", repo, "update-index", "--add", "--cacheinfo", `${mode},${hash},${repoPath}`], { stdio: "ignore" });
     return true;
-  } catch {
+  }
+  catch {
     return false;
-  } finally {
+  }
+  finally {
     rmSync(scratch, { recursive: true, force: true });
   }
 }
 
 const input = JSON.parse(readFileSync(0, "utf8"));
-if (input.stop_hook_active) process.exit(0);
+if (input.stop_hook_active)
+  process.exit(0);
 const sid = input.session_id;
-if (typeof sid !== "string" || sid.length === 0) process.exit(0);
+if (typeof sid !== "string" || sid.length === 0)
+  process.exit(0);
 
 const flagDir = join(process.env.HOME ?? "", ".claude", "turn-flags");
 const flag = join(flagDir, sid);
@@ -76,7 +85,8 @@ if (!existsSync(flag)) {
 let paths: string[];
 try {
   paths = [...new Set(readFileSync(flag, "utf8").split("\n").filter(Boolean))];
-} catch {
+}
+catch {
   process.stderr.write(`Could not read modified-file list for session ${sid}; staging nothing.\n`);
   process.exit(0);
 }
@@ -84,12 +94,14 @@ try {
 const reflowed = paths.filter(existsSync).map((path) => ({ path, runs: reflowFile(path) }));
 
 // Keep the state for the reflow-triggered Stop invocation; it performs the staging pass.
-if (emitReflows("Stop", reflowed, sid) === REFLOW_EMITTED) process.exit(0);
+if (emitReflows("Stop", reflowed, sid) === REFLOW_EMITTED)
+  process.exit(0);
 
-const staged = paths.filter((path) => stageSessionHunk(flagDir, sid, path));
+// const staged = paths.filter((path) => stageSessionHunk(flagDir, sid, path));
 rmSync(flag, { force: true });
 rmSync(join(flagDir, `${sid}.snapshots`), { recursive: true, force: true });
-if (staged.length === 0) process.exit(0);
+// if (staged.length === 0)
+//   process.exit(0);
 // process.stdout.write(JSON.stringify({
 //   hookSpecificOutput: {
 //     hookEventName: "Stop",

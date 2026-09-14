@@ -558,8 +558,11 @@ Do not try to write the file yourself.
 export function reviewChoices(t: PreparedTask): ReviewChoices {
   if (readCheckpoint(t.repoRoot)?.resumedFrom?.exitType === "plan-scrapped")
     return { variant: "approve", adversarial: false };
-  // A planner-side AMEND raises the counter with no round-one audit on disk; recheck needs that file.
-  if (getAttemptCount(t.number, "planReview", t.taskStateRoot) >= 1 && existsSync(t.reviewOutputFile))
+  // One rule: the counter caps rounds; the review file on disk says a round already ran.
+  if (
+    // getAttemptCount(t.number, "planReview", t.taskStateRoot) >= 1 &&
+    existsSync(t.reviewOutputFile)
+  )
     return { variant: "recheck", adversarial: false };
   return { variant: "reviewByDefault", adversarial: isCodexDraftedPlan(t) };
 }
@@ -790,6 +793,8 @@ const fakeTask: PreparedTask = {
   files: ["src/thing.ts"],
   readOnlyFiles: ["*"],
   ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+  writableFiles: ["src/thing.ts", "tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts", "plans/implementation-notes-99.md"],
+  requiredTestGroups: [{ source: "src/thing.ts", candidates: ["tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts"] }],
   readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
   createsFiles: [],
   difficulty: 1,

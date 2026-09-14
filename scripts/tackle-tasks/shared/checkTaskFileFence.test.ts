@@ -16,10 +16,10 @@ function makeSourceRepoWithSubmodule(): string {
     return rootOrigin;
 }
 
-function seedTask(rootOrigin: string, taskNumber: number, files: string[]): void {
+function seedTask(rootOrigin: string, taskNumber: number, files: string[], overrides: Record<string, unknown> = {}): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: files }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title: "t", modifiableFiles: files, ...overrides }]);
 }
 
 // Empty commit moves the child's gitlink HEAD but changes no tracked file, so its diff against baseRef is empty.
@@ -68,6 +68,28 @@ test("test_checkTaskFileFence_acceptsAnOwnedPathDeclaredUnderModifiableFilesInst
     assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-27", taskNumber)).status, "acquired");
     const result = checkTaskFileFence({
         projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-27", rootSourceBranch: "main",
+    });
+
+    assert.equal(result.inside, true);
+    assert.deepEqual(result.violations, []);
+});
+
+test("test_checkTaskFileFence_acceptsAChangeToTheOwnedFilesPairedTestFile", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 28;
+    seedTask(rootOrigin, taskNumber, ["src/thing.ts"], { schemaVersion: "1.0.1", hasTests: true });
+
+    mkdirSync(join(worktreePath, "src"));
+    mkdirSync(join(worktreePath, "tests"));
+    writeFileSync(join(worktreePath, "src", "thing.ts"), "thing\n");
+    writeFileSync(join(worktreePath, "tests", "thing.test.ts"), "test thing\n");
+    git(worktreePath, "add", "src", "tests");
+    git(worktreePath, "commit", "-q", "-m", "add thing and its paired test");
+
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-28", taskNumber)).status, "acquired");
+    const result = checkTaskFileFence({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-28", rootSourceBranch: "main",
     });
 
     assert.equal(result.inside, true);

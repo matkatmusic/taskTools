@@ -84,6 +84,58 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
     }
 });
 
+test("test_resetTask_atBlock_generatedFilesScopeRemovesTestReviewJson", async () => {
+    // Setup: task 9 is open with a worktree whose plans folder already has a stale test-review.json.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        mkdirSync(join(worktreePath, "plans"), { recursive: true });
+        writeFileSync(join(worktreePath, "plans", "plan.json"), "{}");
+        writeFileSync(join(worktreePath, "plans", "test-review.json"), "{}");
+
+        // A packet naming PLAN_THE_TASK for this run, the way the hook writes one for every block it runs.
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-PLAN_THE_TASK-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+        }));
+
+        // Action: reset task 9 at PLAN_THE_TASK, whose resetScope is { counters: true, generatedFiles: true }.
+        process.chdir(repoRoot);
+        await resetTask(9, "PLAN_THE_TASK");
+
+        // Verification: a counter reset removes test-review.json along with plan.json, so the files agree with a fresh review round.
+        assert.equal(existsSync(join(worktreePath, "plans", "test-review.json")), false);
+        assert.equal(existsSync(join(worktreePath, "plans", "plan.json")), false);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
 test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () => {
     // Setup: task 9's per-task steps.json is stale, missing a box the current diagrams draw.
     const repoRoot = makeTempRepoWithCommit();
@@ -816,7 +868,7 @@ test("test_resetTask_atBlock_clearsTheTailCursorSoTheRelaunchStartsAtTheBlock", 
 });
 
 test("test_resetTask_atBlock_keepsAnotherTasksConcurrentRunStateWrite", async () => {
-    // Task 9 has the block-reset fixture; task 10 is open with no run. resetTask runs in a child process so its unlocked tasks.json read/write races a locked write to task 10's run field.
+    // Task 9 uses the block-reset fixture; races resetTask's unlocked write against a locked write to task 10's run field.
     const repoRoot = makeTempRepoWithCommit();
     const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
     const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");

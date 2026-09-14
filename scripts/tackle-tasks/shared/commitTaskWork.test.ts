@@ -47,10 +47,10 @@ function createLinkedWorktree(rootOrigin: string): string {
     return createWorktreeForGroup(rootOrigin, { groupId, taskNumbers: [groupId], filePaths: [], scope: "declared" });
 }
 
-function seedTaskAndClaim(rootOrigin: string, taskNumber: number, title: string, runId: string, files: string[]): void {
+function seedTaskAndClaim(rootOrigin: string, taskNumber: number, title: string, runId: string, files: string[], overrides: Record<string, unknown> = {}): void {
     const { tasksPath } = resolveTaskFiles(rootOrigin);
     mkdirSync(join(tasksPath, ".."), { recursive: true });
-    writeJsonAtomically(tasksPath, [{ taskNumber, title, modifiableFiles: files }]);
+    writeJsonAtomically(tasksPath, [{ taskNumber, title, modifiableFiles: files, ...overrides }]);
     const outcome = claimTask(taskNumber, runId, rootOrigin);
     assert.equal(outcome.status, "claimed");
 }
@@ -91,6 +91,25 @@ test("test_commitTaskWork_stagesAnOwnedPathDeclaredUnderModifiableFilesInsteadOf
     assert.equal(result.commits.length, 1);
     const diffStat = git(worktreePath, "show", "--stat", result.commits[0].hash);
     assert.match(diffStat, /modern-widget\.txt/);
+});
+
+test("test_commitTaskWork_commitsAnUntrackedPairedTestFileBesideItsOwnedSourceFile", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = createLinkedWorktree(rootOrigin);
+    const taskNumber = 9005;
+    seedTaskAndClaim(rootOrigin, taskNumber, "add thing", "run-1", ["src/thing.ts"], { schemaVersion: "1.0.1", hasTests: true });
+
+    mkdirSync(join(worktreePath, "src"));
+    mkdirSync(join(worktreePath, "tests"));
+    writeFileSync(join(worktreePath, "src", "thing.ts"), "thing\n");
+    writeFileSync(join(worktreePath, "tests", "thing.test.ts"), "test thing\n");
+
+    const result = commitTaskWork({ projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-1", stepId: "step-1", rootSourceBranch: "main" });
+
+    assert.equal(result.commits.length, 1);
+    const names = git(worktreePath, "show", "--name-only", "--format=", result.commits[0].hash);
+    assert.match(names, /src\/thing\.ts/);
+    assert.match(names, /tests\/thing\.test\.ts/);
 });
 
 test("test_commitTaskWork_returnsNoCommitsWhenEveryLayerIsClean", () => {

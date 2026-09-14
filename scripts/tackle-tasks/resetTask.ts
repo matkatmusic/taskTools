@@ -353,6 +353,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
             for (const file of existsSync(plansFolder) ? readdirSync(plansFolder) : []) {
                 if (file === "plan.json") rmSync(join(plansFolder, file), { force: true });
                 if (file === "codex-review.json") rmSync(join(plansFolder, file), { force: true });
+                if (file === "test-review.json") rmSync(join(plansFolder, file), { force: true });
                 if (file.startsWith("PLAN_THE_TASK.")) rmSync(join(plansFolder, file), { force: true });
                 if (file.endsWith(".prompt.md")) rmSync(join(plansFolder, file), { force: true });
             }

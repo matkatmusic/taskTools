@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { planReviewPrompt, reviewQuestion, reviewQuestionSkeleton } from "./CodexReviewBodyEmitter.ts";
+import { planReviewPrompt, reviewChoices, reviewQuestion, reviewQuestionSkeleton } from "./CodexReviewBodyEmitter.ts";
 import { writeCheckpoint } from "./checkpoint.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
@@ -18,7 +18,10 @@ const task: PreparedTask = {
     number: 99, briefFile: "/wt/plans/brief-99.md", planFile: "/wt/plans/plan.json",
     reviewFile: "/wt/plans/codex-review.json", reviewOutputFile: "/wt/plans/codex-review.json",
     testReviewFile: "/wt/plans/test-review.json", notesFile: "/wt/plans/implementation-notes-99.md",
-    files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"], readFilePaths: ["/wt/src/thing.ts"], createsFiles: [], difficulty: 1, clarifyRequest: "", testFilePaths: [],
+    files: ["src/thing.ts"], readOnlyFiles: ["*"], ownedFilePaths: ["/wt/src/thing.ts"],
+    writableFiles: ["src/thing.ts", "tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts", "plans/implementation-notes-99.md"],
+    requiredTestGroups: [{ source: "src/thing.ts", candidates: ["tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts"] }],
+    readFilePaths: ["/wt/src/thing.ts"], createsFiles: [], difficulty: 1, clarifyRequest: "", testFilePaths: [],
     hasTests: false, tests: null, codexReviewNotes: "", siblingTasks: [], blockedBy: [], blocks: [], repoRoot: "/wt", taskStateRoot: baseTaskStateRoot,
 };
 
@@ -172,4 +175,17 @@ test("test_reviewQuestion_fallsBackToReviewByDefaultWhenTheRoundOneAuditIsMissin
     assert.equal(reviewQuestion(countedTask).includes("rechecking"), false);
     writeFileSync(reviewOutputFile, "{}");
     assert.equal(reviewQuestion(countedTask).includes("rechecking"), true);
+});
+
+test("test_reviewChoices_recheckWhenTheReviewFileExistsEvenAtAttemptCountZero", () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), "codex-review-body-filewins-"));
+    mkdirSync(join(stateRoot, ".taskTools"), { recursive: true });
+    const run = { runId: "r1", startedAt: "", endedAt: null, exitType: null, exitNote: null, modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null, attempts: { planReview: 0 } };
+    writeFileSync(join(stateRoot, ".taskTools/tasks.json"), JSON.stringify([{ taskNumber: 99, run: { active: true, worktree: "/wt", leaseRunId: "r1", history: [run] } }]));
+    const worktree = mkdtempSync(join(tmpdir(), "codex-review-body-filewins-wt-"));
+    mkdirSync(join(worktree, "plans"));
+    const reviewOutputFile = join(worktree, "plans/codex-review.json");
+    writeFileSync(reviewOutputFile, "{}");
+    const countedTask = { ...task, taskStateRoot: stateRoot, repoRoot: worktree, reviewFile: reviewOutputFile, reviewOutputFile };
+    assert.equal(reviewChoices(countedTask).variant, "recheck");
 });

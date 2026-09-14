@@ -11,7 +11,7 @@ const SCRIPT = join(import.meta.dirname, "..", "scripts", "hooks", "agentFenceHo
 function makeTasksFile(): string {
     const folder = mkdtempSync(join(tmpdir(), "agent-fence-hook-"));
     const tasksPath = join(folder, "tasks.json");
-    writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 1, modifiableFiles: ["src/thing.ts"] }]));
+    writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 1, modifiableFiles: ["src/thing.ts"], schemaVersion: "1.0.1", hasTests: true }]));
     return tasksPath;
 }
 
@@ -73,6 +73,12 @@ test("FIX_CONFLICTS may edit modifiableFiles and the paths git reports unmerged"
     assert.equal(runHook(tasksFile, join(repo, "src", "thing.ts"), "FIX_CONFLICTS"), "");
     const denied = JSON.parse(runHook(tasksFile, join(repo, "lib", "calm.ts"), "FIX_CONFLICTS"));
     assert.equal(denied.hookSpecificOutput.permissionDecision, "deny");
+});
+
+test("allows an edit to the paired test file and the implementation-notes file", () => {
+    const tasksFile = makeTasksFile();
+    assert.equal(runHook(tasksFile, "/worktree/tests/thing.test.ts"), "");
+    assert.equal(runHook(tasksFile, "/worktree/plans/implementation-notes-1.md"), "");
 });
 
 test("throws loudly when the task number is not in tasks.json", () => {

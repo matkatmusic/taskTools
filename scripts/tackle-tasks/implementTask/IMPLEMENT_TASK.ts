@@ -41,8 +41,12 @@ const readFileArgs = (paths: string[]) => [...new Set(paths)].map((path) => `"${
 // Per \`~/.claude/guides/tdd.md\`, write the failing test before the code that satisfies it.`;
 // };
 
-const ownedPathMap = (t: PreparedTask) => t.files
+const ownedPathMap = (t: PreparedTask) => t.writableFiles
   .map((file) => `- \`${file}\` => \`${t.repoRoot.replace(/\/+$/, "")}/${file}\``)
+  .join("\n");
+
+const requiredTests = (t: PreparedTask) => t.requiredTestGroups
+  .map((group) => `- \`${group.source}\`: one of ${group.candidates.map((c) => `\`${c}\``).join(", ")}`)
   .join("\n");
 
 // Tells a fix-round implementer what the task-test gate reported; "" when the gate has not failed this run.
@@ -154,6 +158,7 @@ export type ImplementVars = {
   readFileArgs: string;
   absolutePaths: string;
   ownedPathMap: string;
+  requiredTests: string;
   notesFile: string;
   resumedRun: string;
   failedTestGate: string;
@@ -236,25 +241,12 @@ ${v.absolutePaths}
 `,
   },
   {
-    name: "WHAT YOU MAY EDIT: skip",
-    when: (c) => c.testsField === "skip",
+    name: "WHAT YOU MAY EDIT",
+    when: () => true,
     // Retired (task 51): the fenced PreToolUse hook now denies editing unlisted files.
     render: (v) => `## WHAT YOU MAY EDIT
 
 ${v.ownedPathMap}
-- the implementation log at \`${v.notesFile}\`
-
-${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
-  },
-  {
-    name: "WHAT YOU MAY EDIT: tdd",
-    when: (c) => c.testsField === "tdd",
-    // Retired (task 51): the fenced PreToolUse hook now denies editing unlisted files.
-    render: (v) => `## WHAT YOU MAY EDIT
-
-${v.ownedPathMap}
-- the implementation log at \`${v.notesFile}\`
-- the test file paired with each owned file, at \`${v.repoRoot}/tests/<owned file's base name>.test.ts\`
 
 ${v.resumedRun === "" ? "" : `${v.resumedRun}\n\n`}`,
   },
@@ -270,9 +262,9 @@ This task does not require any tests to be created.
   {
     name: "TESTS: tdd",
     when: (c) => c.testsField === "tdd",
-    render: () => `## TESTS
+    render: (v) => `## TESTS
 
-Each owned file is paired with \`tests/<its base name>.test.ts\`.
+${v.requiredTests}
 The paired files that already exist are in your context from the read-file skill above.
 Import \`test\` from \`node:test\`.
 Import \`assert\` from \`node:assert\`.
@@ -377,7 +369,7 @@ Returning \`implemented: false\` is a correct outcome when the plan is impossibl
 export function implementChoices(t: PreparedTask): ImplementChoices {
   return {
     hasCodexNotes: t.codexReviewNotes.trim() !== "",
-    testsField: t.tests === "skip" || !t.hasTests ? "skip" : "tdd",
+    testsField: t.hasTests ? "tdd" : "skip",
   };
 }
 
@@ -389,6 +381,7 @@ export const IMPLEMENT_SKELETON_VARS: ImplementVars = {
   readFileArgs: '`${readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")])}`',
   absolutePaths: "`${absolutePathsSection(t.repoRoot)}`",
   ownedPathMap: "`${ownedPathMap(t)}`",
+  requiredTests: "`${requiredTests(t)}`",
   notesFile: "`${t.notesFile}`",
   resumedRun: "`${resumedRunSection(t.repoRoot)}`",
   failedTestGate: "`${failedTestGateSection(t.number, t.taskStateRoot)}`",
@@ -415,6 +408,7 @@ export function buildImplementPrompt(t: PreparedTask, typecheckCommand: string, 
     readFileArgs: readFileArgs([t.briefFile, t.planFile, ...t.readFilePaths, ...t.testFilePaths, GUIDE("coding-standards.md"), GUIDE("tdd.md")]),
     absolutePaths: absolutePathsSection(t.repoRoot),
     ownedPathMap: ownedPathMap(t),
+    requiredTests: requiredTests(t),
     notesFile: t.notesFile,
     resumedRun: resumedRunSection(t.repoRoot),
     failedTestGate: failedTestGateSection(t.number, t.taskStateRoot),
@@ -436,6 +430,8 @@ export function implementPromptCombos(): { name: string; skeleton: string; rende
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    writableFiles: ["src/thing.ts", "tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts", "plans/implementation-notes-99.md"],
+    requiredTestGroups: [{ source: "src/thing.ts", candidates: ["tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts"] }],
     readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
     createsFiles: [],
     difficulty: 1,

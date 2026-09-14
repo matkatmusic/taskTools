@@ -21,6 +21,8 @@ const fakeTask: PreparedTask = {
     files: ["src/thing.ts"],
     readOnlyFiles: ["*"],
     ownedFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
+    writableFiles: ["src/thing.ts", "tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts", "plans/implementation-notes-99.md"],
+    requiredTestGroups: [{ source: "src/thing.ts", candidates: ["tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts"] }],
     readFilePaths: ["/tmp/fake-worktree/src/thing.ts"],
     createsFiles: [],
     difficulty: 1,

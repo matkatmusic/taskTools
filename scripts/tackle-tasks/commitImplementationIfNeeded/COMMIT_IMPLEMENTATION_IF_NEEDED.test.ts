@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./COMMIT_IMPLEMENTATION_IF_NEEDED.ts";
-import { claimTask, getCurrentTaskRun } from "../shared/taskRunState.ts";
+import { claimTask, getCurrentTaskRun, raiseAttemptCount } from "../shared/taskRunState.ts";
 import { stagingWorktreePath } from "../shared/stagingWorktree.ts";
 import { writeJsonAtomically } from "../../shared/taskStateLock.ts";
 
@@ -76,6 +76,23 @@ test("test_COMMIT_IMPLEMENTATION_IF_NEEDED_runsTwiceWithTheSameInput", () => {
     assert.deepEqual(secondOutput, firstOutput);
     assert.equal(getCurrentTaskRun(taskNumber, projectRoot)?.commits.length, 1);
     assert.equal(git(worktree, "log", "--oneline").split("\n").length, 2);
+});
+
+test("test_main_commitsAgainWithANewStepIdAfterATestReviewRaisesTheCounter", () => {
+    const taskNumber = 9108;
+    const { projectRoot, worktree } = makeFixture(taskNumber);
+    writeFileSync(join(worktree, "widget.txt"), "widget\n");
+
+    const input = { ...corePacket(projectRoot, worktree, taskNumber), message: "implemented", additionalData: { implemented: true, notes: "" } };
+    main(JSON.stringify(input));
+
+    raiseAttemptCount(taskNumber, "run-1", "testReviews", "pass-1", projectRoot);
+    writeFileSync(join(worktree, "widget.txt"), "widget again\n");
+    main(JSON.stringify(input));
+
+    const commits = getCurrentTaskRun(taskNumber, projectRoot)?.commits;
+    assert.deepEqual(commits?.map((commit) => commit.stepId), ["implement-0", "implement-1"]);
+    assert.equal(git(worktree, "status", "--porcelain"), "");
 });
 
 test("test_main_usesStagingAsTheBaseBranchWhenTheSourceCheckoutIsOnAnotherBranch", () => {

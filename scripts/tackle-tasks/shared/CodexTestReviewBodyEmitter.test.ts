@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { reviewTestsPrompt, reviewTestsQuestionSkeleton } from "./CodexTestReviewBodyEmitter.ts";
+import { reviewQuestionChoices, reviewTestsPrompt, reviewTestsQuestionSkeleton } from "./CodexTestReviewBodyEmitter.ts";
 import type { PreparedTask } from "./preparedTask.ts";
 
 process.env.RUN_STEP_LOG = join(tmpdir(), "codex-test-review-body-run-log.json");
@@ -62,6 +62,8 @@ function makeTaskFixture(): PreparedTask {
         files: ["src/thing.ts"],
         readOnlyFiles: ["*"],
         ownedFilePaths: [join(worktree, "src", "thing.ts")],
+        writableFiles: ["src/thing.ts", "tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts", "plans/implementation-notes-99.md"],
+        requiredTestGroups: [{ source: "src/thing.ts", candidates: ["tests/test-thing.ts", "tests/thing.test.ts", "src/thing.test.ts"] }],
         readFilePaths: [join(worktree, "src", "thing.ts")],
         createsFiles: [],
         difficulty: 1,
@@ -174,6 +176,25 @@ test("test_reviewTestsQuestionSkeleton_holdsOnlyTheSectionsTheChoicesTurnOn", ()
     assert.equal(skeleton.includes("audit you wrote in round one"), false);
 });
 
+test("test_reviewQuestionChoices_fallsBackToReviewByDefaultWhenTheRoundOneAuditIsMissing", () => {
+    const task = makeTaskFixture();
+    const run = {
+        runId: "r1", startedAt: "2026-08-18T00:00:00", endedAt: null, exitType: null, exitNote: null,
+        modifiedFiles: [], commits: [], implementationNotesFile: null, fullSuite: null, attempts: { testReviews: 1 },
+        taskTests: {
+            stepId: "run task tests", testFiles: ["tests/thing.test.ts"], createdTestFiles: ["tests/thing.test.ts"],
+            deletedTestFiles: [], missingTests: false, passed: true, output: "o", checkedAt: "2026-08-18T00:00:00",
+        },
+    };
+    writeFileSync(join(task.taskStateRoot, "tasks.json"), JSON.stringify([{
+        taskNumber: 99, modifiableFiles: ["src/thing.ts"],
+        run: { active: true, worktree: task.repoRoot, leaseRunId: "r1", history: [run] },
+    }]));
+    assert.equal(reviewQuestionChoices(task, []).isRecheck, false);
+    writeFileSync(task.testReviewFile, "{}");
+    assert.equal(reviewQuestionChoices(task, []).isRecheck, true);
+});
+
 test("test_reviewTestsPrompt_tellsTheAgentToRunTheReviewAnswerScriptNotHandTypeTheAnswer", () => {
     // The script derives codexSucceeded and writes the packet answer; the agent only relays the hook output.
     const task = makeTaskFixture();
@@ -183,4 +204,27 @@ test("test_reviewTestsPrompt_tellsTheAgentToRunTheReviewAnswerScriptNotHandTypeT
     assert.match(prompt, /Never write the answer yourself with writeAgentAnswer\.ts/);
     assert.match(prompt, /Then return the hook output verbatim/);
     assert.equal(prompt.includes('"codexSucceeded"'), false);
+});
+
+// Extracts a top-level function's braced body by counting braces from its first "{".
+function functionBody(source: string, functionName: string): string {
+    const start = source.indexOf(`function ${functionName}(`);
+    if (start === -1) throw new Error(`function ${functionName} not found`);
+    const braceStart = source.indexOf("{", start);
+    let depth = 0;
+    for (let i = braceStart; i < source.length; i++) {
+        if (source[i] === "{") depth++;
+        if (source[i] === "}") depth--;
+        if (depth === 0) return source.slice(braceStart, i + 1);
+    }
+    throw new Error(`unbalanced braces in function ${functionName}`);
+}
+
+test("test_reviewChoicesAndReviewQuestionChoices_neverReCoupleThePromptShapeToTheCounter", () => {
+    // One rule: the counter caps rounds; the review file on disk says a round already ran.
+    const reviewBodySource = readFileSync(fileURLToPath(new URL("./CodexReviewBodyEmitter.ts", import.meta.url)), "utf8");
+    const testReviewBodySource = readFileSync(fileURLToPath(new URL("./CodexTestReviewBodyEmitter.ts", import.meta.url)), "utf8");
+    const uncommented = (body: string) => body.split("\n").filter((line) => !line.trim().startsWith("//")).join("\n");
+    assert.equal(uncommented(functionBody(reviewBodySource, "reviewChoices")).includes("getAttemptCount"), false);
+    assert.equal(uncommented(functionBody(testReviewBodySource, "reviewQuestionChoices")).includes("getAttemptCount"), false);
 });
