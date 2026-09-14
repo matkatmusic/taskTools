@@ -14,3 +14,4 @@ echo "[]" > .taskTools/completedTasks.json
 cat > worktree/plans/brief-35.md <<'EOF'
 # fixture sentinel brief for task 35
 EOF
+echo "0" > worktree/plans/PLAN_THE_TASK.codex-done

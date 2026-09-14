@@ -229,6 +229,51 @@ test("test_checkTaskFileFence_rejectsARelativeWorktreePathBeforeGitOrLockAccess"
     assert.equal(git(rootOrigin, "status", "--porcelain"), statusBefore);
 });
 
+test("test_checkTaskFileFence_acceptsAGeneratedJsFileWhenTsconfigSaysItsOwnedTsCompilesToIt", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    // tsconfig.json is already on main before the task branches, so it never shows up as a task change itself.
+    writeFileSync(join(rootOrigin, "tsconfig.json"), JSON.stringify({ compilerOptions: {} }));
+    git(rootOrigin, "add", "tsconfig.json");
+    git(rootOrigin, "commit", "-q", "-m", "add tsconfig.json");
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 30;
+    seedTask(rootOrigin, taskNumber, ["viewer.ts"]);
+
+    writeFileSync(join(worktreePath, "viewer.ts"), "viewer\n");
+    writeFileSync(join(worktreePath, "viewer.js"), "compiled viewer\n");
+    git(worktreePath, "add", "viewer.ts", "viewer.js");
+    git(worktreePath, "commit", "-q", "-m", "edit viewer.ts and its compiled viewer.js");
+
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-30", taskNumber)).status, "acquired");
+    const result = checkTaskFileFence({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-30", rootSourceBranch: "main",
+    });
+
+    assert.equal(result.inside, true);
+    assert.deepEqual(result.violations, []);
+});
+
+test("test_checkTaskFileFence_reportsAGeneratedJsFileAsAViolationWhenTsconfigDoesNotMapItToTheOwnedTs", () => {
+    const rootOrigin = makeSourceRepoWithSubmodule();
+    const worktreePath = makeLinkedWorktree(rootOrigin);
+    const taskNumber = 31;
+    seedTask(rootOrigin, taskNumber, ["viewer.ts"]);
+
+    // No tsconfig.json at all: nothing deterministically ties viewer.js to viewer.ts.
+    writeFileSync(join(worktreePath, "viewer.ts"), "viewer\n");
+    writeFileSync(join(worktreePath, "viewer.js"), "hand-edited viewer\n");
+    git(worktreePath, "add", "viewer.ts", "viewer.js");
+    git(worktreePath, "commit", "-q", "-m", "edit viewer.ts and an unrelated viewer.js");
+
+    assert.equal(acquireSourceRepoLock(rootOrigin, buildLockOwner("run-31", taskNumber)).status, "acquired");
+    const result = checkTaskFileFence({
+        projectRoot: rootOrigin, worktreePath, taskNumber, runId: "run-31", rootSourceBranch: "main",
+    });
+
+    assert.equal(result.inside, false);
+    assert.deepEqual(result.violations, ["viewer.js"]);
+});
+
 test("test_checkTaskFileFence_acceptsAnyPathWhenTheTaskDeclaresAWildcard", () => {
     const rootOrigin = makeSourceRepoWithSubmodule();
     const worktreePath = makeLinkedWorktree(rootOrigin);

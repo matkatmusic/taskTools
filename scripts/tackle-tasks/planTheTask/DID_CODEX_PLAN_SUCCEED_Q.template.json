@@ -1,0 +1,39 @@
+{
+    "input": {
+        "box": "PLAN_THE_TASK_CODEX",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures/worktree",
+        "branch": "task-35",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "outcome": "PLAN",
+            "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures/worktree/plans/plan.json",
+            "clarifyRequest": ""
+        }
+    },
+    "output": {
+        "box": "DID_CODEX_PLAN_SUCCEED_Q",
+        "scriptSignal": "continue",
+        "taskNumber": 35,
+        "runId": "run-1",
+        "projectRoot": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures",
+        "worktree": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures/worktree",
+        "branch": "task-35",
+        "planFile": "",
+        "exitType": "",
+        "exitNote": "",
+        "message": "",
+        "additionalData": {
+            "outcome": "PLAN",
+            "planFile": "{{PROJECT_ROOT}}/scripts/tackle-tasks/planTheTask/fixtures/worktree/plans/plan.json",
+            "clarifyRequest": ""
+        },
+        "next": "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
+    }
+}

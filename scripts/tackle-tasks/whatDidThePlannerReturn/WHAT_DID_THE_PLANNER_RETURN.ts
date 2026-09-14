@@ -5,13 +5,32 @@ import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
 import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
 import { modifiableFiles } from "../../shared/prepareTasks.ts";
+import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
 // import { pairedTestPath } from "../shared/preparedTask.ts";
 import { requiredTestGroups, taskDeclaresTests } from "../shared/writableFiles.ts";
 import type { EntryPacket } from "../preambleStatusCheck/_packet.ts";
 import type { WhatDidThePlannerReturnPacket } from "./_packet.ts";
 
-type Input = EntryPacket & { message: string; additionalData: { outcome: "PLAN" | "CLARIFY"; planFile: string; clarifyRequest: string } };
+type Input = EntryPacket & {
+  message: string;
+  additionalData: { outcome: "PLAN" | "CLARIFY"; planFile: string; clarifyRequest: string; additionalFiles?: string[] };
+};
+
+// The plan step first learns a needed file was missed, so widen the fence here before rejection.
+function mergeAdditionalFiles(projectRoot: string, taskNumber: number, additionalFiles: string[]): void {
+  if (additionalFiles.length === 0)
+    return;
+  const { tasksPath } = resolveTaskFiles(projectRoot);
+  withTaskStateLock(tasksPath, () => {
+    const tasks = readTaskFile(tasksPath);
+    const entry = tasks.find((task) => task.taskNumber === taskNumber);
+    if (entry === undefined)
+      throw new Error(`task ${taskNumber} not found in ${tasksPath}`);
+    (entry as any).modifiableFiles = [...new Set([...modifiableFiles(entry), ...additionalFiles])];
+    writeJsonAtomically(tasksPath, tasks);
+  });
+}
 
 export function main(input: string): Record<string, unknown> {
   const { message: _message, additionalData, ...packet } = JSON.parse(input) as Input;
@@ -21,6 +40,7 @@ export function main(input: string): Record<string, unknown> {
     reviewOutputFile: "", verdict: "", notes: "",
   };
   if (outcome === "PLAN") {
+    mergeAdditionalFiles(packet.projectRoot, packet.taskNumber, additionalData.additionalFiles ?? []);
     const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
     if (entry === undefined)
       throw new Error(`task ${packet.taskNumber} not found in tasks.json`);

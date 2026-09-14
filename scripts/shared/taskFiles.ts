@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { withTaskStateLock, writeJsonAtomically } from "./taskStateLock.ts";
 import { TASK_HAS_NO_TESTS, TASK_HAS_TESTS } from "./resultCodes.ts";
 
-export type TaskRecord = { taskNumber: number; title?: string; description?: string } & Record<string, unknown>;
+export type TaskRecord = { taskNumber: number; title?: string; description?: string; difficulty?: number } & Record<string, unknown>;
 export type TaskFilePair = { tasksPath: string; completedTasksPath: string };
 
 // Schema 1.0.0 uses tests ("skip" or the user's example test); 1.0.1 uses hasTests. Missing schemaVersion defaults to 1.0.0.

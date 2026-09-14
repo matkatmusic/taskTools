@@ -571,7 +571,17 @@
             "producesPrompt": true,
             "mutating": true,
             "next": [
-                "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN"
+                "DID_CODEX_PLAN_SUCCEED_Q"
+            ]
+        },
+        {
+            "box": "DID_CODEX_PLAN_SUCCEED_Q",
+            "script": "scripts/tackle-tasks/planTheTask/DID_CODEX_PLAN_SUCCEED_Q.ts",
+            "template": "scripts/tackle-tasks/planTheTask/DID_CODEX_PLAN_SUCCEED_Q.template.json",
+            "producesPrompt": false,
+            "next": [
+                "pipeline-whatDidThePlannerReturn.mmd::WHAT_DID_THE_PLANNER_RETURN",
+                "PLAN_THE_TASK"
             ]
         },
         {

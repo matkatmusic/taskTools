@@ -325,6 +325,9 @@ The plan must be exact enough and comprehensive enough that the implementer make
 - Account for every file this task owns: either its exact edit list, or the reason it needs no edit.
 - Set \`createsFiles\` to exactly \`${v.createsFiles}\`, copied from the task record.
 - Never add a file to \`createsFiles\`; a missing file the task does not create is a CLARIFY.
+- When the fix needs a file this task does not already own, name every such path in \`additionalFiles\`.
+- - Do not silently plan an edit to a file this task does not own.
+- - \`additionalFiles\` is the only way to widen what the task may touch.
 - Resolve every question while planning.
 - Write no conditional instruction:
 - - no "re-check",
@@ -527,7 +530,7 @@ export function planPrompt(t: PreparedTask): string {
         templateReadFileArgs: readFileArgs([PLAN_TEMPLATE_PATH]),
         readOnlyFiles: t.readOnlyFiles.join(", "),
         tests: t.tests ?? "",
-        whatToReturn: whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>" }`, "replacing every `<...>` with a real value", ""),
+        whatToReturn: whatToReturnSection(`{ "outcome": "<PLAN|CLARIFY>", "planFile": "${t.planFile}", "clarifyRequest": "<the question to ask; an empty string when outcome is PLAN, never null>", "additionalFiles": ["<repo-relative path this task now needs beyond its owned files>"] }`, "replacing every `<...>` with a real value; an empty array when planning found nothing beyond the owned files", ""),
         createsFiles: JSON.stringify(t.createsFiles),
         codexPlanReviewLine: t.difficulty <= 3 ? "" : CODEX_PLAN_REVIEW_LINE,
         repeatClarifyRule: t.clarifyRequest === "" ? "" : REPEAT_CLARIFY_RULE,

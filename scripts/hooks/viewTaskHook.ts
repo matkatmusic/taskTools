@@ -36,7 +36,12 @@ function buildOpenTaskListing(openTasks: TaskRecord[]): string {
   for (const task of openTasks) {
     const run = task.run as { active?: boolean } | undefined;
     const activePrefix = run?.active ? "(active)" : "";
-    lines.push(`  ${activePrefix} ${task.taskNumber}: ${task.title ?? ""}`);
+    let lineText = `  ${activePrefix} ${task.taskNumber}:`;
+    if( task.title !== undefined )
+      lineText += ` ${task.title}`;
+    if( task.difficulty !== undefined )
+      lineText += ` Difficulty: ${task.difficulty}`;
+    lines.push(lineText);
   }
   return `Usage: /view-task <N...>
 

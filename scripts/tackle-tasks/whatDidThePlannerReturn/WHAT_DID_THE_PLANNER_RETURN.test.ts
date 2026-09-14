@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./WHAT_DID_THE_PLANNER_RETURN.ts";
@@ -87,6 +87,54 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_routesStraightOnWhenTheTaskSkipsTests", (
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
     assert.notEqual(output.verdict, "AMEND");
     assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_mergesAdditionalFilesIntoModifiableFilesBeforeCheckingForNamedTests", () => {
+    const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-additional-files-"));
+    const tasksPath = join(root, ".taskTools", "tasks.json");
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(tasksPath, JSON.stringify([{
+        taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["index.html"],
+    }]));
+    const planFile = join(root, "plan.json");
+    writeFileSync(planFile, "no test files mentioned here");
+
+    const output = main(JSON.stringify({
+        ...base(root),
+        additionalData: { outcome: "PLAN", planFile, clarifyRequest: "", additionalFiles: ["tests/index.html.test.ts"] },
+    }));
+
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    assert.deepEqual(tasks[0].modifiableFiles, ["index.html", "tests/index.html.test.ts"]);
+    assert.notEqual(output.verdict, "AMEND");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_leavesModifiableFilesUnchangedWhenAdditionalFilesIsEmpty", () => {
+    const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-no-additional-files-"));
+    const tasksPath = join(root, ".taskTools", "tasks.json");
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 35, title: "t", difficulty: 5, modifiableFiles: ["src/thing.ts"] }]));
+    const planFile = join(root, "plan.json");
+    writeFileSync(planFile, "plan text");
+
+    main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "", additionalFiles: [] } }));
+
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    assert.deepEqual(tasks[0].modifiableFiles, ["src/thing.ts"]);
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_mergingAdditionalFilesDedupesAgainstAlreadyOwnedFiles", () => {
+    const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-dedupe-"));
+    const tasksPath = join(root, ".taskTools", "tasks.json");
+    mkdirSync(join(root, ".taskTools"), { recursive: true });
+    writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 35, title: "t", difficulty: 5, modifiableFiles: ["src/thing.ts"] }]));
+    const planFile = join(root, "plan.json");
+    writeFileSync(planFile, "plan text");
+
+    main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "", additionalFiles: ["src/thing.ts"] } }));
+
+    const tasks = JSON.parse(readFileSync(tasksPath, "utf8"));
+    assert.deepEqual(tasks[0].modifiableFiles, ["src/thing.ts"]);
 });
 
 test("test_WHAT_DID_THE_PLANNER_RETURN_passesWhenThePlanNamesTheCoLocatedCandidate", () => {

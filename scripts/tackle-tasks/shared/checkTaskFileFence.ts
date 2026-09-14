@@ -3,10 +3,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { buildLockOwner, refreshOwnedSourceRepoLockOrThrow } from "./sourceRepoLock.ts";
-import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst } from "./occurrences.ts";
+import { buildDiscoveryManifest, buildOccurrencePath, buildOwnedOccurrencePaths, getOccurrencesDeepestFirst, parseOccurrencePath, type Occurrence } from "./occurrences.ts";
 import { readTaskFile, resolveTaskFiles } from "../../shared/taskFiles.ts";
 import { modifiableFiles } from "../../shared/prepareTasks.ts";
 import { writableFiles } from "./writableFiles.ts";
+import { isCompiledOutputOf } from "./compiledOutputPaths.ts";
 import { requireAbsolutePath } from "./inputPaths.ts";
 import { logStepOutput } from "./logStepOutput.ts";
 
@@ -87,6 +88,33 @@ export function computeExemptGitlinkPaths(
   return exempt;
 }
 
+// A same-name .js is exempt when tsconfig.json confirms it's the compiled output of an owned .ts/.tsx file, not guessed.
+export function computeExemptCompiledOutputPaths(
+  occurrences: Occurrence[],
+  allChangedPaths: string[],
+  ownedPaths: Set<string>,
+): Set<string> {
+  const checkoutPathByOccurrenceId = new Map(occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence.checkoutPath]));
+  const exempt = new Set<string>();
+  for (const changedPath of allChangedPaths) {
+    const { occurrenceId, relativePath } = parseOccurrencePath(changedPath);
+    if (!relativePath.endsWith(".js"))
+      continue;
+    const stem = relativePath.slice(0, -".js".length);
+    const checkoutPath = checkoutPathByOccurrenceId.get(occurrenceId);
+    if (checkoutPath === undefined)
+      continue;
+    for (const sourceExtension of [".ts", ".tsx"]) {
+      const sourceRelativePath = `${stem}${sourceExtension}`;
+      if (!ownedPaths.has(buildOccurrencePath(occurrenceId, sourceRelativePath)))
+        continue;
+      if (isCompiledOutputOf(checkoutPath, sourceRelativePath, relativePath))
+        exempt.add(changedPath);
+    }
+  }
+  return exempt;
+}
+
 export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFileFenceOutput {
   requireAbsolutePath("projectRoot", input.projectRoot);
   requireAbsolutePath("worktreePath", input.worktreePath);
@@ -117,9 +145,11 @@ export function checkTaskFileFence(input: CheckTaskFileFenceInput): CheckTaskFil
   }
 
   const exemptGitlinkPaths = computeExemptGitlinkPaths(input.worktreePath, input.projectRoot, input.rootSourceBranch, changedPathsByOccurrenceId, ownedPaths);
+  const exemptCompiledOutputPaths = computeExemptCompiledOutputPaths(occurrences, allChangedPaths, ownedPaths);
 
   // ponytail: the pipeline's own resume bookkeeping file, exempt like in checkResumedWorktreeFence.
-  const violations = allChangedPaths.filter((path) => path !== "plans/checkpoint.json" && !ownedPaths.has(path) && !exemptGitlinkPaths.has(path));
+  const violations = allChangedPaths.filter((path) =>
+    path !== "plans/checkpoint.json" && !ownedPaths.has(path) && !exemptGitlinkPaths.has(path) && !exemptCompiledOutputPaths.has(path));
   return { inside: violations.length === 0, violations };
 }
 
