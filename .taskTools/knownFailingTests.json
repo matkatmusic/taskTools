@@ -1,9 +1,5 @@
 [
   {
-    "file": "tests/pickATaskBrief.test.ts",
-    "name": "script fails loudly rather than emitting a brief that points nowhere"
-  },
-  {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
   }

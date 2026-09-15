@@ -15,44 +15,53 @@ export type ProcessGroupResult = { code: number | null; timedOut: boolean; outpu
 
 // ponytail: POSIX-only — a negative pid signals the whole process group; there is no Windows equivalent here.
 export function isProcessGroupKillSupported(platform: string = process.platform): boolean {
-    return platform !== "win32";
+  return platform !== "win32";
 }
 
 export function runCommandInProcessGroup(
-    command: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number,
+  command: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number,
 ): Promise<ProcessGroupResult> {
-    if (!isProcessGroupKillSupported()) {
-        return Promise.reject(new Error("runCommandInProcessGroup: POSIX-only (process-group kill via negative pid); not supported on win32"));
-    }
-    return new Promise((resolveResult, rejectResult) => {
-        const child = spawn("bash", ["-c", command], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-        let output = "";
-        let timedOut = false;
-        let settled = false;
-        child.stdout.on("data", (chunk: Buffer) => { output = (output + chunk).slice(-MAX_LIVE_OUTPUT_LENGTH); });
-        child.stderr.on("data", (chunk: Buffer) => { output = (output + chunk).slice(-MAX_LIVE_OUTPUT_LENGTH); });
-        const timer = setTimeout(() => {
-            timedOut = true;
-            if (child.pid === undefined) return;
-            try {
-                process.kill(-child.pid, "SIGKILL");
-            } catch (killError) {
-                if ((killError as NodeJS.ErrnoException).code !== "ESRCH") throw killError;
-            }
-        }, timeoutMs);
-        child.on("error", (error) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            rejectResult(error);
-        });
-        child.on("close", (code) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolveResult({ code, timedOut, output: output.trim() });
-        });
+  if (!isProcessGroupKillSupported()) {
+    return Promise.reject(new Error("runCommandInProcessGroup: POSIX-only (process-group kill via negative pid); not supported on win32"));
+  }
+  return new Promise((resolveResult, rejectResult) => {
+    const child = spawn("bash", ["-c", command], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    let timedOut = false;
+    let settled = false;
+    child.stdout.on("data", (chunk: Buffer) => {
+      output = (output + chunk).slice(-MAX_LIVE_OUTPUT_LENGTH);
     });
+    child.stderr.on("data", (chunk: Buffer) => {
+      output = (output + chunk).slice(-MAX_LIVE_OUTPUT_LENGTH);
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (child.pid === undefined)
+        return;
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      }
+      catch (killError) {
+        if ((killError as NodeJS.ErrnoException).code !== "ESRCH")
+          throw killError;
+      }
+    }, timeoutMs);
+    child.on("error", (error) => {
+      if (settled)
+        return;
+      settled = true;
+      clearTimeout(timer);
+      rejectResult(error);
+    });
+    child.on("close", (code) => {
+      if (settled)
+        return;
+      settled = true;
+      clearTimeout(timer);
+      resolveResult({ code, timedOut, output: output.trim() });
+    });
+  });
 }
 
 // INITIAL_PASS from ~/.claude/CLAUDE.md "Full Suite Testing", verbatim.
@@ -76,72 +85,89 @@ npm test 2>&1 \\
 
 export type FailingTest = { file: string; name: string };
 
+// ponytail: hash-derived port per worktree cwd, so sibling task suites don't collide on shared default ports.
+function hashPort(cwd: string, base: number, range: number): number {
+  let hash = 0;
+  for (let i = 0; i < cwd.length; i++)
+    hash = (hash * 31 + cwd.charCodeAt(i)) >>> 0;
+  return base + (hash % range);
+}
+
 export async function runSuite(
-    cwd: string, timeoutMs: number = SUITE_TIMEOUT_MS,
+  cwd: string, timeoutMs: number = SUITE_TIMEOUT_MS,
 ): Promise<{ allPassing: boolean; output: string; log: string; timedOut: boolean }> {
-    // npm walks up to a parent package.json; from a fixture inside this repo that reruns this whole suite, forever.
-    if (!existsSync(join(cwd, "package.json"))) throw new Error(`task-tests: no package.json in ${cwd}`);
-    // ponytail: strip NODE_TEST_CONTEXT and RUN_STEP_LOG so the child suite inherits neither the parent test context nor the live run log
-    const { NODE_TEST_CONTEXT: _parentTestContext, RUN_STEP_LOG: _parentRunStepLog, ...env } = process.env;
-    env.FORCE_COLOR = "0"; // Jest colors its output unless told otherwise; awk needs plain text.
-    const run = await runCommandInProcessGroup(INITIAL_PASS, cwd, env, timeoutMs);
-    const output = run.timedOut ? `the suite timed out after ${timeoutMs}ms and was killed` : `${run.output}`.trim();
-    const log = output === "all passing" ? "" : existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf8") : "";
-    return { allPassing: output === "all passing", output, log, timedOut: run.timedOut };
+  // npm walks up to a parent package.json; from a fixture inside this repo that reruns this whole suite, forever.
+  if (!existsSync(join(cwd, "package.json")))
+    throw new Error(`task-tests: no package.json in ${cwd}`);
+  // ponytail: strip NODE_TEST_CONTEXT and RUN_STEP_LOG so the child suite inherits neither the parent test context nor the live run log
+  const { NODE_TEST_CONTEXT: _parentTestContext, RUN_STEP_LOG: _parentRunStepLog, ...env } = process.env;
+  env.FORCE_COLOR = "0"; // Jest colors its output unless told otherwise; awk needs plain text.
+  env.SERVER_PORT = String(hashPort(cwd, 20000, 10000));
+  env.CDP_PORT = String(hashPort(cwd, 30000, 10000));
+  const run = await runCommandInProcessGroup(INITIAL_PASS, cwd, env, timeoutMs);
+  const output = run.timedOut ? `the suite timed out after ${timeoutMs}ms and was killed` : `${run.output}`.trim();
+  const log = output === "all passing" ? "" : existsSync(LOG_PATH) ? readFileSync(LOG_PATH, "utf8") : "";
+  return { allPassing: output === "all passing", output, log, timedOut: run.timedOut };
 }
 
 // The node reporter ends with "✖ failing tests:" then pairs of "test at FILE:LINE:COL" / "✖ NAME (ms)".
 function parseNodeFailingTests(log: string): FailingTest[] {
-    const summary = log.slice(log.indexOf("✖ failing tests:"));
-    const failing: FailingTest[] = [];
-    const lines = summary.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-        const location = lines[i].match(/^test at (.+):\d+:\d+$/);
-        if (!location) continue;
-        const name = lines[i + 1]?.replace(/^✖ /, "").replace(/ \(\d+(\.\d+)?ms\)$/, "");
-        failing.push({ file: location[1], name });
-    }
-    return failing;
+  const summary = log.slice(log.indexOf("✖ failing tests:"));
+  const failing: FailingTest[] = [];
+  const lines = summary.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const location = lines[i].match(/^test at (.+):\d+:\d+$/);
+    if (!location)
+      continue;
+    const name = lines[i + 1]?.replace(/^✖ /, "").replace(/ \(\d+(\.\d+)?ms\)$/, "");
+    failing.push({ file: location[1], name });
+  }
+  return failing;
 }
 
 // Jest prints "FAIL path" then "  ● Suite › test" lines, per file and again in the summary.
 function parseJestFailingTests(log: string): FailingTest[] {
-    const failing: FailingTest[] = [];
-    let currentFile = "";
-    for (const line of log.split("\n")) {
-        const failMatch = line.match(/^FAIL (\S+)/);
-        if (failMatch) { currentFile = failMatch[1]; continue; }
-        const testMatch = line.match(/^\s*● (.+)$/);
-        if (!testMatch || !currentFile) continue;
-        const name = testMatch[1];
-        if (!failing.some((f) => f.file === currentFile && f.name === name)) failing.push({ file: currentFile, name });
+  const failing: FailingTest[] = [];
+  let currentFile = "";
+  for (const line of log.split("\n")) {
+    const failMatch = line.match(/^FAIL (\S+)/);
+    if (failMatch) {
+      currentFile = failMatch[1]; continue;
     }
-    return failing;
+    const testMatch = line.match(/^\s*● (.+)$/);
+    if (!testMatch || !currentFile)
+      continue;
+    const name = testMatch[1];
+    if (!failing.some((f) => f.file === currentFile && f.name === name))
+      failing.push({ file: currentFile, name });
+  }
+  return failing;
 }
 
 export function parseFailingTests(log: string): FailingTest[] {
-    return log.includes("✖ failing tests:") ? parseNodeFailingTests(log) : parseJestFailingTests(log);
+  return log.includes("✖ failing tests:") ? parseNodeFailingTests(log) : parseJestFailingTests(log);
 }
 
 export const knownFailingTestsPath = (projectRoot: string) => join(projectRoot, ".taskTools", "knownFailingTests.json");
 
 export function readKnownFailingTests(projectRoot: string): FailingTest[] {
-    const path = knownFailingTestsPath(projectRoot);
-    if (!existsSync(path)) return [];
-    return JSON.parse(readFileSync(path, "utf8"));
+  const path = knownFailingTestsPath(projectRoot);
+  if (!existsSync(path))
+    return [];
+  return JSON.parse(readFileSync(path, "utf8"));
 }
 
 export function writeKnownFailingTests(projectRoot: string, failing: FailingTest[]): void {
-    mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
-    writeFileSync(knownFailingTestsPath(projectRoot), `${JSON.stringify(failing, null, 2)}\n`);
+  mkdirSync(join(projectRoot, ".taskTools"), { recursive: true });
+  writeFileSync(knownFailingTestsPath(projectRoot), `${JSON.stringify(failing, null, 2)}\n`);
 }
 
 // A failure is new when no known entry has the same file and name.
 export function newFailingTests(failing: FailingTest[], known: FailingTest[]): FailingTest[] {
-    return failing.filter((test) => !known.some((k) => k.file === test.file && k.name === test.name));
+  return failing.filter((test) => !known.some((k) => k.file === test.file && k.name === test.name));
 }
 
 // No "all passing" and no parsed failure means the suite crashed; that is red, never a vacuous pass.
 export function judgeSuite(allPassing: boolean, failing: FailingTest[], newFailures: FailingTest[]): boolean {
-    return allPassing || (failing.length > 0 && newFailures.length === 0);
+  return allPassing || (failing.length > 0 && newFailures.length === 0);
 }

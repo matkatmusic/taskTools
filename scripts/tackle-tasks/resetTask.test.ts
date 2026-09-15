@@ -13,6 +13,7 @@ import { generateSteps, resolveDiagramFolderSetting } from "./generateSteps.ts";
 import { taskWorkflowDirectory } from "../shared/taskFiles.ts";
 import { readCheckpoint } from "./shared/checkpoint.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../shared/taskStateLock.ts";
+import { readRetainedRebaseIntent } from "./shared/rebaseIntent.ts";
 
 function git(repoRoot: string, ...args: string[]): string {
     return execFileSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
@@ -76,6 +77,123 @@ test("test_resetTask_atBlock_appliesTheBlocksResetScope", async () => {
         assert.ok(existsSync(join(worktreePath, "plans", "plan.json")));
         assert.ok(existsSync(join(worktreePath, "plans", "brief-9.md")));
         assert.match(said, /cleared: counters/);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_reroutesThroughARebaseWhenStagingHasMovedSinceTheWorktreeWasCut", async () => {
+    // Setup: task 9's worktree is cut from staging, then staging advances before the reset runs.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "staging");
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        mkdirSync(join(worktreePath, "plans"), { recursive: true });
+        writeFileSync(join(worktreePath, "plans", "plan.json"), "{}");
+        writeFileSync(join(worktreePath, "plans", "brief-9.md"), "brief");
+
+        // Staging moves after the worktree was cut.
+        git(repoRoot, "checkout", "-q", "staging");
+        writeFileSync(join(repoRoot, "staging-moved.txt"), "staging moved\n");
+        git(repoRoot, "add", "staging-moved.txt");
+        git(repoRoot, "commit", "-q", "-m", "staging moved");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+        }));
+
+        // Action: reset task 9 at RUN_TASK_TESTS.
+        process.chdir(repoRoot);
+        const said = await resetTask(9, "RUN_TASK_TESTS");
+
+        // Verification: the checkpoint detours through the rebase block first, with the original target stashed.
+        assert.match(said, /staging moved.*rebases onto staging before resuming at [^:]+::RUN_TASK_TESTS/);
+        const checkpoint = readCheckpoint(worktreePath)!;
+        assert.equal(checkpoint.block, "pipeline-preambleStatusCheck.mmd::REBASE_RESUMED_WORKTREE_ONTO_STAGING");
+        const intent = readRetainedRebaseIntent(worktreePath)!;
+        assert.ok(intent !== null);
+        assert.equal(intent.taskNumber, 9);
+        assert.equal(intent.runId, runId);
+        assert.match(intent.targetBlock, /::RUN_TASK_TESTS$/);
+        assert.equal(JSON.parse(intent.targetInput).taskNumber, 9);
+    } finally {
+        process.chdir(cwd);
+        if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
+        rmSync(dirname(worktreePath), { recursive: true, force: true });
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_atBlock_resumesDirectlyAtTheBlockWhenStagingHasNotMoved", async () => {
+    // Setup: same as the reroute test, minus the staging-advancing commit.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 8);
+    const worktreePath = join(tmpdir(), "taskTools-wt", `${basename(repoRoot)}-${hash}`, "task-9");
+    try {
+        const runId = "r1";
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{
+            taskNumber: 9,
+            title: "t",
+            difficulty: 4,
+            run: {
+                active: false, worktree: null, leaseRunId: null,
+                history: [{
+                    runId, startedAt: "t", endedAt: "t2", exitType: "tests-red", exitNote: "n",
+                    modifiedFiles: [], commits: [], implementationNotesFile: null, taskTests: null, fullSuite: null,
+                }],
+            },
+        }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
+
+        git(repoRoot, "branch", "staging");
+        git(repoRoot, "branch", "task-9");
+        git(repoRoot, "worktree", "add", worktreePath, "task-9");
+        mkdirSync(join(worktreePath, "plans"), { recursive: true });
+        writeFileSync(join(worktreePath, "plans", "plan.json"), "{}");
+        writeFileSync(join(worktreePath, "plans", "brief-9.md"), "brief");
+
+        const packetsFolder = join(repoRoot, ".taskTools", "runs", "0000", "packets");
+        mkdirSync(packetsFolder, { recursive: true });
+        const packetInput = JSON.stringify({ taskNumber: 9, runId, worktree: worktreePath, projectRoot: repoRoot });
+        writeFileSync(join(packetsFolder, "01-RUN_TASK_TESTS-0-1.json"), JSON.stringify({
+            command: `node --no-inspect script.ts '${packetInput}'`,
+        }));
+
+        process.chdir(repoRoot);
+        const said = await resetTask(9, "RUN_TASK_TESTS");
+
+        assert.match(said, /resumes at [^:]+::RUN_TASK_TESTS on the next/);
+        const checkpoint = readCheckpoint(worktreePath)!;
+        assert.match(checkpoint.block, /::RUN_TASK_TESTS$/);
+        assert.equal(readRetainedRebaseIntent(worktreePath), null);
     } finally {
         process.chdir(cwd);
         if (existsSync(worktreePath)) git(repoRoot, "worktree", "remove", "--force", worktreePath);
@@ -590,8 +708,8 @@ test("test_resetTask_blocksWhenALaterTaskMergeSitsOnStagingAndNamesIt", async ()
     }
 });
 
-test("test_resetTask_fullReset_throwsWhenAResetPointRefIsMissing", async () => {
-    // Setup: task 50 is open; no reset-point ref was ever written for it.
+test("test_resetTask_fullReset_ofAnOpenTaskNeverRequiresAResetPointRef", async () => {
+    // Task 50 is open, with no reset-point ref, so its full reset just clears local state.
     const repoRoot = makeTempRepoWithCommit();
     const cwd = process.cwd();
     try {
@@ -600,13 +718,44 @@ test("test_resetTask_fullReset_throwsWhenAResetPointRefIsMissing", async () => {
         writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), "[]");
         git(repoRoot, "branch", "staging");
 
-        // Action + verification: the full reset throws naming the repo, and never reaches a mutation.
         process.chdir(repoRoot);
-        await assert.rejects(
-            () => resetTask(50, ""),
-            new RegExp(`no reset point in ${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}; reset it by hand`),
-        );
-        assert.ok(existsSync(join(repoRoot, ".taskTools", "workflows", "50", "steps.json")));
+        await resetTask(50, "");
+
+        // A full reset ends by removing the per-task workflow folder, the same as any other successful full reset.
+        assert.equal(existsSync(join(repoRoot, ".taskTools", "workflows", "50", "steps.json")), false);
+    } finally {
+        process.chdir(cwd);
+        rmSync(repoRoot, { recursive: true, force: true });
+    }
+});
+
+test("test_resetTask_fullReset_ofAnOpenTaskNeverTouchesStagingEvenWithALaterMergeOnTop", async () => {
+    // Setup: task 30 is open and was cut from staging before task 31 merged on top of it — the exact shape that used to throw "reset of 30 blocked. reset 31 first to unblock" for an open task.
+    const repoRoot = makeTempRepoWithCommit();
+    const cwd = process.cwd();
+    try {
+        git(repoRoot, "branch", "staging");
+        const preCutStagingTip = git(repoRoot, "rev-parse", "staging").trim();
+        git(repoRoot, "checkout", "-q", "-b", "task-31", "staging");
+        writeFileSync(join(repoRoot, "task-31.txt"), "work\n");
+        git(repoRoot, "add", "task-31.txt");
+        git(repoRoot, "commit", "-q", "-m", "task 31 work");
+        git(repoRoot, "checkout", "-q", "staging");
+        git(repoRoot, "merge", "-q", "--no-ff", "-m", "merge task-31", "task-31");
+        git(repoRoot, "branch", "-D", "task-31");
+        const stagingTipAfterMerge = git(repoRoot, "rev-parse", "staging").trim();
+
+        mkdirSync(join(repoRoot, ".taskTools"), { recursive: true });
+        writeFileSync(join(repoRoot, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 30, title: "t30" }]));
+        writeFileSync(join(repoRoot, ".taskTools", "completedTasks.json"), JSON.stringify([
+            { taskNumber: 31, title: "t31", commitHashes: ["aaa", stagingTipAfterMerge] },
+        ]));
+        git(repoRoot, "update-ref", "refs/taskTools/reset-point/task-30", preCutStagingTip);
+
+        process.chdir(repoRoot);
+        await resetTask(30, "");
+
+        assert.equal(git(repoRoot, "rev-parse", "staging").trim(), stagingTipAfterMerge);
     } finally {
         process.chdir(cwd);
         rmSync(repoRoot, { recursive: true, force: true });
