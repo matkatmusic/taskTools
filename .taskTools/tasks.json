@@ -392,5 +392,42 @@
         "reason": "step 4 of the /mermaid chain must land first; this step builds on its parser output"
       }
     ]
+  },
+  {
+    "taskNumber": 202,
+    "version": "69585d9b51f35881956b4b3ede2f0a9708e215b5",
+    "title": "/mermaid step 6: parse while loops into Q_ diamonds with a back edge",
+    "userDescription": "Step 6: adding 'while()' expression parsing to the generated file.",
+    "chainGoal": [
+      "- The chain replaces task 190: a /mermaid skill whose TypeScript parser script draws every tracked .ts file into its own .mmd flowchart in the relationship-mermaid grammar.",
+      "- Step order: scanner and file box, function names and statement boxes, call boxes with import paths, if diamonds, for diamonds, while diamonds."
+    ],
+    "goal": [
+      "- The full sum(list) example from task 190 produces, after the for section, Q_while_total_greater_than_100 with _Y \"total > 100\" and _N \"total <= 100\", B_total_is_halve_total --> Q_while_total_greater_than_100 as the back edge, and the _N arm --> B_return_total.",
+      "- `node --test tests/mermaid.test.ts` passes."
+    ],
+    "notInScope": [
+      "- switch: not assigned to any step in this chain yet.",
+      "- Linking diagrams across files: not in task 190 at all."
+    ],
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
+    "description": "In scripts/mermaid/mermaid.ts, a `while` becomes Q_<id>{\"<header text>\"} with the id from the header by the step-2 rule (while (total > 100) -> Q_while_total_greater_than_100), plus Q_CHOICE_<id>_Y[\"<condition>\"] and _N[\"<step-4 flipped opposite>\"]. Edges: previous box --> Q_, Q_ --> both choices, _Y --> first body box, last body box --> Q_ (back edge), _N --> the statement after the loop. `do { } while (c)` is drawn the same way with the body first. Nested ifs and loops in the body use the same walk. The expected test block follows directly after step 5's Q_CHOICE_for_x_of_list_N.",
+    "modifiableFiles": [
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "tests/mermaid.test.ts, exact text compare: the full sum(list) source from task 190 produces the while boxes and edges in the goal after the step-5 for section.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 201,
+        "reason": "step 5 of the /mermaid chain must land first; this step builds on its parser output"
+      }
+    ]
   }
 ]
