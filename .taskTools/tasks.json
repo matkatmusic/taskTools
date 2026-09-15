@@ -238,5 +238,44 @@
     "hasTests": true,
     "tests": "tests/mermaid.test.ts: (1) mermaidForFile(\"scripts/foo/main.ts\", \"\") returns exactly `flowchart TD\\nB_scripts_foo_main_ts[\"scripts/foo/main.ts\"]\\n`. (2) In a temp git repo with a.ts, a.test.ts, and tests/b.ts committed, running the script writes only .taskTools/diagrams/a.mmd.",
     "difficulty": 3
+  },
+  {
+    "taskNumber": 198,
+    "version": "21533ad48161257d3319d6fa9d74b920c451ec23",
+    "title": "/mermaid step 2: parse function names and draw every statement as a B_ box",
+    "userDescription": "Step 2: adding function name parsing only to the generated file, and every other express is just `B_*[\"<that expression>\"]`.",
+    "chainGoal": [
+      "- The chain replaces task 190: a /mermaid skill whose TypeScript parser script draws every tracked .ts file into its own .mmd flowchart in the relationship-mermaid grammar.",
+      "- Step order: scanner and file box, function names and statement boxes, call boxes with import paths, if diamonds, for diamonds, while diamonds."
+    ],
+    "goal": [
+      "- The multipleCalls/singleCall example from task 190 produces exactly the boxes B_a1, B_a2, B_a3, B_b1, B_b2, B_c, B_multipleCalls, B_singleCall and the edges `B_multipleCalls --> B_a1 --> B_b1 --> B_c --> B_a2` and `B_singleCall --> B_a3 --> B_b2`.",
+      "- A class method `bar` on class `Foo` produces B_Foo_bar[\"Foo::bar()\"] followed by its statements.",
+      "- A pure script file with two top-level statements chains them from the file box.",
+      "- `node --test tests/mermaid.test.ts` passes."
+    ],
+    "notInScope": [
+      "- Import-path lines on call boxes: step 3 owns them.",
+      "- if diamonds: step 4. for diamonds: step 5. while diamonds: step 6."
+    ],
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
+    "description": "Extends mermaidForFile in scripts/mermaid/mermaid.ts to parse source text with ts.createSourceFile (TypeScript is already a devDependency) and walk the tree into boxes {id, label} and edges {from, to}, then print them. Top boxes for function declarations, arrow-function consts, and class methods (B_<name>, or B_<Class>_<method> labelled `Class::method(...)`); a function with an empty body gets no top box. One B_ box per statement inside each body, chained in source order from its top box; the file's top-level statements chain from the step-1 file box. Id rule: identifiers and literals in source order joined by `_`, operators as words (> greater_than, < less_than, === equals, ! not, && and, || or, = is, += plus_is), keywords const/let/var/await/new dropped, `return` kept, punctuation dropped, numbers as digits. A repeated id gets a running number suffix counted across the whole file (B_a1, B_a2); a unique id gets none. A statement the walker cannot shape becomes a plain B_ box labelled with that line of code. Calls, if, for, while, switch get no special shape yet: `a();` is B_a[\"a()\"], an `if` is one box holding its whole source text.",
+    "modifiableFiles": [
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "tests/mermaid.test.ts, exact text compare: (1) the multipleCalls/singleCall source from task 190 gives the boxes and edges listed in the goal, after `flowchart TD` and the file box. (2) A class with one method `Foo::bar()` gets B_Foo_bar[\"Foo::bar()\"] followed by its statements. (3) A pure script file with two top-level statements chains them from the file box.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 197,
+        "reason": "step 1 of the /mermaid chain must land first; this step builds on its parser output"
+      }
+    ]
   }
 ]
