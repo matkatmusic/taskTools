@@ -277,5 +277,43 @@
         "reason": "step 1 of the /mermaid chain must land first; this step builds on its parser output"
       }
     ]
+  },
+  {
+    "taskNumber": 199,
+    "version": "0469c0aca4aad792fcfa183790470973e9c23c64",
+    "title": "/mermaid step 3: parse function calls into call boxes with import paths",
+    "userDescription": "Step 3: adding function call parsing to the generated file.",
+    "chainGoal": [
+      "- The chain replaces task 190: a /mermaid skill whose TypeScript parser script draws every tracked .ts file into its own .mmd flowchart in the relationship-mermaid grammar.",
+      "- Step order: scanner and file box, function names and statement boxes, call boxes with import paths, if diamonds, for diamonds, while diamonds."
+    ],
+    "goal": [
+      "- Source with `import { readTask } from \"../shared/tasks.ts\";` and body `const t = readTask(1); console.log(t);` produces B_t_is_readTask_1[\"const t = readTask(1)<br/>../shared/tasks.ts\"] --> B_console_log_t[\"console.log(t)\"].",
+      "- The step-2 multipleCalls/singleCall test still passes unchanged.",
+      "- `node --test tests/mermaid.test.ts` passes."
+    ],
+    "notInScope": [
+      "- if diamonds: step 4. for diamonds: step 5. while diamonds: step 6.",
+      "- Linking to the callee's own diagram in another file: not in task 190 at all."
+    ],
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
+    "description": "In scripts/mermaid/mermaid.ts, a bare call statement, or a call wrapped in a const assignment, return, or await, is recognised as a call to a named function. The box label stays the statement source text. When the callee is imported from a relative specifier (./ or ../) in this file's own import statements, the label gains a second line `<br/>` + that import path. Built-in and node_modules callees get no second line. The id keeps the step-2 rule. The step-2 tests must not regress.",
+    "modifiableFiles": [
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "tests/mermaid.test.ts, exact text compare: source with `import { readTask } from \"../shared/tasks.ts\";` and a function body `const t = readTask(1); console.log(t);` produces B_t_is_readTask_1[\"const t = readTask(1)<br/>../shared/tasks.ts\"] --> B_console_log_t[\"console.log(t)\"]. The step-2 tests still pass unchanged.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 198,
+        "reason": "step 2 of the /mermaid chain must land first; this step builds on its parser output"
+      }
+    ]
   }
 ]
