@@ -199,5 +199,44 @@
       "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.template.json",
       "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.test.ts"
     ]
+  },
+  {
+    "taskNumber": 197,
+    "version": "6f6d9df0e3a29bf40a8158b4bd6ec8787e90f84b",
+    "title": "/mermaid step 1: scan the project and write one B_ box per TypeScript file",
+    "userDescription": "step 1: the basic script that scans and finds the files to parse, and writing a single `B_<relative/path/to/filename>.<extension>` block into a .mmd file for the file being parsed.",
+    "chainGoal": [
+      "- The chain replaces task 190: a /mermaid skill whose TypeScript parser script draws every tracked .ts file into its own .mmd flowchart in the relationship-mermaid grammar.",
+      "- Step order: scanner and file box, function names and statement boxes, call boxes with import paths, if diamonds, for diamonds, while diamonds."
+    ],
+    "goal": [
+      "- `/mermaid` appears in the skill list and runs with no argument.",
+      "- Running it in this repo writes .taskTools/diagrams/<path>.mmd for every tracked .ts file except *.test.ts and tests/, each holding exactly `flowchart TD` and one B_ box labelled with the file's relative path.",
+      "- mermaidForFile(\"scripts/foo/main.ts\", \"\") returns exactly `flowchart TD\\nB_scripts_foo_main_ts[\"scripts/foo/main.ts\"]\\n`.",
+      "- `node --test tests/mermaid.test.ts` passes."
+    ],
+    "notInScope": [
+      "- Reading the TypeScript syntax tree: step 2 owns it.",
+      "- Function, call, if, for, while parsing: steps 2 to 6 own those."
+    ],
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
+    "description": "Create skills/mermaid/SKILL.md mirroring skills/create-task/SKILL.md's shape (a fenced `!` block invoking a script, no argument) and scripts/mermaid/mermaid.ts. The script uses `git ls-files '*.ts'`, excludes `*.test.ts` and anything under `tests/`, and for each remaining file writes .taskTools/diagrams/<relative path>.mmd, overwriting existing files. Step 1 only emits a two-line diagram (`flowchart TD` plus one `B_<id>[\"path\"]` box, id = path with non-identifier chars replaced by `_`); no TypeScript parsing yet. Exports `mermaidForFile(relativePath, sourceText): string` so tests/mermaid.test.ts and later steps can call it without disk I/O. Parent task 190 holds the full grammar and the example sources for the whole chain.",
+    "modifiableFiles": [
+      "skills/mermaid/SKILL.md",
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "skills/mermaid/SKILL.md",
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "tests/mermaid.test.ts: (1) mermaidForFile(\"scripts/foo/main.ts\", \"\") returns exactly `flowchart TD\\nB_scripts_foo_main_ts[\"scripts/foo/main.ts\"]\\n`. (2) In a temp git repo with a.ts, a.test.ts, and tests/b.ts committed, running the script writes only .taskTools/diagrams/a.mmd.",
+    "difficulty": 3
   }
 ]
