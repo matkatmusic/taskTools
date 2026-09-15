@@ -31,48 +31,6 @@
     "hasTests": true
   },
   {
-    "taskNumber": 190,
-    "schemaVersion": "1.0.1",
-    "version": "53e3de50ba468819f85f4913e181cad21664c602",
-    "title": "Add a /mermaid skill that draws every TypeScript file into its own .mmd flowchart",
-    "userDescription": "make a '/mermaid' skill that searches a codebase and builds a .mmd mermaid diagram. It should follow the relationship-mermaid grammar: B_*[\"text\"] for regular blocks, Q_*{\"text?\"} for decision blocks, Q_CHOICE_*[\"text\"] for decision block choices. The skill processes source files separately; it does not connect source files together into a single diagram yet. It takes no argument, scans the project folder, and processes each file automatically. A TypeScript parser script does the work; other languages come later.",
-    "goal": [
-      "- A /mermaid skill exists at skills/mermaid/SKILL.md, takes no argument, and appears in the skill list.",
-      "- Running /mermaid lists every git-tracked .ts file (test files and tests/ skipped) and writes one .mmd per file to .taskTools/diagrams/<same relative path with .mmd>, overwriting any old file.",
-      "- Each .mmd starts with `flowchart TD` and uses only B_*[\"text\"], Q_*{\"text\"}, and Q_CHOICE_*[\"text\"] nodes and `-->` edges. No subgraphs, no classDef, no metadata footer.",
-      "- Every function declaration, arrow-function const, and class method gets a top box labelled with its signature; a class method reads `Class::method`. A file's top-level statements form a chain that starts at a box named after the file (scripts/foo/main.ts -> B_main[\"main.ts\"]).",
-      "- Every statement in a body is one B_ box whose label is the statement's source text. `if`, `switch`, `for`, and `while` are Q_ diamonds labelled with their header text.",
-      "- Each diamond has one Q_CHOICE_ box per arm. `if`/`for`/`while` have a _Y arm labelled with the condition and a _N arm labelled with its opposite (operators flipped by table: > to <=, < to >=, === to !==, ! removed). `switch` has one arm per case, labelled with the case value; default is labelled `default`.",
-      "- A loop's last body box points back to its diamond; the _N arm goes to the next statement. Both `if` arms rejoin at the statement after the if; an arm that returns just stops. Nested control flow is walked the same way.",
-      "- Ids come from the statement in plain English: identifiers and literals in source order joined by `_`, operators as words (> greater_than, < less_than, === equals, ! not, && and, || or, = is), keywords (const/let/await/new) and punctuation dropped, numbers as digits. Choice ids are the diamond id plus _Y, _N, or the case value. A repeated id gets a number suffix counted across the whole file (B_a1, B_a2); an id used once has no suffix.",
-      "- Any statement the parser cannot shape into a Q_ with choices (for example a chained array.map().filter() expression) becomes a plain B_ box whose label is that line of code.",
-      "- tests/mermaid.test.ts feeds the example sources listed in the description into the parser and compares the printed .mmd text exactly.",
-      "- The skill contains an explicit written checklist of those diagram rules."
-    ],
-    "notInScope": [
-      "- NOT in scope: linking one file's diagram to another file's diagram; languages other than TypeScript; changing any existing diagram in diagrams/tackle-tasks/; changing scripts/generateSteps.ts."
-    ],
-    "description": "Add a new /mermaid skill (skills/mermaid/SKILL.md, same shape as skills/create-task/SKILL.md: a fenced `!` block that runs a script) that invokes a new parser script scripts/mermaid/mermaid.ts. The script uses the already-installed TypeScript compiler (`ts.createSourceFile`, no new dependency) to turn each source file into a tree, walks that tree into a small in-between list of boxes {id, label} and edges {from, to}, then prints that list as mermaid text. The grammar is the one used by ~/Programming/relationship-mermaid (see diagrams/say-something-or-let-it-go.mmd there and the `Q_`/`Q_CHOICE` checks in graph-slice.ts), NOT the taskTools diagrams/tackle-tasks grammar. Files: `git ls-files '*.ts'` minus `*.test.ts` and `tests/`. Output: .taskTools/diagrams/<relative path>.mmd. Walk rules: each function-like declaration (function, arrow const, class method) starts its own chain at a top box; the file's top-level statements start a chain at a box named after the file; every statement is a B_ box with the source text as label; if/switch/for/while are Q_ diamonds with one Q_CHOICE_ arm each; if/loop arms are labelled with the condition text and its table-flipped opposite; loop bodies point back to their diamond; if arms rejoin after the if; an arm ending in return stops. Id rule and suffix rule are in the goal. Fallback: a statement the parser cannot shape into a diamond becomes a plain B_ box with the line text.\n\n## Example sources for tests/mermaid.test.ts\n\n1. Calls only:\n```ts\nfunction a() {}\nfunction b() {}\nfunction c() {}\nfunction multipleCalls() { a(); b(); c(); a(); }\nfunction singleCall() { a(); b(); }\n```\nexpected:\n```\nflowchart TD\nB_a1[\"a()\"]\nB_a2[\"a()\"]\nB_a3[\"a()\"]\nB_b1[\"b()\"]\nB_b2[\"b()\"]\nB_c[\"c()\"]\nB_multipleCalls[\"multipleCalls()\"]\nB_singleCall[\"singleCall()\"]\n\nB_multipleCalls --> B_a1 --> B_b1 --> B_c --> B_a2\nB_singleCall --> B_a3 --> B_b2\n```\n(a, b, c have empty bodies and so no top box of their own.)\n\n2. if with early return:\n```ts\nfunction load(path: string) {\n  if (!exists(path)) {\n    return null;\n  }\n  const raw = read(path);\n  return parse(raw);\n}\n```\nexpected:\n```\nflowchart TD\nB_load[\"load(path: string)\"]\nQ_not_exists_path{\"if( !exists(path) )\"}\nQ_CHOICE_not_exists_path_Y[\"!exists(path)\"]\nQ_CHOICE_not_exists_path_N[\"exists(path)\"]\nB_read_path[\"const raw = read(path)\"]\nB_return_null[\"return null\"]\nB_return_parse_raw[\"return parse(raw)\"]\n\nB_load --> Q_not_exists_path\nQ_not_exists_path --> Q_CHOICE_not_exists_path_Y\nQ_CHOICE_not_exists_path_Y --> B_return_null\nQ_not_exists_path --> Q_CHOICE_not_exists_path_N\nQ_CHOICE_not_exists_path_N --> B_read_path\nB_read_path --> B_return_parse_raw\n```\n\n3. for and while loops:\n```ts\nfunction sum(list: number[]) {\n  let total = 0;\n  for (const x of list) {\n    total += x;\n  }\n  while (total > 100) {\n    total = halve(total);\n  }\n  return total;\n}\n```\nexpected: Q_for_x_of_list{\"for (const x of list)\"} with Q_CHOICE_for_x_of_list_Y[\"i < list.length; x = list[i];\"] and Q_CHOICE_for_x_of_list_N[\"i >= list.length\"]; Q_while_total_greater_than_100{\"while (total > 100)\"} with _Y[\"total > 100\"] and _N[\"total <= 100\"]; B_total_plus_is_x --> Q_for_x_of_list and B_total_is_halve_total --> Q_while_total_greater_than_100 as back edges; the _N arms continue to the next statement; B_return_total last.\n\n4. A pure script file with top-level statements and no functions: chain starts at B_<fileName>[\"<fileName>.ts\"].\n\n5. A switch with two cases and default: one diamond, three Q_CHOICE_ arms labelled with the case values and `default`.\n\n## Follow-up\n\nMore example sources are needed later (class methods, nested if inside a loop, unparseable chained expressions like array.map().filter()). Record them as a follow-up task once the parser exists.",
-    "modifiableFiles": [
-      "skills/mermaid/SKILL.md",
-      "scripts/mermaid/mermaid.ts",
-      "tests/mermaid.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "tests": "tests/mermaid.test.ts: for each example source in the description, write it to a temp file, run the parser on it, and assert the printed .mmd text equals the expected text exactly. One more test runs the skill's file listing against a temp git repo with a .ts file, a .test.ts file, and a tests/ file, and asserts only the first one is drawn.",
-    "difficulty": 7,
-    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
-    "blockedBy": [],
-    "hasTests": true,
-    "createsFiles": [
-      "skills/mermaid/SKILL.md",
-      "scripts/mermaid/mermaid.ts",
-      "tests/mermaid.test.ts"
-    ]
-  },
-  {
     "taskNumber": 196,
     "version": "da449af75f26834ca7d8b101d21c1b83e1a8b86e",
     "title": "Run the full suite on the fresh worktree in the preamble and exit staging-suite-red when staging is red",
