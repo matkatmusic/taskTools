@@ -315,5 +315,44 @@
         "reason": "step 2 of the /mermaid chain must land first; this step builds on its parser output"
       }
     ]
+  },
+  {
+    "taskNumber": 200,
+    "version": "81155165ad70cf7c014fe74edd81b69eb7327363",
+    "title": "/mermaid step 4: parse if statements into Q_ diamonds with two choice boxes",
+    "userDescription": "Step 4: adding 'if()' expression parsing to the generated file.",
+    "chainGoal": [
+      "- The chain replaces task 190: a /mermaid skill whose TypeScript parser script draws every tracked .ts file into its own .mmd flowchart in the relationship-mermaid grammar.",
+      "- Step order: scanner and file box, function names and statement boxes, call boxes with import paths, if diamonds, for diamonds, while diamonds."
+    ],
+    "goal": [
+      "- The load(path) example from task 190 produces exactly its expected .mmd text: Q_not_exists_path with _Y \"!exists(path)\" and _N \"exists(path)\", B_return_null off the _Y arm, B_read_path --> B_return_parse_raw off the _N arm.",
+      "- An if/else whose arms both continue rejoins both arms at the next statement.",
+      "- `if (count > 3)` gives Q_count_greater_than_3 with _N label `count <= 3`.",
+      "- `node --test tests/mermaid.test.ts` passes."
+    ],
+    "notInScope": [
+      "- for diamonds: step 5. while diamonds: step 6.",
+      "- switch: not assigned to any step in this chain yet."
+    ],
+    "problemSolvedByTask": "Understanding an unfamiliar codebase's control flow means reading files by hand; there is no automated way to get a flowchart per file.",
+    "description": "In scripts/mermaid/mermaid.ts, an `if` becomes Q_<id>{\"if( <condition text> )\"} with the id from the condition by the step-2 rule, plus Q_CHOICE_<id>_Y[\"<condition>\"] and Q_CHOICE_<id>_N[\"<opposite>\"]. Opposite by table: leading `!` removed; otherwise > to <=, < to >=, >= to <, <= to >, === to !==, !== to ===; anything else wrapped as `!(text)`. Edges: previous box --> Q_, Q_ --> each choice, _Y --> first then-box, _N --> first else-box or the statement after the if, last box of each arm --> the statement after the if. An arm ending in return or throw stops with no edge onward. Nested ifs recurse through the same walk.",
+    "modifiableFiles": [
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "tests/mermaid.test.ts, exact text compare: (1) the load(path) source from task 190 produces exactly its expected output. (2) An if/else with both arms rejoining at the next statement. (3) `if (count > 3)` gives Q_count_greater_than_3 with _N label `count <= 3`.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 199,
+        "reason": "step 3 of the /mermaid chain must land first; this step builds on its parser output"
+      }
+    ]
   }
 ]
