@@ -210,3 +210,96 @@ test("test_mermaidForFile_addsNoSecondLabelLineForANodeModuleImportCall", () => 
         'B_p --> B_execFileSync\n'
     );
 });
+
+test("test_mermaidForFile_parsesAnIfWithEarlyReturnIntoADiamondWithTwoChoices", () => {
+    // Scenario: the load(path) example — an if with only a then-arm that returns, followed by two more statements.  Step: call it with that function body.
+    const source = 'function load(path: string) {\n  if (!exists(path)) {\n    return null;\n  }\n  const raw = read(path);\n  return parse(raw);\n}\n';
+    const result = mermaidForFile("p.ts", source);
+    // Verify: the diamond id and both choice ids come from computeBaseId of the condition text; the Y arm ends in return and stops; the N arm (no else) falls through and chains the remaining statements.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_p_ts["p.ts"]\n' +
+        'B_load["load(path: string)"]\n' +
+        'B_raw_is_read_path["const raw = read(path)"]\n' +
+        'B_return["return null"]\n' +
+        'B_return_parse_raw["return parse(raw)"]\n' +
+        'Q_CHOICE_not_exists_path_N["exists(path)"]\n' +
+        'Q_CHOICE_not_exists_path_Y["!exists(path)"]\n' +
+        'Q_not_exists_path{"if( !exists(path) )"}\n' +
+        'B_load --> Q_not_exists_path\n' +
+        'Q_not_exists_path --> Q_CHOICE_not_exists_path_Y --> B_return\n' +
+        'Q_not_exists_path --> Q_CHOICE_not_exists_path_N --> B_raw_is_read_path --> B_return_parse_raw\n'
+    );
+});
+
+test("test_mermaidForFile_bothIfElseArmsRejoinAtTheStatementAfterTheIf", () => {
+    // Scenario: an if/else whose arms both continue (neither returns); both must rejoin at the same next-statement box, declared once but referenced by two edges.  Step: call it with that function body.
+    const source = 'function g(flag) {\n  if (flag) {\n    doA();\n  } else {\n    doB();\n  }\n  doNext();\n}\n';
+    const result = mermaidForFile("r.ts", source);
+    // Verify: doNext() is declared once but both the Y-arm chain and the N-arm chain end with "--> B_doNext"; the opposite of a bare identifier condition (no operator) is "!(text)".
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_r_ts["r.ts"]\n' +
+        'B_doA["doA()"]\n' +
+        'B_doB["doB()"]\n' +
+        'B_doNext["doNext()"]\n' +
+        'B_g["g(flag)"]\n' +
+        'Q_CHOICE_flag_N["!(flag)"]\n' +
+        'Q_CHOICE_flag_Y["flag"]\n' +
+        'Q_flag{"if( flag )"}\n' +
+        'B_g --> Q_flag\n' +
+        'Q_flag --> Q_CHOICE_flag_Y --> B_doA --> B_doNext\n' +
+        'Q_flag --> Q_CHOICE_flag_N --> B_doB --> B_doNext\n'
+    );
+});
+
+test("test_mermaidForFile_greaterThanConditionFlipsToLessThanOrEqualOnTheNoArm", () => {
+    // Scenario: `if (count > 3)` with no else; verifies the id-from-condition rule and the operator-flip table entry for ">".  Step: call it with that function body.
+    const source = 'function f(count) {\n  if (count > 3) {\n    doThing();\n  }\n}\n';
+    const result = mermaidForFile("q.ts", source);
+    // Verify: the diamond id is Q_count_greater_than_3; the _N choice box is labelled "count <= 3".
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_q_ts["q.ts"]\n' +
+        'B_doThing["doThing()"]\n' +
+        'B_f["f(count)"]\n' +
+        'Q_CHOICE_count_greater_than_3_N["count <= 3"]\n' +
+        'Q_CHOICE_count_greater_than_3_Y["count > 3"]\n' +
+        'Q_count_greater_than_3{"if( count > 3 )"}\n' +
+        'B_f --> Q_count_greater_than_3\n' +
+        'Q_count_greater_than_3 --> Q_CHOICE_count_greater_than_3_Y --> B_doThing\n' +
+        'Q_count_greater_than_3 --> Q_CHOICE_count_greater_than_3_N\n'
+    );
+});
+
+test("test_mermaidForFile_nestedIfRejoinsInnerArmsBeforeOuterArmRejoinsSeparately", () => {
+    // Scenario: an if nested inside another if's then-arm; the inner if's two arms rejoin at the shared statement after it, and that rejoined path then continues to the statement after the outer if, while the outer if's no-arm connects straight to that same final statement.  Step: call it with that function body.
+    const source = 'function f(x, y) {\n  if (x) {\n    if (y) {\n      a();\n    } else {\n      b();\n    }\n    c();\n  }\n  d();\n}\n';
+    const result = mermaidForFile("s.ts", source);
+    // Verify: Q_x and Q_y are distinct diamonds; Q_y's Y and N arms both join at B_c; B_c then connects to B_d; Q_x's N arm connects directly to B_d (not through B_c).
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_s_ts["s.ts"]\n' +
+        'B_a["a()"]\n' +
+        'B_b["b()"]\n' +
+        'B_c["c()"]\n' +
+        'B_d["d()"]\n' +
+        'B_f["f(x, y)"]\n' +
+        'Q_CHOICE_x_N["!(x)"]\n' +
+        'Q_CHOICE_x_Y["x"]\n' +
+        'Q_CHOICE_y_N["!(y)"]\n' +
+        'Q_CHOICE_y_Y["y"]\n' +
+        'Q_x{"if( x )"}\n' +
+        'Q_y{"if( y )"}\n' +
+        'B_f --> Q_x\n' +
+        'Q_x --> Q_CHOICE_x_Y --> Q_y\n' +
+        'Q_y --> Q_CHOICE_y_Y --> B_a --> B_c\n' +
+        'Q_y --> Q_CHOICE_y_N --> B_b --> B_c\n' +
+        'B_c --> B_d\n' +
+        'Q_x --> Q_CHOICE_x_N --> B_d\n'
+    );
+});

@@ -16,6 +16,15 @@ const OPERATOR_WORDS: Record<string, string> = {
 
 const DROPPED_KEYWORDS = new Set(["const", "let", "var", "await", "new"]);
 
+const CONDITION_OPPOSITES: [string, string][] = [
+  ["!==", "==="],
+  ["===", "!=="],
+  [">=", "<"],
+  ["<=", ">"],
+  [">", "<="],
+  ["<", ">="],
+];
+
 interface StatementRecord {
   baseId: string;
   label: string;
@@ -23,7 +32,19 @@ interface StatementRecord {
 
 interface Chain {
   topBox: { id: string; label: string } | null;
-  statements: StatementRecord[];
+  statements: readonly ts.Node[];
+}
+
+interface WalkContext {
+  importMap: Map<string, string>;
+  totalCounts: Map<string, number>;
+  runningCounts: Map<string, number>;
+}
+
+interface WalkOutcome {
+  boxLines: string[];
+  edgeLines: string[];
+  openPaths: string[][];
 }
 
 function computeBaseId(statementText: string): string {
@@ -48,6 +69,18 @@ function computeBaseId(statementText: string): string {
     tokenKind = scanner.scan();
   }
   return words.join("_");
+}
+
+function computeOppositeCondition(conditionText: string): string {
+  if (conditionText.startsWith("!")) {
+    return conditionText.slice(1);
+  }
+  for (const [operator, opposite] of CONDITION_OPPOSITES) {
+    if (conditionText.includes(operator)) {
+      return conditionText.replace(operator, opposite);
+    }
+  }
+  return `!(${conditionText})`;
 }
 
 function calleeName(node: ts.Node): string | null {
@@ -79,6 +112,84 @@ function statementRecord(node: ts.Node, importMap: Map<string, string>): Stateme
   return { baseId: computeBaseId(text), label: finalLabel };
 }
 
+function branchStatements(node: ts.Statement): readonly ts.Statement[] {
+  return ts.isBlock(node) ? node.statements : [node];
+}
+
+function collectBaseIds(statements: readonly ts.Node[], counts: Map<string, number>): void {
+  for (const statement of statements) {
+    if (ts.isIfStatement(statement)) {
+      collectBaseIds(branchStatements(statement.thenStatement), counts);
+      if (statement.elseStatement !== undefined) {
+        collectBaseIds(branchStatements(statement.elseStatement), counts);
+      }
+      continue;
+    }
+    const baseId = computeBaseId(statement.getText());
+    counts.set(baseId, (counts.get(baseId) ?? 0) + 1);
+  }
+}
+
+function assignFinalId(baseId: string, ctx: WalkContext): string {
+  const total = ctx.totalCounts.get(baseId) ?? 0;
+  const occurrence = (ctx.runningCounts.get(baseId) ?? 0) + 1;
+  ctx.runningCounts.set(baseId, occurrence);
+  return total > 1 ? `B_${baseId}${occurrence}` : `B_${baseId}`;
+}
+
+function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], ctx: WalkContext): WalkOutcome {
+  const boxLines: string[] = [];
+  const edgeLines: string[] = [];
+  let openPaths = entryPaths;
+
+  for (const statement of statements) {
+    if (ts.isIfStatement(statement)) {
+      const conditionText = statement.expression.getText();
+      const baseId = computeBaseId(conditionText);
+      const diamondId = `Q_${baseId}`;
+      const yesId = `Q_CHOICE_${baseId}_Y`;
+      const noId = `Q_CHOICE_${baseId}_N`;
+      boxLines.push(`${diamondId}{"if( ${conditionText} )"}`);
+      boxLines.push(`${yesId}["${conditionText}"]`);
+      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+
+      for (const path of openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      const thenOutcome = walkStatements([[diamondId, yesId]], branchStatements(statement.thenStatement), ctx);
+      boxLines.push(...thenOutcome.boxLines);
+      edgeLines.push(...thenOutcome.edgeLines);
+
+      const elseStatements = statement.elseStatement !== undefined ? branchStatements(statement.elseStatement) : [];
+      const elseOutcome = walkStatements([[diamondId, noId]], elseStatements, ctx);
+      boxLines.push(...elseOutcome.boxLines);
+      edgeLines.push(...elseOutcome.edgeLines);
+
+      openPaths = [...thenOutcome.openPaths, ...elseOutcome.openPaths];
+      continue;
+    }
+
+    const record = statementRecord(statement, ctx.importMap);
+    const finalId = assignFinalId(record.baseId, ctx);
+    boxLines.push(`${finalId}["${record.label}"]`);
+
+    const isTerminal = ts.isReturnStatement(statement) || ts.isThrowStatement(statement);
+    for (const path of openPaths) {
+      path.push(finalId);
+    }
+    if (openPaths.length > 1 || isTerminal) {
+      for (const path of openPaths) {
+        edgeLines.push(path.join(" --> "));
+      }
+      openPaths = isTerminal ? [] : [[finalId]];
+    }
+  }
+
+  return { boxLines, edgeLines, openPaths };
+}
+
 function paramsText(parameters: readonly ts.ParameterDeclaration[]): string {
   return parameters.map((parameter) => parameter.getText()).join(", ");
 }
@@ -87,7 +198,7 @@ function functionBodyChain(topBoxId: string, topBoxLabel: string, body: ts.Block
   if (body.statements.length === 0) {
     return [];
   }
-  return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: body.statements.map((statement) => statementRecord(statement, importMap)) }];
+  return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: body.statements }];
 }
 
 function functionLikeChains(statement: ts.Statement, importMap: Map<string, string>): Chain[] | null {
@@ -105,7 +216,7 @@ function functionLikeChains(statement: ts.Statement, importMap: Map<string, stri
       if (ts.isBlock(initializer.body)) {
         return functionBodyChain(topBoxId, topBoxLabel, initializer.body, importMap);
       }
-      return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: [statementRecord(initializer.body, importMap)] }];
+      return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: [initializer.body] }];
     }
     return null;
   }
@@ -170,37 +281,30 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
     fileChainStatements.push(statement);
   }
   if (fileChainStatements.length > 0) {
-    chains.push({ topBox: null, statements: fileChainStatements.map((statement) => statementRecord(statement, importMap)) });
+    chains.push({ topBox: null, statements: fileChainStatements });
   }
 
   const totalCounts = new Map<string, number>();
   for (const chain of chains) {
-    for (const record of chain.statements) {
-      totalCounts.set(record.baseId, (totalCounts.get(record.baseId) ?? 0) + 1);
-    }
+    collectBaseIds(chain.statements, totalCounts);
   }
 
-  const runningCounts = new Map<string, number>();
+  const ctx: WalkContext = { importMap, totalCounts, runningCounts: new Map() };
   const boxLines: string[] = [];
   const edgeLines: string[] = [];
   for (const chain of chains) {
-    const nodeIds: string[] = [];
+    const startId = chain.topBox !== null ? chain.topBox.id : fileBoxId;
     if (chain.topBox !== null) {
       boxLines.push(`${chain.topBox.id}["${chain.topBox.label}"]`);
-      nodeIds.push(chain.topBox.id);
     }
-    else {
-      nodeIds.push(fileBoxId);
+    const outcome = walkStatements([[startId]], chain.statements, ctx);
+    boxLines.push(...outcome.boxLines);
+    edgeLines.push(...outcome.edgeLines);
+    for (const path of outcome.openPaths) {
+      if (path.length >= 2) {
+        edgeLines.push(path.join(" --> "));
+      }
     }
-    for (const record of chain.statements) {
-      const total = totalCounts.get(record.baseId) ?? 0;
-      const occurrence = (runningCounts.get(record.baseId) ?? 0) + 1;
-      runningCounts.set(record.baseId, occurrence);
-      const finalId = total > 1 ? `B_${record.baseId}${occurrence}` : `B_${record.baseId}`;
-      boxLines.push(`${finalId}["${record.label}"]`);
-      nodeIds.push(finalId);
-    }
-    edgeLines.push(nodeIds.join(" --> "));
   }
   boxLines.sort();
 
