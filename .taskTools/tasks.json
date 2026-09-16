@@ -256,7 +256,7 @@
   {
     "taskNumber": 205,
     "version": "7a2a2d4e0f59145b96ee1d99b50c0a3d0dcdaa2c",
-    "title": "run-step: steps.json next override + per-hop input guard on overridden hops",
+    "title": "run-step: steps.json next override + per-hop input guard on every hop",
     "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `scripts/hooks/runStepHook.ts`, `.claude/workflows/run-step.workflow.js`, `tests/runStepHook.test.ts`.\n\nTitle: run-step reads 'next block' from steps.json, overrides reused script's hard-coded next\n\nIn the run-step code (runStepHook.ts, both getNextStepAfter around line 222 and the walk loop around line 505), read a per-node \"next\" override from the generated steps.json. When a steps.json node declares a next override, use it to choose the next block, IGNORING the reused block script's own hard-coded output.next for that node. When the node declares no override, keep the existing hard-coded behavior: output.next among step.next candidates, or the single onlySuccessor. This lets a library script from another diagram be dropped into a new position by naming its next in steps.json alone. Decision nodes still route among their diagram next[] via the emitted choice — the override is per-node, not a change to how a decision block picks. NO block script changes. run-step.workflow.js only relays outcome.next; keep its relay working. Extend tests/runStepHook.test.ts: (a) a node with a steps.json next override routes there even when the script emits a different hard-coded next; (b) a node with no override keeps the existing next behavior. npm run test:baseline stays green because existing pipelines declare no override.\n\nThis is child 1 of the split of task 203 (translator-next override for run-step). Child 2 adds the I/O translator in the same loop; children 3 and 4 prove both on the preamble block. Part of the fast-pipeline chain (203 -> 204).",
     "chainGoal": [
       "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
@@ -264,10 +264,10 @@
       "- Shared acceptance suite (arithmetic A/B/C): tests 1-4 belong to child 1, tests 5-6 to child 2."
     ],
     "goal": [
-      "- npm run test:baseline stays green (no override on existing pipelines, default hops keep verbatim passthrough with no new per-hop check)",
+      "- npm run test:baseline stays green (per-hop input validation runs on every hop; task 206 first makes all existing hops clean subsets)",
       "- With an empty steps.json, run-step routes A->B->C by each block's hard-coded next and the arithmetic chain returns true",
       "- With steps.json overriding a block's nextBlock (no nextScript), run-step resolves the next script via byBlockName[nextBlock].script and the chain still returns true",
-      "- Overriding a hop to a block whose declared template.input does not match the forwarded payload makes run-step fail loud on that overridden hop: result.ok === false with a shape-mismatch error",
+      "- On every hop, when the received payload lacks the next block's declared template.input keys, run-step fails loud: result.ok === false with a shape-mismatch error",
       "- No block script (A/B/C) is edited to change routing; only steps.json changes where a block goes next"
     ],
     "notInScope": [
@@ -277,7 +277,7 @@
       "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
     ],
     "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "getNextStepAfter (runStepHook.ts, ~line 222) and the walk loop's chosenNextBox logic (~line 505) both derive the next box from output.next ?? onlySuccessor. This child makes both call sites check for a steps.json-declared next override on the current node and, when present, route to it instead of output.next/onlySuccessor, resolving the next script via the entry's nextScript ?? byBlockName[nextBlock].script. Decision-node routing (output.next among step.next) is untouched when no override exists. It also extends the existing start-input shape check (getStartInputMismatches / getTemplateShapeMismatches, ~lines 319-333) to run at each OVERRIDDEN hop, so an override that reroutes to a block whose template.input does not match the forwarded payload fails loud via buildFailure (result.ok === false), matching the hook's existing failure style; default hops keep today's verbatim passthrough with no added check. The { blockName, script, nextBlock, nextScript? } config shape and its generation are owned by children 3-4, so runStepHook reads the override defensively and the tests hard-code the fixture steps.json. run-step.workflow.js (~lines 142-144) only relays outcome.next/payload/schema and needs no logic change, just confirmation an overridden next passes through.",
+    "description": "getNextStepAfter (runStepHook.ts, ~line 222) and the walk loop's chosenNextBox logic (~line 505) both derive the next box from output.next ?? onlySuccessor. This child makes both call sites check for a steps.json-declared next override on the current node and, when present, route to it instead of output.next/onlySuccessor, resolving the next script via the entry's nextScript ?? byBlockName[nextBlock].script. Decision-node routing (output.next among step.next) is untouched when no override exists. It also extends the existing start-input shape check (getStartInputMismatches / getTemplateShapeMismatches, ~lines 319-333) to run at EVERY hop, so any hop whose received payload lacks the next block's declared template.input keys fails loud via buildFailure (result.ok === false), matching the hook's existing failure style. Task 206 is a prerequisite that makes the 5 currently-under-declared hops clean, so the baseline stays green. The { blockName, script, nextBlock, nextScript? } config shape and its generation are owned by children 3-4, so runStepHook reads the override defensively and the tests hard-code the fixture steps.json. run-step.workflow.js (~lines 142-144) only relays outcome.next/payload/schema and needs no logic change, just confirmation an overridden next passes through.",
     "modifiableFiles": [
       "scripts/hooks/runStepHook.ts",
       ".claude/workflows/run-step.workflow.js",
@@ -288,8 +288,14 @@
     ],
     "schemaVersion": "1.0.1",
     "hasTests": true,
-    "tests": "Real fixture scripts A.ts/B.ts/C.ts, each with a template.json declaring its input/output shape. A takes {a,b} outputs {sum,a,b}; B takes {sum,a,b} outputs {a,expected}; C takes {a,expected} outputs a boolean. Each script hard-codes its own next (A->B, B->C, C->end). steps.json entry shape: { blockName, script, nextBlock, nextScript? }, resolved as nextScript = entry.nextScript ?? byBlockName[nextBlock].script. TEST 1: empty steps.json -> run-step runs A(1,3) -> B(4,1,3) -> C(1,1) by hard-coded next, result true. TEST 2: steps.json overrides A.nextBlock=B (no nextScript) -> same run, result true. TEST 3: steps.json overrides A.nextBlock=B and B.nextBlock=C -> same run, result true. TEST 4: steps.json overrides A.nextBlock=C (skip B), no translator -> the forwarded {sum,a,b} lacks C's required 'expected' key, so run-step fails loud on that overridden hop: result.ok === false with a shape-mismatch error. The per-hop input check runs ONLY on overridden hops, not on default hard-coded hops, so existing pipelines are unaffected. Tests 5-6 (translator, and detect-a-bad-translator) are owned by child 2.",
-    "difficulty": 6
+    "tests": "Real fixture scripts A.ts/B.ts/C.ts, each with a template.json declaring its input/output shape. A takes {a,b} outputs {sum,a,b}; B takes {sum,a,b} outputs {a,expected}; C takes {a,expected} outputs a boolean. Each script hard-codes its own next (A->B, B->C, C->end). steps.json entry shape: { blockName, script, nextBlock, nextScript? }, resolved as nextScript = entry.nextScript ?? byBlockName[nextBlock].script. TEST 1: empty steps.json -> run-step runs A(1,3) -> B(4,1,3) -> C(1,1) by hard-coded next, result true. TEST 2: steps.json overrides A.nextBlock=B (no nextScript) -> same run, result true. TEST 3: steps.json overrides A.nextBlock=B and B.nextBlock=C -> same run, result true. TEST 4: steps.json overrides A.nextBlock=C (skip B), no translator -> the forwarded {sum,a,b} lacks C's required 'expected' key, so run-step fails loud on that overridden hop: result.ok === false with a shape-mismatch error. The per-hop input check runs on EVERY hop; task 206 makes the 5 currently-under-declared existing hops clean first so the baseline stays green. Tests 5-6 (translator, and detect-a-bad-translator) are owned by child 2.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 206,
+        "reason": "task 206 makes the 5 under-declared existing hops clean subsets, so turning on every-hop input validation keeps npm run test:baseline green"
+      }
+    ]
   },
   {
     "taskNumber": 206,
@@ -303,7 +309,7 @@
     ],
     "notInScope": [
       "- Adding the per-hop input validation itself to runStepHook.ts is owned by task 205",
-      "- The steps.json next override, translator, and preamble proof of concept are owned by tasks 205, 206 and the task-203 split children"
+      "- The steps.json next override, translator, and preamble proof of concept are owned by task 205 and the task-203 split children"
     ],
     "problemSolvedByTask": "The run-step hook is about to validate every block's input against the next block's declared template.input (task 205). Five real pipeline hops declare input keys (box, scriptSignal, taskNumber) that the producing block's template.output does not declare, so turning on per-hop validation would fail them and redden the committed test baseline. The templates must be made consistent first.",
     "description": "Static adjacency check (mirroring getTemplateShapeMismatches in scripts/shared/templateShape.ts, which is subset-by-key-and-kind, extra keys ignored) finds 5 of 84 real hops where the DID_*_SUCCEED_Q target's template.input requires box/scriptSignal/taskNumber that the source template.output does not declare. Inspect the source blocks' actual emitted output to decide, per hop, whether to add the keys to the source's template.output (if the block emits them) or remove them from the target's template.input (if the decision block does not need them). The 10 involved template.json files are this task's fence.",
@@ -326,5 +332,48 @@
     "hasTests": true,
     "tests": "A test that walks every hop of the real scripts/tackle-tasks/diagram-steps.json and asserts next.template.input is a subset (by key and kind) of prev.template.output, using getTemplateShapeMismatches; it currently fails on 5 hops and must pass on all 84. npm run test:baseline stays green.",
     "difficulty": 4
+  },
+  {
+    "taskNumber": 207,
+    "version": "7e5f27b4c4b5ab6a75254c035e28cf01309104dc",
+    "title": "run-step: steps.json translator override reshapes payload across an overridden hop",
+    "userDescription": "[split-task-child] Child 2 of the split of task 203. In the run-step code, pull 'what translator to use' from the steps.json entry, fall back to no translation (verbatim payload) when absent. No block script changes.\n\nThe steps.json entry shape is { blockName, script, nextBlock, nextScript? } plus an optional translator: when a hop is overridden and the entry names a translator (a script path), run-step builds the next block's input by running the translator on the current block's output; when no translator is named the payload is forwarded verbatim (existing behavior). Extend tests/runStepHook.test.ts with the arithmetic A/B/C fixtures. Part of the fast-pipeline chain (203 -> 204).",
+    "chainGoal": [
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
+      "- This is the split of task 203: child 1 = task 205 (steps.json next override + per-hop input guard), child 2 (I/O translator), child 3 (preamble next-override POC), child 4 (preamble translator POC).",
+      "- Shared acceptance suite (arithmetic A/B/C): tests 1-4 belong to child 1, tests 5-6 to child 2."
+    ],
+    "goal": [
+      "- npm run test:baseline stays green (no translator on existing pipelines; verbatim passthrough unchanged)",
+      "- With steps.json overriding A.nextBlock=C AND naming a faithful A-to-C translator, run-step reshapes A's {sum,a,b} output into C's {a,expected} input and the chain returns true",
+      "- A translator that returns the wrong value (right shape) yields the wrong arithmetic result (chain returns false), proving the translator output is what C consumed",
+      "- A translator that returns the wrong shape (missing a required key) fails loud on that hop: result.ok === false with a shape-mismatch error",
+      "- When no translator is named on an overridden hop, the payload is forwarded verbatim (child 1's behavior is preserved)"
+    ],
+    "notInScope": [
+      "- The next-block override and the per-hop input guard are owned by child 1 (task 205); this child adds the translator step on top of it",
+      "- Generating the steps.json { blockName, script, nextBlock, nextScript?, translator } config from a diagram is owned by children 3-4 (generateSteps.ts); child 2 hard-codes the fixture steps.json inside its own tests",
+      "- Defining the real preamble block's translator as a proof of concept is owned by child 4",
+      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
+    ],
+    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
+    "description": "Builds on child 1 (task 205). After child 1 chooses the next block from a steps.json override and validates the forwarded payload against the next block's template.input on overridden hops, this child inserts a translator step: when the overridden entry names a translator (a script path), run-step runs it on the current block's output and uses its return value as the next block's input (which the per-hop guard then validates). When no translator is named, the payload is forwarded verbatim, preserving child 1's behavior. Only runStepHook.ts changes; the { ... translator } config generation is owned by children 3-4, so runStepHook reads the translator field defensively and the tests hard-code the fixture steps.json plus the translator script.",
+    "modifiableFiles": [
+      "scripts/hooks/runStepHook.ts",
+      "tests/runStepHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Reuses child 1's arithmetic A/B/C fixtures and the { blockName, script, nextBlock, nextScript? } steps.json shape, extended with an optional translator (a script path). TEST 5: steps.json overrides A.nextBlock=C AND names a faithful A-to-C translator translate(input) => ({ a: input.sum - input.b, expected: input.a }); run-step reshapes {sum:4,a:1,b:3} into {a:1,expected:1}, C(1,1) returns true. TEST 6 (detect a bad translator): same as test 5 but the translator returns a wrong value (right shape) -> the chain returns false, proving the translator output is what C consumed; and a variant where the translator returns the wrong shape (missing 'expected') -> run-step fails loud on that hop (result.ok === false, shape-mismatch error) via the per-hop input guard added in child 1.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 205,
+        "reason": "needs child 1's steps.json next-override reader and the per-hop input guard the translator output is validated against"
+      }
+    ]
   }
 ]
