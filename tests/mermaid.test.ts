@@ -15,14 +15,14 @@ test("test_mermaidForFile_emitsFlowchartAndOneBoxForThePath", () => {
     // Calls mermaidForFile with a path and empty source; expects a two-line flowchart with one box.
     const result = mermaidForFile("scripts/foo/main.ts", "");
     // Checks the exact string: box id replaces non-identifier characters in the path with underscores.
-    assert.equal(result, '%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\nB_scripts_foo_main_ts["scripts/foo/main.ts"]\n');
+    assert.equal(result, '%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\nB_scripts_foo_main_ts["scripts/foo/main.ts"]\nclassDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\nclassDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\nclassDef decision fill:#fff3bf,stroke:#f08c00,color:#000\nclassDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\nclassDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\nclassDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\nclass B_scripts_foo_main_ts fileRoot\n');
 });
 
 test("test_mermaidForFile_replacesEveryNonIdentifierCharInTheBoxId", () => {
     // A path with a dash, slashes, and dots becomes an id joined only by underscores.
     const result = mermaidForFile("a-b/c.d.ts", "");
     // Verify: dash, slash, and every dot become _; the label keeps the original path.
-    assert.equal(result, '%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\nB_a_b_c_d_ts["a-b/c.d.ts"]\n');
+    assert.equal(result, '%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\nB_a_b_c_d_ts["a-b/c.d.ts"]\nclassDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\nclassDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\nclassDef decision fill:#fff3bf,stroke:#f08c00,color:#000\nclassDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\nclassDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\nclassDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\nclass B_a_b_c_d_ts fileRoot\n');
 });
 
 test("test_writeAllDiagrams_writesOnlyForNonTestTsFiles", () => {
@@ -70,7 +70,16 @@ test("test_mermaidForFile_parsesFunctionNamesAndChainsCallStatements", () => {
         'B_multipleCalls["multipleCalls()"]\n' +
         'B_singleCall["singleCall()"]\n' +
         'B_multipleCalls --> B_a1 --> B_b1 --> B_c --> B_a2\n' +
-        'B_singleCall --> B_a3 --> B_b2\n'
+        'B_singleCall --> B_a3 --> B_b2\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_f_ts fileRoot\n' +
+        'class B_multipleCalls,B_singleCall funcDecl\n' +
+        'class B_a1,B_a2,B_a3,B_b1,B_b2,B_c expression\n'
     );
 });
 
@@ -86,7 +95,16 @@ test("test_mermaidForFile_labelsAClassMethodWithClassNameAndMethodName", () => {
         'B_Foo_bar["Foo::bar()"]\n' +
         'B_a_equals_1["const a = 1"]\n' +
         'B_b_equals_2["const b = 2"]\n' +
-        'B_Foo_bar --> B_a_equals_1 --> B_b_equals_2\n'
+        'B_Foo_bar --> B_a_equals_1 --> B_b_equals_2\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_g_ts fileRoot\n' +
+        'class B_Foo_bar funcDecl\n' +
+        'class B_a_equals_1,B_b_equals_2 expression\n'
     );
 });
 
@@ -101,7 +119,15 @@ test("test_mermaidForFile_chainsTopLevelStatementsFromTheFileBox", () => {
         'B_h_ts["h.ts"]\n' +
         'B_a_equals_1["const a = 1"]\n' +
         'B_b_equals_2["const b = 2"]\n' +
-        'B_h_ts --> B_a_equals_1 --> B_b_equals_2\n'
+        'B_h_ts --> B_a_equals_1 --> B_b_equals_2\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_h_ts fileRoot\n' +
+        'class B_a_equals_1,B_b_equals_2 expression\n'
     );
 });
 
@@ -116,7 +142,16 @@ test("test_mermaidForFile_chainsAnExpressionBodiedArrowConstFromItsTopBox", () =
         'B_i_ts["i.ts"]\n' +
         'B_double["double(x)"]\n' +
         'B_x_2["x * 2"]\n' +
-        'B_double --> B_x_2\n'
+        'B_double --> B_x_2\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_i_ts fileRoot\n' +
+        'class B_double funcDecl\n' +
+        'class B_x_2 expression\n'
     );
 });
 
@@ -132,7 +167,16 @@ test("test_mermaidForFile_addsRelativeImportPathAsSecondLabelLineForAConstAssign
         'B_console_log_t["console.log(t)"]\n' +
         'B_main["main()"]\n' +
         'B_t_equals_readTask_1["const t = readTask(1)<br/>../shared/tasks.ts"]\n' +
-        'B_main --> B_t_equals_readTask_1 --> B_console_log_t\n'
+        'B_main --> B_t_equals_readTask_1 --> B_console_log_t\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_j_ts fileRoot\n' +
+        'class B_main funcDecl\n' +
+        'class B_console_log_t,B_t_equals_readTask_1 expression\n'
     );
 });
 
@@ -147,7 +191,16 @@ test("test_mermaidForFile_addsRelativeImportPathForABareCallStatement", () => {
         'B_k_ts["k.ts"]\n' +
         'B_g["g()"]\n' +
         'B_setup["setup()<br/>./setup.ts"]\n' +
-        'B_g --> B_setup\n'
+        'B_g --> B_setup\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_k_ts fileRoot\n' +
+        'class B_g funcDecl\n' +
+        'class B_setup expression\n'
     );
 });
 
@@ -162,7 +215,16 @@ test("test_mermaidForFile_addsRelativeImportPathForAReturnCall", () => {
         'B_l_ts["l.ts"]\n' +
         'B_m["m()"]\n' +
         'B_return_pick["return pick()<br/>./pick.ts"]\n' +
-        'B_m --> B_return_pick\n'
+        'B_m --> B_return_pick\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_l_ts fileRoot\n' +
+        'class B_m funcDecl\n' +
+        'class B_return_pick expression\n'
     );
 });
 
@@ -177,7 +239,16 @@ test("test_mermaidForFile_addsRelativeImportPathForAnAwaitCall", () => {
         'B_m_ts["m.ts"]\n' +
         'B_flush["await flush()<br/>../io.ts"]\n' +
         'B_n["n()"]\n' +
-        'B_n --> B_flush\n'
+        'B_n --> B_flush\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_m_ts fileRoot\n' +
+        'class B_n funcDecl\n' +
+        'class B_flush expression\n'
     );
 });
 
@@ -192,7 +263,16 @@ test("test_mermaidForFile_addsRelativeImportPathForADefaultImportCall", () => {
         'B_o_ts["o.ts"]\n' +
         'B_q["q()"]\n' +
         'B_run["run()<br/>./run.ts"]\n' +
-        'B_q --> B_run\n'
+        'B_q --> B_run\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_o_ts fileRoot\n' +
+        'class B_q funcDecl\n' +
+        'class B_run expression\n'
     );
 });
 
@@ -207,7 +287,16 @@ test("test_mermaidForFile_addsNoSecondLabelLineForANodeModuleImportCall", () => 
         'B_n_ts["n.ts"]\n' +
         'B_execFileSync["execFileSync()"]\n' +
         'B_p["p()"]\n' +
-        'B_p --> B_execFileSync\n'
+        'B_p --> B_execFileSync\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_n_ts fileRoot\n' +
+        'class B_p funcDecl\n' +
+        'class B_execFileSync expression\n'
     );
 });
 
@@ -224,12 +313,24 @@ test("test_mermaidForFile_parsesAnIfWithEarlyReturnIntoADiamondWithTwoChoices", 
         'B_raw_equals_read_path["const raw = read(path)"]\n' +
         'B_return["return null"]\n' +
         'B_return_parse_raw["return parse(raw)"]\n' +
-        'Q_CHOICE_not_exists_path_N["if( !exists(path) ): FALSE"]\n' +
-        'Q_CHOICE_not_exists_path_Y["if( !exists(path) ): TRUE"]\n' +
+        'Q_CHOICE_not_exists_path_N["FALSE"]\n' +
+        'Q_CHOICE_not_exists_path_Y["TRUE"]\n' +
         'Q_not_exists_path{"if( !exists(path) )"}\n' +
         'B_load --> Q_not_exists_path\n' +
         'Q_not_exists_path --> Q_CHOICE_not_exists_path_Y --> B_return\n' +
-        'Q_not_exists_path --> Q_CHOICE_not_exists_path_N --> B_raw_equals_read_path --> B_return_parse_raw\n'
+        'Q_not_exists_path --> Q_CHOICE_not_exists_path_N --> B_raw_equals_read_path --> B_return_parse_raw\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_p_ts fileRoot\n' +
+        'class B_load funcDecl\n' +
+        'class Q_not_exists_path decision\n' +
+        'class B_raw_equals_read_path,B_return,B_return_parse_raw expression\n' +
+        'class Q_CHOICE_not_exists_path_Y trueBranch\n' +
+        'class Q_CHOICE_not_exists_path_N falseBranch\n'
     );
 });
 
@@ -246,12 +347,24 @@ test("test_mermaidForFile_bothIfElseArmsRejoinAtTheStatementAfterTheIf", () => {
         'B_doB["doB()"]\n' +
         'B_doNext["doNext()"]\n' +
         'B_g["g(flag)"]\n' +
-        'Q_CHOICE_flag_N["if( flag ): FALSE"]\n' +
-        'Q_CHOICE_flag_Y["if( flag ): TRUE"]\n' +
+        'Q_CHOICE_flag_N["FALSE"]\n' +
+        'Q_CHOICE_flag_Y["TRUE"]\n' +
         'Q_flag{"if( flag )"}\n' +
         'B_g --> Q_flag\n' +
         'Q_flag --> Q_CHOICE_flag_Y --> B_doA --> B_doNext\n' +
-        'Q_flag --> Q_CHOICE_flag_N --> B_doB --> B_doNext\n'
+        'Q_flag --> Q_CHOICE_flag_N --> B_doB --> B_doNext\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_r_ts fileRoot\n' +
+        'class B_g funcDecl\n' +
+        'class Q_flag decision\n' +
+        'class B_doA,B_doB,B_doNext expression\n' +
+        'class Q_CHOICE_flag_Y trueBranch\n' +
+        'class Q_CHOICE_flag_N falseBranch\n'
     );
 });
 
@@ -266,12 +379,24 @@ test("test_mermaidForFile_greaterThanConditionFlipsToLessThanOrEqualOnTheNoArm",
         'B_q_ts["q.ts"]\n' +
         'B_doThing["doThing()"]\n' +
         'B_f["f(count)"]\n' +
-        'Q_CHOICE_count_greater_than_3_N["if( count > 3 ): FALSE"]\n' +
-        'Q_CHOICE_count_greater_than_3_Y["if( count > 3 ): TRUE"]\n' +
+        'Q_CHOICE_count_greater_than_3_N["FALSE"]\n' +
+        'Q_CHOICE_count_greater_than_3_Y["TRUE"]\n' +
         'Q_count_greater_than_3{"if( count > 3 )"}\n' +
         'B_f --> Q_count_greater_than_3\n' +
         'Q_count_greater_than_3 --> Q_CHOICE_count_greater_than_3_Y --> B_doThing\n' +
-        'Q_count_greater_than_3 --> Q_CHOICE_count_greater_than_3_N\n'
+        'Q_count_greater_than_3 --> Q_CHOICE_count_greater_than_3_N\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_q_ts fileRoot\n' +
+        'class B_f funcDecl\n' +
+        'class Q_count_greater_than_3 decision\n' +
+        'class B_doThing expression\n' +
+        'class Q_CHOICE_count_greater_than_3_Y trueBranch\n' +
+        'class Q_CHOICE_count_greater_than_3_N falseBranch\n'
     );
 });
 
@@ -289,10 +414,10 @@ test("test_mermaidForFile_nestedIfRejoinsInnerArmsBeforeOuterArmRejoinsSeparatel
         'B_c["c()"]\n' +
         'B_d["d()"]\n' +
         'B_f["f(x, y)"]\n' +
-        'Q_CHOICE_x_N["if( x ): FALSE"]\n' +
-        'Q_CHOICE_x_Y["if( x ): TRUE"]\n' +
-        'Q_CHOICE_y_N["if( y ): FALSE"]\n' +
-        'Q_CHOICE_y_Y["if( y ): TRUE"]\n' +
+        'Q_CHOICE_x_N["FALSE"]\n' +
+        'Q_CHOICE_x_Y["TRUE"]\n' +
+        'Q_CHOICE_y_N["FALSE"]\n' +
+        'Q_CHOICE_y_Y["TRUE"]\n' +
         'Q_x{"if( x )"}\n' +
         'Q_y{"if( y )"}\n' +
         'B_f --> Q_x\n' +
@@ -300,7 +425,19 @@ test("test_mermaidForFile_nestedIfRejoinsInnerArmsBeforeOuterArmRejoinsSeparatel
         'Q_y --> Q_CHOICE_y_Y --> B_a --> B_c\n' +
         'Q_y --> Q_CHOICE_y_N --> B_b --> B_c\n' +
         'B_c --> B_d\n' +
-        'Q_x --> Q_CHOICE_x_N --> B_d\n'
+        'Q_x --> Q_CHOICE_x_N --> B_d\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_s_ts fileRoot\n' +
+        'class B_f funcDecl\n' +
+        'class Q_x,Q_y decision\n' +
+        'class B_a,B_b,B_c,B_d expression\n' +
+        'class Q_CHOICE_x_Y,Q_CHOICE_y_Y trueBranch\n' +
+        'class Q_CHOICE_x_N,Q_CHOICE_y_N falseBranch\n'
     );
 });
 
@@ -322,7 +459,19 @@ test("test_mermaidForFile_forOfLoopBecomesADiamondWithABackEdge", () => {
         'Q_for_x_of_list{"for (const x of list)"}\n' +
         'B_sum --> B_total_equals_0 --> Q_for_x_of_list\n' +
         'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_Y --> B_total_plus_equals_x --> Q_for_x_of_list\n' +
-        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_N --> B_return_total\n'
+        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_N --> B_return_total\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_t_ts fileRoot\n' +
+        'class B_sum funcDecl\n' +
+        'class Q_for_x_of_list decision\n' +
+        'class B_return_total,B_total_equals_0,B_total_plus_equals_x expression\n' +
+        'class Q_CHOICE_for_x_of_list_Y trueBranch\n' +
+        'class Q_CHOICE_for_x_of_list_N falseBranch\n'
     );
 });
 
@@ -342,7 +491,19 @@ test("test_mermaidForFile_classicForConditionAndItsFlippedOppositeBecomeTheChoic
         'Q_for_i_equals_0_i_less_than_3_i{"for (let i = 0; i < 3; i++)"}\n' +
         'B_count --> Q_for_i_equals_0_i_less_than_3_i\n' +
         'Q_for_i_equals_0_i_less_than_3_i --> Q_CHOICE_for_i_equals_0_i_less_than_3_i_Y --> B_log_i --> Q_for_i_equals_0_i_less_than_3_i\n' +
-        'Q_for_i_equals_0_i_less_than_3_i --> Q_CHOICE_for_i_equals_0_i_less_than_3_i_N\n'
+        'Q_for_i_equals_0_i_less_than_3_i --> Q_CHOICE_for_i_equals_0_i_less_than_3_i_N\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_u_ts fileRoot\n' +
+        'class B_count funcDecl\n' +
+        'class Q_for_i_equals_0_i_less_than_3_i decision\n' +
+        'class B_log_i expression\n' +
+        'class Q_CHOICE_for_i_equals_0_i_less_than_3_i_Y trueBranch\n' +
+        'class Q_CHOICE_for_i_equals_0_i_less_than_3_i_N falseBranch\n'
     );
 });
 
@@ -370,7 +531,19 @@ test("test_mermaidForFile_whileLoopBecomesADiamondWithABackEdge", () => {
         'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_Y --> B_total_plus_equals_x --> Q_for_x_of_list\n' +
         'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_N --> Q_while_total_greater_than_100\n' +
         'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_Y --> B_total_equals_halve_total --> Q_while_total_greater_than_100\n' +
-        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n'
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_v_ts fileRoot\n' +
+        'class B_sum funcDecl\n' +
+        'class Q_for_x_of_list,Q_while_total_greater_than_100 decision\n' +
+        'class B_return_total,B_total_equals_0,B_total_equals_halve_total,B_total_plus_equals_x expression\n' +
+        'class Q_CHOICE_for_x_of_list_Y,Q_CHOICE_while_total_greater_than_100_Y trueBranch\n' +
+        'class Q_CHOICE_for_x_of_list_N,Q_CHOICE_while_total_greater_than_100_N falseBranch\n'
     );
 });
 
@@ -392,7 +565,19 @@ test("test_mermaidForFile_doWhileLoopWalksTheBodyFirstThenLoopsBackOnTheConditio
         'Q_while_total_greater_than_100{"while (total > 100)"}\n' +
         'B_sum --> B_total_equals_0 --> B_total_equals_halve_total --> Q_while_total_greater_than_100\n' +
         'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_Y --> B_total_equals_halve_total\n' +
-        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n'
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n' +
+        'classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000\n' +
+        'classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000\n' +
+        'classDef decision fill:#fff3bf,stroke:#f08c00,color:#000\n' +
+        'classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000\n' +
+        'classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000\n' +
+        'classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000\n' +
+        'class B_w_ts fileRoot\n' +
+        'class B_sum funcDecl\n' +
+        'class Q_while_total_greater_than_100 decision\n' +
+        'class B_return_total,B_total_equals_0,B_total_equals_halve_total expression\n' +
+        'class Q_CHOICE_while_total_greater_than_100_Y trueBranch\n' +
+        'class Q_CHOICE_while_total_greater_than_100_N falseBranch\n'
     );
 });
 

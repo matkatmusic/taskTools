@@ -513,11 +513,13 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
   const boxLines: string[] = [];
   const edgeLines: string[] = [];
   const functionExits = new Map<string, { entryId: string; exitIds: string[] }>();
+  const funcDeclIds = new Set<string>();
   const allCallSites: CallSite[] = [];
   for (const chain of chains) {
     const startId = chain.topBox !== null ? chain.topBox.id : fileBoxId;
     if (chain.topBox !== null) {
       boxLines.push(`${chain.topBox.id}["${escapeLabel(chain.topBox.label)}"]`);
+      funcDeclIds.add(chain.topBox.id);
     }
     const outcome = walkStatements([[startId]], chain.statements, ctx);
     boxLines.push(...outcome.boxLines);
@@ -528,8 +530,11 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
         edgeLines.push(path.join(" --> "));
       }
       const last = path[path.length - 1];
-      if (last !== undefined && last !== startId) {
-        fallThroughExits.push(last);
+      if (last !== undefined) {
+        const lastIsFallThroughExit = last !== startId;
+        if (lastIsFallThroughExit) {
+          fallThroughExits.push(last);
+        }
       }
     }
     allCallSites.push(...outcome.callSites);
@@ -557,7 +562,53 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
   }
   boxLines.sort();
 
-  const lines = [`${fileBoxId}["${relativePath}"]`, ...boxLines, ...edgeLines];
+  // Bucket every box by category so each gets its category color; branch labels split TRUE (green) from FALSE (red).
+  const decisionIds: string[] = [];
+  const expressionIds: string[] = [];
+  const funcDeclClassIds: string[] = [];
+  const trueBranchIds: string[] = [];
+  const falseBranchIds: string[] = [];
+  for (const line of boxLines) {
+    const id = line.replace(/[[{].*$/, "");
+    if (id.startsWith("Q_CHOICE_")) {
+      (id.endsWith("_Y") ? trueBranchIds : falseBranchIds).push(id);
+    }
+    else if (id.startsWith("Q_")) {
+      decisionIds.push(id);
+    }
+    else if (funcDeclIds.has(id)) {
+      funcDeclClassIds.push(id);
+    }
+    else {
+      expressionIds.push(id);
+    }
+  }
+  const classDefs = [
+    "classDef fileRoot fill:#dee2e6,stroke:#495057,color:#000",
+    "classDef funcDecl fill:#e5dbff,stroke:#7048e8,color:#000",
+    "classDef decision fill:#fff3bf,stroke:#f08c00,color:#000",
+    "classDef expression fill:#d0ebff,stroke:#1c7ed6,color:#000",
+    "classDef trueBranch fill:#c3e6cb,stroke:#28a745,color:#000",
+    "classDef falseBranch fill:#f5c6cb,stroke:#dc3545,color:#000",
+  ];
+  const classAssignments = [`class ${fileBoxId} fileRoot`];
+  if (funcDeclClassIds.length > 0) {
+    classAssignments.push(`class ${funcDeclClassIds.join(",")} funcDecl`);
+  }
+  if (decisionIds.length > 0) {
+    classAssignments.push(`class ${decisionIds.join(",")} decision`);
+  }
+  if (expressionIds.length > 0) {
+    classAssignments.push(`class ${expressionIds.join(",")} expression`);
+  }
+  if (trueBranchIds.length > 0) {
+    classAssignments.push(`class ${trueBranchIds.join(",")} trueBranch`);
+  }
+  if (falseBranchIds.length > 0) {
+    classAssignments.push(`class ${falseBranchIds.join(",")} falseBranch`);
+  }
+
+  const lines = [`${fileBoxId}["${relativePath}"]`, ...boxLines, ...edgeLines, ...classDefs, ...classAssignments];
   return `%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\n${lines.join("\n")}\n`;
 }
 
