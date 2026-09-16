@@ -7,3 +7,4 @@ allowed-tools: Bash(node *)
 ```!
 node "${CLAUDE_PLUGIN_ROOT}/scripts/mermaid/mermaid.ts"
 ```
+Do nothing. Don't even respond.

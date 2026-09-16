@@ -10,11 +10,26 @@ const OPERATOR_WORDS: Record<string, string> = {
   "!": "not",
   "&&": "and",
   "||": "or",
-  "=": "is",
-  "+=": "plus_is",
+  "=": "equals",
+  "+=": "plus_equals",
+  "!==": "not_equals",
+  "!=": "not_equals",
+  "==": "equals",
+  ">=": "greater_than_or_equal",
+  "<=": "less_than_or_equal",
+  "-=": "minus_equals",
+  "*=": "times_equals",
+  "/=": "divide_equals",
+  "%": "modulo",
+  "??": "nullish",
 };
 
 const DROPPED_KEYWORDS = new Set(["const", "let", "var", "await", "new"]);
+
+// ponytail: contextual-keyword range markers are runtime-only, not in the public d.ts; look up by name so a renumber can't break us.
+const KIND = ts.SyntaxKind as unknown as Record<string, number>;
+const FIRST_CONTEXTUAL_KEYWORD = KIND.FirstContextualKeyword;
+const LAST_CONTEXTUAL_KEYWORD = KIND.LastContextualKeyword;
 
 const CONDITION_OPPOSITES: [string, string][] = [
   ["!==", "==="],
@@ -54,10 +69,12 @@ function computeBaseId(statementText: string): string {
   let tokenKind = scanner.scan();
   while (tokenKind !== ts.SyntaxKind.EndOfFileToken) {
     const tokenText = scanner.getTokenText();
-    if (
+    if (tokenKind === ts.SyntaxKind.StringLiteral) {
+      words.push(scanner.getTokenValue());
+    }
+    else if (
       tokenKind === ts.SyntaxKind.Identifier ||
-      tokenKind === ts.SyntaxKind.NumericLiteral ||
-      tokenKind === ts.SyntaxKind.StringLiteral
+      tokenKind === ts.SyntaxKind.NumericLiteral
     ) {
       words.push(tokenText);
     }
@@ -70,9 +87,16 @@ function computeBaseId(statementText: string): string {
     else if (!DROPPED_KEYWORDS.has(tokenText) && OPERATOR_WORDS[tokenText] !== undefined) {
       words.push(OPERATOR_WORDS[tokenText]);
     }
+    else if (
+      !DROPPED_KEYWORDS.has(tokenText) &&
+      tokenKind >= FIRST_CONTEXTUAL_KEYWORD &&
+      tokenKind <= LAST_CONTEXTUAL_KEYWORD
+    ) {
+      words.push(tokenText);
+    }
     tokenKind = scanner.scan();
   }
-  return words.join("_");
+  return words.join("_").replace(/[^A-Za-z0-9_]/g, "_");
 }
 
 function computeOppositeCondition(conditionText: string): string {
@@ -85,6 +109,10 @@ function computeOppositeCondition(conditionText: string): string {
     }
   }
   return `!(${conditionText})`;
+}
+
+function escapeLabel(text: string): string {
+  return text.replace(/\\/g, "#92;").replace(/"/g, "#quot;").replace(/\s+/g, " ");
 }
 
 function calleeName(node: ts.Node): string | null {
@@ -112,7 +140,7 @@ function statementRecord(node: ts.Node, importMap: Map<string, string>): Stateme
   const label = text.replace(/;\s*$/, "");
   const callee = calleeName(node);
   const specifier = callee !== null ? importMap.get(callee) : undefined;
-  const finalLabel = specifier !== undefined ? `${label}<br/>${specifier}` : label;
+  const finalLabel = specifier !== undefined ? `${escapeLabel(label)}<br/>${specifier}` : escapeLabel(label);
   return { baseId: computeBaseId(text), label: finalLabel };
 }
 
@@ -165,9 +193,11 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       if (firstBoxId === null) {
         firstBoxId = diamondId;
       }
-      boxLines.push(`${diamondId}{"if( ${conditionText} )"}`);
-      boxLines.push(`${yesId}["${conditionText}"]`);
-      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+      boxLines.push(`${diamondId}{"if( ${escapeLabel(conditionText)} )"}`);
+      // boxLines.push(`${yesId}["if( ${escapeLabel(conditionText)} ): TRUE"]`);
+      boxLines.push(`${yesId}["TRUE"]`);
+      // boxLines.push(`${noId}["if( ${escapeLabel(conditionText)} ): FALSE"]`);
+      boxLines.push(`${noId}["FALSE"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
@@ -201,9 +231,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       if (firstBoxId === null) {
         firstBoxId = diamondId;
       }
-      boxLines.push(`${diamondId}{"${headerText}"}`);
-      boxLines.push(`${yesId}["i < ${iterableText}.length; ${loopVariable} = ${iterableText}[i];"]`);
-      boxLines.push(`${noId}["i >= ${iterableText}.length"]`);
+      boxLines.push(`${diamondId}{"${escapeLabel(headerText)}"}`);
+      boxLines.push(`${yesId}["${escapeLabel(`i < ${iterableText}.length; ${loopVariable} = ${iterableText}[i];`)}"]`);
+      boxLines.push(`${noId}["${escapeLabel(`i >= ${iterableText}.length`)}"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
@@ -234,9 +264,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       if (firstBoxId === null) {
         firstBoxId = diamondId;
       }
-      boxLines.push(`${diamondId}{"${headerText}"}`);
-      boxLines.push(`${yesId}["${conditionText}"]`);
-      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+      boxLines.push(`${diamondId}{"${escapeLabel(headerText)}"}`);
+      boxLines.push(`${yesId}["${escapeLabel(conditionText)}"]`);
+      boxLines.push(`${noId}["${escapeLabel(computeOppositeCondition(conditionText))}"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
@@ -265,9 +295,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       if (firstBoxId === null) {
         firstBoxId = diamondId;
       }
-      boxLines.push(`${diamondId}{"${headerText}"}`);
-      boxLines.push(`${yesId}["${conditionText}"]`);
-      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+      boxLines.push(`${diamondId}{"${escapeLabel(headerText)}"}`);
+      boxLines.push(`${yesId}["${escapeLabel(conditionText)}"]`);
+      boxLines.push(`${noId}["${escapeLabel(computeOppositeCondition(conditionText))}"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
@@ -300,9 +330,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       const diamondId = `Q_${idPart}`;
       const yesId = `Q_CHOICE_${idPart}_Y`;
       const noId = `Q_CHOICE_${idPart}_N`;
-      boxLines.push(`${diamondId}{"${headerText}"}`);
-      boxLines.push(`${yesId}["${conditionText}"]`);
-      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+      boxLines.push(`${diamondId}{"${escapeLabel(headerText)}"}`);
+      boxLines.push(`${yesId}["${escapeLabel(conditionText)}"]`);
+      boxLines.push(`${noId}["${escapeLabel(computeOppositeCondition(conditionText))}"]`);
 
       for (const path of bodyOutcome.openPaths) {
         path.push(diamondId);
@@ -323,7 +353,14 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
     }
     boxLines.push(`${finalId}["${record.label}"]`);
 
-    const isTerminal = ts.isReturnStatement(statement) || ts.isThrowStatement(statement);
+    const callExpression = ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) ? statement.expression : undefined;
+    const isProcessExit =
+      callExpression !== undefined &&
+      ts.isPropertyAccessExpression(callExpression.expression) &&
+      ts.isIdentifier(callExpression.expression.expression) &&
+      callExpression.expression.expression.text === "process" &&
+      callExpression.expression.name.text === "exit";
+    const isTerminal = ts.isReturnStatement(statement) || ts.isThrowStatement(statement) || isProcessExit;
     for (const path of openPaths) {
       path.push(finalId);
     }
@@ -372,9 +409,18 @@ function functionLikeChains(statement: ts.Statement, importMap: Map<string, stri
     const className = statement.name.text;
     const chains: Chain[] = [];
     for (const member of statement.members) {
-      if (ts.isMethodDeclaration(member) && member.body && ts.isIdentifier(member.name)) {
-        chains.push(...functionBodyChain(`B_${className}_${member.name.text}`, `${className}::${member.name.text}(${paramsText(member.parameters)})`, member.body, importMap));
+      if (!ts.isMethodDeclaration(member)) {
+        continue;
       }
+      const hasBody = member.body !== undefined;
+      if (!hasBody) {
+        continue;
+      }
+      const hasIdentifierName = ts.isIdentifier(member.name);
+      if (!hasIdentifierName) {
+        continue;
+      }
+      chains.push(...functionBodyChain(`B_${className}_${member.name.text}`, `${className}::${member.name.text}(${paramsText(member.parameters)})`, member.body, importMap));
     }
     return chains;
   }
@@ -443,7 +489,7 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
   for (const chain of chains) {
     const startId = chain.topBox !== null ? chain.topBox.id : fileBoxId;
     if (chain.topBox !== null) {
-      boxLines.push(`${chain.topBox.id}["${chain.topBox.label}"]`);
+      boxLines.push(`${chain.topBox.id}["${escapeLabel(chain.topBox.label)}"]`);
     }
     const outcome = walkStatements([[startId]], chain.statements, ctx);
     boxLines.push(...outcome.boxLines);
@@ -457,7 +503,7 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
   boxLines.sort();
 
   const lines = [`${fileBoxId}["${relativePath}"]`, ...boxLines, ...edgeLines];
-  return `flowchart TD\n${lines.join("\n")}\n`;
+  return `%%{init: {"flowchart": {"wrappingWidth": 100000}}}%%\nflowchart TD\n${lines.join("\n")}\n`;
 }
 
 export function writeAllDiagrams(repoRoot: string = process.cwd()): void {
