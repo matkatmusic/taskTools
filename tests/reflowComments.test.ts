@@ -1,6 +1,9 @@
 // reflowComments joins wrapped prose, skips commented-out code. Run: node --test "tests/*.test.ts"
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describeReflows, needsRewrite, reflowFile, reflowSource } from "../scripts/hooks/reflowComments.ts";
 import { REWRITE_NOT_NEEDED } from "../scripts/shared/resultCodes.ts";
 
@@ -185,6 +188,17 @@ test("all-short reflows report the rewrite but carry no instruction", () => {
 
 test("markdown files are skipped", () => {
   assert.deepEqual(reflowFile("path.md"), []);
+});
+
+test("an active tackle-tasks worktree is skipped", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "reflow-"));
+  const worktree = join(tmp, "task-1");
+  mkdirSync(worktree);
+  const file = join(worktree, "a.ts");
+  writeFileSync(file, WRAPPED);
+  writeFileSync(`${worktree}.lease`, JSON.stringify({ pid: 1, runId: "x" }));
+  assert.deepEqual(reflowFile(file), []);
+  assert.equal(readFileSync(file, "utf8"), WRAPPED);
 });
 
 test("the show command lists every over-cap line in order", () => {

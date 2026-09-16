@@ -1,5 +1,6 @@
 // clang-format for `//` prose: rejoin wrapped comment runs onto one line, leaving commented-out code untouched.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { applyQuota } from "./reflowQuota.ts";
 import {
   BODY_LOOKS_LIKE_CODE,
@@ -73,33 +74,43 @@ function runIsProse(bodies: string[]): number {
 // Block prose: continuation lines carry no marker, so the block is taken whole.
 function reflowBlock(lines: string[], start: number, outLen: number) {
   const kind = BLOCK_KINDS.find((candidate) => candidate.open.test(lines[start]));
-  if (!kind) return null;
+  if (!kind)
+    return null;
   const indent = lines[start].match(kind.open)![1];
   let end = start;
-  while (end < lines.length && !lines[end].includes(kind.closeTag)) end += 1;
-  if (end >= lines.length) return null;
+  while (end < lines.length && !lines[end].includes(kind.closeTag))
+    end += 1;
+  if (end >= lines.length)
+    return null;
 
   const raw = lines.slice(start, end + 1);
   const bodies = raw.map((line, n) => {
     const stripped = (n === 0 ? line.replace(kind.stripOpen, "") : line);
     return (n === raw.length - 1 ? stripped.replace(kind.stripClose, "") : stripped).trim();
   });
-  if (bodies.some((body) => body !== "" && looksLikeCode(body) === BODY_LOOKS_LIKE_CODE)) return null;
-  if (kind.skipIf && bodies.some((body) => kind.skipIf!.test(body))) return null;
+  if (bodies.some((body) => body !== "" && looksLikeCode(body) === BODY_LOOKS_LIKE_CODE))
+    return null;
+  if (kind.skipIf && bodies.some((body) => kind.skipIf!.test(body)))
+    return null;
 
   const paragraphs: { bodies: string[]; start: number; end: number }[] = [];
   bodies.forEach((body, n) => {
-    if (body === "") return;
+    if (body === "")
+      return;
     const last = paragraphs.at(-1);
-    if (last && bodies[n - 1] !== "") last.bodies.push(body), (last.end = start + n + 1);
-    else paragraphs.push({ bodies: [body], start: start + n + 1, end: start + n + 1 });
+    if (last && bodies[n - 1] !== "")
+      last.bodies.push(body), (last.end = start + n + 1);
+    else
+      paragraphs.push({ bodies: [body], start: start + n + 1, end: start + n + 1 });
   });
-  if (paragraphs.length === 0) return null;
+  if (paragraphs.length === 0)
+    return null;
 
   // Delimiters get their own lines; body sits two spaces in from the opener.
   const out: string[] = [`${indent}${kind.openTag}`];
   const placed = paragraphs.map((paragraph) => {
-    if (out.length > 1) out.push("");
+    if (out.length > 1)
+      out.push("");
     out.push(`${indent}  ${joinBodies(paragraph.bodies)}`);
     return { paragraph, line: outLen + out.length };
   });
@@ -108,7 +119,8 @@ function reflowBlock(lines: string[], start: number, outLen: number) {
   const changed = out.length !== raw.length || out.some((line, n) => line !== raw[n]);
   const runs = placed.flatMap(({ paragraph, line }) => {
     const words = joinBodies(paragraph.bodies).split(/\s+/).length;
-    if (!changed && words < WORD_LIMIT) return [];
+    if (!changed && words < WORD_LIMIT)
+      return [];
     return [{ start: paragraph.start, end: paragraph.end, line, words, joined: changed, capped: true }];
   });
   return { end, out, runs };
@@ -139,8 +151,10 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
     const bodies: string[] = [head[3].trim()];
     while (end + 1 < lines.length) {
       const next = lines[end + 1].match(COMMENT);
-      if (!next || next[1] !== indent || next[2] !== marker || startsNewRun(next[3].trim()) === STARTS_NEW_COMMENT_RUN) break;
-      if (next[3].trim() !== "") bodies.push(next[3].trim());
+      if (!next || next[1] !== indent || next[2] !== marker || startsNewRun(next[3].trim()) === STARTS_NEW_COMMENT_RUN)
+        break;
+      if (next[3].trim() !== "")
+        bodies.push(next[3].trim());
       end += 1;
     }
     if (runIsProse(bodies) === RUN_IS_PROSE) {
@@ -153,7 +167,8 @@ export function reflowSource(source: string): { text: string; runs: Reflow[] } {
         runs.push({ start: i + 1, end: end + 1, line: out.length + 1, words, joined, capped });
       }
       out.push(`${indent}${marker} ${text}`);
-    } else {
+    }
+    else {
       out.push(...lines.slice(i, end + 1));
     }
     i = end + 1;
@@ -195,22 +210,32 @@ export function describeReflows(
 
 export function reflowFile(path: string): Reflow[] {
   // Markdown prose is not comments; reflowing it mangles plans and docs.
-  if (path.endsWith(".md")) return [];
+  if (path.endsWith(".md"))
+    return [];
+  // An active tackle-tasks worktree has a sibling <worktree>.lease; the pipeline owns those files.
+  for (let dir = dirname(path); dir !== dirname(dir); dir = dirname(dir)) {
+    if (existsSync(`${dir}.lease`))
+      return [];
+  }
   const source = readFileSync(path, "utf8");
   const { text, runs } = reflowSource(source);
-  if (runs.length > 0 && text !== source) writeFileSync(path, text);
+  if (runs.length > 0 && text !== source)
+    writeFileSync(path, text);
   return runs;
 }
 
 // Blocks on over-cap comments; with a sessionId the quota silences already-seen debt after one fix.
 export function emitReflows(hookEventName: string, files: FileReflow[], sessionId?: string): number {
   const reflowed = files.filter(({ runs }) => runs.length > 0);
-  if (reflowed.length === 0) return REFLOW_NOT_EMITTED;
+  if (reflowed.length === 0)
+    return REFLOW_NOT_EMITTED;
   let overCap = reflowed.map(overCapLines).filter(({ lines }) => lines.length > 0);
-  if (sessionId) overCap = applyQuota(sessionId, overCap);
+  if (sessionId)
+    overCap = applyQuota(sessionId, overCap);
   const joined = reflowed.some(({ runs }) => runs.some((run) => run.joined));
   if (overCap.length === 0) {
-    if (!joined) return REFLOW_NOT_EMITTED;
+    if (!joined)
+      return REFLOW_NOT_EMITTED;
   }
   const reason = describeReflows(reflowed, overCap);
   process.stdout.write(`${JSON.stringify(

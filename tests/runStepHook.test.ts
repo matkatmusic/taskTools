@@ -1932,6 +1932,22 @@ test("test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram", () => {
     assert.equal(readSourceRepoLock(seeded.projectRoot), null);
 });
 
+test("test_runStepHook_checkpointsSourceLockHeldTrueMidWalkInsideTheLock", () => {
+    // Checkpoint used to hardcode sourceLockHeld false; this proves a LOCK_SOURCE_REPO-reachable block now checkpoints true.
+    const worktree = mkdtempSync(join(tmpdir(), "run-step-worktree-"));
+    const projectRoot = mkdtempSync(join(tmpdir(), "run-step-project-"));
+    spawnSync("git", ["-C", projectRoot, "init", "-q"]);
+    const configFile = configWith(writeStep => ({
+        "pipeline-lockSourceRepo.mmd": [{ box: "LOCK_SOURCE_REPO", script: writeStep("LOCK_SOURCE_REPO", { scriptSignal: "continue", worktree, runId: "r1", taskNumber: 7, projectRoot }), next: ["X"] }],
+        "x.mmd": [{ box: "X", script: writeStep("X", { scriptSignal: "stop" }), next: [] }],
+    }));
+    const startInput = JSON.stringify({ worktree, runId: "r1", taskNumber: 7, projectRoot });
+    assert.equal(readSourceRepoLock(projectRoot), null);
+    const { checkpoint } = runHook(`/run-step pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO ${startInput}`, configFile, worktree);
+    assert.equal(checkpoint?.block, "x.mmd::X");
+    assert.equal(checkpoint?.sourceLockHeld, true);
+});
+
 function heldLockRepo(): { projectRoot: string } {
     const projectRoot = realpathSync(mkdtempSync(join(tmpdir(), "run-step-lock-")));
     spawnSync("git", ["-C", projectRoot, "init", "-q"]);
