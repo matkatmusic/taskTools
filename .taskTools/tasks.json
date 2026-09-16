@@ -194,5 +194,63 @@
     "hasTests": true,
     "tests": "A two-block diagram where block1's output keys differ from block2's input keys. steps.json declares a translator-next override on block1 that names block2 and maps the keys. run-step routes block1 to block2 via the override, and block2 receives the translated input. A second block that declares no override still uses its hard-coded next and forwards its output verbatim.",
     "difficulty": 8
+  },
+  {
+    "taskNumber": 204,
+    "version": "78c65bf5203eded2c1e4c28665bad5816617fe61",
+    "title": "Fast tackle-tasks pipeline + `fast` flag (preamble -> plan -> implement -> suite-fix -> merge)",
+    "userDescription": "Add a simpler 'fast' pipeline that reuses some of the diagram blocks: preamble -> planning -> implementing -> test-suite-fix-loop -> merge.  selectable via '/tackle-tasks [N...] <fast>'.  I am undecided if this new way of using should be a separate skill ('/tackle-task-fast') or via the \"use custom pipeline diagrams\" feature that may not have been built yet.",
+    "chainGoal": [
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 adds the translator-next override mechanism; this task adds the fast diagram folder and the `fast` flag on top of it."
+    ],
+    "goal": [
+      "- /tackle-tasks [N...] fast runs a 5-stage pipeline: preamble, plan, implement, full-suite fix loop, merge",
+      "- The fast run skips codex-reviews-plan, plan-verdict, codex-reviews-tests, are-tests-flagged, and the per-task test-fix loop",
+      "- The fast run keeps lockSourceRepo, rebase, and fixConflicts before merging",
+      "- The fast blocks reuse existing block logic via the translator-next override mechanism, not copied block scripts",
+      "- A fast run of a real task lands a merge commit and archives the task"
+    ],
+    "notInScope": [
+      "- The translator-next override / steps.json reuse mechanism is owned by task 203",
+      "- A separate /tackle-task-fast skill; the `fast` flag on /tackle-tasks was chosen instead"
+    ],
+    "problemSolvedByTask": "The full pipeline's review, verdict, and test-flagging gates make it heavy and slow for simple tasks, and there is no lighter path to plan, implement, get the suite green, and merge.",
+    "description": "resolveTaskRun.ts already parses a startingBlock token after the bracketed task-number list via parseStartingBlockArgument; a `fast` token needs the same treatment, threaded into ResolveTaskRunOutput. SkillBodyEmitter.ts's skillBody calls resolveDiagramFolderSetting once per run and feeds diagramFolder, stepsRoot, and allowStubs into ensureTaskWorkflowPair for every task; it needs the fast flag read from the same argsValue parse and passed into that call. generateSteps.ts's resolveDiagramFolderSetting currently branches only on .taskTools/settings.json's diagramFolder key, defaulting to diagrams/tackle-tasks with stepsRoot scripts/tackle-tasks; it needs a fast branch pointing diagramFolder at a new diagrams/tackle-tasks-fast/ while keeping stepsRoot at scripts/tackle-tasks so fast blocks resolve through the same steps.json lookup. The new diagram set keeps preamble, planning, implementing, the full-suite test-fix loop, lockSourceRepo, rebase, and fixConflicts, mirroring diagrams/tackle-tasks/, and drops codex-reviews-plan, plan-verdict, codex-reviews-tests, are-tests-flagged, and the per-task test-fix loop. Reusing the fast blocks through the translator-next override is owned by the blocking task; this task adds the flag, the folder-selection branch, and the diagram files.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/shared/resolveTaskRun.ts",
+      "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+      "scripts/tackle-tasks/generateSteps.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-planTheTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-whatDidThePlannerReturn.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-implementTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitImplementationIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-runFullSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixTheCodebaseForSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-lockSourceRepo.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-rebase.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixConflicts.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-mergeSucceededExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-failuresExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-reportOnlyExit.mmd"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Run /tackle-tasks <N> fast on a fixture task. Assert the run executes only the fast stages in order (preamble, plan, implement, full-suite fix loop, lock, rebase, fixConflicts, merge) and none of the dropped review/verdict/flag blocks, and that it lands a merge commit and archives the task.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 203,
+        "reason": "The fast pipeline reuses existing blocks in a shorter flow via the translator-next override mechanism that task 203 builds."
+      }
+    ]
   }
 ]
