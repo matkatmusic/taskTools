@@ -114,6 +114,34 @@ for (const [diagramFile, entries] of Object.entries(config)) {
     }
 }
 
+// The static twin of getHandedOnShape: what a block declares it hands on, from templates alone, never a script run.
+function getSourceShape(entry: StepConfigEntry, template: BlockTemplate): unknown {
+    if (entry.producesPrompt) {
+        return { ...buildPromptOutputTemplate(entry.box), ...(template.input as Record<string, unknown>), ...(template.agentAnswer as Record<string, unknown>) };
+    }
+    return template.output;
+}
+
+// Static check: for each edge, the target's declared input keys must exist in the source's declared output.
+for (const [diagramFile, entries] of Object.entries(config)) {
+    for (const entry of entries) {
+        for (const target of entry.next) {
+            const targetKey = target.includes("::") ? target : `${diagramFile}::${target}`;
+            const [targetDiagram = "", targetBox = ""] = targetKey.split("::");
+            const targetEntry = config[targetDiagram]?.find(candidate => candidate.box === targetBox);
+
+            test(`test_stepEdge_${entry.box}_to_${targetBox}_inputIsSubsetOfDeclaredOutput`, () => {
+                assert.notEqual(targetEntry, undefined, `${targetKey} is not in steps.json`);
+                const sourceTemplate = readBlockTemplate(entry.template);
+                const targetTemplate = readBlockTemplate(targetEntry!.template);
+                const sourceShape = getSourceShape(entry, sourceTemplate);
+                const mismatches = getTemplateShapeMismatches(targetTemplate.input, sourceShape);
+                assert.deepEqual(mismatches, [], `${targetBox} input declares keys not present in ${entry.box}'s declared output:\n${mismatches.join("\n")}`);
+            });
+        }
+    }
+}
+
 // A prompt block is terminal for its agent; the engine carries the payload, not a next-step line.
 for (const [diagramFile, entries] of Object.entries(config)) {
     for (const entry of entries) {
