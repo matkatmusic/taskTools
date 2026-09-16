@@ -50,25 +50,49 @@ function computeBaseId(statementText: string): string {
   return words.join("_");
 }
 
-function statementRecord(node: ts.Node): StatementRecord {
+function calleeName(node: ts.Node): string | null {
+  let expression: ts.Expression | undefined;
+  if (ts.isExpressionStatement(node)) {
+    expression = node.expression;
+  }
+  else if (ts.isReturnStatement(node)) {
+    expression = node.expression;
+  }
+  else if (ts.isVariableStatement(node) && node.declarationList.declarations.length === 1) {
+    expression = node.declarationList.declarations[0].initializer;
+  }
+  if (expression !== undefined && ts.isAwaitExpression(expression)) {
+    expression = expression.expression;
+  }
+  if (expression !== undefined && ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
+    return expression.expression.text;
+  }
+  return null;
+}
+
+function statementRecord(node: ts.Node, importMap: Map<string, string>): StatementRecord {
   const text = node.getText();
-  return { baseId: computeBaseId(text), label: text.replace(/;\s*$/, "") };
+  const label = text.replace(/;\s*$/, "");
+  const callee = calleeName(node);
+  const specifier = callee !== null ? importMap.get(callee) : undefined;
+  const finalLabel = specifier !== undefined ? `${label}<br/>${specifier}` : label;
+  return { baseId: computeBaseId(text), label: finalLabel };
 }
 
 function paramsText(parameters: readonly ts.ParameterDeclaration[]): string {
   return parameters.map((parameter) => parameter.getText()).join(", ");
 }
 
-function functionBodyChain(topBoxId: string, topBoxLabel: string, body: ts.Block): Chain[] {
+function functionBodyChain(topBoxId: string, topBoxLabel: string, body: ts.Block, importMap: Map<string, string>): Chain[] {
   if (body.statements.length === 0) {
     return [];
   }
-  return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: body.statements.map(statementRecord) }];
+  return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: body.statements.map((statement) => statementRecord(statement, importMap)) }];
 }
 
-function functionLikeChains(statement: ts.Statement): Chain[] | null {
+function functionLikeChains(statement: ts.Statement, importMap: Map<string, string>): Chain[] | null {
   if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) {
-    return functionBodyChain(`B_${statement.name.text}`, `${statement.name.text}(${paramsText(statement.parameters)})`, statement.body);
+    return functionBodyChain(`B_${statement.name.text}`, `${statement.name.text}(${paramsText(statement.parameters)})`, statement.body, importMap);
   }
   if (ts.isVariableStatement(statement)) {
     const declarations = statement.declarationList.declarations;
@@ -79,9 +103,9 @@ function functionLikeChains(statement: ts.Statement): Chain[] | null {
       const topBoxId = `B_${name}`;
       const topBoxLabel = `${name}(${paramsText(initializer.parameters)})`;
       if (ts.isBlock(initializer.body)) {
-        return functionBodyChain(topBoxId, topBoxLabel, initializer.body);
+        return functionBodyChain(topBoxId, topBoxLabel, initializer.body, importMap);
       }
-      return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: [statementRecord(initializer.body)] }];
+      return [{ topBox: { id: topBoxId, label: topBoxLabel }, statements: [statementRecord(initializer.body, importMap)] }];
     }
     return null;
   }
@@ -90,7 +114,7 @@ function functionLikeChains(statement: ts.Statement): Chain[] | null {
     const chains: Chain[] = [];
     for (const member of statement.members) {
       if (ts.isMethodDeclaration(member) && member.body && ts.isIdentifier(member.name)) {
-        chains.push(...functionBodyChain(`B_${className}_${member.name.text}`, `${className}::${member.name.text}(${paramsText(member.parameters)})`, member.body));
+        chains.push(...functionBodyChain(`B_${className}_${member.name.text}`, `${className}::${member.name.text}(${paramsText(member.parameters)})`, member.body, importMap));
       }
     }
     return chains;
@@ -98,14 +122,47 @@ function functionLikeChains(statement: ts.Statement): Chain[] | null {
   return null;
 }
 
+function relativeImportMap(sourceFile: ts.SourceFile): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) {
+      continue;
+    }
+    const moduleSpecifier = statement.moduleSpecifier;
+    if (!ts.isStringLiteral(moduleSpecifier)) {
+      continue;
+    }
+    const specifier = moduleSpecifier.text;
+    if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+      continue;
+    }
+    const defaultName = statement.importClause?.name;
+    if (defaultName !== undefined) {
+      map.set(defaultName.text, specifier);
+    }
+    const namedBindings = statement.importClause?.namedBindings;
+    if (namedBindings === undefined || !ts.isNamedImports(namedBindings)) {
+      continue;
+    }
+    for (const element of namedBindings.elements) {
+      map.set(element.name.text, specifier);
+    }
+  }
+  return map;
+}
+
 export function mermaidForFile(relativePath: string, sourceText: string): string {
   const fileBoxId = "B_" + relativePath.replace(/[^A-Za-z0-9_]/g, "_");
   const sourceFile = ts.createSourceFile(relativePath, sourceText, ts.ScriptTarget.Latest, true);
+  const importMap = relativeImportMap(sourceFile);
 
   const chains: Chain[] = [];
   const fileChainStatements: ts.Statement[] = [];
   for (const statement of sourceFile.statements) {
-    const functionChains = functionLikeChains(statement);
+    if (ts.isImportDeclaration(statement)) {
+      continue;
+    }
+    const functionChains = functionLikeChains(statement, importMap);
     if (functionChains !== null) {
       chains.push(...functionChains);
       continue;
@@ -113,7 +170,7 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
     fileChainStatements.push(statement);
   }
   if (fileChainStatements.length > 0) {
-    chains.push({ topBox: null, statements: fileChainStatements.map(statementRecord) });
+    chains.push({ topBox: null, statements: fileChainStatements.map((statement) => statementRecord(statement, importMap)) });
   }
 
   const totalCounts = new Map<string, number>();

@@ -119,3 +119,94 @@ test("test_mermaidForFile_chainsAnExpressionBodiedArrowConstFromItsTopBox", () =
         'B_double --> B_x_2\n'
     );
 });
+
+test("test_mermaidForFile_addsRelativeImportPathAsSecondLabelLineForAConstAssignmentCall", () => {
+    // Scenario: a const-assignment call to a function imported from a relative specifier gets a second label line; a property-access call to a global does not.  Step: call it with an import declaration plus a two-statement function body.
+    const source = 'import { readTask } from "../shared/tasks.ts";\nfunction main() { const t = readTask(1); console.log(t); }\n';
+    const result = mermaidForFile("j.ts", source);
+    // Verify: the readTask call box gains <br/>../shared/tasks.ts; the console.log box gains no second line; the import declaration produces no box.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_j_ts["j.ts"]\n' +
+        'B_console_log_t["console.log(t)"]\n' +
+        'B_main["main()"]\n' +
+        'B_t_is_readTask_1["const t = readTask(1)<br/>../shared/tasks.ts"]\n' +
+        'B_main --> B_t_is_readTask_1 --> B_console_log_t\n'
+    );
+});
+
+test("test_mermaidForFile_addsRelativeImportPathForABareCallStatement", () => {
+    // Scenario: a bare call statement to a relative-imported function gets the import path as a second label line.  Step: call it with an import and a one-statement function body.
+    const source = 'import { setup } from "./setup.ts";\nfunction g() { setup(); }\n';
+    const result = mermaidForFile("k.ts", source);
+    // Verify: the setup() call box gains <br/>./setup.ts.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_k_ts["k.ts"]\n' +
+        'B_g["g()"]\n' +
+        'B_setup["setup()<br/>./setup.ts"]\n' +
+        'B_g --> B_setup\n'
+    );
+});
+
+test("test_mermaidForFile_addsRelativeImportPathForAReturnCall", () => {
+    // Scenario: a return statement whose expression is a relative-imported call gets the import path as a second label line.  Step: call it with an import and a returning function body.
+    const source = 'import { pick } from "./pick.ts";\nfunction m() { return pick(); }\n';
+    const result = mermaidForFile("l.ts", source);
+    // Verify: the return pick() box gains <br/>./pick.ts.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_l_ts["l.ts"]\n' +
+        'B_m["m()"]\n' +
+        'B_return_pick["return pick()<br/>./pick.ts"]\n' +
+        'B_m --> B_return_pick\n'
+    );
+});
+
+test("test_mermaidForFile_addsRelativeImportPathForAnAwaitCall", () => {
+    // Scenario: an await expression statement wrapping a relative-imported call gets the import path as a second label line.  Step: call it with an import and an async function body.
+    const source = 'import { flush } from "../io.ts";\nasync function n() { await flush(); }\n';
+    const result = mermaidForFile("m.ts", source);
+    // Verify: the await flush() box gains <br/>../io.ts.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_m_ts["m.ts"]\n' +
+        'B_flush["await flush()<br/>../io.ts"]\n' +
+        'B_n["n()"]\n' +
+        'B_n --> B_flush\n'
+    );
+});
+
+test("test_mermaidForFile_addsRelativeImportPathForADefaultImportCall", () => {
+    // Scenario: a call to a function imported as a default import from a relative specifier gets the import path as a second label line.  Step: call it with a default import and a one-statement function body.
+    const source = 'import run from "./run.ts";\nfunction q() { run(); }\n';
+    const result = mermaidForFile("o.ts", source);
+    // Verify: the run() call box gains <br/>./run.ts.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_o_ts["o.ts"]\n' +
+        'B_q["q()"]\n' +
+        'B_run["run()<br/>./run.ts"]\n' +
+        'B_q --> B_run\n'
+    );
+});
+
+test("test_mermaidForFile_addsNoSecondLabelLineForANodeModuleImportCall", () => {
+    // Scenario: a call to a function imported from a non-relative (node module) specifier gets no second label line.  Step: call it with a node import and a one-statement function body.
+    const source = 'import { execFileSync } from "node:child_process";\nfunction p() { execFileSync(); }\n';
+    const result = mermaidForFile("n.ts", source);
+    // Verify: the execFileSync() call box has no <br/> second line.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_n_ts["n.ts"]\n' +
+        'B_execFileSync["execFileSync()"]\n' +
+        'B_p["p()"]\n' +
+        'B_p --> B_execFileSync\n'
+    );
+});
