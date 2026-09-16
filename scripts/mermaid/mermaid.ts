@@ -56,11 +56,18 @@ interface WalkContext {
   runningCounts: Map<string, number>;
 }
 
+interface CallSite {
+  callSiteId: string;
+  callee: string;
+}
+
 interface WalkOutcome {
   boxLines: string[];
   edgeLines: string[];
   openPaths: string[][];
   firstBoxId: string | null;
+  exitIds: string[];
+  callSites: CallSite[];
 }
 
 function computeBaseId(statementText: string): string {
@@ -180,6 +187,8 @@ function assignFinalId(baseId: string, ctx: WalkContext): string {
 function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], ctx: WalkContext): WalkOutcome {
   const boxLines: string[] = [];
   const edgeLines: string[] = [];
+  const exitIds: string[] = [];
+  const callSites: CallSite[] = [];
   let openPaths = entryPaths;
   let firstBoxId: string | null = null;
 
@@ -194,10 +203,10 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
         firstBoxId = diamondId;
       }
       boxLines.push(`${diamondId}{"if( ${escapeLabel(conditionText)} )"}`);
-      // boxLines.push(`${yesId}["if( ${escapeLabel(conditionText)} ): TRUE"]`);
-      boxLines.push(`${yesId}["TRUE"]`);
-      // boxLines.push(`${noId}["if( ${escapeLabel(conditionText)} ): FALSE"]`);
-      boxLines.push(`${noId}["FALSE"]`);
+      boxLines.push(`${yesId}["if( ${escapeLabel(conditionText)} ): TRUE"]`);
+      // boxLines.push(`${yesId}["TRUE"]`);
+      boxLines.push(`${noId}["if( ${escapeLabel(conditionText)} ): FALSE"]`);
+      // boxLines.push(`${noId}["FALSE"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
@@ -213,6 +222,8 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       boxLines.push(...elseOutcome.boxLines);
       edgeLines.push(...elseOutcome.edgeLines);
 
+      exitIds.push(...thenOutcome.exitIds, ...elseOutcome.exitIds);
+      callSites.push(...thenOutcome.callSites, ...elseOutcome.callSites);
       openPaths = [...thenOutcome.openPaths, ...elseOutcome.openPaths];
       continue;
     }
@@ -248,6 +259,8 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
         edgeLines.push(path.join(" --> "));
       }
 
+      exitIds.push(...bodyOutcome.exitIds);
+      callSites.push(...bodyOutcome.callSites);
       openPaths = [[diamondId, noId]];
       continue;
     }
@@ -281,6 +294,8 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
         edgeLines.push(path.join(" --> "));
       }
 
+      exitIds.push(...bodyOutcome.exitIds);
+      callSites.push(...bodyOutcome.callSites);
       openPaths = [[diamondId, noId]];
       continue;
     }
@@ -312,6 +327,8 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
         edgeLines.push(path.join(" --> "));
       }
 
+      exitIds.push(...bodyOutcome.exitIds);
+      callSites.push(...bodyOutcome.callSites);
       openPaths = [[diamondId, noId]];
       continue;
     }
@@ -320,6 +337,8 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       const bodyOutcome = walkStatements(openPaths, branchStatements(statement.statement), ctx);
       boxLines.push(...bodyOutcome.boxLines);
       edgeLines.push(...bodyOutcome.edgeLines);
+      exitIds.push(...bodyOutcome.exitIds);
+      callSites.push(...bodyOutcome.callSites);
       if (firstBoxId === null) {
         firstBoxId = bodyOutcome.firstBoxId;
       }
@@ -361,6 +380,13 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       callExpression.expression.expression.text === "process" &&
       callExpression.expression.name.text === "exit";
     const isTerminal = ts.isReturnStatement(statement) || ts.isThrowStatement(statement) || isProcessExit;
+    if (isTerminal) {
+      exitIds.push(finalId);
+    }
+    const callee = calleeName(statement);
+    if (callee !== null) {
+      callSites.push({ callSiteId: finalId, callee });
+    }
     for (const path of openPaths) {
       path.push(finalId);
     }
@@ -372,7 +398,7 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
     }
   }
 
-  return { boxLines, edgeLines, openPaths, firstBoxId };
+  return { boxLines, edgeLines, openPaths, firstBoxId, exitIds, callSites };
 }
 
 function paramsText(parameters: readonly ts.ParameterDeclaration[]): string {
@@ -486,6 +512,8 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
   const ctx: WalkContext = { importMap, totalCounts, runningCounts: new Map() };
   const boxLines: string[] = [];
   const edgeLines: string[] = [];
+  const functionExits = new Map<string, { entryId: string; exitIds: string[] }>();
+  const allCallSites: CallSite[] = [];
   for (const chain of chains) {
     const startId = chain.topBox !== null ? chain.topBox.id : fileBoxId;
     if (chain.topBox !== null) {
@@ -494,9 +522,36 @@ export function mermaidForFile(relativePath: string, sourceText: string): string
     const outcome = walkStatements([[startId]], chain.statements, ctx);
     boxLines.push(...outcome.boxLines);
     edgeLines.push(...outcome.edgeLines);
+    const fallThroughExits: string[] = [];
     for (const path of outcome.openPaths) {
       if (path.length >= 2) {
         edgeLines.push(path.join(" --> "));
+      }
+      const last = path[path.length - 1];
+      if (last !== undefined && last !== startId) {
+        fallThroughExits.push(last);
+      }
+    }
+    allCallSites.push(...outcome.callSites);
+    if (chain.topBox !== null) {
+      functionExits.set(chain.topBox.id.slice(2), { entryId: chain.topBox.id, exitIds: [...outcome.exitIds, ...fallThroughExits] });
+    }
+  }
+
+  // Wire each same-file call: into the callee, and from each callee exit back to the call site.
+  for (const site of allCallSites) {
+    const target = functionExits.get(site.callee);
+    if (target === undefined) {
+      continue;
+    }
+    // Bare single call: its box id already equals the entry box, so skip to avoid a self-loop.
+    if (site.callSiteId === target.entryId) {
+      continue;
+    }
+    edgeLines.push(`${site.callSiteId} --> ${target.entryId}`);
+    for (const exitId of target.exitIds) {
+      if (exitId !== site.callSiteId) {
+        edgeLines.push(`${exitId} --> ${site.callSiteId}`);
       }
     }
   }
