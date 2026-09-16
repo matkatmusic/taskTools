@@ -157,5 +157,42 @@
       "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.template.json",
       "scripts/tackle-tasks/preambleStatusCheck/IS_WORKTREE_FRESH_Q.test.ts"
     ]
+  },
+  {
+    "taskNumber": 203,
+    "version": "625caab6ed01ccd65850e033c27e9e08f17bf267",
+    "title": "Translator-next override for run-step: optional next + I/O translator with hard-coded fallback",
+    "userDescription": "At a high level, here's what the run-step loop should do, using this idea of translation objects.\n```ts\nlet block = getStartingBlockFromRunStepLaunchArgs(args);\nlet input = getInputFromRunStepLaunchArgs(args);\n\nwhile( true ) {\n    const result = executeBlockScript(block, input);\n    if( result.done )\n        return result.output; \n    //prepare arguments used in loop iteration\n    const nextBlock = getNextBlockInDiagram(diagram, block);\n    const translator = getTranslatorFor(block);\n\n    input = translator.translate(result.output, nextBlock);\n    block = nextBlock;\n}\n```\ngetNextBlockInDiagram reads from a generated steps.json (generated from a .mmd diagram). getTranslatorFor reads from that same steps.json, where each step includes either some kind of property-to-property map to map the keys from one script's output to another script's input, or a file path to a script that performs that JSON-shape-to-JSON-shape conversion.\n\nBeginning step: a translator-next override. If present, use that instead of the hard-coded next, to determine what block to run next. Otherwise, use the existing hard-coded next value, and the existing hard-coded input/output shape.",
+    "chainGoal": [
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: this task adds the translator-next override mechanism (the enabler); the sibling fast-pipeline task, blocked by this one, adds the fast diagram folder and the `fast` flag on top of it."
+    ],
+    "goal": [
+      "- When a step in the generated steps.json declares a translator-next override, the run-step loop uses it to choose the next block instead of the block script's hard-coded next",
+      "- When that override declares an input translator (a property-to-property key map or a converter-script path), the loop builds the next block's input by applying it to the current block's output",
+      "- When no override is present, the loop keeps the existing behavior: the block script's hard-coded next value and its verbatim output as the next block's input",
+      "- One existing block is reused in a second position through an override alone, with no edit to that block's own script",
+      "- npm run test:baseline stays green, because the existing pipelines declare no override and are unchanged"
+    ],
+    "notInScope": [
+      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task",
+      "- Converting the existing default pipeline's blocks to use overrides is out of scope; this task adds the override path plus one demonstrating case only"
+    ],
+    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
+    "description": "runStepHook.ts's getNextStepAfter already reads each box's next array from diagram-steps.json, but a branching box's own output.next still wins, and buildSuccess/buildWalkerStop forward the block's output as the next input verbatim with no remapping. run-step.workflow.js only relays the outcome.next and outcome.payload the hook already decided. StepConfigEntry in generateSteps.ts has next but no translator field; each <BOX>.template.json already declares input/output shapes a translator could target. This task adds an optional translator-next override read from steps.json: when present it decides the next block and, via a key map or converter-script path, shapes the next block's input; when absent the existing hard-coded next and verbatim payload are used. A design point to settle during implementation is how a branching box selects among several next entries once overrides exist, and whether the translator lives per-source-step, per-edge, or per-destination-step. Extend tests/runStepHook.test.ts and tests/generateSteps.test.ts.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/diagram-steps.json",
+      ".claude/workflows/run-step.workflow.js",
+      "scripts/hooks/runStepHook.ts",
+      "tests/runStepHook.test.ts",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "A two-block diagram where block1's output keys differ from block2's input keys. steps.json declares a translator-next override on block1 that names block2 and maps the keys. run-step routes block1 to block2 via the override, and block2 receives the translated input. A second block that declares no override still uses its hard-coded next and forwards its output verbatim.",
+    "difficulty": 8
   }
 ]
