@@ -12,9 +12,9 @@ function git(repoRoot: string, ...args: string[]): string {
 }
 
 test("test_mermaidForFile_emitsFlowchartAndOneBoxForThePath", () => {
-    // Scenario: mermaidForFile returns a two-line diagram: `flowchart TD` and one B_ box labelled with the path.  Step: call it with a path and empty source text.
+    // Calls mermaidForFile with a path and empty source; expects a two-line flowchart with one box.
     const result = mermaidForFile("scripts/foo/main.ts", "");
-    // Verify: the exact two-line string with a trailing newline; the id is the path with non-identifier chars replaced by _.
+    // Checks the exact string: box id replaces non-identifier characters in the path with underscores.
     assert.equal(result, 'flowchart TD\nB_scripts_foo_main_ts["scripts/foo/main.ts"]\n');
 });
 
