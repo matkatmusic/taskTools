@@ -159,49 +159,12 @@
     ]
   },
   {
-    "taskNumber": 203,
-    "version": "625caab6ed01ccd65850e033c27e9e08f17bf267",
-    "title": "Translator-next override for run-step: optional next + I/O translator with hard-coded fallback",
-    "userDescription": "At a high level, here's what the run-step loop should do, using this idea of translation objects.\n```ts\nlet block = getStartingBlockFromRunStepLaunchArgs(args);\nlet input = getInputFromRunStepLaunchArgs(args);\n\nwhile( true ) {\n    const result = executeBlockScript(block, input);\n    if( result.done )\n        return result.output; \n    //prepare arguments used in loop iteration\n    const nextBlock = getNextBlockInDiagram(diagram, block);\n    const translator = getTranslatorFor(block);\n\n    input = translator.translate(result.output, nextBlock);\n    block = nextBlock;\n}\n```\ngetNextBlockInDiagram reads from a generated steps.json (generated from a .mmd diagram). getTranslatorFor reads from that same steps.json, where each step includes either some kind of property-to-property map to map the keys from one script's output to another script's input, or a file path to a script that performs that JSON-shape-to-JSON-shape conversion.\n\nBeginning step: a translator-next override. If present, use that instead of the hard-coded next, to determine what block to run next. Otherwise, use the existing hard-coded next value, and the existing hard-coded input/output shape.",
-    "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: this task adds the translator-next override mechanism (the enabler); the sibling fast-pipeline task, blocked by this one, adds the fast diagram folder and the `fast` flag on top of it."
-    ],
-    "goal": [
-      "- When a step in the generated steps.json declares a translator-next override, the run-step loop uses it to choose the next block instead of the block script's hard-coded next",
-      "- When that override declares an input translator (a property-to-property key map or a converter-script path), the loop builds the next block's input by applying it to the current block's output",
-      "- When no override is present, the loop keeps the existing behavior: the block script's hard-coded next value and its verbatim output as the next block's input",
-      "- One existing block is reused in a second position through an override alone, with no edit to that block's own script",
-      "- npm run test:baseline stays green, because the existing pipelines declare no override and are unchanged"
-    ],
-    "notInScope": [
-      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task",
-      "- Converting the existing default pipeline's blocks to use overrides is out of scope; this task adds the override path plus one demonstrating case only"
-    ],
-    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "runStepHook.ts's getNextStepAfter already reads each box's next array from diagram-steps.json, but a branching box's own output.next still wins, and buildSuccess/buildWalkerStop forward the block's output as the next input verbatim with no remapping. run-step.workflow.js only relays the outcome.next and outcome.payload the hook already decided. StepConfigEntry in generateSteps.ts has next but no translator field; each <BOX>.template.json already declares input/output shapes a translator could target. This task adds an optional translator-next override read from steps.json: when present it decides the next block and, via a key map or converter-script path, shapes the next block's input; when absent the existing hard-coded next and verbatim payload are used. A design point to settle during implementation is how a branching box selects among several next entries once overrides exist, and whether the translator lives per-source-step, per-edge, or per-destination-step. Extend tests/runStepHook.test.ts and tests/generateSteps.test.ts.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/generateSteps.ts",
-      "scripts/tackle-tasks/diagram-steps.json",
-      ".claude/workflows/run-step.workflow.js",
-      "scripts/hooks/runStepHook.ts",
-      "tests/runStepHook.test.ts",
-      "tests/generateSteps.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "A two-block diagram where block1's output keys differ from block2's input keys. steps.json declares a translator-next override on block1 that names block2 and maps the keys. run-step routes block1 to block2 via the override, and block2 receives the translated input. A second block that declares no override still uses its hard-coded next and forwards its output verbatim.",
-    "difficulty": 8
-  },
-  {
     "taskNumber": 204,
     "version": "78c65bf5203eded2c1e4c28665bad5816617fe61",
     "title": "Fast tackle-tasks pipeline + `fast` flag (preamble -> plan -> implement -> suite-fix -> merge)",
     "userDescription": "Add a simpler 'fast' pipeline that reuses some of the diagram blocks: preamble -> planning -> implementing -> test-suite-fix-loop -> merge.  selectable via '/tackle-tasks [N...] <fast>'.  I am undecided if this new way of using should be a separate skill ('/tackle-task-fast') or via the \"use custom pipeline diagrams\" feature that may not have been built yet.",
     "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 adds the translator-next override mechanism; this task adds the fast diagram folder and the `fast` flag on top of it."
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: the split of task 203 (tasks 205 + 207) adds the translator-next override mechanism; this task adds the fast diagram folder and the `fast` flag on top of it."
     ],
     "goal": [
       "- /tackle-tasks [N...] fast runs a 5-stage pipeline: preamble, plan, implement, full-suite fix loop, merge",
@@ -211,7 +174,7 @@
       "- A fast run of a real task lands a merge commit and archives the task"
     ],
     "notInScope": [
-      "- The translator-next override / steps.json reuse mechanism is owned by task 203",
+      "- The translator-next override / steps.json reuse mechanism is owned by the split of task 203 (task 205 next-override, task 207 translator)",
       "- A separate /tackle-task-fast skill; the `fast` flag on /tackle-tasks was chosen instead"
     ],
     "problemSolvedByTask": "The full pipeline's review, verdict, and test-flagging gates make it heavy and slow for simple tasks, and there is no lighter path to plan, implement, get the suite green, and merge.",
@@ -225,6 +188,10 @@
     ],
     "readOnlyFiles": [
       "*"
+    ],
+    "blockedBy": [
+      { "taskNumber": 205, "reason": "fast blocks reuse existing block logic via the steps.json next-override reader added here" },
+      { "taskNumber": 207, "reason": "fast blocks reuse existing block logic via the steps.json translator reader added here" }
     ],
     "createsFiles": [
       "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
@@ -245,13 +212,7 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "Run /tackle-tasks <N> fast on a fixture task. Assert the run executes only the fast stages in order (preamble, plan, implement, full-suite fix loop, lock, rebase, fixConflicts, merge) and none of the dropped review/verdict/flag blocks, and that it lands a merge commit and archives the task.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNumber": 203,
-        "reason": "The fast pipeline reuses existing blocks in a shorter flow via the translator-next override mechanism that task 203 builds."
-      }
-    ]
+    "difficulty": 6
   },
   {
     "taskNumber": 205,
