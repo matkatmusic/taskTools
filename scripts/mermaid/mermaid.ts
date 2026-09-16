@@ -63,6 +63,9 @@ function computeBaseId(statementText: string): string {
     else if (tokenKind === ts.SyntaxKind.ReturnKeyword) {
       words.push("return");
     }
+    else if (tokenKind === ts.SyntaxKind.OfKeyword || tokenKind === ts.SyntaxKind.InKeyword) {
+      words.push(tokenText);
+    }
     else if (!DROPPED_KEYWORDS.has(tokenText) && OPERATOR_WORDS[tokenText] !== undefined) {
       words.push(OPERATOR_WORDS[tokenText]);
     }
@@ -125,6 +128,10 @@ function collectBaseIds(statements: readonly ts.Node[], counts: Map<string, numb
       }
       continue;
     }
+    if (ts.isForOfStatement(statement) || ts.isForInStatement(statement) || ts.isForStatement(statement)) {
+      collectBaseIds(branchStatements(statement.statement), counts);
+      continue;
+    }
     const baseId = computeBaseId(statement.getText());
     counts.set(baseId, (counts.get(baseId) ?? 0) + 1);
   }
@@ -168,6 +175,68 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       edgeLines.push(...elseOutcome.edgeLines);
 
       openPaths = [...thenOutcome.openPaths, ...elseOutcome.openPaths];
+      continue;
+    }
+
+    if (ts.isForOfStatement(statement) || ts.isForInStatement(statement)) {
+      const loopVariable = ts.isVariableDeclarationList(statement.initializer)
+        ? statement.initializer.declarations[0].name.getText()
+        : statement.initializer.getText();
+      const iterableText = statement.expression.getText();
+      const joinWord = ts.isForOfStatement(statement) ? "of" : "in";
+      const headerText = `for (${statement.initializer.getText()} ${joinWord} ${iterableText})`;
+      const idPart = `for_${computeBaseId(headerText)}`;
+      const diamondId = `Q_${idPart}`;
+      const yesId = `Q_CHOICE_${idPart}_Y`;
+      const noId = `Q_CHOICE_${idPart}_N`;
+      boxLines.push(`${diamondId}{"${headerText}"}`);
+      boxLines.push(`${yesId}["i < ${iterableText}.length; ${loopVariable} = ${iterableText}[i];"]`);
+      boxLines.push(`${noId}["i >= ${iterableText}.length"]`);
+
+      for (const path of openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      const bodyOutcome = walkStatements([[diamondId, yesId]], branchStatements(statement.statement), ctx);
+      boxLines.push(...bodyOutcome.boxLines);
+      edgeLines.push(...bodyOutcome.edgeLines);
+      for (const path of bodyOutcome.openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      openPaths = [[diamondId, noId]];
+      continue;
+    }
+
+    if (ts.isForStatement(statement)) {
+      const initText = statement.initializer !== undefined ? statement.initializer.getText() : "";
+      const conditionText = statement.condition !== undefined ? statement.condition.getText() : "";
+      const incrementorText = statement.incrementor !== undefined ? statement.incrementor.getText() : "";
+      const headerText = `for (${initText}; ${conditionText}; ${incrementorText})`;
+      const idPart = `for_${computeBaseId(headerText)}`;
+      const diamondId = `Q_${idPart}`;
+      const yesId = `Q_CHOICE_${idPart}_Y`;
+      const noId = `Q_CHOICE_${idPart}_N`;
+      boxLines.push(`${diamondId}{"${headerText}"}`);
+      boxLines.push(`${yesId}["${conditionText}"]`);
+      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+
+      for (const path of openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      const bodyOutcome = walkStatements([[diamondId, yesId]], branchStatements(statement.statement), ctx);
+      boxLines.push(...bodyOutcome.boxLines);
+      edgeLines.push(...bodyOutcome.edgeLines);
+      for (const path of bodyOutcome.openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      openPaths = [[diamondId, noId]];
       continue;
     }
 

@@ -303,3 +303,45 @@ test("test_mermaidForFile_nestedIfRejoinsInnerArmsBeforeOuterArmRejoinsSeparatel
         'Q_x --> Q_CHOICE_x_N --> B_d\n'
     );
 });
+
+test("test_mermaidForFile_forOfLoopBecomesADiamondWithABackEdge", () => {
+    // Scenario: the sum(list) for-loop example from task 190 (without the while).  Step: call it with that function body.
+    const source = 'function sum(list: number[]) {\n  let total = 0;\n  for (const x of list) {\n    total += x;\n  }\n  return total;\n}\n';
+    const result = mermaidForFile("t.ts", source);
+    // Verify: the diamond id is "for_" plus computeBaseId of the header; the Y arm enters the body and the last body box loops back to the diamond; the N arm goes to the statement after the loop.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_t_ts["t.ts"]\n' +
+        'B_return_total["return total"]\n' +
+        'B_sum["sum(list: number[])"]\n' +
+        'B_total_is_0["let total = 0"]\n' +
+        'B_total_plus_is_x["total += x"]\n' +
+        'Q_CHOICE_for_x_of_list_N["i >= list.length"]\n' +
+        'Q_CHOICE_for_x_of_list_Y["i < list.length; x = list[i];"]\n' +
+        'Q_for_x_of_list{"for (const x of list)"}\n' +
+        'B_sum --> B_total_is_0 --> Q_for_x_of_list\n' +
+        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_Y --> B_total_plus_is_x --> Q_for_x_of_list\n' +
+        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_N --> B_return_total\n'
+    );
+});
+
+test("test_mermaidForFile_classicForConditionAndItsFlippedOppositeBecomeTheChoiceLabels", () => {
+    // Scenario: a classic `for (let i = 0; i < 3; i++)` with a one-statement body and nothing after it.  Step: call it with that function body.
+    const source = 'function count() {\n  for (let i = 0; i < 3; i++) {\n    log(i);\n  }\n}\n';
+    const result = mermaidForFile("u.ts", source);
+    // Verify: the _Y choice is labelled with the condition text; the _N choice is labelled with the table-flipped opposite; the loop's only open path (the _N arm) is flushed at the end since nothing follows it.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_u_ts["u.ts"]\n' +
+        'B_count["count()"]\n' +
+        'B_log_i["log(i)"]\n' +
+        'Q_CHOICE_for_i_is_0_i_less_than_3_i_N["i >= 3"]\n' +
+        'Q_CHOICE_for_i_is_0_i_less_than_3_i_Y["i < 3"]\n' +
+        'Q_for_i_is_0_i_less_than_3_i{"for (let i = 0; i < 3; i++)"}\n' +
+        'B_count --> Q_for_i_is_0_i_less_than_3_i\n' +
+        'Q_for_i_is_0_i_less_than_3_i --> Q_CHOICE_for_i_is_0_i_less_than_3_i_Y --> B_log_i --> Q_for_i_is_0_i_less_than_3_i\n' +
+        'Q_for_i_is_0_i_less_than_3_i --> Q_CHOICE_for_i_is_0_i_less_than_3_i_N\n'
+    );
+});
