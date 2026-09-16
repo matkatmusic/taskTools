@@ -53,23 +53,24 @@ test("test_RUN_FULL_SUITE_runsTheTinyFixtureProjectAndForwardsThePacket", async 
     assert.deepEqual(getTemplateShapeMismatches(template.output, output), []);
 });
 
-test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", async () => {
-    const rootOrigin = makeCommittedRepo();
-    writeFileSync(join(rootOrigin, "package.json"), FIXTURE_PACKAGE_JSON);
-    git(rootOrigin, "add", "package.json");
-    git(rootOrigin, "commit", "-q", "-m", "add fixture test script");
-    const worktree = makeLinkedWorktree(rootOrigin);
-    const taskNumber = 602;
-    seedActiveTaskWithBrief(rootOrigin, worktree, taskNumber);
-
-    const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
-
-    const first = await main(input);
-    const { checkedAt: _checkedAtFirst, ...fullSuiteAfterFirst } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
-
-    const second = await main(input);
-    const { checkedAt: _checkedAtSecond, ...fullSuiteAfterSecond } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
-
-    assert.deepEqual(second, first);
-    assert.deepEqual(fullSuiteAfterSecond, fullSuiteAfterFirst);
-});
+// Retired: RUN_FULL_SUITE runs touched tests now; no fullSuite record is written.
+// test("test_RUN_FULL_SUITE_runsTwiceWithTheSameInput", async () => {
+//     const rootOrigin = makeCommittedRepo();
+//     writeFileSync(join(rootOrigin, "package.json"), FIXTURE_PACKAGE_JSON);
+//     git(rootOrigin, "add", "package.json");
+//     git(rootOrigin, "commit", "-q", "-m", "add fixture test script");
+//     const worktree = makeLinkedWorktree(rootOrigin);
+//     const taskNumber = 602;
+//     seedActiveTaskWithBrief(rootOrigin, worktree, taskNumber);
+//
+//     const input = JSON.stringify({ taskNumber, runId: "run-1", projectRoot: rootOrigin, worktree, branch: `task-${taskNumber}` });
+//
+//     const first = await main(input);
+//     const { checkedAt: _checkedAtFirst, ...fullSuiteAfterFirst } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
+//
+//     const second = await main(input);
+//     const { checkedAt: _checkedAtSecond, ...fullSuiteAfterSecond } = getCurrentTaskRun(taskNumber, rootOrigin)!.fullSuite!;
+//
+//     assert.deepEqual(second, first);
+//     assert.deepEqual(fullSuiteAfterSecond, fullSuiteAfterFirst);
+// });
