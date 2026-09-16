@@ -417,5 +417,51 @@
         "reason": "the POC proves the next-override drives routing, which only takes effect once child 1's runStepHook reader consumes the nextBlock field"
       }
     ]
+  },
+  {
+    "taskNumber": 209,
+    "version": "e7ee1ba499860759a7e0f66e0989869fa600df55",
+    "title": "POC: generate a translator (nextScript) override for the preamble's first hop in diagram-steps.json",
+    "userDescription": "[split-task-child] Child 4 of the split of task 203. Define 'what translator to use' for the first script that runs in the tackle-tasks pipeline (the preamble block, PREAMBLE_STATUS_CHECK), as a proof of concept, by having generateSteps emit a translator/nextScript override on that hop in the generated steps.json. The translator is an identity/passthrough so pipeline behavior is unchanged and the baseline stays green; it proves the generator emits the translator field and the runStepHook reader (task 207) consumes it. No block script changes. Extend tests/generateSteps.test.ts. Part of the fast-pipeline chain (203 -> 204).",
+    "chainGoal": [
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
+      "- This is the split of task 203: child 1 = task 205 (next override reader + per-hop guard), child 2 = task 207 (translator reader), child 3 (preamble nextBlock POC), child 4 (preamble translator POC). Task 206 is a prerequisite of 205."
+    ],
+    "goal": [
+      "- generateSteps emits a translator (nextScript) override on the preamble's first hop in the generated scripts/tackle-tasks/diagram-steps.json",
+      "- The translator is an identity/passthrough, so /tackle-tasks behavior is unchanged and npm run test:baseline stays green",
+      "- tests/generateSteps.test.ts asserts the preamble entry in the generated config carries the translator override field",
+      "- No block script is edited; only the generator and the generated config change"
+    ],
+    "notInScope": [
+      "- Reading/running the translator in the run-step loop is owned by child 2 (task 207)",
+      "- The nextBlock override for the preamble is owned by child 3",
+      "- Converting the rest of the pipeline's blocks to translators is out of scope; this is the preamble demonstration only",
+      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
+    ],
+    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
+    "description": "Builds on child 3 (task 208), which added the nextBlock override to the preamble's first block entry. This POC adds the translator (nextScript) override field to the same hop, pointing at an identity/passthrough translator so behavior is unchanged. It demonstrates the generator side of the task-207 translator mechanism end to end on a real block, with the acceptance suite and baseline staying green. Same schema-reconciliation design point as child 3 (optional field on the existing entry vs the user's flat shape); the POC uses the optional-field form.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/diagram-steps.json",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Regenerate the steps config via generateSteps and assert the preamble's first hop entry in scripts/tackle-tasks/diagram-steps.json now carries a translator (nextScript) override field pointing at an identity/passthrough translator. Assert the generated config still round-trips and npm run test:baseline stays green (behavior unchanged because the translator is identity). Builds on child 3's nextBlock POC on the same entry.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 207,
+        "reason": "the POC proves the translator reshapes the hop's payload, which only takes effect once child 2's runStepHook reader runs the translator"
+      },
+      {
+        "taskNumber": 208,
+        "reason": "edits the same preamble entry in generateSteps.ts / diagram-steps.json that child 3 adds the nextBlock override to; must land after it to avoid clobbering"
+      }
+    ]
   }
 ]
