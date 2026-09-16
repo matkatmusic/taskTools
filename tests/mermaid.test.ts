@@ -51,3 +51,71 @@ test("test_writeAllDiagrams_writesOnlyForNonTestTsFiles", () => {
     // Cleanup.
     rmSync(repoRoot, { recursive: true, force: true });
 });
+
+test("test_mermaidForFile_parsesFunctionNamesAndChainsCallStatements", () => {
+    // Scenario: a file of five functions where three have empty bodies and two chain their call statements.  Step: call it with the multipleCalls/singleCall source from task 190.
+    const source = 'function a() {}\nfunction b() {}\nfunction c() {}\nfunction multipleCalls() { a(); b(); c(); a(); }\nfunction singleCall() { a(); b(); }\n';
+    const result = mermaidForFile("f.ts", source);
+    // Verify: a, b, c get no top box since their bodies are empty; repeated calls get a running number counted across the whole file; each function chains its own calls in source order.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_f_ts["f.ts"]\n' +
+        'B_a1["a()"]\n' +
+        'B_a2["a()"]\n' +
+        'B_a3["a()"]\n' +
+        'B_b1["b()"]\n' +
+        'B_b2["b()"]\n' +
+        'B_c["c()"]\n' +
+        'B_multipleCalls["multipleCalls()"]\n' +
+        'B_singleCall["singleCall()"]\n' +
+        'B_multipleCalls --> B_a1 --> B_b1 --> B_c --> B_a2\n' +
+        'B_singleCall --> B_a3 --> B_b2\n'
+    );
+});
+
+test("test_mermaidForFile_labelsAClassMethodWithClassNameAndMethodName", () => {
+    // Scenario: a class with one method bar gets a top box labelled Foo::bar(), followed by its own statement boxes.  Step: call it with a one-method class source.
+    const source = 'class Foo {\n  bar() {\n    const a = 1;\n    const b = 2;\n  }\n}\n';
+    const result = mermaidForFile("g.ts", source);
+    // Verify: the method box id joins the class name and method name with an underscore; each body statement gets its own box chained from the method box.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_g_ts["g.ts"]\n' +
+        'B_Foo_bar["Foo::bar()"]\n' +
+        'B_a_is_1["const a = 1"]\n' +
+        'B_b_is_2["const b = 2"]\n' +
+        'B_Foo_bar --> B_a_is_1 --> B_b_is_2\n'
+    );
+});
+
+test("test_mermaidForFile_chainsTopLevelStatementsFromTheFileBox", () => {
+    // Scenario: a pure script file with two top-level statements and no functions chains both statements from the file box.  Step: call it with two const declarations.
+    const source = 'const a = 1;\nconst b = 2;\n';
+    const result = mermaidForFile("h.ts", source);
+    // Verify: no function boxes exist; both statements chain in source order starting at the file box.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_h_ts["h.ts"]\n' +
+        'B_a_is_1["const a = 1"]\n' +
+        'B_b_is_2["const b = 2"]\n' +
+        'B_h_ts --> B_a_is_1 --> B_b_is_2\n'
+    );
+});
+
+test("test_mermaidForFile_chainsAnExpressionBodiedArrowConstFromItsTopBox", () => {
+    // Scenario: an arrow-function const with an expression body (no braces) gets a top box and one expression box chained from it.  Step: call it with such a const.
+    const source = 'const double = (x) => x * 2;\n';
+    const result = mermaidForFile("i.ts", source);
+    // Verify: the top box is named for the const, and the expression itself becomes one box chained from it.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_i_ts["i.ts"]\n' +
+        'B_double["double(x)"]\n' +
+        'B_x_2["x * 2"]\n' +
+        'B_double --> B_x_2\n'
+    );
+});
