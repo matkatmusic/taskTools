@@ -290,5 +290,41 @@
     "hasTests": true,
     "tests": "Real fixture scripts A.ts/B.ts/C.ts, each with a template.json declaring its input/output shape. A takes {a,b} outputs {sum,a,b}; B takes {sum,a,b} outputs {a,expected}; C takes {a,expected} outputs a boolean. Each script hard-codes its own next (A->B, B->C, C->end). steps.json entry shape: { blockName, script, nextBlock, nextScript? }, resolved as nextScript = entry.nextScript ?? byBlockName[nextBlock].script. TEST 1: empty steps.json -> run-step runs A(1,3) -> B(4,1,3) -> C(1,1) by hard-coded next, result true. TEST 2: steps.json overrides A.nextBlock=B (no nextScript) -> same run, result true. TEST 3: steps.json overrides A.nextBlock=B and B.nextBlock=C -> same run, result true. TEST 4: steps.json overrides A.nextBlock=C (skip B), no translator -> the forwarded {sum,a,b} lacks C's required 'expected' key, so run-step fails loud on that overridden hop: result.ok === false with a shape-mismatch error. The per-hop input check runs ONLY on overridden hops, not on default hard-coded hops, so existing pipelines are unaffected. Tests 5-6 (translator, and detect-a-bad-translator) are owned by child 2.",
     "difficulty": 6
+  },
+  {
+    "taskNumber": 206,
+    "version": "eb0f019f87b3b8b86ac07fe2627cca7674298b33",
+    "title": "Make 5 codex/plan hops pass subset validation before per-hop input checks land",
+    "userDescription": "Prerequisite for the run-step every-hop input guard (task 205). A static subset check of the real pipeline (next block's template.input must be a subset, by key+kind, of the producing block's template.output) fails on exactly 5 hops, all into DID_*_SUCCEED_Q decision blocks: CODEX_REVIEWS_PLAN -> DID_CODEX_REVIEW_SUCCEED_Q, CODEX_REVIEW_FALLBACK_FABLE -> DID_FABLE_REVIEW_SUCCEED_Q, CODEX_REVIEWS_TESTS -> DID_CODEX_TEST_REVIEW_SUCCEED_Q, CODEX_TEST_REVIEW_FALLBACK_FABLE -> DID_FABLE_TEST_REVIEW_SUCCEED_Q, PLAN_THE_TASK_CODEX -> DID_CODEX_PLAN_SUCCEED_Q. Each target input declares box, scriptSignal, taskNumber that the source output template does not declare. Determine which keys the source block actually emits at runtime, then make each hop consistent: declare the emitted keys on the source's template.output, or drop the unneeded keys from the target's template.input. Once every hop is a clean subset, task 205 can turn on per-hop input validation without reddening npm run test:baseline.",
+    "goal": [
+      "- The static subset check (next.template.input is a subset, by key and kind, of prev.template.output) passes on all 84 hops of the real diagram-steps.json, up from 79",
+      "- npm run test:baseline stays green",
+      "- Each of the 5 named hops is consistent: the keys the source block actually emits are what the target block declares it needs (box, scriptSignal, taskNumber accounted for)"
+    ],
+    "notInScope": [
+      "- Adding the per-hop input validation itself to runStepHook.ts is owned by task 205",
+      "- The steps.json next override, translator, and preamble proof of concept are owned by tasks 205, 206 and the task-203 split children"
+    ],
+    "problemSolvedByTask": "The run-step hook is about to validate every block's input against the next block's declared template.input (task 205). Five real pipeline hops declare input keys (box, scriptSignal, taskNumber) that the producing block's template.output does not declare, so turning on per-hop validation would fail them and redden the committed test baseline. The templates must be made consistent first.",
+    "description": "Static adjacency check (mirroring getTemplateShapeMismatches in scripts/shared/templateShape.ts, which is subset-by-key-and-kind, extra keys ignored) finds 5 of 84 real hops where the DID_*_SUCCEED_Q target's template.input requires box/scriptSignal/taskNumber that the source template.output does not declare. Inspect the source blocks' actual emitted output to decide, per hop, whether to add the keys to the source's template.output (if the block emits them) or remove them from the target's template.input (if the decision block does not need them). The 10 involved template.json files are this task's fence.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.template.json",
+      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.template.json",
+      "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.template.json",
+      "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.template.json",
+      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.template.json",
+      "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.template.json",
+      "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.template.json",
+      "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.template.json",
+      "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.template.json",
+      "scripts/tackle-tasks/planTheTask/DID_CODEX_PLAN_SUCCEED_Q.template.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "A test that walks every hop of the real scripts/tackle-tasks/diagram-steps.json and asserts next.template.input is a subset (by key and kind) of prev.template.output, using getTemplateShapeMismatches; it currently fails on 5 hops and must pass on all 84. npm run test:baseline stays green.",
+    "difficulty": 4
   }
 ]
