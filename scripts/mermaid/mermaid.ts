@@ -203,10 +203,10 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
         firstBoxId = diamondId;
       }
       boxLines.push(`${diamondId}{"if( ${escapeLabel(conditionText)} )"}`);
-      boxLines.push(`${yesId}["if( ${escapeLabel(conditionText)} ): TRUE"]`);
-      // boxLines.push(`${yesId}["TRUE"]`);
-      boxLines.push(`${noId}["if( ${escapeLabel(conditionText)} ): FALSE"]`);
-      // boxLines.push(`${noId}["FALSE"]`);
+      // boxLines.push(`${yesId}["if( ${escapeLabel(conditionText)} ): TRUE"]`);
+      boxLines.push(`${yesId}["TRUE"]`);
+      // boxLines.push(`${noId}["if( ${escapeLabel(conditionText)} ): FALSE"]`);
+      boxLines.push(`${noId}["FALSE"]`);
 
       for (const path of openPaths) {
         path.push(diamondId);
