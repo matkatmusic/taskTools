@@ -375,5 +375,47 @@
         "reason": "needs child 1's steps.json next-override reader and the per-hop input guard the translator output is validated against"
       }
     ]
+  },
+  {
+    "taskNumber": 208,
+    "version": "9735e630985d99d3392689b9ceeec394d1e2696b",
+    "title": "POC: generate a nextBlock override for the preamble's first block in diagram-steps.json",
+    "userDescription": "[split-task-child] Child 3 of the split of task 203. Define 'what block comes next' for the first script that runs in the tackle-tasks pipeline (the preamble block, PREAMBLE_STATUS_CHECK in pipeline-preambleStatusCheck.mmd), as a proof of concept, by having generateSteps emit a nextBlock override on that entry in the generated steps.json. The override points at the block's existing successor so pipeline behavior is unchanged and the baseline stays green; it proves the generator emits the field and the runStepHook reader (task 205) consumes it. No block script changes. Extend tests/generateSteps.test.ts. Part of the fast-pipeline chain (203 -> 204).",
+    "chainGoal": [
+      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
+      "- This is the split of task 203: child 1 = task 205 (next override reader + per-hop guard), child 2 = task 207 (translator reader), child 3 (preamble nextBlock POC), child 4 (preamble translator POC). Task 206 is a prerequisite of 205 (clean up 5 under-declared hops)."
+    ],
+    "goal": [
+      "- generateSteps emits a nextBlock override on the preamble's first block entry in the generated scripts/tackle-tasks/diagram-steps.json",
+      "- The override names the block's existing successor, so /tackle-tasks routing is unchanged and npm run test:baseline stays green",
+      "- tests/generateSteps.test.ts asserts the preamble entry in the generated config carries the nextBlock override field",
+      "- No block script is edited; only the generator and the generated config change"
+    ],
+    "notInScope": [
+      "- Reading/consuming the override in the run-step loop is owned by child 1 (task 205)",
+      "- The translator (nextScript) override for the preamble is owned by child 4",
+      "- Converting the rest of the pipeline's blocks to overrides is out of scope; this is the preamble demonstration only",
+      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
+    ],
+    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
+    "description": "generateSteps.ts builds scripts/tackle-tasks/diagram-steps.json from the .mmd diagrams; entries are currently { box, script, template, producesPrompt, next[] }. This POC adds an optional nextBlock override field to the preamble's first block entry (PREAMBLE_STATUS_CHECK), naming its existing successor so behavior is unchanged. It demonstrates the generator side of the task-205 next-override mechanism end to end on a real block, with the acceptance suite and baseline staying green. The exact schema reconciliation (optional field on the existing entry vs migrating to the user's flat { blockName, script, nextBlock, nextScript? } shape) is a design point for the planner; the POC uses the optional-field form.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/diagram-steps.json",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Regenerate the steps config via generateSteps and assert the preamble's first block entry (PREAMBLE_STATUS_CHECK) in scripts/tackle-tasks/diagram-steps.json now carries a nextBlock override field naming its existing successor. Assert the generated config still round-trips and npm run test:baseline stays green (routing unchanged because the override equals the existing successor). Open design point for the planner: whether the override fields (nextBlock, and later nextScript/translator) are added as OPTIONAL fields on the existing StepConfigEntry ({ box, script, template, producesPrompt, next[] }) or the entry is migrated to the user's flat { blockName, script, nextBlock, nextScript? } shape; the POC needs only the optional-field form.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 205,
+        "reason": "the POC proves the next-override drives routing, which only takes effect once child 1's runStepHook reader consumes the nextBlock field"
+      }
+    ]
   }
 ]
