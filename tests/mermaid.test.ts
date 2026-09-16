@@ -19,7 +19,7 @@ test("test_mermaidForFile_emitsFlowchartAndOneBoxForThePath", () => {
 });
 
 test("test_mermaidForFile_replacesEveryNonIdentifierCharInTheBoxId", () => {
-    // Scenario: a path with a dash, slashes, and dots becomes an id joined only by _.  Step: call it with such a path.
+    // A path with a dash, slashes, and dots becomes an id joined only by underscores.
     const result = mermaidForFile("a-b/c.d.ts", "");
     // Verify: dash, slash, and every dot become _; the label keeps the original path.
     assert.equal(result, 'flowchart TD\nB_a_b_c_d_ts["a-b/c.d.ts"]\n');
@@ -53,7 +53,7 @@ test("test_writeAllDiagrams_writesOnlyForNonTestTsFiles", () => {
 });
 
 test("test_mermaidForFile_parsesFunctionNamesAndChainsCallStatements", () => {
-    // Scenario: a file of five functions where three have empty bodies and two chain their call statements.  Step: call it with the multipleCalls/singleCall source from task 190.
+    // Five functions: three have empty bodies; two chain their call statements in order.
     const source = 'function a() {}\nfunction b() {}\nfunction c() {}\nfunction multipleCalls() { a(); b(); c(); a(); }\nfunction singleCall() { a(); b(); }\n';
     const result = mermaidForFile("f.ts", source);
     // Verify: a, b, c get no top box since their bodies are empty; repeated calls get a running number counted across the whole file; each function chains its own calls in source order.
