@@ -45,6 +45,7 @@ interface WalkOutcome {
   boxLines: string[];
   edgeLines: string[];
   openPaths: string[][];
+  firstBoxId: string | null;
 }
 
 function computeBaseId(statementText: string): string {
@@ -132,6 +133,10 @@ function collectBaseIds(statements: readonly ts.Node[], counts: Map<string, numb
       collectBaseIds(branchStatements(statement.statement), counts);
       continue;
     }
+    if (ts.isWhileStatement(statement) || ts.isDoStatement(statement)) {
+      collectBaseIds(branchStatements(statement.statement), counts);
+      continue;
+    }
     const baseId = computeBaseId(statement.getText());
     counts.set(baseId, (counts.get(baseId) ?? 0) + 1);
   }
@@ -148,6 +153,7 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
   const boxLines: string[] = [];
   const edgeLines: string[] = [];
   let openPaths = entryPaths;
+  let firstBoxId: string | null = null;
 
   for (const statement of statements) {
     if (ts.isIfStatement(statement)) {
@@ -156,6 +162,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       const diamondId = `Q_${baseId}`;
       const yesId = `Q_CHOICE_${baseId}_Y`;
       const noId = `Q_CHOICE_${baseId}_N`;
+      if (firstBoxId === null) {
+        firstBoxId = diamondId;
+      }
       boxLines.push(`${diamondId}{"if( ${conditionText} )"}`);
       boxLines.push(`${yesId}["${conditionText}"]`);
       boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
@@ -189,6 +198,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       const diamondId = `Q_${idPart}`;
       const yesId = `Q_CHOICE_${idPart}_Y`;
       const noId = `Q_CHOICE_${idPart}_N`;
+      if (firstBoxId === null) {
+        firstBoxId = diamondId;
+      }
       boxLines.push(`${diamondId}{"${headerText}"}`);
       boxLines.push(`${yesId}["i < ${iterableText}.length; ${loopVariable} = ${iterableText}[i];"]`);
       boxLines.push(`${noId}["i >= ${iterableText}.length"]`);
@@ -219,6 +231,9 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       const diamondId = `Q_${idPart}`;
       const yesId = `Q_CHOICE_${idPart}_Y`;
       const noId = `Q_CHOICE_${idPart}_N`;
+      if (firstBoxId === null) {
+        firstBoxId = diamondId;
+      }
       boxLines.push(`${diamondId}{"${headerText}"}`);
       boxLines.push(`${yesId}["${conditionText}"]`);
       boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
@@ -240,8 +255,72 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
       continue;
     }
 
+    if (ts.isWhileStatement(statement)) {
+      const conditionText = statement.expression.getText();
+      const headerText = `while (${conditionText})`;
+      const idPart = `while_${computeBaseId(headerText)}`;
+      const diamondId = `Q_${idPart}`;
+      const yesId = `Q_CHOICE_${idPart}_Y`;
+      const noId = `Q_CHOICE_${idPart}_N`;
+      if (firstBoxId === null) {
+        firstBoxId = diamondId;
+      }
+      boxLines.push(`${diamondId}{"${headerText}"}`);
+      boxLines.push(`${yesId}["${conditionText}"]`);
+      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+
+      for (const path of openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      const bodyOutcome = walkStatements([[diamondId, yesId]], branchStatements(statement.statement), ctx);
+      boxLines.push(...bodyOutcome.boxLines);
+      edgeLines.push(...bodyOutcome.edgeLines);
+      for (const path of bodyOutcome.openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+
+      openPaths = [[diamondId, noId]];
+      continue;
+    }
+
+    if (ts.isDoStatement(statement)) {
+      const bodyOutcome = walkStatements(openPaths, branchStatements(statement.statement), ctx);
+      boxLines.push(...bodyOutcome.boxLines);
+      edgeLines.push(...bodyOutcome.edgeLines);
+      if (firstBoxId === null) {
+        firstBoxId = bodyOutcome.firstBoxId;
+      }
+
+      const conditionText = statement.expression.getText();
+      const headerText = `while (${conditionText})`;
+      const idPart = `while_${computeBaseId(headerText)}`;
+      const diamondId = `Q_${idPart}`;
+      const yesId = `Q_CHOICE_${idPart}_Y`;
+      const noId = `Q_CHOICE_${idPart}_N`;
+      boxLines.push(`${diamondId}{"${headerText}"}`);
+      boxLines.push(`${yesId}["${conditionText}"]`);
+      boxLines.push(`${noId}["${computeOppositeCondition(conditionText)}"]`);
+
+      for (const path of bodyOutcome.openPaths) {
+        path.push(diamondId);
+        edgeLines.push(path.join(" --> "));
+      }
+      if (bodyOutcome.firstBoxId !== null) {
+        edgeLines.push(`${diamondId} --> ${yesId} --> ${bodyOutcome.firstBoxId}`);
+      }
+
+      openPaths = [[diamondId, noId]];
+      continue;
+    }
+
     const record = statementRecord(statement, ctx.importMap);
     const finalId = assignFinalId(record.baseId, ctx);
+    if (firstBoxId === null) {
+      firstBoxId = finalId;
+    }
     boxLines.push(`${finalId}["${record.label}"]`);
 
     const isTerminal = ts.isReturnStatement(statement) || ts.isThrowStatement(statement);
@@ -256,7 +335,7 @@ function walkStatements(entryPaths: string[][], statements: readonly ts.Node[], 
     }
   }
 
-  return { boxLines, edgeLines, openPaths };
+  return { boxLines, edgeLines, openPaths, firstBoxId };
 }
 
 function paramsText(parameters: readonly ts.ParameterDeclaration[]): string {

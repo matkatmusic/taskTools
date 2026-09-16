@@ -345,3 +345,53 @@ test("test_mermaidForFile_classicForConditionAndItsFlippedOppositeBecomeTheChoic
         'Q_for_i_is_0_i_less_than_3_i --> Q_CHOICE_for_i_is_0_i_less_than_3_i_N\n'
     );
 });
+
+test("test_mermaidForFile_whileLoopBecomesADiamondWithABackEdge", () => {
+    // Scenario: the full sum(list) example from task 190 - a for loop, then a while loop, then a return.  Step: call it with that function body.
+    const source = 'function sum(list: number[]) {\n  let total = 0;\n  for (const x of list) {\n    total += x;\n  }\n  while (total > 100) {\n    total = halve(total);\n  }\n  return total;\n}\n';
+    const result = mermaidForFile("v.ts", source);
+    // Verify: the while diamond id is "while_" plus computeBaseId of the header; _Y is the condition and _N is its flipped opposite; the for loop _N arm now flows into the while diamond; the body box loops back to the while diamond; the while _N arm flows to the return.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_v_ts["v.ts"]\n' +
+        'B_return_total["return total"]\n' +
+        'B_sum["sum(list: number[])"]\n' +
+        'B_total_is_0["let total = 0"]\n' +
+        'B_total_is_halve_total["total = halve(total)"]\n' +
+        'B_total_plus_is_x["total += x"]\n' +
+        'Q_CHOICE_for_x_of_list_N["i >= list.length"]\n' +
+        'Q_CHOICE_for_x_of_list_Y["i < list.length; x = list[i];"]\n' +
+        'Q_CHOICE_while_total_greater_than_100_N["total <= 100"]\n' +
+        'Q_CHOICE_while_total_greater_than_100_Y["total > 100"]\n' +
+        'Q_for_x_of_list{"for (const x of list)"}\n' +
+        'Q_while_total_greater_than_100{"while (total > 100)"}\n' +
+        'B_sum --> B_total_is_0 --> Q_for_x_of_list\n' +
+        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_Y --> B_total_plus_is_x --> Q_for_x_of_list\n' +
+        'Q_for_x_of_list --> Q_CHOICE_for_x_of_list_N --> Q_while_total_greater_than_100\n' +
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_Y --> B_total_is_halve_total --> Q_while_total_greater_than_100\n' +
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n'
+    );
+});
+
+test("test_mermaidForFile_doWhileLoopWalksTheBodyFirstThenLoopsBackOnTheCondition", () => {
+    // Scenario: a do-while loop runs its body once unconditionally, then loops back to the body's first statement while the condition holds.  Step: call it with a function whose body is a let, a do-while, then a return.
+    const source = 'function sum(list: number[]) {\n  let total = 0;\n  do {\n    total = halve(total);\n  } while (total > 100);\n  return total;\n}\n';
+    const result = mermaidForFile("w.ts", source);
+    // Verify: the body statement box is chained in before the diamond; the diamond's Y choice loops back to that same body box; the N choice falls through to the return.
+    assert.equal(
+        result,
+        'flowchart TD\n' +
+        'B_w_ts["w.ts"]\n' +
+        'B_return_total["return total"]\n' +
+        'B_sum["sum(list: number[])"]\n' +
+        'B_total_is_0["let total = 0"]\n' +
+        'B_total_is_halve_total["total = halve(total)"]\n' +
+        'Q_CHOICE_while_total_greater_than_100_N["total <= 100"]\n' +
+        'Q_CHOICE_while_total_greater_than_100_Y["total > 100"]\n' +
+        'Q_while_total_greater_than_100{"while (total > 100)"}\n' +
+        'B_sum --> B_total_is_0 --> B_total_is_halve_total --> Q_while_total_greater_than_100\n' +
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_Y --> B_total_is_halve_total\n' +
+        'Q_while_total_greater_than_100 --> Q_CHOICE_while_total_greater_than_100_N --> B_return_total\n'
+    );
+});
