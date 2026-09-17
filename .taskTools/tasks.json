@@ -166,6 +166,12 @@
     "chainGoal": [
       "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: the split of task 203 (tasks 205 + 207) adds the translator-next override mechanism; this task adds the fast diagram folder and the `fast` flag on top of it."
     ],
+    "agent": {
+      "PLAN_THE_TASK": {
+        "model": "claude-opus-5[1m]",
+        "effort": "high"
+      }
+    },
     "goal": [
       "- /tackle-tasks [N...] fast runs a 5-stage pipeline: preamble, plan, implement, full-suite fix loop, merge",
       "- The fast run skips codex-reviews-plan, plan-verdict, codex-reviews-tests, are-tests-flagged, and the per-task test-fix loop",
@@ -184,20 +190,27 @@
       "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
       "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
       "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
-      "scripts/tackle-tasks/generateSteps.ts"
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts",
+      "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.test.ts",
+      "tests/generateSteps.test.ts",
+      "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-planTheTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-whatDidThePlannerReturn.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-implementTask.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitImplementationIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-runFullSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixTheCodebaseForSuite.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-lockSourceRepo.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-rebase.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-fixConflicts.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-commitMergeConflictFixIfNeeded.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-mergeSucceededExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-failuresExit.mmd",
+      "diagrams/tackle-tasks-fast/pipeline-reportOnlyExit.mmd"
     ],
     "readOnlyFiles": [
       "*"
-    ],
-    "blockedBy": [
-      {
-        "taskNumber": 205,
-        "reason": "fast blocks reuse existing block logic via the steps.json next-override reader added here"
-      },
-      {
-        "taskNumber": 207,
-        "reason": "fast blocks reuse existing block logic via the steps.json translator reader added here"
-      }
     ],
     "createsFiles": [
       "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
@@ -218,60 +231,81 @@
     "schemaVersion": "1.0.1",
     "hasTests": true,
     "tests": "Run /tackle-tasks <N> fast on a fixture task. Assert the run executes only the fast stages in order (preamble, plan, implement, full-suite fix loop, lock, rebase, fixConflicts, merge) and none of the dropped review/verdict/flag blocks, and that it lands a merge commit and archives the task.",
-    "difficulty": 6
-  },
-  {
-    "taskNumber": 205,
-    "version": "7a2a2d4e0f59145b96ee1d99b50c0a3d0dcdaa2c",
-    "title": "run-step: steps.json next override + per-hop input guard on every hop",
-    "userDescription": "[split-task-child] This task is being created by `/split-task` as one of an already-requested set of 4 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `scripts/hooks/runStepHook.ts`, `.claude/workflows/run-step.workflow.js`, `tests/runStepHook.test.ts`.\n\nTitle: run-step reads 'next block' from steps.json, overrides reused script's hard-coded next\n\nIn the run-step code (runStepHook.ts, both getNextStepAfter around line 222 and the walk loop around line 505), read a per-node \"next\" override from the generated steps.json. When a steps.json node declares a next override, use it to choose the next block, IGNORING the reused block script's own hard-coded output.next for that node. When the node declares no override, keep the existing hard-coded behavior: output.next among step.next candidates, or the single onlySuccessor. This lets a library script from another diagram be dropped into a new position by naming its next in steps.json alone. Decision nodes still route among their diagram next[] via the emitted choice — the override is per-node, not a change to how a decision block picks. NO block script changes. run-step.workflow.js only relays outcome.next; keep its relay working. Extend tests/runStepHook.test.ts: (a) a node with a steps.json next override routes there even when the script emits a different hard-coded next; (b) a node with no override keeps the existing next behavior. npm run test:baseline stays green because existing pipelines declare no override.\n\nThis is child 1 of the split of task 203 (translator-next override for run-step). Child 2 adds the I/O translator in the same loop; children 3 and 4 prove both on the preamble block. Part of the fast-pipeline chain (203 -> 204).",
-    "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
-      "- This is the split of task 203: child 1 (steps.json next override + per-hop input guard), child 2 (I/O translator), child 3 (preamble next-override POC), child 4 (preamble translator POC).",
-      "- Shared acceptance suite (arithmetic A/B/C): tests 1-4 belong to child 1, tests 5-6 to child 2."
-    ],
-    "goal": [
-      "- npm run test:baseline stays green (per-hop input validation runs on every hop; task 206 first makes all existing hops clean subsets)",
-      "- With an empty steps.json, run-step routes A->B->C by each block's hard-coded next and the arithmetic chain returns true",
-      "- With steps.json overriding a block's nextBlock (no nextScript), run-step resolves the next script via byBlockName[nextBlock].script and the chain still returns true",
-      "- On every hop, when the received payload lacks the next block's declared template.input keys, run-step fails loud: result.ok === false with a shape-mismatch error",
-      "- No block script (A/B/C) is edited to change routing; only steps.json changes where a block goes next"
-    ],
-    "notInScope": [
-      "- The I/O translator (nextScript / translator that reshapes the payload) and its tests (tests 5 and 6) are owned by child 2",
-      "- Generating the steps.json { blockName, script, nextBlock, nextScript? } config from a diagram is owned by children 3-4 (generateSteps.ts); child 1 hard-codes the fixture steps.json inside its own tests",
-      "- Defining the real preamble block's next override as a proof of concept is owned by children 3-4",
-      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
-    ],
-    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "getNextStepAfter (runStepHook.ts, ~line 222) and the walk loop's chosenNextBox logic (~line 505) both derive the next box from output.next ?? onlySuccessor. This child makes both call sites check for a steps.json-declared next override on the current node and, when present, route to it instead of output.next/onlySuccessor, resolving the next script via the entry's nextScript ?? byBlockName[nextBlock].script. Decision-node routing (output.next among step.next) is untouched when no override exists. It also extends the existing start-input shape check (getStartInputMismatches / getTemplateShapeMismatches, ~lines 319-333) to run at EVERY hop, so any hop whose received payload lacks the next block's declared template.input keys fails loud via buildFailure (result.ok === false), matching the hook's existing failure style. Task 206 is a prerequisite that makes the 5 currently-under-declared hops clean, so the baseline stays green. The { blockName, script, nextBlock, nextScript? } config shape and its generation are owned by children 3-4, so runStepHook reads the override defensively and the tests hard-code the fixture steps.json. run-step.workflow.js (~lines 142-144) only relays outcome.next/payload/schema and needs no logic change, just confirmation an overridden next passes through.",
-    "modifiableFiles": [
-      "scripts/hooks/runStepHook.ts",
-      ".claude/workflows/run-step.workflow.js",
-      "tests/runStepHook.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "Real fixture scripts A.ts/B.ts/C.ts, each with a template.json declaring its input/output shape. A takes {a,b} outputs {sum,a,b}; B takes {sum,a,b} outputs {a,expected}; C takes {a,expected} outputs a boolean. Each script hard-codes its own next (A->B, B->C, C->end). steps.json entry shape: { blockName, script, nextBlock, nextScript? }, resolved as nextScript = entry.nextScript ?? byBlockName[nextBlock].script. TEST 1: empty steps.json -> run-step runs A(1,3) -> B(4,1,3) -> C(1,1) by hard-coded next, result true. TEST 2: steps.json overrides A.nextBlock=B (no nextScript) -> same run, result true. TEST 3: steps.json overrides A.nextBlock=B and B.nextBlock=C -> same run, result true. TEST 4: steps.json overrides A.nextBlock=C (skip B), no translator -> the forwarded {sum,a,b} lacks C's required 'expected' key, so run-step fails loud on that overridden hop: result.ok === false with a shape-mismatch error. The per-hop input check runs on EVERY hop; task 206 makes the 5 currently-under-declared existing hops clean first so the baseline stays green. Tests 5-6 (translator, and detect-a-bad-translator) are owned by child 2.",
     "difficulty": 6,
     "run": {
       "active": false,
-      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-205",
-      "leaseRunId": "b8d3ce5d-c685-4eb9-a3b3-5df06c357cf8",
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-204",
+      "leaseRunId": "5418b1d7-34ad-41b3-b646-ecd0daaf4120",
       "history": [
         {
-          "runId": "b8d3ce5d-c685-4eb9-a3b3-5df06c357cf8",
-          "startedAt": "2026-09-16T15:50:17-07:00",
-          "endedAt": "2026-09-16T16:49:12-07:00",
-          "exitType": "plan-scrapped",
-          "exitNote": "codex did not accept the plan in two reviews",
-          "modifiedFiles": [],
-          "commits": [],
+          "runId": "5418b1d7-34ad-41b3-b646-ecd0daaf4120",
+          "startedAt": "2026-09-16T22:17:05-07:00",
+          "endedAt": "2026-09-16T23:54:44-07:00",
+          "exitType": "block-failed",
+          "exitNote": "pipeline-rebase.mmd::REBASE_ONTO_TARGET_BRANCH exited 1\nError: rebase of occurrence \"root\" refused: dirty tracked files in \"/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-204\" are not task work — not in the task's modifiableFiles: .taskTools/knownFailingTests.json",
+          "modifiedFiles": [
+            "diagrams/tackle-tasks-fast/pipeline-commitImplementationIfNeeded.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-commitMergeConflictFixIfNeeded.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-failuresExit.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-fixConflicts.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-fixTheCodebaseForSuite.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-implementTask.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-lockSourceRepo.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-mergeSucceededExit.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-planTheTask.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-rebase.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-reportOnlyExit.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-runFullSuite.mmd",
+            "diagrams/tackle-tasks-fast/pipeline-whatDidThePlannerReturn.mmd",
+            "scripts/tackle-tasks/generateSteps.ts",
+            "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+            "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+            "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+            "scripts/tackle-tasks/shared/resolveTaskRun.ts",
+            "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.test.ts",
+            "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts",
+            "tests/generateSteps.test.ts"
+          ],
+          "commits": [
+            {
+              "occurrenceId": "",
+              "hash": "d6a37937d68f9e1e5b2f8edfa7c1b2534ed9e322",
+              "kind": "work",
+              "stepId": "implement-0"
+            }
+          ],
           "implementationNotesFile": null,
-          "taskTests": null,
+          "taskTests": {
+            "stepId": "RUN_TASK_TESTS",
+            "passed": true,
+            "testFiles": [
+              "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+              "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+              "scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.test.ts",
+              "tests/generateSteps.test.ts"
+            ],
+            "createdTestFiles": [],
+            "deletedTestFiles": [],
+            "missingTests": false,
+            "output": "known failing test (ignored): tests/relatedTests.test.ts — test_main_readsTheTurnFlagOnStopAndReportsTypeErrors\nknown failing test (ignored): tests/runStepHook.test.ts — test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit\nknown failing test (ignored): tests/runStepHook.test.ts — test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill\n✖ test_main_readsTheTurnFlagOnStopAndReportsTypeErrors (3441.449625ms)\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit (434.66375ms)\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill (281.268959ms)\n✖ failing tests:\n✖ test_main_readsTheTurnFlagOnStopAndReportsTypeErrors (3441.449625ms)\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit (434.66375ms)\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill (281.268959ms)\nObject (0.071208ms)\n✔ test_getTemplateShapeMismatches_looksInsideANestedObject (0.060833ms)\n✔ test_getTemplateShapeMismatches_checksEveryItemAgainstTheFirstTemplateItem (0.064833ms)\n✔ test_getTemplateShapeMismatches_acceptsAnyItemsWhenTheTemplateArrayIsEmpty (0.051792ms)\n✔ test_getTemplateShapeMismatches_tellsNullApartFromAnObject (0.080042ms)\n✔ test_getTemplateShapeMismatches_allowsNoKeysWhenTheTemplateObjectIsEmpty (0.734208ms)\n✔ test_missingPackageJsonProducesResolutionRequest (2.494667ms)\n✔ test_packageJsonWithoutTestScriptProducesResolutionRequest (8.740084ms)\n✔ test_unambiguousTestScriptIsDiscoveredAndRecorded (1.769292ms)\n✔ test_unambiguousRelatedScriptIsRecordedSeparatelyFromCompleteSuite (12.193875ms)\n✔ test_twoEquallyPlausibleRelatedCandidatesProduceResolutionRequest (3.849458ms)\n✔ test_persistedAnswerIsReusedOnNextRunForAmbiguousCandidates (4.63025ms)\n✔ test_persistedAnswerIsReusedOnNextRunForMissingConfiguration (0.995ms)\n✔ test_occurrencesOfOneLogicalRepositoryCarrySamePolicyWhileRecordedSeparately (2.239208ms)\n✔ appends each edited path to the session flag file (309.338875ms)\n✔ missing session_id does nothing (199.879ms)\n✔ removes closed number, drops emptied blockedBy, keeps other blockers and their reason (262.754833ms)\n✔ no matching blockers leaves tasks.json untouched (151.822459ms)\n✔ migrates a legacy bare-number blockedBy entry and still filters it when its blocker closes (150.701583ms)\n✔ migrates a legacy bare-number entry to the object shape even when its blocker is not the one closing (189.174667ms)\n✔ brief reproduces the pre-refactor skill body byte-for-byte once its substitutions are applied (370.853125ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT or $ARGUMENTS placeholder (0.17175ms)\n✔ script reads arguments from stdin and embeds the live getTaskDetails.ts output (585.736291ms)\n✔ script fails loudly rather than emitting a brief that points nowhere (95.464667ms)\n✔ brief leaves no unexpanded CLAUDE_PLUGIN_ROOT placeholder (0.640542ms)\n✔ hook loads and answers /view-task with a block decision (352.243542ms)\n✔ namespaced /taskTools:view-task is matched like the bare form (164.836584ms)\n✔ goal and chainGoal arrays print as lines, not as bulleted extras (140.56ms)\n✔ hook is silent passthrough for other prompts (147.655958ms)\n✔ /view-task <N> includes the task's description with real newlines (105.401708ms)\n✔ /view-task with no number blocks with usage and the open-task listing (108.332375ms)\n✔ unknown task number reports not-found instead of crashing (134.964292ms)\n✔ test_whatToReturnSection_wrapsTheValueInMessageAndAdditionalDataAndAlwaysSaysToReturnThatShapeAnyway (0.443291ms)\n✔ test_workflow_inputAndAgentCallCarryTheDefaultBandWhenTheTaskHasNoOverride (830.089ms)\n✔ test_workflow_inputAndAgentCallCarryTheTaskOverride (784.87175ms)\n✔ test_workflow_labelsTheWorkerCallWithThePromptBlock (847.438708ms)\n✔ test_workflow_aBareStartingBlockGetsThatBlocksAgentOptions (2.544583ms)\n✔ test_workflowLivenessHook_printsNoLogYetWhenNoneExists (381.805875ms)\n✔ test_workflowLivenessHook_printsTheFirstBlockNameAndAgeFromTheNewestRunLog (160.296125ms)\n✔ test_workflowLivenessHook_picksTheNewestRunLogWhenMultipleExistForTheTask (205.575542ms)\n✔ test_workflowLivenessHook_usesTasksFileNotCwdToFindTheProject (249.653458ms)\n✔ test_workflowLivenessHook_reportsAStaleLogHonestlyWhenANewLaunchFailedBeforeWritingAnything (142.396291ms)\n✔ test_workflowLivenessHook_staysSilentForAToolThatIsNotWorkflow (103.578ms)\n✔ test_workflowLivenessHook_staysSilentWhenArgsTaskIsMissing (185.9005ms)\n✔ test_workflowLivenessHook_staysSilentWhenArgsTasksFileIsMissing (159.911167ms)\n✔ test_workflowLivenessHook_reportsUnreadableForInvalidJson (131.48775ms)\n✔ test_workflowLivenessHook_reportsUnreadableForANonArray (112.149791ms)\n✔ test_workflowLivenessHook_reportsEmptyForAnEmptyArray (136.462875ms)\n✔ test_workflowLivenessHook_reportsUnreadableWhenTheFirstEntryHasNoBlockField (234.19925ms)\n✔ test_workflow_declaresMetaAsTheFirstStatement (0.46ms)\n✔ test_workflow_containsNoRequireOrProcessOrImport (0.262125ms)\nℹ tests 3231\nℹ suites 0\nℹ pass 3228\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 418810.485709\n\n✖ failing tests:\n\ntest at tests/relatedTests.test.ts:95:1\n✖ test_main_readsTheTurnFlagOnStopAndReportsTypeErrors (3441.449625ms)\n  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /error TS2322/. Input:\n  \n  '(node:6386) Warning: node:test run() is being called recursively within a test file. skipping running files.\\n' +\n    '(Use `node --trace-warnings ...` to show where the warning was created)\\n' +\n    'Type errors after editing /private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/related-tests-hook-e1x8BN/widget.ts:\\n' +\n    \"\\x1B[96mwidget.ts\\x1B[0m:\\x1B[93m1\\x1B[0m:\\x1B[93m14\\x1B[0m - \\x1B[91merror\\x1B[0m\\x1B[90m TS2322: \\x1B[0mType 'string' is not assignable to type 'number'.\\n\" +\n    '\\n' +\n    '\\x1B[7m1\\x1B[0m export const n: number = \"not a number\";\\n' +\n    '\\x1B[7m \\x1B[0m \\x1B[91m             ~\\x1B[0m\\n' +\n    '\\n' +\n    '\\n' +\n    'Found 1 error in widget.ts\\x1B[90m:1\\x1B[0m\\n'\n  \n      at TestContext.<anonymous> (file:///private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-204/tests/relatedTests.test.ts:114:12)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: '(node:6386) Warning: node:test run() is being called recursively within a test file. skipping running files.\\n(Use `node --trace-warnings ...` to show where the warning was created)\\nType errors after editing /private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/related-tests-hook-e1x8BN/widget.ts:\\n\\x1B[96mwidget.ts\\x1B[0m:\\x1B[93m1\\x1B[0m:\\x1B[93m14\\x1B[0m - \\x1B[91merror\\x1B[0m\\x1B[90m TS2322: \\x1B[0mType \\'string\\' is not assignable to type \\'number\\'.\\n\\n\\x1B[7m1\\x1B[0m export const n: number = \"not a number\";\\n\\x1B[7m \\x1B[0m \\x1B[91m             ~\\x1B[0m\\n\\n\\nFound 1 error in widget.ts\\x1B[90m:1\\x1B[0m\\n',\n    expected: /error TS2322/,\n    operator: 'match',\n    diff: 'simple'\n  }\n\ntest at tests/runStepHook.test.ts:1965:1\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit (434.66375ms)\n  TypeError: Cannot read properties of undefined (reading 'additionalContext')\n      at TestContext.<anonymous> (file:///private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-204/tests/runStepHook.test.ts:1975:90)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)\n\ntest at tests/runStepHook.test.ts:1980:1\n✖ test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill (281.268959ms)\n  TypeError: Cannot read properties of undefined (reading 'additionalContext')\n      at TestContext.<anonymous> (file:///private/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-204/tests/runStepHook.test.ts:1990:90)\n      at Test.runInAsyncScope (node:async_hooks:226:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)\n",
+            "newFailingTests": [],
+            "knownFailingTests": [
+              {
+                "file": "tests/relatedTests.test.ts",
+                "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
+              },
+              {
+                "file": "tests/runStepHook.test.ts",
+                "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit"
+              },
+              {
+                "file": "tests/runStepHook.test.ts",
+                "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill"
+              }
+            ],
+            "checkedAt": "2026-09-16T23:51:59-07:00"
+          },
           "fullSuite": null,
           "stepResults": [
             {
@@ -283,150 +317,23 @@
             }
           ],
           "attempts": {
-            "planReview": 2
+            "clarify": 1,
+            "planReview": 1
           },
           "countedPasses": {
+            "clarify": [
+              "ae78aadd-aef0-4b0b-b245-30544333c347"
+            ],
             "planReview": [
-              "9904eb70-59e0-4481-88be-591e454d4447",
-              "ba50ce15-1a00-45fe-801e-2a18c558b5a2"
+              "a73f4c1b-14ae-4c44-8aec-5ffe3b8a4f3c"
             ]
           },
           "tailCursor": null
         }
       ]
     },
-    "codexReviewNotes": "[implement-the-next-block-override-and-per-hop-input-guard-in-run-step-hook] Replace the preserved empty-successor guard with `if (step.next.length === 0 && step.nextBlock === undefined)`, retaining its existing failure body. Add a fixture case whose current node has `next: []` and a valid `nextBlock`, and assert the override reaches that target.\n\nDurable because: The legacy missing-route error remains for nodes without an override, while the declarative override is always evaluated when present.\n\n[add-failing-tests-for-next-block-override-and-per-hop-input-guard] Change one successful arithmetic override test so A emits hard-coded `next: \"C\"` while `A.nextBlock` is `\"B\"`; make A's output-template `next` match that emitted value, then assert the successful walk is A→B→C and returns true. Update the RED-baseline text to say only the tests whose assertions depend on new behavior fail before the implementation.\n\nDurable because: The test now fails if the walk consults the reused script's emitted route instead of `steps.json`, while preserving a true no-override regression test."
-  },
-  {
-    "taskNumber": 207,
-    "version": "7e5f27b4c4b5ab6a75254c035e28cf01309104dc",
-    "title": "run-step: steps.json translator override reshapes payload across an overridden hop",
-    "userDescription": "[split-task-child] Child 2 of the split of task 203. In the run-step code, pull 'what translator to use' from the steps.json entry, fall back to no translation (verbatim payload) when absent. No block script changes.\n\nThe steps.json entry shape is { blockName, script, nextBlock, nextScript? } plus an optional translator: when a hop is overridden and the entry names a translator (a script path), run-step builds the next block's input by running the translator on the current block's output; when no translator is named the payload is forwarded verbatim (existing behavior). Extend tests/runStepHook.test.ts with the arithmetic A/B/C fixtures. Part of the fast-pipeline chain (203 -> 204).",
-    "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
-      "- This is the split of task 203: child 1 = task 205 (steps.json next override + per-hop input guard), child 2 (I/O translator), child 3 (preamble next-override POC), child 4 (preamble translator POC).",
-      "- Shared acceptance suite (arithmetic A/B/C): tests 1-4 belong to child 1, tests 5-6 to child 2."
-    ],
-    "goal": [
-      "- npm run test:baseline stays green (no translator on existing pipelines; verbatim passthrough unchanged)",
-      "- With steps.json overriding A.nextBlock=C AND naming a faithful A-to-C translator, run-step reshapes A's {sum,a,b} output into C's {a,expected} input and the chain returns true",
-      "- A translator that returns the wrong value (right shape) yields the wrong arithmetic result (chain returns false), proving the translator output is what C consumed",
-      "- A translator that returns the wrong shape (missing a required key) fails loud on that hop: result.ok === false with a shape-mismatch error",
-      "- When no translator is named on an overridden hop, the payload is forwarded verbatim (child 1's behavior is preserved)"
-    ],
-    "notInScope": [
-      "- The next-block override and the per-hop input guard are owned by child 1 (task 205); this child adds the translator step on top of it",
-      "- Generating the steps.json { blockName, script, nextBlock, nextScript?, translator } config from a diagram is owned by children 3-4 (generateSteps.ts); child 2 hard-codes the fixture steps.json inside its own tests",
-      "- Defining the real preamble block's translator as a proof of concept is owned by child 4",
-      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
-    ],
-    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "Builds on child 1 (task 205). After child 1 chooses the next block from a steps.json override and validates the forwarded payload against the next block's template.input on overridden hops, this child inserts a translator step: when the overridden entry names a translator (a script path), run-step runs it on the current block's output and uses its return value as the next block's input (which the per-hop guard then validates). When no translator is named, the payload is forwarded verbatim, preserving child 1's behavior. Only runStepHook.ts changes; the { ... translator } config generation is owned by children 3-4, so runStepHook reads the translator field defensively and the tests hard-code the fixture steps.json plus the translator script.",
-    "modifiableFiles": [
-      "scripts/hooks/runStepHook.ts",
-      "tests/runStepHook.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "Reuses child 1's arithmetic A/B/C fixtures and the { blockName, script, nextBlock, nextScript? } steps.json shape, extended with an optional translator (a script path). TEST 5: steps.json overrides A.nextBlock=C AND names a faithful A-to-C translator translate(input) => ({ a: input.sum - input.b, expected: input.a }); run-step reshapes {sum:4,a:1,b:3} into {a:1,expected:1}, C(1,1) returns true. TEST 6 (detect a bad translator): same as test 5 but the translator returns a wrong value (right shape) -> the chain returns false, proving the translator output is what C consumed; and a variant where the translator returns the wrong shape (missing 'expected') -> run-step fails loud on that hop (result.ok === false, shape-mismatch error) via the per-hop input guard added in child 1.",
-    "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNumber": 205,
-        "reason": "needs child 1's steps.json next-override reader and the per-hop input guard the translator output is validated against"
-      }
-    ]
-  },
-  {
-    "taskNumber": 208,
-    "version": "9735e630985d99d3392689b9ceeec394d1e2696b",
-    "title": "POC: generate a nextBlock override for the preamble's first block in diagram-steps.json",
-    "userDescription": "[split-task-child] Child 3 of the split of task 203. Define 'what block comes next' for the first script that runs in the tackle-tasks pipeline (the preamble block, PREAMBLE_STATUS_CHECK in pipeline-preambleStatusCheck.mmd), as a proof of concept, by having generateSteps emit a nextBlock override on that entry in the generated steps.json. The override points at the block's existing successor so pipeline behavior is unchanged and the baseline stays green; it proves the generator emits the field and the runStepHook reader (task 205) consumes it. No block script changes. Extend tests/generateSteps.test.ts. Part of the fast-pipeline chain (203 -> 204).",
-    "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
-      "- This is the split of task 203: child 1 = task 205 (next override reader + per-hop guard), child 2 = task 207 (translator reader), child 3 (preamble nextBlock POC), child 4 (preamble translator POC). Task 206 is a prerequisite of 205 (clean up 5 under-declared hops)."
-    ],
-    "goal": [
-      "- generateSteps emits a nextBlock override on the preamble's first block entry in the generated scripts/tackle-tasks/diagram-steps.json",
-      "- The override names the block's existing successor, so /tackle-tasks routing is unchanged and npm run test:baseline stays green",
-      "- tests/generateSteps.test.ts asserts the preamble entry in the generated config carries the nextBlock override field",
-      "- No block script is edited; only the generator and the generated config change"
-    ],
-    "notInScope": [
-      "- Reading/consuming the override in the run-step loop is owned by child 1 (task 205)",
-      "- The translator (nextScript) override for the preamble is owned by child 4",
-      "- Converting the rest of the pipeline's blocks to overrides is out of scope; this is the preamble demonstration only",
-      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
-    ],
-    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "generateSteps.ts builds scripts/tackle-tasks/diagram-steps.json from the .mmd diagrams; entries are currently { box, script, template, producesPrompt, next[] }. This POC adds an optional nextBlock override field to the preamble's first block entry (PREAMBLE_STATUS_CHECK), naming its existing successor so behavior is unchanged. It demonstrates the generator side of the task-205 next-override mechanism end to end on a real block, with the acceptance suite and baseline staying green. The exact schema reconciliation (optional field on the existing entry vs migrating to the user's flat { blockName, script, nextBlock, nextScript? } shape) is a design point for the planner; the POC uses the optional-field form.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/generateSteps.ts",
-      "scripts/tackle-tasks/diagram-steps.json",
-      "tests/generateSteps.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "Regenerate the steps config via generateSteps and assert the preamble's first block entry (PREAMBLE_STATUS_CHECK) in scripts/tackle-tasks/diagram-steps.json now carries a nextBlock override field naming its existing successor. Assert the generated config still round-trips and npm run test:baseline stays green (routing unchanged because the override equals the existing successor). Open design point for the planner: whether the override fields (nextBlock, and later nextScript/translator) are added as OPTIONAL fields on the existing StepConfigEntry ({ box, script, template, producesPrompt, next[] }) or the entry is migrated to the user's flat { blockName, script, nextBlock, nextScript? } shape; the POC needs only the optional-field form.",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNumber": 205,
-        "reason": "the POC proves the next-override drives routing, which only takes effect once child 1's runStepHook reader consumes the nextBlock field"
-      }
-    ]
-  },
-  {
-    "taskNumber": 209,
-    "version": "e7ee1ba499860759a7e0f66e0989869fa600df55",
-    "title": "POC: generate a translator (nextScript) override for the preamble's first hop in diagram-steps.json",
-    "userDescription": "[split-task-child] Child 4 of the split of task 203. Define 'what translator to use' for the first script that runs in the tackle-tasks pipeline (the preamble block, PREAMBLE_STATUS_CHECK), as a proof of concept, by having generateSteps emit a translator/nextScript override on that hop in the generated steps.json. The translator is an identity/passthrough so pipeline behavior is unchanged and the baseline stays green; it proves the generator emits the translator field and the runStepHook reader (task 207) consumes it. No block script changes. Extend tests/generateSteps.test.ts. Part of the fast-pipeline chain (203 -> 204).",
-    "chainGoal": [
-      "- The chain delivers a 'fast' tackle-tasks pipeline that reuses existing diagram blocks in a shorter flow: task 203 (split into these children) adds the translator-next override mechanism; task 204, blocked by it, adds the fast diagram folder and the `fast` flag on top.",
-      "- This is the split of task 203: child 1 = task 205 (next override reader + per-hop guard), child 2 = task 207 (translator reader), child 3 (preamble nextBlock POC), child 4 (preamble translator POC). Task 206 is a prerequisite of 205."
-    ],
-    "goal": [
-      "- generateSteps emits a translator (nextScript) override on the preamble's first hop in the generated scripts/tackle-tasks/diagram-steps.json",
-      "- The translator is an identity/passthrough, so /tackle-tasks behavior is unchanged and npm run test:baseline stays green",
-      "- tests/generateSteps.test.ts asserts the preamble entry in the generated config carries the translator override field",
-      "- No block script is edited; only the generator and the generated config change"
-    ],
-    "notInScope": [
-      "- Reading/running the translator in the run-step loop is owned by child 2 (task 207)",
-      "- The nextBlock override for the preamble is owned by child 3",
-      "- Converting the rest of the pipeline's blocks to translators is out of scope; this is the preamble demonstration only",
-      "- The fast pipeline diagram and the `fast` flag are owned by the sibling fast-pipeline task 204"
-    ],
-    "problemSolvedByTask": "Blocks hard-code their own next block and downstream payload glue, so they cannot be recomposed into a different pipeline without editing each block's script; there is no declarative translator to remap one block's output into the next block's input.",
-    "description": "Builds on child 3 (task 208), which added the nextBlock override to the preamble's first block entry. This POC adds the translator (nextScript) override field to the same hop, pointing at an identity/passthrough translator so behavior is unchanged. It demonstrates the generator side of the task-207 translator mechanism end to end on a real block, with the acceptance suite and baseline staying green. Same schema-reconciliation design point as child 3 (optional field on the existing entry vs the user's flat shape); the POC uses the optional-field form.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/generateSteps.ts",
-      "scripts/tackle-tasks/diagram-steps.json",
-      "tests/generateSteps.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "Regenerate the steps config via generateSteps and assert the preamble's first hop entry in scripts/tackle-tasks/diagram-steps.json now carries a translator (nextScript) override field pointing at an identity/passthrough translator. Assert the generated config still round-trips and npm run test:baseline stays green (behavior unchanged because the translator is identity). Builds on child 3's nextBlock POC on the same entry.",
-    "difficulty": 5,
-    "blockedBy": [
-      {
-        "taskNumber": 207,
-        "reason": "the POC proves the translator reshapes the hop's payload, which only takes effect once child 2's runStepHook reader runs the translator"
-      },
-      {
-        "taskNumber": 208,
-        "reason": "edits the same preamble entry in generateSteps.ts / diagram-steps.json that child 3 adds the nextBlock override to; must land after it to avoid clobbering"
-      }
-    ]
+    "clarifyRequest": "The fast diagram folder cannot route the planning stage with the 14 files createsFiles names, and the choice is yours. What the code says: (1) scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts line 62 returns next 'pipeline-codexReviewsPlan.mmd::IS_PLAN_APPROVED_BY_DEFAULT_Q' for every task whose difficulty is 4 or more, and line 55 returns next 'pipeline-whatIsReviewVerdict.mmd::UPDATE_TASKS_JSON' when the plan does not name a declared test file. (2) createsFiles holds 14 fast diagrams and names neither pipeline-codexReviewsPlan.mmd nor pipeline-whatIsReviewVerdict.mmd, so neither string can ever appear in that block's next list: remapNextAcrossDiagrams in scripts/tackle-tasks/generateSteps.ts only builds '<a file in this same folder>::BOX'. (3) scripts/hooks/runStepHook.ts lines 537-538 stop the run when a script names a next that is not in step.next, so a fast run of any task with difficulty 4 or more dies right after planning. (4) The nextBlock override at scripts/hooks/runStepHook.ts line 529 replaces the hop for EVERY exit of a block, so putting one on WHAT_DID_THE_PLANNER_RETURN would also push a CLARIFY answer into IMPLEMENT_TASK and hide the planner's question. Making that override per-exit is out of scope by the brief, which gives the override mechanism to tasks 205 and 207. Nothing else needs a decision: the other 13 fast diagrams copy diagrams/tackle-tasks/ with only the task-test loop cut, and ARE_TASK_TESTS_SKIPPED_Q can take a safe nextBlock override to LOCK_SOURCE_REPO because both of its exits stay inside the fast set. Please pick one. (A) Let task 204 also create diagrams/tackle-tasks-fast/pipeline-codexReviewsPlan.mmd and diagrams/tackle-tasks-fast/pipeline-whatIsReviewVerdict.mmd as one-block forwarding diagrams, each with a nextBlock override to IMPLEMENT_TASK, so no block script changes at all; createsFiles then holds 16 files. (B) Add scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts to this task's modifiableFiles, so its routing can send a fast run straight to IMPLEMENT_TASK while the default pipeline keeps today's behavior. (C) Another route you prefer.",
+    "codexReviewNotes": "[generate-steps-fast-branch] Make `fast` take precedence over `.taskTools/settings.json`: return `{ diagramFolder: FAST_DIAGRAM_FOLDER, stepsRoot: join(PROJECT_ROOT, \"scripts/tackle-tasks\"), allowStubs: true }` whenever `fast` is true, before evaluating `settings.diagramFolder`; add a test fixture with a custom `diagramFolder` asserting a fast invocation still generates the 14 fast diagrams.\n\nDurable because: The flag then selects one deterministic built-in pipeline for every target project, including projects that otherwise customize their normal pipeline.\n\n[answer-to-the-clarify-request] Add a top-level `additionalFiles` declaration containing exactly `scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.ts` and `scripts/tackle-tasks/whatDidThePlannerReturn/WHAT_DID_THE_PLANNER_RETURN.test.ts`, so the two Option-B edits are authorized before implementation begins.\n\nDurable because: The declared fence expansion matches the edits the plan requires and prevents the routing fix from being rejected as an out-of-scope change."
   },
   {
     "taskNumber": 211,
@@ -582,5 +489,33 @@
     "hasTests": true,
     "tests": "The two held-lock tests test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit and test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill in tests/runStepHook.test.ts must pass (ok:false returned quickly, no crash) and be removed from .taskTools/knownFailingTests.json.",
     "difficulty": 3
+  },
+  {
+    "taskNumber": 215,
+    "version": "a759ad40a0a2fc7b62bd4c56aac49da5e7eea45d",
+    "title": "task-tests hook lets an in-run agent rewrite knownFailingTests.json out of fence",
+    "userDescription": "During task 204's run, the IMPLEMENT_TASK agent invoked /task-tests (the taskTools:task-tests skill) to run the full suite. taskTestsHook.ts (scripts/hooks/taskTestsHook.ts:38, via writeKnownFailingTests in scripts/shared/taskTestsRunner.ts) then ran the suite and wrote the currently-failing set into the worktree's .taskTools/knownFailingTests.json. Because a stepTemplates producesItsOutputContract test was TRANSIENTLY failing mid-implementation, a spurious 4th entry was baked into the baseline. The implementer later fixed the code (the test passes), but its fence correctly refused to let it revert .taskTools/knownFailingTests.json, so the stale out-of-fence edit remained and blocked REBASE_ONTO_TARGET_BRANCH (rebaseTaskWorktree.ts refused: dirty tracked file not in modifiableFiles). Two problems: (1) an IMPLEMENT_TASK (or any pipeline-stage) agent should not be able to run /task-tests / the full suite at all; the full suite belongs to a later stage. (2) The task-tests hook should not rewrite the committed baseline from inside a task worktree / during a pipeline run. Fix one or both: block the /task-tests hook when invoked by a pipeline-stage agent or inside a task worktree (no-op or throw), and/or prevent the implementer environment from invoking it. Acceptance: an implement/fix stage agent invoking /task-tests does not modify .taskTools/knownFailingTests.json in the worktree; a run whose implementer transiently fails a test still rebases cleanly once the code is fixed.",
+    "goal": [
+      "- An IMPLEMENT_TASK or FIX-stage agent invoking /task-tests (or taskTools:task-tests) does NOT rewrite .taskTools/knownFailingTests.json in the task worktree",
+      "- A tackle-tasks run whose implementer transiently failed then fixed a test reaches REBASE_ONTO_TARGET_BRANCH without a dirty out-of-fence knownFailingTests.json",
+      "- npm run test:baseline stays green"
+    ],
+    "notInScope": [
+      "- Rewriting how /task-tests works for the user-invoked case outside a run is not in scope; only the in-run / pipeline-stage-agent case is",
+      "- The fast-pipeline feature itself (task 204) is separate and already implemented"
+    ],
+    "problemSolvedByTask": "An in-run pipeline-stage agent can pollute the committed test baseline out of its fence by invoking /task-tests, baking a transient failure into knownFailingTests.json and blocking the rebase gate. This makes runs fail for a reason unrelated to the task's real work.",
+    "description": "taskTestsHook.ts unconditionally runs the suite and calls writeKnownFailingTests(projectRoot, failing) whenever /task-tests or the taskTools:task-tests skill is invoked, including from inside a task worktree by a pipeline-stage agent. This lets an IMPLEMENT_TASK agent bake a transient mid-implementation failure into the committed baseline, which is out of the task's fence and blocks rebaseTaskWorktree.ts's dirty-tracked-file gate. Guard the hook so it does not rewrite the baseline when invoked from within a task worktree or by a pipeline-stage agent (detect via the worktree/run markers the other hooks already use), or otherwise prevent implement/fix agents from invoking the full-suite /task-tests. Keep the normal user-invoked /task-tests baseline-recording behavior intact.",
+    "modifiableFiles": [
+      "scripts/hooks/taskTestsHook.ts",
+      "scripts/hooks/taskTestsHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "A test that simulates an IMPLEMENT_TASK-stage invocation of the task-tests hook (or /task-tests inside a task worktree) and asserts .taskTools/knownFailingTests.json is unchanged (the hook no-ops or throws), while a normal user-invoked /task-tests outside a run still records the baseline.",
+    "difficulty": 4
   }
 ]
