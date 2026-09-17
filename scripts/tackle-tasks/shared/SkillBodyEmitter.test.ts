@@ -128,6 +128,35 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     assert.ok(Object.keys(defaultConfig).length > 1);
 });
 
+test("test_skillBody_fastBeatsAProjectsCustomDiagramFolder", () => {
+    // Setup: a target repository that customizes its normal pipeline in .taskTools/settings.json.
+    const root = makeTargetRepository([9]);
+    const customDiagramFolder = join(root, "diagrams");
+    mkdirSync(customDiagramFolder, { recursive: true });
+    writeFileSync(join(customDiagramFolder, "pipeline-preambleStatusCheck.mmd"), "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n");
+    writeFileSync(join(root, ".taskTools/settings.json"), JSON.stringify({ diagramFolder: customDiagramFolder }));
+
+    // Test action: the same project asks for a fast run. The first call only writes the agent files.
+    skillBody("[9] fast", root);
+    skillBody("[9] fast", root);
+
+    // Verification: the run walks the 14 fast diagrams, not the project's own one.
+    const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/9/steps.json"), "utf8"));
+    assert.equal(Object.keys(stepsConfig).length, 14);
+    assert.ok(Object.keys(stepsConfig).includes("pipeline-implementTask.mmd"));
+    assert.ok(!Object.keys(stepsConfig).includes("pipeline-codexReviewsPlan.mmd"));
+});
+
+test("test_skillBody_omitsStartingBlockWhenOnlyFastFollowsTheTaskList", () => {
+    // Step: "fast" names the pipeline, so it must never reach the workflow as a starting block.
+    const root = makeTargetRepository([74]);
+    skillBody("[74] fast", root);
+    const brief = skillBody("[74] fast", root);
+    const workflowLine = brief.split("\n").find((line) => line.startsWith("WORKFLOW 1: "))!;
+    const call = JSON.parse(workflowLine.slice("WORKFLOW 1: ".length));
+    assert.ok(!("startingBlock" in call.args));
+});
+
 test("test_skillBody_reusesAnActiveTasksExistingPairInsteadOfRegeneratingIt", () => {
     // Setup: task 9 is already marked active, with a pair already on disk from its first launch.
     const root = makeTargetRepository([9]);

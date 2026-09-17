@@ -1,0 +1,22 @@
+flowchart TB
+%% One orange block. The hook walks in from a dashed FIX_THE_CODEBASE_FOR_SUITE block, prints the prompt, and stops.
+
+  subgraph fixTheCodebaseForSuite ["Input: a red full suite"]
+    direction TB
+    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_FOR_SUITE"]
+  end
+  subgraph fixTheCodebaseForSuiteNext ["next diagram"]
+    direction TB
+    COMMIT_SUITE_FIX_IF_NEEDED["COMMIT_SUITE_FIX_IF_NEEDED"]
+  end
+  fixTheCodebaseForSuite ~~~ fixTheCodebaseForSuiteNext
+
+  FIX_THE_CODEBASE_FOR_SUITE --> COMMIT_SUITE_FIX_IF_NEEDED
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class FIX_THE_CODEBASE_FOR_SUITE returns_a_prompt
+  class COMMIT_SUITE_FIX_IF_NEEDED next_diagram

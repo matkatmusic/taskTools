@@ -238,6 +238,61 @@ test("test_resolveDiagramFolderSetting_defaultsToTheRealPipelineWhenNoSettingsFi
     });
 });
 
+test("test_resolveDiagramFolderSetting_fastPicksTheFastPipelineWhenThereIsNoSettingsFile", () => {
+    // Step: the fast flag alone picks the built-in fast diagram folder.
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-fast-"));
+    assert.deepEqual(resolveDiagramFolderSetting(fixtureRoot, true), {
+        diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks-fast"),
+        stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
+        allowStubs: true,
+    });
+});
+
+test("test_resolveDiagramFolderSetting_fastWinsOverACustomDiagramFolderInSettings", () => {
+    // Setup: a project that customizes its normal pipeline through .taskTools/settings.json.
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-fast-custom-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    const diagramFolder = join(fixtureRoot, "diagrams");
+    mkdirSync(diagramFolder, { recursive: true });
+    writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
+    writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
+
+    // Test action: the same project asks for a fast run.
+    const setting = resolveDiagramFolderSetting(fixtureRoot, true);
+
+    // Verification: the custom folder is left out; fast is one pipeline for every project.
+    assert.deepEqual(setting, {
+        diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks-fast"),
+        stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
+        allowStubs: true,
+    });
+});
+
+test("test_generateSteps_generatesTheFourteenFastDiagrams", () => {
+    // Step: the fast folder generates against the real block scripts, with no stub allowed.
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-fast-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks-fast"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    assert.equal(Object.keys(config).length, 14);
+    assert.ok(Object.keys(config).includes("pipeline-mergeSucceededExit.mmd"));
+    assert.ok(!Object.keys(config).includes("pipeline-codexReviewsPlan.mmd"));
+});
+
+test("test_generateSteps_addsTheFastNextBlockOverrideOnAreTaskTestsSkipped", () => {
+    // Step: the fast pipeline leaves out the per-task test loop through one nextBlock override.
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-fast-override-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks-fast"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    const entry = config["pipeline-commitImplementationIfNeeded.mmd"]!.find(candidate => candidate.box === "ARE_TASK_TESTS_SKIPPED_Q")!;
+    assert.equal(entry.nextBlock, "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO");
+});
+
+test("test_generateSteps_leavesTheFastNextBlockOverrideOffTheDefaultDiagramFolder", () => {
+    // Step: the default pipeline keeps its per-task test loop.
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-default-override-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    const entry = config["pipeline-commitImplementationIfNeeded.mmd"]!.find(candidate => candidate.box === "ARE_TASK_TESTS_SKIPPED_Q")!;
+    assert.equal(entry.nextBlock, undefined);
+});
+
 test("test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
     mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });

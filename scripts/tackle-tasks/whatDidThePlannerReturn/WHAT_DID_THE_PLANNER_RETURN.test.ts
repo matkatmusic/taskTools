@@ -5,10 +5,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { main } from "./WHAT_DID_THE_PLANNER_RETURN.ts";
 
+// The block reads the run's own steps.json to tell the default pipeline from the fast one.
+function writeStepsConfig(root: string, diagramFile: string): void {
+    mkdirSync(join(root, ".taskTools", "workflows", "35"), { recursive: true });
+    writeFileSync(join(root, ".taskTools", "workflows", "35", "steps.json"), JSON.stringify({ [diagramFile]: [] }));
+}
+
 function makeProjectRootWithDifficulty(difficulty: number): string {
     const root = mkdtempSync(join(tmpdir(), "what-did-the-planner-return-"));
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{ taskNumber: 35, title: "t", difficulty }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     return root;
 }
 
@@ -18,6 +25,7 @@ function makeProjectRootWithDeclaredTests(difficulty: number, planContents: stri
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 35, title: "t", difficulty, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["src/thing.ts"],
     }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, planContents);
     return { root, planFile };
@@ -70,6 +78,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_skipsAnOwnedFileWithNoTestRule", () => {
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["index.html"],
     }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "no test files mentioned here");
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
@@ -82,6 +91,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_routesStraightOnWhenTheTaskSkipsTests", (
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 35, title: "t", difficulty: 3, schemaVersion: "1.0.1", hasTests: true, tests: "skip", modifiableFiles: ["src/thing.ts"],
     }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "no test files mentioned here");
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
@@ -96,6 +106,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_mergesAdditionalFilesIntoModifiableFilesB
     writeFileSync(tasksPath, JSON.stringify([{
         taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["index.html"],
     }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "no test files mentioned here");
 
@@ -114,6 +125,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_leavesModifiableFilesUnchangedWhenAdditio
     const tasksPath = join(root, ".taskTools", "tasks.json");
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 35, title: "t", difficulty: 5, modifiableFiles: ["src/thing.ts"] }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "plan text");
 
@@ -128,6 +140,7 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_mergingAdditionalFilesDedupesAgainstAlrea
     const tasksPath = join(root, ".taskTools", "tasks.json");
     mkdirSync(join(root, ".taskTools"), { recursive: true });
     writeFileSync(tasksPath, JSON.stringify([{ taskNumber: 35, title: "t", difficulty: 5, modifiableFiles: ["src/thing.ts"] }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "plan text");
 
@@ -143,8 +156,42 @@ test("test_WHAT_DID_THE_PLANNER_RETURN_passesWhenThePlanNamesTheCoLocatedCandida
     writeFileSync(join(root, ".taskTools", "tasks.json"), JSON.stringify([{
         taskNumber: 35, title: "t", difficulty: 5, schemaVersion: "1.0.1", hasTests: true, modifiableFiles: ["scripts/x/y.ts"],
     }]));
+    writeStepsConfig(root, "pipeline-codexReviewsPlan.mmd");
     const planFile = join(root, "plan.json");
     writeFileSync(planFile, "write scripts/x/y.test.ts alongside the source file");
     const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
     assert.notEqual(output.verdict, "AMEND");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesPlanOutcomeStraightToImplementTaskOnAFastRun", () => {
+    // Setup: a difficulty-5 task whose run walks the fast diagram set.
+    const root = makeProjectRootWithDifficulty(5);
+    writeStepsConfig(root, "pipeline-implementTask.mmd");
+
+    // Test action: the planner accepts the plan.
+    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile: "plans/plan-35.json", clarifyRequest: "" } }));
+
+    // Verification: a fast run has no codex plan review, so the plan goes to the implementer.
+    assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_skipsTheDeclaredTestCheckOnAFastRun", () => {
+    // Setup: a task that declares tests, and a plan that names none of them.
+    const { root, planFile } = makeProjectRootWithDeclaredTests(5, "no test files mentioned here");
+    writeStepsConfig(root, "pipeline-implementTask.mmd");
+
+    // Test action: the planner accepts the plan.
+    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "PLAN", planFile, clarifyRequest: "" } }));
+
+    // Verification: the fast set has no verdict diagram, so no AMEND hop is named.
+    assert.notEqual(output.verdict, "AMEND");
+    assert.equal(output.next, "pipeline-implementTask.mmd::IMPLEMENT_TASK");
+});
+
+test("test_WHAT_DID_THE_PLANNER_RETURN_routesClarifyOutcomeToTheRoundsCheckOnAFastRun", () => {
+    // Step: the fast set keeps the clarify loop, so a CLARIFY answer routes inside the same diagram.
+    const root = makeProjectRootWithDifficulty(5);
+    writeStepsConfig(root, "pipeline-implementTask.mmd");
+    const output = main(JSON.stringify({ ...base(root), additionalData: { outcome: "CLARIFY", planFile: "", clarifyRequest: "which database?" } }));
+    assert.equal(output.next, "ARE_2_CLARIFY_ROUNDS_DONE_Q");
 });
