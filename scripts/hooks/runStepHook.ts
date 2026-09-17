@@ -75,7 +75,7 @@ const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
 // Both exit tails release the source lock, so a block inside them starts without it.
 const EXIT_DIAGRAMS = ["pipeline-failuresExit.mmd", SUCCESS_DIAGRAM];
 
-type Step = StepConfigEntry & { diagram: string; nextBlock?: string; nextScript?: string };
+type Step = StepConfigEntry & { diagram: string; nextBlock?: string; translator?: string };
 type StepRun = {
   ok: boolean;
   box: string;
@@ -218,11 +218,11 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
   return stepRun;
 }
 
-// An overridden hop's nextScript reshapes the current block's output into the next block's input; the per-hop
-// input guard that already checks every hop's payload catches a bad nextScript's output the same way it
+// An overridden hop's translator reshapes the current block's output into the next block's input; the per-hop
+// input guard that already checks every hop's payload catches a bad translator's output the same way it
 // catches anything else, so this never needs its own shape check.
-function runTranslator(nextScript: string, payload: Record<string, unknown>): Record<string, unknown> | null {
-  const spawnResult = spawnSync("node", ["--no-inspect", nextScript, JSON.stringify(payload)], { cwd: PROJECT_ROOT, encoding: "utf8" });
+function runTranslator(translator: string, payload: Record<string, unknown>): Record<string, unknown> | null {
+  const spawnResult = spawnSync("node", ["--no-inspect", translator, JSON.stringify(payload)], { cwd: PROJECT_ROOT, encoding: "utf8" });
   return parseStepResult((spawnResult.stdout ?? "").trimEnd());
 }
 
@@ -588,9 +588,9 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     stepKey = nextStepKey;
     // A box sees only the prior box; next is consumed here, so a spreading box never inherits its choice.
     const { next: _next, ...resultWithoutNext } = stepRun.result;
-    // An overridden hop may name a nextScript to reshape the payload; with none, the payload forwards verbatim.
-    const nextPayload = step.nextBlock !== undefined && step.nextScript !== undefined
-      ? runTranslator(step.nextScript, resultWithoutNext)
+    // An overridden hop may name a translator to reshape the payload; with none, the payload forwards verbatim.
+    const nextPayload = step.nextBlock !== undefined && step.translator !== undefined
+      ? runTranslator(step.translator, resultWithoutNext)
       : resultWithoutNext;
     input = JSON.stringify(nextPayload);
   }
