@@ -75,7 +75,7 @@ const LOCK_SOURCE_REPO_BOX = "LOCK_SOURCE_REPO";
 // Both exit tails release the source lock, so a block inside them starts without it.
 const EXIT_DIAGRAMS = ["pipeline-failuresExit.mmd", SUCCESS_DIAGRAM];
 
-type Step = StepConfigEntry & { diagram: string };
+type Step = StepConfigEntry & { diagram: string; nextBlock?: string };
 type StepRun = {
   ok: boolean;
   box: string;
@@ -221,6 +221,9 @@ function runStepScript(step: Step, input: string, invocation: string): StepRun {
 // Where a fresh run picks up, by the same rule the walk itself follows. Null when nothing follows.
 function getNextStepAfter(stoppedAt: string, output: Record<string, unknown>): string | null {
   const step = STEPS_BY_KEY.get(stoppedAt)!;
+  if (step.nextBlock !== undefined) {
+    return getStepKey(step.nextBlock, step.diagram);
+  }
   const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
   const chosenNextBox = output.next ?? onlySuccessor;
   if (chosenNextBox === undefined) {
@@ -235,11 +238,17 @@ function isInsideSourceLock(stepKey: string): number {
   if (lockStepKey === undefined)
     return SOURCE_LOCK_UNREACHABLE;
   const reached = new Set<string>();
-  const toVisit = [...STEPS_BY_KEY.get(lockStepKey)!.next.map((box) => getStepKey(box, STEPS_BY_KEY.get(lockStepKey)!.diagram))];
-  while (toVisit.length > 0) {
+  for (const toVisit = [...STEPS_BY_KEY.get(lockStepKey)!.next.map((box) => getStepKey(box, STEPS_BY_KEY.get(lockStepKey)!.diagram))]; toVisit.length > 0;) {
     const visiting = toVisit.pop()!;
     const step = STEPS_BY_KEY.get(visiting);
-    if (step === undefined || reached.has(visiting) || EXIT_DIAGRAMS.includes(step.diagram))
+    const isUnknownStep = step === undefined;
+    if (isUnknownStep)
+      continue;
+    const isAlreadyReached = reached.has(visiting);
+    if (isAlreadyReached)
+      continue;
+    const isExitDiagram = EXIT_DIAGRAMS.includes(step.diagram);
+    if (isExitDiagram)
       continue;
     reached.add(visiting);
     toVisit.push(...step.next.map((box) => getStepKey(box, step.diagram)));
@@ -420,10 +429,12 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
       return walkFromStep(entry.block, entry.input, invocation);
     }
   }
-  const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
-  if (startInputMismatches.length > 0) {
-    return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches]);
-  }
+  // Retired: this ran once, for the walk's first hop only. The per-hop check inside the loop below now
+  // covers the first hop too (same (step, input) pair), plus every later hop this one-time check never saw.
+  // const startInputMismatches = getStartInputMismatches(STEPS_BY_KEY.get(startStepKey)!, startInput);
+  // if (startInputMismatches.length > 0) {
+  //   return buildFailure([], [`${startStepKey} input breaks its contract`, ...startInputMismatches]);
+  // }
   const boxesRun: string[] = [];
   let stepKey = startStepKey;
   let input = startInput;
@@ -431,6 +442,11 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
   while (true) {
     const step = STEPS_BY_KEY.get(stepKey)!;
     const packet = getPacketFromInput(input);
+    // Every hop's payload must match the next block's declared input, not just the walk's first hop.
+    const inputMismatches = getStartInputMismatches(step, input);
+    if (inputMismatches.length > 0) {
+      return buildFailure(boxesRun, [`${stepKey} input breaks its contract`, ...inputMismatches], { step, packet, input, startedFromPacketFile });
+    }
     // A prompt block runs under its own model; the walk stops and names it for the next agent.
     if (step.producesPrompt && boxesRun.length > 0) {
       return buildWalkerStop(boxesRun, stepKey, packet);
@@ -497,20 +513,24 @@ function walkFromStep(startStepKey: string, startInput: string, invocation: stri
     if (scriptSignal === SCRIPT_SIGNAL.PROMPT) {
       return buildSuccess(boxesRun, stepKey, stepRun, input);
     }
-    if (step.next.length === 0) {
+    if (step.next.length === 0 && step.nextBlock === undefined) {
       return buildFailure(boxesRun, [`${stepKey} has an empty next; say where it goes next in steps.json`], { step, packet, input, startedFromPacketFile });
     }
 
-    // A box with one successor may leave next out of its output; a decision box must name its choice.
-    const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
-    const chosenNextBox = stepRun.result.next ?? onlySuccessor;
-    if (chosenNextBox === undefined) {
-      return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`], { step, packet, input, startedFromPacketFile });
+    // A steps.json next override names the next block outright; it ignores the script's own hard-coded choice.
+    let nextStepKey = step.nextBlock !== undefined ? getStepKey(step.nextBlock, step.diagram) : undefined;
+    if (nextStepKey === undefined) {
+      // A box with one successor may leave next out of its output; a decision box must name its choice.
+      const onlySuccessor = step.next.length === 1 ? step.next[0] : undefined;
+      const chosenNextBox = stepRun.result.next ?? onlySuccessor;
+      if (chosenNextBox === undefined) {
+        return buildFailure(boxesRun, [`${stepKey} points at ${step.next.join(", ")}; its output must name one in next`], { step, packet, input, startedFromPacketFile });
+      }
+      if (!step.next.includes(String(chosenNextBox))) {
+        return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`], { step, packet, input, startedFromPacketFile });
+      }
+      nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
     }
-    if (!step.next.includes(String(chosenNextBox))) {
-      return buildFailure(boxesRun, [`${stepKey} next ${JSON.stringify(chosenNextBox)} is not one of ${step.next.join(", ")}`], { step, packet, input, startedFromPacketFile });
-    }
-    const nextStepKey = getStepKey(String(chosenNextBox), step.diagram);
     if (!STEPS_BY_KEY.has(nextStepKey)) {
       return buildFailure(boxesRun, [`next box ${nextStepKey} is not in the config`], { step, packet, input, startedFromPacketFile });
     }

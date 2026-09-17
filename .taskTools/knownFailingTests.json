@@ -2,5 +2,13 @@
   {
     "file": "tests/relatedTests.test.ts",
     "name": "test_main_readsTheTurnFlagOnStopAndReportsTypeErrors"
+  },
+  {
+    "file": "tests/runStepHook.test.ts",
+    "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit"
+  },
+  {
+    "file": "tests/runStepHook.test.ts",
+    "name": "test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill"
   }
 ]

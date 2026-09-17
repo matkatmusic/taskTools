@@ -49,7 +49,7 @@ function runHook(prompt: string, configFile?: string, worktree?: string, priorPa
 }
 
 // Builds a throwaway config whose steps live in a temp folder, so a walk never touches the repo's own.
-function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; producesPrompt?: boolean; agent?: AgentOptions; next: string[] }[]>) {
+function configWith(build: (writeStep: (box: string, result: Record<string, unknown>) => string, folder: string) => Record<string, { box: string; script: string; producesPrompt?: boolean; agent?: AgentOptions; nextBlock?: string; next: string[] }[]>) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-steps-"));
     const outputByBox: Record<string, Record<string, unknown>> = {};
     const writeStep = (box: string, result: Record<string, unknown>) => {
@@ -2080,3 +2080,134 @@ for (const entry of REAL_FAILURES_EXIT_STEPS) {
         assert.equal(existsSync(`${worktree}.lease`), true);
     });
 }
+
+// Real A/B/C fixture: A(a,b)->{sum,a,b}, B(sum,a,b)->{a,expected}, C(a,expected)->boolean; each hard-codes its own next.  nextScript is never set here: resolving a translator via nextScript is task 207's job, not this one's.
+function arithmeticConfig(overrides: { A?: { nextBlock: string }; B?: { nextBlock: string } } = {}) {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-arithmetic-"));
+    const scriptA = join(folder, "A.ts");
+    writeFileSync(scriptA, [
+        'const { a, b } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "A", scriptSignal: "continue", next: "B", sum: a + b, a, b }));',
+    ].join("\n"));
+    const scriptB = join(folder, "B.ts");
+    writeFileSync(scriptB, [
+        'const { sum, a, b } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "B", scriptSignal: "continue", next: "C", a, expected: sum - b }));',
+    ].join("\n"));
+    const scriptC = join(folder, "C.ts");
+    writeFileSync(scriptC, [
+        'const { a, expected } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "C", scriptSignal: "stop", result: a === expected }));',
+    ].join("\n"));
+    const templateA = join(folder, "A.template.json");
+    writeFileSync(templateA, JSON.stringify({ input: { a: 0, b: 0 }, output: { box: "A", scriptSignal: "continue", next: "B", sum: 0, a: 0, b: 0 } }));
+    const templateB = join(folder, "B.template.json");
+    writeFileSync(templateB, JSON.stringify({ input: { sum: 0, a: 0, b: 0 }, output: { box: "B", scriptSignal: "continue", next: "C", a: 0, expected: 0 } }));
+    const templateC = join(folder, "C.template.json");
+    writeFileSync(templateC, JSON.stringify({ input: { a: 0, expected: 0 }, output: { box: "C", scriptSignal: "stop", result: true } }));
+    const configFile = join(folder, "steps.json");
+    writeFileSync(configFile, JSON.stringify({
+        "arithmetic.mmd": [
+            { box: "A", script: scriptA, template: templateA, producesPrompt: false, next: ["B"], ...overrides.A },
+            { box: "B", script: scriptB, template: templateB, producesPrompt: false, next: ["C"], ...overrides.B },
+            { box: "C", script: scriptC, template: templateC, producesPrompt: false, next: [] },
+        ],
+    }));
+    return configFile;
+}
+
+// TEST 1: no override anywhere; the walk follows each script's own hard-coded next.
+test("test_runStepHook_walksTheArithmeticChainByHardCodedNextWhenStepsJsonDeclaresNoOverride", () => {
+    const configFile = arithmeticConfig();
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A", "arithmetic.mmd::B", "arithmetic.mmd::C"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, true);
+});
+
+// TEST 2: steps.json overrides A's hard-coded next "C" to "B", else the walk skips B and fails C's contract.
+function arithmeticConfigWithADivertedToB() {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-arithmetic-diverted-"));
+    const scriptA = join(folder, "A.ts");
+    writeFileSync(scriptA, [
+        'const { a, b } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "A", scriptSignal: "continue", next: "C", sum: a + b, a, b }));',
+    ].join("\n"));
+    const scriptB = join(folder, "B.ts");
+    writeFileSync(scriptB, [
+        'const { sum, a, b } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "B", scriptSignal: "continue", next: "C", a, expected: sum - b }));',
+    ].join("\n"));
+    const scriptC = join(folder, "C.ts");
+    writeFileSync(scriptC, [
+        'const { a, expected } = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ box: "C", scriptSignal: "stop", result: a === expected }));',
+    ].join("\n"));
+    const templateA = join(folder, "A.template.json");
+    writeFileSync(templateA, JSON.stringify({ input: { a: 0, b: 0 }, output: { box: "A", scriptSignal: "continue", next: "C", sum: 0, a: 0, b: 0 } }));
+    const templateB = join(folder, "B.template.json");
+    writeFileSync(templateB, JSON.stringify({ input: { sum: 0, a: 0, b: 0 }, output: { box: "B", scriptSignal: "continue", next: "C", a: 0, expected: 0 } }));
+    const templateC = join(folder, "C.template.json");
+    writeFileSync(templateC, JSON.stringify({ input: { a: 0, expected: 0 }, output: { box: "C", scriptSignal: "stop", result: true } }));
+    const configFile = join(folder, "steps.json");
+    writeFileSync(configFile, JSON.stringify({
+        "arithmetic.mmd": [
+            { box: "A", script: scriptA, template: templateA, producesPrompt: false, next: ["B", "C"], nextBlock: "B" },
+            { box: "B", script: scriptB, template: templateB, producesPrompt: false, next: ["C"] },
+            { box: "C", script: scriptC, template: templateC, producesPrompt: false, next: [] },
+        ],
+    }));
+    return configFile;
+}
+
+test("test_runStepHook_stepsJsonNextBlockOverrideWinsOverTheScriptsOwnEmittedNext", () => {
+    const configFile = arithmeticConfigWithADivertedToB();
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A", "arithmetic.mmd::B", "arithmetic.mmd::C"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, true);
+});
+
+// TEST 3: both A.nextBlock and B.nextBlock are overridden, each to the box already hard-coded.
+test("test_runStepHook_resolvesStepsJsonNextBlockOverridesOnMultipleNodesInTheSameWalk", () => {
+    const configFile = arithmeticConfig({ A: { nextBlock: "B" }, B: { nextBlock: "C" } });
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A", "arithmetic.mmd::B", "arithmetic.mmd::C"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, true);
+});
+
+// TEST 4: A.nextBlock skips straight to C; C's declared input needs 'expected', which the skipped hop never produced.
+test("test_runStepHook_failsLoudWhenANextBlockOverrideSkipsAStepAndBreaksTheNextStepsInputContract", () => {
+    const configFile = arithmeticConfig({ A: { nextBlock: "C" } });
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A"]);
+    assert.match(result.errors[0], /arithmetic\.mmd::C input breaks its contract/);
+    assert.match(result.errors[1], /expected is missing/);
+});
+
+// getNextStepAfter's own override branch: a prompt block's steps.json nextBlock beats its own emitted next.
+test("test_runStepHook_prefersAStepsJsonNextBlockOverrideOverTheScriptsOwnEmittedNextAfterAPromptStop", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "prompt", prompt: "answer", next: "B" }), producesPrompt: true, nextBlock: "C", next: ["B", "C"] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+            { box: "C", script: writeStep("C", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    assert.equal(runHook("/run-step A", configFile).result.outcome.next, "one.mmd::C");
+});
+
+// AMENDMENT 1: nextBlock override must still work even when next:[] triggers the empty-successor guard.
+test("test_runStepHook_emptyNextGuardDoesNotSwallowAValidNextBlockOverride", () => {
+    const configFile = configWith(writeStep => ({
+        "one.mmd": [
+            { box: "A", script: writeStep("A", { scriptSignal: "continue" }), nextBlock: "B", next: [] },
+            { box: "B", script: writeStep("B", { scriptSignal: "stop" }), next: [] },
+        ],
+    }));
+    const { result } = runHook("/run-step A", configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
+});
