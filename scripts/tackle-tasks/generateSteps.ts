@@ -8,6 +8,11 @@ const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const REGENERATE_DELAY_MS = 50;
 // The one override this POC emits: the preamble's first block, only for the repository's own default pipeline.
 const DEFAULT_DIAGRAM_FOLDER = join(PROJECT_ROOT, "diagrams/tackle-tasks");
+const FAST_DIAGRAM_FOLDER = join(PROJECT_ROOT, "diagrams/tackle-tasks-fast");
+// The fast pipeline's one override: leave the per-task test loop and go to the merge tail.
+const FAST_NEXT_BLOCK_OVERRIDES: Record<string, string> = {
+  "pipeline-commitImplementationIfNeeded.mmd::ARE_TASK_TESTS_SKIPPED_Q": "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
+};
 const NEXT_BLOCK_OVERRIDES: Record<string, string> = {
   "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "IS_TASK_BLOCKED_Q",
 };
@@ -220,7 +225,11 @@ function getDiagramFileNames(diagramFolder: string): string[] {
 export type DiagramFolderSetting = { diagramFolder: string; stepsRoot: string; allowStubs: boolean };
 
 // .taskTools/settings.json in the target project names a diagramFolder; an absent file or key means the default pipeline.
-export function resolveDiagramFolderSetting(projectRoot: string): DiagramFolderSetting {
+export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean = false): DiagramFolderSetting {
+  // fast wins over the project's settings.json, so one built-in pipeline serves every project.
+  if (fast) {
+    return { diagramFolder: FAST_DIAGRAM_FOLDER, stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"), allowStubs: true };
+  }
   const settingsPath = join(projectRoot, ".taskTools/settings.json");
   const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) as { diagramFolder?: string } : {};
   if (!settings.diagramFolder) {
@@ -369,6 +378,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
       }
       const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
       const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
+      const fastNextBlockOverride = diagramFolder === FAST_DIAGRAM_FOLDER ? FAST_NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       const translatorOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? TRANSLATOR_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       entries.push({
         box,
@@ -377,6 +387,7 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         producesPrompt,
         ...(mutating ? { mutating } : {}),
         ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
+        ...(fastNextBlockOverride ? { nextBlock: fastNextBlockOverride } : {}),
         ...(translatorOverride ? { translator: translatorOverride } : {}),
         next: remappedNext[box] ?? [],
       });

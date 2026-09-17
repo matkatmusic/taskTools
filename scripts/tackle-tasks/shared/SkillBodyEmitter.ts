@@ -2,7 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseTaskNumberArgument, parseStartingBlockArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
+import { parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
 import { generateWorkflow } from "../generateWorkflow.ts";
@@ -74,7 +74,7 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     */
 
     // Regenerated fresh each run to match diagrams on disk, unless ensureTaskWorkflowPair reuses an active task's existing pair untouched.
-    const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot);
+    const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot, parseFastArgument(argsValue));
     const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
     const startingBlock = parseStartingBlockArgument(argsValue);
     // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.

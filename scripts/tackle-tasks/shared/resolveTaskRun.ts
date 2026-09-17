@@ -7,12 +7,14 @@ import { requireAbsolutePath } from "./inputPaths.ts";
 
 export type ResolveTaskRunOutput = {
     taskNumbers: number[];
+    fast: boolean;
     projectRoot: string;
     sourceBranch: string;
     runId: string;
 };
 
 const TASK_NUMBER_TOKEN = /^-?\d+$/;
+const FAST_TOKEN = "fast";
 
 // M2: accepted grammar is a delimiter-separated list of positive safe integers, optionally wrapped in one matching pair of outer brackets — "[1,2]" and "1 2" both work; "[1" and "1]" do not, and neither does an integer beyond Number.MAX_SAFE_INTEGER. Text after "]" is ignored. Text after "]" is ignored.
 export function parseTaskNumberArgument(args: string): number[] {
@@ -40,13 +42,22 @@ export function parseTaskNumberArgument(args: string): number[] {
     return numbers;
 }
 
+// The fast pipeline is picked by the word "fast" after the bracketed task list.
+export function parseFastArgument(args: string): boolean {
+    const closingBracket = args.indexOf("]");
+    if (closingBracket === -1) return false;
+    const rest = args.slice(closingBracket + 1).trim();
+    if (rest === "") return false;
+    return rest.split(/\s+/).includes(FAST_TOKEN);
+}
+
 // The block name to start the workflow walk from, if the caller named one after the task list.
 export function parseStartingBlockArgument(args: string): string {
     const closingBracket = args.indexOf("]");
     if (closingBracket === -1) return "";
     const rest = args.slice(closingBracket + 1).trim();
     if (rest === "") return "";
-    return rest.split(/\s+/)[0];
+    return rest.split(/\s+/).filter((token) => token !== FAST_TOKEN)[0] ?? "";
 }
 
 export function resolveTaskRun(args: string, projectRoot: string): ResolveTaskRunOutput {
@@ -54,6 +65,7 @@ export function resolveTaskRun(args: string, projectRoot: string): ResolveTaskRu
     const taskNumbers = parseTaskNumberArgument(args);
     return {
         taskNumbers,
+        fast: parseFastArgument(args),
         projectRoot,
         sourceBranch: currentBranchName(projectRoot),
         runId: generateRunId(),

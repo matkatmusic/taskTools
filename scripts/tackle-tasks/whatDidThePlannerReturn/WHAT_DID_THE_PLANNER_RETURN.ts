@@ -1,9 +1,9 @@
 // WHAT_DID_THE_PLANNER_RETURN, from pipeline-plan.mmd's decision, ported to route only.
-import { readFileSync, realpathSync } from "node:fs";
-import { basename } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT_SIGNAL } from "../../shared/contracts.ts";
-import { readTaskFile, resolveTaskFiles, taskHasTests } from "../../shared/taskFiles.ts";
+import { readTaskFile, resolveTaskFiles, taskHasTests, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 import { modifiableFiles } from "../../shared/prepareTasks.ts";
 import { withTaskStateLock, writeJsonAtomically } from "../../shared/taskStateLock.ts";
 import { TASK_HAS_TESTS } from "../../shared/resultCodes.ts";
@@ -32,6 +32,16 @@ function mergeAdditionalFiles(projectRoot: string, taskNumber: number, additiona
   });
 }
 
+// The run's own steps.json records which diagram set it walks; the fast set drops the codex plan review.
+// A single-block contract test invokes this script with no workflow ever set up, so a missing file reads as the default pipeline.
+function isFastPipeline(projectRoot: string, taskNumber: number): boolean {
+  const stepsConfigPath = join(taskWorkflowDirectory(resolveTaskFiles(projectRoot).tasksPath, taskNumber), "steps.json");
+  if (!existsSync(stepsConfigPath))
+    return false;
+  const stepsConfig = JSON.parse(readFileSync(stepsConfigPath, "utf8")) as Record<string, unknown>;
+  return !("pipeline-codexReviewsPlan.mmd" in stepsConfig);
+}
+
 export function main(input: string): Record<string, unknown> {
   const { message: _message, additionalData, ...packet } = JSON.parse(input) as Input;
   const { outcome, planFile, clarifyRequest } = additionalData;
@@ -44,6 +54,10 @@ export function main(input: string): Record<string, unknown> {
     const entry = readTaskFile(resolveTaskFiles(packet.projectRoot).tasksPath).find((task) => task.taskNumber === packet.taskNumber);
     if (entry === undefined)
       throw new Error(`task ${packet.taskNumber} not found in tasks.json`);
+    // A fast run draws neither the plan review nor the verdict, so an accepted plan goes to the implementer.
+    if (isFastPipeline(packet.projectRoot, packet.taskNumber)) {
+      return { ...output, next: "pipeline-implementTask.mmd::IMPLEMENT_TASK" };
+    }
     if (taskDeclaresTests(entry)) {
       const planText = readFileSync(planFile, "utf8");
       const unnamed = requiredTestGroups(entry).filter((group) => !group.candidates.some((candidate) => planText.includes(basename(candidate))));

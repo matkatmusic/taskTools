@@ -1,0 +1,18 @@
+flowchart TB
+%% Not an agent() entry. The hook walks in from a dashed REPORT_ONLY_EXIT block. Writes nothing.
+
+  subgraph reportOnlyExit ["Input: an exit type and note"]
+    direction TB
+    REPORT_ONLY_EXIT["REPORT_ONLY_EXIT"]
+    STOP["stop"]
+  end
+
+  REPORT_ONLY_EXIT --> STOP
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class REPORT_ONLY_EXIT fail
+  class STOP output

@@ -1,0 +1,47 @@
+flowchart TB
+%% One agent() call. /run-step starts at COMMIT_SUITE_FIX_IF_NEEDED; the rebase diagram walks in at RUN_FULL_SUITE. Every path ends at an orange block or a dashed block.
+
+  subgraph runFullSuite ["Input: [FIX_THE_CODEBASE_FOR_SUITE]'s result"]
+    direction TB
+    COMMIT_SUITE_FIX_IF_NEEDED["COMMIT_SUITE_FIX_IF_NEEDED"]
+    RUN_FULL_SUITE["RUN_FULL_SUITE"]
+    DO_ALL_TESTS_PASS_Q["do all tests pass?"]
+    ARE_2_SUITE_FIXES_DONE_Q["2 suite fix attempts done?"]
+    DID_CHANGES_STAY_INSIDE_FENCE_Q["did every change stay inside<br/>the task's file fence?"]
+    MERGE_WORKTREES["merge worktrees and submodules,<br/>no fast-forward"]
+    READ_MERGE_PUBLICATION_STATE["read the publication state<br/>from the layer merge refs"]
+    WHAT_IS_PUBLICATION_STATE_Q["what is the publication state?"]
+    ARE_2_MERGE_ATTEMPTS_DONE_Q["2 merge attempts done?"]
+  end
+  subgraph runFullSuiteNext ["next diagram"]
+    direction TB
+    FIX_THE_CODEBASE_FOR_SUITE["FIX_THE_CODEBASE_FOR_SUITE"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+    MERGE_SUCCEEDED_EXIT["MERGE_SUCCEEDED_EXIT"]
+    REBASE_ONTO_TARGET_BRANCH["REBASE_ONTO_TARGET_BRANCH"]
+  end
+  runFullSuite ~~~ runFullSuiteNext
+
+  COMMIT_SUITE_FIX_IF_NEEDED --> RUN_FULL_SUITE
+  RUN_FULL_SUITE --> DO_ALL_TESTS_PASS_Q
+  DO_ALL_TESTS_PASS_Q -- "NO" --> ARE_2_SUITE_FIXES_DONE_Q
+  ARE_2_SUITE_FIXES_DONE_Q -- "NO<br/>pass the failing tests to the agent" --> FIX_THE_CODEBASE_FOR_SUITE
+  ARE_2_SUITE_FIXES_DONE_Q -- "YES<br/>suite-red" --> FAILURES_EXIT
+  DO_ALL_TESTS_PASS_Q -- "YES" --> DID_CHANGES_STAY_INSIDE_FENCE_Q
+  DID_CHANGES_STAY_INSIDE_FENCE_Q -- "NO<br/>fence-violation" --> FAILURES_EXIT
+  DID_CHANGES_STAY_INSIDE_FENCE_Q -- "YES" --> MERGE_WORKTREES
+  MERGE_WORKTREES --> READ_MERGE_PUBLICATION_STATE
+  READ_MERGE_PUBLICATION_STATE --> WHAT_IS_PUBLICATION_STATE_Q
+  WHAT_IS_PUBLICATION_STATE_Q -- "ALL LANDED" --> MERGE_SUCCEEDED_EXIT
+  WHAT_IS_PUBLICATION_STATE_Q -- "SOME LANDED<br/>partially-published" --> FAILURES_EXIT
+  WHAT_IS_PUBLICATION_STATE_Q -- "NONE LANDED" --> ARE_2_MERGE_ATTEMPTS_DONE_Q
+  ARE_2_MERGE_ATTEMPTS_DONE_Q -- "NO<br/>the target branch tip moved" --> REBASE_ONTO_TARGET_BRANCH
+  ARE_2_MERGE_ATTEMPTS_DONE_Q -- "YES<br/>merge-failed" --> FAILURES_EXIT
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class COMMIT_SUITE_FIX_IF_NEEDED,RUN_FULL_SUITE,DO_ALL_TESTS_PASS_Q,ARE_2_SUITE_FIXES_DONE_Q,DID_CHANGES_STAY_INSIDE_FENCE_Q,MERGE_WORKTREES,READ_MERGE_PUBLICATION_STATE,WHAT_IS_PUBLICATION_STATE_Q,ARE_2_MERGE_ATTEMPTS_DONE_Q script
+  class FIX_THE_CODEBASE_FOR_SUITE,FAILURES_EXIT,MERGE_SUCCEEDED_EXIT,REBASE_ONTO_TARGET_BRANCH next_diagram

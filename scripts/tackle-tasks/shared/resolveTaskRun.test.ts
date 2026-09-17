@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument } from "./resolveTaskRun.ts";
+import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument } from "./resolveTaskRun.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
@@ -114,6 +114,32 @@ test("test_parseStartingBlockArgument_returnsEmptyWhenNothingFollowsTheBracket",
     // Step: no closing bracket, or nothing after it, means no starting block was given.
     assert.equal(parseStartingBlockArgument("[1]"), "");
     assert.equal(parseStartingBlockArgument("1 2 3"), "");
+});
+
+test("test_parseStartingBlockArgument_skipsTheFastToken", () => {
+    // Step: "fast" picks the pipeline, so it is never read as the block to start from.
+    assert.equal(parseStartingBlockArgument("[1] fast"), "");
+    assert.equal(parseStartingBlockArgument("[1] fast IMPLEMENT_TASK"), "IMPLEMENT_TASK");
+});
+
+test("test_parseFastArgument_returnsTrueWhenTheWordFastFollowsTheTaskList", () => {
+    // Step: the word "fast" after the closing bracket picks the fast pipeline.
+    assert.equal(parseFastArgument("[1] fast"), true);
+    assert.equal(parseFastArgument("[1, 2] fast IMPLEMENT_TASK"), true);
+});
+
+test("test_parseFastArgument_returnsFalseWhenNoFastTokenIsGiven", () => {
+    // Step: every other argument shape keeps the default pipeline.
+    assert.equal(parseFastArgument("[1]"), false);
+    assert.equal(parseFastArgument("[1] IMPLEMENT_TASK"), false);
+    assert.equal(parseFastArgument("1 2 3"), false);
+});
+
+test("test_resolveTaskRun_reportsTheFastFlag", () => {
+    // Step: the resolver hands the fast choice on with the task numbers.
+    const root = makeProjectRoot([{ taskNumber: 1 }]);
+    assert.equal(resolveTaskRun("[1] fast", root).fast, true);
+    assert.equal(resolveTaskRun("[1]", root).fast, false);
 });
 
 test("test_resolveTaskRun_cliWorksWhenLaunchedFromAnUnrelatedWorkingDirectory", () => {

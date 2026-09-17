@@ -1,0 +1,34 @@
+flowchart TB
+%% Not an agent() entry. The hook walks in from a dashed MERGE_SUCCEEDED_EXIT block. The point of no return; order matters.
+
+  subgraph mergeSucceededExit ["Input: every layer landed"]
+    direction TB
+    MERGE_SUCCEEDED_EXIT["MERGE_SUCCEEDED_EXIT"]
+    RECORD_MERGE_COMMIT_HASHES["record the merge commit hashes to tasks.json"]
+    WRITE_EXIT_TYPE_COMPLETED["write exit type completed to tasks.json"]
+    RECORD_MODIFIED_FILES_SUCCESS["record the modified files to tasks.json"]
+    CLEAN_UP_WORKTREES["clean up worktrees, leases,<br/>persistence refs and the source lock"]
+    BUILD_CLOSURE_NOTE["build the closure note from the recorded run"]
+    MARK_TASK_INACTIVE_SUCCESS["mark the task inactive in tasks.json"]
+    ARCHIVE_TASK["move the task to completedTasks.json<br/>and update tasks blocked by it"]
+    REPORT_CLOSURE_NOTE["report the closure note"]
+    STOP["stop"]
+  end
+
+  MERGE_SUCCEEDED_EXIT --> RECORD_MERGE_COMMIT_HASHES
+  RECORD_MERGE_COMMIT_HASHES --> WRITE_EXIT_TYPE_COMPLETED
+  WRITE_EXIT_TYPE_COMPLETED --> RECORD_MODIFIED_FILES_SUCCESS
+  RECORD_MODIFIED_FILES_SUCCESS --> CLEAN_UP_WORKTREES
+  CLEAN_UP_WORKTREES --> BUILD_CLOSURE_NOTE
+  BUILD_CLOSURE_NOTE --> MARK_TASK_INACTIVE_SUCCESS
+  MARK_TASK_INACTIVE_SUCCESS --> ARCHIVE_TASK
+  ARCHIVE_TASK --> REPORT_CLOSURE_NOTE
+  REPORT_CLOSURE_NOTE --> STOP
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class MERGE_SUCCEEDED_EXIT,RECORD_MERGE_COMMIT_HASHES,WRITE_EXIT_TYPE_COMPLETED,RECORD_MODIFIED_FILES_SUCCESS,CLEAN_UP_WORKTREES,BUILD_CLOSURE_NOTE,MARK_TASK_INACTIVE_SUCCESS,ARCHIVE_TASK,REPORT_CLOSURE_NOTE script
+  class STOP output

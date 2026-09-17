@@ -1,0 +1,31 @@
+flowchart TB
+%% Not an agent() entry. The hook walks in from a dashed LOCK_SOURCE_REPO block. Every path ends at a dashed block.
+
+  subgraph lockSourceRepo ["Input: a committed, reviewed implementation"]
+    direction TB
+    LOCK_SOURCE_REPO["LOCK_SOURCE_REPO"]
+    WAS_LOCK_ACQUIRED_Q["was the lock acquired?"]
+    HAS_LOCK_WAIT_DEADLINE_PASSED_Q["has the lock wait deadline passed?"]
+    WAIT_FOR_LOCK["wait 5s"]
+  end
+  subgraph lockSourceRepoNext ["next diagram"]
+    direction TB
+    REBASE_ONTO_TARGET_BRANCH["REBASE_ONTO_TARGET_BRANCH"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+  end
+  lockSourceRepo ~~~ lockSourceRepoNext
+
+  LOCK_SOURCE_REPO --> WAS_LOCK_ACQUIRED_Q
+  WAS_LOCK_ACQUIRED_Q -- "YES" --> REBASE_ONTO_TARGET_BRANCH
+  WAS_LOCK_ACQUIRED_Q -- "NO" --> HAS_LOCK_WAIT_DEADLINE_PASSED_Q
+  HAS_LOCK_WAIT_DEADLINE_PASSED_Q -- "NO" --> WAIT_FOR_LOCK
+  HAS_LOCK_WAIT_DEADLINE_PASSED_Q -- "YES<br/>run-failed" --> FAILURES_EXIT
+  WAIT_FOR_LOCK --> LOCK_SOURCE_REPO
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class LOCK_SOURCE_REPO,WAS_LOCK_ACQUIRED_Q,HAS_LOCK_WAIT_DEADLINE_PASSED_Q,WAIT_FOR_LOCK script
+  class REBASE_ONTO_TARGET_BRANCH,FAILURES_EXIT next_diagram

@@ -1,0 +1,30 @@
+flowchart TB
+%% Not an agent() entry. The hook walks in from a dashed REBASE_ONTO_TARGET_BRANCH block. Every path ends at an orange block or a dashed block.
+
+  subgraph rebase ["Input: the source repo lock is held"]
+    direction TB
+    REBASE_ONTO_TARGET_BRANCH["REBASE_ONTO_TARGET_BRANCH"]
+    DID_REBASE_REPORT_CONFLICTS_Q["did the rebase report conflicts?"]
+    ARE_2_CONFLICT_FIXES_DONE_Q["2 conflict fixes done?"]
+  end
+  subgraph rebaseNext ["next diagram"]
+    direction TB
+    FIX_CONFLICTS["FIX_CONFLICTS"]
+    RUN_FULL_SUITE["RUN_FULL_SUITE"]
+    FAILURES_EXIT["FAILURES_EXIT"]
+  end
+  rebase ~~~ rebaseNext
+
+  REBASE_ONTO_TARGET_BRANCH --> DID_REBASE_REPORT_CONFLICTS_Q
+  DID_REBASE_REPORT_CONFLICTS_Q -- "NO" --> RUN_FULL_SUITE
+  DID_REBASE_REPORT_CONFLICTS_Q -- "YES" --> ARE_2_CONFLICT_FIXES_DONE_Q
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "NO<br/>pass the stopped layer and<br/>its conflicted files to the agent" --> FIX_CONFLICTS
+  ARE_2_CONFLICT_FIXES_DONE_Q -- "YES<br/>rebase-stuck" --> FAILURES_EXIT
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class REBASE_ONTO_TARGET_BRANCH,DID_REBASE_REPORT_CONFLICTS_Q,ARE_2_CONFLICT_FIXES_DONE_Q script
+  class FIX_CONFLICTS,RUN_FULL_SUITE,FAILURES_EXIT next_diagram

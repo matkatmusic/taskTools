@@ -1,0 +1,22 @@
+flowchart TB
+%% One orange block. The hook walks in from a dashed FIX_CONFLICTS block, prints the prompt, and stops.
+
+  subgraph fixConflicts ["Input: a rebase stopped on conflicts"]
+    direction TB
+    FIX_CONFLICTS["FIX_CONFLICTS"]
+  end
+  subgraph fixConflictsNext ["next diagram"]
+    direction TB
+    COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED["COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED"]
+  end
+  fixConflicts ~~~ fixConflictsNext
+
+  FIX_CONFLICTS --> COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED
+
+  classDef script fill:#2f7d46,stroke:#1e5c31,color:#ffffff
+  classDef returns_a_prompt fill:#e07b39,stroke:#a8541f,color:#1a1a1a
+  classDef fail fill:red,stroke:#254a70,color:#ffffff
+  classDef output fill:#3b6ea5,stroke:#254a70,color:#ffffff
+  classDef next_diagram fill:#ffffff,stroke:#3b6ea5,stroke-width:2px,stroke-dasharray:6 4,color:#1a1a1a
+  class FIX_CONFLICTS returns_a_prompt
+  class COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED next_diagram
