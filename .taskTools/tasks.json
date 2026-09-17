@@ -512,5 +512,48 @@
     "hasTests": true,
     "tests": "From a scratch repo with --plugin-dir pointing at mermaid-editor, /create-mermaid writes one .mmd per tracked .ts file; the moved test file passes in the new repo.",
     "difficulty": 5
+  },
+  {
+    "taskNumber": 212,
+    "version": "3a87cec594c65b88e2bff82309aaa0f303b18ee0",
+    "title": "Add the find-bad-nodes skill to the mermaid-editor plugin",
+    "userDescription": "Add a 'find-bad-nodes' skill to the ~/Programming/relationship-mermaid/mermaid-editor plugin: it finds and flags diagram nodes in a .mmd file that don't follow the naming convention. The naming convention is whatever node names the create-mermaid generator (mermaid.ts, moved there by the sibling task 211) emits; do not hand-write a second rule. The SKILL.md contains no prose, only a dynamic-injection command that runs a script; the script does all the work. It flags only; it does not fix nodes. [split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md\"]`.",
+    "chainGoal": [
+      "- Parent task 210: the mermaid-editor repo becomes a plugin shipping create-mermaid, find-bad-nodes, and reflow-diagram; task 211 moves create-mermaid, this task adds find-bad-nodes, its sibling adds reflow-diagram"
+    ],
+    "goal": [
+      "- `/find-bad-nodes <file.mmd>` prints each bad node with its file and line; a clean diagram prints nothing and exits 0",
+      "- The rule is the same one mermaid.ts emits; no second naming rule is written by hand",
+      "- the skill file contains no prose, and only contains a Dynamic Injection command to run a script file, which is what does all the work."
+    ],
+    "notInScope": [
+      "- Fixing or renaming the flagged nodes: this skill flags only",
+      "- reflow-diagram: owned by the sibling child task that adds that skill",
+      "- Moving the generator into the plugin: owned by task 211"
+    ],
+    "problemSolvedByTask": "Hand-edited diagrams break the tooling that reads node names",
+    "description": "mermaid-editor (~/Programming/relationship-mermaid/mermaid-editor) is a git submodule currently holding only LICENSE; neither .claude-plugin/plugin.json nor any skills/ directory exists yet there — both are created by sibling task 211, which this task depends on. The naming convention to check comes from scripts/mermaid/mermaid.ts (moved to scripts/create-mermaid/mermaid.ts by task 211): assignFinalId/computeBaseId produce statement-box ids as B_<tokens>, decision diamonds as Q_<tokens> with branches Q_CHOICE_<tokens>_Y/_N, function/method entry boxes as B_<functionName> or B_<className>_<methodName>, and the file-root box as B_<sanitizedRelativePath>. The SKILL.md holds only a dynamic-injection command that runs scripts/find-bad-nodes/findBadNodes.ts; that script imports the id rules from create-mermaid's generator rather than hand-writing a duplicate regex, and a test at tests/find-bad-nodes.test.ts covers it. taskTools' own root .claude-plugin/plugin.json shows plugins auto-discover skills by directory name (no explicit skill listing), so the plugin.json edit here is a small version/keyword update, not a registration list. The skill only flags nodes whose ids don't match the convention; it must not modify the .mmd file.",
+    "modifiableFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/find-bad-nodes/findBadNodes.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/find-bad-nodes.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Run /find-bad-nodes on a fixture .mmd with one node that breaks the generator's naming; output names that node and nothing else.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 211,
+        "reason": "find-bad-nodes must derive the naming convention from scripts/create-mermaid/mermaid.ts at its new mermaid-editor location, which task 211 creates; the file does not exist there yet."
+      }
+    ]
   }
 ]
