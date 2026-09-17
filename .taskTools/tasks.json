@@ -190,8 +190,14 @@
       "*"
     ],
     "blockedBy": [
-      { "taskNumber": 205, "reason": "fast blocks reuse existing block logic via the steps.json next-override reader added here" },
-      { "taskNumber": 207, "reason": "fast blocks reuse existing block logic via the steps.json translator reader added here" }
+      {
+        "taskNumber": 205,
+        "reason": "fast blocks reuse existing block logic via the steps.json next-override reader added here"
+      },
+      {
+        "taskNumber": 207,
+        "reason": "fast blocks reuse existing block logic via the steps.json translator reader added here"
+      }
     ],
     "createsFiles": [
       "diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd",
@@ -251,48 +257,45 @@
     "hasTests": true,
     "tests": "Real fixture scripts A.ts/B.ts/C.ts, each with a template.json declaring its input/output shape. A takes {a,b} outputs {sum,a,b}; B takes {sum,a,b} outputs {a,expected}; C takes {a,expected} outputs a boolean. Each script hard-codes its own next (A->B, B->C, C->end). steps.json entry shape: { blockName, script, nextBlock, nextScript? }, resolved as nextScript = entry.nextScript ?? byBlockName[nextBlock].script. TEST 1: empty steps.json -> run-step runs A(1,3) -> B(4,1,3) -> C(1,1) by hard-coded next, result true. TEST 2: steps.json overrides A.nextBlock=B (no nextScript) -> same run, result true. TEST 3: steps.json overrides A.nextBlock=B and B.nextBlock=C -> same run, result true. TEST 4: steps.json overrides A.nextBlock=C (skip B), no translator -> the forwarded {sum,a,b} lacks C's required 'expected' key, so run-step fails loud on that overridden hop: result.ok === false with a shape-mismatch error. The per-hop input check runs on EVERY hop; task 206 makes the 5 currently-under-declared existing hops clean first so the baseline stays green. Tests 5-6 (translator, and detect-a-bad-translator) are owned by child 2.",
     "difficulty": 6,
-    "blockedBy": [
-      {
-        "taskNumber": 206,
-        "reason": "task 206 makes the 5 under-declared existing hops clean subsets, so turning on every-hop input validation keeps npm run test:baseline green"
-      }
-    ]
-  },
-  {
-    "taskNumber": 206,
-    "version": "eb0f019f87b3b8b86ac07fe2627cca7674298b33",
-    "title": "Make 5 codex/plan hops pass subset validation before per-hop input checks land",
-    "userDescription": "Prerequisite for the run-step every-hop input guard (task 205). A static subset check of the real pipeline (next block's template.input must be a subset, by key+kind, of the producing block's template.output) fails on exactly 5 hops, all into DID_*_SUCCEED_Q decision blocks: CODEX_REVIEWS_PLAN -> DID_CODEX_REVIEW_SUCCEED_Q, CODEX_REVIEW_FALLBACK_FABLE -> DID_FABLE_REVIEW_SUCCEED_Q, CODEX_REVIEWS_TESTS -> DID_CODEX_TEST_REVIEW_SUCCEED_Q, CODEX_TEST_REVIEW_FALLBACK_FABLE -> DID_FABLE_TEST_REVIEW_SUCCEED_Q, PLAN_THE_TASK_CODEX -> DID_CODEX_PLAN_SUCCEED_Q. Each target input declares box, scriptSignal, taskNumber that the source output template does not declare. Determine which keys the source block actually emits at runtime, then make each hop consistent: declare the emitted keys on the source's template.output, or drop the unneeded keys from the target's template.input. Once every hop is a clean subset, task 205 can turn on per-hop input validation without reddening npm run test:baseline.",
-    "goal": [
-      "- The static subset check (next.template.input is a subset, by key and kind, of prev.template.output) passes on all 84 hops of the real diagram-steps.json, up from 79",
-      "- npm run test:baseline stays green",
-      "- Each of the 5 named hops is consistent: the keys the source block actually emits are what the target block declares it needs (box, scriptSignal, taskNumber accounted for)"
-    ],
-    "notInScope": [
-      "- Adding the per-hop input validation itself to runStepHook.ts is owned by task 205",
-      "- The steps.json next override, translator, and preamble proof of concept are owned by task 205 and the task-203 split children"
-    ],
-    "problemSolvedByTask": "The run-step hook is about to validate every block's input against the next block's declared template.input (task 205). Five real pipeline hops declare input keys (box, scriptSignal, taskNumber) that the producing block's template.output does not declare, so turning on per-hop validation would fail them and redden the committed test baseline. The templates must be made consistent first.",
-    "description": "Static adjacency check (mirroring getTemplateShapeMismatches in scripts/shared/templateShape.ts, which is subset-by-key-and-kind, extra keys ignored) finds 5 of 84 real hops where the DID_*_SUCCEED_Q target's template.input requires box/scriptSignal/taskNumber that the source template.output does not declare. Inspect the source blocks' actual emitted output to decide, per hop, whether to add the keys to the source's template.output (if the block emits them) or remove them from the target's template.input (if the decision block does not need them). The 10 involved template.json files are this task's fence.",
-    "modifiableFiles": [
-      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEWS_PLAN.template.json",
-      "scripts/tackle-tasks/codexReviewsPlan/CODEX_REVIEW_FALLBACK_FABLE.template.json",
-      "scripts/tackle-tasks/codexReviewsPlan/DID_CODEX_REVIEW_SUCCEED_Q.template.json",
-      "scripts/tackle-tasks/codexReviewsPlan/DID_FABLE_REVIEW_SUCCEED_Q.template.json",
-      "scripts/tackle-tasks/codexReviewsTests/CODEX_REVIEWS_TESTS.template.json",
-      "scripts/tackle-tasks/codexReviewsTests/CODEX_TEST_REVIEW_FALLBACK_FABLE.template.json",
-      "scripts/tackle-tasks/codexReviewsTests/DID_CODEX_TEST_REVIEW_SUCCEED_Q.template.json",
-      "scripts/tackle-tasks/codexReviewsTests/DID_FABLE_TEST_REVIEW_SUCCEED_Q.template.json",
-      "scripts/tackle-tasks/planTheTask/PLAN_THE_TASK_CODEX.template.json",
-      "scripts/tackle-tasks/planTheTask/DID_CODEX_PLAN_SUCCEED_Q.template.json"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "A test that walks every hop of the real scripts/tackle-tasks/diagram-steps.json and asserts next.template.input is a subset (by key and kind) of prev.template.output, using getTemplateShapeMismatches; it currently fails on 5 hops and must pass on all 84. npm run test:baseline stays green.",
-    "difficulty": 4
+    "run": {
+      "active": false,
+      "worktree": "/var/folders/fy/wg2tzrv957sg2vqjcvdkdzvm0000gn/T/taskTools-wt/taskTools-1f205b9e/task-205",
+      "leaseRunId": "b8d3ce5d-c685-4eb9-a3b3-5df06c357cf8",
+      "history": [
+        {
+          "runId": "b8d3ce5d-c685-4eb9-a3b3-5df06c357cf8",
+          "startedAt": "2026-09-16T15:50:17-07:00",
+          "endedAt": "2026-09-16T16:49:12-07:00",
+          "exitType": "plan-scrapped",
+          "exitNote": "codex did not accept the plan in two reviews",
+          "modifiedFiles": [],
+          "commits": [],
+          "implementationNotesFile": null,
+          "taskTests": null,
+          "fullSuite": null,
+          "stepResults": [
+            {
+              "stepId": "init-submodules",
+              "script": "initTaskSubmodules",
+              "result": {
+                "initialized": false
+              }
+            }
+          ],
+          "attempts": {
+            "planReview": 2
+          },
+          "countedPasses": {
+            "planReview": [
+              "9904eb70-59e0-4481-88be-591e454d4447",
+              "ba50ce15-1a00-45fe-801e-2a18c558b5a2"
+            ]
+          },
+          "tailCursor": null
+        }
+      ]
+    },
+    "codexReviewNotes": "[implement-the-next-block-override-and-per-hop-input-guard-in-run-step-hook] Replace the preserved empty-successor guard with `if (step.next.length === 0 && step.nextBlock === undefined)`, retaining its existing failure body. Add a fixture case whose current node has `next: []` and a valid `nextBlock`, and assert the override reaches that target.\n\nDurable because: The legacy missing-route error remains for nodes without an override, while the declarative override is always evaluated when present.\n\n[add-failing-tests-for-next-block-override-and-per-hop-input-guard] Change one successful arithmetic override test so A emits hard-coded `next: \"C\"` while `A.nextBlock` is `\"B\"`; make A's output-template `next` match that emitted value, then assert the successful walk is A→B→C and returns true. Update the RED-baseline text to say only the tests whose assertions depend on new behavior fail before the implementation.\n\nDurable because: The test now fails if the walk consults the reused script's emitted route instead of `steps.json`, while preserving a true no-override regression test."
   },
   {
     "taskNumber": 207,
@@ -424,5 +427,48 @@
         "reason": "edits the same preamble entry in generateSteps.ts / diagram-steps.json that child 3 adds the nextBlock override to; must land after it to avoid clobbering"
       }
     ]
+  },
+  {
+    "taskNumber": 210,
+    "version": "7f329db53ce1bea22e097420de0ba2d89f2571a5",
+    "title": "Move the mermaid skill into the mermaid-editor plugin as create-mermaid, with find-bad-nodes and reflow-diagram",
+    "userDescription": "move the 'mermaid' skill into the ~/Programming/relationship-mermaid/mermaid-editor submodule repo, rename skill to 'create-mermaid', make available as a plugin with other skills (find-bad-nodes: finds and flags diagram nodes that don't follow the naming convention, reflow-diagram: restructures the diagram file so declarations are at the top, node links are afterwards, at most 2 nodes per link line, decision nodes and their choices are grouped together for easy readability)",
+    "goal": [
+      "- `claude --plugin-dir ~/Programming/relationship-mermaid/mermaid-editor` lists the skills create-mermaid, find-bad-nodes, and reflow-diagram",
+      "- taskTools no longer ships a mermaid skill: skills/mermaid and scripts/mermaid are retired from taskTools and the taskTools suite still passes",
+      "- The mermaid editor repo includes the ability to generate mermaid diagrams from a codebase, via this migrated skill/plugin"
+    ],
+    "notInScope": [
+      "- Changing the diagrams the generator emits: the generator's output shape stays the same, only its home moves",
+      "- Editing the existing tackle-tasks diagrams: no .mmd under diagrams/ is reflowed as part of this task"
+    ],
+    "problemSolvedByTask": "The mermaid tools belong with the mermaid editor, not the task tool",
+    "description": "taskTools' only skill literally named 'mermaid' is skills/mermaid/SKILL.md, a thin wrapper (allowed-tools: Bash(node *)) that shells out to scripts/mermaid/mermaid.ts, a TypeScript-compiler-API AST walk (634 lines) that scans every tracked .ts file and writes one .taskTools/diagrams/<path>.mmd flowchart per file, covered by tests/mermaid.test.ts (631 lines). The destination, ~/Programming/relationship-mermaid/mermaid-editor, is its own git repo (github.com/matkatmusic/mermaid-editor) checked out as a submodule of relationship-mermaid; on disk it currently holds only a LICENSE file (confirmed via ls -la), so every plugin path under it is new. taskTools' own .claude-plugin/plugin.json plus skills/<name>/SKILL.md layout is the template to copy for turning mermaid-editor into a plugin exposing three skills: create-mermaid (the renamed, relocated mermaid skill with its script and test), find-bad-nodes (new: flag .mmd node ids that break the diagram's naming convention), and reflow-diagram (new: rewrite a .mmd file so declarations come first, then link lines with at most 2 nodes each, with decision nodes grouped together with their choices). Per this project's comment-out-don't-delete convention, retiring the taskTools copies means commenting skills/mermaid/SKILL.md, scripts/mermaid/mermaid.ts, and tests/mermaid.test.ts out rather than removing them. The naming convention find-bad-nodes checks is whatever node names scripts/mermaid/mermaid.ts emits today; that generator is the rule. Because mermaid-editor is not a submodule of taskTools, the implementing agent must operate on it via its own absolute path rather than the taskTools worktree.",
+    "modifiableFiles": [
+      "skills/mermaid/SKILL.md",
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "From a scratch repo with --plugin-dir pointing at the new plugin, /create-mermaid writes one .mmd per file, /find-bad-nodes flags a bad node, /reflow-diagram reorders a fixture and the output matches a golden file.",
+    "difficulty": 8
   }
 ]
