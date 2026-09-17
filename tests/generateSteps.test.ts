@@ -361,9 +361,24 @@ test("test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock", () => 
     assert.equal(preambleEntry.nextBlock, "IS_TASK_BLOCKED_Q");
 });
 
-// A synthetic diagram reusing the same file name and box name, outside the repo's own diagram folder, must not pick up the override.
+// A synthetic diagram with the same file and box name, outside the default folder, skips the nextBlock override.
 test("test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder", () => {
     const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
     assert.equal(preambleEntry.nextBlock, undefined);
+});
+
+// The nextBlock override's translator is identity, generated only for the repo's own default diagram folder.
+test("test_generateSteps_addsATranslatorOverrideOnThePreamblesFirstBlock", () => {
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-translator-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+    assert.equal(preambleEntry.translator, "scripts/tackle-tasks/shared/identityTranslator.ts");
+});
+
+// A synthetic diagram with the same file and box name, outside the default folder, skips the translator override.
+test("test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramFolder", () => {
+    const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
+    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+    assert.equal(preambleEntry.translator, undefined);
 });

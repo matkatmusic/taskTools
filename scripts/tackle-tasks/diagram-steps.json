@@ -602,6 +602,7 @@
             "producesPrompt": false,
             "mutating": true,
             "nextBlock": "IS_TASK_BLOCKED_Q",
+            "translator": "scripts/tackle-tasks/shared/identityTranslator.ts",
             "next": [
                 "pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT",
                 "IS_TASK_BLOCKED_Q"
