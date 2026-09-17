@@ -429,49 +429,6 @@
     ]
   },
   {
-    "taskNumber": 210,
-    "version": "7f329db53ce1bea22e097420de0ba2d89f2571a5",
-    "title": "Move the mermaid skill into the mermaid-editor plugin as create-mermaid, with find-bad-nodes and reflow-diagram",
-    "userDescription": "move the 'mermaid' skill into the ~/Programming/relationship-mermaid/mermaid-editor submodule repo, rename skill to 'create-mermaid', make available as a plugin with other skills (find-bad-nodes: finds and flags diagram nodes that don't follow the naming convention, reflow-diagram: restructures the diagram file so declarations are at the top, node links are afterwards, at most 2 nodes per link line, decision nodes and their choices are grouped together for easy readability)",
-    "goal": [
-      "- `claude --plugin-dir ~/Programming/relationship-mermaid/mermaid-editor` lists the skills create-mermaid, find-bad-nodes, and reflow-diagram",
-      "- taskTools no longer ships a mermaid skill: skills/mermaid and scripts/mermaid are retired from taskTools and the taskTools suite still passes",
-      "- The mermaid editor repo includes the ability to generate mermaid diagrams from a codebase, via this migrated skill/plugin"
-    ],
-    "notInScope": [
-      "- Changing the diagrams the generator emits: the generator's output shape stays the same, only its home moves",
-      "- Editing the existing tackle-tasks diagrams: no .mmd under diagrams/ is reflowed as part of this task"
-    ],
-    "problemSolvedByTask": "The mermaid tools belong with the mermaid editor, not the task tool",
-    "description": "taskTools' only skill literally named 'mermaid' is skills/mermaid/SKILL.md, a thin wrapper (allowed-tools: Bash(node *)) that shells out to scripts/mermaid/mermaid.ts, a TypeScript-compiler-API AST walk (634 lines) that scans every tracked .ts file and writes one .taskTools/diagrams/<path>.mmd flowchart per file, covered by tests/mermaid.test.ts (631 lines). The destination, ~/Programming/relationship-mermaid/mermaid-editor, is its own git repo (github.com/matkatmusic/mermaid-editor) checked out as a submodule of relationship-mermaid; on disk it currently holds only a LICENSE file (confirmed via ls -la), so every plugin path under it is new. taskTools' own .claude-plugin/plugin.json plus skills/<name>/SKILL.md layout is the template to copy for turning mermaid-editor into a plugin exposing three skills: create-mermaid (the renamed, relocated mermaid skill with its script and test), find-bad-nodes (new: flag .mmd node ids that break the diagram's naming convention), and reflow-diagram (new: rewrite a .mmd file so declarations come first, then link lines with at most 2 nodes each, with decision nodes grouped together with their choices). Per this project's comment-out-don't-delete convention, retiring the taskTools copies means commenting skills/mermaid/SKILL.md, scripts/mermaid/mermaid.ts, and tests/mermaid.test.ts out rather than removing them. The naming convention find-bad-nodes checks is whatever node names scripts/mermaid/mermaid.ts emits today; that generator is the rule. Because mermaid-editor is not a submodule of taskTools, the implementing agent must operate on it via its own absolute path rather than the taskTools worktree.",
-    "modifiableFiles": [
-      "skills/mermaid/SKILL.md",
-      "scripts/mermaid/mermaid.ts",
-      "tests/mermaid.test.ts",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
-    ],
-    "readOnlyFiles": [
-      "*"
-    ],
-    "createsFiles": [
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/find-bad-nodes/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
-      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
-    ],
-    "schemaVersion": "1.0.1",
-    "hasTests": true,
-    "tests": "From a scratch repo with --plugin-dir pointing at the new plugin, /create-mermaid writes one .mmd per file, /find-bad-nodes flags a bad node, /reflow-diagram reorders a fixture and the output matches a golden file.",
-    "difficulty": 8
-  },
-  {
     "taskNumber": 211,
     "version": "d6b1777578ce93cc3a1bb04a5d395dc1d7800d18",
     "title": "Move the mermaid skill into the mermaid-editor plugin as create-mermaid",
@@ -598,5 +555,32 @@
         "reason": "Task 211 creates /Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json for the mermaid-editor plugin; this task edits that same plugin.json and must land after 211 creates it, to avoid clobbering."
       }
     ]
+  },
+  {
+    "taskNumber": 214,
+    "version": "2bccbae1756810e4759b9621e91b66ff3e362cb9",
+    "title": "Fix heldLockRepo held-lock run-step tests crashing in the FAILURES_EXIT tail",
+    "userDescription": "heldLockRepo held-lock run-step tests crash inside the FAILURES_EXIT tail. The two tests test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit and test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill (tests/runStepHook.test.ts ~line 1965/1980) are currently recorded as known-failing. Root cause: task 205 made the per-hop input-contract check run with full context on every hop; a FIRST-hop contract failure that carries a real worktree (the held-lock packet omits box/scriptSignal and sets worktree=projectRoot) now routes into the real FAILURES_EXIT tail, and writeTailCursor(taskNumber) throws \"task 1 not found\" because heldLockRepo() (tests/runStepHook.test.ts ~line 1951) creates no tasks.json. This is a latent bug 205 surfaced, not new logic. Two candidate fixes, pick one when planning: (a) seed heldLockRepo() with a tasks.json + run.history record for task 1, mirroring test_runStepHook_routesANonZeroExitHardFailureIntoTheFailuresExitTail at tests/runStepHook.test.ts:1344; or (b) make a first-hop contract failure return a context-free buildFailure (as the retired start-input check did) so a bad start invocation never spins up the failuresExit tail — reads more correct because a malformed start invocation has no run to fail. Acceptance: both tests pass and are removed from .taskTools/knownFailingTests.json; npm run test:baseline green. modifiableFiles: scripts/hooks/runStepHook.ts, tests/runStepHook.test.ts. difficulty ~3.",
+    "goal": [
+      "- test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit and test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill both pass",
+      "- both tests are removed from .taskTools/knownFailingTests.json",
+      "- npm run test:baseline reports baseline ok"
+    ],
+    "notInScope": [
+      "- Changing task 205's per-hop input-contract check for later (non-first) hops is not in scope; task 205 owns that behavior"
+    ],
+    "problemSolvedByTask": "Task 205's per-hop input-contract check surfaced a latent crash: a first-hop contract failure that carries a real worktree now enters the real FAILURES_EXIT tail, and writeTailCursor throws 'task 1 not found' because heldLockRepo() creates no tasks.json. The two held-lock tests are masked as known-failing until this is fixed.",
+    "description": "In runStepHook.ts the per-hop input-contract check (added by task 205, inside the walk loop) calls buildFailure with full context { step, packet, input, startedFromPacketFile } on every hop. On the walk's first hop this replaced the retired start-input check, which called buildFailure with no context (a side-effect-free early return). When the first-hop packet carries a real worktree, the full-context failure now routes into the real FAILURES_EXIT tail; writeTailCursor(taskNumber) then throws 'task 1 not found' because the heldLockRepo() fixture git-inits a repo with no tasks.json. Fix by either seeding heldLockRepo() with a tasks.json + run.history for the packet's taskNumber (mirroring the fixture at tests/runStepHook.test.ts:1344), or by making a first-hop (boxesRun.length === 0) contract failure return a context-free buildFailure so a malformed start invocation never enters the failuresExit tail.",
+    "modifiableFiles": [
+      "scripts/hooks/runStepHook.ts",
+      "tests/runStepHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "The two held-lock tests test_runStepHook_reportsAHeldLockInsteadOfHangingOnUserPromptSubmit and test_runStepHook_reportsAHeldLockInsteadOfHangingOnPostToolUseSkill in tests/runStepHook.test.ts must pass (ok:false returned quickly, no crash) and be removed from .taskTools/knownFailingTests.json.",
+    "difficulty": 3
   }
 ]
