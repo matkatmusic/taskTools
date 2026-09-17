@@ -2081,8 +2081,8 @@ for (const entry of REAL_FAILURES_EXIT_STEPS) {
     });
 }
 
-// Real A/B/C fixture: A(a,b)->{sum,a,b}, B(sum,a,b)->{a,expected}, C(a,expected)->boolean; each hard-codes its own next.  nextScript is never set here: resolving a translator via nextScript is task 207's job, not this one's.
-function arithmeticConfig(overrides: { A?: { nextBlock: string }; B?: { nextBlock: string } } = {}) {
+// Real A/B/C fixture: A(a,b)->{sum,a,b}, B(sum,a,b)->{a,expected}, C(a,expected)->boolean; each hard-codes its own next.  translator is never set here: resolving a translator is task 207's job, not this one's.
+function arithmeticConfig(overrides: { A?: { nextBlock: string; translator?: string }; B?: { nextBlock: string; translator?: string } } = {}) {
     const folder = mkdtempSync(join(tmpdir(), "run-step-arithmetic-"));
     const scriptA = join(folder, "A.ts");
     writeFileSync(scriptA, [
@@ -2210,4 +2210,50 @@ test("test_runStepHook_emptyNextGuardDoesNotSwallowAValidNextBlockOverride", () 
     const { result } = runHook("/run-step A", configFile);
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.deepEqual(result.ran, ["one.mmd::A", "one.mmd::B"]);
+});
+
+// TEST 5: steps.json overrides A.nextBlock=C AND names a faithful A-to-C translator; run-step reshapes A's {sum,a,b} output into C's {a,expected} input.
+test("test_runStepHook_runsTheOverriddenHopsTranslatorToReshapeThePayload", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
+    const translatorScript = join(folder, "translate.ts");
+    writeFileSync(translatorScript, [
+        'const input = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ a: input.sum - input.b, expected: input.a }));',
+    ].join("\n"));
+    const configFile = arithmeticConfig({ A: { nextBlock: "C", translator: translatorScript } });
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A", "arithmetic.mmd::C"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, true);
+});
+
+// TEST 6a: a right-shaped translator that returns the wrong value proves C consumed the translated payload, not A's own output.
+test("test_runStepHook_aTranslatorThatReturnsTheWrongValueYieldsTheWrongArithmeticResult", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
+    const translatorScript = join(folder, "translate-wrong-value.ts");
+    writeFileSync(translatorScript, [
+        'const input = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ a: input.sum - input.b, expected: input.a + 1 }));',
+    ].join("\n"));
+    const configFile = arithmeticConfig({ A: { nextBlock: "C", translator: translatorScript } });
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A", "arithmetic.mmd::C"]);
+    assert.equal(JSON.parse(readFileSync(result.outcome.payload, "utf8")).result, false);
+});
+
+// TEST 6b: a translator that drops a required key fails loud on that hop, via the same per-hop input guard child 1 added.
+test("test_runStepHook_aTranslatorThatReturnsTheWrongShapeFailsLoudOnThatHop", () => {
+    const folder = mkdtempSync(join(tmpdir(), "run-step-translator-"));
+    const translatorScript = join(folder, "translate-wrong-shape.ts");
+    writeFileSync(translatorScript, [
+        'const input = JSON.parse(process.argv[2] ?? "{}");',
+        'console.log(JSON.stringify({ a: input.sum - input.b }));',
+    ].join("\n"));
+    const configFile = arithmeticConfig({ A: { nextBlock: "C", translator: translatorScript } });
+    const { result } = runHook(`/run-step A {"a":1,"b":3}`, configFile);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.ran, ["arithmetic.mmd::A"]);
+    assert.match(result.errors[0], /arithmetic\.mmd::C input breaks its contract/);
+    assert.match(result.errors[1], /expected is missing/);
 });
