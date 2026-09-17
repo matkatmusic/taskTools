@@ -352,3 +352,18 @@ test("test_generateSteps_theCommittedStepsJsonIsUpToDate", () => {
     generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
     assert.equal(readFileSync(tempConfigPath, "utf8"), readFileSync(committedStepsJsonPath, "utf8"));
 });
+
+// The override is keyed by the full diagram-entry identifier, generated only for the repo's own default diagram folder.
+test("test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock", () => {
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-next-block-")), "steps.json");
+    const config = generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false);
+    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+    assert.equal(preambleEntry.nextBlock, "IS_TASK_BLOCKED_Q");
+});
+
+// A synthetic diagram reusing the same file name and box name, outside the repo's own diagram folder, must not pick up the override.
+test("test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder", () => {
+    const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
+    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+    assert.equal(preambleEntry.nextBlock, undefined);
+});
