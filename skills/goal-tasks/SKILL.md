@@ -5,7 +5,7 @@ argument-hint: "<project goal>"
 allowed-tools: Bash(git add *)
 ---
 
-Standing rule for every step below: if the user is vague or unsure, use AskUserQuestion to fill specific gaps, or `/grill-me` for open-ended direction-setting.
+Standing rule for every step below: if the user is vague or unsure, use AskUserQuestion to fill specific gaps, or `/grilling` for open-ended direction-setting.
 
 1. Interview the user to find the real goal of this project.
 
