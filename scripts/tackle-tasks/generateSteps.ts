@@ -6,6 +6,11 @@ import { AGENT_ANSWER_TEMPLATE } from "../shared/contracts.ts";
 
 const PROJECT_ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const REGENERATE_DELAY_MS = 50;
+// The one override this POC emits: the preamble's first block, only for the repository's own default pipeline.
+const DEFAULT_DIAGRAM_FOLDER = join(PROJECT_ROOT, "diagrams/tackle-tasks");
+const NEXT_BLOCK_OVERRIDES: Record<string, string> = {
+    "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "IS_TASK_BLOCKED_Q",
+};
 
 // The one folder under scripts/tackle-tasks/ that owns each block's script: the diagram the block belongs to.
 const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
@@ -60,7 +65,7 @@ const BLOCK_OWNER_FOLDER: Record<string, string> = Object.fromEntries(
 
 // next holds bare box ids for same-diagram arrows and "other.mmd::BOX" when the arrow crosses into another diagram.
 export type AgentOptions = { model: string; effort: string; agentType?: string };
-export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; agent?: AgentOptions; next: string[] };
+export type StepConfigEntry = { box: string; script: string; template: string; producesPrompt: boolean; mutating?: boolean; nextBlock?: string; agent?: AgentOptions; next: string[] };
 // Keyed by diagram file name; two diagrams naming the same box share its script but keep separate entries.
 export type StepConfig = Record<string, StepConfigEntry[]>;
 export type DiagramEdges = { boxes: string[]; next: Record<string, string[]> };
@@ -359,12 +364,14 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
                 newTemplatePaths.add(relative(PROJECT_ROOT, templatePath));
             }
             const mutating = mutatingByStepKey[`${diagramFile}::${box}`];
+            const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
             entries.push({
                 box,
                 script: relative(PROJECT_ROOT, scriptPath),
                 template: relative(PROJECT_ROOT, templatePath),
                 producesPrompt,
                 ...(mutating ? { mutating } : {}),
+                ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
                 next: remappedNext[box] ?? [],
             });
         }
