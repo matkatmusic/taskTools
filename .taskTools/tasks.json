@@ -470,5 +470,47 @@
     "hasTests": true,
     "tests": "From a scratch repo with --plugin-dir pointing at the new plugin, /create-mermaid writes one .mmd per file, /find-bad-nodes flags a bad node, /reflow-diagram reorders a fixture and the output matches a golden file.",
     "difficulty": 8
+  },
+  {
+    "taskNumber": 211,
+    "version": "d6b1777578ce93cc3a1bb04a5d395dc1d7800d18",
+    "title": "Move the mermaid skill into the mermaid-editor plugin as create-mermaid",
+    "userDescription": "Move the taskTools 'mermaid' skill into the ~/Programming/relationship-mermaid/mermaid-editor repo as a plugin skill named 'create-mermaid': create .claude-plugin/plugin.json there, move scripts/mermaid/mermaid.ts and tests/mermaid.test.ts across, rename the skill, and retire the taskTools copies by commenting them out. Naming convention stays whatever mermaid.ts emits today. [split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"skills/mermaid/SKILL.md\",\"scripts/mermaid/mermaid.ts\",\"tests/mermaid.test.ts\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts\"]`.",
+    "chainGoal": [
+      "- Parent task 210: the mermaid-editor repo becomes a plugin shipping create-mermaid, find-bad-nodes, and reflow-diagram; this child moves create-mermaid, its two siblings add the other two skills"
+    ],
+    "goal": [
+      "- `claude --plugin-dir ~/Programming/relationship-mermaid/mermaid-editor` lists the skill create-mermaid",
+      "- `node --test tests/create-mermaid.test.ts` passes inside ~/Programming/relationship-mermaid/mermaid-editor",
+      "- skills/mermaid/SKILL.md, scripts/mermaid/mermaid.ts, and tests/mermaid.test.ts in taskTools are commented out and the taskTools suite still passes"
+    ],
+    "notInScope": [
+      "- find-bad-nodes: owned by the sibling child task that adds that skill",
+      "- reflow-diagram: owned by the sibling child task that adds that skill"
+    ],
+    "problemSolvedByTask": "The mermaid tools belong with the mermaid editor, not the task tool",
+    "description": "taskTools's skills/mermaid/SKILL.md invokes scripts/mermaid/mermaid.ts via `node \"${CLAUDE_PLUGIN_ROOT}/scripts/mermaid/mermaid.ts\"`; the script (634 lines) exports mermaidForFile and writeAllDiagrams and writes one .taskTools/diagrams/<path>.mmd per tracked TypeScript file. tests/mermaid.test.ts (631 lines) imports those exports from ../scripts/mermaid/mermaid.ts and runs standalone via `node --test tests/mermaid.test.ts`. The destination, ~/Programming/relationship-mermaid/mermaid-editor, is a git submodule (its .git file points to ../.git/modules/mermaid-editor) and currently holds only a LICENSE file — none of .claude-plugin/, skills/create-mermaid/, scripts/create-mermaid/, or tests/ exist there yet, so all four destination paths are new. taskTools's own .claude-plugin/plugin.json (name/version/description/author/keywords fields) is the closest existing example to model the new plugin.json on, since no plugin.json exists yet in mermaid-editor. Retiring the taskTools copies means commenting out the SKILL.md, mermaid.ts, and mermaid.test.ts contents in place, per this repo's comment-out-don't-delete convention, not removing the files. The mermaid.ts output naming convention (.taskTools/diagrams/<path>.mmd) is unchanged by the move; only the skill/script/test names and locations change to create-mermaid.",
+    "modifiableFiles": [
+      "skills/mermaid/SKILL.md",
+      "scripts/mermaid/mermaid.ts",
+      "tests/mermaid.test.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/create-mermaid/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/create-mermaid/mermaid.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/create-mermaid.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "From a scratch repo with --plugin-dir pointing at mermaid-editor, /create-mermaid writes one .mmd per tracked .ts file; the moved test file passes in the new repo.",
+    "difficulty": 5
   }
 ]
