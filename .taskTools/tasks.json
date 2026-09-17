@@ -555,5 +555,48 @@
         "reason": "find-bad-nodes must derive the naming convention from scripts/create-mermaid/mermaid.ts at its new mermaid-editor location, which task 211 creates; the file does not exist there yet."
       }
     ]
+  },
+  {
+    "taskNumber": 213,
+    "version": "4c9f5327eff5614b3191d68e7f2b2d15010e4d41",
+    "title": "Add the reflow-diagram skill to the mermaid-editor plugin",
+    "userDescription": "Add a 'reflow-diagram' skill to the ~/Programming/relationship-mermaid/mermaid-editor plugin: it restructures a .mmd diagram file so node declarations are at the top, node links come afterwards, each link line names at most 2 nodes (no A --> B --> C chains), and decision nodes are grouped together with their outgoing choice links for easy readability. It never renames nodes. The SKILL.md contains no prose, only a dynamic-injection command that runs a script; the script does all the work. Running it twice changes nothing the second time. [split-task-child] This task is being created by `/split-task` as one of an already-requested set of 3 children — skip the oversized-task assessment regardless of this task's difficulty. This child's `files` field must be exactly this list, in this order, and no other files: `[\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json\",\"/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md\"]`.",
+    "chainGoal": [
+      "- Parent task 210: the mermaid-editor repo becomes a plugin shipping create-mermaid, find-bad-nodes, and reflow-diagram; task 211 moves create-mermaid, task 212 adds find-bad-nodes, this task adds reflow-diagram"
+    ],
+    "goal": [
+      "- Declarations first, links after: every node declaration is above the first link line",
+      "- At most 2 nodes per link line: no A --> B --> C chains remain",
+      "- Decision nodes sit with their choices: a decision node's outgoing links are grouped right after it",
+      "- the skill body contains no prose, except a dynamic injection command to run a script, which is where all of the work is performed."
+    ],
+    "notInScope": [
+      "- Renaming nodes: names are untouched; flagging bad names is task 212",
+      "- Moving the generator into the plugin: owned by task 211"
+    ],
+    "problemSolvedByTask": "Diagram files are hard to read because declarations and links are mixed, and long link chains and scattered decision branches hide the flow.",
+    "description": "mermaid-editor is a git submodule at /Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor, currently tracking only LICENSE at commit 4027f15; neither .claude-plugin/ nor skills/ exists yet. This is one of 3 children split from task 210; sibling task 211 creates .claude-plugin/plugin.json, so this task lands after it and only bumps that manifest. taskTools's own skills/mermaid/SKILL.md establishes the dynamic-injection convention (a node \"${CLAUDE_PLUGIN_ROOT}/scripts/<skill>/<script>.ts\" command block); the SKILL.md here holds only that command, and the work lives in scripts/reflow-diagram/reflowDiagram.ts with a golden-file test at tests/reflow-diagram.test.ts. The reflow algorithm must parse node declarations and link lines out of the .mmd flowchart body, split any link line naming 3+ nodes into separate 2-node link lines, place all declarations before all links, group decision nodes with their outgoing choice links, and never alter a node id; running it on its own output must be a no-op.",
+    "modifiableFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/skills/reflow-diagram/SKILL.md",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/scripts/reflow-diagram/reflowDiagram.ts",
+      "/Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/tests/reflow-diagram.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Run /reflow-diagram on a messy fixture .mmd; the result matches a golden file byte for byte, and running it again changes nothing.",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNumber": 211,
+        "reason": "Task 211 creates /Users/matkatmusicllc/Programming/relationship-mermaid/mermaid-editor/.claude-plugin/plugin.json for the mermaid-editor plugin; this task edits that same plugin.json and must land after 211 creates it, to avoid clobbering."
+      }
+    ]
   }
 ]
