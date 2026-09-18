@@ -705,5 +705,65 @@
         "reason": "chain order: [mermaid 8], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 225,
+    "version": "433ec6ba0102f0d3825b68f57f0495c9a9f7f671",
+    "title": "[mermaid 10] Each diagram folder owns one diagram-steps.json; a folder: word picks the folder",
+    "userDescription": "[mermaid 10] 10. WHAT: Make each diagram folder own one `diagram-steps.json`, and let the skill argument pick the folder.\n   WHY: a custom diagram set runs with no code change.\n   HOW: `tackle-tasks [N] [fast | <diagram folder>]` picks the folder; the hook and the workflow load that folder's `diagram-steps.json`.\n\nUser rulings (2026-09-18): (a) the folder word carries a prefix: `/tackle-tasks [5] folder:myDiagrams REBASE` means folder myDiagrams plus starting block REBASE; a word with no prefix stays the starting block; `fast` stays a built-in flag word for the plugin's fast folder. (b) `folder:<dir>` is resolved from the user's project root, the same rule as the `diagramFolder` setting in `.taskTools/settings.json`; a `folder:` word wins over settings.json. (c) each folder's steps file lives inside the diagram folder: `scripts/tackle-tasks/diagram-steps.json` moves to `diagrams/tackle-tasks/diagram-steps.json`, next to its .mmd files, and every reader changes its path.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md; tasks 216 to 224 are [mermaid 1] to [mermaid 9]."
+    ],
+    "goal": [
+      "- `npm run steps` writes `diagrams/tackle-tasks/diagram-steps.json`, and `scripts/tackle-tasks/diagram-steps.json` is gone from git.",
+      "- `rg 'scripts/tackle-tasks/diagram-steps.json' scripts tests package.json` finds only commented-out lines.",
+      "- `/tackle-tasks [N] folder:<dir>` on a fixture folder runs that folder's blocks, shown by a test.",
+      "- The named test files pass when each runs alone."
+    ],
+    "notInScope": [
+      "- changes to fast mode's diagrams: a later goal.",
+      "- the new-format preamble diagram: owned by [mermaid 11].",
+      "- a diagrams.json list file in each folder: owned by [launch 4]."
+    ],
+    "problemSolvedByTask": "a custom diagram set runs with no code change.",
+    "description": "The canonical steps config path `scripts/tackle-tasks/diagram-steps.json` is hardcoded in these readers: `DEFAULT_CONFIG_FILE` in scripts/hooks/runStepHook.ts and scripts/hooks/runStepStopHook.ts, `CANONICAL_STEPS_CONFIG_PATH` in scripts/tackle-tasks/shared/SkillBodyEmitter.ts, the CLI-entry `configPath` in scripts/tackle-tasks/generateSteps.ts, `DEFAULT_CONFIG_FILE` in scripts/tackle-tasks/generateWorkflow.ts, and `checkScriptPathsInsideRoot` in scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts; six test files read it directly. The old file moves with `git mv`, and every reader points at `<resolved diagramFolder>/diagram-steps.json`. `resolveDiagramFolderSetting` in generateSteps.ts already resolves the default folder, the fast folder, and the settings.json `diagramFolder`; it gains the `folder:` word, which wins over settings.json and throws when the folder does not exist or holds no .mmd file. `getDiagramFileNames` already takes only .mmd files, so the json file is safe from that scan. scripts/tackle-tasks/shared/resolveTaskRun.ts has `parseFastArgument` and `parseStartingBlockArgument` but no `folder:` parsing yet. `skillBody` and `ensureTaskWorkflowPair` in SkillBodyEmitter.ts pass the fast flag and copy from the hardcoded canonical path; both must use the chosen folder. resetTask.ts already calls `resolveDiagramFolderSetting` with no hardcoded path and package.json's `steps` script names no path; both are listed so the implementer can verify them. skills/tackle-tasks/SKILL.md's argument-hint gains the `folder:<dir>` word.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/generateWorkflow.ts",
+      "scripts/tackle-tasks/resetTask.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.ts",
+      "scripts/tackle-tasks/shared/resolveTaskRun.ts",
+      "scripts/hooks/runStepHook.ts",
+      "scripts/hooks/runStepStopHook.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.ts",
+      "package.json",
+      "skills/tackle-tasks/SKILL.md",
+      "scripts/tackle-tasks/diagram-steps.json",
+      "tests/stepTemplates.test.ts",
+      "tests/runStepHook.test.ts",
+      "tests/generateWorkflow.test.ts",
+      "tests/generateSteps.test.ts",
+      "scripts/tackle-tasks/shared/resolveAgentOptions.test.ts",
+      "scripts/tackle-tasks/whatIsReviewVerdict/TWO_CODEX_REVIEWS_COMPLETED_Q.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/PREFLIGHT_OK_Q.test.ts",
+      "scripts/tackle-tasks/shared/resolveTaskRun.test.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "diagrams/tackle-tasks/diagram-steps.json"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "(1) parse: `[5] folder:x REBASE` gives folder x and starting block REBASE; `[5] REBASE` gives no folder and block REBASE; `[5] fast` still gives fast. (2) resolveDiagramFolderSetting: a `folder:` word wins over settings.json; a folder that does not exist or holds no .mmd throws. (3) generateSteps writes `<diagram folder>/diagram-steps.json`. (4) runStepHook and the skill body load the steps file of the chosen folder, shown with a fixture folder that holds one custom block.",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNumber": 224,
+        "reason": "chain order: [mermaid 9], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
+      }
+    ]
   }
 ]
