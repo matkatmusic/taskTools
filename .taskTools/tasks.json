@@ -570,5 +570,49 @@
         "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 222,
+    "version": "60decd183646992ab56b997847e4101abb241f04",
+    "title": "[mermaid 7] Generator records the start block; hook and workflow read it from diagram-steps.json",
+    "userDescription": "[mermaid 7] 7. WHAT: Make the generator record the start block in `diagram-steps.json`, and make the hook and the workflow read it from there.\n   WHY: the diagram decides where a run begins; `diagram-steps.json` mirrors the diagram.\n   HOW: Generator writes `\"start\": \"<diagram>.mmd::<BLOCK>\"`, taken from the one node in the folder that no arrow points at. `generateWorkflow.ts` and `runStepHook.ts` read the start block from that key. The `START_STEP` literals in both files are commented out.\n\nUser ruling (2026-09-18): the start block is recorded as a TOP-LEVEL key in diagram-steps.json, exactly as the spec says: `\"start\": \"<diagram>.mmd::<BLOCK>\"` next to the diagram-file keys. Every loop over the top-level keys that treats each key as a diagram file must skip `start`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md; tasks 216 to 221 are [mermaid 1] to [mermaid 6]."
+    ],
+    "goal": [
+      "- `npm run steps` writes a top-level `\"start\": \"pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK\"` into scripts/tackle-tasks/diagram-steps.json.",
+      "- `rg 'START_STEP(_KEY)? = \"' scripts` finds only commented-out lines.",
+      "- The test files for generateSteps, generateWorkflow, runStepHook, and stepTemplates pass when each runs alone."
+    ],
+    "notInScope": [
+      "- the lock-block literal: owned by [mermaid 8].",
+      "- one diagram-steps.json per diagram folder: owned by [mermaid 10].",
+      "- the new-format preamble diagram: owned by [mermaid 11]."
+    ],
+    "problemSolvedByTask": "the diagram decides where a run begins; diagram-steps.json mirrors the diagram.",
+    "description": "generateSteps() in scripts/tackle-tasks/generateSteps.ts builds a config keyed only by diagram file name; it must also set a top-level `start` to `<diagram>.mmd::<BLOCK>` for the one box, across every parsed diagram, that appears in no diagram's `next` list, and throw naming every candidate when more than one qualifies. generateWorkflow.ts exports a `START_STEP` literal and has two `Object.entries(config)` loops (assertStartStepIsInConfig, buildWorkflowScript); the start block must come from `config.start`, both loops must skip `start`, and the literal is commented out. scripts/hooks/runStepHook.ts has a `START_STEP_KEY` literal and a buildStepsByKey loop over the config that must skip `start`; it reads the start block from the config, and a run with no named block starts there. resetTask.ts consumes the same config through `Object.entries` in two places that must skip `start`; its lock-block literal is not touched here. tests/stepTemplates.test.ts has four loops over the repo config that must skip `start`. tests/generateSteps.test.ts has `Object.keys(config)` assertions that change with the new key. tests/runStepHook.test.ts has a test that regexes the `START_STEP_KEY` literal against `START_STEP`, and tests/generateWorkflow.test.ts asserts the literal inside generated scripts; both are reworked to read `config.start`.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/tackle-tasks/generateWorkflow.ts",
+      "scripts/hooks/runStepHook.ts",
+      "scripts/tackle-tasks/resetTask.ts",
+      "tests/generateSteps.test.ts",
+      "tests/generateWorkflow.test.ts",
+      "tests/runStepHook.test.ts",
+      "tests/stepTemplates.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "(1) generateSteps: a folder of diagrams where one node has no arrow into it: the config's top-level `start` is `<diagram>.mmd::<BLOCK>` of that node. (2) generateSteps: two nodes with no arrow into them: it throws and names both. (3) generateWorkflow: the script's start block comes from the config's `start` key, not a literal. (4) runStepHook: a run with no named block starts at the config's `start` block.",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNumber": 221,
+        "reason": "chain order: [mermaid 6], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
+      }
+    ]
   }
 ]
