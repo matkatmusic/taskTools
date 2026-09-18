@@ -409,5 +409,44 @@
         "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 218,
+    "version": "fbdef78f8ce0dc0079ff7ada14731f6e841cc38a",
+    "title": "[mermaid 3] Generator reads a block:<diagram>.mmd::<BLOCK> signpost line",
+    "userDescription": "3. WHAT: Make the generator read a `block:<diagram>.mmd::<BLOCK>` line in a node's text.\n   WHY: the viewer needs one node per diagram to show where the flow continues, and the hook needs no new code to follow it.\n   HOW: Such a node is a signpost to a block in another diagram. Example: `B_REPORT_ONLY_EXIT[\"REPORT_ONLY_EXIT<br/>block:pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT\"]`. The signpost gets no script and no entry. Any block with an arrow to the signpost gets `pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT` in its `next` list, as if the arrow went straight to that block. This is the same `<diagram>.mmd::<BLOCK>` form that `next` already uses today for a hop into another diagram, and `getStepKey` in the hook already reads it, so the entry format does not change.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- A node whose text contains block:<diagram>.mmd::<BLOCK> gets no script, no template, and no entry in the generated diagram-steps.json.",
+      "- Any box with an arrow into that signpost node has <diagram>.mmd::<BLOCK> in its next array in the generated config, exactly as if the arrow pointed straight at that block.",
+      "- `node --test tests/generateSteps.test.ts` passes, including the tests added for this item.",
+      "- `npm run test:baseline` passes with no new failures outside `.taskTools/knownFailingTests.json`."
+    ],
+    "notInScope": [
+      "- reading the three new node kinds B_/Q_/Q_CHOICE_: owned by [mermaid 2]",
+      "- reading or writing a file: label line: owned by [mermaid 4]",
+      "- filling in a missing file: line or creating stub scripts: owned by [mermaid 5]"
+    ],
+    "problemSolvedByTask": "The viewer needs one node per diagram to show where the flow continues, and the hook needs no new code to follow it.",
+    "description": "getStepKey in scripts/hooks/runStepHook.ts already resolves any box reference containing :: as a fully-qualified <diagram>.mmd::<BLOCK> key, so no change is needed there. plans/preamble-revised.mmd's B_REPORT_ONLY_EXIT and B_IS_DIFFICULTY_7_PLUS_Q nodes are the concrete signpost examples in the reference diagram, each carrying a block: label line and no file: line. The generator work is confined to scripts/tackle-tasks/generateSteps.ts: detect a block: label line on a B_/Q_ node, exclude that node from getting a script/template/entry, and when another box's arrow points at the signpost, write the signpost's <diagram>.mmd::<BLOCK> string into that box's next array instead of the signpost's own id. This mirrors the existing remapNextAcrossDiagrams cross-diagram jump logic already in generateSteps.ts, but is driven by an explicit label instead of arrow-reachability across parsed diagrams.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/generateSteps.test.ts, add: test_generateSteps_treatsABlockLabelAsASignpost — a B_ node whose text contains a block:<diagram>.mmd::<BLOCK> line: diagram-steps.json holds no entry, script, or template for that node. test_generateSteps_pointsAnArrowIntoASignpostAtItsCrossDiagramTarget — a box with an arrow into that signpost node: the box's next array holds the signpost's <diagram>.mmd::<BLOCK> string directly, not the signpost's own id.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 217,
+        "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
+      }
+    ]
   }
 ]
