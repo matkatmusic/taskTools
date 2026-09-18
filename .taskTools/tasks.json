@@ -490,5 +490,46 @@
         "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 220,
+    "version": "1d4fdd490cfe782611ff621418f6f57d7ac5a789",
+    "title": "[mermaid 5] Generator fills in a missing file: line and creates the script stub",
+    "userDescription": "5. WHAT: Make the generator fill in a missing `file:` line in a diagram block and create the script stub.\n   WHY: a user adds a block by drawing it; the generator does the rest, and a forgotten block fails loudly.\n   HOW: A `B_` or `Q_` node with no `file:` line gets `file:<diagramName>/<blockNameAsCamelCase>.ts` written into its diagram text. If that file is not on disk, the generator writes a stub that throws \"block <name> in <diagram> is not implemented\". `Q_CHOICE_` nodes are not modified.\n\nUser ruling (2026-09-18): `blockNameAsCamelCase` is the file-name convention only for a NEW block with no file entry; existing diagram-steps.json script paths (SCREAMING_SNAKE_CASE) are read as-is and never renamed. The old `assertNoOrphanBoxScripts` check is commented out, because it breaks both on a camelCase file name and on every migrated block keeping its B_/Q_ prefix in the box name while no script file name carries it. The new check: a diagram-steps.json entry that points to a file that does not exist throws. This new check must run after stub creation, so a new block's stub exists before the check runs.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- A B_/Q_ node with no file: line gets a file:<diagramName>/<blockNameAsCamelCase>.ts line written into its diagram text by the generator, and a stub file is created at that path if none exists.",
+      "- The generated stub, when run, throws \"block <name> in <diagram> is not implemented\".",
+      "- Running the generator against a diagram-steps.json entry whose script path does not exist on disk throws, and this check only fires after stub files have been written.",
+      "- `node --test tests/generateSteps.test.ts` passes, including the tests added for this item.",
+      "- `npm run test:baseline` passes with no new failures outside `.taskTools/knownFailingTests.json`."
+    ],
+    "notInScope": [
+      "- reading the three new node kinds B_/Q_/Q_CHOICE_: owned by [mermaid 2]",
+      "- reading an existing file: label line: owned by [mermaid 4]",
+      "- syncing diagram-steps.json back into the diagram: owned by [mermaid 6]",
+      "- replacing the preamble diagram itself: owned by [mermaid 11]"
+    ],
+    "problemSolvedByTask": "A user adds a block by drawing it; the generator does the rest, and a forgotten block fails loudly.",
+    "description": "generateSteps.ts's current buildStubScript always returns SCRIPT_SIGNAL.CONTINUE (or PROMPT for a producesPrompt box); this item needs a distinct stub form for a block with no file: line, one that throws `block <name> in <diagram> is not implemented`. assertNoOrphanBoxScripts (its `box === basename(file, \".ts\")` check) is retired because it cannot handle a migrated box id that keeps its B_/Q_ prefix while its script file name never does; tests/generateSteps.test.ts has four assertions tied to its current error message that must be removed or rewritten alongside it. The replacement check walks diagram-steps.json entries and throws if an entry's script path does not exist on disk, and it must run after stub files are written, or every newly-stubbed block would trip it immediately. The camelCase naming rule applies only to a block with no existing file: line; every already-authored script path (SCREAMING_SNAKE_CASE, per plans/preamble-revised.mmd) is read and kept as-is, never renamed.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/generateSteps.test.ts, add: test_generateSteps_writesACamelCaseFileLineForANewBlock — a B_/Q_ node with no file: line: a file:<diagramName>/<blockNameAsCamelCase>.ts line is written into that node's text in the diagram file. test_generateSteps_writesAStubThatThrowsNotImplemented — that same new block, once generated: running the stub throws exactly \"block <name> in <diagram> is not implemented\". test_generateSteps_leavesAQChoiceNodeWithNoFileLineUnmodified — a Q_CHOICE_ node with no file: line: the generator writes no file: line and no stub file for it. test_generateSteps_throwsWhenAnEntrysScriptFileIsMissing — a diagram-steps.json entry pointing at a script path that does not exist on disk: generateSteps throws, and the check runs after stub creation so a newly-stubbed block's own entry does not trip it.",
+    "difficulty": 6,
+    "blockedBy": [
+      {
+        "taskNumber": 219,
+        "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
+      }
+    ]
   }
 ]
