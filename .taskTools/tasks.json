@@ -368,5 +368,46 @@
     "hasTests": false,
     "tests": "",
     "difficulty": 1
+  },
+  {
+    "taskNumber": 217,
+    "version": "88d018a7d48d7b88a69af741d4ea05c55a290c52",
+    "title": "[mermaid 2] Generator reads the B_, Q_, and Q_CHOICE_ node kinds",
+    "userDescription": "2. WHAT: Make the generator read the three new node kinds, `B_`, `Q_`, and `Q_CHOICE_`, next to the plain-ID style it reads today.\n   WHY: this is the only node style the mermaid-viewer tool can draw, and the two styles must live side by side while the diagrams migrate one at a time.\n   HOW: The block name in `diagram-steps.json` is the name as drawn, prefix included (e.g. `B_LOCK_SOURCE_REPO`). A `Q_CHOICE_` node is not a block: it gets no script and no entry. The block a choice node points at goes into its parent decision's `next` list, so a decision script keeps returning the target block name and the hook's routing code needs no change. Plain-ID diagrams still parse as before.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- Running the generator against a diagram built from B_/Q_/Q_CHOICE_ node ids produces one diagram-steps.json entry per B_/Q_ box, keyed by its full node id (prefix included), and no entry for any Q_CHOICE_ id.",
+      "- A decision box's next array in the generated config names the block a Q_CHOICE_ target points to, never the Q_CHOICE_ id itself.",
+      "- Regenerating the existing plain-ID diagrams in diagrams/tackle-tasks/ still produces the same diagram-steps.json shape as before this change.",
+      "- `node --test tests/generateSteps.test.ts` passes, including the tests added for this item.",
+      "- `npm run test:baseline` passes with no new failures outside `.taskTools/knownFailingTests.json`."
+    ],
+    "notInScope": [
+      "- reading a block:<diagram>.mmd::<BLOCK> signpost line: owned by [mermaid 3]",
+      "- reading or writing a file: label line: owned by [mermaid 4]",
+      "- filling in a missing file: line or creating stub scripts: owned by [mermaid 5]",
+      "- replacing the preamble diagram itself: owned by [mermaid 11]"
+    ],
+    "problemSolvedByTask": "This is the only node style the mermaid-viewer tool can draw, and the two styles must live side by side while the diagrams migrate one at a time.",
+    "description": "generateSteps.ts's getEdgesInDiagram/getBoxIdFromArrowSide already treat every box id as an opaque string with no prefix handling, so B_/Q_/Q_CHOICE_ ids already parse as valid ids today; the required change is behavioral, not about recognizing new syntax. The new work: when building each StepConfigEntry, skip any box whose id starts with Q_CHOICE_ (no script, no template, no entry), and when a Q_/B_ box's next list would point at a Q_CHOICE_ box, substitute that Q_CHOICE_ box's own next target so the decision's script still returns a real block name. plans/preamble-revised.mmd is the reference example: multiple Q_CHOICE_ pairs (e.g. Q_CHOICE_PREAMBLE_STATUS_CHECK_Y/_N) sit between a Q_ decision and its real targets. Plain-ID diagrams in diagrams/tackle-tasks/ use no prefixed or Q_CHOICE_ ids, so their generated output must stay unaffected. tests/generateSteps.test.ts already builds throwaway diagram folders inline via a generateFrom() helper, the pattern any new test should follow.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/generateSteps.test.ts, add: test_generateSteps_foldsAQChoiceTargetIntoTheDecisionsNext — a diagram with one Q_ decision and two Q_CHOICE_ nodes pointing at two different B_ blocks: both target block names land in the decision's next array, and diagram-steps.json holds no entry, script, or template for either Q_CHOICE_ id. test_generateSteps_keepsThePrefixInTheBoxName — a diagram with a B_/Q_ prefixed node id (e.g. B_LOCK_SOURCE_REPO): the generated entry is keyed by the full prefixed id, not the bare name with the prefix stripped. test_generateSteps_stillParsesAPlainIdDiagram — an existing plain-ID diagram with no B_/Q_/Q_CHOICE_ prefixes: generateSteps produces the same entries it does today.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 216,
+        "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
+      }
+    ]
   }
 ]
