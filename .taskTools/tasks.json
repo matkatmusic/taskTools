@@ -657,5 +657,53 @@
         "reason": "chain order: [mermaid 7], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 224,
+    "version": "1369614b9ab8dbf334b56f1fad8ca92d35232ba6",
+    "title": "[mermaid 9] Drop the mutating flag",
+    "userDescription": "9. WHAT: Drop the `mutating` flag.\n   WHY: nothing in the pipeline reads the flag. The \"never run a state-changing block twice\" job it was named for is done today by the per-step receipt in `shared/taskRunState.ts`.\n   HOW: The carry-over code in `generateSteps.ts` (the code that copies `mutating` from the old `diagram-steps.json` into the new one) is commented out, and the test skip in `tests/stepTemplates.test.ts` that reads `entry.mutating` is commented out. The 24 flags stop being written on the next generation.\n\nUser ruling (2026-09-18): `tests/stepTemplates.test.ts` reads `entry.mutating` in TWO test-generation loops, not one — the `..._producesItsOutputContract` loop (`if (entry.mutating) { continue; }`) and the `..._promptHasNoContinuationInstructions` loop (`if (!entry.producesPrompt || entry.mutating) { continue; }`). Both `if` blocks are commented out, not just one. Retired code is commented out, never deleted.\n\nUser ruling (2026-09-18): this task also fixes every block that fails the generated template tests once the two skips are gone. The code or its template and fixtures are fixed, never the generated tests.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md; tasks 216 to 222 are [mermaid 1] to [mermaid 7]."
+    ],
+    "goal": [
+      "- `npm run steps` writes no `mutating` key into any entry of scripts/tackle-tasks/diagram-steps.json.",
+      "- `rg 'entry\\.mutating' tests/stepTemplates.test.ts` finds only commented-out lines.",
+      "- `node --test tests/generateSteps.test.ts tests/stepTemplates.test.ts scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts` passes.",
+      "- Every block that carried `mutating: true` before this task passes its generated `test_stepTemplate_<diagram>_<box>_producesItsOutputContract` test, and `test_stepTemplate_<diagram>_<box>_promptHasNoContinuationInstructions` for the one of them that also produces a prompt, in tests/stepTemplates.test.ts."
+    ],
+    "notInScope": [
+      "- Syncing a flag between `diagram-steps.json` and the diagram, the way [mermaid 6] (`file:`/`script`) and [mermaid 8] (`takesSourceLock`) do, does not apply here: `mutating` is deleted outright, never synced.",
+      "- Fixing a specific block's own dedicated test suite (its own `<BOX>.test.ts`) is unaffected and out of scope; only the generic tests/stepTemplates.test.ts contract tests are unskipped."
+    ],
+    "problemSolvedByTask": "Nothing in the pipeline reads the mutating flag anymore. The job it was named for, never running a state-changing block twice, is already done today by the per-step receipt in shared/taskRunState.ts.",
+    "description": "generateSteps.ts's getMutatingFromPreviousConfig function reads the previous on-disk diagram-steps.json before each regeneration and is the sole reason `mutating: true` survives across generations; commenting it out (and the mutatingByStepKey lookup/spread that consumes it) is the only change generateSteps.ts itself needs. The repo's committed scripts/tackle-tasks/diagram-steps.json holds exactly 24 entries with `mutating: true` today; regenerating after this change (`npm run steps`) removes the key from all 24. tests/stepTemplates.test.ts reads `entry.mutating` in two separate test-generation loops, not one; commenting out both `if` blocks means all 24 formerly-skipped blocks now get a generated `..._producesItsOutputContract` test, and one of them (PLAN_THE_TASK_CODEX, the only mutating block that also producesPrompt) additionally gets the `..._promptHasNoContinuationInstructions` test. tests/generateSteps.test.ts's test_generateSteps_keepsAHandWrittenMutatingFlag and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts's test_skillBody_preservesHandAuthoredMutatingFlagsOnATasksFirstGeneration both assert the retired carry-over behavior directly and must be commented out, not left to fail. The commitMergeConflictFixIfNeeded owner folder (COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED, CONTINUE_REBASE) is the expected failure: it has no fixtures directory today, and its two templates use placeholder paths (`/repo`, `/repo/.worktrees/task-1`) that do not exist on disk, so this task adds `fixtures/setup.sh`, `fixtures/cleanup.sh`, and `fixtures/.gitignore` for it, the same shape rebase's and mergeSucceededExit's fixtures use, and repoints both templates at the real paths those scripts build. Most of the other 22 owner folders (preambleStatusCheck, mergeSucceededExit, planTheTask, rebase, runFullSuite, lockSourceRepo, codexReviewsPlan) already have their own fixtures/setup.sh, fixtures/cleanup.sh, or a committed static fixture directory that stepTemplates.test.ts already runs before and after the whole suite, so they are expected to pass unmodified; any of them that instead fails once unskipped is also in scope, fixed in its own code, template, or fixtures (never in the generated test), with its files added to this task's file list through the normal amendment process.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/stepTemplates.test.ts",
+      "tests/generateSteps.test.ts",
+      "scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts",
+      "scripts/tackle-tasks/diagram-steps.json",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED.template.json",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/CONTINUE_REBASE.template.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/fixtures/setup.sh",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/fixtures/cleanup.sh",
+      "scripts/tackle-tasks/commitMergeConflictFixIfNeeded/fixtures/.gitignore"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Comment out (do not delete) tests/generateSteps.test.ts's test_generateSteps_keepsAHandWrittenMutatingFlag and scripts/tackle-tasks/shared/SkillBodyEmitter.test.ts's test_skillBody_preservesHandAuthoredMutatingFlagsOnATasksFirstGeneration: both assert the retired carry-over behavior and would otherwise fail. Add one new test to tests/generateSteps.test.ts, test_generateSteps_neverWritesAMutatingFieldAnymore: generate from a diagram, hand-write `mutating: true` onto one entry in the written config like the old test did, write the config back, and regenerate again — assert that box's entry has no `mutating` key at all (not even `false`). Comment out both `if (entry.mutating)` / `if (!entry.producesPrompt || entry.mutating)` skip blocks in tests/stepTemplates.test.ts so the two generated-test loops stop excluding the 24 formerly-mutating blocks, then run the full stepTemplates.test.ts and fix whatever fails among those newly-active tests (COMMIT_MERGE_CONFLICT_FIX_IF_NEEDED and CONTINUE_REBASE look most at risk, having no fixtures directory today).",
+    "difficulty": 7,
+    "blockedBy": [
+      {
+        "taskNumber": 223,
+        "reason": "chain order: [mermaid 8], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
+      }
+    ]
   }
 ]
