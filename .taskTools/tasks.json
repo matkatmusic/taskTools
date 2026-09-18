@@ -448,5 +448,47 @@
         "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 219,
+    "version": "4ff0b04863b7552e93e0eaebb2298e2a471b353f",
+    "title": "[mermaid 4] Generator reads the file: line and writes it into the block's entry",
+    "userDescription": "4. WHAT: Make the generator read the `file:` line in a block's text and write that path into the block's entry.\n   WHY: `diagram-steps.json`, not a hard-coded folder map, says which script a block runs, and the generator populates `diagram-steps.json` from the `file:` key in the block's text value.\n   HOW: Generator reads a `file:<path>` label line from a diagram's block text and uses that path (relative to `scripts/`) as the block's script and writes it to the block entry in `diagram-steps.json`; the template path is the same path with `.template.json`.\n\nUser ruling (2026-09-18): `file:` paths are relative to the repo root (`PROJECT_ROOT` in `generateSteps.ts`), not the diagram's stepsRoot and not `scripts/`. The generator joins a `file:<path>` value onto `PROJECT_ROOT` and writes that same repo-root-relative string into the entry's `script` field, matching what `relative(PROJECT_ROOT, scriptPath)` already writes today and what every reader (`scripts/hooks/runStepHook.ts`, which spawns `node <step.script>` with `cwd: PROJECT_ROOT`) already assumes. This item also rewrites all 26 `file:` lines in `plans/preamble-revised.mmd` from stepsRoot-relative (e.g. `file:preambleStatusCheck/CREATE_WORKTREE.ts`) to repo-root-relative (e.g. `file:scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts`). Scope is the default pipeline only; a custom diagramFolder has no repo-root concept in generateSteps() today, and that belongs to a later item.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- A block whose text contains a file:<path> line gets that exact repo-root-relative path written as its script field in diagram-steps.json, and the same path with .template.json written as its template field.",
+      "- Every file: line in plans/preamble-revised.mmd reads as a repo-root-relative path (starting scripts/tackle-tasks/...), and running the generator against it produces script values identical to those file: lines.",
+      "- `node --test tests/generateSteps.test.ts` passes, including the tests added for this item.",
+      "- `npm run test:baseline` passes with no new failures outside `.taskTools/knownFailingTests.json`."
+    ],
+    "notInScope": [
+      "- reading the three new node kinds B_/Q_/Q_CHOICE_: owned by [mermaid 2]",
+      "- reading a block: signpost line: owned by [mermaid 3]",
+      "- filling in a missing file: line or creating stub scripts: owned by [mermaid 5]",
+      "- syncing diagram-steps.json back into the diagram: owned by [mermaid 6]",
+      "- supporting a repo-root convention for a custom diagram folder: owned by [mermaid 10]"
+    ],
+    "problemSolvedByTask": "diagram-steps.json, not a hard-coded folder map, should say which script a block runs, populated from the file: key in the block's text value.",
+    "description": "scripts/hooks/runStepHook.ts spawns `node <step.script>` with cwd set to PROJECT_ROOT, and generateSteps.ts today writes `script: relative(PROJECT_ROOT, scriptPath)`, so every existing script path in diagram-steps.json is already repo-root-relative (e.g. scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts). plans/preamble-revised.mmd's 26 file: lines are stepsRoot-relative today (e.g. file:preambleStatusCheck/CREATE_WORKTREE.ts) and must be rewritten to repo-root-relative form so the generator can use the literal file: value as the script field with no further path-rewriting logic. The template path is the same string with .ts replaced by .template.json, matching the existing scriptPath/templatePath pairing already in generateSteps.ts. This item is scoped to the default pipeline (diagrams/tackle-tasks/ and plans/preamble-revised.mmd); a custom diagramFolder has no PROJECT_ROOT-relative convention in generateSteps() today.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts",
+      "plans/preamble-revised.mmd"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/generateSteps.test.ts, add: test_generateSteps_readsAFileLineAsARepoRootRelativeScript — a block whose text contains a file: line written as a repo-root-relative path (e.g. file:scripts/tackle-tasks/someFolder/SOME_BOX.ts, not a stepsRoot-relative or bare scripts/ path): the entry's script field is written as that exact repo-root-relative string, joined onto PROJECT_ROOT rather than stepsRoot, and the entry's template field is the same path with .ts replaced by .template.json.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 218,
+        "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
+      }
+    ]
   }
 ]
