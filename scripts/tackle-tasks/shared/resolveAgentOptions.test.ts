@@ -81,6 +81,17 @@ test("test_resolveAgentOptions_usesTheTaskOverrideForThatBlockOnly", () => {
     assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "claude-sonnet-5[1m]", effort: "high", agentType: "task-1-implement-task" });
 });
 
+test("test_resolveAgentOptions_usesTheTaskOverrideForImplementTaskToo", () => {
+    const stepsConfigPath = makeStepsConfig();
+    const tasksFile = makeTasksFile([
+        { taskNumber: 1, difficulty: 4, agent: { IMPLEMENT_TASK: { model: "custom-model", effort: "custom-effort" } } },
+    ]);
+
+    resolveAgentOptions(stepsConfigPath, tasksFile, 1);
+    const config = readConfig(stepsConfigPath);
+    assert.deepEqual(findEntry(config, "IMPLEMENT_TASK").agent, { model: "custom-model", effort: "custom-effort", agentType: "task-1-implement-task" });
+});
+
 test("test_resolveAgentOptions_givesTheRelayAgentToEveryBlockOutsideTheBandSet", () => {
     const stepsConfigPath = makeStepsConfig();
     const tasksFile = makeTasksFile([{ taskNumber: 1, difficulty: 4 }]);
