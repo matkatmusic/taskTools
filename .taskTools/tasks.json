@@ -340,5 +340,33 @@
     "hasTests": true,
     "tests": "A test that simulates an IMPLEMENT_TASK-stage invocation of the task-tests hook (or /task-tests inside a task worktree) and asserts .taskTools/knownFailingTests.json is unchanged (the hook no-ops or throws), while a normal user-invoked /task-tests outside a run still records the baseline.",
     "difficulty": 4
+  },
+  {
+    "taskNumber": 216,
+    "version": "3ab09de372ae7c7c8a423d66044d3a0adfe014b6",
+    "title": "[mermaid 1] Start: confirm the current plain-ID pipeline state",
+    "userDescription": "1. Start: `scripts/tackle-tasks/generateSteps.ts` parses only plain-ID diagrams; every live diagram in `diagrams/tackle-tasks/` uses plain IDs and no `file:` line; the script for a block is always `scripts/tackle-tasks/<owner folder>/<BOX_ID>.ts`; the start block and the lock block are named by literals in `runStepHook.ts`, `generateWorkflow.ts`, and `resetTask.ts`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `scripts/tackle-tasks/generateSteps.ts` is confirmed to parse only plain-ID diagrams (no B_/Q_/Q_CHOICE_ or file: handling), with the command run and its output pasted.",
+      "- Every `.mmd` file in `diagrams/tackle-tasks/` is confirmed to use plain (unprefixed) box ids and contain no `file:` label line, with the command run and its output pasted.",
+      "- The script-path pattern `scripts/tackle-tasks/<owner folder>/<BOX_ID>.ts` is confirmed against `BLOCK_OWNER_FOLDER` and the script-path construction in `generateSteps.ts`, with the command run and its output pasted.",
+      "- The start-block and lock-block literals are confirmed to exist in `scripts/hooks/runStepHook.ts`, `scripts/tackle-tasks/generateWorkflow.ts`, and `scripts/tackle-tasks/resetTask.ts`, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- changing any parsing behavior in generateSteps.ts: owned by [mermaid 2]",
+      "- adding block: or file: line support: owned by [mermaid 3] and [mermaid 4]"
+    ],
+    "description": "Confirmed against scripts/tackle-tasks/generateSteps.ts: getEdgesInDiagram and getBoxIdFromArrowSide parse a box id by splitting on `[`, `(`, `{` with no awareness of a B_/Q_/Q_CHOICE_ prefix or a file: label, and no diagram file in diagrams/tackle-tasks/ contains a file: line. BLOCK_OWNER_FOLDER plus the scriptPath construction in generateSteps confirms every block's script lives at scripts/tackle-tasks/<owner folder>/<BOX_ID>.ts. scripts/hooks/runStepHook.ts hardcodes a start-step key and a lock-block box name as literals; scripts/tackle-tasks/generateWorkflow.ts hardcodes the same start-step literal; scripts/tackle-tasks/resetTask.ts searches for a step key ending in the lock block's literal name. This is a check-only task: no code change, only confirming each cited fact with a command and its pasted output.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1
   }
 ]
