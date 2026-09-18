@@ -614,5 +614,48 @@
         "reason": "chain order: [mermaid 6], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 223,
+    "version": "1f2c736e6825c629fa98ca697e48d67cab8e3c1e",
+    "title": "[mermaid 8] Generator reads and syncs takesSourceLock; hook and resetTask find the lock block by that flag",
+    "userDescription": "8. WHAT: Make the generator read `takesSourceLock:true` and sync it with `diagram-steps.json`, and make the code find the lock block by that flag.\n   WHY: the code must know which block takes the source-repo lock, so it can list every block that runs while the lock is held, and that fact belongs in the diagram.\n   HOW: Generator reads a `takesSourceLock:true` label line and writes `takesSourceLock: true` on that block's entry. The same sync as step 6 applies: if the user moves the flag in `diagram-steps.json`, the generator moves the label line in the diagram. `runStepHook.ts` and `resetTask.ts` find the lock block by this flag. The `LOCK_SOURCE_REPO` literals in both files are commented out.\n\nUser ruling (2026-09-18): `takesSourceLock` stays a per-entry flag on each block's StepConfigEntry, exactly as the spec's HOW says — it is not a top-level key like `start` (task 222, [mermaid 7]). Any config-reading code this task adds must reuse the config-iteration maps task 222 already updated to skip the top-level `start` key; it must not add its own fresh `Object.entries(config)` loop without excluding `start`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md; tasks 216 to 222 are [mermaid 1] to [mermaid 7]."
+    ],
+    "goal": [
+      "- Adding `takesSourceLock:true` to a different block's label in `diagrams/tackle-tasks/pipeline-lockSourceRepo.mmd`, then running `npm run steps`, makes `runStepHook.ts`'s and `resetTask.ts`'s lock-block lookup follow that block instead of `LOCK_SOURCE_REPO` by name.",
+      "- `rg 'LOCK_SOURCE_REPO_BOX|endsWith\\(\"::LOCK_SOURCE_REPO\"\\)' scripts` finds only commented-out lines.",
+      "- `node --test tests/generateSteps.test.ts tests/runStepHook.test.ts` passes, including the new and updated tests for this behavior."
+    ],
+    "notInScope": [
+      "- The top-level `start` key and updating config loops to skip it is [mermaid 7] (task 222), already done; this task's lock lookup reuses those already-updated maps.",
+      "- Dropping the `mutating` flag is [mermaid 9], not this task.",
+      "- One `diagram-steps.json` per diagram folder is [mermaid 10], not this task.",
+      "- The new-format preamble diagram migration is [mermaid 11], not this task."
+    ],
+    "problemSolvedByTask": "The code must know which block takes the source-repo lock, so it can list every block that runs while the lock is held, and that fact belongs in the diagram rather than a hardcoded name.",
+    "description": "Today runStepHook.ts finds the lock block via a hardcoded `LOCK_SOURCE_REPO_BOX = \"LOCK_SOURCE_REPO\"` constant fed into `getStepKeysNamingBox`, and resetTask.ts finds it via `[...stepsByKey.keys()].find(key => key.endsWith(\"::LOCK_SOURCE_REPO\"))`; these are the literals this item comments out. Neither lookup needs a new raw `Object.entries(config)` loop: both already walk an already-built `stepsByKey`/`STEPS_BY_KEY` map, the same maps task 222 updated to skip the top-level `start` key, so no new start-skipping code is needed here. The `LOCK_SOURCE_REPO` node in `diagrams/tackle-tasks/pipeline-lockSourceRepo.mmd` today carries only its own name as a label (`LOCK_SOURCE_REPO[\"LOCK_SOURCE_REPO\"]`) with no `takesSourceLock` line at all, so this task also adds that label line to the diagram, the same way a `file:` label line gets added to a node's text. Three fixtures in tests/runStepHook.test.ts (test_runStepHook_takesTheSourceLockWhenTheNamedBlockSitsInsideTheLock, test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram, test_runStepHook_checkpointsSourceLockHeldTrueMidWalkInsideTheLock) build a synthetic config naming a box \"LOCK_SOURCE_REPO\" with no `takesSourceLock` field; each needs `takesSourceLock: true` added to that entry to keep passing once the lookup goes by flag. scripts/tackle-tasks/resetTask.test.ts's real-pipeline acceptance test generates from the live default diagram folder, so once the diagram carries the label it should keep passing with no edit.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "scripts/hooks/runStepHook.ts",
+      "scripts/tackle-tasks/resetTask.ts",
+      "diagrams/tackle-tasks/pipeline-lockSourceRepo.mmd",
+      "tests/generateSteps.test.ts",
+      "tests/runStepHook.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "In tests/generateSteps.test.ts: (1) test_generateSteps_readsATakesSourceLockLabelIntoTheEntry — a diagram whose one node's label includes `takesSourceLock:true`: the generated entry for that box gets `takesSourceLock: true`, and every other box's entry has no `takesSourceLock` key. (2) test_generateSteps_syncsTakesSourceLockBackIntoTheDiagramWhenConfigDiffers — generate from a diagram with no `takesSourceLock` label, edit the written config to set that entry's `takesSourceLock` to `true` and write it back (same shape as the existing mutating-flag test): regenerating must add a `takesSourceLock:true` line to that box's label in the .mmd on disk. In tests/runStepHook.test.ts: (3) add `takesSourceLock: true` to the synthetic LOCK_SOURCE_REPO entries in test_runStepHook_takesTheSourceLockWhenTheNamedBlockSitsInsideTheLock, test_runStepHook_takesNoSourceLockForABlockInAnExitDiagram, and test_runStepHook_checkpointsSourceLockHeldTrueMidWalkInsideTheLock, so they keep passing under the new flag-based lookup. (4) test_runStepHook_findsTheLockBlockByFlagEvenWhenNotNamedLockSourceRepo — a config where a box named something other than LOCK_SOURCE_REPO (e.g. TAKE_THE_LOCK) carries `takesSourceLock: true` and no box is literally named LOCK_SOURCE_REPO: a block reachable from it still checkpoints `sourceLockHeld: true`, proving the lookup goes by flag, not by name.",
+    "difficulty": 5,
+    "blockedBy": [
+      {
+        "taskNumber": 222,
+        "reason": "chain order: [mermaid 7], the previous item of specs/diagrams-in-mermaid-viewer-format.md, must be completed first"
+      }
+    ]
   }
 ]
