@@ -531,5 +531,44 @@
         "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
       }
     ]
+  },
+  {
+    "taskNumber": 221,
+    "version": "fe2d524e7e9f350fe4a9c6d7cbdbaf3bed825a24",
+    "title": "[mermaid 6] Sync diagram-steps.json script paths back into the diagram's file: lines",
+    "userDescription": "6. WHAT: Make the generator sync `diagram-steps.json` back into the diagram.\n   WHY: the user re-points a block at another script by editing `diagram-steps.json`; the `.mmd` must never drift from `diagram-steps.json`.\n   HOW: When a `diagram-steps.json` entry's `script` differs from the diagram's `file:` line, `diagram-steps.json` wins and the `file:` line in the diagram's block is rewritten.\n\nUser ruling (2026-09-18): `file:` paths are repo-root-relative (the item 4 ruling), so the comparison and the rewrite both use the repo-root-relative path already stored in the entry's `script` field (e.g. `scripts/tackle-tasks/preambleStatusCheck/CREATE_WORKTREE.ts`), never a stepsRoot-relative one. Per the item 5 ruling, `diagram-steps.json` is the source of truth for a block's script path; the `.mmd` is what gets kept in sync with it, not the other way around.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. This is one task in the chain [mermaid 1] through [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- Editing a block's `script` field in `diagram-steps.json` to a different real script path, then running `node scripts/tackle-tasks/generateSteps.ts`, rewrites that block's `file:` line in its `.mmd` diagram to the edited path.",
+      "- Running the generator when every entry's `script` already matches its diagram's `file:` line leaves every diagram file's bytes unchanged.",
+      "- `node --test tests/generateSteps.test.ts` passes, including the two new tests for this behavior."
+    ],
+    "notInScope": [
+      "- Making the generator read a `file:` line into an entry in the first place is [mermaid 4], not this task.",
+      "- Filling in a missing `file:` line and creating the block's script stub is [mermaid 5], not this task.",
+      "- Syncing a `takesSourceLock:true` label the same way is [mermaid 8], not this task.",
+      "- Dropping the `mutating` flag's carry-over code is [mermaid 9], not this task."
+    ],
+    "problemSolvedByTask": "A user re-points a block at a different script by editing diagram-steps.json directly. Today generateSteps.ts only reads the diagram forward into the config; nothing writes a changed script path back into the diagram's file: line, so the .mmd silently drifts out of sync with diagram-steps.json.",
+    "description": "generateSteps.ts already has a precedent for this shape of work: getMutatingFromPreviousConfig reads the previous on-disk diagram-steps.json before the fresh config is written, so the mutating flag survives regeneration. This task adds the mirror direction for the script path: the previous config's entry.script (per stepKey) is compared against the file: value just parsed from the diagram's block text, and on a mismatch the previous config's script wins. Today parseDiagrams only calls readFileSync on each diagram file; generateSteps writes stub scripts and templates but never writes back to the diagram file itself, so this task adds a writeFileSync of the mutated diagram text back to its path under diagramFolder when at least one block's file: line changed. Per the item 4 ruling, entry.script is already stored repo-root-relative, so no path conversion is needed before writing it into the file: line. The rewritten diagram text must otherwise be byte-identical to the original, so only the matched file: line's value changes.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/generateSteps.ts",
+      "tests/generateSteps.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "Add two tests to tests/generateSteps.test.ts, using the file's generateFrom(diagrams) helper, alongside test_generateSteps_keepsAHandWrittenMutatingFlag: test_generateSteps_rewritesTheFileLineWhenDiagramStepsJsonScriptDiffers — generate from a one-block diagram whose box already carries a `file:` line, then edit that block's `script` field in the written config to a different path and write the config back, like the existing mutating test does; running the generator again must rewrite the diagram's `file:` line in the .mmd on disk to the edited script path, read back with readFileSync. test_generateSteps_leavesTheDiagramByteIdenticalWhenScriptMatchesTheFileLine — generate from the same kind of diagram with its `file:` line and matching `script` left untouched; running the generator again must leave the diagram file's on-disk bytes exactly as they were (assert.equal against the original readFileSync'd text).",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 220,
+        "reason": "chain order: the previous item of specs/diagrams-in-mermaid-viewer-format.md must be completed first"
+      }
+    ]
   }
 ]
