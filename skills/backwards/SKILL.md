@@ -22,6 +22,12 @@ Standing rule for every step below: the user's answers are rough and out of orde
    N. Goal: <goal>
    ```
 
+## Each Step needs 'WHAT', 'WHY', and Optionally 'HOW'
+Each step in the backwards list should clearly state:
+- **WHAT**: The goal of this step.  This is the title of the step.
+- **WHY**: Why this particular goal is necessary at this specific step in the context of reaching the overall goal.
+- **HOW** (optional): How to accomplish this step, if it is not immediately obvious.  references to code or documentation may be included in the HOW section, but the step should remain concise.  The step is not meant to replace a full plan, but simply offer a hint or guidance for how to accomplish the WHAT. 
+
 ## The interview preamble
 
 1. Ask the user what they want to accomplish, unless `$ARGUMENTS` already says it.  This item becomes the last line in `specs/<goal-name>.md`. Write the goal as one sentence that describes the finished state, e.g. "Mermaid skill no longer exists here and functions correctly in the destination project." 
