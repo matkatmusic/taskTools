@@ -119,8 +119,12 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
         }
         next[box] ??= [];
         const target = boxChain[position + 1];
-        if (target && !next[box]!.includes(target)) {
-          next[box]!.push(target);
+        const hasTarget = target !== undefined;
+        if (hasTarget) {
+          const alreadyLinked = next[box]!.includes(target);
+          if (!alreadyLinked) {
+            next[box]!.push(target);
+          }
         }
       }
     }
