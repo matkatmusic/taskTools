@@ -988,5 +988,40 @@
         "reason": "chain order: [mermaid 13] comes before [mermaid 14]"
       }
     ]
+  },
+  {
+    "taskNumber": 230,
+    "version": "9f7c41377544195f0d107564361f045d7ea43a8e",
+    "title": "[mermaid 15] Goal: the mermaid-viewer chain holds",
+    "userDescription": "15. Goal: The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone.\n\nUser ruling (2026-09-18): a Goal item checks the literal goal sentence written in its spec item, not \"the items before it hold\". This item's goal is exactly the sentence above, copied verbatim. Each goal line is a by-hand check of one clause of that sentence, with an exact command and exact expected output: the mermaid-viewer-format clause and the generator-parses-them clause (`node scripts/tackle-tasks/generateSteps.ts` exits 0) each get their own command, and the splice clause points at [mermaid 14]'s exact proof steps. Still check-only: no code change, hasTests false, tests \"\".\n\nUser ruling (2026-09-18): in this chain only the preamble diagram moves to the new format ([mermaid 11], in both `diagrams/tackle-tasks` and `diagrams/tackle-tasks-fast`); the other diagrams keep the plain-ID format. The \"diagrams use the mermaid-viewer format\" check looks only at `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` and `diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd`, not at `diagrams/tackle-tasks/*.mmd`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- The diagrams use the mermaid-viewer format: `rg -n '^\\s*[A-Z][A-Za-z0-9_]*(\\[|\\(|\\{)' diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd | rg -v '(B_|Q_CHOICE_|Q_)'` finds no plain-ID (unprefixed) box declaration in either preamble diagram; the exact expected output is nothing printed. This chain only migrates the preamble diagram, so the other files under `diagrams/tackle-tasks/` and `diagrams/tackle-tasks-fast/` are not part of this check.",
+      "- The generator parses them: `node scripts/tackle-tasks/generateSteps.ts` exits 0, printing a config summary with no thrown error.",
+      "- A new block can be spliced into the pipeline by an edit to the diagram alone: re-run [mermaid 14]'s exact proof — with its demo block still drawn in `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd`, run `npm run steps`, confirm the demo block's `file:` line, stub `.ts`, and `diagram-steps.json` entry exist, then run `/run-step` on any open task; the exact expected output is the stub's own message, `block <name> in <diagram> is not implemented`, with the command and its pasted output."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task, like every other \"Goal:\" item in this spec.",
+      "- Removing or cleaning up [mermaid 14]'s demo block: not addressed by this item.",
+      "- Moving the other diagrams to the new format: not part of this chain."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the chain's own literal goal sentence — the diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced in by a diagram edit alone — each clause verified by its own by-hand command, not by re-confirming that prior items hold.",
+    "description": "This is a check-only task with no code change, per the user ruling that a Goal item checks the literal goal sentence in its own spec item, not that the items before it hold. The goal sentence is copied verbatim from specs/diagrams-in-mermaid-viewer-format.md item 15: \"The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone.\" Each of its three clauses gets its own by-hand check with an exact command and exact expected output. In this chain only the preamble diagram moves to the new format ([mermaid 11], in both diagrams/tackle-tasks and diagrams/tackle-tasks-fast); the other diagrams keep the plain-ID format. The mermaid-viewer-format clause is checked by grepping only diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd and diagrams/tackle-tasks-fast/pipeline-preambleStatusCheck.mmd for any box declaration that is not prefixed B_, Q_, or Q_CHOICE_; nothing should print. The parses-them clause is checked by running node scripts/tackle-tasks/generateSteps.ts directly and confirming it exits 0. The splice-by-diagram-edit-alone clause is checked by re-running mermaid 14's own proof exactly: the demo block drawn in pipeline-preambleStatusCheck.mmd still gets its file: line, stub, and diagram-steps.json entry from npm run steps, and /run-step still reaches it and throws its stub message.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 229,
+        "reason": "chain order: [mermaid 14] comes before [mermaid 15]"
+      }
+    ]
   }
 ]
