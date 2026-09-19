@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -240,7 +240,7 @@ test("test_generateSteps_ignoresSharedFolderAndHiddenFilesInTheOrphanGuard", () 
 
 test("test_resolveDiagramFolderSetting_defaultsToTheRealPipelineWhenNoSettingsFile", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-"));
-    const setting = resolveDiagramFolderSetting(fixtureRoot);
+    const setting = resolveDiagramFolderSetting(fixtureRoot, false, "");
     assert.deepEqual(setting, {
         diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks"),
         stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
@@ -251,7 +251,7 @@ test("test_resolveDiagramFolderSetting_defaultsToTheRealPipelineWhenNoSettingsFi
 test("test_resolveDiagramFolderSetting_fastPicksTheFastPipelineWhenThereIsNoSettingsFile", () => {
     // Step: the fast flag alone picks the built-in fast diagram folder.
     const fixtureRoot = mkdtempSync(join(tmpdir(), "diagram-folder-setting-fast-"));
-    assert.deepEqual(resolveDiagramFolderSetting(fixtureRoot, true), {
+    assert.deepEqual(resolveDiagramFolderSetting(fixtureRoot, true, ""), {
         diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks-fast"),
         stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
         allowStubs: true,
@@ -268,7 +268,7 @@ test("test_resolveDiagramFolderSetting_fastWinsOverACustomDiagramFolderInSetting
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
 
     // Test action: the same project asks for a fast run.
-    const setting = resolveDiagramFolderSetting(fixtureRoot, true);
+    const setting = resolveDiagramFolderSetting(fixtureRoot, true, "");
 
     // Verification: the custom folder is left out; fast is one pipeline for every project.
     assert.deepEqual(setting, {
@@ -330,7 +330,7 @@ test("test_resolveDiagramFolderSetting_readsACustomDiagramFolderFromSettings", (
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(diagramFolder, "one.mmd"), "flowchart TD\n    A --> B\n");
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
-    const setting = resolveDiagramFolderSetting(fixtureRoot);
+    const setting = resolveDiagramFolderSetting(fixtureRoot, false, "");
     assert.deepEqual(setting, { diagramFolder, stepsRoot: diagramFolder, allowStubs: false });
 });
 
@@ -339,7 +339,7 @@ test("test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderDoesNotExist", 
     mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
     const diagramFolder = join(fixtureRoot, "missing");
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
-    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot), (error: Error) => error.message.includes(diagramFolder));
+    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot, false, ""), (error: Error) => error.message.includes(diagramFolder));
 });
 
 test("test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderHoldsNoMmd", () => {
@@ -348,7 +348,81 @@ test("test_resolveDiagramFolderSetting_throwsWhenTheDiagramFolderHoldsNoMmd", ()
     const diagramFolder = join(fixtureRoot, "diagrams");
     mkdirSync(diagramFolder, { recursive: true });
     writeFileSync(join(fixtureRoot, ".taskTools/settings.json"), JSON.stringify({ diagramFolder }));
-    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot), (error: Error) => error.message.includes(diagramFolder));
+    assert.throws(() => resolveDiagramFolderSetting(fixtureRoot, false, ""), (error: Error) => error.message.includes(diagramFolder));
+});
+
+test("test_resolveDiagramFolderSetting_folderWordWinsOverSettingsJson", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    mkdirSync(join(fixtureRoot, "a"), { recursive: true });
+    mkdirSync(join(fixtureRoot, "b"), { recursive: true });
+    writeFileSync(join(fixtureRoot, "a", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
+    writeFileSync(join(fixtureRoot, "b", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(fixtureRoot, ".taskTools", "settings.json"), JSON.stringify({ diagramFolder: "a" }));
+    const setting = resolveDiagramFolderSetting(fixtureRoot, false, "b");
+    assert.equal(setting.diagramFolder, join(fixtureRoot, "b"));
+});
+
+test("test_resolveDiagramFolderSetting_folderWordWithNoSettingsJson", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    mkdirSync(join(fixtureRoot, "b"), { recursive: true });
+    writeFileSync(join(fixtureRoot, "b", "one.mmd"), "flowchart TD\n    A[\"A\"]\n");
+    const setting = resolveDiagramFolderSetting(fixtureRoot, false, "b");
+    assert.equal(setting.diagramFolder, join(fixtureRoot, "b"));
+});
+
+test("test_resolveDiagramFolderSetting_throwsForAMissingFolder", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    assert.throws(
+        () => resolveDiagramFolderSetting(fixtureRoot, false, "missing"),
+        (error: Error) => error.message.includes(join(fixtureRoot, "missing")) && error.message.includes("does not exist or holds no .mmd files"),
+    );
+});
+
+test("test_resolveDiagramFolderSetting_throwsForAnEmptyFolder", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    mkdirSync(join(fixtureRoot, "empty"), { recursive: true });
+    assert.throws(
+        () => resolveDiagramFolderSetting(fixtureRoot, false, "empty"),
+        (error: Error) => error.message.includes(join(fixtureRoot, "empty")) && error.message.includes("does not exist or holds no .mmd files"),
+    );
+});
+
+test("test_resolveDiagramFolderSetting_throwsWhenFolderWordIsOutsideTheProject", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    assert.throws(
+        () => resolveDiagramFolderSetting(fixtureRoot, false, "../other"),
+        (error: Error) => error.message.includes(resolve(fixtureRoot, "../other")) && error.message.includes("is outside the project"),
+    );
+});
+
+test("test_resolveDiagramFolderSetting_throwsForAnAbsolutePathOutsideTheProject", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    assert.throws(
+        () => resolveDiagramFolderSetting(fixtureRoot, false, "/etc"),
+        (error: Error) => error.message.includes("/etc") && error.message.includes("is outside the project"),
+    );
+});
+
+test("test_resolveDiagramFolderSetting_throwsWhenSettingsJsonDiagramFolderIsOutsideTheProject", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    mkdirSync(join(fixtureRoot, ".taskTools"), { recursive: true });
+    writeFileSync(join(fixtureRoot, ".taskTools", "settings.json"), JSON.stringify({ diagramFolder: "../other" }));
+    assert.throws(
+        () => resolveDiagramFolderSetting(fixtureRoot, false, ""),
+        (error: Error) => error.message.includes(resolve(fixtureRoot, "../other")) && error.message.includes("is outside the project"),
+    );
+});
+
+// Regression guard: default branch (no folder word or settings.json) must keep writing to the plugin's scripts/tackle-tasks.
+test("test_generateSteps_writesToTheFoldersOwnStepsJson", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "resolve-folder-"));
+    const setting = resolveDiagramFolderSetting(fixtureRoot, false, "");
+    assert.deepEqual(setting, {
+        diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks"),
+        stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"),
+        allowStubs: true,
+    });
 });
 
 test("test_generateSteps_throwsOnAMissingScriptWhenStubsAreNotAllowed", () => {

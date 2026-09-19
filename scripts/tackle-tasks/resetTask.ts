@@ -40,7 +40,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
   // A run that failed before task 10 shipped has no per-task pair yet; regenerate one so reset stays usable.
   if (!existsSync(stepsConfigPath)) {
     mkdirSync(dirname(stepsConfigPath), { recursive: true });
-    const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
+    const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot, false, "");
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
   }
   const stepsByDiagram: Record<string, { box: string; script: string; next: string[]; takesSourceLock?: boolean }[] | string> = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
@@ -478,7 +478,7 @@ export async function resetTask(taskNumber: number, block: string): Promise<stri
     lines.push(`cleared: ${cleared.length > 0 ? cleared.join(", ") : "nothing"}`);
 
     // Same three calls as SkillBodyEmitter.ts ensureTaskWorkflowPair, so a resume walks the current diagrams.
-    const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot);
+    const diagramFolderSetting = resolveDiagramFolderSetting(repoRoot, false, "");
     const workflowFile = join(dirname(stepsConfigPath), "workflow.js");
     generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
     resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);

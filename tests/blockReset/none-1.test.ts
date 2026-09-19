@@ -32,7 +32,7 @@ test("test_resetTask_atEveryBlock_none_restoresRootToThatBlocksRewindPoint", asy
         // Real block list, pipeline order, same technique as resetTask.test.ts's atEveryBlock test.
         const stepsConfigPath = join(taskWorkflowDirectory(resolveTaskFiles(repoRoot).tasksPath, TASK_NUMBER), "steps.json");
         mkdirSync(dirname(stepsConfigPath), { recursive: true });
-        const setting = resolveDiagramFolderSetting(repoRoot);
+        const setting = resolveDiagramFolderSetting(repoRoot, false, "");
         const stepsByDiagram = generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const boxCounts = new Map<string, number>();
         for (const entry of Object.values(stepsByDiagram).flat()) {

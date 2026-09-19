@@ -1,6 +1,6 @@
 // Turns every .mmd in a folder into stub scripts and a box-to-script config.
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AGENT_ANSWER_TEMPLATE } from "../shared/contracts.ts";
 
@@ -465,17 +465,23 @@ function getDiagramFileNames(diagramFolder: string): string[] {
 export type DiagramFolderSetting = { diagramFolder: string; stepsRoot: string; allowStubs: boolean };
 
 // .taskTools/settings.json in the target project names a diagramFolder; an absent file or key means the default pipeline.
-export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean = false): DiagramFolderSetting {
-  // fast wins over the project's settings.json, so one built-in pipeline serves every project.
+export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean, folderWord: string): DiagramFolderSetting {
+  // fast wins over both the folder word and the project's settings.json, so one built-in pipeline serves every project.
   if (fast) {
     return { diagramFolder: FAST_DIAGRAM_FOLDER, stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"), allowStubs: true };
   }
   const settingsPath = join(projectRoot, ".taskTools/settings.json");
   const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) as { diagramFolder?: string } : {};
-  if (!settings.diagramFolder) {
+  // folderWord wins over settings.json for this one run.
+  const customFolder = folderWord !== "" ? folderWord : settings.diagramFolder;
+  if (!customFolder) {
     return { diagramFolder: join(PROJECT_ROOT, "diagrams/tackle-tasks"), stepsRoot: join(PROJECT_ROOT, "scripts/tackle-tasks"), allowStubs: true };
   }
-  const diagramFolder = resolve(projectRoot, settings.diagramFolder);
+  const diagramFolder = resolve(projectRoot, customFolder);
+  const isOutsideProject = !diagramFolder.startsWith(`${resolve(projectRoot)}${sep}`) && diagramFolder !== resolve(projectRoot);
+  if (isOutsideProject) {
+    throw new Error(`${diagramFolder} is outside the project`);
+  }
   if (!existsSync(diagramFolder) || getDiagramFileNames(diagramFolder).length === 0) {
     throw new Error(`diagramFolder ${diagramFolder} does not exist or holds no .mmd files`);
   }
@@ -864,7 +870,7 @@ function watchDiagramFolder(diagramFolder: string, stepsRoot: string, configPath
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const commandArguments = process.argv.slice(2);
-  const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT);
+  const { diagramFolder, stepsRoot, allowStubs } = resolveDiagramFolderSetting(PROJECT_ROOT, false, "");
   const configPath = join(PROJECT_ROOT, "scripts/tackle-tasks/diagram-steps.json");
   console.log(getConfigSummary(generateSteps(diagramFolder, stepsRoot, configPath, allowStubs, true)));
 

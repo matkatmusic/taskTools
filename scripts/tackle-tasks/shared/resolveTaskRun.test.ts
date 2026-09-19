@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument } from "./resolveTaskRun.ts";
+import { resolveTaskRun, parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument, parseFolderArgument } from "./resolveTaskRun.ts";
 import { resolveTaskWorktreeConventionDirectory } from "../../shared/prepareTasks.ts";
 import { git, makeLayeredSubmoduleFixture, makeLinkedWorktree } from "../../../tests/support/gitFixtures.ts";
 
@@ -120,6 +120,20 @@ test("test_parseStartingBlockArgument_skipsTheFastToken", () => {
     // Step: "fast" picks the pipeline, so it is never read as the block to start from.
     assert.equal(parseStartingBlockArgument("[1] fast"), "");
     assert.equal(parseStartingBlockArgument("[1] fast IMPLEMENT_TASK"), "IMPLEMENT_TASK");
+});
+
+test("test_parseFolderArgument_readsAFolderWordAfterTheBracket", () => {
+    // Step: a "folder:<dir>" word after the bracketed task list names a custom diagram folder for this run.
+    assert.equal(parseFolderArgument("[5] folder:myDiagrams REBASE"), "myDiagrams");
+    assert.equal(parseFolderArgument("[5] REBASE"), "");
+    assert.equal(parseFolderArgument("[5] fast"), "");
+    assert.equal(parseFolderArgument("[5] folder:myDiagrams"), "myDiagrams");
+});
+
+test("test_parseStartingBlockArgument_skipsAFolderWord", () => {
+    // Step: a folder word names the diagram folder, so it is never read as the block to start from.
+    assert.equal(parseStartingBlockArgument("[5] folder:myDiagrams REBASE"), "REBASE");
+    assert.equal(parseStartingBlockArgument("[5] REBASE"), "REBASE");
 });
 
 test("test_parseFastArgument_returnsTrueWhenTheWordFastFollowsTheTaskList", () => {

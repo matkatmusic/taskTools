@@ -128,6 +128,29 @@ test("test_skillBody_twoProjectsWithDifferentDiagramsNeverShareAStepsJson", () =
     assert.ok(Object.keys(defaultConfig).length > 1);
 });
 
+test("test_skillBody_folderWordPicksACustomDiagramFolderOwningItsOwnSteps", () => {
+    // Setup: a target repository whose "b" folder holds one diagram naming one custom block.
+    const root = makeTargetRepository([7]);
+    const customDiagramFolder = join(root, "b");
+    mkdirSync(customDiagramFolder, { recursive: true });
+    writeFileSync(join(customDiagramFolder, "one.mmd"), "flowchart TD\n    CUSTOM_BLOCK[\"Custom Block\"]\n");
+    const blockFolder = join(customDiagramFolder, "one");
+    mkdirSync(blockFolder, { recursive: true });
+    const blockOutput = { box: "CUSTOM_BLOCK", scriptSignal: "stop", note: "MARKER", input: "" };
+    writeFileSync(join(blockFolder, "CUSTOM_BLOCK.ts"), `console.log(JSON.stringify(${JSON.stringify(blockOutput)}));\n`);
+    writeFileSync(join(blockFolder, "CUSTOM_BLOCK.template.json"), `${JSON.stringify({ input: {}, output: blockOutput }, null, 4)}\n`);
+
+    // Test action: run task 7 with the "folder:b" word.
+    skillBody("[7] folder:b", root);
+    skillBody("[7] folder:b", root);
+
+    // Verification: the task's own steps.json holds only the custom folder's own block.
+    const stepsConfig = JSON.parse(readFileSync(join(root, ".taskTools/workflows/7/steps.json"), "utf8"));
+    assert.deepEqual(Object.keys(stepsConfig).sort(), ["one.mmd", "start"]);
+    const entries = stepsConfig["one.mmd"] as { box: string }[];
+    assert.deepEqual(entries.map((entry) => entry.box), ["CUSTOM_BLOCK"]);
+});
+
 test("test_skillBody_fastBeatsAProjectsCustomDiagramFolder", () => {
     // Setup: a target repository that customizes its normal pipeline in .taskTools/settings.json.
     const root = makeTargetRepository([9]);

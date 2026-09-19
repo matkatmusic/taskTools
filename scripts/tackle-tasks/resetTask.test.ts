@@ -279,7 +279,7 @@ test("test_resetTask_atBlock_regeneratesStepsJsonFromCurrentDiagrams", async () 
 
         const stepsConfigPath = join(taskWorkflowDirectory(join(repoRoot, ".taskTools", "tasks.json"), 9), "steps.json");
         mkdirSync(dirname(stepsConfigPath), { recursive: true });
-        const setting = resolveDiagramFolderSetting(repoRoot);
+        const setting = resolveDiagramFolderSetting(repoRoot, false, "");
         generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const staleConfig = JSON.parse(readFileSync(stepsConfigPath, "utf-8"));
         // Drop one box, simulating a diagram change made since this config went stale.
@@ -849,7 +849,7 @@ test("test_resetTask_atEveryBlock_findsThePacketTheHookWrote", async () => {
     try {
         const stepsConfigPath = join(taskWorkflowDirectory(join(repoRoot, ".taskTools", "tasks.json"), 9), "steps.json");
         mkdirSync(dirname(stepsConfigPath), { recursive: true });
-        const setting = resolveDiagramFolderSetting(repoRoot);
+        const setting = resolveDiagramFolderSetting(repoRoot, false, "");
         const stepsByDiagram = generateSteps(setting.diagramFolder, setting.stepsRoot, stepsConfigPath, setting.allowStubs);
         const boxCounts = new Map<string, number>();
         for (const entry of Object.values(stepsByDiagram).flat()) {

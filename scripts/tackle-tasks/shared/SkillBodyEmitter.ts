@@ -2,7 +2,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
+import { parseTaskNumberArgument, parseStartingBlockArgument, parseFastArgument, parseFolderArgument, repositoryTopLevel } from "./resolveTaskRun.ts";
 import { readTaskFile, resolveTaskFiles, taskWorkflowDirectory } from "../../shared/taskFiles.ts";
 import { generateSteps, resolveDiagramFolderSetting, type DiagramFolderSetting } from "../generateSteps.ts";
 import { generateWorkflow } from "../generateWorkflow.ts";
@@ -19,51 +19,56 @@ const WAIT_FOR_AGENT_REGISTRY_PATH = fileURLToPath(new URL("./waitForAgentRegist
 // const RESET_TASK_PATH = fileURLToPath(new URL("../resetTask.ts", import.meta.url)); // retired: the hook runs the reset now.
 
 function isTaskActive(tasksFile: string, taskNumber: number): boolean {
-    const task = readTaskFile(tasksFile).find((entry) => entry.taskNumber === taskNumber);
-    if (task === undefined) {
-        return false;
-    }
-    const run = task.run as { active?: boolean } | undefined;
-    if (run === undefined) {
-        return false;
-    }
-    return run.active === true;
+  const task = readTaskFile(tasksFile).find((entry) => entry.taskNumber === taskNumber);
+  if (task === undefined) {
+    return false;
+  }
+  const run = task.run as { active?: boolean } | undefined;
+  if (run === undefined) {
+    return false;
+  }
+  return run.active === true;
 }
 
 // Reuses an active task's pair untouched to protect checkpoint files; otherwise regenerates fresh from canonical config, preserving hand-authored flags.
 function ensureTaskWorkflowPair(tasksFile: string, taskNumber: number, diagramFolderSetting: DiagramFolderSetting): { workflowFile: string; stepsConfigPath: string } {
-    const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
-    const stepsConfigPath = join(workflowDirectory, "steps.json");
-    const workflowFile = join(workflowDirectory, "workflow.js");
-    if (isTaskActive(tasksFile, taskNumber)) {
-        if (existsSync(workflowFile)) {
-            if (existsSync(stepsConfigPath)) {
-                return { workflowFile, stepsConfigPath };
-            }
-        }
+  const workflowDirectory = taskWorkflowDirectory(tasksFile, taskNumber);
+  const stepsConfigPath = join(workflowDirectory, "steps.json");
+  const workflowFile = join(workflowDirectory, "workflow.js");
+  if (isTaskActive(tasksFile, taskNumber)) {
+    if (existsSync(workflowFile)) {
+      if (existsSync(stepsConfigPath)) {
+        return { workflowFile, stepsConfigPath };
+      }
     }
-    mkdirSync(workflowDirectory, { recursive: true });
-    if (!existsSync(stepsConfigPath)) {
-        if (existsSync(CANONICAL_STEPS_CONFIG_PATH)) {
-            copyFileSync(CANONICAL_STEPS_CONFIG_PATH, stepsConfigPath);
-        }
+  }
+  mkdirSync(workflowDirectory, { recursive: true });
+  const folderOwnStepsPath = join(diagramFolderSetting.diagramFolder, "diagram-steps.json");
+  if (!diagramFolderSetting.allowStubs) {
+    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, folderOwnStepsPath, false);
+  }
+  if (!existsSync(stepsConfigPath)) {
+    const seedPath = diagramFolderSetting.allowStubs ? CANONICAL_STEPS_CONFIG_PATH : folderOwnStepsPath;
+    if (existsSync(seedPath)) {
+      copyFileSync(seedPath, stepsConfigPath);
     }
-    generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
-    resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
-    generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
-    return { workflowFile, stepsConfigPath };
+  }
+  generateSteps(diagramFolderSetting.diagramFolder, diagramFolderSetting.stepsRoot, stepsConfigPath, diagramFolderSetting.allowStubs);
+  resolveAgentOptions(stepsConfigPath, tasksFile, taskNumber);
+  generateWorkflow(workflowFile, taskNumber, stepsConfigPath);
+  return { workflowFile, stepsConfigPath };
 }
 
 export const skillBody = (argsValue: string, projectRoot: string): string => {
-    // `reset N [BLOCK]`: the run-step hook already ran the reset on this prompt and injected its lines above.
-    const tokens = argsValue.trim().split(/\s+/);
-    if (tokens[0] === "reset") {
-        parseTaskNumberArgument(tokens[1] ?? "");
-        return `The hook ran the reset for task ${tokens[1]}. Say the lines it injected above. Run nothing.\n`;
-    }
-    // retired: // ponytail: one task at a time for now — multiple tasks come later.
-    const taskNumbers = parseTaskNumberArgument(argsValue);
-    /* retired: the hook walks the preamble from PREAMBLE_TASK_NUMBER_INPUT now, so the body runs none of it.
+  // `reset N [BLOCK]`: the run-step hook already ran the reset on this prompt and injected its lines above.
+  const tokens = argsValue.trim().split(/\s+/);
+  if (tokens[0] === "reset") {
+    parseTaskNumberArgument(tokens[1] ?? "");
+    return `The hook ran the reset for task ${tokens[1]}. Say the lines it injected above. Run nothing.\n`;
+  }
+  // retired: // ponytail: one task at a time for now — multiple tasks come later.
+  const taskNumbers = parseTaskNumberArgument(argsValue);
+  /* retired: the hook walks the preamble from PREAMBLE_TASK_NUMBER_INPUT now, so the body runs none of it.
     const run = resolveTaskRun(argsValue, projectRoot);
     const preambleResult = runPreamble(taskNumber, run.runId, projectRoot);
     if (preambleResult.code === WorkflowResultCodes.DO_NOT_PROCEED) {
@@ -73,39 +78,56 @@ export const skillBody = (argsValue: string, projectRoot: string): string => {
     }
     */
 
-    // Regenerated fresh each run to match diagrams on disk, unless ensureTaskWorkflowPair reuses an active task's existing pair untouched.
-    const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot, parseFastArgument(argsValue));
-    const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
-    const startingBlock = parseStartingBlockArgument(argsValue);
-    // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.
-    const agentsDirectory = join(projectRoot, ".claude", "agents");
-    const agentFilesMissing = taskNumbers.filter((taskNumber) =>
-        !existsSync(agentsDirectory) || !readdirSync(agentsDirectory).some((name) => name.startsWith(`task-${taskNumber}-`)));
-    const workflowLines = taskNumbers.map((taskNumber, index) => {
-        const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
-        const workflowArgs: Record<string, unknown> = {
-            task: taskNumber,
-            tasksFile,
-            // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
-        };
-        if (startingBlock !== "") workflowArgs.startingBlock = startingBlock;
-        // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
-        const workflowCall = JSON.stringify({
-            scriptPath: workflowFile,
-            args: workflowArgs,
-        });
-        return `WORKFLOW ${index + 1}: ${workflowCall}`;
+  // Regenerated fresh each run to match diagrams on disk, unless ensureTaskWorkflowPair reuses an active task's existing pair untouched.
+  const diagramFolderSetting = resolveDiagramFolderSetting(projectRoot, parseFastArgument(argsValue), parseFolderArgument(argsValue));
+  const tasksFile = resolveTaskFiles(projectRoot).tasksPath;
+  const startingBlock = parseStartingBlockArgument(argsValue);
+  // The harness reloads .claude/agents only on a real user turn, so files written now need a second invocation.
+  const agentsDirectory = join(projectRoot, ".claude", "agents");
+  const agentsDirectoryMissing = !existsSync(agentsDirectory);
+  const agentFilesMissing: number[] = [];
+  for (const taskNumber of taskNumbers) {
+    if (agentsDirectoryMissing) {
+      agentFilesMissing.push(taskNumber);
+      continue;
+    }
+    let hasAgentFile = false;
+    for (const name of readdirSync(agentsDirectory)) {
+      if (name.startsWith(`task-${taskNumber}-`)) {
+        hasAgentFile = true;
+        break;
+      }
+    }
+    if (!hasAgentFile) {
+      agentFilesMissing.push(taskNumber);
+    }
+  }
+  const workflowLines = taskNumbers.map((taskNumber, index) => {
+    const { workflowFile } = ensureTaskWorkflowPair(tasksFile, taskNumber, diagramFolderSetting);
+    const workflowArgs: Record<string, unknown> = {
+      task: taskNumber,
+      tasksFile,
+      // firstPassSchemaCount: retired — the workflow reads AGENT_SCHEMAS by block key now.
+    };
+    if (startingBlock !== "")
+      workflowArgs.startingBlock = startingBlock;
+    // Serialized, never interpolated: the arguments may hold quotes, backslashes and newlines.
+    const workflowCall = JSON.stringify({
+      scriptPath: workflowFile,
+      args: workflowArgs,
     });
-    const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
+    return `WORKFLOW ${index + 1}: ${workflowCall}`;
+  });
+  const executeCalls = taskNumbers.map((_taskNumber, index) => `\`Workflow(WORKFLOW ${index + 1})\``).join(", ");
 
-    if (agentFilesMissing.length > 0) {
-        return `Agent files for task ${agentFilesMissing.join(", ")} were just written. The harness loads them on your next message.
+  if (agentFilesMissing.length > 0) {
+    return `Agent files for task ${agentFilesMissing.join(", ")} were just written. The harness loads them on your next message.
 Say exactly: "Agent files written. Run /tackle-tasks ${argsValue.trim()} again to launch." Run nothing else.
 `;
-    }
+  }
 
-    // Retired: the wait-script step (WAIT_FOR_AGENT_REGISTRY_PATH); only a real user turn reloads agents.
-    return `Launch every one of the following as a background workflow, in the same message, so they run concurrently:
+  // Retired: the wait-script step (WAIT_FOR_AGENT_REGISTRY_PATH); only a real user turn reloads agents.
+  return `Launch every one of the following as a background workflow, in the same message, so they run concurrently:
 
 ${workflowLines.join("\n\n")}
 
@@ -160,22 +182,23 @@ Finally, stage the changes made this session — which may span multiple git rep
 */
 
 function readStdin(): string {
-    try {
-        return readFileSync(0, "utf8");
-    } catch {
-        return "";
-    }
+  try {
+    return readFileSync(0, "utf8");
+  }
+  catch {
+    return "";
+  }
 }
 
 if (process.argv[1]?.endsWith("SkillBodyEmitter.ts")) {
-    const argsValue = readStdin().replace(/\n$/, "");
-    // A brief built from missing arguments points nowhere, so stop rather than emit one.
-    if (argsValue === "") {
-        process.stderr.write(
-            "tackle-tasks SkillBodyEmitter: no arguments on stdin\n" +
+  const argsValue = readStdin().replace(/\n$/, "");
+  // A brief built from missing arguments points nowhere, so stop rather than emit one.
+  if (argsValue === "") {
+    process.stderr.write(
+      "tackle-tasks SkillBodyEmitter: no arguments on stdin\n" +
                 "usage: node SkillBodyEmitter.ts <<'TACKLETASKSEOF'\n[N,N,...]\nTACKLETASKSEOF\n",
-        );
-        process.exit(1);
-    }
-    process.stdout.write(skillBody(argsValue, repositoryTopLevel(process.cwd())));
+    );
+    process.exit(1);
+  }
+  process.stdout.write(skillBody(argsValue, repositoryTopLevel(process.cwd())));
 }
