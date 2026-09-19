@@ -31,12 +31,26 @@ function addOrVerifyLinkedWorktree(sourceCheckoutPath: string, worktreePath: str
     const found = git(worktreePath, "branch", "--show-current");
     // "" is a submodule layer left detached at its parent's recorded gitlink; that's the expected steady state.
     if (found !== branch && found !== "") {
-        const status = git(worktreePath, "status", "--porcelain");
-        if (status !== "") {
+        // RETIRED (task 233): status --porcelain treated a stale index as real work.
+        // const status = git(worktreePath, "status", "--porcelain");
+        // if (status !== "") {
+        //     throw new Error(`staging worktree at "${worktreePath}" is on "${found}", expected "${branch}"\n${status}`);
+        // }
+        // Spec work rule: a tracked-file diff or any untracked file is work.
+        const diffResult = spawnSync("git", ["-C", worktreePath, "diff", "--quiet"], { encoding: "utf8" });
+        const hasChangedTrackedFiles = diffResult.status !== 0;
+        const untrackedFiles = git(worktreePath, "ls-files", "--others", "--exclude-standard");
+        const hasUntrackedFiles = untrackedFiles !== "";
+        const holdsWork = hasChangedTrackedFiles || hasUntrackedFiles;
+        if (holdsWork) {
+            const status = git(worktreePath, "status", "--porcelain");
             throw new Error(`staging worktree at "${worktreePath}" is on "${found}", expected "${branch}"\n${status}`);
         }
+        // RETIRED (task 233): rmSync left stale worktree administrative state behind; git owns the rebuild now.
+        // rmSync(worktreePath, { recursive: true, force: true });
         // A stale worktree from before staging existed sits on the old base branch; rebuild it when clean.
-        rmSync(worktreePath, { recursive: true, force: true });
+        git(sourceCheckoutPath, "worktree", "remove", "--force", worktreePath);
+        git(sourceCheckoutPath, "worktree", "prune");
         git(sourceCheckoutPath, "worktree", "add", "--quiet", "--force", worktreePath, branch);
         return;
     }

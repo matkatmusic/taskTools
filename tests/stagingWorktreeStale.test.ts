@@ -32,3 +32,40 @@ test("test_ensureStagingWorktree_rebuildsAStaleSubmoduleWorktreeWhenClean_ButRef
         (error: Error) => error.message.includes('is on "oldbase"'),
     );
 });
+
+test("test_ensureStagingWorktree_rebuildsOntoStagingWhenTheFolderIsOnTheUsersBranchWithOnlyAStaleCommit", () => {
+    const fixture = makeShapeFixture("one-submodule", "at-head", 502);
+    const originalBranch = git(fixture.rootPath, "branch", "--show-current");
+
+    ensureStagingWorktree(fixture.rootPath, "staging");
+
+    const worktreePath = stagingWorktreePath(fixture.rootPath);
+    git(worktreePath, "checkout", "-q", "-B", "feature-x");
+
+    git(fixture.rootPath, "checkout", "-q", "--ignore-other-worktrees", "feature-x");
+    writeFileSync(join(fixture.rootPath, "stale-commit.txt"), "stale\n");
+    git(fixture.rootPath, "add", "stale-commit.txt");
+    git(fixture.rootPath, "commit", "-q", "-m", "commit elsewhere on feature-x");
+    git(fixture.rootPath, "checkout", "-q", originalBranch);
+
+    assert.doesNotThrow(() => ensureStagingWorktree(fixture.rootPath, "staging"));
+    assert.equal(git(worktreePath, "branch", "--show-current"), "staging");
+});
+
+test("test_ensureStagingWorktree_throwsWhenTheFolderOnTheWrongBranchHoldsAnUntrackedFile", () => {
+    const fixture = makeShapeFixture("one-submodule", "at-head", 503);
+
+    ensureStagingWorktree(fixture.rootPath, "staging");
+
+    const worktreePath = stagingWorktreePath(fixture.rootPath);
+    git(worktreePath, "checkout", "-q", "-B", "feature-x");
+    writeFileSync(join(worktreePath, "scratch.txt"), "scratch\n");
+
+    assert.throws(
+        () => ensureStagingWorktree(fixture.rootPath, "staging"),
+        (error: Error) =>
+            error.message.includes(worktreePath) &&
+            error.message.includes("feature-x") &&
+            error.message.includes("scratch.txt"),
+    );
+});
