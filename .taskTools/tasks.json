@@ -1705,5 +1705,59 @@
         "reason": "chain order: [launch 7] comes before [launch 8]"
       }
     ]
+  },
+  {
+    "taskNumber": 248,
+    "version": "e08083aa9679232042e35333687210278b395331",
+    "title": "[launch 9] The preamble waits for the source-repo lock before the catch-up, with a deadline",
+    "userDescription": "9. The preamble waits for the source-repo lock before the catch-up, with a deadline.\n    WHY: `git branch -f staging` changes the source repository. Two launches must not do it at the same time. The source-repo lock already guards this class of change.\n    HOW: fill in the stubs `LOCK_STAGING_FOR_CATCH_UP`, `WAS_CATCH_UP_LOCK_ACQUIRED_Q`, `HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q`, and `WAIT_FOR_CATCH_UP_LOCK`. Copy the four-block loop in `scripts/tackle-tasks/lockSourceRepo/`. It calls `acquireSourceRepoLock` with `buildLockOwner`. It uses the same lock file. The loop uses no agent turns. A passed deadline goes to `REPORT_ONLY_EXIT`.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- The four stub files, `LOCK_STAGING_FOR_CATCH_UP.ts`, `WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts`, `HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts`, and `WAIT_FOR_CATCH_UP_LOCK.ts`, no longer throw \"is not implemented\"; each runs real logic.",
+      "- `WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts` routes to `Q_CATCH_UP_STAGING` on YES and to `Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q` on NO.",
+      "- `HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts` routes to `pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT` once the deadline passes, never to `FAILURES_EXIT`.",
+      "- `WAIT_FOR_CATCH_UP_LOCK.ts` waits, then loops back to `B_LOCK_STAGING_FOR_CATCH_UP` with no `next` key in its own output.",
+      "- `node --test scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.test.ts scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.test.ts scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.test.ts scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.test.ts` passes."
+    ],
+    "notInScope": [
+      "- Filling in `CATCH_UP_STAGING`, `FIX_CATCH_UP_CONFLICTS`, and `COMMIT_CATCH_UP_MERGE` is [launch 10], [launch 11], and [launch 12].",
+      "- The 2-try stop at `ARE_2_CONFLICT_FIXES_DONE_Q` for the post-implementation rebase is untouched; this item's wait loop carries no try counter at all.",
+      "- Building `scripts/shared/catchUpStaging.ts` and `scripts/shared/mergeHelpers.ts` is [launch 8] and [launch 7]; this task never calls either."
+    ],
+    "problemSolvedByTask": "`git branch -f staging` changes the source repository, and two launches must not do it at the same time; the source-repo lock already guards this class of change, but nothing yet makes the catch-up wait for it before moving staging.",
+    "description": "LOCK_STAGING_FOR_CATCH_UP, WAS_CATCH_UP_LOCK_ACQUIRED_Q, HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q, and WAIT_FOR_CATCH_UP_LOCK are new files in scripts/tackle-tasks/preambleStatusCheck/, one generator-written throwing stub each, filled in to mirror scripts/tackle-tasks/lockSourceRepo/LOCK_SOURCE_REPO.ts, WAS_LOCK_ACQUIRED_Q.ts, HAS_LOCK_WAIT_DEADLINE_PASSED_Q.ts, and WAIT_FOR_LOCK.ts almost line for line, all four calling scripts/tackle-tasks/shared/sourceRepoLock.ts's acquireSourceRepoLock and buildLockOwner against the same .git/taskTools-source.lock file. The one behavior change from the copied pattern: a passed wait deadline routes to B_REPORT_ONLY_EXIT (using the routing string \"pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT\" other preambleStatusCheck blocks already write) instead of FAILURES_EXIT, since a blocked catch-up is not a pipeline failure. preambleStatusCheck/_packet.ts's shared EntryPacket type gains a new required lockWaitStartedAt: string field, defaulted to \"\" in the one place that builds a full packet literal, PREAMBLE_STATUS_CHECK.ts; every other preambleStatusCheck block already spreads ...packet rather than listing fields by name, so no other file needs an edit for this addition. Both the Q_ decision blocks and the B_ blocks route using the prefixed node ids plans/preamble-revised.mmd draws (Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q, Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q, B_WAIT_FOR_CATCH_UP_LOCK, B_LOCK_STAGING_FOR_CATCH_UP), including the box field each script writes into its own output packet, on the reading that the mermaid migration's prefixed-id rule applies everywhere but a verbatim userDescription. The exact exitType slug this task's REPORT_ONLY_EXIT branch should write is not settled anywhere; the diagram draws only the branch label \"the lock wait deadline passed\", used here verbatim as exitNote, with \"catch-up-lock-timeout\" proposed as exitType pending confirmation.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/_packet.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.template.json",
+      "scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.template.json"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "createsFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.test.ts"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "scripts/tackle-tasks/preambleStatusCheck/LOCK_STAGING_FOR_CATCH_UP.test.ts: test_lockStagingForCatchUp_takesTheLockWhenNobodyHoldsIt -- input {taskNumber:1, runId:\"run-a\", projectRoot: a fresh temp dir containing a `.git` folder, worktree:\"/wt\", branch:\"task-1\", exitType:\"\", exitNote:\"\", lockWaitStartedAt:\"2024-01-01T00:00:00.000Z\"}; expected result.box === \"B_LOCK_STAGING_FOR_CATCH_UP\", result.scriptSignal === \"continue\", result.acquired === true, result.heldByOwner === \"\", result.lockWaitStartedAt === \"2024-01-01T00:00:00.000Z\". test_lockStagingForCatchUp_returnsAtOnceWhenAnotherRunHoldsTheLock -- setup: acquireSourceRepoLock(projectRoot, buildLockOwner(\"run-rival\", 9)) succeeds first; then call main with runId \"run-a\"; expected result.acquired === false, result.heldByOwner === buildLockOwner(\"run-rival\", 9), and the call returns in under 1000ms. test_lockStagingForCatchUp_stampsTheWaitClockOnceOnFirstEntry -- input has no lockWaitStartedAt key; expected result.lockWaitStartedAt is a fresh ISO timestamp >= the timestamp captured immediately before the call. test_lockStagingForCatchUp_rejectsARelativeProjectRoot -- input projectRoot: \"relative/path\"; expected main(...) throws.\n\nscripts/tackle-tasks/preambleStatusCheck/WAS_CATCH_UP_LOCK_ACQUIRED_Q.test.ts: test_wasCatchUpLockAcquired_routesToCatchUpStagingWhenAcquired -- input {..., acquired:true}; expected result.next === \"Q_CATCH_UP_STAGING\", result.box === \"Q_WAS_CATCH_UP_LOCK_ACQUIRED_Q\". test_wasCatchUpLockAcquired_routesToHasCatchUpLockWaitDeadlinePassedWhenNotAcquired -- input {..., acquired:false}; expected result.next === \"Q_HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q\".\n\nscripts/tackle-tasks/preambleStatusCheck/HAS_CATCH_UP_LOCK_WAIT_DEADLINE_PASSED_Q.test.ts: test_hasCatchUpLockWaitDeadlinePassed_waitsAgainBeforeTheCap -- input lockWaitStartedAt = now minus 60 seconds; expected result.next === \"B_WAIT_FOR_CATCH_UP_LOCK\", result.exitType === \"\", result.exitNote === \"\". test_hasCatchUpLockWaitDeadlinePassed_exitsToReportOnlyAfterTheCap -- input lockWaitStartedAt = now minus 6 minutes; expected result.next === \"pipeline-reportOnlyExit.mmd::REPORT_ONLY_EXIT\", result.exitType === \"catch-up-lock-timeout\", result.exitNote === \"the lock wait deadline passed\" (the exact text plans/preamble-revised.mmd draws on this branch).\n\nscripts/tackle-tasks/preambleStatusCheck/WAIT_FOR_CATCH_UP_LOCK.test.ts: test_waitForCatchUpLock_waitsThenLoopsBackToLockStagingForCatchUp -- run with an overridable wait (e.g. env WAIT_FOR_CATCH_UP_LOCK_MS=20) so the test does not spend 5 real seconds; expected the call takes at least that many ms, result.box === \"B_WAIT_FOR_CATCH_UP_LOCK\", result.scriptSignal === \"continue\", and result carries no `next` key (a B_ block has one exit, wired in diagram-steps.json straight to B_LOCK_STAGING_FOR_CATCH_UP, never returned by the script itself).",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 247,
+        "reason": "chain order: [launch 8] comes before [launch 9]"
+      }
+    ]
   }
 ]
