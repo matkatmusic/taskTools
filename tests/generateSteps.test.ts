@@ -460,3 +460,19 @@ test("test_generateSteps_stillParsesAPlainIdDiagram", () => {
     assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), ["A", "B"]);
     assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["B"]);
 });
+
+test("test_generateSteps_treatsABlockLabelAsASignpost", () => {
+    const { config, stepsRoot } = generateFrom({
+        "one.mmd": "flowchart TD\n    B_SIGNPOST[\"SIGNPOST<br/>block:two.mmd::TARGET\"]\n",
+    });
+    assert.deepEqual(config["one.mmd"]!.map(entry => entry.box), []);
+    assert.equal(existsSync(join(stepsRoot, "one/B_SIGNPOST.ts")), false);
+    assert.equal(existsSync(join(stepsRoot, "one/B_SIGNPOST.template.json")), false);
+});
+
+test("test_generateSteps_pointsAnArrowIntoASignpostAtItsCrossDiagramTarget", () => {
+    const { config } = generateFrom({
+        "one.mmd": "flowchart TD\n    A --> B_SIGNPOST\n    B_SIGNPOST[\"SIGNPOST<br/>block:two.mmd::TARGET\"]\n",
+    });
+    assert.deepEqual(config["one.mmd"]!.find(entry => entry.box === "A")!.next, ["two.mmd::TARGET"]);
+});

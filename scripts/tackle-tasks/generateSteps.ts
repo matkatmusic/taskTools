@@ -137,6 +137,22 @@ export function getPromptBoxesInDiagram(diagram: string): string[] {
   return promptBoxes;
 }
 
+// "block:<diagram>.mmd::<BLOCK>" in a box's label makes it a signpost to another diagram's block.
+function getBlockSignpostTargets(diagram: string): Record<string, string> {
+  const targets: Record<string, string> = {};
+  for (const line of diagram.split("\n")) {
+    const statement = line.split("%%")[0]!.trim();
+    const blockMatch = statement.match(/block:([^<"]+)/);
+    const hasBlockLabel = blockMatch !== null;
+    if (!hasBlockLabel) {
+      continue;
+    }
+    const box = statement.split(/[[({]/)[0]!.trim();
+    targets[box] = blockMatch[1]!;
+  }
+  return targets;
+}
+
 function buildStubScript(box: string, diagramFile: string, producesPrompt: boolean): string {
   const resultLine = producesPrompt
     ? `return { box: "${box}", scriptSignal: SCRIPT_SIGNAL.PROMPT, prompt: \`stub prompt from \${basename(fileURLToPath(import.meta.url))}\` };`
@@ -250,7 +266,7 @@ export function resolveDiagramFolderSetting(projectRoot: string, fast: boolean =
   return { diagramFolder, stepsRoot: diagramFolder, allowStubs: false };
 }
 
-type ParsedDiagram = DiagramEdges & { promptBoxes: string[] };
+type ParsedDiagram = DiagramEdges & { promptBoxes: string[]; blockSignpostTargets: Record<string, string> };
 
 // Every diagram's boxes, edges, and prompt-marked boxes, parsed once up front.
 function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
@@ -258,7 +274,7 @@ function parseDiagrams(diagramFolder: string): Map<string, ParsedDiagram> {
   for (const diagramFile of getDiagramFileNames(diagramFolder)) {
     const diagram = readFileSync(join(diagramFolder, diagramFile), "utf8");
     const { boxes, next } = getEdgesInDiagram(diagram);
-    parsedByDiagramFile.set(diagramFile, { boxes, next, promptBoxes: getPromptBoxesInDiagram(diagram) });
+    parsedByDiagramFile.set(diagramFile, { boxes, next, promptBoxes: getPromptBoxesInDiagram(diagram), blockSignpostTargets: getBlockSignpostTargets(diagram) });
   }
   return parsedByDiagramFile;
 }
@@ -300,6 +316,23 @@ function foldChoiceTargetsIntoNext(next: Record<string, string[]>): Record<strin
       const isChoiceNode = target.startsWith("Q_CHOICE_");
       if (isChoiceNode) {
         folded[box]!.push(...next[target]!);
+        continue;
+      }
+      folded[box]!.push(target);
+    }
+  }
+  return folded;
+}
+
+// A signpost box's own id in a next array is replaced by the <diagram>.mmd::<BLOCK> string from its block: label.
+function foldBlockSignpostsIntoNext(next: Record<string, string[]>, blockSignpostTargets: Record<string, string>): Record<string, string[]> {
+  const folded: Record<string, string[]> = {};
+  for (const [box, targets] of Object.entries(next)) {
+    folded[box] = [];
+    for (const target of targets) {
+      const isSignpost = blockSignpostTargets[target] !== undefined;
+      if (isSignpost) {
+        folded[box]!.push(blockSignpostTargets[target]!);
         continue;
       }
       folded[box]!.push(target);
@@ -374,11 +407,19 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
   const newTemplatePaths = new Set<string>();
   const config: StepConfig = {};
   for (const [diagramFile, data] of parsedDiagrams) {
-    const remappedNext = remapNextAcrossDiagrams(diagramFile, foldChoiceTargetsIntoNext(data.next), parsedDiagrams);
+    const remappedNext = foldBlockSignpostsIntoNext(
+      remapNextAcrossDiagrams(diagramFile, foldChoiceTargetsIntoNext(data.next), parsedDiagrams),
+      data.blockSignpostTargets,
+    );
     const entries: StepConfigEntry[] = [];
     for (const box of data.boxes) {
       // A Q_CHOICE_ node is not a block; its target already landed in its parent decision's next list.
       if (box.startsWith("Q_CHOICE_")) {
+        continue;
+      }
+      // A block: label makes this box a signpost to another diagram; it is not a step of its own.
+      const isSignpost = data.blockSignpostTargets[box] !== undefined;
+      if (isSignpost) {
         continue;
       }
       // A dashed box only points into another diagram; that diagram holds the step.
