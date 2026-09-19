@@ -2031,5 +2031,48 @@
         "reason": "chain order: [launch 14] comes before [launch 15]"
       }
     ]
+  },
+  {
+    "taskNumber": 255,
+    "version": "3efc48e37b44d71b7c2f6d4b854ef022f21c9deb",
+    "title": "[launch 16] Fill in AMEND_TASK_FILE_LIST and add violations to EntryPacket",
+    "userDescription": "16. The `AMEND_TASK_FILE_LIST` block adds every outside-the-fence file to the task's file list in tasks.json, and the run continues.\n    WHY: this is user note 3. The fence check runs only on a resumed worktree. It fails when the earlier run edited a file that the task does not list (`checkResumedWorktreeFence.ts:33-66`). The work is real, so the record is what is wrong.\n    HOW: fill in the stub. It calls `addTaskFiles` with the files that `DOES_FENCE_COVER_WORKTREE_Q` put in the payload.\n\nUser ruling (2026-09-18): `scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts` does NOT put the violation file paths in the packet on NO today; it only builds a text exitNote. The item's HOW assumes the paths are in the payload, so add a REQUIRED `violations: string[]` field to the `EntryPacket` type (`scripts/tackle-tasks/preambleStatusCheck/_packet.ts`). `scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts` is the one place that builds a full `EntryPacket` literal, so it sets `violations: []`. Without that listing, `scripts/hooks/agentFenceHook.ts` denies the edit. In `DOES_FENCE_COVER_WORKTREE_Q.ts`, fill `violations` from `checkResumedWorktreeFence(...).violations` on the NO branch and drop the leftover exitType/exitNote.\n\nUser ruling (2026-09-18): [mermaid 11] already changes the NO branch of `DOES_FENCE_COVER_WORKTREE_Q.ts` to return `next: \"B_AMEND_TASK_FILE_LIST\"` (it was `FAILURES_EXIT`), when it replaces the live preamble. This task does not own that routing change. It still owns the required `violations: string[]` packet field, filling it on the NO branch, dropping the leftover exitType/exitNote, and the real code of the `B_AMEND_TASK_FILE_LIST` stub.",
+    "chainGoal": [
+      "A tackle-tasks launch reaches the planning stage on its own when staging is behind, a rebase has a conflict, a task file is outside the fence, or a listed file does not exist yet. The chain is [launch 1] to [launch 22] from specs/launch-reaches-planning-alone.md."
+    ],
+    "goal": [
+      "- `scripts/tackle-tasks/preambleStatusCheck/_packet.ts`'s `EntryPacket` type has a REQUIRED `violations: string[]` field.",
+      "- `scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts`'s packet literal sets `violations: []`, and `node --test scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.test.ts` passes with that field asserted.",
+      "- On the NO branch, `Q_DOES_FENCE_COVER_WORKTREE_Q`'s output carries `violations` equal to the files `checkResumedWorktreeFence` reports, with no `exitType` or `exitNote` left over, and `node --test scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.test.ts` passes.",
+      "- The `B_AMEND_TASK_FILE_LIST` stub (the file its `file:` line in `diagrams/tackle-tasks/pipeline-preambleStatusCheck.mmd` names) calls `addTaskFiles` with the packet's `violations`, and after it runs, tasks.json's task has those paths appended to `modifiableFiles`."
+    ],
+    "notInScope": [
+      "- Routing `Q_DOES_FENCE_COVER_WORKTREE_Q`'s NO branch to `B_AMEND_TASK_FILE_LIST` instead of `FAILURES_EXIT`: [mermaid 11] already made that change when it replaced the live preamble.",
+      "- Choosing the stub's file path or writing its generator-made `.template.json`: [mermaid 5] and [mermaid 11] own the stub's location and creation; this task only fills in the throw.",
+      "- [launch 17]'s missing-file case (`ADD_MISSING_FILES_TO_CREATES_FILES`) is a separate block and a separate task.",
+      "- [launch 18]'s new `tests/tackleTasksAcceptance.test.ts` behavior (e) exercises this block end to end through a real launch; that test lives in [launch 18], not here."
+    ],
+    "problemSolvedByTask": "The fence check runs only on a resumed worktree, and today it fails the whole launch when an earlier run edited a file the task does not list, even though the work is real. The record, not the run, is what is wrong, so the fix is to add the file to the task instead of stopping.",
+    "description": "[mermaid 11] already rewrote the live preamble so Q_DOES_FENCE_COVER_WORKTREE_Q's NO branch routes to B_AMEND_TASK_FILE_LIST instead of FAILURES_EXIT; this task does not touch that routing. This task adds a REQUIRED violations: string[] field to the EntryPacket type in scripts/tackle-tasks/preambleStatusCheck/_packet.ts, since PREAMBLE_STATUS_CHECK.ts is the only place that builds a full EntryPacket literal and must set violations: [] there. DOES_FENCE_COVER_WORKTREE_Q.ts already computes checkResumedWorktreeFence(...).violations for its exitNote text; on the NO branch this task fills the new violations field from that same value and drops the now-unused exitType and exitNote. The B_AMEND_TASK_FILE_LIST block's real code is the last piece: it is a generator-written stub today, and this task fills it in to call addTaskFiles with the packet's violations, widening the task's modifiableFiles in tasks.json. The stub's exact file path is not guessed here; it is the path the block's file: line names once [mermaid 5] and [mermaid 11] have run the generator, and the implementing agent reads that path from the regenerated diagram-steps.json rather than inventing one. B_AMEND_TASK_FILE_LIST is a B_ block with one exit, so its script returns an EntryPacket with no next field, the same shape B_MARK_TASK_ACTIVE.ts returns today.",
+    "modifiableFiles": [
+      "scripts/tackle-tasks/preambleStatusCheck/_packet.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.test.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.ts",
+      "scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.test.ts"
+    ],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": true,
+    "tests": "1) In scripts/tackle-tasks/preambleStatusCheck/PREAMBLE_STATUS_CHECK.test.ts, update test_PREAMBLE_STATUS_CHECK_continuesToIsTaskBlockedWhenTheTaskIsInTasksJson's assert.deepEqual expected object to add violations: [] alongside the existing fields (box: 'PREAMBLE_STATUS_CHECK', scriptSignal: 'continue', taskNumber, runId: '', projectRoot, worktree: '', branch, docsMode: '', planFile: '', exitType: '', exitNote: '', next: 'IS_TASK_BLOCKED_Q'); the test fails today without that added key once EntryPacket requires it. 2) In scripts/tackle-tasks/preambleStatusCheck/DOES_FENCE_COVER_WORKTREE_Q.test.ts, rename test_DOES_FENCE_COVER_WORKTREE_Q_choosesFailuresExitWhenAnEditTouchesAnUndeclaredFile to test_DOES_FENCE_COVER_WORKTREE_Q_fillsViolationsAndDropsTheExitNoteWhenAnEditTouchesAnUndeclaredFile. Same setup (a task declaring modifiableFiles: ['seed.txt'], the worktree additionally committing outside.txt). Exact expected result: output.next equals 'B_AMEND_TASK_FILE_LIST' (already true before this task, from [mermaid 11]); output.violations deepEquals ['outside.txt']; output.exitType equals ''; output.exitNote equals ''. 3) Add test_DOES_FENCE_COVER_WORKTREE_Q_reportsEveryViolatingPathWhenMultipleFilesAreOutsideTheFence: a task declaring modifiableFiles: ['seed.txt'], the worktree committing two extra files, outside-a.txt and outside-b.txt. Exact expected result: output.violations deepEquals ['outside-a.txt', 'outside-b.txt']. 4) Add a test for the B_AMEND_TASK_FILE_LIST stub (co-located <stub-file>.test.ts, named once the generator has written the real path), test_B_AMEND_TASK_FILE_LIST_appendsEachViolationToTheTasksModifiableFiles: a tasks.json entry for task 900501 with modifiableFiles: ['seed.txt'], and an input packet whose violations equals ['outside.txt']. Exact expected result: after main() runs, re-reading tasks.json shows task 900501's modifiableFiles deepEquals ['seed.txt', 'outside.txt'], and the returned value has no next key (a B_ block, same shape as B_MARK_TASK_ACTIVE.ts's return today). 5) Add test_B_AMEND_TASK_FILE_LIST_dedupesAViolationTheTaskAlreadyDeclares: same setup, but violations equals ['seed.txt'] (already declared). Exact expected result: modifiableFiles stays deepEqual to ['seed.txt'], no duplicate entry.",
+    "difficulty": 4,
+    "blockedBy": [
+      {
+        "taskNumber": 254,
+        "reason": "chain order: [launch 15] comes before [launch 16]"
+      }
+    ]
   }
 ]
