@@ -104,7 +104,15 @@ export function getEdgesInDiagram(diagram: string): DiagramEdges {
     }
     // A dotted arrow is a side note, not an edge; each side parses alone.
     for (const segment of statement.split("-.->")) {
-      const boxChain = segment.split("-->").map(getBoxIdFromArrowSide).filter(Boolean);
+      const boxChain: string[] = [];
+      for (const arrowSide of segment.split("-->")) {
+        const box = getBoxIdFromArrowSide(arrowSide);
+        const isEmptyBox = box === "";
+        if (isEmptyBox) {
+          continue;
+        }
+        boxChain.push(box);
+      }
       for (const [position, box] of boxChain.entries()) {
         if (!boxes.includes(box)) {
           boxes.push(box);
