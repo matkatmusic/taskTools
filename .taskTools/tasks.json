@@ -919,5 +919,37 @@
         "reason": "chain order: [mermaid 11] comes before [mermaid 12]"
       }
     ]
+  },
+  {
+    "taskNumber": 228,
+    "version": "2ab710d36925cd8180814c98d2459d1042260e55",
+    "title": "[mermaid 13] Full suite passes",
+    "userDescription": "13. Full suite passes via `npm run test:baseline`.",
+    "chainGoal": [
+      "The pipeline diagrams use the mermaid-viewer format, the generator parses them, and a new block can be spliced into the pipeline by an edit to the diagram alone. The chain is [mermaid 1] to [mermaid 15] from specs/diagrams-in-mermaid-viewer-format.md."
+    ],
+    "goal": [
+      "- `npm run test:baseline` exits 0 with no failures outside `.taskTools/knownFailingTests.json`, confirming [mermaid 1] through [mermaid 12] leave no regression, with the command run and its output pasted."
+    ],
+    "notInScope": [
+      "- Any code change: this is a check-only task; a failure here is fixed by returning to whichever of [mermaid 1] through [mermaid 12] caused it, not by editing here.",
+      "- Rewriting the known-failing-tests baseline: only `/task-tests` may do that, and only when the user asks."
+    ],
+    "problemSolvedByTask": "Check-only item: the check proves the whole chain from [mermaid 1] through [mermaid 12] lands with no test regression before [mermaid 14] proves the splice by hand.",
+    "description": "This is a check-only task with no code change: run npm run test:baseline and paste its output. A pass confirms every prior item in the chain, mermaid 1 through mermaid 12, leaves the suite in the same state as the committed .taskTools/knownFailingTests.json baseline. A failure not already in that baseline means a prior chain item introduced a regression, fixed by returning to that item, never by editing here.",
+    "modifiableFiles": [],
+    "readOnlyFiles": [
+      "*"
+    ],
+    "schemaVersion": "1.0.1",
+    "hasTests": false,
+    "tests": "",
+    "difficulty": 1,
+    "blockedBy": [
+      {
+        "taskNumber": 227,
+        "reason": "chain order: [mermaid 12] comes before [mermaid 13]"
+      }
+    ]
   }
 ]
