@@ -553,34 +553,43 @@ test("test_generateSteps_theCommittedStepsJsonIsUpToDate", () => {
     assert.equal(readFileSync(tempConfigPath, "utf8"), readFileSync(committedStepsJsonPath, "utf8"));
 });
 
-// The override is keyed by the full diagram-entry identifier, generated only for the repo's own default diagram folder.
-test("test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock", () => {
-    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-next-block-")), "steps.json");
-    const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
-    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
-    assert.equal(preambleEntry.nextBlock, "IS_TASK_BLOCKED_Q");
-});
+// RETIRED (task 227): default-pipeline override tables retired
+// test("test_generateSteps_addsANextBlockOverrideOnThePreamblesFirstBlock", () => {
+//     const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-next-block-")), "steps.json");
+//     const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
+//     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+//     assert.equal(preambleEntry.nextBlock, "IS_TASK_BLOCKED_Q");
+// });
 
-// A synthetic diagram with the same file and box name, outside the default folder, skips the nextBlock override.
-test("test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder", () => {
-    const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
-    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+// RETIRED (task 227): default-pipeline override tables retired
+// test("test_generateSteps_leavesTheNextBlockOverrideOffOutsideTheDefaultDiagramFolder", () => {
+//     const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
+//     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+//     assert.equal(preambleEntry.nextBlock, undefined);
+// });
+
+// RETIRED (task 227): default-pipeline override tables retired
+// test("test_generateSteps_addsATranslatorOverrideOnThePreamblesFirstBlock", () => {
+//     const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-translator-")), "steps.json");
+//     const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
+//     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+//     assert.equal(preambleEntry.translator, "scripts/tackle-tasks/shared/identityTranslator.ts");
+// });
+
+// RETIRED (task 227): default-pipeline override tables retired
+// test("test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramFolder", () => {
+//     const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
+//     const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
+//     assert.equal(preambleEntry.translator, undefined);
+// });
+
+test("test_generateSteps_leavesNoOverrideTraceOnThePreamblesFirstBlock", () => {
+    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-no-override-")), "steps.json");
+    const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
+    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "Q_PREAMBLE_STATUS_CHECK")!;
     assert.equal(preambleEntry.nextBlock, undefined);
-});
-
-// The nextBlock override's translator is identity, generated only for the repo's own default diagram folder.
-test("test_generateSteps_addsATranslatorOverrideOnThePreamblesFirstBlock", () => {
-    const tempConfigPath = join(mkdtempSync(join(tmpdir(), "generate-steps-translator-")), "steps.json");
-    const config = narrow(generateSteps(join(PROJECT_ROOT, "diagrams/tackle-tasks"), join(PROJECT_ROOT, "scripts/tackle-tasks"), tempConfigPath, false));
-    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
-    assert.equal(preambleEntry.translator, "scripts/tackle-tasks/shared/identityTranslator.ts");
-});
-
-// A synthetic diagram with the same file and box name, outside the default folder, skips the translator override.
-test("test_generateSteps_leavesTheTranslatorOverrideOffOutsideTheDefaultDiagramFolder", () => {
-    const { config } = generateFrom({ "pipeline-preambleStatusCheck.mmd": "flowchart TD\n    PREAMBLE_STATUS_CHECK --> SECOND_BOX\n" });
-    const preambleEntry = config["pipeline-preambleStatusCheck.mmd"]!.find(candidate => candidate.box === "PREAMBLE_STATUS_CHECK")!;
     assert.equal(preambleEntry.translator, undefined);
+    assert.ok(preambleEntry.next.includes("Q_IS_TASK_BLOCKED_Q"));
 });
 
 test("test_generateSteps_foldsAQChoiceTargetIntoTheDecisionsNext", () => {

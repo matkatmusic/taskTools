@@ -13,13 +13,15 @@ const FAST_DIAGRAM_FOLDER = join(PROJECT_ROOT, "diagrams/tackle-tasks-fast");
 const FAST_NEXT_BLOCK_OVERRIDES: Record<string, string> = {
   "pipeline-commitImplementationIfNeeded.mmd::ARE_TASK_TESTS_SKIPPED_Q": "pipeline-lockSourceRepo.mmd::LOCK_SOURCE_REPO",
 };
-const NEXT_BLOCK_OVERRIDES: Record<string, string> = {
-  "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "IS_TASK_BLOCKED_Q",
-};
+// commented out (task 227): default-pipeline override tables retired
+// const NEXT_BLOCK_OVERRIDES: Record<string, string> = {
+//   "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "IS_TASK_BLOCKED_Q",
+// };
 // The nextBlock override's translator: identity, so the overridden hop's payload forwards unchanged.
-const TRANSLATOR_OVERRIDES: Record<string, string> = {
-  "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "scripts/tackle-tasks/shared/identityTranslator.ts",
-};
+// commented out (task 227): default-pipeline override tables retired
+// const TRANSLATOR_OVERRIDES: Record<string, string> = {
+//   "pipeline-preambleStatusCheck.mmd::PREAMBLE_STATUS_CHECK": "scripts/tackle-tasks/shared/identityTranslator.ts",
+// };
 
 // The one folder under scripts/tackle-tasks/ that owns each block's script: the diagram the block belongs to.
 const BLOCKS_BY_OWNER_FOLDER: Record<string, string[]> = {
@@ -853,9 +855,11 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
       else {
         takesSourceLock = takesSourceLockFromDiagram;
       }
-      const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
+      // commented out (task 227): default-pipeline override tables retired
+      // const nextBlockOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       const fastNextBlockOverride = diagramFolder === FAST_DIAGRAM_FOLDER ? FAST_NEXT_BLOCK_OVERRIDES[`${diagramFile}::${box}`] : undefined;
-      const translatorOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? TRANSLATOR_OVERRIDES[`${diagramFile}::${box}`] : undefined;
+      // commented out (task 227): default-pipeline override tables retired
+      // const translatorOverride = diagramFolder === DEFAULT_DIAGRAM_FOLDER ? TRANSLATOR_OVERRIDES[`${diagramFile}::${box}`] : undefined;
       entries.push({
         box,
         script: relative(PROJECT_ROOT, scriptPath),
@@ -864,9 +868,11 @@ export function generateSteps(diagramFolder: string, stepsRoot: string, configPa
         // RETIRED (task 224): mutating is no longer written into generated entries.
         // ...(mutating ? { mutating } : {}),
         ...(takesSourceLock ? { takesSourceLock } : {}),
-        ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
+        // commented out (task 227): default-pipeline override tables retired
+        // ...(nextBlockOverride ? { nextBlock: nextBlockOverride } : {}),
         ...(fastNextBlockOverride ? { nextBlock: fastNextBlockOverride } : {}),
-        ...(translatorOverride ? { translator: translatorOverride } : {}),
+        // commented out (task 227): default-pipeline override tables retired
+        // ...(translatorOverride ? { translator: translatorOverride } : {}),
         next: remappedNext[box] ?? [],
       });
     }
